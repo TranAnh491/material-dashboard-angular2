@@ -9,13 +9,13 @@ declare interface RouteInfo {
 }
 export const ROUTES: RouteInfo[] = [
     { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
-    { path: '/user-profile', title: 'User Profile',  icon:'person', class: '' },
-    { path: '/table-list', title: 'Table List',  icon:'content_paste', class: '' },
-    { path: '/typography', title: 'Typography',  icon:'library_books', class: '' },
-    { path: '/icons', title: 'Icons',  icon:'bubble_chart', class: '' },
-    { path: '/maps', title: 'Maps',  icon:'location_on', class: '' },
-    { path: '/notifications', title: 'Notifications',  icon:'notifications', class: '' },
-    { path: '/upgrade', title: 'Upgrade to PRO',  icon:'unarchive', class: 'active-pro' },
+    { path: '/user-profile', title: 'Materials',  icon:'inventory_2', class: '' },
+    { path: '/table-list', title: 'Finished Goods',  icon:'all_inbox', class: '' },
+    { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
+    { path: '/icons', title: 'SKU',  icon:'qr_code_2', class: '' },
+    { path: '/maps', title: 'Layout',  icon:'location_on', class: '' },
+    { path: '/notifications', title: 'Transport Fleet',  icon:'local_shipping', class: '' },
+    { path: '/upgrade', title: 'Made in Airspeed',  icon:'verified', class: 'active-pro' },
 ];
 
 @Component({

@@ -8,143 +8,155 @@ import * as Chartist from 'chartist';
 })
 export class DashboardComponent implements OnInit {
 
+  workOrder = "...";
+  shipment = "...";
+  workOrderStatus: any[] = []; // Thêm biến này
+
   constructor() { }
-  startAnimationForLineChart(chart){
-      let seq: any, delays: any, durations: any;
-      seq = 0;
-      delays = 80;
-      durations = 500;
 
-      chart.on('draw', function(data) {
-        if(data.type === 'line' || data.type === 'area') {
-          data.element.animate({
-            d: {
-              begin: 600,
-              dur: 700,
-              from: data.path.clone().scale(1, 0).translate(0, data.chartRect.height()).stringify(),
-              to: data.path.clone().stringify(),
-              easing: Chartist.Svg.Easing.easeOutQuint
-            }
-          });
-        } else if(data.type === 'point') {
-              seq++;
-              data.element.animate({
-                opacity: {
-                  begin: seq * delays,
-                  dur: durations,
-                  from: 0,
-                  to: 1,
-                  easing: 'ease'
-                }
-              });
-          }
-      });
-
-      seq = 0;
-  };
-  startAnimationForBarChart(chart){
-      let seq2: any, delays2: any, durations2: any;
-
-      seq2 = 0;
-      delays2 = 80;
-      durations2 = 500;
-      chart.on('draw', function(data) {
-        if(data.type === 'bar'){
-            seq2++;
-            data.element.animate({
-              opacity: {
-                begin: seq2 * delays2,
-                dur: durations2,
-                from: 0,
-                to: 1,
-                easing: 'ease'
-              }
-            });
-        }
-      });
-
-      seq2 = 0;
-  };
-  ngOnInit() {
-      /* ----------==========     Daily Sales Chart initialization For Documentation    ==========---------- */
-
-      const dataDailySalesChart: any = {
-          labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-          series: [
-              [12, 17, 7, 17, 23, 18, 38]
-          ]
-      };
-
-     const optionsDailySalesChart: any = {
-          lineSmooth: Chartist.Interpolation.cardinal({
-              tension: 0
-          }),
-          low: 0,
-          high: 50, // creative tim: we recommend you to set the high sa the biggest value + something for a better look
-          chartPadding: { top: 0, right: 0, bottom: 0, left: 0},
+  // Hàm vẽ số lên điểm chart (Line)
+  addValueLabels(chart, values) {
+    chart.on('draw', function (data) {
+      if (data.type === 'point') {
+        chart.svg.elem('text', {
+          x: data.x,
+          y: data.y - 10,
+          style: 'font-size: 12px; fill: #333; font-weight: bold;',
+        }, 'ct-value').text(values[data.index].toString());
       }
-
-      var dailySalesChart = new Chartist.Line('#dailySalesChart', dataDailySalesChart, optionsDailySalesChart);
-
-      this.startAnimationForLineChart(dailySalesChart);
-
-
-      /* ----------==========     Completed Tasks Chart initialization    ==========---------- */
-
-      const dataCompletedTasksChart: any = {
-          labels: ['12p', '3p', '6p', '9p', '12p', '3a', '6a', '9a'],
-          series: [
-              [230, 750, 450, 300, 280, 240, 200, 190]
-          ]
-      };
-
-     const optionsCompletedTasksChart: any = {
-          lineSmooth: Chartist.Interpolation.cardinal({
-              tension: 0
-          }),
-          low: 0,
-          high: 1000, // creative tim: we recommend you to set the high sa the biggest value + something for a better look
-          chartPadding: { top: 0, right: 0, bottom: 0, left: 0}
-      }
-
-      var completedTasksChart = new Chartist.Line('#completedTasksChart', dataCompletedTasksChart, optionsCompletedTasksChart);
-
-      // start animation for the Completed Tasks Chart - Line Chart
-      this.startAnimationForLineChart(completedTasksChart);
-
-
-
-      /* ----------==========     Emails Subscription Chart initialization    ==========---------- */
-
-      var datawebsiteViewsChart = {
-        labels: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
-        series: [
-          [542, 443, 320, 780, 553, 453, 326, 434, 568, 610, 756, 895]
-
-        ]
-      };
-      var optionswebsiteViewsChart = {
-          axisX: {
-              showGrid: false
-          },
-          low: 0,
-          high: 1000,
-          chartPadding: { top: 0, right: 5, bottom: 0, left: 0}
-      };
-      var responsiveOptions: any[] = [
-        ['screen and (max-width: 640px)', {
-          seriesBarDistance: 5,
-          axisX: {
-            labelInterpolationFnc: function (value) {
-              return value[0];
-            }
-          }
-        }]
-      ];
-      var websiteViewsChart = new Chartist.Bar('#websiteViewsChart', datawebsiteViewsChart, optionswebsiteViewsChart, responsiveOptions);
-
-      //start animation for the Emails Subscription Chart
-      this.startAnimationForBarChart(websiteViewsChart);
+    });
   }
 
+  startAnimationForLineChart(chart) {
+    let seq: any, delays: any, durations: any;
+    seq = 0; delays = 80; durations = 500;
+    chart.on('draw', function (data) {
+      if (data.type === 'line' || data.type === 'area') {
+        data.element.animate({
+          d: {
+            begin: 600,
+            dur: 700,
+            from: data.path.clone().scale(1, 0).translate(0, data.chartRect.height()).stringify(),
+            to: data.path.clone().stringify(),
+            easing: Chartist.Svg.Easing.easeOutQuint
+          }
+        });
+      } else if (data.type === 'point') {
+        seq++;
+        data.element.animate({
+          opacity: {
+            begin: seq * delays,
+            dur: durations,
+            from: 0,
+            to: 1,
+            easing: 'ease'
+          }
+        });
+      }
+    });
+    seq = 0;
+  }
+
+  startAnimationForBarChart(chart) {
+    let seq2: any, delays2: any, durations2: any;
+    seq2 = 0; delays2 = 80; durations2 = 500;
+    chart.on('draw', function (data) {
+      if (data.type === 'bar') {
+        seq2++;
+        data.element.animate({
+          opacity: {
+            begin: seq2 * delays2,
+            dur: durations2,
+            from: 0,
+            to: 1,
+            easing: 'ease'
+          }
+        });
+      }
+    });
+    seq2 = 0;
+  }
+
+  ngOnInit() {
+    fetch('https://docs.google.com/spreadsheets/d/1dGfJhDx-JNsFJ0l3kcz8uAHvMtm7GhPeAcUj8pBqx_Q/pub?gid=1580861382&single=true&output=csv')
+      .then(res => res.text())
+      .then(csv => {
+        const rows = csv.split('\n').map(row => row.split(','));
+
+        // Lấy số động Work order & Shipment
+        for (let cells of rows) {
+          if (cells[0]?.trim().toLowerCase() === "work order") this.workOrder = cells[1]?.trim();
+          if (cells[0]?.trim().toLowerCase() === "shipment") this.shipment = cells[1]?.trim();
+        }
+
+        // Lấy dữ liệu biểu đồ (giả định như trước đây)
+        const months = rows[11].slice(1).map(m => m.trim());
+        const matAccuracy = rows[12].slice(1).map(a => Number(a.replace('%','').replace(',','.').trim())).filter(x => !isNaN(x));
+        const fgAccuracy = rows[13].slice(1).map(a => Number(a.replace('%','').replace(',','.').trim())).filter(x => !isNaN(x));
+        const fgTurnover = rows[14].slice(1).map(a => Number(a.replace(',','.').trim())).filter(x => !isNaN(x));
+
+        // Chart 1: Materials Accuracy (Line)
+        let matMin = Math.min(...matAccuracy);
+        let matMax = Math.max(...matAccuracy);
+        const optionsMaterialsAccuracy = {
+          lineSmooth: Chartist.Interpolation.cardinal({ tension: 0 }),
+          low: Math.max(98, matMin - 0.2),
+          high: Math.min(100, matMax + 0.2),
+          chartPadding: { top: 20, right: 10, bottom: 0, left: 10 }
+        };
+        const dataMaterialsAccuracy = {
+          labels: months,
+          series: [matAccuracy]
+        };
+        const dailySalesChart = new Chartist.Line('#dailySalesChart', dataMaterialsAccuracy, optionsMaterialsAccuracy);
+        this.startAnimationForLineChart(dailySalesChart);
+        this.addValueLabels(dailySalesChart, matAccuracy);
+
+        // Chart 2: Finished Goods Accuracy (Line)
+        let fgMin = Math.min(...fgAccuracy);
+        let fgMax = Math.max(...fgAccuracy);
+        const optionsFGAccuracy = {
+          lineSmooth: Chartist.Interpolation.cardinal({ tension: 0 }),
+          low: Math.max(98, fgMin - 0.2),
+          high: Math.min(100, fgMax + 0.2),
+          chartPadding: { top: 20, right: 10, bottom: 0, left: 10 }
+        };
+        const dataFGAccuracy = {
+          labels: months,
+          series: [fgAccuracy]
+        };
+        const websiteViewsChart = new Chartist.Line('#websiteViewsChart', dataFGAccuracy, optionsFGAccuracy);
+        this.startAnimationForLineChart(websiteViewsChart);
+        this.addValueLabels(websiteViewsChart, fgAccuracy);
+
+        // Chart 3: FGs Inventory Turnover (Line, xanh da trời)
+        let fgTMin = Math.min(...fgTurnover);
+        let fgTMax = Math.max(...fgTurnover);
+        const optionsFGTurnover = {
+          lineSmooth: Chartist.Interpolation.cardinal({ tension: 0 }),
+          low: Math.floor(fgTMin - 0.2),
+          high: fgTMax + 0.2,
+          chartPadding: { top: 20, right: 10, bottom: 0, left: 10 }
+        };
+        const dataFGTurnover = {
+          labels: months,
+          series: [fgTurnover]
+        };
+        const completedTasksChart = new Chartist.Line('#completedTasksChart', dataFGTurnover, optionsFGTurnover);
+        this.startAnimationForLineChart(completedTasksChart);
+        this.addValueLabels(completedTasksChart, fgTurnover);
+
+        // Lấy dữ liệu A19:C25 (dòng 18-24, index 18-24)
+        this.workOrderStatus = [];
+        for (let i = 18; i <= 24; i++) {
+          if (rows[i] && rows[i][0]) {
+            this.workOrderStatus.push({
+              code: rows[i][0]?.trim(),
+              value: rows[i][1] ? rows[i][1].trim() : '',
+              note: rows[i][2] ? rows[i][2].trim() : ''
+            });
+          }
+        }
+      });
+  }
 }

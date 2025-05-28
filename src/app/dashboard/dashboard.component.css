@@ -1,0 +1,14 @@
+/**** Change FGs Inventory Turnover chart to blue ****/
+#completedTasksChart .ct-series-a .ct-line,
+#completedTasksChart .ct-series-a .ct-point {
+  stroke: #2196f3 !important;
+}
+#completedTasksChart .ct-series-a .ct-area {
+  fill: #2196f3 !important;
+  fill-opacity: 0.1;
+}
+.card-title {
+    font-size: 1rem !important;  /* hoặc thử 1.5rem nếu muốn nhỏ hơn nữa */
+    font-weight: 500;
+    line-height: 1.1;
+}
