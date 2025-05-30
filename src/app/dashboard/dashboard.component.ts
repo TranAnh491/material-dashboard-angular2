@@ -153,7 +153,8 @@ export class DashboardComponent implements OnInit {
             this.workOrderStatus.push({
               code: rows[i][0]?.trim(),
               value: rows[i][1] ? rows[i][1].trim() : '',
-              note: rows[i][2] ? rows[i][2].trim() : ''
+              note: rows[i][2] ? rows[i][2].trim() : '',
+              extra: rows[i][3] ? rows[i][3].trim() : ''
             });
           }
         }
