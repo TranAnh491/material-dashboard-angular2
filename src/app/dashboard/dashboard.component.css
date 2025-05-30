@@ -12,3 +12,15 @@
     font-weight: 500;
     line-height: 1.1;
 }
+th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+.card-title,
+.card-category,
+.card,
+.table th,
+.table td,
+.stats {
+  color: #111 !important;
+}
