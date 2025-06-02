@@ -9,55 +9,24 @@ import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
 
+import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
+import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
+import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
+import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+
 export const AdminLayoutRoutes: Routes = [
-    // {
-    //   path: '',
-    //   children: [ {
-    //     path: 'dashboard',
-    //     component: DashboardComponent
-    // }]}, {
-    // path: '',
-    // children: [ {
-    //   path: 'userprofile',
-    //   component: UserProfileComponent
-    // }]
-    // }, {
-    //   path: '',
-    //   children: [ {
-    //     path: 'icons',
-    //     component: IconsComponent
-    //     }]
-    // }, {
-    //     path: '',
-    //     children: [ {
-    //         path: 'notifications',
-    //         component: NotificationsComponent
-    //     }]
-    // }, {
-    //     path: '',
-    //     children: [ {
-    //         path: 'maps',
-    //         component: MapsComponent
-    //     }]
-    // }, {
-    //     path: '',
-    //     children: [ {
-    //         path: 'typography',
-    //         component: TypographyComponent
-    //     }]
-    // }, {
-    //     path: '',
-    //     children: [ {
-    //         path: 'upgrade',
-    //         component: UpgradeComponent
-    //     }]
-    // }
-    { path: 'dashboard',      component: DashboardComponent },
-    { path: 'user-profile',   component: UserProfileComponent },
-    { path: 'table-list',     component: TableListComponent },
-    { path: 'typography',     component: TypographyComponent },
-    { path: 'icons',          component: IconsComponent },
-    { path: 'maps',           component: MapsComponent },
-    { path: 'notifications',  component: NotificationsComponent },
-    { path: 'upgrade',        component: UpgradeComponent },
+  { path: 'dashboard',            component: DashboardComponent },
+  { path: 'user-profile',         component: UserProfileComponent },
+  { path: 'table-list',           component: TableListComponent },
+  { path: 'typography',           component: TypographyComponent },
+  { path: 'icons',                component: IconsComponent },
+  { path: 'maps',                 component: MapsComponent },
+  { path: 'notifications',        component: NotificationsComponent },
+  { path: 'upgrade',              component: UpgradeComponent },
+
+  // 4 chức năng materials
+  { path: 'work-order-status',    component: WorkOrderStatusComponent },
+  { path: 'inbound-materials',    component: InboundMaterialsComponent },
+  { path: 'outbound-materials',   component: OutboundMaterialsComponent },
+  { path: 'materials-inventory',  component: MaterialsInventoryComponent }
 ];

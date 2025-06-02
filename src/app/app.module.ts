@@ -7,6 +7,10 @@ import { AppRoutingModule } from './app.routing';
 import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
+import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
+import { InboundMaterialsComponent } from './pages/inbound-materials/inbound-materials.component';
+import { OutboundMaterialsComponent } from './pages/outbound-materials/outbound-materials.component';
+import { MaterialsInventoryComponent } from './pages/materials-inventory/materials-inventory.component';
 
 @NgModule({
   imports: [
@@ -21,6 +25,10 @@ import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.compon
   declarations: [
     AppComponent,
     AdminLayoutComponent,
+    WorkOrderStatusComponent,
+    InboundMaterialsComponent,
+    OutboundMaterialsComponent,
+    MaterialsInventoryComponent,
 
   ],
   providers: [],
