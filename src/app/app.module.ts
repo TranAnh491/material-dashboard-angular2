@@ -7,10 +7,13 @@ import { AppRoutingModule } from './app.routing';
 import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
-import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
-import { InboundMaterialsComponent } from './pages/inbound-materials/inbound-materials.component';
-import { OutboundMaterialsComponent } from './pages/outbound-materials/outbound-materials.component';
-import { MaterialsInventoryComponent } from './pages/materials-inventory/materials-inventory.component';
+
+// Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
+// nhưng KHÔNG đưa vào declarations!
+// import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
+// import { InboundMaterialsComponent } from './pages/inbound-materials/inbound-materials.component';
+// import { OutboundMaterialsComponent } from './pages/outbound-materials/outbound-materials.component';
+// import { MaterialsInventoryComponent } from './pages/materials-inventory/materials-inventory.component';
 
 @NgModule({
   imports: [
@@ -25,11 +28,7 @@ import { MaterialsInventoryComponent } from './pages/materials-inventory/materia
   declarations: [
     AppComponent,
     AdminLayoutComponent,
-    WorkOrderStatusComponent,
-    InboundMaterialsComponent,
-    OutboundMaterialsComponent,
-    MaterialsInventoryComponent,
-
+    // KHÔNG khai báo 4 component materials ở đây!
   ],
   providers: [],
   bootstrap: [AppComponent]
