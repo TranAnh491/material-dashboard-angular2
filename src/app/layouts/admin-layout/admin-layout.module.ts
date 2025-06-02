@@ -59,3 +59,5 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
   ]
 })
 export class AdminLayoutModule {}
+// This module defines the admin layout for the application, including routing and component declarations.
+// It imports necessary Angular modules and Material components, and declares the components used in the admin layout.
