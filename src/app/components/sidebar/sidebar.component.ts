@@ -2,14 +2,25 @@ import { Component, OnInit } from '@angular/core';
 
 declare const $: any;
 declare interface RouteInfo {
-    path: string;
+    path?: string;
     title: string;
     icon: string;
     class: string;
+    children?: RouteInfo[];
 }
 export const ROUTES: RouteInfo[] = [
     { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
-    { path: '/user-profile', title: 'Materials',  icon:'inventory_2', class: '' },
+    {
+        title: 'Materials',
+        icon: 'inventory_2',
+        class: '',
+        children: [
+            { path: '/work-order-status', title: 'Work order status', icon: 'assignment', class: '' },
+            { path: '/inbound-materials', title: 'Inbound materials', icon: 'call_received', class: '' },
+            { path: '/outbound-materials', title: 'Outbound materials', icon: 'call_made', class: '' },
+            { path: '/materials-inventory', title: 'Materials inventory', icon: 'inventory', class: '' }
+        ]
+    },
     { path: '/table-list', title: 'Finished Goods',  icon:'all_inbox', class: '' },
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
     { path: '/icons', title: 'SKU',  icon:'qr_code_2', class: '' },
@@ -37,4 +48,8 @@ export class SidebarComponent implements OnInit {
       }
       return true;
   };
+
+  openGoogleSheet() {
+    window.open('https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit?gid=0#gid=0', '_blank');
+  }
 }
