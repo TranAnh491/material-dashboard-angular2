@@ -12,7 +12,7 @@ export class WorkOrderStatusComponent implements OnInit {
   columns: string[] = [];
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbzHs7HFieDUkq2i9OyK_CkKfjclc31w6e_9nwq5t5OlgVMEEqqlLHdhUj4iGg2sHBz-/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbzAkZjhsjdwSok1CfciFAhftU_J2X3ZQs22JLjGAXINds1VxhdXbAtYvPd3Zq3Xl1Kc/exec';
 
   isLoggedIn = false;
   username = '';
@@ -34,10 +34,10 @@ export class WorkOrderStatusComponent implements OnInit {
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get<any[]>(this.GAS_URL).subscribe({
-      next: (data) => {
-        if (data.length) this.columns = Object.keys(data[0]);
-        this.allWorkOrders = data;
+    this.http.get<any>(this.GAS_URL).subscribe({
+      next: (resp) => {
+        this.columns = resp.columns; // lấy đúng tiêu đề dòng 4, đúng thứ tự
+        this.allWorkOrders = resp.data;
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
