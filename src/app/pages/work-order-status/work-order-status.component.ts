@@ -25,8 +25,8 @@ export class WorkOrderStatusComponent implements OnInit {
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 
   // Đúng tên cột lấy từ Google Sheet
-  yearColumn: string = 'NĂM';    // Đúng tên cột A (thường là 'NĂM' hoặc 'NAM')
-  monthColumn: string = 'THÁNG'; // Đúng tên cột B (thường là 'THÁNG' hoặc 'THANG')
+  yearColumn: string = 'YEAR';    // Đúng tên cột A (thường là 'NĂM' hoặc 'NAM')
+  monthColumn: string = 'MONTH'; // Đúng tên cột B (thường là 'THÁNG' hoặc 'THANG')
 
   constructor(private http: HttpClient) {}
 
