@@ -1,6 +1,19 @@
-<p>work-order-status works!</p>
 <div class="workorder-container">
   <h2>Work Order Status</h2>
+
+  <!-- Dropdown filter -->
+  <div style="margin-bottom: 16px;">
+    <label style="font-weight:500;">Năm:</label>
+    <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:10px;">
+      <option value="">-- Tất cả --</option>
+      <option *ngFor="let y of years" [value]="y">{{y}}</option>
+    </select>
+    <label style="font-weight:500;">Tháng:</label>
+    <select [(ngModel)]="selectedMonth" (change)="filterData()">
+      <option value="">-- Tất cả --</option>
+      <option *ngFor="let m of months" [value]="m">{{m}}</option>
+    </select>
+  </div>
 
   <!-- Đăng nhập -->
   <div *ngIf="!isLoggedIn" class="login-box">
