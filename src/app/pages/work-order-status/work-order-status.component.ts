@@ -12,7 +12,7 @@ export class WorkOrderStatusComponent implements OnInit {
   columns: string[] = [];
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbyM1qg6foGjZdr-y1f8ZiKJ8N-x5FU2VunC6Z_JsYBLsWR13V4fm_j0Z7sahKxCdvKX/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbzHs7HFieDUkq2i9OyK_CkKfjclc31w6e_9nwq5t5OlgVMEEqqlLHdhUj4iGg2sHBz-/exec';
   isLoggedIn = false;
   username = '';
   password = '';
