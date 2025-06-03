@@ -1,6 +1,14 @@
 <div class="workorder-container">
   <h2 class="wo-title">Work Order Status</h2>
 
+  <!-- Nút mở Google Sheet -->
+  <button class="edit-sheet-btn" (click)="openGoogleSheet()">
+    <span style="display:flex;align-items:center;">
+      <i class="material-icons" style="font-size:18px;margin-right:4px;">edit</i>
+      Edit on Google Sheet
+    </span>
+  </button>
+
   <!-- Dropdown filter -->
   <div style="margin-bottom: 16px;">
     <label style="font-weight:500;">Y:</label>

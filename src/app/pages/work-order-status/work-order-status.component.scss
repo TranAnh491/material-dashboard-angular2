@@ -226,3 +226,21 @@ button:active {
   .wo-table { font-size: 0.92em; }
   .wo-title { font-size: 1.28em;}
 }
+.edit-sheet-btn {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  padding: 7px 18px;
+  border-radius: 7px;
+  margin-bottom: 12px;
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 8px #8eb4d2;
+  display: inline-flex;
+  align-items: center;
+}
+.edit-sheet-btn:hover {
+  background: #1565c0;
+}

@@ -90,4 +90,9 @@ export class WorkOrderStatusComponent implements OnInit {
     });
     this.editIndex = null; // reset dòng edit khi lọc lại
   }
+
+  // ===> Hàm mới thêm vào <===
+  openGoogleSheet() {
+    window.open('https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0', '_blank');
+  }
 }
