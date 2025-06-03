@@ -59,3 +59,33 @@ button:hover {
   padding: 5px 16px;
   cursor: pointer;
 }
+.wo-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  background: #fff;
+}
+.wo-table th, .wo-table td {
+  border: 1px solid #e0e0e0;
+  padding: 8px 6px;
+  text-align: left;
+  font-size: 15px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.wo-table th {
+  background: #f7f9fc;
+  font-weight: 600;
+}
+.wo-table tr:nth-child(even) {
+  background: #f7fafd;
+}
+.wo-table tr:hover {
+  background: #e6f7ff;
+}
+.wo-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f7f9fc;
+  z-index: 2;
+}
