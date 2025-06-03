@@ -9,7 +9,7 @@ import { HttpClient } from '@angular/common/http';
 export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];            // data sau khi lọc
   allWorkOrders: any[] = [];         // full data lấy từ sheet
-  columns: string[] = [];
+  columns: string[] = [];            // headers động lấy từ API
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycbzHs7HFieDUkq2i9OyK_CkKfjclc31w6e_9nwq5t5OlgVMEEqqlLHdhUj4iGg2sHBz-/exec';
@@ -24,17 +24,17 @@ export class WorkOrderStatusComponent implements OnInit {
   years: string[] = [];
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 
-  // Đúng tên cột lấy từ Google Sheet
-  yearColumn: string = 'Year';    // Đúng tên cột A (thường là 'NĂM' hoặc 'NAM')
-  monthColumn: string = 'Month'; // Đúng tên cột B (thường là 'THÁNG' hoặc 'THANG')
+  // Tên cột năm, tháng (cứ để đúng tên dòng 4 sheet là được)
+  yearColumn: string = 'Year';
+  monthColumn: string = 'Month';
 
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get<any[]>(this.GAS_URL).subscribe({
-      next: (data) => {
-        if (data.length) this.columns = Object.keys(data[0]);
-        this.allWorkOrders = data;
+    this.http.get<any>(this.GAS_URL).subscribe({
+      next: (resp) => {
+        this.columns = resp.headers;        // lấy tiêu đề động từ API (dòng 4 Sheet)
+        this.allWorkOrders = resp.data;     // lấy data
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
@@ -72,7 +72,6 @@ export class WorkOrderStatusComponent implements OnInit {
     for (const row of this.allWorkOrders) {
       if (row[this.yearColumn]) yearSet.add(row[this.yearColumn].toString());
     }
-    // Sắp xếp tăng dần
     return Array.from(yearSet).sort((a,b) => Number(a) - Number(b));
   }
 
