@@ -1,14 +1,14 @@
 <div class="workorder-container">
-  <h2>Work Order Status</h2>
+  <h2 class="wo-title">Work Order Status</h2>
 
   <!-- Dropdown filter -->
   <div style="margin-bottom: 16px;">
-    <label style="font-weight:500;">Năm:</label>
+    <label style="font-weight:500;">Y:</label>
     <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:10px;">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let y of years" [value]="y">{{y}}</option>
     </select>
-    <label style="font-weight:500;">Tháng:</label>
+    <label style="font-weight:500;">M:</label>
     <select [(ngModel)]="selectedMonth" (change)="filterData()">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let m of months" [value]="m">{{m}}</option>
@@ -28,22 +28,27 @@
     <table *ngIf="workOrders.length > 0" class="wo-table">
       <thead>
         <tr>
-          <th *ngFor="let col of columns">{{col}}</th>
-          <th>Actions</th>
+          <th *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">{{col}}</th>
+          <th class="actions-col">Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of workOrders; let i=index">
-          <td *ngFor="let col of columns">
-            <input [(ngModel)]="workOrders[i][col]" />
+        <tr *ngFor="let row of workOrders; let i=index" [class.odd]="i%2===0" [class.even]="i%2===1">
+          <td *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">
+            <ng-container *ngIf="editIndex === i; else viewOnly">
+              <input [(ngModel)]="workOrders[i][col]" class="wo-input" (keydown.enter)="saveRow(i)" />
+            </ng-container>
+            <ng-template #viewOnly>
+              {{row[col]}}
+            </ng-template>
           </td>
-          <td>
-            <button (click)="saveRow(i)">Save</button>
+          <td class="actions-col">
+            <button *ngIf="editIndex !== i" (click)="editIndex = i">Edit</button>
+            <button *ngIf="editIndex === i" (click)="saveRow(i)">Save</button>
           </td>
         </tr>
       </tbody>
     </table>
-    <div *ngIf="workOrders.length === 0" style="margin:12px 0; color:#888;">Không có dữ liệu!</div>
   </div>
 
   <!-- Chưa đăng nhập: Chỉ xem -->
@@ -51,12 +56,12 @@
     <table class="wo-table">
       <thead>
         <tr>
-          <th *ngFor="let col of columns">{{col}}</th>
+          <th *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">{{col}}</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of workOrders">
-          <td *ngFor="let col of columns">
+        <tr *ngFor="let row of workOrders; let i=index" [class.odd]="i%2===0" [class.even]="i%2===1">
+          <td *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">
             {{row[col]}}
           </td>
         </tr>

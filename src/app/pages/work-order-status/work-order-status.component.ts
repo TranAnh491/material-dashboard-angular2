@@ -7,12 +7,13 @@ import { HttpClient } from '@angular/common/http';
   styleUrls: ['./work-order-status.component.scss']
 })
 export class WorkOrderStatusComponent implements OnInit {
-  workOrders: any[] = [];            // data sau khi lọc
-  allWorkOrders: any[] = [];         // full data lấy từ sheet
-  columns: string[] = [];            // headers động lấy từ API
+  workOrders: any[] = [];
+  allWorkOrders: any[] = [];
+  columns: string[] = [];
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbxrISpBqE9PQ6ycA-vIXdhAXf2jMtP18DKW5GWSFBYwS_09E9mJQvsnTY9ydx01QSOX/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbzHs7HFieDUkq2i9OyK_CkKfjclc31w6e_9nwq5t5OlgVMEEqqlLHdhUj4iGg2sHBz-/exec';
+
   isLoggedIn = false;
   username = '';
   password = '';
@@ -24,17 +25,19 @@ export class WorkOrderStatusComponent implements OnInit {
   years: string[] = [];
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 
-  // Tên cột năm, tháng (cứ để đúng tên dòng 4 sheet là được)
+  // Cho edit dòng
+  editIndex: number | null = null;
+
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
 
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.http.get<any>(this.GAS_URL).subscribe({
-      next: (resp) => {
-        this.columns = resp.headers;        // lấy tiêu đề động từ API (dòng 4 Sheet)
-        this.allWorkOrders = resp.data;     // lấy data
+    this.http.get<any[]>(this.GAS_URL).subscribe({
+      next: (data) => {
+        if (data.length) this.columns = Object.keys(data[0]);
+        this.allWorkOrders = data;
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
@@ -55,14 +58,17 @@ export class WorkOrderStatusComponent implements OnInit {
     }
   }
 
+  // Lưu row sau khi sửa (chỉ dòng đang edit)
   saveRow(i: number) {
     const data = this.workOrders[i];
-    // Tìm index gốc của dòng đang hiển thị trong allWorkOrders
     const idx = this.allWorkOrders.findIndex(row =>
       this.columns.every(col => row[col] === data[col])
     );
     this.http.post<any>(this.GAS_URL, {row: idx, data}).subscribe({
-      next: () => alert('Saved!'),
+      next: () => {
+        alert('Saved!');
+        this.editIndex = null;
+      },
       error: () => alert('Save failed!')
     });
   }
@@ -82,5 +88,6 @@ export class WorkOrderStatusComponent implements OnInit {
       if (this.selectedMonth) ok = ok && row[this.monthColumn]?.toString() === this.selectedMonth;
       return ok;
     });
+    this.editIndex = null; // reset dòng edit khi lọc lại
   }
 }
