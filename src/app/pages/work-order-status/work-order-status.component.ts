@@ -12,7 +12,7 @@ export class WorkOrderStatusComponent implements OnInit {
   columns: string[] = [];            // headers động lấy từ API
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbzHs7HFieDUkq2i9OyK_CkKfjclc31w6e_9nwq5t5OlgVMEEqqlLHdhUj4iGg2sHBz-/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbxrISpBqE9PQ6ycA-vIXdhAXf2jMtP18DKW5GWSFBYwS_09E9mJQvsnTY9ydx01QSOX/exec';
   isLoggedIn = false;
   username = '';
   password = '';
