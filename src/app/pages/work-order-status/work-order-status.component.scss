@@ -1,0 +1,61 @@
+.workorder-container {
+  max-width: 660px;
+  margin: 46px auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 3px 24px #d4e6fa88;
+  padding: 32px 22px 38px 22px;
+  text-align: center;
+}
+.wo-table {
+  width: 100%;
+  margin-top: 18px;
+  border-collapse: collapse;
+}
+.wo-table th, .wo-table td {
+  border: 1px solid #dee7f7;
+  padding: 6px 12px;
+  font-size: 1em;
+}
+.wo-table input {
+  width: 90%;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+}
+.wo-table tr:nth-child(even) {
+  background: #f7fafc;
+}
+button {
+  padding: 3px 13px;
+  background: #1976d2;
+  color: #fff;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover {
+  background: #1259a8;
+}
+.login-box {
+  margin: 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.login-box input {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #b7caf0;
+  min-width: 190px;
+}
+.login-box button {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 16px;
+  cursor: pointer;
+}

@@ -1,1 +1,56 @@
 <p>work-order-status works!</p>
+<div class="workorder-container">
+  <h2>Work Order Status</h2>
+
+  <!-- Đăng nhập -->
+  <div *ngIf="!isLoggedIn" class="login-box">
+    <input placeholder="Account" [(ngModel)]="username" />
+    <input placeholder="Password" type="password" [(ngModel)]="password" />
+    <button (click)="login()">Login</button>
+    <div *ngIf="loginError" style="color: red;">{{loginError}}</div>
+  </div>
+
+  <!-- Đã đăng nhập: Cho sửa -->
+  <div *ngIf="isLoggedIn">
+    <table *ngIf="workOrders.length > 0" class="wo-table">
+      <thead>
+        <tr>
+          <th *ngFor="let col of columns">{{col}}</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of workOrders; let i=index">
+          <td *ngFor="let col of columns">
+            <input [(ngModel)]="workOrders[i][col]" />
+          </td>
+          <td>
+            <button (click)="saveRow(i)">Save</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Chưa đăng nhập: Chỉ xem -->
+  <div *ngIf="!isLoggedIn && workOrders.length > 0">
+    <table class="wo-table">
+      <thead>
+        <tr>
+          <th *ngFor="let col of columns">{{col}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of workOrders">
+          <td *ngFor="let col of columns">
+            {{row[col]}}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:8px; color: #888;">Đăng nhập để chỉnh sửa dữ liệu!</div>
+  </div>
+
+  <div *ngIf="loading">Loading...</div>
+  <div *ngIf="errorMsg">{{errorMsg}}</div>
+</div>
