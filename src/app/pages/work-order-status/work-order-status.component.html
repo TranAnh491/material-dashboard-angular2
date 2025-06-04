@@ -1,5 +1,6 @@
 <div class="workorder-container">
-  <!-- Nút mở Google Sheet, nằm trên cùng bên trái -->
+
+  <!-- Nút Edit on Google Sheet, căn trái phía trên -->
   <div class="edit-sheet-wrapper">
     <button class="edit-sheet-btn" (click)="openGoogleSheet()">
       <span style="display:flex;align-items:center;">
@@ -9,18 +10,18 @@
     </button>
   </div>
 
-  <!-- Tiêu đề, căn giữa -->
+  <!-- Tiêu đề bảng -->
   <h2 class="wo-title">Work Order Status</h2>
 
-  <!-- Dropdown filter -->
+  <!-- Bộ lọc -->
   <div style="margin-bottom: 16px; text-align:center;">
-    <label class="filter-label" style="color:#222;">Y:</label>
-    <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:14px; text-align:center; min-width:72px;">
+    <label class="filter-label">Y:</label>
+    <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:14px; min-width:72px;">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let y of years" [value]="y">{{y}}</option>
     </select>
-    <label class="filter-label" style="color:#222;">M:</label>
-    <select [(ngModel)]="selectedMonth" (change)="filterData()" style="min-width:60px; text-align:center;">
+    <label class="filter-label">M:</label>
+    <select [(ngModel)]="selectedMonth" (change)="filterData()" style="min-width:60px;">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let m of months" [value]="m">{{m}}</option>
     </select>
@@ -34,15 +35,13 @@
     <div *ngIf="loginError" style="color: red;">{{loginError}}</div>
   </div>
 
-  <!-- Đã đăng nhập: Cho sửa -->
+  <!-- Đã đăng nhập: Được chỉnh sửa -->
   <div *ngIf="isLoggedIn">
     <div style="overflow-x:auto; max-height: 66vh;">
       <table *ngIf="workOrders.length > 0" class="wo-table">
         <thead>
           <tr>
-            <th *ngFor="let col of columns; let idx = index" class="header">
-              {{col}}
-            </th>
+            <th *ngFor="let col of columns" class="header">{{col}}</th>
             <th class="actions-col header">Actions</th>
           </tr>
         </thead>
@@ -52,10 +51,22 @@
               [class.even]="i%2===1">
             <td *ngFor="let col of columns">
               <ng-container *ngIf="editIndex === i; else viewOnly">
-                <input [(ngModel)]="workOrders[i][col]" class="wo-input" (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+                <ng-container *ngIf="col === 'Date PD'; else editOther">
+                  <input [(ngModel)]="workOrders[i][col]" class="wo-input"
+                         (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+                </ng-container>
+                <ng-template #editOther>
+                  <input [(ngModel)]="workOrders[i][col]" class="wo-input"
+                         (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+                </ng-template>
               </ng-container>
               <ng-template #viewOnly>
-                {{row[col]}}
+                <ng-container *ngIf="col === 'Date PD'; else normalCol">
+                  {{ formatDatePD(row[col]) }}
+                </ng-container>
+                <ng-template #normalCol>
+                  {{ row[col] }}
+                </ng-template>
               </ng-template>
             </td>
             <td class="actions-col">
@@ -82,7 +93,12 @@
               [class.odd]="i%2===0"
               [class.even]="i%2===1">
             <td *ngFor="let col of columns">
-              {{row[col]}}
+              <ng-container *ngIf="col === 'Date PD'; else normalCell">
+                {{ formatDatePD(row[col]) }}
+              </ng-container>
+              <ng-template #normalCell>
+                {{ row[col] }}
+              </ng-template>
             </td>
           </tr>
         </tbody>

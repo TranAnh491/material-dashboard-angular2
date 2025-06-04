@@ -39,8 +39,6 @@ export class WorkOrderStatusComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
-        // Nếu muốn debug, bỏ comment dòng dưới
-        // console.log('JSON RESPONSE:', resp);
         this.columns = resp.columns || [];
         this.allWorkOrders = resp.data || [];
         this.years = this.getYearsList();
@@ -97,5 +95,12 @@ export class WorkOrderStatusComponent implements OnInit {
 
   openGoogleSheet() {
     window.open('https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0', '_blank');
+  }
+
+  formatDatePD(dateStr: string): string {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB'); // dd/MM/yyyy
   }
 }
