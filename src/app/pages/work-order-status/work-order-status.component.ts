@@ -19,13 +19,11 @@ export class WorkOrderStatusComponent implements OnInit {
   password = '';
   loginError = '';
 
-  // Filter
   selectedYear: string = '';
   selectedMonth: string = '';
   years: string[] = [];
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 
-  // Cho edit dòng
   editIndex: number | null = null;
 
   yearColumn: string = 'Year';
@@ -33,7 +31,6 @@ export class WorkOrderStatusComponent implements OnInit {
 
   constructor(private http: HttpClient) {}
 
-  // Hàm check cột Work Order (giữ lại nếu dùng cho HTML)
   isWorkOrder(col: string): boolean {
     return col.trim().toLowerCase() === 'work order';
   }
@@ -41,7 +38,9 @@ export class WorkOrderStatusComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
-        this.columns = resp.columns || []; // lấy đúng tiêu đề dòng 4
+        // KIỂM TRA LOG DỮ LIỆU JSON VỀ
+        console.log('JSON RESPONSE:', resp);
+        this.columns = resp.columns || [];
         this.allWorkOrders = resp.data || [];
         this.years = this.getYearsList();
         this.filterData();
@@ -63,7 +62,6 @@ export class WorkOrderStatusComponent implements OnInit {
     }
   }
 
-  // Lưu dòng đang sửa
   saveRow(i: number) {
     const data = this.workOrders[i];
     const idx = this.allWorkOrders.findIndex(row =>
@@ -93,7 +91,7 @@ export class WorkOrderStatusComponent implements OnInit {
       if (this.selectedMonth) ok = ok && row[this.monthColumn]?.toString() === this.selectedMonth;
       return ok;
     });
-    this.editIndex = null; // reset dòng edit khi lọc lại
+    this.editIndex = null;
   }
 
   openGoogleSheet() {
