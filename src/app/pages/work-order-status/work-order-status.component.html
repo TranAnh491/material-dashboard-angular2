@@ -2,21 +2,23 @@
   <h2 class="wo-title">Work Order Status</h2>
 
   <!-- Nút mở Google Sheet -->
-  <button class="edit-sheet-btn" (click)="openGoogleSheet()">
-    <span style="display:flex;align-items:center;">
-      <i class="material-icons" style="font-size:18px;margin-right:4px;">edit</i>
-      Edit on Google Sheet
-    </span>
-  </button>
+  <div class="edit-sheet-wrapper">
+    <button class="edit-sheet-btn" (click)="openGoogleSheet()">
+      <span style="display:flex;align-items:center;">
+        <i class="material-icons" style="font-size:18px;margin-right:4px;">edit</i>
+        Edit on Google Sheet
+      </span>
+    </button>
+  </div>
 
   <!-- Dropdown filter -->
   <div style="margin-bottom: 16px;">
-    <label style="font-weight:500;">Y:</label>
+    <label class="filter-label">Y:</label>
     <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:10px;">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let y of years" [value]="y">{{y}}</option>
     </select>
-    <label style="font-weight:500;">M:</label>
+    <label class="filter-label">M:</label>
     <select [(ngModel)]="selectedMonth" (change)="filterData()">
       <option value="">-- Tất cả --</option>
       <option *ngFor="let m of months" [value]="m">{{m}}</option>
@@ -36,15 +38,15 @@
     <table *ngIf="workOrders.length > 0" class="wo-table">
       <thead>
         <tr>
-          <th *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">{{col}}</th>
+          <th *ngFor="let col of columns" [class.sticky]="isWorkOrder(col)">{{col}}</th>
           <th class="actions-col">Actions</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let row of workOrders; let i=index" [class.odd]="i%2===0" [class.even]="i%2===1">
-          <td *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">
+          <td *ngFor="let col of columns" [class.sticky]="isWorkOrder(col)">
             <ng-container *ngIf="editIndex === i; else viewOnly">
-              <input [(ngModel)]="workOrders[i][col]" class="wo-input" (keydown.enter)="saveRow(i)" />
+              <input [(ngModel)]="workOrders[i][col]" class="wo-input" (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
             </ng-container>
             <ng-template #viewOnly>
               {{row[col]}}
@@ -64,12 +66,12 @@
     <table class="wo-table">
       <thead>
         <tr>
-          <th *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">{{col}}</th>
+          <th *ngFor="let col of columns" [class.sticky]="isWorkOrder(col)">{{col}}</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let row of workOrders; let i=index" [class.odd]="i%2===0" [class.even]="i%2===1">
-          <td *ngFor="let col of columns" [class.sticky]="col === 'Work Order'">
+          <td *ngFor="let col of columns" [class.sticky]="isWorkOrder(col)">
             {{row[col]}}
           </td>
         </tr>

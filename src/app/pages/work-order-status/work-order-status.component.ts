@@ -10,6 +10,7 @@ export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
+  options: any = {};  // options received from backend
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycbzAkZjhsjdwSok1CfciFAhftU_J2X3ZQs22JLjGAXINds1VxhdXbAtYvPd3Zq3Xl1Kc/exec';
@@ -32,8 +33,6 @@ export class WorkOrderStatusComponent implements OnInit {
   monthColumn: string = 'Month';
 
   constructor(private http: HttpClient) {}
-
-  // Hàm check cột Work Order (giữ lại nếu dùng cho HTML)
   isWorkOrder(col: string): boolean {
     return col.trim().toLowerCase() === 'work order';
   }
@@ -41,8 +40,6 @@ export class WorkOrderStatusComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
-        this.columns = resp.columns || []; // lấy đúng tiêu đề dòng 4
-        this.allWorkOrders = resp.data || [];
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
