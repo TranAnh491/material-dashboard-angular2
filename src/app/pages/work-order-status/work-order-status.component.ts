@@ -10,6 +10,7 @@ export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
+  options: any = {};  // options received from backend
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycbzAkZjhsjdwSok1CfciFAhftU_J2X3ZQs22JLjGAXINds1VxhdXbAtYvPd3Zq3Xl1Kc/exec';
@@ -38,8 +39,8 @@ export class WorkOrderStatusComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
-        // KIỂM TRA LOG DỮ LIỆU JSON VỀ
-        console.log('JSON RESPONSE:', resp);
+        // Nếu muốn debug, bỏ comment dòng dưới
+        // console.log('JSON RESPONSE:', resp);
         this.columns = resp.columns || [];
         this.allWorkOrders = resp.data || [];
         this.years = this.getYearsList();
