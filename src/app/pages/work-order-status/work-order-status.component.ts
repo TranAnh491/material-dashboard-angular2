@@ -33,6 +33,10 @@ export class WorkOrderStatusComponent implements OnInit {
 
   constructor(private http: HttpClient) {}
 
+  isWorkOrder(col: string): boolean {
+    return col.trim().toLowerCase() === 'work order';
+  }
+
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
