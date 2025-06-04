@@ -33,7 +33,6 @@ export class WorkOrderStatusComponent implements OnInit {
   monthColumn: string = 'Month';
 
   constructor(private http: HttpClient) {}
-
   isWorkOrder(col: string): boolean {
     return col.trim().toLowerCase() === 'work order';
   }
@@ -41,9 +40,6 @@ export class WorkOrderStatusComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
-        this.columns = resp.columns; // lấy đúng tiêu đề dòng 4, đúng thứ tự
-        this.allWorkOrders = resp.data;
-        this.options = resp.options || {};
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
@@ -64,7 +60,7 @@ export class WorkOrderStatusComponent implements OnInit {
     }
   }
 
-  // Lưu row sau khi sửa (chỉ dòng đang edit)
+  // Lưu dòng đang sửa
   saveRow(i: number) {
     const data = this.workOrders[i];
     const idx = this.allWorkOrders.findIndex(row =>
@@ -84,7 +80,7 @@ export class WorkOrderStatusComponent implements OnInit {
     for (const row of this.allWorkOrders) {
       if (row[this.yearColumn]) yearSet.add(row[this.yearColumn].toString());
     }
-    return Array.from(yearSet).sort((a,b) => Number(a) - Number(b));
+    return Array.from(yearSet).sort((a, b) => Number(a) - Number(b));
   }
 
   filterData() {
@@ -97,7 +93,6 @@ export class WorkOrderStatusComponent implements OnInit {
     this.editIndex = null; // reset dòng edit khi lọc lại
   }
 
-  // ===> Hàm mới thêm vào <===
   openGoogleSheet() {
     window.open('https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0', '_blank');
   }
