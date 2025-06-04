@@ -68,7 +68,10 @@ export class WorkOrderStatusComponent implements OnInit {
         alert('Saved!');
         this.editIndex = null;
       },
-      error: () => alert('Save failed!')
+      error: (err) => {
+  alert('Save failed!\n' + (err?.error?.error || JSON.stringify(err)));
+  console.error(err);
+}
     });
   }
 
