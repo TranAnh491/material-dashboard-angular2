@@ -10,6 +10,7 @@ export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
+  options: any = {};  // options received from backend
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycbzAkZjhsjdwSok1CfciFAhftU_J2X3ZQs22JLjGAXINds1VxhdXbAtYvPd3Zq3Xl1Kc/exec';
@@ -42,6 +43,7 @@ export class WorkOrderStatusComponent implements OnInit {
       next: (resp) => {
         this.columns = resp.columns; // lấy đúng tiêu đề dòng 4, đúng thứ tự
         this.allWorkOrders = resp.data;
+        this.options = resp.options || {};
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
