@@ -50,17 +50,17 @@
               [class.odd]="i%2===0"
               [class.even]="i%2===1">
             <td *ngFor="let col of columns">
-              <ng-container *ngIf="editIndex === i; else viewOnly">
-                <ng-container *ngIf="col === 'Date PD'; else editOther">
-                  <input [(ngModel)]="workOrders[i][col]" class="wo-input"
-                         (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+              <ng-container *ngIf="editIndex === i; else viewCell">
+                <ng-container *ngIf="columnOptions[col]; else normalEdit">
+                  <select [(ngModel)]="workOrders[i][col]" (change)="saveRow(i)" (keydown.enter)="saveRow(i)">
+                    <option *ngFor="let opt of columnOptions[col]" [value]="opt">{{opt}}</option>
+                  </select>
                 </ng-container>
-                <ng-template #editOther>
-                  <input [(ngModel)]="workOrders[i][col]" class="wo-input"
-                         (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+                <ng-template #normalEdit>
+                  <input [(ngModel)]="workOrders[i][col]" (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
                 </ng-template>
               </ng-container>
-              <ng-template #viewOnly>
+              <ng-template #viewCell>
                 <ng-container *ngIf="col === 'Date PD'; else normalCol">
                   {{ formatDatePD(row[col]) }}
                 </ng-container>

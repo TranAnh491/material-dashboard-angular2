@@ -10,10 +10,10 @@ export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
-  options: any = {};  // options received from backend
+  columnOptions: { [key: string]: string[] } = {}; // <-- Lấy dropdown động
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbzAkZjhsjdwSok1CfciFAhftU_J2X3ZQs22JLjGAXINds1VxhdXbAtYvPd3Zq3Xl1Kc/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbwXAnRAs0yjgQnz6y-vwx2WOlf79z-zMB8XgJqxDD2WJsZjNJZK4cac3qVyMkGxrCA/exec';
 
   isLoggedIn = false;
   username = '';
@@ -32,10 +32,6 @@ export class WorkOrderStatusComponent implements OnInit {
 
   constructor(private http: HttpClient) {}
 
-  isWorkOrder(col: string): boolean {
-    return col.trim().toLowerCase() === 'work order';
-  }
-
   ngOnInit(): void {
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
@@ -44,6 +40,7 @@ export class WorkOrderStatusComponent implements OnInit {
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
+        this.columnOptions = resp.options || resp.dropdown || {}; // lấy đúng key backend trả về
       },
       error: () => {
         this.errorMsg = 'Failed to load data';
@@ -66,7 +63,7 @@ export class WorkOrderStatusComponent implements OnInit {
     const idx = this.allWorkOrders.findIndex(row =>
       this.columns.every(col => row[col] === data[col])
     );
-    this.http.post<any>(this.GAS_URL, {row: idx, data}).subscribe({
+    this.http.post<any>(this.GAS_URL, { row: idx, data }).subscribe({
       next: () => {
         alert('Saved!');
         this.editIndex = null;
