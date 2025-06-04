@@ -1,7 +1,5 @@
 <div class="workorder-container">
-  <h2 class="wo-title">Work Order Status</h2>
-
-  <!-- Nút mở Google Sheet -->
+  <!-- Nút mở Google Sheet, nằm trên cùng bên trái -->
   <div class="edit-sheet-wrapper">
     <button class="edit-sheet-btn" (click)="openGoogleSheet()">
       <span style="display:flex;align-items:center;">
@@ -10,6 +8,9 @@
       </span>
     </button>
   </div>
+
+  <!-- Tiêu đề, căn giữa -->
+  <h2 class="wo-title">Work Order Status</h2>
 
   <!-- Dropdown filter -->
   <div style="margin-bottom: 16px; text-align:center;">
@@ -35,13 +36,11 @@
 
   <!-- Đã đăng nhập: Cho sửa -->
   <div *ngIf="isLoggedIn">
-    <div style="overflow-x:auto;">
+    <div style="overflow-x:auto; max-height: 66vh;">
       <table *ngIf="workOrders.length > 0" class="wo-table">
         <thead>
           <tr>
-            <th *ngFor="let col of columns; let idx = index"
-                [class.sticky-col]="isWorkOrder(col)"
-                [class.header]="true">
+            <th *ngFor="let col of columns; let idx = index" class="header">
               {{col}}
             </th>
             <th class="actions-col header">Actions</th>
@@ -51,8 +50,7 @@
           <tr *ngFor="let row of workOrders; let i=index"
               [class.odd]="i%2===0"
               [class.even]="i%2===1">
-            <td *ngFor="let col of columns"
-                [class.sticky-col]="isWorkOrder(col)">
+            <td *ngFor="let col of columns">
               <ng-container *ngIf="editIndex === i; else viewOnly">
                 <input [(ngModel)]="workOrders[i][col]" class="wo-input" (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
               </ng-container>
@@ -72,19 +70,18 @@
 
   <!-- Chưa đăng nhập: Chỉ xem -->
   <div *ngIf="!isLoggedIn && workOrders.length > 0">
-    <div style="overflow-x:auto;">
+    <div style="overflow-x:auto; max-height: 66vh;">
       <table class="wo-table">
         <thead>
           <tr>
-            <th *ngFor="let col of columns" [class.sticky-col]="isWorkOrder(col)" class="header">{{col}}</th>
+            <th *ngFor="let col of columns" class="header">{{col}}</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of workOrders; let i=index"
               [class.odd]="i%2===0"
               [class.even]="i%2===1">
-            <td *ngFor="let col of columns"
-                [class.sticky-col]="isWorkOrder(col)">
+            <td *ngFor="let col of columns">
               {{row[col]}}
             </td>
           </tr>

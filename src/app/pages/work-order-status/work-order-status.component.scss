@@ -1,8 +1,61 @@
 .workorder-container {
   padding: 0 0 10px 0;
+  position: relative;
 }
 
-/* Table Container for horizontal/vertical scroll & sticky */
+/* Nút Edit Google Sheet - nằm trên cùng bên trái, không đè lên tiêu đề */
+.edit-sheet-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  margin-top: 12px;
+  margin-left: 24px;
+}
+.edit-sheet-btn {
+  background: #1c7fed;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 19px;
+  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 17px;
+  box-shadow: 0 2px 12px #aec7ed40;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+}
+.edit-sheet-btn:hover {
+  background: #1057a5;
+}
+
+/* Tiêu đề Work Order Status */
+.wo-title {
+  font-size: 2.4em;
+  font-weight: bold;
+  text-align: center;
+  color: #273b54;
+  margin: 32px 0 10px 0;
+  letter-spacing: 2px;
+}
+
+/* Bộ lọc năm tháng */
+.filter-label {
+  font-weight: 600;
+  color: #222;
+  margin-right: 2px;
+  font-size: 1em;
+}
+select {
+  min-width: 54px;
+  border-radius: 7px;
+  border: 1px solid #bdd5f7;
+  padding: 4px 8px;
+}
+
+/* Table */
 .wo-table {
   width: max-content;
   min-width: 100%;
@@ -25,16 +78,7 @@
   color: #164678;
 }
 
-/* Sticky cột Work Order (left: ... theo thứ tự cột của bạn) */
-.wo-table th.sticky-col, .wo-table td.sticky-col {
-  position: sticky;
-  left: 350px;  // chỉnh lại đúng vị trí của cột Work Order, thử left: 420px nếu bị lệch
-  background: #d0e3fa !important;
-  z-index: 11;
-  font-weight: 700;
-}
-
-/* Nếu muốn sticky nhiều cột, dùng left khác nhau cho từng cột */
+/* Đã bỏ sticky cột, chỉ sticky header */
 
 /* Table body */
 .wo-table td, .wo-table th {
@@ -65,7 +109,6 @@
   font-size: 15px;
   outline: none;
 }
-
 .wo-input:focus {
   border: 2px solid #3781d9;
   background: #f3f9ff;
@@ -76,7 +119,6 @@
   min-width: 90px;
   text-align: center;
 }
-
 .wo-table button {
   background: #2497f3;
   color: #fff;
@@ -87,56 +129,6 @@
   font-size: 15px;
   transition: background .15s;
 }
-
 .wo-table button:hover {
   background: #155f9e;
-}
-
-/* Nút Edit Google Sheet */
-.edit-sheet-wrapper {
-  position: absolute;
-  top: 38px;
-  left: 275px;
-}
-.edit-sheet-btn {
-  background: #1c7fed;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 19px;
-  margin-bottom: 10px;
-  font-weight: 600;
-  font-size: 17px;
-  box-shadow: 0 2px 12px #aec7ed40;
-  cursor: pointer;
-  transition: background 0.2s;
-  display: flex;
-  align-items: center;
-}
-.edit-sheet-btn:hover {
-  background: #1057a5;
-}
-
-/* Bộ lọc năm tháng */
-.filter-label {
-  font-weight: 600;
-  color: #222;
-  margin-right: 2px;
-  font-size: 1em;
-}
-select {
-  min-width: 54px;
-  border-radius: 7px;
-  border: 1px solid #bdd5f7;
-  padding: 4px 8px;
-}
-
-/* Tiêu đề Work Order Status */
-.wo-title {
-  font-size: 2.4em;
-  font-weight: bold;
-  text-align: center;
-  color: #273b54;
-  margin: 24px 0 10px 0;
-  letter-spacing: 2px;
 }
