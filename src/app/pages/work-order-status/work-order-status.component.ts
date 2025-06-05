@@ -68,7 +68,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   login() {
-    if (this.username === 'Admin' && this.password === 'admin') {
+    if (this.username === 'anhtt' && this.password === '123456') {
       this.isLoggedIn = true;
       this.loginError = '';
     } else {
