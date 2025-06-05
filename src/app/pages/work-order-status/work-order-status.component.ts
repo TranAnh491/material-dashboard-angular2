@@ -13,7 +13,7 @@ export class WorkOrderStatusComponent implements OnInit {
   columnOptions: { [key: string]: string[] } = {}; // <-- Lấy dropdown động
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbzS5RmQv7nD1T1uR7BV9lLUxqiiFcuCGtGYn-gD3rHeLM2fuaGWmZWJBUGQT2aInBAE/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycby7bSWG_YGtRQ93zVxiJOWj4Hq0aL_63f916LV4sGryaRtE0GfVotpdj4x-_RV13s0E/exec';
 
   isLoggedIn = false;
   username = '';
