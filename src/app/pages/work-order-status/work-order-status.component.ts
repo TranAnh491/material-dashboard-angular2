@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 @Component({
@@ -6,7 +6,7 @@ import { HttpClient } from '@angular/common/http';
   templateUrl: './work-order-status.component.html',
   styleUrls: ['./work-order-status.component.scss']
 })
-export class WorkOrderStatusComponent implements OnInit {
+export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
@@ -30,9 +30,27 @@ export class WorkOrderStatusComponent implements OnInit {
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
 
+  refreshInterval: any;      // <--- ADD
+  refreshTime = 30000;       // <--- ADD (miliseconds)
+
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
+    this.loadData();
+    // Tự động reload mỗi X giây
+    this.refreshInterval = setInterval(() => {
+      this.loadData();
+    }, this.refreshTime);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+  }
+
+  loadData() {
+    this.loading = true;
     this.http.get<any>(this.GAS_URL).subscribe({
       next: (resp) => {
         this.columns = resp.columns || [];
@@ -40,7 +58,7 @@ export class WorkOrderStatusComponent implements OnInit {
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
-        this.columnOptions = resp.options || resp.dropdown || {}; // lấy đúng key backend trả về
+        this.columnOptions = resp.options || resp.dropdown || {};
       },
       error: () => {
         this.errorMsg = 'Failed to load data';
@@ -69,9 +87,9 @@ export class WorkOrderStatusComponent implements OnInit {
         this.editIndex = null;
       },
       error: (err) => {
-  alert('Save failed!\n' + (err?.error?.error || JSON.stringify(err)));
-  console.error(err);
-}
+        alert('Save failed!\n' + (err?.error?.error || JSON.stringify(err)));
+        console.error(err);
+      }
     });
   }
 

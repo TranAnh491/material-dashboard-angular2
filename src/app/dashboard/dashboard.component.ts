@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import * as Chartist from 'chartist';
 
 @Component({
@@ -6,15 +6,18 @@ import * as Chartist from 'chartist';
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
 
   workOrder = "...";
   shipment = "...";
-  workOrderStatus: any[] = []; // Thêm biến này
+  workOrderStatus: any[] = [];
+
+  refreshInterval: any;
+  refreshTime = 300000; // 5 phút (300.000 ms)
 
   constructor() { }
 
-  // Hàm vẽ số lên điểm chart (Line)
+  // Vẽ số lên chart (Line)
   addValueLabels(chart, values) {
     chart.on('draw', function (data) {
       if (data.type === 'point') {
@@ -78,18 +81,32 @@ export class DashboardComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.loadDashboardData();
+    // Tự động reload mỗi 5 phút
+    this.refreshInterval = setInterval(() => {
+      this.loadDashboardData();
+    }, this.refreshTime);
+  }
+
+  ngOnDestroy() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+  }
+
+  loadDashboardData() {
     fetch('https://docs.google.com/spreadsheets/d/1dGfJhDx-JNsFJ0l3kcz8uAHvMtm7GhPeAcUj8pBqx_Q/pub?gid=1580861382&single=true&output=csv')
       .then(res => res.text())
       .then(csv => {
         const rows = csv.split('\n').map(row => row.split(','));
 
-        // Lấy số động Work order & Shipment
+        // Lấy số Work order & Shipment
         for (let cells of rows) {
           if (cells[0]?.trim().toLowerCase() === "work order") this.workOrder = cells[1]?.trim();
           if (cells[0]?.trim().toLowerCase() === "shipment") this.shipment = cells[1]?.trim();
         }
 
-        // Lấy dữ liệu biểu đồ (giả định như trước đây)
+        // Biểu đồ (dữ liệu giả định như cũ)
         const months = rows[11].slice(1).map(m => m.trim());
         const matAccuracy = rows[12].slice(1).map(a => Number(a.replace('%','').replace(',','.').trim())).filter(x => !isNaN(x));
         const fgAccuracy = rows[13].slice(1).map(a => Number(a.replace('%','').replace(',','.').trim())).filter(x => !isNaN(x));
@@ -129,7 +146,7 @@ export class DashboardComponent implements OnInit {
         this.startAnimationForLineChart(websiteViewsChart);
         this.addValueLabels(websiteViewsChart, fgAccuracy);
 
-        // Chart 3: FGs Inventory Turnover (Line, xanh da trời)
+        // Chart 3: FGs Inventory Turnover (Line)
         let fgTMin = Math.min(...fgTurnover);
         let fgTMax = Math.max(...fgTurnover);
         const optionsFGTurnover = {
@@ -146,7 +163,7 @@ export class DashboardComponent implements OnInit {
         this.startAnimationForLineChart(completedTasksChart);
         this.addValueLabels(completedTasksChart, fgTurnover);
 
-        // Lấy dữ liệu A19:C25 (dòng 18-24, index 18-24)
+        // Dữ liệu workOrderStatus (A19:C25, dòng 18-24)
         this.workOrderStatus = [];
         for (let i = 18; i <= 24; i++) {
           if (rows[i] && rows[i][0]) {
