@@ -66,6 +66,30 @@ tbody td, thead th {
   color: #111 !important;
 }
 
+/**** Custom card header tím đẹp cho Work Order Status ****/
+.custom-card-header {
+  padding: 18px 22px 10px 22px;
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 0;
+  box-shadow: 0 2px 8px #d7b8eb44;
+}
+.custom-card-header-purple {
+  background: linear-gradient(60deg, #ab47bc, #8e24aa);
+  color: #fff !important;
+}
+.custom-card-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.custom-card-desc {
+  margin: 0;
+  font-size: 1rem;
+  color: #efeaff;
+  opacity: 0.88;
+}
+
 /* Có thể thêm border-radius nếu muốn bo góc bảng:
 .workorder-status-table,
 .table {

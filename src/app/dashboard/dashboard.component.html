@@ -130,47 +130,32 @@
     </div>
     <!-- Reports and Shipment Status -->
     <div class="row">
-      <!-- Reports Tab -->
+      <!-- Work Order Status -->
       <div class="col-lg-6 col-md-12">
         <div class="card">
-          <div class="card-header card-header-tabs card-header-primary">
-            <div class="nav-tabs-navigation">
-              <div class="nav-tabs-wrapper">
-                <span class="nav-tabs-title">Reports:</span>
-                <ul class="nav nav-tabs" data-tabs="tabs">
-                  <li class="nav-item">
-                    <a mat-button class="nav-link active" href="#profile" data-toggle="tab">
-                      <i class="material-icons">data_thresholding</i> Work order status
-                      <div class="ripple-container"></div>
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
+          <div class="custom-card-header custom-card-header-purple">
+            <h4 class="custom-card-title">Work Order Status</h4>
+            <p class="custom-card-desc">Status for the next 7 days</p>
           </div>
           <div class="card-body">
-            <div class="tab-content">
-              <div class="tab-pane active" id="profile">
-                <table class="table table-bordered table-striped workorder-status-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Done</th>
-                      <th>Awaiting Picking</th>
-                      <th>Delay</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr *ngFor="let row of workOrderStatus">
-                      <td>{{ row.code }}</td>
-                      <td>{{ row.value }}</td>
-                      <td>{{ row.note }}</td>
-                      <td>{{ row.extra }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <table class="table table-bordered table-striped workorder-status-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Done</th>
+                  <th>Awaiting Picking</th>
+                  <th>Delay</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of workOrderStatus">
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.value }}</td>
+                  <td>{{ row.note }}</td>
+                  <td>{{ row.extra }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
