@@ -144,7 +144,6 @@
                       <div class="ripple-container"></div>
                     </a>
                   </li>
-                  <!-- Đã xoá tab Shipment status ở đây -->
                 </ul>
               </div>
             </div>
@@ -152,26 +151,25 @@
           <div class="card-body">
             <div class="tab-content">
               <div class="tab-pane active" id="profile">
-                <table class="table table-bordered table-striped">
+                <table class="table table-bordered table-striped workorder-status-table">
                   <thead>
                     <tr>
-                      <th>Code</th>
-                      <th>Value</th>
-                      <th>Note</th>
-                      <th>Extra</th>
+                      <th>Date</th>
+                      <th>Done</th>
+                      <th>Awaiting Picking</th>
+                      <th>Delay</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr *ngFor="let row of workOrderStatus">
-                      <td>{{row.code}}</td>
-                      <td>{{row.value}}</td>
-                      <td>{{row.note}}</td>
-                      <td>{{row.extra}}</td>
+                      <td>{{ row.date }}</td>
+                      <td>{{ row.done }}</td>
+                      <td>{{ row.awaiting }}</td>
+                      <td>{{ row.delay }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <!-- Đã xoá tab-pane Shipment status -->
             </div>
           </div>
         </div>

@@ -7,20 +7,69 @@
   fill: #2196f3 !important;
   fill-opacity: 0.1;
 }
+
+/**** Work Order Status Table - căn giữa, màu đen ****/
+.workorder-status-table {
+  width: 100%;
+  text-align: center;
+}
+.workorder-status-table th,
+.workorder-status-table td {
+  text-align: center !important;
+  color: #111 !important;
+  vertical-align: middle !important;
+}
+.workorder-status-table th {
+  font-weight: bold;
+  font-size: 1.04em;
+  background: #fff;
+}
+
+/**** Tiêu đề bảng, thẻ card, stats - màu đen, font điều chỉnh ****/
 .card-title {
-    font-size: 1rem !important;  /* hoặc thử 1.5rem nếu muốn nhỏ hơn nữa */
+    font-size: 1rem !important;
     font-weight: 500;
     line-height: 1.1;
+    color: #111 !important;
 }
+.card-category {
+    color: #111 !important;
+}
+.card {
+    color: #111 !important;
+}
+.stats {
+    color: #111 !important;
+}
+.table th,
+.table td {
+    color: #111 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+/**** Table header căn giữa, giữa dòng ****/
 th {
   text-align: center !important;
   vertical-align: middle !important;
 }
-.card-title,
-.card-category,
-.card,
-.table th,
-.table td,
-.stats {
+
+/**** Optional: Tăng độ nét tiêu đề trong bảng (nếu muốn) ****/
+.table thead th {
+  font-weight: bold !important;
+  color: #111 !important;
+  background: #fff;
+}
+
+/**** Nếu muốn bảng không có chữ xám mặc định Material ****/
+tbody td, thead th {
   color: #111 !important;
 }
+
+/* Có thể thêm border-radius nếu muốn bo góc bảng:
+.workorder-status-table,
+.table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+*/
