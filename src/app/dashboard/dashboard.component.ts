@@ -165,7 +165,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         // Dữ liệu workOrderStatus (A19:C25, dòng 18-24)
         this.workOrderStatus = [];
-        for (let i = 18; i <= 24; i++) {
+        for (let i = 19; i <= 24; i++) {
           if (rows[i] && rows[i][0]) {
             this.workOrderStatus.push({
               code: rows[i][0]?.trim(),
