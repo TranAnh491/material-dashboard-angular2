@@ -10,7 +10,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
-  columnOptions: { [key: string]: string[] } = {}; // <-- Lấy dropdown động
+  columnOptions: { [key: string]: string[] } = {};
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycby7bSWG_YGtRQ93zVxiJOWj4Hq0aL_63f916LV4sGryaRtE0GfVotpdj4x-_RV13s0E/exec';
@@ -30,14 +30,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
 
-  refreshInterval: any;      // <--- ADD
-  refreshTime = 30000;       // <--- ADD (miliseconds)
+  refreshInterval: any;
+  refreshTime = 30000; // 30s
 
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
+    // Auto chọn tháng và năm hiện tại khi mở trang
+    const today = new Date();
+    this.selectedMonth = (today.getMonth() + 1).toString();
+    this.selectedYear = today.getFullYear().toString();
+
     this.loadData();
-    // Tự động reload mỗi X giây
     this.refreshInterval = setInterval(() => {
       this.loadData();
     }, this.refreshTime);
