@@ -14,7 +14,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   shipmentStatus: any[] = [];
 
   refreshInterval: any;
-  refreshTime = 300000; // 5 phút
+  refreshTime = 300000; // 5 phút (300.000 ms)
 
   constructor() { }
 
@@ -164,10 +164,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.startAnimationForLineChart(completedTasksChart);
         this.addValueLabels(completedTasksChart, fgTurnover);
 
-        // Dữ liệu workOrderStatus (A19:C25, dòng 19-24)
+        // Work Order Status (dòng 19 đến 24)
         this.workOrderStatus = [];
         for (let i = 19; i <= 24; i++) {
-          if (rows[i] && rows[i][0]) {
+          if (rows[i] && rows[i][0] && rows[i][0].trim().toLowerCase() !== 'date') {
             this.workOrderStatus.push({
               code: rows[i][0]?.trim(),
               value: rows[i][1] ? rows[i][1].trim() : '',
@@ -177,47 +177,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         }
 
-        // Dữ liệu Shipment Status (A30:E, từ hôm nay đến 7 ngày tới)
-        const shipmentStatus = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Shipment Status - Lọc đúng dòng có data, bỏ dòng trống/lặp
+        this.shipmentStatus = [];
+        // Ví dụ, dữ liệu bảng shipment bắt đầu từ dòng 30 (rows[30]), có header (bỏ qua), data thực từ 31 trở đi
+        for (let i = 31; i < rows.length; i++) {
+          // Nếu dòng trắng hoặc hết dữ liệu thực thì break
+          if (!rows[i] || !rows[i][0] || rows[i][0].trim() === '') break;
+          // Bỏ nếu là header
+          if (rows[i][0].trim().toLowerCase() === 'ship date') continue;
 
-        for (let i = 29; i < rows.length; i++) { // dòng 30 trong sheet là index 29
-          const row = rows[i];
-          if (!row || !row[0]) continue;
-
-          let shipDateCell = row[0].trim();
-          let shipDateObj: Date | null = null;
-          if (shipDateCell) {
-            let parts = shipDateCell.split(/[\/\-]/);
-            if (parts.length === 3) {
-              if (parts[2].length === 4) { // dd/mm/yyyy
-                shipDateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
-              } else if (parts[0].length === 4) { // yyyy-mm-dd
-                shipDateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-              }
-            } else {
-              let dateNum = Number(shipDateCell);
-              if (!isNaN(dateNum)) {
-                shipDateObj = new Date(Math.round((dateNum - 25569) * 86400 * 1000));
-              }
-            }
-          }
-          if (!shipDateObj) continue;
-          shipDateObj.setHours(0, 0, 0, 0);
-
-          const diff = (shipDateObj.getTime() - today.getTime()) / (1000 * 3600 * 24);
-          if (diff < 0 || diff > 7) continue;
-
-          shipmentStatus.push({
-            shipDate: row[0]?.trim() || '',
-            shipment: row[1]?.trim() || '',
-            customer: row[2]?.trim() || '',
-            carton: row[3]?.trim() || '',
-            statusDetail: row[4]?.trim() || ''
+          this.shipmentStatus.push({
+            shipDate: rows[i][0]?.trim(),
+            shipment: rows[i][1]?.trim(),
+            customer: rows[i][2]?.trim(),
+            carton: rows[i][3]?.trim(),
+            statusDetail: rows[i][4]?.trim()
           });
         }
-        this.shipmentStatus = shipmentStatus;
+
       });
   }
 }
