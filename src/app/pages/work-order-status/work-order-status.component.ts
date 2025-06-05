@@ -13,7 +13,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   columnOptions: { [key: string]: string[] } = {};
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycby7bSWG_YGtRQ93zVxiJOWj4Hq0aL_63f916LV4sGryaRtE0GfVotpdj4x-_RV13s0E/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbywrBaLuzeeNlCihVh9tkOb55row6VIpyKrrI2Gl40uNaXnNp7nMkaov0x9aTaSwob6/exec';
 
   isLoggedIn = false;
   username = '';
