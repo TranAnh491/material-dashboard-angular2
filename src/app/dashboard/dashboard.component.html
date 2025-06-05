@@ -174,58 +174,34 @@
           </div>
         </div>
       </div>
-      <!-- Shipment Status - Đã thay cho Employees Stats -->
+      <!-- Shipment Status -->
       <div class="col-lg-6 col-md-12">
         <div class="card">
           <div class="card-header card-header-warning">
             <h4 class="card-title">Shipment Status</h4>
-            <p class="card-category">Status of Shipments</p>
+            <p class="card-category">Status for the next 7 days</p>
           </div>
           <div class="card-body table-responsive">
-            <table class="table">
-              <tbody>
+            <table class="table table-bordered table-striped">
+              <thead>
                 <tr>
-                  <td>
-                    <div class="form-check">
-                      <label class="form-check-label">
-                        <input class="form-check-input" type="checkbox" value="" checked>
-                        <span class="form-check-sign">
-                          <span class="check"></span>
-                        </span>
-                      </label>
-                    </div>
-                  </td>
-                  <td>Flooded: One year later, assessing what was lost and what was found when a ravaging rain swept through metro Detroit
-                  </td>
-                  <td class="td-actions text-right">
-                    <button mat-raised-button type="button" matTooltip="Edit Task" [matTooltipPosition]="'above'" class="btn btn-primary btn-link btn-sm btn-just-icon">
-                      <i class="material-icons">edit</i>
-                    </button>
-                    <button mat-raised-button type="button" matTooltip="Remove" [matTooltipPosition]="'above'" class="btn btn-danger btn-link btn-sm btn-just-icon">
-                      <i class="material-icons">close</i>
-                    </button>
-                  </td>
+                  <th>Ship Date</th>
+                  <th>Shipment</th>
+                  <th>Customer</th>
+                  <th>Carton</th>
+                  <th>Status Detail</th>
                 </tr>
-                <tr>
-                  <td>
-                    <div class="form-check">
-                      <label class="form-check-label">
-                        <input class="form-check-input" type="checkbox" value="">
-                        <span class="form-check-sign">
-                          <span class="check"></span>
-                        </span>
-                      </label>
-                    </div>
-                  </td>
-                  <td>Sign contract for "What are conference organizers afraid of?"</td>
-                  <td class="td-actions text-right">
-                    <button mat-raised-button type="button" matTooltip="Edit Task" [matTooltipPosition]="'above'" class="btn btn-primary btn-link btn-sm btn-just-icon">
-                      <i class="material-icons">edit</i>
-                    </button>
-                    <button mat-raised-button type="button" matTooltip="Remove" [matTooltipPosition]="'above'" class="btn btn-danger btn-link btn-sm btn-just-icon">
-                      <i class="material-icons">close</i>
-                    </button>
-                  </td>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of shipmentStatus">
+                  <td>{{ row.shipDate }}</td>
+                  <td>{{ row.shipment }}</td>
+                  <td>{{ row.customer }}</td>
+                  <td>{{ row.carton }}</td>
+                  <td>{{ row.statusDetail }}</td>
+                </tr>
+                <tr *ngIf="shipmentStatus.length === 0">
+                  <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
                 </tr>
               </tbody>
             </table>

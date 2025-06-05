@@ -11,9 +11,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrder = "...";
   shipment = "...";
   workOrderStatus: any[] = [];
+  shipmentStatus: any[] = [];
 
   refreshInterval: any;
-  refreshTime = 300000; // 5 phút (300.000 ms)
+  refreshTime = 300000; // 5 phút
 
   constructor() { }
 
@@ -163,7 +164,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.startAnimationForLineChart(completedTasksChart);
         this.addValueLabels(completedTasksChart, fgTurnover);
 
-        // Dữ liệu workOrderStatus (A19:C25, dòng 18-24)
+        // Dữ liệu workOrderStatus (A19:C25, dòng 19-24)
         this.workOrderStatus = [];
         for (let i = 19; i <= 24; i++) {
           if (rows[i] && rows[i][0]) {
@@ -175,6 +176,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
             });
           }
         }
+
+        // Dữ liệu Shipment Status (A30:E, từ hôm nay đến 7 ngày tới)
+        const shipmentStatus = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 29; i < rows.length; i++) { // dòng 30 trong sheet là index 29
+          const row = rows[i];
+          if (!row || !row[0]) continue;
+
+          let shipDateCell = row[0].trim();
+          let shipDateObj: Date | null = null;
+          if (shipDateCell) {
+            let parts = shipDateCell.split(/[\/\-]/);
+            if (parts.length === 3) {
+              if (parts[2].length === 4) { // dd/mm/yyyy
+                shipDateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+              } else if (parts[0].length === 4) { // yyyy-mm-dd
+                shipDateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              }
+            } else {
+              let dateNum = Number(shipDateCell);
+              if (!isNaN(dateNum)) {
+                shipDateObj = new Date(Math.round((dateNum - 25569) * 86400 * 1000));
+              }
+            }
+          }
+          if (!shipDateObj) continue;
+          shipDateObj.setHours(0, 0, 0, 0);
+
+          const diff = (shipDateObj.getTime() - today.getTime()) / (1000 * 3600 * 24);
+          if (diff < 0 || diff > 7) continue;
+
+          shipmentStatus.push({
+            shipDate: row[0]?.trim() || '',
+            shipment: row[1]?.trim() || '',
+            customer: row[2]?.trim() || '',
+            carton: row[3]?.trim() || '',
+            statusDetail: row[4]?.trim() || ''
+          });
+        }
+        this.shipmentStatus = shipmentStatus;
       });
   }
 }
