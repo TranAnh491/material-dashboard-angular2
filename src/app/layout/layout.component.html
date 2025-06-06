@@ -1,0 +1,13 @@
+<div style="margin-bottom: 14px;">
+  <input [(ngModel)]="searchCode" placeholder="Nhập mã vật tư..." style="padding: 7px; border-radius: 6px; border: 1px solid #bbb; min-width: 160px;" />
+  <button (click)="search()" style="padding: 7px 18px; margin-left: 10px; border-radius: 6px; background: #2196f3; color: #fff; border: none;">
+    Tìm
+  </button>
+</div>
+<div class="layout-grid">
+  <div *ngFor="let loc of locations"
+       [ngClass]="{'highlight': loc.id === highlightLocation}"
+       class="location-cell">
+    {{loc.id}}
+  </div>
+</div>
