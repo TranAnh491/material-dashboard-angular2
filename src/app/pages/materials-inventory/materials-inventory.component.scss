@@ -1,20 +1,26 @@
 .table-inventory {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 14px;
+  margin-top: 0;
   background: #fff;
   box-shadow: 0 2px 8px #e3e3e3;
 }
+
 .table-inventory th, .table-inventory td {
   border: 1px solid #ddd;
   padding: 8px 6px;
   text-align: center;
 }
+
 .table-inventory th {
   background: #2196f3;
   color: #fff;
   font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
+
 .table-inventory tr:nth-child(even) {
   background: #f6f9fd;
 }
