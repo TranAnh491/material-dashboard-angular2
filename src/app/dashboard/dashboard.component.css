@@ -97,3 +97,8 @@ tbody td, thead th {
   overflow: hidden;
 }
 */
+/* Tiêu đề Work Order Status: đen, in đậm, nền tím */
+.custom-card-header-purple .custom-card-title {
+  color: #111 !important;
+  font-weight: bold !important;
+}
