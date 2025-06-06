@@ -79,7 +79,7 @@ tbody td, thead th {
 }
 .custom-card-title {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.0rem;
   font-weight: 700;
   letter-spacing: 0.2px;
 }
@@ -100,7 +100,7 @@ tbody td, thead th {
 /* Tiêu đề Work Order Status: đen, in đậm, nền tím */
 .custom-card-header-purple .custom-card-title {
   color: #111 !important;
-  font-weight: bold !important;
+  font-weight: normal !important;
 }
 .custom-card-header-purple .custom-card-desc {
   color: #111 !important;
