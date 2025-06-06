@@ -11,7 +11,7 @@ interface Inventory {
 @Component({
   selector: 'app-materials-inventory',
   templateUrl: './materials-inventory.component.html',
-  styleUrls: ['./materials-inventory.component.scss']
+  styleUrls: ['./materials-inventory.component.scss']    // nếu bạn dùng scss, còn css thì sửa lại
 })
 export class MaterialsInventoryComponent implements OnInit {
   inventoryList: Inventory[] = [];
