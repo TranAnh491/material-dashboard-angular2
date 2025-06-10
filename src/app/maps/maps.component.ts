@@ -104,7 +104,7 @@ export class MapsComponent implements OnInit {
 
   private highlightElement(svgId: string): boolean {
     if (this.svgContainer && this.svgContainer.nativeElement) {
-      const svgObject = this.svgContainer.nativeElement.querySelector(`object[loc="${svgId.toLowerCase()}"]`);
+      const svgObject = this.svgContainer.nativeElement.querySelector(`object[loc="${svgId}" i]`);
       if (svgObject) {
         const rect = svgObject.querySelector('rect');
         if (rect) {
