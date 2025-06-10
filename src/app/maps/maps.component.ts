@@ -19,6 +19,7 @@ export class MapsComponent implements OnInit {
   
   private itemLocations: LocationInfo = {};
   private highlightedElements: HTMLElement[] = [];
+  private locToCellIdMap = new Map<string, string>();
 
   constructor(
     private http: HttpClient,
@@ -103,10 +104,15 @@ export class MapsComponent implements OnInit {
   }
 
   private highlightElement(svgId: string): boolean {
+    const cellId = this.locToCellIdMap.get(svgId.toLowerCase());
+    if (!cellId) {
+      return false;
+    }
+    
     if (this.svgContainer && this.svgContainer.nativeElement) {
-      const svgObject = this.svgContainer.nativeElement.querySelector(`object[loc="${svgId}" i]`);
-      if (svgObject) {
-        const rect = svgObject.querySelector('rect');
+      const groupElement = this.svgContainer.nativeElement.querySelector(`g[data-cell-id="${cellId}"]`);
+      if (groupElement) {
+        const rect = groupElement.querySelector('rect');
         if (rect) {
           this.renderer.setStyle(rect, 'fill', 'orange');
           this.highlightedElements.push(rect);
@@ -124,10 +130,21 @@ export class MapsComponent implements OnInit {
     this.highlightedElements = [];
   }
 
+  private buildLocMap(svgText: string) {
+    const regex = /<object.*?loc="([^"]+)".*?id="([^"]+)".*?>/g;
+    let match;
+    while ((match = regex.exec(svgText)) !== null) {
+      const loc = match[1].toLowerCase();
+      const id = match[2];
+      this.locToCellIdMap.set(loc, id);
+    }
+  }
+
   private loadSvg() {
     this.http.get('assets/img/LayoutD.svg', { responseType: 'text' })
-      .subscribe(svg => {
-        this.svgContent = this.sanitizer.bypassSecurityTrustHtml(svg);
+      .subscribe(svgText => {
+        this.buildLocMap(svgText);
+        this.svgContent = this.sanitizer.bypassSecurityTrustHtml(svgText);
       });
   }
 }
