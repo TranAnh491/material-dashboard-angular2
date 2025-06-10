@@ -32,7 +32,7 @@ export class MapsComponent implements OnInit {
   }
 
   private loadItemLocations() {
-    const sheetUrl = 'https://script.google.com/macros/s/AKfycby_mM2Gg5dY_o_2aFp-2e7C9D-U_sP_H1G5L0u-1JtTzE43V2Zf/exec';
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
     this.http.get<any[]>(sheetUrl).subscribe(data => {
       this.itemLocations = this.parseLocationData(data);
     });
