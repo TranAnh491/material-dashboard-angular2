@@ -34,7 +34,9 @@ export class MapsComponent implements OnInit {
   private loadItemLocations() {
     const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
     this.http.get<any[]>(sheetUrl).subscribe(data => {
+      console.log('--- Raw Data From Google Sheet: ---', data);
       this.itemLocations = this.parseLocationData(data);
+      console.log('--- Parsed Item Locations: ---', this.itemLocations);
     });
   }
 
