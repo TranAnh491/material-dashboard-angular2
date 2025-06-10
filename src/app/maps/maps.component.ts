@@ -1,15 +1,9 @@
-import { Component, OnInit, ElementRef, ViewChild, Renderer2, OnDestroy } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, Renderer2 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { catchError } from 'rxjs/operators';
-import { of, Subscription } from 'rxjs';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 interface LocationInfo {
-  itemCode: string;
-  po: string;
-  qty: number;
-  originalLocation: string;
-  normalizedLocation: string;
-  svgId: string;
+  [key: string]: string[];
 }
 
 @Component({
@@ -17,213 +11,122 @@ interface LocationInfo {
   templateUrl: './maps.component.html',
   styleUrls: ['./maps.component.css']
 })
-export class MapsComponent implements OnInit, OnDestroy {
-
-  // --- CONFIGURATION ---
-  private dataSourceUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-  private svgLayoutUrl = 'assets/img/LayoutD.svg';
-  
-  // Style for highlighted elements in the SVG
-  private readonly HIGHLIGHT_STYLE = {
-    fill: '#ff9800', // Orange
-    stroke: '#c00',
-    'stroke-width': '2px'
-  };
-  // -------------------
-
+export class MapsComponent implements OnInit {
   @ViewChild('svgContainer', { static: true }) svgContainer: ElementRef;
+  
+  public svgContent: SafeHtml;
+  public searchMessage: string = '';
+  
+  private itemLocations: LocationInfo = {};
+  private highlightedElements: HTMLElement[] = [];
 
-  public loading = true;
-  public errorMessage: string | null = null;
-  public searchResult: string | null = null;
-
-  private itemToLocationsMap: Map<string, LocationInfo[]> = new Map();
-  private highlightedElements: { element: any, originalStyle: any, titleElement?: any }[] = [];
-  private elementsToReset: { element: any, originalStyle: any, titleElement?: any }[] = [];
-  private subscriptions: Subscription = new Subscription();
-
-  constructor(private http: HttpClient, private renderer: Renderer2) { }
+  constructor(
+    private http: HttpClient,
+    private sanitizer: DomSanitizer,
+    private renderer: Renderer2
+  ) {}
 
   ngOnInit() {
-    this.loadDataAndSvg();
+    this.loadItemLocations();
+    this.loadSvg();
   }
 
-  ngOnDestroy() {
-    this.subscriptions.unsubscribe();
+  private loadItemLocations() {
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycby_mM2Gg5dY_o_2aFp-2e7C9D-U_sP_H1G5L0u-1JtTzE43V2Zf/exec';
+    this.http.get<any[]>(sheetUrl).subscribe(data => {
+      this.itemLocations = this.parseLocationData(data);
+    });
   }
 
-  private loadDataAndSvg(): void {
-    this.loading = true;
+  private parseLocationData(data: any[]): LocationInfo {
+    const locations: LocationInfo = {};
+    // Skip header row, assuming it's the first row
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const itemCode = row[0] ? String(row[0]).trim().toUpperCase() : '';
+      const location = row[1] ? String(row[1]).trim().toUpperCase() : '';
+
+      if (itemCode && location) {
+        if (!locations[itemCode]) {
+          locations[itemCode] = [];
+        }
+        locations[itemCode].push(location);
+      }
+    }
+    return locations;
+  }
+  
+  searchByItemCode(event: Event) {
+    const itemCodeInput = (event.target as HTMLInputElement).value.trim().toUpperCase();
+    this.searchMessage = '';
+    this.clearHighlight();
+
+    if (!itemCodeInput) {
+      this.searchMessage = 'Vui lòng nhập mã hàng.';
+      return;
+    }
     
-    // Step 1: Fetch location data from Google Script
-    const dataSub = this.http.get<any[]>(this.dataSourceUrl).pipe(
-      catchError(error => {
-        this.errorMessage = `Failed to load location data. Error: ${error.message}`;
-        return of(null);
-      })
-    ).subscribe(data => {
-      if (data) {
-        this.parseLocationData(data);
-      }
-      // Step 2: Load SVG layout after fetching data
-      this.loadSvgLayout();
-    });
+    const locations = this.itemLocations[itemCodeInput];
 
-    this.subscriptions.add(dataSub);
-  }
-
-  private parseLocationData(data: any[]): void {
-    const allLocationData: LocationInfo[] = data.map(row => {
-        const originalLocation = row.location?.trim() || '';
-        const normalizedLocation = originalLocation.toUpperCase();
-        
-        // --- NEW, SIMPLER LOGIC ---
-        // Always take the first 2 characters for the SVG ID, as requested.
-        // This correctly handles D1xxx -> D1 and also D11xxx -> D1.
-        const svgId = normalizedLocation.substring(0, 2);
-
-        return {
-            itemCode: (row.code?.trim() || '').toUpperCase(),
-            po: row.name?.trim() || 'N/A',
-            qty: row.qty || 0,
-            originalLocation: originalLocation,
-            normalizedLocation: normalizedLocation,
-            svgId: svgId
-        };
-    }).filter(info => info.itemCode && info.originalLocation);
-
-    // Create a map for quick search by item code
-    this.itemToLocationsMap.clear();
-    allLocationData.forEach(info => {
-        const existing = this.itemToLocationsMap.get(info.itemCode);
-        if (existing) {
-            existing.push(info);
-        } else {
-            this.itemToLocationsMap.set(info.itemCode, [info]);
-        }
-    });
-    console.log('--- WAREHOUSE DATA LOADED ---');
-    console.log('Item to Location Map:', this.itemToLocationsMap);
-  }
-  
-  private loadSvgLayout(): void {
-    const svgSub = this.http.get(this.svgLayoutUrl, { responseType: 'text' }).pipe(
-        catchError(error => {
-            this.errorMessage = `Failed to load SVG layout file from '${this.svgLayoutUrl}'. Make sure the file exists.`;
-            return of(null);
-        })
-    ).subscribe(svgContent => {
-        this.loading = false;
-        if (svgContent) {
-            // Directly inject the SVG content into the container
-            this.svgContainer.nativeElement.innerHTML = svgContent;
-        }
-    });
-    this.subscriptions.add(svgSub);
-  }
-  
-  public search(itemCode: string): void {
-    this.searchResult = null;
-    this.resetHighlights();
-
-    if (!itemCode) {
-      return;
-    }
-
-    const searchTerm = itemCode.trim().toUpperCase();
-    const locationsForItem = this.itemToLocationsMap.get(searchTerm);
-
-    if (locationsForItem && locationsForItem.length > 0) {
-      // Group all found location details by their target SVG ID
-      const detailsBySvgId = new Map<string, LocationInfo[]>();
-      locationsForItem.forEach(locInfo => {
-        const details = detailsBySvgId.get(locInfo.svgId);
-        if (details) {
-          details.push(locInfo);
-        } else {
-          detailsBySvgId.set(locInfo.svgId, [locInfo]);
-        }
-      });
-      
+    if (locations && locations.length > 0) {
       const foundAreas: string[] = [];
-      detailsBySvgId.forEach((details, svgId) => {
-        const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
-
-        if (svgElement) {
-          this.highlightElement(svgId, details[0]);
-          if (!foundAreas.includes(svgId)) {
-            foundAreas.push(svgId.replace(/_/g, ' '));
-          }
+      const notFoundAreas: string[] = [];
+      
+      locations.forEach(location => {
+        const svgId = location.substring(0, 2); 
+        const success = this.highlightElement(svgId);
+        if (success) {
+            if (!foundAreas.includes(location)) {
+                foundAreas.push(location);
+            }
+        } else {
+            if (!notFoundAreas.includes(location)) {
+                notFoundAreas.push(location);
+            }
         }
       });
 
-      if (foundAreas.length > 0) {
-        this.searchResult = `Item <strong>${itemCode}</strong> found in area(s): <strong>${foundAreas.join(', ')}</strong>. Hover over the area for details.`;
-      } else {
-        const originalLocations = locationsForItem.map(l => l.originalLocation).join(', ');
-        this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${originalLocations}), but the corresponding area could not be found on the layout. Please check the SVG IDs.`;
+      let message = `Mã hàng ${itemCodeInput} có vị trí tại: `;
+      if(foundAreas.length > 0){
+        message += `<strong>${foundAreas.join(', ')}</strong> (đã tô sáng). `;
       }
+      if(notFoundAreas.length > 0){
+        message += `Không tìm thấy khu vực cho: <strong>${notFoundAreas.join(', ')}</strong> trên layout.`;
+      }
+      this.searchMessage = message;
+
     } else {
-      this.searchResult = `Item <strong>${itemCode}</strong> not found in the location data.`;
+      this.searchMessage = `Không tìm thấy thông tin vị trí cho mã hàng: ${itemCodeInput}.`;
     }
   }
 
-  private highlightElement(svgId: string, info: LocationInfo): void {
-    if (!this.svgContainer?.nativeElement) {
-      return;
-    }
-
-    // Change the selector to be case-insensitive with the 'i' flag
-    const element = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
-
-    if (element) {
-      this.highlightedElements.push(element);
-      // Save the original style before changing it
-      const originalFill = element.style.fill;
-      const originalStroke = element.style.stroke;
-      const originalStrokeWidth = element.style.strokeWidth;
-
-      // Apply highlighting
-      element.style.fill = '#FFA500'; // Orange
-      element.style.stroke = '#FF4500'; // OrangeRed
-      element.style.strokeWidth = '2px';
-
-      // Create and add tooltip
-      const tooltipText = `Location: ${info.originalLocation} | PO: ${info.po} | Qty: ${info.qty}`;
-      
-      const titleElement = this.renderer.createElement('title', 'http://www.w3.org/2000/svg');
-      const textNode = this.renderer.createText(tooltipText);
-      this.renderer.appendChild(titleElement, textNode);
-      this.renderer.appendChild(element, titleElement);
-
-      // Store a reference to the element and its original style for resetting
-      this.elementsToReset.push({ 
-        element: element, 
-        originalStyle: { 
-          fill: originalFill, 
-          stroke: originalStroke, 
-          strokeWidth: originalStrokeWidth
-        },
-        titleElement: titleElement
-      });
-    }
-  }
-
-  private resetHighlights(): void {
-    this.elementsToReset.forEach(item => {
-      // Restore original styles
-      this.renderer.setStyle(item.element, 'fill', item.originalStyle.fill);
-      this.renderer.setStyle(item.element, 'stroke', item.originalStyle.stroke);
-      this.renderer.setStyle(item.element, 'stroke-width', item.originalStyle.strokeWidth);
-      
-      // Remove the tooltip
-      if (item.titleElement) {
-        this.renderer.removeChild(item.element, item.titleElement);
+  private highlightElement(svgId: string): boolean {
+    if (this.svgContainer && this.svgContainer.nativeElement) {
+      const svgObject = this.svgContainer.nativeElement.querySelector(`object[loc="${svgId.toLowerCase()}"]`);
+      if (svgObject) {
+        const rect = svgObject.querySelector('rect');
+        if (rect) {
+          this.renderer.setStyle(rect, 'fill', 'orange');
+          this.highlightedElements.push(rect);
+          return true;
+        }
       }
-    });
+    }
+    return false;
+  }
 
-    this.elementsToReset = [];
+  private clearHighlight() {
+    this.highlightedElements.forEach(element => {
+      this.renderer.setStyle(element, 'fill', ''); // Reset to original color
+    });
     this.highlightedElements = [];
+  }
+
+  private loadSvg() {
+    this.http.get('assets/img/LayoutD.svg', { responseType: 'text' })
+      .subscribe(svg => {
+        this.svgContent = this.sanitizer.bypassSecurityTrustHtml(svg);
+      });
   }
 }
 
