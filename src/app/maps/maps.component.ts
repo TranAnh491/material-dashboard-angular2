@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ElementRef, ViewChild, Renderer2, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
+import { of, Subscription } from 'rxjs';
 
 // Define the structure for a warehouse cell
 interface WarehouseCell {
@@ -16,95 +16,93 @@ interface WarehouseCell {
   templateUrl: './maps.component.html',
   styleUrls: ['./maps.component.css']
 })
-export class MapsComponent implements OnInit {
+export class MapsComponent implements OnInit, OnDestroy {
 
   // --- CONFIGURATION ---
-  // API URL from Google Apps Script
   private dataSourceUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-
-  // Warehouse Layout Dimensions
-  // Increased to cover locations like E63, F64, etc.
-  private readonly WAREHOUSE_ROWS = 26; // A-Z
-  private readonly WAREHOUSE_COLS = 100; // 1-100
+  private svgLayoutUrl = 'assets/img/LayoutD.svg';
+  
+  // Style for highlighted elements in the SVG
+  private readonly HIGHLIGHT_STYLE = {
+    fill: '#ff9800', // Orange
+    stroke: '#c00',
+    'stroke-width': '2px'
+  };
   // -------------------
 
-  public gridData: WarehouseCell[][] = [];
+  @ViewChild('svgContainer', { static: true }) svgContainer: ElementRef;
+
   public loading = true;
   public errorMessage: string | null = null;
   public searchResult: string | null = null;
 
-  // Maps item code to a list of possible locations (e.g., 'ITEM001' -> ['A01', 'B05'])
   private locationData: Map<string, string[]> = new Map();
+  private highlightedElements: { element: any, originalStyle: any }[] = [];
+  private subscriptions: Subscription = new Subscription();
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private renderer: Renderer2) { }
 
   ngOnInit() {
-    this.initializeGrid();
-    this.fetchData();
+    this.loadDataAndSvg();
   }
 
-  private initializeGrid(): void {
-    this.gridData = [];
-    for (let i = 0; i <= this.WAREHOUSE_ROWS; i++) {
-      const row: WarehouseCell[] = [];
-      for (let j = 0; j <= this.WAREHOUSE_COLS; j++) {
-        const isHeader = i === 0 || j === 0;
-        row.push({
-          value: isHeader ? '' : this.getLocationName(i, j),
-          display: this.getCellDisplay(i, j),
-          highlight: false,
-          isHeader: isHeader,
-        });
-      }
-      this.gridData.push(row);
-    }
-  }
-  
-  private getCellDisplay(row: number, col: number): string {
-    if (row === 0 && col === 0) return '';
-    if (row === 0) return `C${col}`; // Column header
-    if (col === 0) return String.fromCharCode(64 + row); // Row header (A,B,C..)
-    return this.getLocationName(row, col);
+  ngOnDestroy() {
+    this.subscriptions.unsubscribe();
   }
 
-  private getLocationName(row: number, col: number): string {
-    // Naming convention: A1, A2, ..., B1, B2, ...
-    const rowName = String.fromCharCode(64 + row);
-    return `${rowName}${col}`;
-  }
-
-  private fetchData(): void {
+  private loadDataAndSvg(): void {
     this.loading = true;
-    this.http.get<any[]>(this.dataSourceUrl).pipe(
+    
+    // Step 1: Fetch location data from Google Script
+    const dataSub = this.http.get<any[]>(this.dataSourceUrl).pipe(
       catchError(error => {
-        this.errorMessage = `Failed to load data from the URL. Please check the link and its permissions. Error: ${error.message}`;
-        return of(null); // Return a null observable to stop the pipe
+        this.errorMessage = `Failed to load location data. Error: ${error.message}`;
+        return of(null);
       })
     ).subscribe(data => {
-      this.loading = false;
-      if (!data) return;
-
-      // The API returns an array of objects with `code` and `location`
-      data.forEach((row: any) => {
-        const itemCode = row.code?.trim();
-        const location = row.location?.trim();
-        
-        if (itemCode && location) {
-          const uppercaseCode = itemCode.toUpperCase();
-          const uppercaseLocation = location.toUpperCase();
-
-          const existingLocations = this.locationData.get(uppercaseCode);
-          if (existingLocations) {
-            // Add location only if it's not already in the list to avoid duplicates
-            if (!existingLocations.includes(uppercaseLocation)) {
-              existingLocations.push(uppercaseLocation);
-            }
-          } else {
-            this.locationData.set(uppercaseCode, [uppercaseLocation]);
-          }
-        }
-      });
+      if (data) {
+        this.parseLocationData(data);
+      }
+      // Step 2: Load SVG layout after fetching data
+      this.loadSvgLayout();
     });
+
+    this.subscriptions.add(dataSub);
+  }
+
+  private parseLocationData(data: any[]): void {
+    data.forEach((row: any) => {
+      const itemCode = row.code?.trim().toUpperCase();
+      // Normalize location: uppercase and replace spaces/special chars with '_'
+      const location = row.location?.trim().toUpperCase().replace(/[\s\W]+/g, '_');
+      
+      if (itemCode && location) {
+        const existing = this.locationData.get(itemCode);
+        if (existing) {
+          if (!existing.includes(location)) {
+            existing.push(location);
+          }
+        } else {
+          this.locationData.set(itemCode, [location]);
+        }
+      }
+    });
+  }
+  
+  private loadSvgLayout(): void {
+    const svgSub = this.http.get(this.svgLayoutUrl, { responseType: 'text' }).pipe(
+        catchError(error => {
+            this.errorMessage = `Failed to load SVG layout file from '${this.svgLayoutUrl}'. Make sure the file exists.`;
+            return of(null);
+        })
+    ).subscribe(svgContent => {
+        this.loading = false;
+        if (svgContent) {
+            // Directly inject the SVG content into the container
+            this.svgContainer.nativeElement.innerHTML = svgContent;
+        }
+    });
+    this.subscriptions.add(svgSub);
   }
   
   public search(itemCode: string): void {
@@ -121,43 +119,64 @@ export class MapsComponent implements OnInit {
     if (locations && locations.length > 0) {
       const foundLocations: string[] = [];
       
-      // A map for quick lookup of grid cells by their location value
-      const gridLocationMap = new Map<string, WarehouseCell>();
-      this.gridData.forEach(row => {
-          row.forEach(cell => {
-              if (!cell.isHeader) {
-                  gridLocationMap.set(cell.value.toUpperCase(), cell);
-              }
-          });
-      });
-
-      locations.forEach(location => {
-        const cell = gridLocationMap.get(location);
-        if (cell) {
-          cell.highlight = true;
-          if (!foundLocations.includes(location)) {
-            foundLocations.push(location);
+      locations.forEach(locationId => {
+        // Query the SVG DOM for the element with the matching ID
+        const svgElement = this.svgContainer.nativeElement.querySelector(`#${locationId}`);
+        if (svgElement) {
+          this.highlightElement(svgElement);
+          // Use original location name for display if possible, or the ID
+          const originalLocationName = this.findOriginalLocationName(locationId);
+          if (!foundLocations.includes(originalLocationName)) {
+            foundLocations.push(originalLocationName);
           }
         }
       });
 
       if (foundLocations.length > 0) {
-        this.searchResult = `Item <strong>${itemCode}</strong> found at location(s): <strong>${foundLocations.join(', ')}</strong>.`;
+        this.searchResult = `Item <strong>${itemCode}</strong> found at: <strong>${foundLocations.join(', ')}</strong>.`;
       } else {
-        // This case handles when location names from data don't exist in our grid (e.g., 'Kệ Q')
-        this.searchResult = `Item <strong>${itemCode}</strong> has assigned location(s) (${locations.join(', ')}), but these could not be visualized on the current grid layout.`;
+        this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${locations.join(', ')}), but they could not be found on the SVG layout. Check if the IDs in the SVG file match the location data.`;
       }
     } else {
       this.searchResult = `Item <strong>${itemCode}</strong> not found in the location data.`;
     }
   }
 
+  private highlightElement(element: any): void {
+    const originalStyle = {
+      fill: element.style.fill,
+      stroke: element.style.stroke,
+      'stroke-width': element.style.strokeWidth
+    };
+    this.highlightedElements.push({ element, originalStyle });
+    
+    // Apply new styles
+    this.renderer.setStyle(element, 'fill', this.HIGHLIGHT_STYLE.fill);
+    this.renderer.setStyle(element, 'stroke', this.HIGHLIGHT_STYLE.stroke);
+    this.renderer.setStyle(element, 'stroke-width', this.HIGHLIGHT_STYLE['stroke-width']);
+  }
+
   private resetHighlights(): void {
-    for (const row of this.gridData) {
-      for (const cell of row) {
-        cell.highlight = false;
-      }
+    this.highlightedElements.forEach(item => {
+      // Restore original styles
+      this.renderer.setStyle(item.element, 'fill', item.originalStyle.fill);
+      this.renderer.setStyle(item.element, 'stroke', item.originalStyle.stroke);
+      this.renderer.setStyle(item.element, 'stroke-width', item.originalStyle['stroke-width']);
+    });
+    this.highlightedElements = [];
+  }
+
+  private findOriginalLocationName(locationId: string): string {
+    // This is a helper to show the original name (with spaces) in the message
+    for(const [key, value] of this.locationData.entries()) {
+        const normalizedLocations = value.map(v => v.toUpperCase().replace(/[\s\W]+/g, '_'));
+        if (normalizedLocations.includes(locationId)) {
+            // Find the original location name from the raw data that matches this ID
+            // This is complex, so we'll just return the ID for now.
+            // A better implementation would store original names alongside normalized IDs.
+        }
     }
+    return locationId.replace(/_/g, ' '); // Simple conversion back
   }
 }
 

@@ -30,16 +30,11 @@
             
             <h5 *ngIf="searchResult" [innerHTML]="searchResult"></h5>
 
-            <div class="warehouse-grid" *ngIf="!loading && gridData.length > 0">
-              <div *ngFor="let row of gridData; let i = index" class="warehouse-row">
-                <div *ngFor="let cell of row; let j = index" 
-                     class="warehouse-cell"
-                     [ngClass]="{'highlight': cell.highlight, 'header': cell.isHeader, 'empty': !cell.value}"
-                     [title]="cell.value || 'Empty'">
-                  {{ cell.display }}
-                </div>
-              </div>
+            <!-- Container for the SVG Layout -->
+            <div class="svg-container" #svgContainer>
+              <!-- The SVG will be loaded and injected here by the component -->
             </div>
+
           </div>
         </div>
       </div>
