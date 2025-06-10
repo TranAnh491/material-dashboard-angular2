@@ -74,17 +74,22 @@ export class MapsComponent implements OnInit, OnDestroy {
   private parseLocationData(data: any[]): void {
     const allLocationData: LocationInfo[] = data.map(row => {
         const originalLocation = row.location?.trim() || '';
-        const normalizedLocation = originalLocation.toUpperCase().replace(/[\\s\\W]+/g, '_');
-        const match = normalizedLocation.match(/^([A-Z]+)(\\d)/);
+        const normalizedLocation = originalLocation.toUpperCase();
         
-        let svgId: string;
-        if (match) {
-          // This logic shortens codes like 'D11' to 'D1' by taking the letters and the *first* digit.
-          svgId = match[1] + match[2];
+        let svgId = '';
+        // Extract the initial group of letters (e.g., "D", "NG")
+        const letters = (normalizedLocation.match(/^[A-Z]+/) || [''])[0];
+
+        if (letters) {
+            // Get the rest of the string after the letters
+            const remaining = normalizedLocation.substring(letters.length);
+            // From the remainder, get the very first character only if it's a digit
+            const firstDigit = (remaining.match(/^\\d/) || [''])[0];
+            // The final ID is the letters + the first digit (if it exists)
+            svgId = letters + firstDigit;
         } else {
-          // This handles codes that are letters only, like 'NG' or 'IQC'.
-          const matchLettersOnly = normalizedLocation.match(/^[A-Z]+/);
-          svgId = matchLettersOnly ? matchLettersOnly[0] : normalizedLocation;
+            // Fallback for any cases that don't match the pattern
+            svgId = normalizedLocation.replace(/[\\s\\W]+/g, '_');
         }
 
         return {
@@ -135,12 +140,8 @@ export class MapsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log(`--- SEARCHING FOR: "${itemCode}" ---`);
-
     const searchTerm = itemCode.trim().toUpperCase();
     const locationsForItem = this.itemToLocationsMap.get(searchTerm);
-
-    console.log('Found locations for this item:', locationsForItem);
 
     if (locationsForItem && locationsForItem.length > 0) {
       // Group all found location details by their target SVG ID
@@ -156,16 +157,12 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
-        console.log(`Attempting to find SVG element with ID: #${svgId}`);
         const svgElement = this.svgContainer.nativeElement.querySelector(`#${svgId}`);
         if (svgElement) {
-          console.log(`SUCCESS: Found element for #${svgId}. Highlighting it.`, svgElement);
           this.highlightElement(svgElement, details);
           if (!foundAreas.includes(svgId)) {
             foundAreas.push(svgId.replace(/_/g, ' '));
           }
-        } else {
-          console.error(`ERROR: Could not find any SVG element with ID: #${svgId}`);
         }
       });
 
@@ -176,7 +173,6 @@ export class MapsComponent implements OnInit, OnDestroy {
         this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${originalLocations}), but the corresponding area could not be found on the layout. Please check the SVG IDs.`;
       }
     } else {
-      console.log(`No locations found in the data for item code: "${searchTerm}"`);
       this.searchResult = `Item <strong>${itemCode}</strong> not found in the location data.`;
     }
   }
