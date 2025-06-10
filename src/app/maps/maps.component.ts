@@ -3,12 +3,13 @@ import { HttpClient } from '@angular/common/http';
 import { catchError } from 'rxjs/operators';
 import { of, Subscription } from 'rxjs';
 
-// Define the structure for a warehouse cell
-interface WarehouseCell {
-  value: string; // The actual location name (e.g., A1, B2)
-  display: string; // What's shown in the cell (can be truncated or be a header)
-  highlight: boolean; // True if it should be highlighted
-  isHeader: boolean; // True for row/column headers
+interface LocationInfo {
+  itemCode: string;
+  po: string;
+  qty: number;
+  originalLocation: string;
+  normalizedLocation: string;
+  svgId: string;
 }
 
 @Component({
@@ -36,8 +37,8 @@ export class MapsComponent implements OnInit, OnDestroy {
   public errorMessage: string | null = null;
   public searchResult: string | null = null;
 
-  private locationData: Map<string, string[]> = new Map();
-  private highlightedElements: { element: any, originalStyle: any }[] = [];
+  private itemToLocationsMap: Map<string, LocationInfo[]> = new Map();
+  private highlightedElements: { element: any, originalStyle: any, titleElement?: any }[] = [];
   private subscriptions: Subscription = new Subscription();
 
   constructor(private http: HttpClient, private renderer: Renderer2) { }
@@ -71,21 +72,31 @@ export class MapsComponent implements OnInit, OnDestroy {
   }
 
   private parseLocationData(data: any[]): void {
-    data.forEach((row: any) => {
-      const itemCode = row.code?.trim().toUpperCase();
-      // Normalize location: uppercase and replace spaces/special chars with '_'
-      const location = row.location?.trim().toUpperCase().replace(/[\s\W]+/g, '_');
-      
-      if (itemCode && location) {
-        const existing = this.locationData.get(itemCode);
+    const allLocationData: LocationInfo[] = data.map(row => {
+        const originalLocation = row.location?.trim() || '';
+        const normalizedLocation = originalLocation.toUpperCase().replace(/[\s\W]+/g, '_');
+        const match = normalizedLocation.match(/^([A-Z]+)(\d)/);
+        const svgId = match ? match[1] + match[2] : normalizedLocation;
+
+        return {
+            itemCode: (row.code?.trim() || '').toUpperCase(),
+            po: row.name?.trim() || 'N/A',
+            qty: row.qty || 0,
+            originalLocation: originalLocation,
+            normalizedLocation: normalizedLocation,
+            svgId: svgId
+        };
+    }).filter(info => info.itemCode && info.originalLocation);
+
+    // Create a map for quick search by item code
+    this.itemToLocationsMap.clear();
+    allLocationData.forEach(info => {
+        const existing = this.itemToLocationsMap.get(info.itemCode);
         if (existing) {
-          if (!existing.includes(location)) {
-            existing.push(location);
-          }
+            existing.push(info);
         } else {
-          this.locationData.set(itemCode, [location]);
+            this.itemToLocationsMap.set(info.itemCode, [info]);
         }
-      }
     });
   }
   
@@ -114,46 +125,65 @@ export class MapsComponent implements OnInit, OnDestroy {
     }
 
     const searchTerm = itemCode.trim().toUpperCase();
-    const locations = this.locationData.get(searchTerm);
+    const locationsForItem = this.itemToLocationsMap.get(searchTerm);
 
-    if (locations && locations.length > 0) {
-      const foundLocations: string[] = [];
+    if (locationsForItem && locationsForItem.length > 0) {
+      // Group all found location details by their target SVG ID
+      const detailsBySvgId = new Map<string, LocationInfo[]>();
+      locationsForItem.forEach(locInfo => {
+        const details = detailsBySvgId.get(locInfo.svgId);
+        if (details) {
+          details.push(locInfo);
+        } else {
+          detailsBySvgId.set(locInfo.svgId, [locInfo]);
+        }
+      });
       
-      locations.forEach(locationId => {
-        // Query the SVG DOM for the element with the matching ID
-        const svgElement = this.svgContainer.nativeElement.querySelector(`#${locationId}`);
+      const foundAreas: string[] = [];
+      detailsBySvgId.forEach((details, svgId) => {
+        const svgElement = this.svgContainer.nativeElement.querySelector(`#${svgId}`);
         if (svgElement) {
-          this.highlightElement(svgElement);
-          // Use original location name for display if possible, or the ID
-          const originalLocationName = this.findOriginalLocationName(locationId);
-          if (!foundLocations.includes(originalLocationName)) {
-            foundLocations.push(originalLocationName);
+          this.highlightElement(svgElement, details);
+          if (!foundAreas.includes(svgId)) {
+            foundAreas.push(svgId.replace(/_/g, ' '));
           }
         }
       });
 
-      if (foundLocations.length > 0) {
-        this.searchResult = `Item <strong>${itemCode}</strong> found at: <strong>${foundLocations.join(', ')}</strong>.`;
+      if (foundAreas.length > 0) {
+        this.searchResult = `Item <strong>${itemCode}</strong> found in area(s): <strong>${foundAreas.join(', ')}</strong>. Hover over the area for details.`;
       } else {
-        this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${locations.join(', ')}), but they could not be found on the SVG layout. Check if the IDs in the SVG file match the location data.`;
+        const originalLocations = locationsForItem.map(l => l.originalLocation).join(', ');
+        this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${originalLocations}), but the corresponding area could not be found on the layout. Please check the SVG IDs.`;
       }
     } else {
       this.searchResult = `Item <strong>${itemCode}</strong> not found in the location data.`;
     }
   }
 
-  private highlightElement(element: any): void {
+  private highlightElement(element: any, details: LocationInfo[]): void {
     const originalStyle = {
       fill: element.style.fill,
       stroke: element.style.stroke,
       'stroke-width': element.style.strokeWidth
     };
-    this.highlightedElements.push({ element, originalStyle });
     
     // Apply new styles
     this.renderer.setStyle(element, 'fill', this.HIGHLIGHT_STYLE.fill);
     this.renderer.setStyle(element, 'stroke', this.HIGHLIGHT_STYLE.stroke);
     this.renderer.setStyle(element, 'stroke-width', this.HIGHLIGHT_STYLE['stroke-width']);
+    
+    // Create and add tooltip
+    const tooltipText = details.map(d => 
+      `Location: ${d.originalLocation} | PO: ${d.po} | Qty: ${d.qty}`
+    ).join('\\n'); // Use newline for SVG tooltips
+    
+    const titleElement = this.renderer.createElement('title', 'http://www.w3.org/2000/svg');
+    const textNode = this.renderer.createText(tooltipText);
+    this.renderer.appendChild(titleElement, textNode);
+    this.renderer.appendChild(element, titleElement);
+
+    this.highlightedElements.push({ element, originalStyle, titleElement });
   }
 
   private resetHighlights(): void {
@@ -162,21 +192,12 @@ export class MapsComponent implements OnInit, OnDestroy {
       this.renderer.setStyle(item.element, 'fill', item.originalStyle.fill);
       this.renderer.setStyle(item.element, 'stroke', item.originalStyle.stroke);
       this.renderer.setStyle(item.element, 'stroke-width', item.originalStyle['stroke-width']);
+      // Remove the tooltip
+      if (item.titleElement) {
+        this.renderer.removeChild(item.element, item.titleElement);
+      }
     });
     this.highlightedElements = [];
-  }
-
-  private findOriginalLocationName(locationId: string): string {
-    // This is a helper to show the original name (with spaces) in the message
-    for(const [key, value] of this.locationData.entries()) {
-        const normalizedLocations = value.map(v => v.toUpperCase().replace(/[\s\W]+/g, '_'));
-        if (normalizedLocations.includes(locationId)) {
-            // Find the original location name from the raw data that matches this ID
-            // This is complex, so we'll just return the ID for now.
-            // A better implementation would store original names alongside normalized IDs.
-        }
-    }
-    return locationId.replace(/_/g, ' '); // Simple conversion back
   }
 }
 
