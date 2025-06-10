@@ -157,7 +157,7 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
-        const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}"]`);
+        const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
         if (svgElement) {
           this.highlightElement(svgId, details[0]);
           if (!foundAreas.includes(svgId)) {
@@ -182,8 +182,8 @@ export class MapsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Change the selector from an ID to a custom attribute 'loc'
-    const element = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}"]`);
+    // Change the selector to be case-insensitive with the 'i' flag
+    const element = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
 
     if (element) {
       this.highlightedElements.push(element);
