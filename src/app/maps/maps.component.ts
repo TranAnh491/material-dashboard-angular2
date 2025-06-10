@@ -42,11 +42,11 @@ export class MapsComponent implements OnInit {
 
   private parseLocationData(data: any[]): LocationInfo {
     const locations: LocationInfo = {};
-    // Skip header row, assuming it's the first row
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const itemCode = row[0] ? String(row[0]).trim().toUpperCase() : '';
-      const location = row[1] ? String(row[1]).trim().toUpperCase() : '';
+    // The new data is an array of objects, not an array of arrays.
+    // No need to skip a header row.
+    for (const row of data) {
+      const itemCode = row.code ? String(row.code).trim().toUpperCase() : '';
+      const location = row.location ? String(row.location).trim().toUpperCase() : '';
 
       if (itemCode && location) {
         if (!locations[itemCode]) {
