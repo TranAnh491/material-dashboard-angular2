@@ -21,6 +21,7 @@ import { MatRippleModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 // Các component materials mới
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
@@ -40,6 +41,7 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
     MatInputModule,
     MatSelectModule,
     MatTooltipModule,
+    MatProgressSpinnerModule,
   ],
   declarations: [
     DashboardComponent,

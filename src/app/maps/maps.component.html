@@ -1,1 +1,48 @@
-<div id="map"></div>
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-danger">
+            <h4 class="card-title">Warehouse Layout</h4>
+            <p class="card-category">Find item location in the warehouse</p>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <mat-form-field class="example-full-width">
+                  <input matInput #searchInput placeholder="Enter Item Code to find" (keyup.enter)="search(searchInput.value)">
+                </mat-form-field>
+              </div>
+              <div class="col-md-6">
+                <button mat-raised-button type="submit" class="btn btn-danger pull-right" (click)="search(searchInput.value)">Search</button>
+              </div>
+            </div>
+
+            <div *ngIf="loading" class="text-center">
+              <mat-spinner diameter="50"></mat-spinner>
+              <p>Loading warehouse data...</p>
+            </div>
+
+            <div *ngIf="errorMessage" class="alert alert-danger">
+              {{ errorMessage }}
+            </div>
+            
+            <h5 *ngIf="searchResult" [innerHTML]="searchResult"></h5>
+
+            <div class="warehouse-grid" *ngIf="!loading && gridData.length > 0">
+              <div *ngFor="let row of gridData; let i = index" class="warehouse-row">
+                <div *ngFor="let cell of row; let j = index" 
+                     class="warehouse-cell"
+                     [ngClass]="{'highlight': cell.highlight, 'header': cell.isHeader, 'empty': !cell.value}"
+                     [title]="cell.value || 'Empty'">
+                  {{ cell.display }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

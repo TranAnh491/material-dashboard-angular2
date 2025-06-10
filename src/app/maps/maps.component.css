@@ -1,0 +1,57 @@
+.warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 2px;
+  margin-top: 20px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.warehouse-row {
+  display: contents; /* Allows cells to be direct children of the grid */
+}
+
+.warehouse-cell {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: center;
+  min-height: 40px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: #f9f9f9;
+  cursor: default;
+  transition: background-color 0.3s;
+}
+
+.warehouse-cell.header {
+  background-color: #e0e0e0;
+  font-weight: bold;
+}
+
+.warehouse-cell.empty {
+  background-color: #fafafa;
+  color: #ccc;
+}
+
+.warehouse-cell.highlight {
+  background-color: #ff9800; /* Orange */
+  color: white;
+  font-weight: bold;
+}
+
+/* For loading spinner */
+.text-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Ensure form field takes full width */
+.example-full-width {
+    width: 100%;
+}
