@@ -140,6 +140,10 @@ export class MapsComponent implements OnInit, OnDestroy {
       return;
     }
 
+    console.log('--- STARTING SEARCH ---');
+    // Log the entire SVG content right before searching
+    console.log('Current SVG content in DOM:', this.svgContainer.nativeElement.innerHTML);
+
     const searchTerm = itemCode.trim().toUpperCase();
     const locationsForItem = this.itemToLocationsMap.get(searchTerm);
 
@@ -157,7 +161,10 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
+        console.log(`Searching for element with attribute: [loc="${svgId}" i]`);
         const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
+        console.log('Found element:', svgElement); // This will be null if not found
+
         if (svgElement) {
           this.highlightElement(svgId, details[0]);
           if (!foundAreas.includes(svgId)) {
