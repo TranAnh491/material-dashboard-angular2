@@ -78,16 +78,15 @@ export class MapsComponent implements OnInit, OnDestroy {
         const normalizedLocation = originalLocation.toUpperCase();
         
         let svgId = '';
-        // Extract the initial group of letters (e.g., "D", "NG")
-        const letters = (normalizedLocation.match(/^[A-Z]+/) || [''])[0];
-
-        if (letters) {
-            // Get the rest of the string after the letters
-            const remaining = normalizedLocation.substring(letters.length);
-            // From the remainder, get the very first character only if it's a digit
-            const firstDigit = (remaining.match(/^\\d/) || [''])[0];
-            // The final ID is the letters + the first digit (if it exists)
-            svgId = letters + firstDigit;
+        const lettersMatch = normalizedLocation.match(/^[A-Z]+/);
+        if (lettersMatch) {
+            const letters = lettersMatch[0];
+            const numbersMatch = normalizedLocation.substring(letters.length).match(/^\\d+/);
+            // This now correctly handles D1, D11, NG, etc.
+            // For "D1", it takes "D" + "1" -> "D1"
+            // For "D11", it takes "D" + "11" -> "D11"
+            // For "NG", it takes "NG" + "" -> "NG"
+            svgId = letters + (numbersMatch ? numbersMatch[0] : '');
         } else {
             // Fallback for any cases that don't match the pattern
             svgId = normalizedLocation.replace(/[\\s\\W]+/g, '_');
