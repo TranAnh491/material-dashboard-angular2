@@ -172,7 +172,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               code: rows[i][0]?.trim(),
               value: rows[i][1] ? rows[i][1].trim() : '',
               note: rows[i][2] ? rows[i][2].trim() : '',
-              ready: rows[i][3]?.trim() || '', // Ready (kiểm)
+              ready: rows[i][3]?.trim() || '',
               extra: rows[i][4] ? rows[i][4].trim() : ''
             });
           }
