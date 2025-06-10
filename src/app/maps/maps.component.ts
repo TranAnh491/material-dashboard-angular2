@@ -39,6 +39,7 @@ export class MapsComponent implements OnInit, OnDestroy {
 
   private itemToLocationsMap: Map<string, LocationInfo[]> = new Map();
   private highlightedElements: { element: any, originalStyle: any, titleElement?: any }[] = [];
+  private elementsToReset: { element: any, originalStyle: any, titleElement?: any }[] = [];
   private subscriptions: Subscription = new Subscription();
 
   constructor(private http: HttpClient, private renderer: Renderer2) { }
@@ -157,9 +158,9 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
-        const svgElement = this.svgContainer.nativeElement.querySelector(`#${svgId}`);
+        const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}"]`);
         if (svgElement) {
-          this.highlightElement(svgElement, details);
+          this.highlightElement(svgId, details[0]);
           if (!foundAreas.includes(svgId)) {
             foundAreas.push(svgId.replace(/_/g, ' '));
           }
@@ -177,42 +178,61 @@ export class MapsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private highlightElement(element: any, details: LocationInfo[]): void {
-    const originalStyle = {
-      fill: element.style.fill,
-      stroke: element.style.stroke,
-      'stroke-width': element.style.strokeWidth
-    };
-    
-    // Apply new styles
-    this.renderer.setStyle(element, 'fill', this.HIGHLIGHT_STYLE.fill);
-    this.renderer.setStyle(element, 'stroke', this.HIGHLIGHT_STYLE.stroke);
-    this.renderer.setStyle(element, 'stroke-width', this.HIGHLIGHT_STYLE['stroke-width']);
-    
-    // Create and add tooltip
-    const tooltipText = details.map(d => 
-      `Location: ${d.originalLocation} | PO: ${d.po} | Qty: ${d.qty}`
-    ).join('\\n'); // Use newline for SVG tooltips
-    
-    const titleElement = this.renderer.createElement('title', 'http://www.w3.org/2000/svg');
-    const textNode = this.renderer.createText(tooltipText);
-    this.renderer.appendChild(titleElement, textNode);
-    this.renderer.appendChild(element, titleElement);
+  private highlightElement(svgId: string, info: LocationInfo): void {
+    if (!this.svgContainer?.nativeElement) {
+      return;
+    }
 
-    this.highlightedElements.push({ element, originalStyle, titleElement });
+    // Change the selector from an ID to a custom attribute 'loc'
+    const element = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}"]`);
+
+    if (element) {
+      this.highlightedElements.push(element);
+      // Save the original style before changing it
+      const originalFill = element.style.fill;
+      const originalStroke = element.style.stroke;
+      const originalStrokeWidth = element.style.strokeWidth;
+
+      // Apply highlighting
+      element.style.fill = '#FFA500'; // Orange
+      element.style.stroke = '#FF4500'; // OrangeRed
+      element.style.strokeWidth = '2px';
+
+      // Create and add tooltip
+      const tooltipText = `Location: ${info.originalLocation} | PO: ${info.po} | Qty: ${info.qty}`;
+      
+      const titleElement = this.renderer.createElement('title', 'http://www.w3.org/2000/svg');
+      const textNode = this.renderer.createText(tooltipText);
+      this.renderer.appendChild(titleElement, textNode);
+      this.renderer.appendChild(element, titleElement);
+
+      // Store a reference to the element and its original style for resetting
+      this.elementsToReset.push({ 
+        element: element, 
+        originalStyle: { 
+          fill: originalFill, 
+          stroke: originalStroke, 
+          strokeWidth: originalStrokeWidth
+        },
+        titleElement: titleElement
+      });
+    }
   }
 
   private resetHighlights(): void {
-    this.highlightedElements.forEach(item => {
+    this.elementsToReset.forEach(item => {
       // Restore original styles
       this.renderer.setStyle(item.element, 'fill', item.originalStyle.fill);
       this.renderer.setStyle(item.element, 'stroke', item.originalStyle.stroke);
-      this.renderer.setStyle(item.element, 'stroke-width', item.originalStyle['stroke-width']);
+      this.renderer.setStyle(item.element, 'stroke-width', item.originalStyle.strokeWidth);
+      
       // Remove the tooltip
       if (item.titleElement) {
         this.renderer.removeChild(item.element, item.titleElement);
       }
     });
+
+    this.elementsToReset = [];
     this.highlightedElements = [];
   }
 }
