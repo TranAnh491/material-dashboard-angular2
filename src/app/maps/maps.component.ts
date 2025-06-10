@@ -77,20 +77,10 @@ export class MapsComponent implements OnInit, OnDestroy {
         const originalLocation = row.location?.trim() || '';
         const normalizedLocation = originalLocation.toUpperCase();
         
-        let svgId = '';
-        const lettersMatch = normalizedLocation.match(/^[A-Z]+/);
-        if (lettersMatch) {
-            const letters = lettersMatch[0];
-            const numbersMatch = normalizedLocation.substring(letters.length).match(/^\\d+/);
-            // This now correctly handles D1, D11, NG, etc.
-            // For "D1", it takes "D" + "1" -> "D1"
-            // For "D11", it takes "D" + "11" -> "D11"
-            // For "NG", it takes "NG" + "" -> "NG"
-            svgId = letters + (numbersMatch ? numbersMatch[0] : '');
-        } else {
-            // Fallback for any cases that don't match the pattern
-            svgId = normalizedLocation.replace(/[\\s\\W]+/g, '_');
-        }
+        // --- NEW, SIMPLER LOGIC ---
+        // Always take the first 2 characters for the SVG ID, as requested.
+        // This correctly handles D1xxx -> D1 and also D11xxx -> D1.
+        const svgId = normalizedLocation.substring(0, 2);
 
         return {
             itemCode: (row.code?.trim() || '').toUpperCase(),
@@ -140,10 +130,6 @@ export class MapsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log('--- STARTING SEARCH ---');
-    // Log the entire SVG content right before searching
-    console.log('Current SVG content in DOM:', this.svgContainer.nativeElement.innerHTML);
-
     const searchTerm = itemCode.trim().toUpperCase();
     const locationsForItem = this.itemToLocationsMap.get(searchTerm);
 
@@ -161,9 +147,7 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
-        console.log(`Searching for element with attribute: [loc="${svgId}" i]`);
         const svgElement = this.svgContainer.nativeElement.querySelector(`[loc="${svgId}" i]`);
-        console.log('Found element:', svgElement); // This will be null if not found
 
         if (svgElement) {
           this.highlightElement(svgId, details[0]);
