@@ -18,21 +18,11 @@
                 <button mat-raised-button type="submit" class="btn btn-danger pull-right" (click)="search(searchInput.value)">Search</button>
               </div>
             </div>
-
-            <div *ngIf="loading" class="text-center">
-              <mat-spinner diameter="50"></mat-spinner>
-              <p>Loading warehouse data...</p>
-            </div>
-
-            <div *ngIf="errorMessage" class="alert alert-danger">
-              {{ errorMessage }}
-            </div>
             
-            <h5 *ngIf="searchResult" [innerHTML]="searchResult"></h5>
+            <h5 *ngIf="searchMessage" [innerHTML]="searchMessage"></h5>
 
             <!-- Container for the SVG Layout -->
-            <div class="svg-container" #svgContainer>
-              <!-- The SVG will be loaded and injected here by the component -->
+            <div class="svg-container" #svgContainer [innerHTML]="svgContent">
             </div>
 
           </div>

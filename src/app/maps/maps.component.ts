@@ -56,8 +56,8 @@ export class MapsComponent implements OnInit {
     return locations;
   }
   
-  searchByItemCode(event: Event) {
-    const itemCodeInput = (event.target as HTMLInputElement).value.trim().toUpperCase();
+  public search(itemCode: string) {
+    const itemCodeInput = itemCode.trim().toUpperCase();
     this.searchMessage = '';
     this.clearHighlight();
 
