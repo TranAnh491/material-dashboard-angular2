@@ -107,6 +107,8 @@ export class MapsComponent implements OnInit, OnDestroy {
             this.itemToLocationsMap.set(info.itemCode, [info]);
         }
     });
+    console.log('--- WAREHOUSE DATA LOADED ---');
+    console.log('Item to Location Map:', this.itemToLocationsMap);
   }
   
   private loadSvgLayout(): void {
@@ -133,8 +135,12 @@ export class MapsComponent implements OnInit, OnDestroy {
       return;
     }
 
+    console.log(`--- SEARCHING FOR: "${itemCode}" ---`);
+
     const searchTerm = itemCode.trim().toUpperCase();
     const locationsForItem = this.itemToLocationsMap.get(searchTerm);
+
+    console.log('Found locations for this item:', locationsForItem);
 
     if (locationsForItem && locationsForItem.length > 0) {
       // Group all found location details by their target SVG ID
@@ -150,12 +156,16 @@ export class MapsComponent implements OnInit, OnDestroy {
       
       const foundAreas: string[] = [];
       detailsBySvgId.forEach((details, svgId) => {
+        console.log(`Attempting to find SVG element with ID: #${svgId}`);
         const svgElement = this.svgContainer.nativeElement.querySelector(`#${svgId}`);
         if (svgElement) {
+          console.log(`SUCCESS: Found element for #${svgId}. Highlighting it.`, svgElement);
           this.highlightElement(svgElement, details);
           if (!foundAreas.includes(svgId)) {
             foundAreas.push(svgId.replace(/_/g, ' '));
           }
+        } else {
+          console.error(`ERROR: Could not find any SVG element with ID: #${svgId}`);
         }
       });
 
@@ -166,6 +176,7 @@ export class MapsComponent implements OnInit, OnDestroy {
         this.searchResult = `Item <strong>${itemCode}</strong> has location(s) (${originalLocations}), but the corresponding area could not be found on the layout. Please check the SVG IDs.`;
       }
     } else {
+      console.log(`No locations found in the data for item code: "${searchTerm}"`);
       this.searchResult = `Item <strong>${itemCode}</strong> not found in the location data.`;
     }
   }
