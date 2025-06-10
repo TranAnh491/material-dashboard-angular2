@@ -74,9 +74,18 @@ export class MapsComponent implements OnInit, OnDestroy {
   private parseLocationData(data: any[]): void {
     const allLocationData: LocationInfo[] = data.map(row => {
         const originalLocation = row.location?.trim() || '';
-        const normalizedLocation = originalLocation.toUpperCase().replace(/[\s\W]+/g, '_');
-        const match = normalizedLocation.match(/^([A-Z]+)(\d)/);
-        const svgId = match ? match[1] + match[2] : normalizedLocation;
+        const normalizedLocation = originalLocation.toUpperCase().replace(/[\\s\\W]+/g, '_');
+        const match = normalizedLocation.match(/^([A-Z]+)(\\d)/);
+        
+        let svgId: string;
+        if (match) {
+          // This logic shortens codes like 'D11' to 'D1' by taking the letters and the *first* digit.
+          svgId = match[1] + match[2];
+        } else {
+          // This handles codes that are letters only, like 'NG' or 'IQC'.
+          const matchLettersOnly = normalizedLocation.match(/^[A-Z]+/);
+          svgId = matchLettersOnly ? matchLettersOnly[0] : normalizedLocation;
+        }
 
         return {
             itemCode: (row.code?.trim() || '').toUpperCase(),
