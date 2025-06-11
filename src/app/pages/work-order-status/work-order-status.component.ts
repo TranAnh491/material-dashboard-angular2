@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 
 @Component({
   selector: 'app-work-order-status',
@@ -103,7 +103,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         return;
     }
 
-    this.http.post<any>(this.GAS_URL, { row: sheetRowIndex, data }).subscribe({
+    const payload = { row: sheetRowIndex, data };
+    const httpOptions = {
+      headers: new HttpHeaders({
+        'Content-Type': 'text/plain;charset=utf-8',
+      })
+    };
+
+    this.http.post<any>(this.GAS_URL, JSON.stringify(payload), httpOptions).subscribe({
       next: (response) => {
         if (response && response.status === 'success') {
           alert('Saved!');
