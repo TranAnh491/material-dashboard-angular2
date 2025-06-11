@@ -17,10 +17,6 @@ export class AdminLayoutComponent implements OnInit {
 
   constructor( public location: Location, private router: Router) {}
 
-  public get shouldRemovePadding(): boolean {
-    return this.location.path() === '/work-order-status';
-  }
-
   ngOnInit() {
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;
 
