@@ -19,11 +19,16 @@
 }
 
 .checklist-row {
-    justify-content: center;
+    justify-content: flex-start; /* Align to left instead of center */
     margin-bottom: 20px;
 }
 
 .checklist-card {
     flex: 0 1 auto; /* Don't grow, don't shrink, base size is auto */
     min-width: 200px; /* Give it a minimum width */
+}
+
+/* Remove padding from the main container for this specific page */
+.documents-container {
+    padding: 0;
 }
