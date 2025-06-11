@@ -17,9 +17,9 @@ export class AdminLayoutComponent implements OnInit {
 
   constructor( public location: Location, private router: Router) {}
 
-  public get shouldShowNavbar(): boolean {
-    const dashboardRoutes = ['/dashboard', '/'];
-    return dashboardRoutes.includes(this.location.path());
+  public shouldShowNavbar(): boolean {
+    const hideNavbarOnRoutes = ['/maps', '/typography', '/work-order-status'];
+    return !hideNavbarOnRoutes.includes(this.location.path());
   }
 
   ngOnInit() {
@@ -144,6 +144,12 @@ export class AdminLayoutComponent implements OnInit {
           return true;
       }
   }
+
+  public shouldShowFooter(): boolean {
+    const hideFooterOnRoutes = ['/maps', '/work-order-status', '/typography'];
+    return !hideFooterOnRoutes.includes(this.location.path());
+  }
+  
   runOnRouteChange(): void {
     if (window.matchMedia(`(min-width: 960px)`).matches && !this.isMac()) {
       const elemMainPanel = <HTMLElement>document.querySelector('.main-panel');
