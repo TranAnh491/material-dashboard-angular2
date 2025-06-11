@@ -3,14 +3,23 @@
 }
 
 .logo {
-  text-align: center;
-  padding: 18px 0;
+  padding: 15px 0px;
+  margin: 0;
+  display: block;
+  position: relative;
+  z-index: 4;
+  opacity: 0.5;
 }
 .logo-img img {
   width: 44px;
   height: 44px;
   object-fit: contain;
   margin-bottom: 5px;
+}
+
+.logo a.logo-mini {
+  opacity: 1 !important;
+  float: left;
 }
 
 .nav {
