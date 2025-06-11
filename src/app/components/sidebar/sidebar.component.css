@@ -8,18 +8,18 @@
   display: block;
   position: relative;
   z-index: 4;
-  opacity: 0.5;
 }
 .logo-img img {
-  width: 44px;
-  height: 44px;
+  width: 35px;
+  height: 35px;
   object-fit: contain;
   margin-bottom: 5px;
 }
 
 .logo a.logo-mini {
   opacity: 1 !important;
-  float: left;
+  float: none;
+  text-align: center;
 }
 
 .nav {
