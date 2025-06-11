@@ -1,99 +1,85 @@
-<svg width="500" height="900" viewBox="0 0 500 900" xmlns="http://www.w3.org/2000/svg">
-  <!-- Tường ngoài -->
-  <rect x="10" y="10" width="480" height="880" fill="#fff" stroke="#000" stroke-width="2"/>
+<svg width="320" height="520" viewBox="0 0 320 520" xmlns="http://www.w3.org/2000/svg">
+  <!-- 
+    Layout kho hàng.
+    Quy ước tỉ lệ: 1 mét = 10 pixels.
+    Kích thước kho: 30m x 50m (300x500 pixels).
+    Kích thước kệ nhỏ: 1m x 3m (10x30 pixels).
+  -->
+
+  <!-- Tường kho (30m x 50m) -->
+  <rect x="10" y="10" width="300" height="500" fill="#f9f9f9" stroke="#333" stroke-width="2"/>
   
-  <!-- Các phòng bên trái -->
-  <!-- Scrap area -->
-  <rect x="15" y="15" width="60" height="40" fill="#f5f5f5" stroke="#000"/>
-  <text x="20" y="40" font-size="12" font-family="Arial">Scrap area</text>
-  <!-- NG area -->
-  <rect x="15" y="65" width="60" height="40" fill="#f5f5f5" stroke="#000"/>
-  <text x="20" y="90" font-size="12" font-family="Arial">NG area</text>
-  <!-- IQC và các ô nhỏ -->
-  <text x="25" y="130" font-size="14" font-family="Arial" fill="red">IQC</text>
-  <g font-size="10" font-family="Arial">
-    <rect x="15" y="135" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="148">Q</text>
-    <rect x="15" y="155" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="168">S</text>
-    <rect x="15" y="175" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="188">T</text>
-    <rect x="15" y="195" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="208">U</text>
-    <rect x="15" y="215" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="228">V</text>
-    <rect x="15" y="235" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="248">W</text>
-    <rect x="15" y="255" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="268">X</text>
-    <rect x="15" y="275" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="288">Y</text>
-    <rect x="15" y="295" width="60" height="18" fill="#fff" stroke="#000"/><text x="20" y="308">Z</text>
-  </g>
-  <text x="23" y="330" font-size="12" fill="red" font-family="Arial" transform="rotate(-90 23,330)">Secured WH</text>
-
-  <!-- WH offices -->
-  <rect x="15" y="340" width="60" height="40" fill="#fff" stroke="#000"/>
-  <rect x="15" y="390" width="60" height="40" fill="#fff" stroke="#000"/>
-  <text x="25" y="370" font-size="12" font-family="Arial" fill="red">WH</text>
-  <text x="25" y="420" font-size="12" font-family="Arial" fill="red">WH</text>
-
-  <!-- Charging forklift area -->
-  <rect x="15" y="445" width="60" height="80" fill="#e0e0e0" stroke="#000"/>
-  <text x="18" y="475" font-size="10" font-family="Arial">Charging forklift</text>
-  
-  <!-- Locker area -->
-  <rect x="85" y="15" width="50" height="18" fill="#fff" stroke="#000"/>
-  <text x="87" y="28" font-size="10" font-family="Arial">Locker</text>
-
-  <!-- Vùng kệ chính -->
-  <!-- Các dãy kệ B, C, D, E, F, G -->
-  <!-- G1-F1-E1-D1-C1-B1-A1... -->
-  <g font-size="10" font-family="Arial">
+  <!-- Các dãy kệ -->
+  <g font-family="Arial">
     <!-- Dãy A -->
-    <g data-loc="A4" data-cell-id="cell-a4"><rect x="400" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="405" y="100" font-size="10">A4</text></g>
-    <g data-loc="A3" data-cell-id="cell-a3"><rect x="400" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="405" y="180" font-size="10">A3</text></g>
-    <g data-loc="A2" data-cell-id="cell-a2"><rect x="400" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="405" y="260" font-size="10">A2</text></g>
-    <g data-loc="A1" data-cell-id="cell-a1"><rect x="400" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="405" y="340" font-size="10">A1</text></g>
+    <g data-loc="A9" data-cell-id="cell-a9"><rect x="300" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="40" font-size="8">A9</text></g>
+    <g data-loc="A8" data-cell-id="cell-a8"><rect x="300" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="70" font-size="8">A8</text></g>
+    <g data-loc="A7" data-cell-id="cell-a7"><rect x="300" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="100" font-size="8">A7</text></g>
+    <g data-loc="A6" data-cell-id="cell-a6"><rect x="300" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="130" font-size="8">A6</text></g>
+    <g data-loc="A5" data-cell-id="cell-a5"><rect x="300" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="160" font-size="8">A5</text></g>
+    <g data-loc="A4" data-cell-id="cell-a4"><rect x="300" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="190" font-size="8">A4</text></g>
+    <g data-loc="A3" data-cell-id="cell-a3"><rect x="300" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="220" font-size="8">A3</text></g>
+    <g data-loc="A2" data-cell-id="cell-a2"><rect x="300" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="250" font-size="8">A2</text></g>
+    <g data-loc="A1" data-cell-id="cell-a1"><rect x="300" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="301" y="280" font-size="8">A1</text></g>
     <!-- Dãy B -->
-    <g data-loc="B4" data-cell-id="cell-b4"><rect x="370" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="375" y="100" font-size="10">B4</text></g>
-    <g data-loc="B3" data-cell-id="cell-b3"><rect x="370" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="375" y="180" font-size="10">B3</text></g>
-    <g data-loc="B2" data-cell-id="cell-b2"><rect x="370" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="375" y="260" font-size="10">B2</text></g>
-    <g data-loc="B1" data-cell-id="cell-b1"><rect x="370" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="375" y="340" font-size="10">B1</text></g>
+    <g data-loc="B9" data-cell-id="cell-b9"><rect x="260" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="40" font-size="8">B9</text></g>
+    <g data-loc="B8" data-cell-id="cell-b8"><rect x="260" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="70" font-size="8">B8</text></g>
+    <g data-loc="B7" data-cell-id="cell-b7"><rect x="260" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="100" font-size="8">B7</text></g>
+    <g data-loc="B6" data-cell-id="cell-b6"><rect x="260" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="130" font-size="8">B6</text></g>
+    <g data-loc="B5" data-cell-id="cell-b5"><rect x="260" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="160" font-size="8">B5</text></g>
+    <g data-loc="B4" data-cell-id="cell-b4"><rect x="260" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="190" font-size="8">B4</text></g>
+    <g data-loc="B3" data-cell-id="cell-b3"><rect x="260" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="220" font-size="8">B3</text></g>
+    <g data-loc="B2" data-cell-id="cell-b2"><rect x="260" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="250" font-size="8">B2</text></g>
+    <g data-loc="B1" data-cell-id="cell-b1"><rect x="260" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="261" y="280" font-size="8">B1</text></g>
     <!-- Dãy C -->
-    <g data-loc="C4" data-cell-id="cell-c4"><rect x="340" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="345" y="100" font-size="10">C4</text></g>
-    <g data-loc="C3" data-cell-id="cell-c3"><rect x="340" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="345" y="180" font-size="10">C3</text></g>
-    <g data-loc="C2" data-cell-id="cell-c2"><rect x="340" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="345" y="260" font-size="10">C2</text></g>
-    <g data-loc="C1" data-cell-id="cell-c1"><rect x="340" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="345" y="340" font-size="10">C1</text></g>
+    <g data-loc="C9" data-cell-id="cell-c9"><rect x="245" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="40" font-size="8">C9</text></g>
+    <g data-loc="C8" data-cell-id="cell-c8"><rect x="245" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="70" font-size="8">C8</text></g>
+    <g data-loc="C7" data-cell-id="cell-c7"><rect x="245" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="100" font-size="8">C7</text></g>
+    <g data-loc="C6" data-cell-id="cell-c6"><rect x="245" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="130" font-size="8">C6</text></g>
+    <g data-loc="C5" data-cell-id="cell-c5"><rect x="245" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="160" font-size="8">C5</text></g>
+    <g data-loc="C4" data-cell-id="cell-c4"><rect x="245" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="190" font-size="8">C4</text></g>
+    <g data-loc="C3" data-cell-id="cell-c3"><rect x="245" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="220" font-size="8">C3</text></g>
+    <g data-loc="C2" data-cell-id="cell-c2"><rect x="245" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="250" font-size="8">C2</text></g>
+    <g data-loc="C1" data-cell-id="cell-c1"><rect x="245" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="246" y="280" font-size="8">C1</text></g>
     <!-- Dãy D -->
-    <g data-loc="D4" data-cell-id="cell-d4"><rect x="310" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="315" y="100" font-size="10">D4</text></g>
-    <g data-loc="D3" data-cell-id="cell-d3"><rect x="310" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="315" y="180" font-size="10">D3</text></g>
-    <g data-loc="D2" data-cell-id="cell-d2"><rect x="310" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="315" y="260" font-size="10">D2</text></g>
-    <g data-loc="D1" data-cell-id="cell-d1"><rect x="310" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="315" y="340" font-size="10">D1</text></g>
+    <g data-loc="D9" data-cell-id="cell-d9"><rect x="205" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="40" font-size="8">D9</text></g>
+    <g data-loc="D8" data-cell-id="cell-d8"><rect x="205" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="70" font-size="8">D8</text></g>
+    <g data-loc="D7" data-cell-id="cell-d7"><rect x="205" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="100" font-size="8">D7</text></g>
+    <g data-loc="D6" data-cell-id="cell-d6"><rect x="205" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="130" font-size="8">D6</text></g>
+    <g data-loc="D5" data-cell-id="cell-d5"><rect x="205" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="160" font-size="8">D5</text></g>
+    <g data-loc="D4" data-cell-id="cell-d4"><rect x="205" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="190" font-size="8">D4</text></g>
+    <g data-loc="D3" data-cell-id="cell-d3"><rect x="205" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="220" font-size="8">D3</text></g>
+    <g data-loc="D2" data-cell-id="cell-d2"><rect x="205" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="250" font-size="8">D2</text></g>
+    <g data-loc="D1" data-cell-id="cell-d1"><rect x="205" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="206" y="280" font-size="8">D1</text></g>
     <!-- Dãy E -->
-    <g data-loc="E4" data-cell-id="cell-e4"><rect x="280" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="285" y="100" font-size="10">E4</text></g>
-    <g data-loc="E3" data-cell-id="cell-e3"><rect x="280" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="285" y="180" font-size="10">E3</text></g>
-    <g data-loc="E2" data-cell-id="cell-e2"><rect x="280" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="285" y="260" font-size="10">E2</text></g>
-    <g data-loc="E1" data-cell-id="cell-e1"><rect x="280" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="285" y="340" font-size="10">E1</text></g>
+    <g data-loc="E9" data-cell-id="cell-e9"><rect x="190" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="40" font-size="8">E9</text></g>
+    <g data-loc="E8" data-cell-id="cell-e8"><rect x="190" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="70" font-size="8">E8</text></g>
+    <g data-loc="E7" data-cell-id="cell-e7"><rect x="190" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="100" font-size="8">E7</text></g>
+    <g data-loc="E6" data-cell-id="cell-e6"><rect x="190" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="130" font-size="8">E6</text></g>
+    <g data-loc="E5" data-cell-id="cell-e5"><rect x="190" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="160" font-size="8">E5</text></g>
+    <g data-loc="E4" data-cell-id="cell-e4"><rect x="190" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="190" font-size="8">E4</text></g>
+    <g data-loc="E3" data-cell-id="cell-e3"><rect x="190" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="220" font-size="8">E3</text></g>
+    <g data-loc="E2" data-cell-id="cell-e2"><rect x="190" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="250" font-size="8">E2</text></g>
+    <g data-loc="E1" data-cell-id="cell-e1"><rect x="190" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="191" y="280" font-size="8">E1</text></g>
     <!-- Dãy F -->
-    <g data-loc="F4" data-cell-id="cell-f4"><rect x="250" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="255" y="100" font-size="10">F4</text></g>
-    <g data-loc="F3" data-cell-id="cell-f3"><rect x="250" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="255" y="180" font-size="10">F3</text></g>
-    <g data-loc="F2" data-cell-id="cell-f2"><rect x="250" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="255" y="260" font-size="10">F2</text></g>
-    <g data-loc="F1" data-cell-id="cell-f1"><rect x="250" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="255" y="340" font-size="10">F1</text></g>
+    <g data-loc="F9" data-cell-id="cell-f9"><rect x="150" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="40" font-size="8">F9</text></g>
+    <g data-loc="F8" data-cell-id="cell-f8"><rect x="150" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="70" font-size="8">F8</text></g>
+    <g data-loc="F7" data-cell-id="cell-f7"><rect x="150" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="100" font-size="8">F7</text></g>
+    <g data-loc="F6" data-cell-id="cell-f6"><rect x="150" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="130" font-size="8">F6</text></g>
+    <g data-loc="F5" data-cell-id="cell-f5"><rect x="150" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="160" font-size="8">F5</text></g>
+    <g data-loc="F4" data-cell-id="cell-f4"><rect x="150" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="190" font-size="8">F4</text></g>
+    <g data-loc="F3" data-cell-id="cell-f3"><rect x="150" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="220" font-size="8">F3</text></g>
+    <g data-loc="F2" data-cell-id="cell-f2"><rect x="150" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="250" font-size="8">F2</text></g>
+    <g data-loc="F1" data-cell-id="cell-f1"><rect x="150" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="151" y="280" font-size="8">F1</text></g>
     <!-- Dãy G -->
-    <g data-loc="G4" data-cell-id="cell-g4"><rect x="220" y="80" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="225" y="100" font-size="10">G4</text></g>
-    <g data-loc="G3" data-cell-id="cell-g3"><rect x="220" y="155" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="225" y="180" font-size="10">G3</text></g>
-    <g data-loc="G2" data-cell-id="cell-g2"><rect x="220" y="230" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="225" y="260" font-size="10">G2</text></g>
-    <g data-loc="G1" data-cell-id="cell-g1"><rect x="220" y="305" width="20" height="75" fill="#ffe4b5" stroke="#000"/><text x="225" y="340" font-size="10">G1</text></g>
+    <g data-loc="G9" data-cell-id="cell-g9"><rect x="135" y="20" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="40" font-size="8">G9</text></g>
+    <g data-loc="G8" data-cell-id="cell-g8"><rect x="135" y="50" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="70" font-size="8">G8</text></g>
+    <g data-loc="G7" data-cell-id="cell-g7"><rect x="135" y="80" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="100" font-size="8">G7</text></g>
+    <g data-loc="G6" data-cell-id="cell-g6"><rect x="135" y="110" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="130" font-size="8">G6</text></g>
+    <g data-loc="G5" data-cell-id="cell-g5"><rect x="135" y="140" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="160" font-size="8">G5</text></g>
+    <g data-loc="G4" data-cell-id="cell-g4"><rect x="135" y="170" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="190" font-size="8">G4</text></g>
+    <g data-loc="G3" data-cell-id="cell-g3"><rect x="135" y="200" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="220" font-size="8">G3</text></g>
+    <g data-loc="G2" data-cell-id="cell-g2"><rect x="135" y="230" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="250" font-size="8">G2</text></g>
+    <g data-loc="G1" data-cell-id="cell-g1"><rect x="135" y="260" width="10" height="30" fill="#ffe4b5" stroke="#000" stroke-width="0.5"/><text x="136" y="280" font-size="8">G1</text></g>
   </g>
-
-  <!-- Vùng IQC 18x2 -->
-  <rect x="90" y="380" width="320" height="40" fill="none" stroke="#ccc" stroke-dasharray="5,5"/>
-  <text x="110" y="400" font-size="13" font-family="Arial" fill="#333">IQC 18 x 2</text>
-
-  <!-- W.O outbound -->
-  <rect x="120" y="20" width="110" height="35" fill="none" stroke="#ccc" stroke-dasharray="3,3"/>
-  <text x="125" y="40" font-size="11" font-family="Arial" fill="#333" transform="rotate(-90 135,40)">W.O outbound</text>
-
-  <!-- STAGING và SHIPPING -->
-  <rect x="90" y="730" width="140" height="120" fill="#e6f7ff" stroke="#000"/>
-  <text x="125" y="790" font-size="16" font-family="Arial" fill="#009">STAGING 10x7</text>
-  <rect x="250" y="730" width="140" height="120" fill="#f9e6ff" stroke="#000"/>
-  <text x="280" y="790" font-size="16" font-family="Arial" fill="#900">SHIPPING 10x7</text>
-  
-  <!-- Main Door -->
-  <rect x="230" y="870" width="40" height="18" fill="#fff" stroke="#000"/>
-  <text x="237" y="883" font-size="13" font-family="Arial">Main Door</text>
 </svg>
