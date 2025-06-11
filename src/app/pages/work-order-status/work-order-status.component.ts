@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
@@ -7,7 +7,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
   templateUrl: './work-order-status.component.html',
   styleUrls: ['./work-order-status.component.scss']
 })
-export class WorkOrderStatusComponent implements OnInit, OnDestroy {
+export class WorkOrderStatusComponent implements OnInit {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
@@ -24,9 +24,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
 
-  refreshInterval: any;
-  refreshTime = 30000; // 30s
-
   embeddedSheetUrl: SafeResourceUrl | null = null;
 
   constructor(private http: HttpClient, private sanitizer: DomSanitizer) {}
@@ -37,15 +34,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.selectedYear = today.getFullYear().toString();
 
     this.loadData();
-    this.refreshInterval = setInterval(() => {
-      this.loadData();
-    }, this.refreshTime);
-  }
-
-  ngOnDestroy(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
   }
 
   loadData() {
