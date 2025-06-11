@@ -104,20 +104,30 @@ export class MapsComponent implements OnInit {
   }
 
   private highlightElement(svgId: string): boolean {
+    console.log(`Searching for svgId: '${svgId.toLowerCase()}' in map...`);
     const cellId = this.locToCellIdMap.get(svgId.toLowerCase());
     if (!cellId) {
+      console.error(`...cellId not found for loc '${svgId.toLowerCase()}'.`);
       return false;
     }
+    console.log(`...found cellId: '${cellId}'. Querying DOM...`);
     
     if (this.svgContainer && this.svgContainer.nativeElement) {
-      const groupElement = this.svgContainer.nativeElement.querySelector(`g[data-cell-id="${cellId}"]`);
+      const query = `g[data-cell-id="${cellId}"]`;
+      const groupElement = this.svgContainer.nativeElement.querySelector(query);
       if (groupElement) {
+        console.log('...Found group element:', groupElement);
         const rect = groupElement.querySelector('rect');
         if (rect) {
+          console.log('...Found rect, applying highlight:', rect);
           this.renderer.setStyle(rect, 'fill', 'orange');
           this.highlightedElements.push(rect);
           return true;
+        } else {
+          console.error('...Group element found, but NO rect inside it.');
         }
+      } else {
+        console.error(`...Could not find group element with query: '${query}'`);
       }
     }
     return false;
@@ -131,6 +141,7 @@ export class MapsComponent implements OnInit {
   }
 
   private buildLocMap(svgText: string) {
+    this.locToCellIdMap.clear(); // Clear map before building
     const regex = /<object.*?loc="([^"]+)".*?id="([^"]+)".*?>/g;
     let match;
     while ((match = regex.exec(svgText)) !== null) {
@@ -138,6 +149,7 @@ export class MapsComponent implements OnInit {
       const id = match[2];
       this.locToCellIdMap.set(loc, id);
     }
+    console.log('--- Built loc to cell ID map: ---', this.locToCellIdMap);
   }
 
   private loadSvg() {
