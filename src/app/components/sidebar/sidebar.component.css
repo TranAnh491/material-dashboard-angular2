@@ -3,15 +3,15 @@
 }
 
 .logo {
-  padding: 15px 0px;
+  padding: 20px 0px;
   margin: 0;
   display: block;
   position: relative;
   z-index: 4;
 }
 .logo-img img {
-  width: 35px;
-  height: 35px;
+  width: 60px;
+  height: 60px;
   object-fit: contain;
   margin-bottom: 5px;
 }
@@ -20,6 +20,9 @@
   opacity: 1 !important;
   float: none;
   text-align: center;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: #3C4858;
 }
 
 .nav {
