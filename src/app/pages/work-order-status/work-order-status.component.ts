@@ -8,13 +8,14 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 })
 export class WorkOrderStatusComponent implements OnInit {
   
-  SHEET_ID = '17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84';
+  SHEET_URL = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit?gid=0';
   embeddedSheetUrl: SafeResourceUrl | null = null;
 
   constructor(private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
-    const embedUrl = `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/pubhtml?widget=true&amp;single=true&amp;headers=false`;
+    // single=true hides other sheets. rm=minimal provides a cleaner UI.
+    const embedUrl = `${this.SHEET_URL}&single=true&rm=minimal`;
     this.embeddedSheetUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
   }
 }
