@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 interface DocumentFile {
   title: string;
@@ -16,18 +17,25 @@ export class DocumentsComponent implements OnInit {
   documentList: DocumentFile[] = [
     {
       title: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO ĐẶC BIỆT',
-      url: 'https://docs.google.com/spreadsheets/d/1otX4VegyT7fdHMZqRLulBGoc-zmdP1bJLSuYHZAstEc/edit?gid=1531087093#gid=1531087093',
+      url: 'https://docs.google.com/spreadsheets/d/1otX4VegyT7fdHMZqRLulBGoc-zmdP1bJLSuYHZAstEc/edit?gid=1531087093',
       category: 'Checklist Kho'
     }
     // Thêm các file khác vào đây
   ];
 
-  constructor() { }
+  selectedDocumentUrl: SafeResourceUrl | null = null;
+
+  constructor(private sanitizer: DomSanitizer) { }
 
   ngOnInit(): void {
   }
 
-  openDocument(url: string): void {
-    window.open(url, '_blank');
+  selectDocument(doc: DocumentFile): void {
+    const embedUrl = doc.url.includes('?') ? `${doc.url}&rm=minimal` : `${doc.url}?rm=minimal`;
+    this.selectedDocumentUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
+  }
+
+  closeDocument(): void {
+    this.selectedDocumentUrl = null;
   }
 }
