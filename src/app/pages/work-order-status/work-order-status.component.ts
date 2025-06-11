@@ -8,14 +8,21 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 })
 export class WorkOrderStatusComponent implements OnInit {
   
-  SHEET_URL = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit?gid=0';
+  SHEET_ID = '17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84';
+  SHEET_GID = '0'; // GID for "W.O Masss" sheet
+  
   embeddedSheetUrl: SafeResourceUrl | null = null;
 
   constructor(private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
-    // single=true hides other sheets. rm=minimal provides a cleaner UI.
-    const embedUrl = `${this.SHEET_URL}&single=true&rm=minimal`;
+    // Construct the URL with gid in the fragment part for better reliability
+    const baseUrl = `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/edit`;
+    const params = `?single=true&rm=minimal`;
+    const fragment = `#gid=${this.SHEET_GID}`;
+    
+    const embedUrl = `${baseUrl}${params}${fragment}`;
+    
     this.embeddedSheetUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
   }
 }
