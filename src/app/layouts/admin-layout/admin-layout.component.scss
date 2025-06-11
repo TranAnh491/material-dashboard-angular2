@@ -1,22 +1,18 @@
 .main-panel {
-    // margin-left: 260px; // This is a patch, the flex layout should handle positioning.
-    height: 100vh;
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
 }
 
 .content-area {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    flex-grow: 1;
+    /* The router-outlet will be placed here */
 }
 
 /* Ensure the routed component inside content-area also fills the space */
 .content-area > :first-child {
     height: 100%;
 }
-
 
 app-navbar, .footer-wrapper {
     flex-shrink: 0;

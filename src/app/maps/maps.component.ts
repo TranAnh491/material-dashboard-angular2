@@ -139,6 +139,11 @@ export class MapsComponent implements OnInit {
           console.log('...Found rect, applying highlight:', rect);
           this.renderer.setStyle(rect, 'fill', 'orange');
           this.highlightedElements.push(rect);
+          
+          // --- BEGIN: Auto-scroll to element ---
+          groupElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+          // --- END: Auto-scroll to element ---
+
           return true;
         } else {
           console.error('...Group element found, but NO rect inside it.');
