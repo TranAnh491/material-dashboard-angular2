@@ -10,10 +10,11 @@
   z-index: 4;
 }
 .logo-img img {
-  width: 70px;
-  height: 70px;
+  width: 133px;
+  height: 133px;
   object-fit: contain;
-  margin-bottom: 5px;
+  display: block;
+  margin: 0 auto 5px auto;
 }
 
 .logo a.logo-mini {
