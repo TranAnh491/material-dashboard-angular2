@@ -2,8 +2,14 @@ import { Component, OnInit, ViewChild, ElementRef, Renderer2 } from '@angular/co
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
+interface ItemDetail {
+  location: string;
+  po: string;
+  qty: any;
+}
+
 interface LocationInfo {
-  [key: string]: string[];
+  [key: string]: ItemDetail[];
 }
 
 @Component({
@@ -43,17 +49,17 @@ export class MapsComponent implements OnInit {
 
   private parseLocationData(data: any[]): LocationInfo {
     const locations: LocationInfo = {};
-    // The new data is an array of objects, not an array of arrays.
-    // No need to skip a header row.
     for (const row of data) {
       const itemCode = row.code ? String(row.code).trim().toUpperCase() : '';
       const location = row.location ? String(row.location).trim().toUpperCase() : '';
+      const po = row.po ? String(row.po).trim() : 'N/A';
+      const qty = row.qty !== undefined ? row.qty : 'N/A';
 
       if (itemCode && location) {
         if (!locations[itemCode]) {
           locations[itemCode] = [];
         }
-        locations[itemCode].push(location);
+        locations[itemCode].push({ location, po, qty });
       }
     }
     return locations;
@@ -69,32 +75,29 @@ export class MapsComponent implements OnInit {
       return;
     }
     
-    const locations = this.itemLocations[itemCodeInput];
+    const itemDetails = this.itemLocations[itemCodeInput];
 
-    if (locations && locations.length > 0) {
-      const foundAreas: string[] = [];
-      const notFoundAreas: string[] = [];
+    if (itemDetails && itemDetails.length > 0) {
+      const foundLocations = new Set<string>();
+      const notFoundLocations = new Set<string>();
       
-      locations.forEach(location => {
-        const svgId = location.substring(0, 2); 
+      itemDetails.forEach(detail => {
+        const svgId = detail.location.substring(0, 2); 
         const success = this.highlightElement(svgId);
         if (success) {
-            if (!foundAreas.includes(location)) {
-                foundAreas.push(location);
-            }
+            foundLocations.add(detail.location);
         } else {
-            if (!notFoundAreas.includes(location)) {
-                notFoundAreas.push(location);
-            }
+            notFoundLocations.add(detail.location);
         }
       });
 
-      let message = `Mã hàng ${itemCodeInput} có vị trí tại: `;
-      if(foundAreas.length > 0){
-        message += `<strong>${foundAreas.join(', ')}</strong> (đã tô sáng). `;
-      }
-      if(notFoundAreas.length > 0){
-        message += `Không tìm thấy khu vực cho: <strong>${notFoundAreas.join(', ')}</strong> trên layout.`;
+      let message = '';
+      itemDetails.forEach(detail => {
+        message += `${itemCodeInput}. vị trí <strong>${detail.location}</strong>. PO: ${detail.po}, Qty: ${detail.qty}<br>`;
+      });
+
+      if (notFoundLocations.size > 0) {
+          message += `<br>Không tìm thấy khu vực cho: <strong>${Array.from(notFoundLocations).join(', ')}</strong> trên layout.`;
       }
       this.searchMessage = message;
 
