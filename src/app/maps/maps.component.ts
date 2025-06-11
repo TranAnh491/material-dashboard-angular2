@@ -142,14 +142,21 @@ export class MapsComponent implements OnInit {
 
   private buildLocMap(svgText: string) {
     this.locToCellIdMap.clear(); // Clear map before building
-    const regex = /<object.*?loc="([^"]+)".*?id="([^"]+)".*?>/g;
-    let match;
-    while ((match = regex.exec(svgText)) !== null) {
-      const loc = match[1].toLowerCase();
-      const id = match[2];
-      this.locToCellIdMap.set(loc, id);
-    }
-    console.log('--- Built loc to cell ID map: ---', this.locToCellIdMap);
+
+    // Use DOMParser to safely and robustly parse the SVG XML
+    const parser = new DOMParser();
+    const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
+
+    // Find all <g> elements that have both data-loc and data-cell-id attributes
+    const groupElements = svgDoc.querySelectorAll('g[data-loc][data-cell-id]');
+
+    groupElements.forEach(g => {
+      const loc = g.getAttribute('data-loc')!.toLowerCase();
+      const cellId = g.getAttribute('data-cell-id')!;
+      this.locToCellIdMap.set(loc, cellId);
+    });
+
+    console.log('--- Built loc to cell ID map (DOM Parsing): ---', this.locToCellIdMap);
   }
 
   private loadSvg() {
