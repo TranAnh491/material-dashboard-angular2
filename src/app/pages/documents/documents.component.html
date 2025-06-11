@@ -3,8 +3,9 @@
 
     <!-- Document List View -->
     <div *ngIf="!selectedDocumentUrl">
-      <div class="row">
-        <div *ngFor="let doc of documentList" class="col-md-4">
+      <!-- Row for Checklists -->
+      <div class="row checklist-row">
+        <div *ngFor="let doc of documentList" class="col-md-auto checklist-card">
           <div class="card">
             <div class="card-body text-center">
               <h5 class="card-title">{{ doc.title }}</h5>
@@ -13,6 +14,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Here you can add another row for other documents if needed -->
+
     </div>
 
     <!-- Embedded Document View -->
