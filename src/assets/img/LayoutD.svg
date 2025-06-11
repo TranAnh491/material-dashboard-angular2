@@ -18,8 +18,8 @@
   <!-- Văn phòng & Khu vực trái -->
   <g font-family="Arial" text-anchor="middle" dominant-baseline="middle" transform="translate(-5, 0)">
       <!-- Admin Area -->
-      <rect x="15" y="12" width="70" height="58" fill="none" stroke="#333" stroke-width="1"/>
-      <text x="50" y="41" font-size="10">Admin</text>
+      <rect x="15" y="11" width="80" height="59" fill="none" stroke="#333" stroke-width="1"/>
+      <text x="55" y="41" font-size="10">Admin</text>
 
       <!-- Quality Office -->
       <rect x="15" y="70" width="70" height="60" fill="none" stroke="#333" stroke-width="1"/>
@@ -78,8 +78,8 @@
       
       <!-- Kệ K (bên trong office) -->
       <g data-loc="K" data-cell-id="cell-k">
-        <rect x="80" y="150" width="5" height="80" fill="white" stroke="#000" stroke-width="0.5" stroke-dasharray="3,3"/>
-        <text x="82.5" y="190" font-size="8">K</text>
+        <rect x="79" y="150" width="5" height="80" fill="white" stroke="#000" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <text x="81.5" y="190" font-size="8">K</text>
       </g>
 
       <!-- WH OFFICE -->
