@@ -16,8 +16,13 @@ export class DocumentsComponent implements OnInit {
 
   documentList: DocumentFile[] = [
     {
-      title: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO ĐẶC BIỆT',
+      title: 'Checklist ASM1',
       url: 'https://docs.google.com/spreadsheets/d/1otX4VegyT7fdHMZqRLulBGoc-zmdP1bJLSuYHZAstEc/edit?gid=1531087093',
+      category: 'Checklist Kho'
+    },
+    {
+      title: 'Checklist ASM2',
+      url: 'https://docs.google.com/spreadsheets/d/1dSSE2Wu_hWntnmm0BM4NXxySOVGR6Nd9wTJECtkIdao/edit?gid=1427962301',
       category: 'Checklist Kho'
     }
     // Thêm các file khác vào đây
