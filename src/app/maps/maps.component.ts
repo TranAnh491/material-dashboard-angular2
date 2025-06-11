@@ -52,7 +52,7 @@ export class MapsComponent implements OnInit {
     for (const row of data) {
       const itemCode = row.code ? String(row.code).trim().toUpperCase() : '';
       const location = row.location ? String(row.location).trim().toUpperCase() : '';
-      const po = row.po ? String(row.po).trim() : 'N/A';
+      const po = row.name ? String(row.name).trim() : 'N/A';
       const qty = row.qty !== undefined ? row.qty : 'N/A';
 
       if (itemCode && location) {
@@ -82,8 +82,7 @@ export class MapsComponent implements OnInit {
       const notFoundLocations = new Set<string>();
       
       itemDetails.forEach(detail => {
-        const svgId = detail.location.substring(0, 2); 
-        const success = this.highlightElement(svgId);
+        const success = this.highlightElement(detail.location);
         if (success) {
             foundLocations.add(detail.location);
         } else {
@@ -106,11 +105,26 @@ export class MapsComponent implements OnInit {
     }
   }
 
-  private highlightElement(svgId: string): boolean {
-    console.log(`Searching for svgId: '${svgId.toLowerCase()}' in map...`);
-    const cellId = this.locToCellIdMap.get(svgId.toLowerCase());
+  private highlightElement(location: string): boolean {
+    const locationLower = location.toLowerCase();
+
+    // Find the map key that is the longest prefix of the given location
+    let bestMatchKey = '';
+    for (const key of this.locToCellIdMap.keys()) {
+        if (locationLower.startsWith(key) && key.length > bestMatchKey.length) {
+            bestMatchKey = key;
+        }
+    }
+
+    if (!bestMatchKey) {
+        console.error(`...no matching prefix found for loc '${locationLower}'.`);
+        return false;
+    }
+
+    console.log(`Searching for svgId: '${bestMatchKey}' in map (derived from '${locationLower}')...`);
+    const cellId = this.locToCellIdMap.get(bestMatchKey);
     if (!cellId) {
-      console.error(`...cellId not found for loc '${svgId.toLowerCase()}'.`);
+      console.error(`...cellId not found for loc '${bestMatchKey}'.`);
       return false;
     }
     console.log(`...found cellId: '${cellId}'. Querying DOM...`);
