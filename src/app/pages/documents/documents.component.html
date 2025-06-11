@@ -1,5 +1,5 @@
 <div class="main-content">
-  <div class="container-fluid documents-container">
+  <div class="container-fluid documents-container" [class.embedded]="selectedDocumentUrl">
 
     <!-- Document List View -->
     <div *ngIf="!selectedDocumentUrl">

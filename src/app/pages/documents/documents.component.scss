@@ -1,8 +1,17 @@
+.documents-container.embedded {
+    height: 100vh; /* Make container full viewport height */
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .embedded-view,
 .iframe-container {
     height: 100%;
     display: flex;
     flex-direction: column;
+    flex-grow: 1; /* Allow this to grow and fill the space */
 }
 
 .iframe-container iframe {
