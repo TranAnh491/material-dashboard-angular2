@@ -13,7 +13,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   columnOptions: { [key: string]: string[] } = {};
   loading = true;
   errorMsg = '';
-  GAS_URL = 'https://script.google.com/macros/s/AKfycbywrBaLuzeeNlCihVh9tkOb55row6VIpyKrrI2Gl40uNaXnNp7nMkaov0x9aTaSwob6/exec';
+  GAS_URL = 'https://script.google.com/macros/s/AKfycbycffWLVmbTSAlnHB8rCci3mAYL45Ehl1TEYJbBrKzZPw86-tkXdU4DRGbCQyDT2j0c/exec';
 
   isLoggedIn = false;
   username = '';
@@ -96,29 +96,30 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   saveRow(i: number) {
     const data = this.workOrders[i];
-    const originalData = this.allWorkOrders.find(row => row.row_id === data.row_id);
+    const sheetRowIndex = data.row_id; 
 
-    if (!originalData) {
-        alert('Save failed! Could not find original row to update.');
+    if (!sheetRowIndex) {
+        alert('Save failed! Cannot identify the row to update. Please ensure row_id is available from the script.');
         return;
     }
 
-    // Xác định index trong sheet thông qua row_id hoặc một định danh duy nhất
-    const sheetRowIndex = originalData.row_id; // Giả sử có cột row_id từ sheet
-
     this.http.post<any>(this.GAS_URL, { row: sheetRowIndex, data }).subscribe({
-      next: () => {
-        alert('Saved!');
-        this.editIndex = null;
-        this.originalRowData = null;
-        // Cập nhật lại allWorkOrders để đảm bảo dữ liệu đồng nhất
-        const idx = this.allWorkOrders.findIndex(row => row.row_id === data.row_id);
-        if (idx !== -1) {
-          this.allWorkOrders[idx] = { ...data };
+      next: (response) => {
+        if (response && response.status === 'success') {
+          alert('Saved!');
+          this.editIndex = null;
+          this.originalRowData = null;
+          const idx = this.allWorkOrders.findIndex(row => row.row_id === data.row_id);
+          if (idx !== -1) {
+            this.allWorkOrders[idx] = { ...data };
+          }
+        } else {
+          alert('Save failed!\n' + (response.message || 'Unknown error from script.'));
         }
       },
       error: (err) => {
-        alert('Save failed!\n' + (err?.error?.error || JSON.stringify(err)));
+        const errorMessage = err?.error?.message || 'A server error occurred or the request was blocked (CORS issue). Please check the Apps Script configuration and ensure it has been re-deployed.';
+        alert('Save failed!\n' + errorMessage);
         console.error(err);
       }
     });
