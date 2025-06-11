@@ -26,6 +26,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 
   editIndex: number | null = null;
+  originalRowData: any = null;
 
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
@@ -80,15 +81,41 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
+  startEdit(i: number) {
+    this.originalRowData = { ...this.workOrders[i] };
+    this.editIndex = i;
+  }
+
+  cancelEdit() {
+    if (this.editIndex !== null && this.originalRowData) {
+      this.workOrders[this.editIndex] = { ...this.originalRowData };
+    }
+    this.editIndex = null;
+    this.originalRowData = null;
+  }
+
   saveRow(i: number) {
     const data = this.workOrders[i];
-    const idx = this.allWorkOrders.findIndex(row =>
-      this.columns.every(col => row[col] === data[col])
-    );
-    this.http.post<any>(this.GAS_URL, { row: idx, data }).subscribe({
+    const originalData = this.allWorkOrders.find(row => row.row_id === data.row_id);
+
+    if (!originalData) {
+        alert('Save failed! Could not find original row to update.');
+        return;
+    }
+
+    // Xác định index trong sheet thông qua row_id hoặc một định danh duy nhất
+    const sheetRowIndex = originalData.row_id; // Giả sử có cột row_id từ sheet
+
+    this.http.post<any>(this.GAS_URL, { row: sheetRowIndex, data }).subscribe({
       next: () => {
         alert('Saved!');
         this.editIndex = null;
+        this.originalRowData = null;
+        // Cập nhật lại allWorkOrders để đảm bảo dữ liệu đồng nhất
+        const idx = this.allWorkOrders.findIndex(row => row.row_id === data.row_id);
+        if (idx !== -1) {
+          this.allWorkOrders[idx] = { ...data };
+        }
       },
       error: (err) => {
         alert('Save failed!\n' + (err?.error?.error || JSON.stringify(err)));

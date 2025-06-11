@@ -52,12 +52,12 @@
             <td *ngFor="let col of columns">
               <ng-container *ngIf="editIndex === i; else viewCell">
                 <ng-container *ngIf="columnOptions[col]; else normalEdit">
-                  <select [(ngModel)]="workOrders[i][col]" (change)="saveRow(i)" (keydown.enter)="saveRow(i)">
+                  <select [(ngModel)]="workOrders[i][col]">
                     <option *ngFor="let opt of columnOptions[col]" [value]="opt">{{opt}}</option>
                   </select>
                 </ng-container>
                 <ng-template #normalEdit>
-                  <input [(ngModel)]="workOrders[i][col]" (keydown.enter)="saveRow(i)" (blur)="saveRow(i)" />
+                  <input [(ngModel)]="workOrders[i][col]" />
                 </ng-template>
               </ng-container>
               <ng-template #viewCell>
@@ -70,8 +70,13 @@
               </ng-template>
             </td>
             <td class="actions-col">
-              <button *ngIf="editIndex !== i" (click)="editIndex = i">Edit</button>
-              <button *ngIf="editIndex === i" (click)="saveRow(i)">Save</button>
+              <ng-container *ngIf="editIndex !== i">
+                <button (click)="startEdit(i)" class="btn-edit">Edit</button>
+              </ng-container>
+              <ng-container *ngIf="editIndex === i">
+                <button (click)="saveRow(i)" class="btn-save">Save</button>
+                <button (click)="cancelEdit()" class="btn-cancel">Cancel</button>
+              </ng-container>
             </td>
           </tr>
         </tbody>
