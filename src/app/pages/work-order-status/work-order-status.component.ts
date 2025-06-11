@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-work-order-status',
@@ -10,23 +11,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   workOrders: any[] = [];
   allWorkOrders: any[] = [];
   columns: string[] = [];
-  columnOptions: { [key: string]: string[] } = {};
   loading = true;
   errorMsg = '';
   GAS_URL = 'https://script.google.com/macros/s/AKfycbycffWLVmbTSAlnHB8rCci3mAYL45Ehl1TEYJbBrKzZPw86-tkXdU4DRGbCQyDT2j0c/exec';
-
-  isLoggedIn = false;
-  username = '';
-  password = '';
-  loginError = '';
+  SHEET_URL_FOR_EDITING = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit?gid=0';
 
   selectedYear: string = '';
   selectedMonth: string = '';
   years: string[] = [];
   months: string[] = ['1','2','3','4','5','6','7','8','9','10','11','12'];
-
-  editIndex: number | null = null;
-  originalRowData: any = null;
 
   yearColumn: string = 'Year';
   monthColumn: string = 'Month';
@@ -34,10 +27,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   refreshInterval: any;
   refreshTime = 30000; // 30s
 
-  constructor(private http: HttpClient) {}
+  embeddedSheetUrl: SafeResourceUrl | null = null;
+
+  constructor(private http: HttpClient, private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
-    // Auto chọn tháng và năm hiện tại khi mở trang
     const today = new Date();
     this.selectedMonth = (today.getMonth() + 1).toString();
     this.selectedYear = today.getFullYear().toString();
@@ -63,71 +57,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.years = this.getYearsList();
         this.filterData();
         this.loading = false;
-        this.columnOptions = resp.options || resp.dropdown || {};
       },
       error: () => {
         this.errorMsg = 'Failed to load data';
         this.loading = false;
-      }
-    });
-  }
-
-  login() {
-    if (this.username === 'anhtt' && this.password === '123456') {
-      this.isLoggedIn = true;
-      this.loginError = '';
-    } else {
-      this.loginError = 'Wrong account or password!';
-    }
-  }
-
-  startEdit(i: number) {
-    this.originalRowData = { ...this.workOrders[i] };
-    this.editIndex = i;
-  }
-
-  cancelEdit() {
-    if (this.editIndex !== null && this.originalRowData) {
-      this.workOrders[this.editIndex] = { ...this.originalRowData };
-    }
-    this.editIndex = null;
-    this.originalRowData = null;
-  }
-
-  saveRow(i: number) {
-    const data = this.workOrders[i];
-    const sheetRowIndex = data.row_id; 
-
-    if (!sheetRowIndex) {
-        alert('Save failed! Cannot identify the row to update. Please ensure row_id is available from the script.');
-        return;
-    }
-
-    const payload = { row: sheetRowIndex, data };
-    const httpOptions = {
-      headers: new HttpHeaders({
-        'Content-Type': 'text/plain;charset=utf-8',
-      })
-    };
-
-    this.http.post<any>(this.GAS_URL, JSON.stringify(payload), httpOptions).subscribe({
-      next: (response) => {
-        if (response && response.status === 'success') {
-          alert('Saved!');
-          this.editIndex = null;
-          this.originalRowData = null;
-          const idx = this.allWorkOrders.findIndex(row => row.row_id === data.row_id);
-          if (idx !== -1) {
-            this.allWorkOrders[idx] = { ...data };
-          }
-        } else {
-          alert('Save failed!\n' + (response.message || 'Unknown error from script.'));
-        }
-      },
-      error: (err) => {
-        const errorMessage = err?.error?.message || 'A server error occurred or the request was blocked (CORS issue). Please check the Apps Script configuration and ensure it has been re-deployed.';
-        alert('Save failed!\n' + errorMessage);
-        console.error(err);
       }
     });
   }
@@ -147,11 +80,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       if (this.selectedMonth) ok = ok && row[this.monthColumn]?.toString() === this.selectedMonth;
       return ok;
     });
-    this.editIndex = null;
+  }
+  
+  showSheetForEditing() {
+    const embedUrl = `${this.SHEET_URL_FOR_EDITING}&rm=minimal`;
+    this.embeddedSheetUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
   }
 
-  openGoogleSheet() {
-    window.open('https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0', '_blank');
+  hideSheet() {
+    this.embeddedSheetUrl = null;
+    this.loadData(); // Tải lại dữ liệu sau khi chỉnh sửa xong
   }
 
   formatDatePD(dateStr: string): string {

@@ -1,117 +1,76 @@
-<div class="workorder-container">
+<div class="main-content">
+  <div class="container-fluid">
 
-  <!-- Nút Edit on Google Sheet, căn trái phía trên -->
-  <div class="edit-sheet-wrapper">
-    <button class="edit-sheet-btn" (click)="openGoogleSheet()">
-      <span style="display:flex;align-items:center;">
-        <i class="material-icons" style="font-size:18px;margin-right:4px;">edit</i>
-        Edit on Google Sheet
-      </span>
-    </button>
+    <!-- Chế độ xem bảng (khi không chỉnh sửa) -->
+    <ng-container *ngIf="!embeddedSheetUrl">
+      <div class="card">
+        <div class="card-header card-header-info d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="card-title">Work Order Status</h4>
+            <p class="card-category">Dữ liệu được làm mới mỗi 30 giây.</p>
+          </div>
+          <button class="btn btn-white" (click)="showSheetForEditing()">
+            <i class="material-icons" style="margin-right: 4px;">edit</i>
+            Chỉnh sửa trên Google Sheet
+          </button>
+        </div>
+        <div class="card-body">
+          <!-- Bộ lọc -->
+          <div class="d-flex justify-content-center mb-3">
+            <label class="filter-label mr-2">Năm:</label>
+            <select [(ngModel)]="selectedYear" (change)="filterData()" class="form-control" style="width: 100px; margin-right: 20px;">
+              <option value="">Tất cả</option>
+              <option *ngFor="let y of years" [value]="y">{{y}}</option>
+            </select>
+            <label class="filter-label mr-2">Tháng:</label>
+            <select [(ngModel)]="selectedMonth" (change)="filterData()" class="form-control" style="width: 100px;">
+              <option value="">Tất cả</option>
+              <option *ngFor="let m of months" [value]="m">{{m}}</option>
+            </select>
+          </div>
+          
+          <div *ngIf="loading" class="text-center">Đang tải dữ liệu...</div>
+          <div *ngIf="errorMsg" class="alert alert-danger">{{errorMsg}}</div>
+
+          <!-- Bảng dữ liệu -->
+          <div class="table-responsive" *ngIf="!loading && workOrders.length > 0">
+            <table class="table table-hover">
+              <thead class="text-info">
+                <th *ngFor="let col of columns">{{col}}</th>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of workOrders">
+                  <td *ngFor="let col of columns">
+                    {{ (col === 'Date PD' ? formatDatePD(row[col]) : row[col]) || '' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div *ngIf="!loading && workOrders.length === 0" class="text-center text-muted mt-3">
+            Không có dữ liệu cho tháng/năm đã chọn.
+          </div>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- Chế độ nhúng Google Sheet (khi chỉnh sửa) -->
+    <ng-container *ngIf="embeddedSheetUrl">
+       <div class="card">
+        <div class="card-header card-header-info d-flex align-items-center">
+          <button (click)="hideSheet()" class="btn btn-white btn-round btn-just-icon mr-3">
+            <i class="material-icons">arrow_back</i>
+          </button>
+          <div>
+            <h4 class="card-title mb-0">Chỉnh sửa Work Order</h4>
+            <p class="card-category">Sau khi sửa xong, nhấn nút quay lại để tải lại dữ liệu.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <iframe [src]="embeddedSheetUrl" width="100%" height="650px" frameborder="0">Đang tải...</iframe>
+        </div>
+      </div>
+    </ng-container>
+
   </div>
-
-  <!-- Tiêu đề bảng -->
-  <h2 class="wo-title">Work Order Status</h2>
-
-  <!-- Bộ lọc -->
-  <div style="margin-bottom: 16px; text-align:center;">
-    <label class="filter-label">Y:</label>
-    <select [(ngModel)]="selectedYear" (change)="filterData()" style="margin-right:14px; min-width:72px;">
-      <option value="">-- Tất cả --</option>
-      <option *ngFor="let y of years" [value]="y">{{y}}</option>
-    </select>
-    <label class="filter-label">M:</label>
-    <select [(ngModel)]="selectedMonth" (change)="filterData()" style="min-width:60px;">
-      <option value="">-- Tất cả --</option>
-      <option *ngFor="let m of months" [value]="m">{{m}}</option>
-    </select>
-  </div>
-
-  <!-- Đăng nhập -->
-  <div *ngIf="!isLoggedIn" class="login-box">
-    <input placeholder="Account" [(ngModel)]="username" />
-    <input placeholder="Password" type="password" [(ngModel)]="password" />
-    <button (click)="login()">Login</button>
-    <div *ngIf="loginError" style="color: red;">{{loginError}}</div>
-  </div>
-
-  <!-- Đã đăng nhập: Được chỉnh sửa -->
-  <div *ngIf="isLoggedIn">
-    <div style="overflow-x:auto; max-height: 66vh;">
-      <table *ngIf="workOrders.length > 0" class="wo-table">
-        <thead>
-          <tr>
-            <th *ngFor="let col of columns" class="header">{{col}}</th>
-            <th class="actions-col header">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let row of workOrders; let i=index"
-              [class.odd]="i%2===0"
-              [class.even]="i%2===1">
-            <td *ngFor="let col of columns">
-              <ng-container *ngIf="editIndex === i; else viewCell">
-                <ng-container *ngIf="columnOptions[col]; else normalEdit">
-                  <select [(ngModel)]="workOrders[i][col]">
-                    <option *ngFor="let opt of columnOptions[col]" [value]="opt">{{opt}}</option>
-                  </select>
-                </ng-container>
-                <ng-template #normalEdit>
-                  <input [(ngModel)]="workOrders[i][col]" />
-                </ng-template>
-              </ng-container>
-              <ng-template #viewCell>
-                <ng-container *ngIf="col === 'Date PD'; else normalCol">
-                  {{ formatDatePD(row[col]) }}
-                </ng-container>
-                <ng-template #normalCol>
-                  {{ row[col] }}
-                </ng-template>
-              </ng-template>
-            </td>
-            <td class="actions-col">
-              <ng-container *ngIf="editIndex !== i">
-                <button (click)="startEdit(i)" class="btn-edit">Edit</button>
-              </ng-container>
-              <ng-container *ngIf="editIndex === i">
-                <button (click)="saveRow(i)" class="btn-save">Save</button>
-                <button (click)="cancelEdit()" class="btn-cancel">Cancel</button>
-              </ng-container>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Chưa đăng nhập: Chỉ xem -->
-  <div *ngIf="!isLoggedIn && workOrders.length > 0">
-    <div style="overflow-x:auto; max-height: 66vh;">
-      <table class="wo-table">
-        <thead>
-          <tr>
-            <th *ngFor="let col of columns" class="header">{{col}}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let row of workOrders; let i=index"
-              [class.odd]="i%2===0"
-              [class.even]="i%2===1">
-            <td *ngFor="let col of columns">
-              <ng-container *ngIf="col === 'Date PD'; else normalCell">
-                {{ formatDatePD(row[col]) }}
-              </ng-container>
-              <ng-template #normalCell>
-                {{ row[col] }}
-              </ng-template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div style="margin-top:8px; color: #888;">Đăng nhập để chỉnh sửa dữ liệu!</div>
-  </div>
-
-  <div *ngIf="loading">Loading...</div>
-  <div *ngIf="errorMsg">{{errorMsg}}</div>
 </div>
