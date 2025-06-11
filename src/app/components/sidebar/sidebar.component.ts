@@ -23,7 +23,7 @@ export const ROUTES: RouteInfo[] = [
     },
     { path: '/table-list', title: 'Finished Goods',  icon:'all_inbox', class: '' },
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
-    { path: '/icons', title: 'Document',  icon:'article', class: '' },
+    { path: '/documents', title: 'Document',  icon:'article', class: '' },
     { path: '/maps', title: 'Find',  icon:'location_on', class: '' },
     { path: '/notifications', title: 'Transport Fleet',  icon:'local_shipping', class: '' },
     { path: '/upgrade', title: 'Made in Airspeed',  icon:'verified', class: 'active-pro' },
