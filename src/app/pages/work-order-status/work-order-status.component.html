@@ -1,1 +1,48 @@
-<iframe *ngIf="embeddedSheetUrl" [src]="embeddedSheetUrl" class="work-order-iframe"></iframe>
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-info">
+            <h4 class="card-title ">Trạng thái Lệnh sản xuất (Work Order Status)</h4>
+            <p class="card-category">Dữ liệu được cập nhật trực tiếp từ Google Sheet. Click vào ô để chỉnh sửa.</p>
+          </div>
+          <div class="card-body">
+            <div *ngIf="isLoading" class="text-center">
+              <p>Đang tải dữ liệu...</p>
+            </div>
+  
+            <div *ngIf="errorMessage" class="alert alert-danger">
+              {{ errorMessage }}
+            </div>
+  
+            <div *ngIf="!isLoading && !errorMessage && workOrders.length > 0" class="table-responsive">
+              <table class="table">
+                <thead class=" text-primary">
+                  <th *ngFor="let header of tableHeaders">
+                    {{ header }}
+                  </th>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let order of workOrders; let i = index">
+                    <td *ngFor="let header of tableHeaders" 
+                        contenteditable="true"
+                        (blur)="onCellUpdate(i, header, $event.target.innerText)"
+                        (keydown.enter)="$event.target.blur(); $event.preventDefault()">
+                      {{ order[header] }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+  
+            <div *ngIf="!isLoading && !errorMessage && workOrders.length === 0">
+                <p>Không có dữ liệu để hiển thị.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  
