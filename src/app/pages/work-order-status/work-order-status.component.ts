@@ -16,11 +16,14 @@ export class WorkOrderStatusComponent implements OnInit {
   constructor(private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
-    // Using widget=true and headers=false is a more reliable way to hide the sheet navigation
+    // The most reliable way to show a single, editable sheet.
+    // `single=true` hides the bottom sheet navigation bar.
+    // The GID must be in the URL fragment (#).
     const baseUrl = `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/edit`;
-    const params = `?gid=${this.SHEET_GID}&widget=true&headers=false`;
+    const params = `?single=true`;
+    const fragment = `#gid=${this.SHEET_GID}`;
     
-    const embedUrl = `${baseUrl}${params}`;
+    const embedUrl = `${baseUrl}${params}${fragment}`;
     
     this.embeddedSheetUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
   }
