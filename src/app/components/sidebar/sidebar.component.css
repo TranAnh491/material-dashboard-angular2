@@ -19,10 +19,13 @@
 .logo a.logo-mini {
   opacity: 1 !important;
   float: none;
-  text-align: center;
   font-size: 1.1em;
-  font-weight: 600;
+  font-weight: normal;
   color: #3C4858;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .nav {
