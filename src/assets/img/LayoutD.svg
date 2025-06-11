@@ -29,11 +29,17 @@
       <rect x="15" y="130" width="70" height="200" fill="none" stroke="#333" stroke-width="1"/>
       <!-- Kệ trong Unnamed Office -->
       <g font-size="3" text-anchor="middle" dominant-baseline="middle">
-        <!-- Horizontal spacing: 0.2m (2px), Vertical spacing: 0.5m (5px) -->
         <!-- Row Q: y=132 -->
-        <g data-loc="QR3" data-cell-id="cell-qr3"><rect x="17" y="132" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="134.5">QR3</text></g><g data-loc="QL3" data-cell-id="cell-ql3"><rect x="17" y="137" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="139.5">QL3</text></g>
-        <g data-loc="QR2" data-cell-id="cell-qr2"><rect x="34" y="132" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="134.5">QR2</text></g><g data-loc="QL2" data-cell-id="cell-ql2"><rect x="34" y="137" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="139.5">QL2</text></g>
-        <g data-loc="QR1" data-cell-id="cell-qr1"><rect x="51" y="132" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="134.5">QR1</text></g><g data-loc="QL1" data-cell-id="cell-ql1"><rect x="51" y="137" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="139.5">QL1</text></g>
+        <g data-loc="Q3" data-cell-id="cell-q3"><rect x="17" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="137" font-size="4">Q3</text></g>
+        <g data-loc="Q2" data-cell-id="cell-q2"><rect x="34" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="137" font-size="4">Q2</text></g>
+        <g data-loc="Q1" data-cell-id="cell-q1"><rect x="51" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="137" font-size="4">Q1</text></g>
+        
+        <!-- Kệ A12 -->
+        <g data-loc="A12" data-cell-id="cell-a12">
+          <rect x="71" y="132" width="10" height="10" fill="white" stroke="#000" stroke-width="0.5"/>
+          <text x="76" y="137" font-size="4">A12</text>
+        </g>
+        
         <!-- Row R: y=147 -->
         <g data-loc="RR3" data-cell-id="cell-rr3"><rect x="17" y="147" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="149.5">RR3</text></g><g data-loc="RL3" data-cell-id="cell-rl3"><rect x="17" y="152" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="154.5">RL3</text></g>
         <g data-loc="RR2" data-cell-id="cell-rr2"><rect x="34" y="147" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="149.5">RR2</text></g><g data-loc="RL2" data-cell-id="cell-rl2"><rect x="34" y="152" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="154.5">RL2</text></g>
