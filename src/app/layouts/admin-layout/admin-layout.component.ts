@@ -17,6 +17,11 @@ export class AdminLayoutComponent implements OnInit {
 
   constructor( public location: Location, private router: Router) {}
 
+  public get shouldShowNavbar(): boolean {
+    const dashboardRoutes = ['/dashboard', '/'];
+    return dashboardRoutes.includes(this.location.path());
+  }
+
   ngOnInit() {
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;
 

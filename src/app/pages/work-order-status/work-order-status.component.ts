@@ -8,14 +8,13 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 })
 export class WorkOrderStatusComponent implements OnInit {
   
-  SHEET_URL_FOR_EDITING = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit?gid=0';
+  SHEET_ID = '17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84';
   embeddedSheetUrl: SafeResourceUrl | null = null;
 
   constructor(private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
-    // Hiển thị trực tiếp Google Sheet khi component được tải
-    const embedUrl = `${this.SHEET_URL_FOR_EDITING}&rm=minimal`;
+    const embedUrl = `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/pubhtml?widget=true&amp;single=true&amp;headers=false`;
     this.embeddedSheetUrl = this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
   }
 }
