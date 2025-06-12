@@ -29,7 +29,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'icons',                component: IconsComponent },
   { path: 'documents',            component: DocumentsComponent },
   { path: 'maps',                 component: MapsComponent },
-  { path: 'announcement',         component: NotificationsComponent },
+  { path: 'schedules',            component: NotificationsComponent },
   { path: 'kpi-reports',        component: KpiReportsComponent },
   { path: 'equipment',            component: EquipmentComponent },
   { path: 'upgrade',              component: UpgradeComponent },
