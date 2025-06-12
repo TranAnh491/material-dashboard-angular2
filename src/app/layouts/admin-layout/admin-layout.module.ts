@@ -13,6 +13,7 @@ import { IconsComponent } from '../../icons/icons.component';
 import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
+import { LogComponent } from '../../pages/log/log.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -52,6 +53,7 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
     MapsComponent,
     NotificationsComponent,
     UpgradeComponent,
+    LogComponent,
 
     // 4 component materials mới
     WorkOrderStatusComponent,

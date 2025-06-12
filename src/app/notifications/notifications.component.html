@@ -1,48 +1,13 @@
 <div class="main-content">
   <div class="container-fluid">
     <div class="card">
-      <div class="card-header card-header-tabs card-header-primary">
-        <div class="nav-tabs-navigation">
-          <div class="nav-tabs-wrapper">
-            <ul class="nav nav-tabs" data-tabs="tabs">
-              <li class="nav-item">
-                <a class="nav-link" [class.active]="currentView === 'log'" (click)="selectView('log')" href="javascript:void(0)">
-                  <i class="material-icons">add_box</i> Log
-                  <div class="ripple-container"></div>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" [class.active]="currentView === 'document'" (click)="selectView('document')" href="javascript:void(0)">
-                  <i class="material-icons">description</i> Document
-                  <div class="ripple-container"></div>
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
+      <div class="card-header card-header-warning">
+        <h4 class="card-title">Tài liệu Vận chuyển</h4>
+        <p class="card-category">Dữ liệu được cập nhật từ biểu mẫu Log.</p>
       </div>
       <div class="card-body">
-        <div class="tab-content">
-
-          <!-- Log Form View (Google Form) -->
-          <div class="tab-pane" [class.active]="currentView === 'log'">
-            <div *ngIf="logFormUrl; else noFormUrl" class="iframe-container">
-              <iframe [src]="logFormUrl" width="100%" height="800px" frameborder="0" marginheight="0" marginwidth="0">Đang tải…</iframe>
-            </div>
-            <ng-template #noFormUrl>
-              <div class="alert alert-warning">
-                <span>Vui lòng cung cấp link nhúng Google Form trong file `notifications.component.ts`.</span>
-              </div>
-            </ng-template>
-          </div>
-
-          <!-- Document Iframe View (Google Sheet) -->
-          <div class="tab-pane" [class.active]="currentView === 'document'">
-            <div *ngIf="documentUrl" class="iframe-container">
-              <iframe [src]="documentUrl" width="100%" height="800px" frameborder="0">Đang tải...</iframe>
-            </div>
-          </div>
-
+        <div class="iframe-container" style="height: 80vh;">
+          <iframe [src]="documentUrl" width="100%" height="100%" frameborder="0">Đang tải...</iframe>
         </div>
       </div>
     </div>
