@@ -9,7 +9,6 @@ import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
 import { DocumentsComponent } from '../../pages/documents/documents.component';
-import { LogComponent } from '../../pages/log/log.component';
 
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
@@ -24,8 +23,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'icons',                component: IconsComponent },
   { path: 'documents',            component: DocumentsComponent },
   { path: 'maps',                 component: MapsComponent },
-  { path: 'transport-document',   component: NotificationsComponent },
-  { path: 'log',                  component: LogComponent },
+  { path: 'announcement',         component: NotificationsComponent },
   { path: 'upgrade',              component: UpgradeComponent },
 
   // 4 chức năng materials

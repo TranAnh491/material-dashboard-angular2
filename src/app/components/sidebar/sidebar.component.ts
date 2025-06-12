@@ -23,18 +23,10 @@ export const ROUTES: RouteInfo[] = [
     },
     { path: '/table-list', title: 'Finished Goods',  icon:'all_inbox', class: '' },
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
-    { path: '/documents', title: 'Document',  icon:'article', class: '' },
+    { path: '/documents', title: 'Checklist',  icon:'checklist', class: '' },
     { path: '/maps', title: 'Find',  icon:'location_on', class: '' },
-    {
-        title: 'Transport Fleet',
-        icon: 'local_shipping',
-        class: '',
-        children: [
-            { path: '/log', title: 'Log', icon: 'edit_note', class: 'nav-item-orange' },
-            { path: '/transport-document', title: 'Document', icon: 'description', class: 'nav-item-orange' }
-        ]
-    },
-    { path: '/upgrade', title: 'Made in Airspeed',  icon:'verified', class: 'active-pro' },
+    { path: '/announcement', title: 'Announcement',  icon:'campaign', class: '' },
+    { path: '/upgrade', title: 'Warehouse Team',  icon:'groups', class: 'active-pro' },
 ];
 
 @Component({
