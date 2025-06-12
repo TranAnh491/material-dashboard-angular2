@@ -2,6 +2,8 @@ import { Component, OnInit, ElementRef } from '@angular/core';
 import { ROUTES } from '../sidebar/sidebar.component';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router } from '@angular/router';
+import { NotificationService } from '../../core/notification.service';
+import { interval, Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-navbar',
@@ -10,12 +12,16 @@ import { Router } from '@angular/router';
 })
 export class NavbarComponent implements OnInit {
     private listTitles: any[];
-    location: Location;
+    private location: Location;
       mobile_menu_visible: any = 0;
     private toggleButton: any;
     private sidebarVisible: boolean;
 
-    constructor(location: Location,  private element: ElementRef, private router: Router) {
+    public notificationCount = 0;
+    private lastNotificationCount = 0;
+    private notificationSubscription: Subscription;
+
+    constructor(location: Location,  private element: ElementRef, private router: Router, private notificationService: NotificationService) {
       this.location = location;
           this.sidebarVisible = false;
     }
@@ -32,6 +38,54 @@ export class NavbarComponent implements OnInit {
            this.mobile_menu_visible = 0;
          }
      });
+
+      // Lấy số lượng thông báo đã lưu trữ từ localStorage
+      this.lastNotificationCount = parseInt(localStorage.getItem('lastNotificationCount') || '0', 10);
+      this.notificationCount = this.lastNotificationCount; // Hiển thị số cũ trong khi chờ tải
+
+      // Bắt đầu kiểm tra thông báo định kỳ (ví dụ: mỗi 30 giây)
+      this.notificationSubscription = interval(30000).subscribe(() => this.checkForNotifications());
+      this.checkForNotifications(); // Kiểm tra ngay lần đầu
+    }
+
+    checkForNotifications() {
+      this.notificationService.getNotificationCount().subscribe({
+        next: (data) => {
+          if (data.status === 'success') {
+            if (data.count > this.lastNotificationCount) {
+              this.notificationCount = data.count - this.lastNotificationCount;
+            } else {
+              // Nếu không có thông báo mới, hoặc sheet đã bị xóa bớt, reset về 0
+              this.notificationCount = 0;
+            }
+            // Không lưu data.count trực tiếp, chỉ lưu khi người dùng đã xem
+          }
+        },
+        error: (err) => {
+          console.error('Failed to get notifications:', err);
+          this.notificationCount = 0; // Reset nếu có lỗi
+        }
+      });
+    }
+
+    // Khi người dùng nhấp vào chuông thông báo, reset số lượng
+    resetNotificationCount() {
+        this.notificationService.getNotificationCount().subscribe({
+            next: (data) => {
+                if(data.status === 'success') {
+                    this.lastNotificationCount = data.count;
+                    localStorage.setItem('lastNotificationCount', this.lastNotificationCount.toString());
+                    this.notificationCount = 0;
+                }
+            }
+        });
+    }
+
+    ngOnDestroy() {
+      // Hủy đăng ký để tránh rò rỉ bộ nhớ
+      if (this.notificationSubscription) {
+        this.notificationSubscription.unsubscribe();
+      }
     }
 
     sidebarOpen() {
