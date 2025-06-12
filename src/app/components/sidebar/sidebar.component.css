@@ -132,17 +132,17 @@
 }
 
 /* Custom Orange Color for Nav Items */
-.nav > li.nav-item-orange > a {
+.nav li.nav-item-orange > a {
   color: #ff9800; /* Orange text */
 }
 
-.nav > li.nav-item-orange > a:hover,
-.nav > li.nav-item-orange > a.active {
+.nav li.nav-item-orange > a:hover,
+.nav li.nav-item-orange > a.active {
   background: rgba(255, 152, 0, 0.15); /* Light orange background for hover/active */
   color: #ff9800;
   box-shadow: 0 1px 6px rgba(255, 152, 0, 0.3);
 }
 
-.nav > li.nav-item-orange > a .material-icons {
+.nav li.nav-item-orange > a .material-icons {
   color: #ff9800;
 }

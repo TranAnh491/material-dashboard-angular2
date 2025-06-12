@@ -25,8 +25,15 @@ export const ROUTES: RouteInfo[] = [
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
     { path: '/documents', title: 'Document',  icon:'article', class: '' },
     { path: '/maps', title: 'Find',  icon:'location_on', class: '' },
-    { path: '/log', title: 'Log',  icon:'edit_note', class: 'nav-item-orange' },
-    { path: '/transport-document', title: 'Transport Document',  icon:'description', class: 'nav-item-orange' },
+    {
+        title: 'Transport Fleet',
+        icon: 'local_shipping',
+        class: '',
+        children: [
+            { path: '/log', title: 'Log', icon: 'edit_note', class: 'nav-item-orange' },
+            { path: '/transport-document', title: 'Document', icon: 'description', class: 'nav-item-orange' }
+        ]
+    },
     { path: '/upgrade', title: 'Made in Airspeed',  icon:'verified', class: 'active-pro' },
 ];
 

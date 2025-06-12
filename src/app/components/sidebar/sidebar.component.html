@@ -22,7 +22,7 @@
           <i class="material-icons expand-icon">{{menuItem.expanded ? 'expand_less' : 'expand_more'}}</i>
         </a>
         <ul class="nav sub-menu" *ngIf="menuItem.expanded">
-          <li *ngFor="let child of menuItem.children">
+          <li *ngFor="let child of menuItem.children" [class]="child.class">
             <a [routerLink]="[child.path]" routerLinkActive="active">
               <i class="material-icons">{{child.icon}}</i>
               <span>{{child.title}}</span>
