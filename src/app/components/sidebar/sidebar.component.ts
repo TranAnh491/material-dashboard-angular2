@@ -11,22 +11,41 @@ declare interface RouteInfo {
 export const ROUTES: RouteInfo[] = [
     { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
     {
+        title: 'Daily Operations',
+        icon: 'event_note',
+        class: '',
+        children: [
+            { path: '/work-order-status', title: 'Work order status', icon: 'assignment', class: '' },
+            { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' }
+        ]
+    },
+    {
         title: 'Materials',
         icon: 'inventory_2',
         class: '',
         children: [
-            { path: '/work-order-status', title: 'Work order status', icon: 'assignment', class: '' },
             { path: '/inbound-materials', title: 'Inbound materials', icon: 'call_received', class: '' },
             { path: '/outbound-materials', title: 'Outbound materials', icon: 'call_made', class: '' },
             { path: '/materials-inventory', title: 'Materials inventory', icon: 'inventory', class: '' }
         ]
     },
-    { path: '/table-list', title: 'Finished Goods',  icon:'all_inbox', class: '' },
+    {
+        title: 'Finished Goods',
+        icon: 'all_inbox',
+        class: '',
+        children: [
+            { path: '/inbound-fgs', title: 'Inbound FGs', icon: 'arrow_downward', class: '' },
+            { path: '/outbound-fgs', title: 'Outbound FGs', icon: 'arrow_upward', class: '' },
+            { path: '/table-list', title: 'FGs Inventory', icon: 'inventory', class: '' },
+        ]
+    },
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
+    { path: '/maps', title: 'Layout',  icon:'view_quilt', class: '' },
     { path: '/documents', title: 'Checklist',  icon:'checklist', class: '' },
-    { path: '/maps', title: 'Find',  icon:'location_on', class: '' },
     { path: '/announcement', title: 'Announcement',  icon:'campaign', class: '' },
-    { path: '/upgrade', title: 'Warehouse Team',  icon:'groups', class: 'active-pro' },
+    { path: '/kpi-reports', title: 'KPI & Reports',  icon:'bar_chart', class: '' },
+    { path: '/equipment', title: 'Equipment',  icon:'construction', class: '' },
+    { path: 'upgrade', title: 'Warehouse Team',  icon:'groups', class: 'active-pro' },
 ];
 
 @Component({

@@ -10,6 +10,12 @@ import { NotificationsComponent } from '../../notifications/notifications.compon
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
 import { DocumentsComponent } from '../../pages/documents/documents.component';
 
+import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
+import { EquipmentComponent } from '../../pages/equipment/equipment.component';
+import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
+import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
+import { ShipmentComponent } from '../../pages/shipment/shipment.component';
+
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
@@ -24,7 +30,12 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'documents',            component: DocumentsComponent },
   { path: 'maps',                 component: MapsComponent },
   { path: 'announcement',         component: NotificationsComponent },
+  { path: 'kpi-reports',        component: KpiReportsComponent },
+  { path: 'equipment',            component: EquipmentComponent },
   { path: 'upgrade',              component: UpgradeComponent },
+  { path: 'inbound-fgs',          component: InboundFgsComponent },
+  { path: 'outbound-fgs',         component: OutboundFgsComponent },
+  { path: 'shipment',             component: ShipmentComponent },
 
   // 4 chức năng materials
   { path: 'work-order-status',    component: WorkOrderStatusComponent },

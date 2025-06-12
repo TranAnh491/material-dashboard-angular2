@@ -28,6 +28,11 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { EquipmentComponent } from '../../pages/equipment/equipment.component';
+import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
+import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
+import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
+import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 
 @NgModule({
   imports: [
@@ -52,6 +57,11 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
     MapsComponent,
     NotificationsComponent,
     UpgradeComponent,
+    KpiReportsComponent,
+    EquipmentComponent,
+    InboundFgsComponent,
+    OutboundFgsComponent,
+    ShipmentComponent,
 
     // 4 component materials mới
     WorkOrderStatusComponent,
