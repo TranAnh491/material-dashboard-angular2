@@ -29,6 +29,7 @@
   opacity: 1 !important;
   float: none;
   text-align: center;
+  display: inline-block;
 }
 
 .nav {
