@@ -1,42 +1,36 @@
 import { Component, OnInit } from '@angular/core';
-declare var $: any;
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+
 @Component({
   selector: 'app-notifications',
   templateUrl: './notifications.component.html',
   styleUrls: ['./notifications.component.css']
 })
 export class NotificationsComponent implements OnInit {
+  currentView: 'log' | 'document' = 'log'; // Chế độ xem mặc định là 'log'
 
-  constructor() { }
-  showNotification(from, align){
-      const type = ['','info','success','warning','danger'];
+  // URL cho sheet kết quả
+  documentUrl: SafeResourceUrl;
+  // Thêm &rm=minimal để có giao diện gọn gàng hơn khi nhúng
+  private rawDocumentUrl = 'https://docs.google.com/spreadsheets/d/1hxDhlNumfD-6gyz1ajd5Bz0GdpQ9m4tUJGXD4hIvfHQ/edit?gid=0&rm=minimal';
 
-      const color = Math.floor((Math.random() * 4) + 1);
+  // URL cho Google Form nhập liệu
+  logFormUrl: SafeResourceUrl;
+  // !!! VUI LÒNG THAY BẰNG LINK NHÚNG GOOGLE FORM CỦA BẠN !!!
+  private rawLogFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfwh-h9SRBCi-zVJSdMO7drnHkc5VHqbIvkmUiiYobATCR8HA/viewform?embedded=true';
 
-      $.notify({
-          icon: "notifications",
-          message: "Welcome to <b>Material Dashboard</b> - a beautiful freebie for every web developer."
+  constructor(private sanitizer: DomSanitizer) { }
 
-      },{
-          type: type[color],
-          timer: 4000,
-          placement: {
-              from: from,
-              align: align
-          },
-          template: '<div data-notify="container" class="col-xl-4 col-lg-4 col-11 col-sm-4 col-md-4 alert alert-{0} alert-with-icon" role="alert">' +
-            '<button mat-button  type="button" aria-hidden="true" class="close mat-button" data-notify="dismiss">  <i class="material-icons">close</i></button>' +
-            '<i class="material-icons" data-notify="icon">notifications</i> ' +
-            '<span data-notify="title">{1}</span> ' +
-            '<span data-notify="message">{2}</span>' +
-            '<div class="progress" data-notify="progressbar">' +
-              '<div class="progress-bar progress-bar-{0}" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>' +
-            '</div>' +
-            '<a href="{3}" target="{4}" data-notify="url"></a>' +
-          '</div>'
-      });
-  }
   ngOnInit() {
+    // Sanitize URLs để đảm bảo an toàn khi nhúng vào iframe
+    this.documentUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.rawDocumentUrl);
+
+    if (this.rawLogFormUrl !== 'YOUR_GOOGLE_FORM_EMBED_URL_HERE') {
+      this.logFormUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.rawLogFormUrl);
+    }
   }
 
+  selectView(view: 'log' | 'document') {
+    this.currentView = view;
+  }
 }
