@@ -42,10 +42,7 @@ export const ROUTES: RouteInfo[] = [
     { path: '/typography', title: 'Bonded Materials',  icon:'lock', class: '' },
     { path: '/maps', title: 'Layout',  icon:'view_quilt', class: '' },
     { path: '/documents', title: 'Checklist',  icon:'checklist', class: '' },
-    { path: '/schedules', title: 'Schedules',  icon:'schedule', class: '' },
-    { path: '/kpi-reports', title: 'KPI & Reports',  icon:'bar_chart', class: '' },
     { path: '/equipment', title: 'Equipment',  icon:'construction', class: '' },
-    { path: 'upgrade', title: 'Warehouse Team',  icon:'groups', class: 'active-pro' },
 ];
 
 @Component({
