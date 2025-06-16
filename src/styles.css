@@ -1,13 +1,29 @@
 /* You can add global styles to this file, and also import other style files */
 
-.main-panel .content {
-    /* Ghi đè padding mặc định để tận dụng không gian */
-    padding: 15px !important;
-    /* Xóa bỏ min-height để component con có thể chiếm 100% chiều cao */
-    min-height: unset !important;
+html, body {
+    height: 100%;
 }
 
-.card .card-body {
-    /* Đảm bảo card-body có thể co giãn */
+/* 
+  Tăng độ ưu tiên của selector để đảm bảo ghi đè thành công các style mặc định của template.
+  Chúng ta nhắm trực tiếp vào cấu trúc layout của bạn.
+*/
+.wrapper > .main-panel > .content {
+    /* Xóa bỏ min-height để component con có thể chiếm 100% chiều cao một cách tự nhiên */
+    min-height: unset !important;
+    /* Giảm padding để có thêm không gian */
+    padding: 15px !important;
+}
+
+/* Đảm bảo các thẻ chứa bên trong cũng co giãn theo */
+.main-panel .content > .container-fluid,
+.main-panel .content > .container-fluid > .card,
+.main-panel .content > .container-fluid > .card > .card-body {
     height: 100%;
+}
+
+/* Cần thiết để layout flex bên trong work-order-status hoạt động đúng */
+.card .card-body {
+    display: flex;
+    flex-direction: column;
 }
