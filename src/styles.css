@@ -1,1 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
+
+.main-panel .content {
+    /* Giảm padding-top từ giá trị mặc định (thường là 70px hoặc 90px) xuống để tận dụng không gian */
+    padding-top: 20px !important;
+}
