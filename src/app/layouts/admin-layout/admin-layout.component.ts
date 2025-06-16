@@ -10,10 +10,13 @@ import { filter, Subscription } from 'rxjs';
   templateUrl: './admin-layout.component.html',
   styleUrls: ['./admin-layout.component.scss']
 })
-export class AdminLayoutComponent implements OnInit {
+export class AdminLayoutComponent implements OnInit, AfterViewInit {
   private _router: Subscription;
   private lastPoppedUrl: string;
   private yScrollStack: number[] = [];
+  public isDashboard = false;
+  private psMainPanel: PerfectScrollbar;
+  private psSidebar: PerfectScrollbar;
 
   constructor( public location: Location, private router: Router) {}
 
@@ -23,6 +26,12 @@ export class AdminLayoutComponent implements OnInit {
   }
 
   ngOnInit() {
+      this.router.events.pipe(
+        filter(event => event instanceof NavigationEnd)
+      ).subscribe((event: NavigationEnd) => {
+        this.isDashboard = event.urlAfterRedirects === '/dashboard';
+      });
+
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;
 
       if (isWindows && !document.getElementsByTagName('body')[0].classList.contains('sidebar-mini')) {
@@ -53,10 +62,12 @@ export class AdminLayoutComponent implements OnInit {
       this._router = this.router.events.pipe(filter(event => event instanceof NavigationEnd)).subscribe((event: NavigationEnd) => {
            elemMainPanel.scrollTop = 0;
            elemSidebar.scrollTop = 0;
+           // Cập nhật thanh cuộn mỗi khi chuyển trang
+           this.updatePerfectScrollbar();
       });
       if (window.matchMedia(`(min-width: 960px)`).matches && !this.isMac()) {
-          let ps = new PerfectScrollbar(elemMainPanel);
-          ps = new PerfectScrollbar(elemSidebar);
+          this.psMainPanel = new PerfectScrollbar(elemMainPanel);
+          this.psSidebar = new PerfectScrollbar(elemSidebar);
       }
 
       const window_width = $(window).width();
@@ -131,9 +142,20 @@ export class AdminLayoutComponent implements OnInit {
           }
       });
   }
+
   ngAfterViewInit() {
-      this.runOnRouteChange();
+    // Không cần this.runOnRouteChange() nữa
   }
+
+  updatePerfectScrollbar() {
+    if (window.matchMedia(`(min-width: 960px)`).matches && !this.isMac()) {
+      // Đảm bảo đối tượng đã được khởi tạo
+      if (this.psMainPanel) {
+        this.psMainPanel.update();
+      }
+    }
+  }
+
   isMaps(path){
       var titlee = this.location.prepareExternalUrl(this.location.path());
       titlee = titlee.slice( 1 );
@@ -150,13 +172,6 @@ export class AdminLayoutComponent implements OnInit {
     return !hideFooterOnRoutes.includes(this.location.path());
   }
   
-  runOnRouteChange(): void {
-    if (window.matchMedia(`(min-width: 960px)`).matches && !this.isMac()) {
-      const elemMainPanel = <HTMLElement>document.querySelector('.main-panel');
-      const ps = new PerfectScrollbar(elemMainPanel);
-      ps.update();
-    }
-  }
   isMac(): boolean {
       let bool = false;
       if (navigator.platform.toUpperCase().indexOf('MAC') >= 0 || navigator.platform.toUpperCase().indexOf('IPAD') >= 0) {
