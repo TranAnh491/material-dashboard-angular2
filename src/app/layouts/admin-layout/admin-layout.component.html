@@ -4,6 +4,11 @@
         <div class="sidebar-background" style="background-image: url(./assets/img/sidebar-4.jpg)"></div>
     </div>
     <div class="main-panel">
+        <!-- DEBUGGING: HIỂN THỊ TRẠNG THÁI ĐỂ KIỂM TRA -->
+        <h1 style="background: yellow; color: black; z-index: 9999; position: absolute;">
+            DEBUG: isDashboard = {{ isDashboard }}
+        </h1>
+
         <app-navbar *ngIf="isDashboard && shouldShowNavbar()"></app-navbar>
         <div class="content" [style.padding-top]="isDashboard ? '30px' : '0px'">
             <router-outlet></router-outlet>
