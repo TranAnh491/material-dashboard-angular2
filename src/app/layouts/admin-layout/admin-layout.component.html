@@ -5,7 +5,7 @@
     </div>
     <div class="main-panel">
         <app-navbar *ngIf="isDashboard && shouldShowNavbar()"></app-navbar>
-        <div class="content" [ngClass]="{'no-top-padding': !isDashboard}">
+        <div class="content" [style.padding-top]="isDashboard ? '30px' : '0px'">
             <router-outlet></router-outlet>
         </div>
         <div class="footer-wrapper" *ngIf="shouldShowFooter()">
