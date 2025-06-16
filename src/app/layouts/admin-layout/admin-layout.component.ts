@@ -14,6 +14,7 @@ export class AdminLayoutComponent implements OnInit {
   private _router: Subscription;
   private lastPoppedUrl: string;
   private yScrollStack: number[] = [];
+  public isDashboard = false;
 
   constructor( public location: Location, private router: Router) {}
 
@@ -23,6 +24,12 @@ export class AdminLayoutComponent implements OnInit {
   }
 
   ngOnInit() {
+      this.router.events.pipe(
+        filter(event => event instanceof NavigationEnd)
+      ).subscribe((event: NavigationEnd) => {
+        this.isDashboard = event.urlAfterRedirects === '/dashboard';
+      });
+
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;
 
       if (isWindows && !document.getElementsByTagName('body')[0].classList.contains('sidebar-mini')) {

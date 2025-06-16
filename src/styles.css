@@ -27,3 +27,8 @@ html, body {
     display: flex;
     flex-direction: column;
 }
+
+/* Class mới để xóa padding-top khi không phải trang dashboard */
+.main-panel .content.no-top-padding {
+    padding-top: 0 !important;
+}
