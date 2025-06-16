@@ -8,7 +8,6 @@ import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
 import { DocumentsComponent } from './pages/documents/documents.component';
-import { SafePipe } from './pipes/safe.pipe';
 
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
@@ -31,7 +30,6 @@ import { SafePipe } from './pipes/safe.pipe';
     AppComponent,
     AdminLayoutComponent,
     DocumentsComponent,
-    SafePipe,
     // KHÔNG khai báo 4 component materials ở đây!
   ],
   providers: [],
