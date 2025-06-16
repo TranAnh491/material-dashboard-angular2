@@ -1,48 +1,65 @@
-<div style="display: flex; flex-direction: column; height: 100vh;">
-  <!-- 60% phía trên: Danh sách lệnh sản xuất -->
-  <div style="flex: 6; overflow: auto; border-bottom: 2px solid #ccc;">
-    <table class="table table-hover">
-      <thead>
-        <tr>
-          <th>Mã lệnh</th>
-          <th>Mô tả</th>
-          <th>Trạng thái</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let wo of workOrders"
-            [class.selected]="wo === selectedWO"
-            (click)="selectWO(wo)">
-          <td>{{ wo.id }}</td>
-          <td>{{ wo.description }}</td>
-          <td>{{ wo.status }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="card">
+      <div class="card-header card-header-danger">
+        <h4 class="card-title">Work Order Status</h4>
+        <p class="card-category">Live data from Google Sheet</p>
+      </div>
+      <div class="card-body">
+        <!-- Main container with 60/40 split -->
+        <div style="display: flex; flex-direction: column; height: calc(100vh - 250px);">
 
-  <!-- 40% phía dưới: Google Sheet chỉnh sửa -->
-  <div style="flex: 4; overflow: auto;">
-    <iframe
-      width="100%"
-      height="100%"
-      frameborder="0"
-      [src]="googleSheetUrl | safe"
-      allowfullscreen>
-    </iframe>
+          <!-- Top 60%: Work Order List -->
+          <div style="flex: 6; overflow: auto; border-bottom: 2px solid #ccc;">
+            <div *ngIf="isLoading" class="loading-indicator">
+              <p>Loading data...</p>
+            </div>
+            <div *ngIf="errorMessage && !isLoading" class="alert alert-danger">
+              {{ errorMessage }}
+            </div>
+            <div *ngIf="!isLoading && !errorMessage && workOrders.length > 0" class="table-responsive">
+              <table class="table table-hover">
+                <thead class="text-primary">
+                  <th *ngFor="let header of tableHeaders">{{ header }}</th>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let wo of workOrders; let i = index" 
+                      (click)="selectWO(wo)" 
+                      [class.selected-row]="wo === selectedWO">
+                    <td *ngFor="let header of tableHeaders">
+                      {{ wo[header] }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bottom 40%: Google Sheet for Editing -->
+          <div style="flex: 4; overflow: hidden; padding-top: 15px;">
+             <h5 class="text-primary">Edit Details in Google Sheet</h5>
+             <p>Select a row above to see details. Direct edits in the sheet below will be saved automatically.</p>
+            <iframe
+              width="100%"
+              height="100%"
+              frameborder="0"
+              [src]="googleSheetUrl | safe"
+              allowfullscreen>
+            </iframe>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
-.selected {
-  background-color: #e0f7fa;
+.selected-row {
+  background-color: #fce4ec !important; /* A light pink shade from the theme */
   font-weight: bold;
 }
 tr {
   cursor: pointer;
-}
-.table {
-  width: 100%;
 }
 </style>
   

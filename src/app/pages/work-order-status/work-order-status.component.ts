@@ -18,6 +18,10 @@ export class WorkOrderStatusComponent implements OnInit {
   public tableHeaders: string[] = [];
   public isLoading = true;
   public errorMessage: string | null = null;
+  public selectedWO: WorkOrder | null = null;
+  
+  // URL để nhúng iframe Google Sheet. Thay GID nếu cần.
+  public googleSheetUrl = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0';
 
   // IMPORTANT: Please replace this with your Google Apps Script URL for the Work Order sheet.
   private sheetUrl = 'https://script.google.com/macros/s/AKfycbycffWLVmbTSAlnHB8rCci3mAYL45Ehl1TEYJbBrKzZPw86-tkXdU4DRGbCQyDT2j0c/exec';
@@ -45,6 +49,8 @@ export class WorkOrderStatusComponent implements OnInit {
           // This makes the component flexible to different sheet structures.
           this.tableHeaders = Object.keys(data[0]);
           this.workOrders = data;
+          // Tự động chọn dòng đầu tiên khi dữ liệu được tải
+          this.selectedWO = this.workOrders[0];
         } else {
            this.errorMessage = "Không có dữ liệu hoặc định dạng dữ liệu không đúng từ Google Sheet.";
         }
@@ -56,6 +62,14 @@ export class WorkOrderStatusComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  // Hàm này được gọi khi người dùng click vào một dòng trong bảng
+  selectWO(workOrder: WorkOrder) {
+    this.selectedWO = workOrder;
+    console.log('Selected Work Order:', this.selectedWO);
+    // Trong tương lai, bạn có thể cập nhật googleSheetUrl ở đây nếu mỗi W.O có một link sheet khác nhau.
+    // Ví dụ: this.googleSheetUrl = `https://...&range=${this.selectedWO['CellRange']}`;
   }
 
   // This function is called when a cell loses focus (e.g., user clicks away or presses Enter).
