@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, Renderer2, ElementRef, AfterViewChecked } from '@angular/core';
 import { Location, LocationStrategy, PathLocationStrategy, PopStateEvent } from '@angular/common';
 import { Router, NavigationEnd, NavigationStart } from '@angular/router';
 import PerfectScrollbar from 'perfect-scrollbar';
@@ -10,18 +10,19 @@ import { filter, Subscription } from 'rxjs';
   templateUrl: './admin-layout.component.html',
   styleUrls: ['./admin-layout.component.scss']
 })
-export class AdminLayoutComponent implements OnInit {
+export class AdminLayoutComponent implements OnInit, AfterViewChecked {
   private _router: Subscription;
   private lastPoppedUrl: string;
   private yScrollStack: number[] = [];
   public isDashboard = false;
+  private contentElement: HTMLElement;
 
-  constructor( public location: Location, private router: Router) {}
-
-  public shouldShowNavbar(): boolean {
-    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status'];
-    return !hideNavbarOnRoutes.includes(this.location.path());
-  }
+  constructor(
+    public location: Location,
+    private router: Router,
+    private renderer: Renderer2,
+    private elementRef: ElementRef
+  ) {}
 
   ngOnInit() {
       this.router.events.pipe(
@@ -29,6 +30,8 @@ export class AdminLayoutComponent implements OnInit {
       ).subscribe((event: NavigationEnd) => {
         this.isDashboard = event.urlAfterRedirects === '/dashboard';
       });
+
+      this.contentElement = this.elementRef.nativeElement.querySelector('.content');
 
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;
 
@@ -138,6 +141,17 @@ export class AdminLayoutComponent implements OnInit {
           }
       });
   }
+
+  ngAfterViewChecked() {
+    if (this.contentElement) {
+      if (this.isDashboard) {
+        this.renderer.setStyle(this.contentElement, 'padding-top', '30px');
+      } else {
+        this.renderer.setStyle(this.contentElement, 'padding-top', '0px');
+      }
+    }
+  }
+
   ngAfterViewInit() {
       this.runOnRouteChange();
   }
