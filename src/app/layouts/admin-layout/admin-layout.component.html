@@ -4,8 +4,8 @@
         <div class="sidebar-background" style="background-image: url(./assets/img/sidebar-4.jpg)"></div>
     </div>
     <div class="main-panel">
-        <app-navbar *ngIf="isDashboard && shouldShowNavbar()"></app-navbar>
-        <div class="content">
+        <app-navbar *ngIf="shouldShowNavbar()"></app-navbar>
+        <div class="content-area">
             <router-outlet></router-outlet>
         </div>
         <div class="footer-wrapper" *ngIf="shouldShowFooter()">
