@@ -186,4 +186,8 @@ export class AdminLayoutComponent implements OnInit, AfterViewChecked {
       return bool;
   }
 
+  public shouldShowNavbar(): boolean {
+    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status'];
+    return !hideNavbarOnRoutes.includes(this.location.path());
+  }
 }
