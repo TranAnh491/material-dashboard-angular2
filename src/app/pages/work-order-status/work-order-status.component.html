@@ -1,48 +1,48 @@
-<div class="main-content">
-  <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-header card-header-info">
-            <h4 class="card-title ">Trạng thái Lệnh sản xuất (Work Order Status)</h4>
-            <p class="card-category">Dữ liệu được cập nhật trực tiếp từ Google Sheet. Click vào ô để chỉnh sửa.</p>
-          </div>
-          <div class="card-body">
-            <div *ngIf="isLoading" class="text-center">
-              <p>Đang tải dữ liệu...</p>
-            </div>
-  
-            <div *ngIf="errorMessage" class="alert alert-danger">
-              {{ errorMessage }}
-            </div>
-  
-            <div *ngIf="!isLoading && !errorMessage && workOrders.length > 0" class="table-responsive">
-              <table class="table">
-                <thead class=" text-primary">
-                  <th *ngFor="let header of tableHeaders">
-                    {{ header }}
-                  </th>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let order of workOrders; let i = index">
-                    <td *ngFor="let header of tableHeaders" 
-                        contenteditable="true"
-                        (blur)="onCellUpdate(i, header, $event.target.innerText)"
-                        (keydown.enter)="$event.target.blur(); $event.preventDefault()">
-                      {{ order[header] }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-  
-            <div *ngIf="!isLoading && !errorMessage && workOrders.length === 0">
-                <p>Không có dữ liệu để hiển thị.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+<div style="display: flex; flex-direction: column; height: 100vh;">
+  <!-- 60% phía trên: Danh sách lệnh sản xuất -->
+  <div style="flex: 6; overflow: auto; border-bottom: 2px solid #ccc;">
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Mã lệnh</th>
+          <th>Mô tả</th>
+          <th>Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let wo of workOrders"
+            [class.selected]="wo === selectedWO"
+            (click)="selectWO(wo)">
+          <td>{{ wo.id }}</td>
+          <td>{{ wo.description }}</td>
+          <td>{{ wo.status }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 40% phía dưới: Google Sheet chỉnh sửa -->
+  <div style="flex: 4; overflow: auto;">
+    <iframe
+      width="100%"
+      height="100%"
+      frameborder="0"
+      [src]="googleSheetUrl | safe"
+      allowfullscreen>
+    </iframe>
   </div>
 </div>
+
+<style>
+.selected {
+  background-color: #e0f7fa;
+  font-weight: bold;
+}
+tr {
+  cursor: pointer;
+}
+.table {
+  width: 100%;
+}
+</style>
   
