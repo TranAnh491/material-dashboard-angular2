@@ -1,200 +1,219 @@
-<div class="main-content">
-  <div class="container-fluid">
-    <div class="row">
-      <!-- KPI Card 1 -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-icon" style="background: #4caf50;">
-            <div class="card-icon">
-              <i class="material-icons" style="color: #fff;">assignment</i>
-            </div>
-            <p class="card-category">Work Order</p>
-            <h3 class="card-title">{{ workOrder }}</h3>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">date_range</i> This month - Completed/Total
-            </div>
-          </div>
+<!-- KPI Cards Section -->
+<div class="row">
+  <!-- Work Order -->
+  <div class="col-lg-3 col-md-6 col-sm-6">
+    <div class="card card-stats d-flex align-items-center">
+      <div class="card-header card-header-icon animate-icon" style="background: #c8e6c9;">
+        <div class="card-icon">
+          <i class="material-icons" style="color: #4caf50; font-size: 32px;">assignment</i>
         </div>
       </div>
-
-      <!-- KPI Card 2 -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-icon" style="background: #ff9800;">
-            <div class="card-icon">
-              <i class="material-icons" style="color: #fff;">local_shipping</i>
-            </div>
-            <p class="card-category">Shipment</p>
-            <h3 class="card-title">{{ shipment }}</h3>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">date_range</i> This month - Completed/Total
-            </div>
-          </div>
-        </div>
+      <div class="card-body">
+        <p class="card-category">Work Order</p>
+        <h3 class="card-title">{{ workOrder }}</h3>
       </div>
-
-      <!-- KPI Card 3 -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-icon" style="background: #2196f3;">
-            <div class="card-icon">
-              <i class="material-icons" style="color: #fff;">check_circle</i>
-            </div>
-            <p class="card-category">OTD</p>
-            <h3 class="card-title">100%</h3>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">alarm_on</i> This month
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- KPI Card 4 -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-icon" style="background: #f44336;">
-            <div class="card-icon">
-              <i class="material-icons" style="color: #fff;">health_and_safety</i>
-            </div>
-            <p class="card-category">Safety</p>
-            <h3 class="card-title">100%</h3>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">update</i> Since Dec-2018
-            </div>
-          </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">date_range</i> This month - Completed/Total
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Chart Section -->
-    <div class="row">
-      <div class="col-md-4">
-        <div class="card card-chart">
-          <div class="card-body">
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-success">inventory_2</i> % Materials Accuracy
-            </h4>
-            <canvas id="dailySalesChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">access_time</i> Inventory stocktaking monthly
-            </div>
-          </div>
+  <!-- Shipment -->
+  <div class="col-lg-3 col-md-6 col-sm-6">
+    <div class="card card-stats d-flex align-items-center">
+      <div class="card-header card-header-icon animate-icon" style="background: #ffe0b2;">
+        <div class="card-icon">
+          <i class="material-icons" style="color: #ff9800; font-size: 32px;">inventory</i>
         </div>
       </div>
-
-      <div class="col-md-4">
-        <div class="card card-chart">
-          <div class="card-body">
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-warning">check_circle</i> % Finished Goods Accuracy
-            </h4>
-            <canvas id="websiteViewsChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">access_time</i> Inventory stocktaking monthly
-            </div>
-          </div>
-        </div>
+      <div class="card-body">
+        <p class="card-category">Shipment</p>
+        <h3 class="card-title">{{ shipment }}</h3>
       </div>
-
-      <div class="col-md-4">
-        <div class="card card-chart">
-          <div class="card-body">
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-info">autorenew</i> FGs Inventory Turnover
-            </h4>
-            <canvas id="completedTasksChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">access_time</i> Updated monthly
-            </div>
-          </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">date_range</i> This month - Completed/Total
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Work Order Status -->
-    <div class="row">
-      <div class="col-lg-6 col-md-12">
-        <div class="card">
-          <div class="custom-card-header custom-card-header-purple">
-            <h4 class="custom-card-title">Work Order Status</h4>
-            <p class="custom-card-desc">Status for the next 7 days</p>
-          </div>
-          <div class="card-body">
-            <table class="table table-bordered table-striped workorder-status-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Done</th>
-                  <th>Awaiting Picking</th>
-                  <th>Ready</th>
-                  <th>Delay</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of workOrderStatus">
-                  <td>{{ row.code }}</td>
-                  <td>{{ row.value }}</td>
-                  <td>{{ row.note }}</td>
-                  <td>{{ row.ready }}</td>
-                  <td>{{ row.extra }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+  <!-- OTD -->
+  <div class="col-lg-3 col-md-6 col-sm-6">
+    <div class="card card-stats d-flex align-items-center">
+      <div class="card-header card-header-icon animate-icon" style="background: #bbdefb;">
+        <div class="card-icon">
+          <i class="material-icons" style="color: #2196f3; font-size: 32px;">check_circle</i>
         </div>
       </div>
+      <div class="card-body">
+        <p class="card-category">OTD</p>
+        <h3 class="card-title">100%</h3>
+      </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">alarm_on</i> This month
+        </div>
+      </div>
+    </div>
+  </div>
 
-      <!-- Shipment Status -->
-      <div class="col-lg-6 col-md-12">
-        <div class="card">
-          <div class="card-header card-header-warning">
-            <h4 class="card-title">Shipment Status</h4>
-            <p class="card-category">Status for the next 7 days</p>
-          </div>
-          <div class="card-body table-responsive">
-            <table class="table table-bordered table-striped">
-              <thead>
-                <tr>
-                  <th>Ship Date</th>
-                  <th>Shipment</th>
-                  <th>Customer</th>
-                  <th>Carton</th>
-                  <th>Status Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of shipmentStatus">
-                  <td>{{ row.shipDate }}</td>
-                  <td>{{ row.shipment }}</td>
-                  <td>{{ row.customer }}</td>
-                  <td>{{ row.carton }}</td>
-                  <td>{{ row.statusDetail }}</td>
-                </tr>
-                <tr *ngIf="shipmentStatus.length === 0">
-                  <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+  <!-- Safety -->
+  <div class="col-lg-3 col-md-6 col-sm-6">
+    <div class="card card-stats d-flex align-items-center">
+      <div class="card-header card-header-icon animate-icon" style="background: #ffcdd2;">
+        <div class="card-icon">
+          <i class="material-icons" style="color: #f44336; font-size: 32px;">health_and_safety</i>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="card-category">Safety</p>
+        <h3 class="card-title">100%</h3>
+      </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">update</i> Since Dec-2018
         </div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Chart Section: Materials Accuracy / FG Accuracy / Inventory Turnover -->
+<div class="row">
+  <div class="col-md-4">
+    <div class="card card-chart">
+      <div class="card-body">
+        <h4 class="card-title d-flex align-items-center">
+          <i class="material-icons me-2 text-success animate-icon" style="background-color: #e8f5e9; padding: 6px; border-radius: 8px;">inventory_2</i> % Materials Accuracy
+        </h4>
+        <canvas id="dailySalesChart"></canvas>
+        <p class="text-muted mt-2">Data last 6 months</p>
+      </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">access_time</i> Inventory stocktaking monthly
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card card-chart">
+      <div class="card-body">
+        <h4 class="card-title d-flex align-items-center">
+          <i class="material-icons me-2 text-warning animate-icon" style="background-color: #fff3e0; padding: 6px; border-radius: 8px;">inventory</i> % Finished Goods Accuracy
+        </h4>
+        <canvas id="websiteViewsChart"></canvas>
+        <p class="text-muted mt-2">Data last 6 months</p>
+      </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">access_time</i> Inventory stocktaking monthly
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card card-chart">
+      <div class="card-body">
+        <h4 class="card-title d-flex align-items-center">
+          <i class="material-icons me-2 text-info animate-icon" style="background-color: #e3f2fd; padding: 6px; border-radius: 8px;">autorenew</i> FGs Inventory Turnover
+        </h4>
+        <canvas id="completedTasksChart"></canvas>
+        <p class="text-muted mt-2">Data last 6 months</p>
+      </div>
+      <div class="card-footer">
+        <div class="stats">
+          <i class="material-icons">access_time</i> Updated monthly
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Work Order Status -->
+<div class="row">
+  <div class="col-lg-6 col-md-12">
+    <div class="card">
+      <div class="custom-card-header custom-card-header-purple">
+        <h4 class="custom-card-title">Work Order Status</h4>
+        <p class="custom-card-desc">Status for the next 7 days</p>
+      </div>
+      <div class="card-body">
+        <table class="table table-bordered table-striped workorder-status-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Done</th>
+              <th>Awaiting Picking</th>
+              <th>Ready</th>
+              <th>Delay</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of workOrderStatus">
+              <td>{{ row.code }}</td>
+              <td>{{ row.value }}</td>
+              <td>{{ row.note }}</td>
+              <td>{{ row.ready }}</td>
+              <td>{{ row.extra }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shipment Status -->
+  <div class="col-lg-6 col-md-12">
+    <div class="card">
+      <div class="card-header card-header-warning">
+        <h4 class="card-title">Shipment Status</h4>
+        <p class="card-category">Status for the next 7 days</p>
+      </div>
+      <div class="card-body table-responsive">
+        <table class="table table-bordered table-striped">
+          <thead>
+            <tr>
+              <th>Ship Date</th>
+              <th>Shipment</th>
+              <th>Customer</th>
+              <th>Carton</th>
+              <th>Status Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of shipmentStatus">
+              <td>{{ row.shipDate }}</td>
+              <td>{{ row.shipment }}</td>
+              <td>{{ row.customer }}</td>
+              <td>{{ row.carton }}</td>
+              <td>{{ row.statusDetail }}</td>
+            </tr>
+            <tr *ngIf="shipmentStatus.length === 0">
+              <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.animate-icon {
+  animation: bounce 1.6s infinite ease-in-out;
+}
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+</style>

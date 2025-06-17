@@ -86,10 +86,38 @@
   opacity: 0.88;
 }
 
-/* 📌 Optional: Table border radius (if needed) */
-/*
+/* KPI Card Enhancements */
+.card-stats {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.card-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  margin: 10px auto;
+}
+
+/* 🔄 Bounce animation */
+.animate-icon {
+  animation: bounce 1.6s infinite ease-in-out;
+}
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* 📌 Optional: Table border radius */
 .table, .workorder-status-table {
   border-radius: 8px;
   overflow: hidden;
 }
-*/
