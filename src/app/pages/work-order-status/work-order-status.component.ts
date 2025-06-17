@@ -1,8 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { GoogleSheetService } from '../../services/google-sheet.service';
+import { AuthService } from '../../services/auth.service';
 
-// Define an interface for a single Work Order.
-// The properties are generic for now. They will be dynamically determined from the sheet.
 interface WorkOrder {
   [key: string]: any;
 }
@@ -13,112 +12,63 @@ interface WorkOrder {
   styleUrls: ['./work-order-status.component.scss']
 })
 export class WorkOrderStatusComponent implements OnInit {
-
   public workOrders: WorkOrder[] = [];
   public tableHeaders: string[] = [];
   public isLoading = true;
   public errorMessage: string | null = null;
   public selectedWO: WorkOrder | null = null;
-  
-  // URL để nhúng iframe Google Sheet. Thay GID nếu cần.
+
   public googleSheetUrl = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0';
 
-  // IMPORTANT: Please replace this with your Google Apps Script URL for the Work Order sheet.
-  private sheetUrl = 'https://script.google.com/macros/s/AKfycbycffWLVmbTSAlnHB8rCci3mAYL45Ehl1TEYJbBrKzZPw86-tkXdU4DRGbCQyDT2j0c/exec';
-
-  constructor(private http: HttpClient) {}
+  constructor(
+    private sheetService: GoogleSheetService,
+    public auth: AuthService
+  ) {}
 
   ngOnInit(): void {
-    if (this.sheetUrl === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
-      this.isLoading = false;
-      this.errorMessage = "Vui lòng cập nhật URL Google Apps Script trong work-order-status.component.ts để tải dữ liệu.";
-      console.error(this.errorMessage);
-    } else {
-      this.fetchWorkOrders();
-    }
+    this.auth.signIn(); // tự động đăng nhập (hoặc thêm nút)
+    setTimeout(() => this.fetchWorkOrders(), 1000); // đợi token sẵn sàng
   }
 
   fetchWorkOrders() {
     this.isLoading = true;
-    this.errorMessage = null;
-    this.http.get<any[]>(this.sheetUrl).subscribe({
-      next: (data) => {
-        console.log('Work Order Data from Google Sheet:', data);
-        if (data && data.length > 0) {
-          // Assuming the first object's keys are the headers.
-          // This makes the component flexible to different sheet structures.
-          this.tableHeaders = Object.keys(data[0]);
-          this.workOrders = data;
-          // Tự động chọn dòng đầu tiên khi dữ liệu được tải
-          this.selectedWO = this.workOrders[0];
-        } else {
-           this.errorMessage = "Không có dữ liệu hoặc định dạng dữ liệu không đúng từ Google Sheet.";
-        }
+    this.sheetService.getSheet('Sheet1!A2:E').subscribe({
+      next: (res: any) => {
+        const headers = res.values[0];
+        this.tableHeaders = headers;
+        this.workOrders = res.values.slice(1).map((row: string[]) => {
+          const wo: any = {};
+          headers.forEach((h, i) => wo[h] = row[i] || '');
+          return wo;
+        });
+        this.selectedWO = this.workOrders[0];
         this.isLoading = false;
       },
-      error: (error) => {
-        console.error('Error fetching work orders:', error);
-        this.errorMessage = "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng kiểm tra lại URL và cài đặt Google Apps Script.";
+      error: err => {
+        this.errorMessage = 'Lỗi khi lấy dữ liệu từ Google Sheets';
         this.isLoading = false;
+        console.error(err);
       }
     });
   }
 
-  // Hàm này được gọi khi người dùng click vào một dòng trong bảng
   selectWO(workOrder: WorkOrder) {
     this.selectedWO = workOrder;
-    console.log('Selected Work Order:', this.selectedWO);
-    // Trong tương lai, bạn có thể cập nhật googleSheetUrl ở đây nếu mỗi W.O có một link sheet khác nhau.
-    // Ví dụ: this.googleSheetUrl = `https://...&range=${this.selectedWO['CellRange']}`;
   }
 
-  // This function is called when a cell loses focus (e.g., user clicks away or presses Enter).
   onCellUpdate(rowIndex: number, header: string, value: string) {
-    const workOrder = this.workOrders[rowIndex];
-    const originalValue = workOrder[header];
-    const trimmedValue = value.trim();
+    const colLetter = String.fromCharCode(65 + this.tableHeaders.indexOf(header));
+    const rowNumber = rowIndex + 3; // A2 là tiêu đề, A3 là data đầu tiên
+    const range = `Sheet1!${colLetter}${rowNumber}`;
 
-    // If the value hasn't changed, do nothing.
-    if (originalValue === trimmedValue) {
-      return;
-    }
-
-    console.log(`Updating row ${rowIndex}, column "${header}" to new value: "${trimmedValue}"`);
-    
-    // Update the local data immediately for a responsive UI.
-    workOrder[header] = trimmedValue;
-    
-    // --- Send update to Google Sheet ---
-    // We assume the first column header is the unique identifier for the row.
-    const uniqueIdHeader = this.tableHeaders[0]; 
-    const uniqueId = workOrder[uniqueIdHeader];
-
-    if (!uniqueId) {
-      console.error('Cannot update row because the unique identifier is missing.');
-      this.errorMessage = `Lỗi: Không thể cập nhật dòng vì thiếu mã định danh duy nhất (cột '${uniqueIdHeader}').`;
-      // Optionally, revert the change in the UI
-      workOrder[header] = originalValue;
-      return;
-    }
-
-    const updatePayload = {
-      id: uniqueId,
-      column: header,
-      value: trimmedValue
-    };
-    
-    console.log('Sending this payload to Google Apps Script:', updatePayload);
-
-    this.http.post(this.sheetUrl, updatePayload).subscribe({
-      next: (response) => {
-        console.log('Update successful:', response);
-        // You might want to show a success toast message here.
+    this.sheetService.updateCell(range, value.trim()).subscribe({
+      next: () => {
+        this.workOrders[rowIndex][header] = value.trim();
+        console.log('Updated', range, value);
       },
-      error: (error) => {
-        console.error('Failed to update Google Sheet:', error);
-        this.errorMessage = `Lỗi khi cập nhật Google Sheet. Thay đổi của bạn có thể chưa được lưu.`;
-        // Revert the local data since the update failed.
-        workOrder[header] = originalValue;
+      error: err => {
+        console.error('Update failed', err);
+        this.errorMessage = 'Không thể cập nhật Google Sheet';
       }
     });
   }
