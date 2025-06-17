@@ -146,3 +146,16 @@
 .nav li.nav-item-orange > a .material-icons {
   color: #ff9800;
 }
+
+.nav-icon svg {
+  width: 20px;
+  height: 20px;
+  margin-right: 14px;
+  stroke-width: 1.5;
+  color: #5d6c88;
+  flex-shrink: 0;
+}
+.nav > li > a.active .nav-icon svg,
+.nav > li > a:hover .nav-icon svg {
+  color: #1976d2;
+}

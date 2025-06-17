@@ -3,28 +3,29 @@
     <div class="logo-img">
       <img src="/assets/img/logo.png" />
     </div>
-    
   </a>
 </div>
+
 <div class="sidebar-wrapper">
   <ul class="nav">
     <li *ngFor="let menuItem of menuItems">
       <ng-container *ngIf="!menuItem.children">
         <a [routerLink]="[menuItem.path]" routerLinkActive="active">
-          <i class="material-icons">{{menuItem.icon}}</i>
+          <span class="nav-icon" [innerHTML]="menuItem.svg"></span>
           <span>{{menuItem.title}}</span>
         </a>
       </ng-container>
+
       <ng-container *ngIf="menuItem.children">
         <a href="#" (click)="menuItem.expanded = !menuItem.expanded; $event.preventDefault()">
-          <i class="material-icons">{{menuItem.icon}}</i>
+          <span class="nav-icon" [innerHTML]="menuItem.svg"></span>
           <span>{{menuItem.title}}</span>
-          <i class="material-icons expand-icon">{{menuItem.expanded ? 'expand_less' : 'expand_more'}}</i>
+          <i class="material-icons expand-icon">{{ menuItem.expanded ? 'expand_less' : 'expand_more' }}</i>
         </a>
         <ul class="nav sub-menu" *ngIf="menuItem.expanded">
           <li *ngFor="let child of menuItem.children" [class]="child.class">
             <a [routerLink]="[child.path]" routerLinkActive="active">
-              <i class="material-icons">{{child.icon}}</i>
+              <span class="nav-icon" [innerHTML]="child.svg"></span>
               <span>{{child.title}}</span>
             </a>
           </li>
