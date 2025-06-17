@@ -60,7 +60,7 @@ export class WorkOrderStatusComponent implements OnInit {
 
   fetchWorkOrders() {
     this.isLoading = true;
-    this.sheetService.getSheet('W.O Mass!A:X').subscribe({
+    this.sheetService.getSheet('W.O Mass!A3:X10').subscribe({
       next: (res: any) => {
         const headers = res.values[0];
         this.tableHeaders = headers;
