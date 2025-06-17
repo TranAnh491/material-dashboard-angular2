@@ -62,6 +62,7 @@ export class WorkOrderStatusComponent implements OnInit {
     this.isLoading = true;
     this.sheetService.getSheet('WO!A3:X10').subscribe({
       next: (res: any) => {
+        console.log('✅ Loaded data:', res);
         const headers = res.values[0];
         this.tableHeaders = headers;
         this.workOrders = res.values.slice(1).map((row: string[]) => {
@@ -73,9 +74,9 @@ export class WorkOrderStatusComponent implements OnInit {
         this.isLoading = false;
       },
       error: err => {
+        console.error('❌ Lỗi lấy sheet:', err);
         this.errorMessage = 'Lỗi khi lấy dữ liệu từ Google Sheets';
         this.isLoading = false;
-        console.error(err);
       }
     });
   }

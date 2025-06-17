@@ -11,17 +11,24 @@ export class GoogleSheetService {
   getSheet(range: string) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/${range}`;
     const headers = new HttpHeaders({
-      Authorization: `Bearer ${this.auth.token}`
+      Authorization: `Bearer ${this.auth.token}`,
     });
-    return this.http.get<any>(url, { headers });
+
+    return this.http.get(url, { headers });
   }
 
-  updateCell(range: string, value: any) {
+  updateCell(range: string, value: string) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/${range}?valueInputOption=RAW`;
     const headers = new HttpHeaders({
       Authorization: `Bearer ${this.auth.token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     });
-    return this.http.put<any>(url, { values: [[value]] }, { headers });
+
+    const body = {
+      range: range,
+      values: [[value]],
+    };
+
+    return this.http.put(url, body, { headers });
   }
 }
