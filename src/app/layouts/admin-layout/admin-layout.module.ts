@@ -24,9 +24,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { SharedModule } from '../../shared/shared.module';
 
-// Import SafePipe
-import { SafePipe } from '../../pipes/safe.pipe';
-
 // Các component materials mới
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
@@ -67,7 +64,6 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
     InboundFgsComponent,
     OutboundFgsComponent,
     ShipmentComponent,
-    SafePipe,
 
     // 4 component materials mới
     WorkOrderStatusComponent,
