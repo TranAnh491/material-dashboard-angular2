@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { GoogleSheetService } from '../../services/google-sheet.service';
 import { AuthService } from '../../services/auth.service';
+import { HttpClient } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 
 interface WorkOrder {
   [key: string]: any;
@@ -20,14 +22,23 @@ export class WorkOrderStatusComponent implements OnInit {
 
   public googleSheetUrl = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0';
 
+  // IMPORTANT: Please replace this with your Google Apps Script URL for the Work Order sheet.
+  private sheetUrl = 'https://script.google.com/macros/s/AKfycbycffWLVmbTSAlnHB8rCci3mAYL45Ehl1TEYJbBrKzZPw86-tkXdU4DRGbCQyDT2j0c/exec';
+
   constructor(
     private sheetService: GoogleSheetService,
+    private http: HttpClient,
     public auth: AuthService
   ) {}
 
   ngOnInit(): void {
-    this.auth.signIn(); // tự động đăng nhập (hoặc thêm nút)
-    setTimeout(() => this.fetchWorkOrders(), 1000); // đợi token sẵn sàng
+    // Tự động đăng nhập khi component được khởi tạo
+    this.auth.signIn();
+
+    if (this.sheetUrl === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+      this.isLoading = false;
+      setTimeout(() => this.fetchWorkOrders(), 1000); // đợi token sẵn sàng
+    }
   }
 
   fetchWorkOrders() {
