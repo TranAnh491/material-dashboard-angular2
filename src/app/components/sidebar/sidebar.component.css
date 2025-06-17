@@ -159,3 +159,10 @@
 .nav > li > a:hover .nav-icon svg {
   color: #1976d2;
 }
+
+.nav-icon-placeholder {
+  width: 20px;
+  height: 20px;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
