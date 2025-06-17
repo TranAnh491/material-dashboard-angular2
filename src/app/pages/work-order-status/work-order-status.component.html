@@ -3,35 +3,87 @@
     <div class="card">
       <div class="card-header card-header-danger">
         <h4 class="card-title">Work Order Status (Current Month)</h4>
-        <p class="card-category">Displaying work orders for the current month</p>
+        <p class="card-category">Select a row to edit details</p>
       </div>
       <div class="card-body">
 
-        <div *ngIf="isLoading" class="text-center">
-          <p>⏳ Đang tải dữ liệu...</p>
-        </div>
+        <!-- Loading and Error States -->
+        <div *ngIf="isLoading" class="text-center"><p>Loading data...</p></div>
+        <div *ngIf="errorMessage && !isLoading" class="alert alert-danger">{{ errorMessage }}</div>
 
-        <div class="table-responsive" *ngIf="!isLoading && displayedRows.length > 0">
-          <table class="table">
+        <!-- Top Table -->
+        <div class="table-responsive" *ngIf="!isLoading && workOrders.length > 0">
+          <table class="table table-hover">
             <thead class="text-primary">
               <tr>
                 <th *ngFor="let h of tableHeaders">{{ h }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let row of displayedRows">
-                <td *ngFor="let h of tableHeaders">{{ row[h] }}</td>
+              <tr *ngFor="let wo of workOrders; let i = index" 
+                  (click)="selectWO(i)"
+                  [class.selected-row]="i === selectedIndex">
+                <td *ngFor="let h of tableHeaders">{{ wo[h] }}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div *ngIf="!isLoading && displayedRows.length === 0" class="text-center">
-            <p>No work orders found for the current month.</p>
+        <!-- Bottom Form -->
+        <div class="bottom-form mt-4" *ngIf="selectedWO">
+          <hr>
+          <h4 class="card-title">Edit Details for Work Order: {{ selectedWO['Work Order'] }}</h4>
+          
+          <form class="form-horizontal">
+            <div class="row">
+              <label class="col-sm-2 col-form-label">Check</label>
+              <div class="col-sm-10">
+                <div class="form-group">
+                  <input type="text" class="form-control" [(ngModel)]="selectedWO['Check']" name="check">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <label class="col-sm-2 col-form-label">Kitting</label>
+              <div class="col-sm-10">
+                <div class="form-group">
+                  <input type="text" class="form-control" [(ngModel)]="selectedWO['Kitting']" name="kitting">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <label class="col-sm-2 col-form-label">W.O Status</label>
+              <div class="col-sm-10">
+                <div class="form-group">
+                  <input type="text" class="form-control" [(ngModel)]="selectedWO['W.O Status']" name="status">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12 text-right">
+                    <button class="btn btn-primary" (click)="saveUpdates()">Save Updates</button>
+                </div>
+            </div>
+          </form>
         </div>
 
       </div>
     </div>
   </div>
 </div>
+
+<style>
+.selected-row {
+  background-color: #fce4ec !important; /* A light pink shade from the theme */
+  font-weight: bold;
+}
+tr {
+  cursor: pointer;
+}
+.bottom-form {
+  padding: 15px;
+  border: 1px solid #eee;
+  border-radius: 5px;
+}
+</style>
   
