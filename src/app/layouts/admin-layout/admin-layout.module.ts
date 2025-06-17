@@ -22,6 +22,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { SharedModule } from '../../shared/shared.module';
 
 // Import SafePipe
 import { SafePipe } from '../../pipes/safe.pipe';
@@ -50,6 +51,7 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
     MatSelectModule,
     MatTooltipModule,
     MatProgressSpinnerModule,
+    SharedModule,
   ],
   declarations: [
     DashboardComponent,
