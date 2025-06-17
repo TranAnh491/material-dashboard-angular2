@@ -32,12 +32,30 @@ export class WorkOrderStatusComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    setTimeout(() => {
-      this.auth.signIn().then(() => {
-        console.log('✅ Token:', this.auth.token);
+    // Không cần tự động đăng nhập nữa, để người dùng chủ động click
+  }
+
+  // Hàm này được gọi bởi nút "Đăng nhập Google"
+  handleSignIn() {
+    this.isLoading = true;
+    this.errorMessage = null;
+    this.auth.signIn()
+      .then(() => {
+        console.log('✅ Đăng nhập thành công! Token:', this.auth.token);
         this.fetchWorkOrders();
+      })
+      .catch((error: any) => {
+        this.isLoading = false;
+        this.errorMessage = 'Đăng nhập thất bại. Vui lòng kiểm tra console (F12) để xem chi tiết lỗi.';
+        console.error('Lỗi đăng nhập chi tiết:', error);
       });
-    }, 1000); // delay nhẹ để đảm bảo gapi load xong
+  }
+  
+  // Hàm này được gọi bởi nút "Đăng xuất"
+  handleSignOut() {
+    this.auth.signOut();
+    this.workOrders = []; // Xóa dữ liệu sau khi đăng xuất
+    this.tableHeaders = [];
   }
 
   fetchWorkOrders() {

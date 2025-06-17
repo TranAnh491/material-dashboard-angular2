@@ -7,52 +7,34 @@
       </div>
       <div class="card-body">
         <div class="text-center mb-3">
-          <button class="btn btn-primary" (click)="auth.signIn()">Đăng nhập Google</button>
-          <button class="btn btn-outline-secondary" (click)="auth.signOut()">Đăng xuất</button>
+          <button class="btn btn-primary" (click)="handleSignIn()">Đăng nhập Google</button>
+          <button class="btn btn-outline-secondary" (click)="handleSignOut()">Đăng xuất</button>
         </div>
 
-        <!-- Main container with 60/40 split -->
-        <div style="display: flex; flex-direction: column; height: calc(85vh - 120px);">
-
-          <!-- Top 60%: Work Order List -->
-          <div style="flex: 6; overflow: auto; border-bottom: 2px solid #ccc;">
-            <div *ngIf="isLoading" class="loading-indicator">
-              <p>Loading data...</p>
-            </div>
-            <div *ngIf="errorMessage && !isLoading" class="alert alert-danger">
-              {{ errorMessage }}
-            </div>
-            <div *ngIf="!isLoading && !errorMessage && workOrders.length > 0" class="table-responsive">
-              <table class="table table-hover">
-                <thead class="text-primary">
-                  <th *ngFor="let header of tableHeaders">{{ header }}</th>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let wo of workOrders; let i = index" 
-                      (click)="selectWO(wo)" 
-                      [class.selected-row]="wo === selectedWO">
-                    <td *ngFor="let header of tableHeaders">
-                      {{ wo[header] }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Bottom 40%: Google Sheet for Editing -->
-          <div style="flex: 4; overflow: hidden; padding-top: 15px;">
-             <h5 class="text-primary">Edit Details in Google Sheet</h5>
-             <p>Select a row above to see details. Direct edits in the sheet below will be saved automatically.</p>
-            <iframe
-              width="100%"
-              height="100%"
-              frameborder="0"
-              [src]="googleSheetUrl | safe"
-              allowfullscreen>
-            </iframe>
-          </div>
+        <!-- Vùng hiển thị dữ liệu -->
+        <div *ngIf="isLoading" class="loading-indicator text-center">
+          <p>Loading data...</p>
         </div>
+        <div *ngIf="errorMessage && !isLoading" class="alert alert-danger">
+          {{ errorMessage }}
+        </div>
+        <div *ngIf="!isLoading && !errorMessage && workOrders.length > 0" class="table-responsive">
+          <table class="table table-hover">
+            <thead class="text-primary">
+              <th *ngFor="let header of tableHeaders">{{ header }}</th>
+            </thead>
+            <tbody>
+              <tr *ngFor="let wo of workOrders; let i = index" 
+                  (click)="selectWO(wo)" 
+                  [class.selected-row]="wo === selectedWO">
+                <td *ngFor="let header of tableHeaders">
+                  {{ wo[header] }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </div>
   </div>
