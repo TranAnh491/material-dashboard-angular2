@@ -1,50 +1,47 @@
 <div class="main-content">
   <div class="container-fluid">
     <div class="row">
-      <!-- Card 1 -->
+      <!-- KPI Card 1 -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="card card-stats">
-          <div class="card-header card-header-warning card-header-icon">
-            <div class="card-icon" style="background: #4caf50;">
+          <div class="card-header card-header-icon" style="background: #4caf50;">
+            <div class="card-icon">
               <i class="material-icons" style="color: #fff;">assignment</i>
             </div>
-            <p class="card-category">Work order</p>
-            <h3 class="card-title">
-              {{workOrder}}
-              <small></small>
-            </h3>
+            <p class="card-category">Work Order</p>
+            <h3 class="card-title">{{ workOrder }}</h3>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">date_range</i>This month - Completed/ Total
+              <i class="material-icons">date_range</i> This month - Completed/Total
             </div>
           </div>
         </div>
       </div>
-      <!-- Card 2 -->
+
+      <!-- KPI Card 2 -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="card card-stats">
-          <div class="card-header card-header-success card-header-icon">
-            <div class="card-icon" style="background: #ff9800;">
+          <div class="card-header card-header-icon" style="background: #ff9800;">
+            <div class="card-icon">
               <i class="material-icons" style="color: #fff;">local_shipping</i>
             </div>
             <p class="card-category">Shipment</p>
-            <h3 class="card-title">
-              {{shipment}}
-            </h3>
+            <h3 class="card-title">{{ shipment }}</h3>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">date_range</i> This month -Completed/ Total
+              <i class="material-icons">date_range</i> This month - Completed/Total
             </div>
           </div>
         </div>
       </div>
-      <!-- Card 3 -->
+
+      <!-- KPI Card 3 -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="card card-stats">
-          <div class="card-header card-header-danger card-header-icon">
-            <div class="card-icon" style="background: #2196f3;">
+          <div class="card-header card-header-icon" style="background: #2196f3;">
+            <div class="card-icon">
               <i class="material-icons" style="color: #fff;">check_circle</i>
             </div>
             <p class="card-category">OTD</p>
@@ -57,12 +54,13 @@
           </div>
         </div>
       </div>
-      <!-- Card 4 -->
+
+      <!-- KPI Card 4 -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="card card-stats">
-          <div class="card-header card-header-info card-header-icon">
-            <div class="card-icon" style="background: #f44336;">
-              <i class="material-icons" style="font-size:32px; color:#fff;">health_and_safety</i>
+          <div class="card-header card-header-icon" style="background: #f44336;">
+            <div class="card-icon">
+              <i class="material-icons" style="color: #fff;">health_and_safety</i>
             </div>
             <p class="card-category">Safety</p>
             <h3 class="card-title">100%</h3>
@@ -75,62 +73,63 @@
         </div>
       </div>
     </div>
-    <!-- Charts row -->
+
+    <!-- Chart Section -->
     <div class="row">
       <div class="col-md-4">
         <div class="card card-chart">
-          <div class="card-header card-header-success">
-            <div class="ct-chart" id="dailySalesChart"></div>
-          </div>
           <div class="card-body">
-            <h4 class="card-title">% Materials Accuracy</h4>
-            <p class="card-category">
-              <span>Data last 6 months.</span>
-            </p>
+            <h4 class="card-title d-flex align-items-center">
+              <i class="material-icons me-2 text-success">inventory_2</i> % Materials Accuracy
+            </h4>
+            <canvas id="dailySalesChart"></canvas>
+            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">access_time</i>Inventory stocktaking monthly 
+              <i class="material-icons">access_time</i> Inventory stocktaking monthly
             </div>
           </div>
         </div>
       </div>
+
       <div class="col-md-4">
         <div class="card card-chart">
-          <div class="card-header card-header-warning">
-            <div class="ct-chart" id="websiteViewsChart"></div>
-          </div>
           <div class="card-body">
-            <h4 class="card-title">% Finished Goods Accuracy</h4>
-            <p class="card-category">Data last 6 months</p>
+            <h4 class="card-title d-flex align-items-center">
+              <i class="material-icons me-2 text-warning">check_circle</i> % Finished Goods Accuracy
+            </h4>
+            <canvas id="websiteViewsChart"></canvas>
+            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">access_time</i>Inventory stocktaking monthly 
+              <i class="material-icons">access_time</i> Inventory stocktaking monthly
             </div>
           </div>
         </div>
       </div>
+
       <div class="col-md-4">
         <div class="card card-chart">
-          <div class="card-header card-header-info">
-            <div class="ct-chart" id="completedTasksChart"></div>
-          </div>
           <div class="card-body">
-            <h4 class="card-title">FGs Inventory Turnover</h4>
-            <p class="card-category">Data last 6 months</p>
+            <h4 class="card-title d-flex align-items-center">
+              <i class="material-icons me-2 text-info">autorenew</i> FGs Inventory Turnover
+            </h4>
+            <canvas id="completedTasksChart"></canvas>
+            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">access_time</i> updated monthly 
+              <i class="material-icons">access_time</i> Updated monthly
             </div>
           </div>
         </div>
       </div>
     </div>
-    <!-- Reports and Shipment Status -->
+
+    <!-- Work Order Status -->
     <div class="row">
-      <!-- Work Order Status -->
       <div class="col-lg-6 col-md-12">
         <div class="card">
           <div class="custom-card-header custom-card-header-purple">
@@ -161,6 +160,7 @@
           </div>
         </div>
       </div>
+
       <!-- Shipment Status -->
       <div class="col-lg-6 col-md-12">
         <div class="card">

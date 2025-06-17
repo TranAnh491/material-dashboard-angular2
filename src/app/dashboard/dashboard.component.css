@@ -1,88 +1,84 @@
-/**** Change FGs Inventory Turnover chart to blue ****/
-#completedTasksChart .ct-series-a .ct-line,
-#completedTasksChart .ct-series-a .ct-point {
-  stroke: #2196f3 !important;
+/* 🎨 Chart Colors */
+#completedTasksChart {
+  background: white;
 }
-#completedTasksChart .ct-series-a .ct-area {
-  fill: #2196f3 !important;
-  fill-opacity: 0.1;
+#dailySalesChart,
+#websiteViewsChart,
+#completedTasksChart {
+  width: 100% !important;
+  max-height: 240px;
 }
 
-/**** Work Order Status Table - căn giữa, màu đen ****/
+/* 📊 Card Styling */
+.card-chart {
+  border-radius: 1rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease;
+}
+.card-chart:hover {
+  transform: translateY(-3px);
+}
+
+.card-title {
+  font-size: 1.05rem !important;
+  font-weight: 600;
+  color: #111 !important;
+}
+
+.card-category,
+.stats,
+.table th,
+.table td {
+  color: #111 !important;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.text-muted {
+  color: #777 !important;
+  font-size: 0.9rem;
+}
+
+/* 🧾 Table Styling */
 .workorder-status-table {
   width: 100%;
   text-align: center;
 }
+
 .workorder-status-table th,
 .workorder-status-table td {
   text-align: center !important;
   color: #111 !important;
   vertical-align: middle !important;
+  font-size: 0.95rem;
 }
+
 .workorder-status-table th {
   font-weight: bold;
   font-size: 1.04em;
   background: #fff;
 }
 
-/**** Tiêu đề bảng, thẻ card, stats - màu đen, font điều chỉnh ****/
-.card-title {
-    font-size: 1rem !important;
-    font-weight: 500;
-    line-height: 1.1;
-    color: #111 !important;
-}
-.card-category {
-    color: #111 !important;
-}
-.card {
-    color: #111 !important;
-}
-.stats {
-    color: #111 !important;
-}
-.table th,
-.table td {
-    color: #111 !important;
-    text-align: center !important;
-    vertical-align: middle !important;
-}
-
-/**** Table header căn giữa, giữa dòng ****/
-th {
-  text-align: center !important;
-  vertical-align: middle !important;
-}
-
-/**** Optional: Tăng độ nét tiêu đề trong bảng (nếu muốn) ****/
-.table thead th {
-  font-weight: bold !important;
-  color: #111 !important;
-  background: #fff;
-}
-
-/**** Nếu muốn bảng không có chữ xám mặc định Material ****/
-tbody td, thead th {
-  color: #111 !important;
-}
-
-/**** Custom card header tím đẹp cho Work Order Status ****/
+/* 💼 Custom header: Work Order Status */
 .custom-card-header {
   padding: 18px 22px 10px 22px;
   border-radius: 8px 8px 0 0;
   margin-bottom: 0;
   box-shadow: 0 2px 8px #d7b8eb44;
 }
+
 .custom-card-header-purple {
   background: linear-gradient(60deg, #ab47bc, #8e24aa);
   color: #fff !important;
 }
+
 .custom-card-title {
   margin: 0;
   font-size: 1.0rem;
   font-weight: 700;
   letter-spacing: 0.2px;
 }
+
 .custom-card-desc {
   margin: 0;
   font-size: 1rem;
@@ -90,18 +86,10 @@ tbody td, thead th {
   opacity: 0.88;
 }
 
-/* Có thể thêm border-radius nếu muốn bo góc bảng:
-.workorder-status-table,
-.table {
+/* 📌 Optional: Table border radius (if needed) */
+/*
+.table, .workorder-status-table {
   border-radius: 8px;
   overflow: hidden;
 }
 */
-/* Tiêu đề Work Order Status: đen, in đậm, nền tím */
-.custom-card-header-purple .custom-card-title {
-  color: #111 !important;
-  font-weight: normal !important;
-}
-.custom-card-header-purple .custom-card-desc {
-  color: #111 !important;
-}
