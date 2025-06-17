@@ -6,8 +6,13 @@
         <p class="card-category">Live data from Google Sheet</p>
       </div>
       <div class="card-body">
+        <div class="text-center mb-3">
+          <button class="btn btn-primary" (click)="auth.signIn()">Đăng nhập Google</button>
+          <button class="btn btn-outline-secondary" (click)="auth.signOut()">Đăng xuất</button>
+        </div>
+
         <!-- Main container with 60/40 split -->
-        <div style="display: flex; flex-direction: column; height: 100%;">
+        <div style="display: flex; flex-direction: column; height: calc(85vh - 120px);">
 
           <!-- Top 60%: Work Order List -->
           <div style="flex: 6; overflow: auto; border-bottom: 2px solid #ccc;">

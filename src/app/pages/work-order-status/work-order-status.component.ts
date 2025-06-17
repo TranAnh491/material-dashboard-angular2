@@ -32,13 +32,12 @@ export class WorkOrderStatusComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Tự động đăng nhập khi component được khởi tạo
-    this.auth.signIn();
-
-    if (this.sheetUrl === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
-      this.isLoading = false;
-      setTimeout(() => this.fetchWorkOrders(), 1000); // đợi token sẵn sàng
-    }
+    setTimeout(() => {
+      this.auth.signIn().then(() => {
+        console.log('✅ Token:', this.auth.token);
+        this.fetchWorkOrders();
+      });
+    }, 1000); // delay nhẹ để đảm bảo gapi load xong
   }
 
   fetchWorkOrders() {
