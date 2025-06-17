@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { GoogleSheetService } from '../../services/google-sheet.service';
 import { AuthService } from '../../services/auth.service';
 import { HttpClient } from '@angular/common/http';
-import { Subscription } from 'rxjs';
 
 interface WorkOrder {
   [key: string]: any;
@@ -19,6 +18,7 @@ export class WorkOrderStatusComponent implements OnInit {
   public isLoading = true;
   public errorMessage: string | null = null;
   public selectedWO: WorkOrder | null = null;
+  public selectedIndex: number | null = null;
 
   public googleSheetUrl = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=0';
 
@@ -32,10 +32,10 @@ export class WorkOrderStatusComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Không cần tự động đăng nhập nữa, để người dùng chủ động click
+    // Để trống, người dùng sẽ chủ động đăng nhập và tải dữ liệu
+    this.handleSignIn();
   }
 
-  // Hàm này được gọi bởi nút "Đăng nhập Google"
   handleSignIn() {
     this.isLoading = true;
     this.errorMessage = null;
@@ -51,53 +51,77 @@ export class WorkOrderStatusComponent implements OnInit {
       });
   }
   
-  // Hàm này được gọi bởi nút "Đăng xuất"
   handleSignOut() {
     this.auth.signOut();
-    this.workOrders = []; // Xóa dữ liệu sau khi đăng xuất
+    this.workOrders = [];
     this.tableHeaders = [];
+    this.selectedWO = null;
+    this.selectedIndex = null;
   }
 
   fetchWorkOrders() {
     this.isLoading = true;
-    this.sheetService.getSheet('WO!A3:X10').subscribe({
+    this.sheetService.getSheet('WO!A2:X').subscribe({ // Lấy từ A2 để bao gồm cả header
       next: (res: any) => {
         console.log('✅ Loaded data:', res);
         const headers = res.values[0];
+        const data = res.values.slice(1);
+
         this.tableHeaders = headers;
-        this.workOrders = res.values.slice(1).map((row: string[]) => {
+        this.workOrders = data.map((row: string[]) => {
           const wo: any = {};
           headers.forEach((h, i) => wo[h] = row[i] || '');
           return wo;
         });
-        this.selectedWO = this.workOrders[0];
+        
         this.isLoading = false;
       },
       error: err => {
         console.error('❌ Lỗi lấy sheet:', err);
-        this.errorMessage = 'Lỗi khi lấy dữ liệu từ Google Sheets';
+        this.errorMessage = 'Lỗi khi lấy dữ liệu từ Google Sheets. Vui lòng kiểm tra quyền truy cập và tên sheet.';
         this.isLoading = false;
       }
     });
   }
 
-  selectWO(workOrder: WorkOrder) {
-    this.selectedWO = workOrder;
+  selectWO(index: number) {
+    // Tạo một bản sao của đối tượng để tránh binding 2 chiều trực tiếp vào bảng
+    this.selectedWO = { ...this.workOrders[index] };
+    this.selectedIndex = index;
+    console.log('Selected WO:', this.selectedWO);
   }
 
+  saveUpdates() {
+    if (!this.selectedWO || this.selectedIndex === null) {
+      this.errorMessage = 'Vui lòng chọn một dòng để cập nhật.';
+      return;
+    }
+
+    const updates = ['Check', 'Kitting', 'W.O Status'];
+    updates.forEach(key => {
+      const value = this.selectedWO[key];
+      // Gọi hàm onCellUpdate đã có
+      this.onCellUpdate(this.selectedIndex, key, value);
+    });
+
+    // Cập nhật lại dữ liệu trong bảng ngay lập tức
+    this.workOrders[this.selectedIndex] = { ...this.selectedWO };
+    alert('Cập nhật đã được gửi!');
+  }
+  
   onCellUpdate(rowIndex: number, header: string, value: string) {
     const colLetter = String.fromCharCode(65 + this.tableHeaders.indexOf(header));
-    const rowNumber = rowIndex + 3; // A2 là tiêu đề, A3 là data đầu tiên
-    const range = `Sheet1!${colLetter}${rowNumber}`;
+    // Dữ liệu bắt đầu từ dòng 3 (index 2 trong array, vì A2 là header)
+    const rowNumber = rowIndex + 3; 
+    const range = `WO!${colLetter}${rowNumber}`;
 
     this.sheetService.updateCell(range, value.trim()).subscribe({
       next: () => {
-        this.workOrders[rowIndex][header] = value.trim();
-        console.log('Updated', range, value);
+        console.log(`✅ Updated range ${range} with value: ${value}`);
       },
       error: err => {
-        console.error('Update failed', err);
-        this.errorMessage = 'Không thể cập nhật Google Sheet';
+        console.error(`❌ Failed to update range ${range}:`, err);
+        this.errorMessage = `Không thể cập nhật cột ${header}.`;
       }
     });
   }
