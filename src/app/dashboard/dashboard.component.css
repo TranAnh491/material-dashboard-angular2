@@ -20,12 +20,18 @@
 }
 
 .card-title {
-  font-size: 1.05rem !important;
+  font-size: 1.4rem;
   font-weight: 600;
-  color: #111 !important;
+  color: #111;
+  margin: 0.2rem 0 0.5rem;
 }
 
-.card-category,
+.card-category {
+  font-size: 0.9rem;
+  color: #444;
+  margin: 0;
+}
+
 .stats,
 .table th,
 .table td {
@@ -37,6 +43,7 @@
 .text-muted {
   color: #777 !important;
   font-size: 0.9rem;
+  opacity: 0.88;
 }
 
 /* 🧾 Table Styling */
@@ -87,20 +94,34 @@
 }
 
 /* KPI Card Enhancements */
-.card-stats {
-  min-height: 140px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+.card.card-stats {
+  border-radius: 1rem;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  padding-top: 1rem;
 }
+.card.card-stats:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
 .card-header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  margin: 10px auto;
+  margin: -28px auto 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card-footer {
+  background: transparent;
+  padding-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #666;
 }
 
 /* 🔄 Bounce animation */
