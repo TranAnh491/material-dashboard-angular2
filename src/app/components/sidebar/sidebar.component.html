@@ -11,21 +11,21 @@
     <li *ngFor="let menuItem of menuItems">
       <ng-container *ngIf="!menuItem.children">
         <a [routerLink]="[menuItem.path]" routerLinkActive="active">
-          <span class="nav-icon" [innerHTML]="menuItem.svg"></span>
+          <span class="nav-icon" [innerHTML]="menuItem.svg | safe: 'html'"></span>
           <span>{{menuItem.title}}</span>
         </a>
       </ng-container>
 
       <ng-container *ngIf="menuItem.children">
         <a href="#" (click)="menuItem.expanded = !menuItem.expanded; $event.preventDefault()">
-          <span class="nav-icon" [innerHTML]="menuItem.svg"></span>
+          <span class="nav-icon" [innerHTML]="menuItem.svg | safe: 'html'"></span>
           <span>{{menuItem.title}}</span>
           <i class="material-icons expand-icon">{{ menuItem.expanded ? 'expand_less' : 'expand_more' }}</i>
         </a>
         <ul class="nav sub-menu" *ngIf="menuItem.expanded">
           <li *ngFor="let child of menuItem.children" [class]="child.class">
             <a [routerLink]="[child.path]" routerLinkActive="active">
-              <span class="nav-icon" [innerHTML]="child.svg"></span>
+              <span class="nav-icon" [innerHTML]="child.svg | safe: 'html'"></span>
               <span>{{child.title}}</span>
             </a>
           </li>
