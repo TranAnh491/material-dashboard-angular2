@@ -87,9 +87,10 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private createWarehouseFromSVG(svgDoc: Document): void {
-    const scale = 1; 
-    const defaultHeight = 40; 
-    
+    const scale = 1;
+    const defaultHeight = 40;
+    const shelfColor = 0x996633; // Brown color for shelves
+
     // Floor
     const floorRect = svgDoc.querySelector('rect');
     if (floorRect) {
@@ -107,7 +108,7 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
     allElements.forEach(g => {
         const rect = g.querySelector('rect');
-        const text = g.querySelector('text');
+        const textEl = g.querySelector('text');
         if (!rect) return;
 
         const loc = g.getAttribute('data-loc');
@@ -117,17 +118,58 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
         const z = parseFloat(rect.getAttribute('y')) + depth / 2;
 
         const geometry = new THREE.BoxGeometry(width, defaultHeight, depth);
-        const material = new THREE.MeshStandardMaterial({ color: 0x996633 });
+        const material = new THREE.MeshStandardMaterial({ color: shelfColor });
 
         const cube = new THREE.Mesh(geometry, material);
         cube.position.set(x, defaultHeight / 2, z);
         cube.castShadow = true;
         cube.receiveShadow = true;
         
+        // Add edges for visual separation
+        const edges = new THREE.EdgesGeometry(geometry);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+        cube.add(line);
+
         this.scene.add(cube);
         this.objects[loc] = cube;
         this.originalMaterials[loc] = cube.material;
+
+        // Add text label
+        if (textEl && textEl.textContent) {
+            const label = this.createTextSprite(textEl.textContent.trim());
+            label.position.set(x, defaultHeight + 15, z);
+            this.scene.add(label);
+        }
     });
+  }
+
+  private createTextSprite(message: string): THREE.Sprite {
+    const fontface = 'Arial';
+    const fontsize = 36;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = `Bold ${fontsize}px ${fontface}`;
+    
+    // Set background color
+    context.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    // Set text color
+    context.strokeStyle = 'black';
+    context.lineWidth = 4;
+
+    const metrics = context.measureText(message);
+    const textWidth = metrics.width;
+
+    context.strokeText(message, 0, fontsize);
+    context.fillText(message, 0, fontsize);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.scale.set(textWidth/4, fontsize/4, 1.0);
+    
+    return sprite;
   }
 
   public findShelf(code: string): void {
