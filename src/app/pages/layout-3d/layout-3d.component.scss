@@ -3,4 +3,5 @@
     height: 100%;
     min-height: 80vh; /* Ensure it has a substantial height */
     display: block;
+    border: 5px solid red; /* --- Add this for diagnostics --- */
 } 
