@@ -142,16 +142,17 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const textEl = g.querySelector('text');
         if (!rect) return;
 
-        const loc = g.getAttribute('data-loc').toUpperCase();
+        const loc = g.getAttribute('data-loc');
+        const upperCaseLoc = loc.toUpperCase();
         const width = parseFloat(rect.getAttribute('width'));
         const depth = parseFloat(rect.getAttribute('height'));
         const x = parseFloat(rect.getAttribute('x')) + width / 2;
         const z = parseFloat(rect.getAttribute('y')) + depth / 2;
 
-        if (twoDZones.includes(loc)) {
+        if (twoDZones.includes(upperCaseLoc)) {
             // 2D Zones
             let zoneColor;
-            switch(loc) {
+            switch(upperCaseLoc) {
                 case 'WH OFFICE':
                 case 'UNNAMED OFFICE':
                 case 'QUALITY':
@@ -189,7 +190,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             this.scene.add(plane);
 
             // Add border for specified 2D zones
-            if (borderedZones.includes(loc)) {
+            if (borderedZones.includes(upperCaseLoc)) {
                 const borderPoints = [
                     new THREE.Vector3(-width / 2, 0, -depth / 2),
                     new THREE.Vector3( width / 2, 0, -depth / 2),
@@ -205,12 +206,13 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             }
 
             if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 18, 'rgba(255, 255, 255, 0.8)', 'black');
+                const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
+                const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
                 label.position.set(x, 0.2, z);
                 this.scene.add(label);
             }
         } else {
-            const locPrefix = loc.replace(/[0-9]/g, '');
+            const locPrefix = upperCaseLoc.replace(/[0-9]/g, '');
             let currentHeight = defaultHeight;
             let levels = 0;
 
@@ -253,11 +255,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             }
 
             this.scene.add(cube);
-            this.objects[loc] = cube;
-            this.originalMaterials[loc] = cube.material;
+            this.objects[upperCaseLoc] = cube;
+            this.originalMaterials[upperCaseLoc] = cube.material;
 
             if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 36, 'rgba(0,0,0,0)', 'black');
+                const label = this.createTextSprite(textEl.textContent.trim(), 40, 'rgba(0,0,0,0)', 'black');
                 label.position.set(x, currentHeight + 15, z);
                 this.scene.add(label);
             }
