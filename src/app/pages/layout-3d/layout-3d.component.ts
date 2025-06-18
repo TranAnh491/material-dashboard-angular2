@@ -32,6 +32,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.initThree();
     this.loadSVGAndBuildScene();
+    setTimeout(() => this.onWindowResize(), 0);
   }
 
   ngOnDestroy(): void {
