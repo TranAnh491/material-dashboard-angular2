@@ -227,10 +227,10 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const shelfDepth = depth - margin;
             
             let shelfObject: THREE.Object3D;
+            const baseName = textEl ? textEl.textContent.trim() : '';
 
             if (levels > 0) {
-                // Create a realistic, hollow shelf with levels and multiple colors
-                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels);
+                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName);
             } else {
                 // Create a solid box for shelves without levels
                 const material = new THREE.MeshStandardMaterial({ color: shelfColor });
@@ -240,29 +240,30 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
                 mesh.receiveShadow = true;
                 mesh.userData.originalMaterial = material; // Store for resetting highlights
                 shelfObject = mesh;
+
+                // Add a single label for solid shelves if they have a name
+                if (baseName) {
+                    const label = this.createTextSprite(baseName, 40, 'rgba(0,0,0,0)', 'black');
+                    label.position.set(0, currentHeight / 2 + 15, 0);
+                    shelfObject.add(label);
+                }
             }
             
             shelfObject.position.set(x, currentHeight / 2, z);
 
             this.scene.add(shelfObject);
             this.objects[upperCaseLoc] = shelfObject;
-
-            if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 40, 'rgba(0,0,0,0)', 'black');
-                label.position.set(x, currentHeight + 15, z);
-                this.scene.add(label);
-            }
         }
     });
   }
 
-  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number): THREE.Group {
+  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string): THREE.Group {
     const group = new THREE.Group();
     const postSize = 1.5;
     const shelfThickness = 0.5;
 
-    const postMaterial = new THREE.MeshStandardMaterial({ color: 0xffd580 }); // Orange
-    const shelfSurfaceMaterial = new THREE.MeshStandardMaterial({ color: 0xadd8e6 }); // Light Blue
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 }); // Orange
+    const shelfSurfaceMaterial = new THREE.MeshStandardMaterial({ color: 0x1e90ff }); // DodgerBlue
 
     // 4 Vertical Posts
     const postGeometry = new THREE.BoxGeometry(postSize, height, postSize);
@@ -281,7 +282,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         group.add(post);
     });
 
-    // Horizontal Shelf Surfaces
+    // Horizontal Shelf Surfaces with individual labels
     if (levels > 1) {
         const shelfGeometry = new THREE.BoxGeometry(width, shelfThickness, depth);
         const spacing = height / (levels -1);
@@ -291,8 +292,23 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             shelf.position.set(0, yPos, 0);
             shelf.castShadow = true;
             shelf.receiveShadow = true;
-            shelf.userData.originalMaterial = shelfSurfaceMaterial; // Store for reset
+            shelf.userData.originalMaterial = shelfSurfaceMaterial;
             group.add(shelf);
+
+            // Add individual label for each level
+            if (baseName) {
+                const labelText = `${baseName}${i + 1}`;
+                const label = this.createTextSprite(labelText, 12, 'rgba(0,0,0,0)', 'black');
+                
+                // Position the label at the front-right corner of the shelf surface
+                const labelWidth = label.scale.x;
+                const labelY = yPos + shelfThickness / 2 + 0.1; // Place just above the surface
+                const labelX = width / 2 - labelWidth / 2 - postSize; // Place on the right, accounting for post
+                const labelZ = depth / 2 - postSize; // Place at the front
+                
+                label.position.set(labelX, labelY, labelZ);
+                group.add(label);
+            }
         }
     }
     return group;
@@ -325,8 +341,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
     const sprite = new THREE.Sprite(spriteMaterial);
     
-    const scaleFactor = 0.2; 
-    sprite.scale.set(textWidth * scaleFactor, fontsize * scaleFactor, 1.0);
+    // Scale sprite to a fixed size in world units
+    const shelfThickness = 0.5;
+    const desiredHeight = shelfThickness / 2; // Half the height of the shelf surface
+    const aspect = canvas.width / canvas.height;
+    sprite.scale.set(desiredHeight * aspect, desiredHeight, 1.0);
     
     return sprite;
   }
