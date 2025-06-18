@@ -7,7 +7,6 @@ import { AppRoutingModule } from './app.routing';
 import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
-import { AdminLayoutModule } from './layouts/admin-layout/admin-layout.module';
 
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
@@ -25,10 +24,10 @@ import { AdminLayoutModule } from './layouts/admin-layout/admin-layout.module';
     ComponentsModule,
     RouterModule,
     AppRoutingModule,
-    AdminLayoutModule
   ],
   declarations: [
-    AppComponent
+    AppComponent,
+    AdminLayoutComponent,
   ],
   providers: [],
   bootstrap: [AppComponent]
