@@ -104,6 +104,18 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
         floor.receiveShadow = true;
         this.scene.add(floor);
+
+        // Add floor border
+        const floorBorderGeometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0.1, 0),
+            new THREE.Vector3(floorWidth, 0.1, 0),
+            new THREE.Vector3(floorWidth, 0.1, floorHeight),
+            new THREE.Vector3(0, 0.1, floorHeight),
+            new THREE.Vector3(0, 0.1, 0)
+        ]);
+        const floorBorderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+        const floorBorder = new THREE.Line(floorBorderGeometry, floorBorderMaterial);
+        this.scene.add(floorBorder);
     }
 
     // Shelves and Zones Config
@@ -114,6 +126,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const margin = 2;
     const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
     const fiveLevelPrefixes = ['F', 'G', 'Q', 'RL', 'RR', 'SL', 'SR', 'TL', 'TR', 'UL', 'UR', 'VL', 'VR', 'WL', 'WR', 'XL', 'XR', 'YL', 'YR', 'ZL', 'ZR', 'HL', 'HR'];
+    const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
 
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
     allElements.forEach(g => {
@@ -135,6 +148,22 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             plane.rotation.x = -Math.PI / 2;
             plane.position.set(x, 0.1, z);
             this.scene.add(plane);
+
+            // Add border for specified 2D zones
+            if (borderedZones.includes(loc)) {
+                const borderPoints = [
+                    new THREE.Vector3(-width / 2, 0, -depth / 2),
+                    new THREE.Vector3( width / 2, 0, -depth / 2),
+                    new THREE.Vector3( width / 2, 0,  depth / 2),
+                    new THREE.Vector3(-width / 2, 0,  depth / 2),
+                    new THREE.Vector3(-width / 2, 0, -depth / 2)
+                ];
+                const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+                const borderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+                const borderLine = new THREE.Line(borderGeometry, borderMaterial);
+                borderLine.position.set(x, 0.15, z); // Slightly above the plane
+                this.scene.add(borderLine);
+            }
 
             if (textEl && textEl.textContent) {
                 const label = this.createTextSprite(textEl.textContent.trim(), 18, 'rgba(255, 255, 255, 0.8)', 'black');
