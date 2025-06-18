@@ -21,7 +21,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private frameId: number = null;
   
   private objects: { [key: string]: THREE.Object3D } = {};
-  private originalMaterials: { [key: string]: THREE.Material | THREE.Material[] } = {};
   private highlightedMaterial: THREE.Material;
 
   constructor(
@@ -228,17 +227,18 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const shelfDepth = depth - margin;
             
             let shelfObject: THREE.Object3D;
-            const material = new THREE.MeshStandardMaterial({ color: shelfColor });
 
             if (levels > 0) {
-                // Create a realistic, hollow shelf with levels
-                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, material);
+                // Create a realistic, hollow shelf with levels and multiple colors
+                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels);
             } else {
                 // Create a solid box for shelves without levels
+                const material = new THREE.MeshStandardMaterial({ color: shelfColor });
                 const geometry = new THREE.BoxGeometry(shelfWidth, currentHeight, shelfDepth);
                 const mesh = new THREE.Mesh(geometry, material);
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
+                mesh.userData.originalMaterial = material; // Store for resetting highlights
                 shelfObject = mesh;
             }
             
@@ -246,7 +246,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
             this.scene.add(shelfObject);
             this.objects[upperCaseLoc] = shelfObject;
-            this.originalMaterials[upperCaseLoc] = material;
 
             if (textEl && textEl.textContent) {
                 const label = this.createTextSprite(textEl.textContent.trim(), 40, 'rgba(0,0,0,0)', 'black');
@@ -257,10 +256,13 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, material: THREE.Material): THREE.Group {
+  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number): THREE.Group {
     const group = new THREE.Group();
     const postSize = 1.5;
     const shelfThickness = 0.5;
+
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0xffd580 }); // Orange
+    const shelfSurfaceMaterial = new THREE.MeshStandardMaterial({ color: 0xadd8e6 }); // Light Blue
 
     // 4 Vertical Posts
     const postGeometry = new THREE.BoxGeometry(postSize, height, postSize);
@@ -271,10 +273,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         new THREE.Vector3(-width / 2 + postSize / 2, 0, -depth / 2 + postSize / 2),
     ];
     postPositions.forEach(pos => {
-        const post = new THREE.Mesh(postGeometry, material);
+        const post = new THREE.Mesh(postGeometry, postMaterial);
         post.position.copy(pos);
         post.castShadow = true;
         post.receiveShadow = true;
+        post.userData.originalMaterial = postMaterial; // Store for reset
         group.add(post);
     });
 
@@ -283,11 +286,12 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const shelfGeometry = new THREE.BoxGeometry(width, shelfThickness, depth);
         const spacing = height / (levels -1);
         for (let i = 0; i < levels; i++) {
-            const shelf = new THREE.Mesh(shelfGeometry, material);
+            const shelf = new THREE.Mesh(shelfGeometry, shelfSurfaceMaterial);
             const yPos = i * spacing - height / 2;
             shelf.position.set(0, yPos, 0);
             shelf.castShadow = true;
             shelf.receiveShadow = true;
+            shelf.userData.originalMaterial = shelfSurfaceMaterial; // Store for reset
             group.add(shelf);
         }
     }
@@ -377,11 +381,10 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private resetHighlights(): void {
     for (const key in this.objects) {
         const shelfObject = this.objects[key];
-        const originalMaterial = this.originalMaterials[key];
-        if (shelfObject && originalMaterial) {
+        if (shelfObject) {
             shelfObject.traverse(child => {
-                if (child instanceof THREE.Mesh) {
-                    child.material = originalMaterial as THREE.Material;
+                if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
+                    child.material = child.userData.originalMaterial;
                 }
             });
         }
