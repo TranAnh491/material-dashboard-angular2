@@ -29,11 +29,12 @@
         <text x="50" y="100" font-size="10">Quality</text>
       </g>
       
-      <!-- Unnamed Office -->
-      <g data-loc="UNNAMED OFFICE">
+      <!-- Secured WH -->
+      <g data-loc="Secured WH">
         <rect x="15" y="130" width="70" height="200" fill="none" stroke="#333" stroke-width="1"/>
+        <text x="50" y="230" font-size="10">Secured WH</text>
       </g>
-      <!-- Kệ trong Unnamed Office -->
+      <!-- Kệ trong Secured WH -->
       <g font-size="3" text-anchor="middle" dominant-baseline="middle">
         <!-- Row Q: y=132 -->
         <g data-loc="Q3" data-cell-id="cell-q3"><rect x="17" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="137" font-size="4">Q3</text></g>

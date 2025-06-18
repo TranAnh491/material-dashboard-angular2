@@ -20,7 +20,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private controls: OrbitControls;
   private frameId: number = null;
   
-  private objects: { [key: string]: THREE.Object3D } = {};
   private highlightedMaterial: THREE.Material;
 
   constructor(
@@ -131,9 +130,10 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const tallerHeight = 60;
     const shelfColor = 0xffd580; // This is now also the forklift color
     const margin = 2;
-    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE'];
-    const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE', 'K', 'WO'];
+    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'SECURED WH'];
+    const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'SECURED WH', 'K', 'WO'];
     const fiveLevelPrefixes = ['F', 'G', 'Q', 'RL', 'RR', 'SL', 'SR', 'TL', 'TR', 'UL', 'UR', 'VL', 'VR', 'WL', 'WR', 'XL', 'XR', 'YL', 'YR', 'ZL', 'ZR', 'HL', 'HR'];
+    const securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
 
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
     allElements.forEach(g => {
@@ -153,7 +153,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             let zoneColor;
             switch(upperCaseLoc) {
                 case 'WH OFFICE':
-                case 'UNNAMED OFFICE':
+                case 'SECURED WH':
                 case 'QUALITY':
                 case 'J':
                 case 'INBOUND STAGE':
@@ -206,17 +206,29 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
             if (textEl && textEl.textContent) {
                 const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
-                const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
-                label.position.set(x, 0.2, z);
-                this.scene.add(label);
+                const floorLabelZones = ['INBOUND STAGE', 'OUTBOUND STAGE', 'FORKLIFT', 'J', 'NG', 'K', 'WO', 'IQC', 'QUALITY', 'ADMIN', 'WH OFFICE', 'VP'];
+
+                if (floorLabelZones.includes(upperCaseLoc)) {
+                    const label = this.createFloorLabel(displayText, width, depth);
+                    label.rotation.x = -Math.PI / 2;
+                    label.position.set(x, 0.15, z); // Place it slightly above the zone plane
+                    this.scene.add(label);
+                } else {
+                    const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
+                    label.position.set(x, 0.2, z);
+                    this.scene.add(label);
+                }
             }
         } else {
             // 3D Shelves
             const locPrefix = upperCaseLoc.replace(/[0-9]/g, '');
             let currentHeight = defaultHeight;
             let levels = 0;
+            const isSecuredShelf = securedWhShelvesPrefixes.includes(locPrefix) || upperCaseLoc === 'A12';
 
-            if (['A', 'B', 'C', 'D', 'E'].includes(locPrefix)) {
+            if (upperCaseLoc === 'A12') {
+                levels = 5;
+            } else if (['A', 'B', 'C', 'D', 'E'].includes(locPrefix)) {
                 currentHeight = tallerHeight;
                 levels = 7;
             } else if (fiveLevelPrefixes.includes(locPrefix)) {
@@ -230,7 +242,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const baseName = textEl ? textEl.textContent.trim() : '';
 
             if (levels > 0) {
-                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName);
+                const labelSize = isSecuredShelf ? 16 : 24;
+                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName, labelSize);
             } else {
                 // Create a solid box for shelves without levels
                 const material = new THREE.MeshStandardMaterial({ color: shelfColor });
@@ -243,21 +256,22 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
                 // Add a single label for solid shelves if they have a name
                 if (baseName) {
-                    const label = this.createTextSprite(baseName, 40, 'rgba(0,0,0,0)', 'black');
+                    const labelSize = isSecuredShelf ? 20 : 40;
+                    const label = this.createTextSprite(baseName, labelSize, 'rgba(0,0,0,0)', 'black');
                     label.position.set(0, currentHeight / 2 + 15, 0);
                     shelfObject.add(label);
                 }
             }
             
+            shelfObject.name = upperCaseLoc; // Assign name for searching
             shelfObject.position.set(x, currentHeight / 2, z);
 
             this.scene.add(shelfObject);
-            this.objects[upperCaseLoc] = shelfObject;
         }
     });
   }
 
-  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string): THREE.Group {
+  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string, labelSize: number): THREE.Group {
     const group = new THREE.Group();
     const postSize = 1.5;
     const shelfThickness = 0.5;
@@ -285,9 +299,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     // Horizontal Shelf Surfaces with individual labels
     if (levels > 1) {
         const shelfGeometry = new THREE.BoxGeometry(width, shelfThickness, depth);
-        const spacing = height / (levels -1);
+        const spacing = height / (levels - 1);
         for (let i = 0; i < levels; i++) {
+            const shelfLevelName = `${baseName}${i + 1}`;
             const shelf = new THREE.Mesh(shelfGeometry, shelfSurfaceMaterial);
+            shelf.name = shelfLevelName; // Assign name for searching individual levels
             const yPos = i * spacing - height / 2;
             shelf.position.set(0, yPos, 0);
             shelf.castShadow = true;
@@ -297,15 +313,12 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
             // Add individual label for each level
             if (baseName) {
-                const labelText = `${baseName}${i + 1}`;
-                const label = this.createTextSprite(labelText, 24, 'rgba(0,0,0,0)', 'black');
+                const label = this.createTextSprite(shelfLevelName, labelSize, 'rgba(0,0,0,0)', 'black');
                 
-                // Position the label to stand on the front-right corner of the shelf
                 const labelHeight = label.scale.y;
-                const labelWidth = label.scale.x;
                 const labelY = yPos + shelfThickness / 2 + labelHeight / 2; // Place its base on the surface
-                const labelX = width / 2 - labelWidth / 2 - postSize;
-                const labelZ = depth / 2 - postSize; 
+                const labelX = 0; // Centered horizontally
+                const labelZ = 0; // Centered along the length
                 
                 label.position.set(labelX, labelY, labelZ);
                 group.add(label);
@@ -313,6 +326,40 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         }
     }
     return group;
+  }
+
+  private createFloorLabel(message: string, planeWidth: number, planeDepth: number): THREE.Mesh {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    
+    // Normalize font size based on plane width to keep visual size consistent.
+    // The smaller the plane, the larger the font on the texture.
+    // We use a base fontsize of 50 for a reference plane width of 100.
+    const fontsize = (30 * 100) / planeWidth;
+    
+    context.font = `Bold ${fontsize}px Arial`;
+    
+    // Keep canvas resolution consistent, but maintain aspect ratio of the target plane.
+    canvas.width = 1024;
+    canvas.height = 1024 * (planeDepth / planeWidth);
+
+    context.font = `Bold ${fontsize}px Arial`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillStyle = 'black';
+    context.fillText(message, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        transparent: true
+    });
+
+    const geometry = new THREE.PlaneGeometry(planeWidth, planeDepth);
+    const mesh = new THREE.Mesh(geometry, material);
+    return mesh;
   }
 
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
@@ -354,60 +401,67 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     if (!code) return;
     this.resetHighlights();
     const upperCaseCode = code.toUpperCase();
-    
-    // Direct search for shelf
-    if (this.objects[upperCaseCode]) {
-        this.highlightShelf(this.objects[upperCaseCode]);
-        return;
+
+    // First, try to find the object directly in the scene by its name.
+    // This could be a whole shelf group ('G1') or a specific level ('G15').
+    const directFind = this.scene.getObjectByName(upperCaseCode);
+    if (directFind) {
+      this.highlightShelf(directFind);
+      return;
     }
-    
-    // Search by item code in Google Sheet
+
+    // If not found directly, assume it's an item code and search the Google Sheet.
     const searchRange = 'Inventory!A:B';
     this.googleSheetService.getSheet(searchRange).subscribe((response: any) => {
       const rows = response.values;
-      if (!rows) return;
-      
+      if (!rows || rows.length === 0) {
+        console.warn(`No data found in Google Sheet or failed to parse.`);
+        return;
+      }
+
       const foundRow = rows.find(row => row[0] && row[0].toUpperCase() === upperCaseCode);
       if (foundRow && foundRow[1]) {
-        const location = foundRow[1].toUpperCase();
-        const shelf = this.objects[location];
-        if (shelf) {
-          this.highlightShelf(shelf);
+        const location = foundRow[1].toUpperCase().trim();
+        console.log(`Item '${code}' found in Sheet. Target location: '${location}'`);
+
+        const shelfOrLevel = this.scene.getObjectByName(location);
+
+        if (shelfOrLevel) {
+          console.log('Successfully found object in 3D scene:', shelfOrLevel);
+          this.highlightShelf(shelfOrLevel);
         } else {
-          console.warn(`Item found at '${location}', but shelf not in 3D model.`);
+          console.error(`Item found at location '${location}', but this location object was not found in the 3D model.`);
         }
       } else {
-        console.warn(`Item code '${code}' not found.`);
+        console.warn(`Item code '${code}' not found in Google Sheet.`);
       }
     }, error => console.error('Error fetching from Google Sheet:', error));
   }
 
   private highlightShelf(shelf: THREE.Object3D): void {
-      shelf.traverse(child => {
-        if (child instanceof THREE.Mesh) {
-            child.material = this.highlightedMaterial;
-        }
-      });
-      const targetPosition = shelf.position.clone();
-      new TWEEN.Tween(this.camera.position)
-        .to({ x: targetPosition.x, y: targetPosition.y + 100, z: targetPosition.z + 150 }, 1000)
-        .easing(TWEEN.Easing.Cubic.InOut).start();
-      new TWEEN.Tween(this.controls.target)
-        .to(targetPosition, 1000)
-        .easing(TWEEN.Easing.Cubic.InOut).start();
+    shelf.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.material = this.highlightedMaterial;
+      }
+    });
+
+    const targetPosition = new THREE.Vector3();
+    shelf.getWorldPosition(targetPosition); // Get world position
+
+    new TWEEN.Tween(this.camera.position)
+      .to({ x: targetPosition.x, y: targetPosition.y + 100, z: targetPosition.z + 150 }, 1000)
+      .easing(TWEEN.Easing.Cubic.InOut).start();
+    new TWEEN.Tween(this.controls.target)
+      .to(targetPosition, 1000)
+      .easing(TWEEN.Easing.Cubic.InOut).start();
   }
 
   private resetHighlights(): void {
-    for (const key in this.objects) {
-        const shelfObject = this.objects[key];
-        if (shelfObject) {
-            shelfObject.traverse(child => {
-                if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
-                    child.material = child.userData.originalMaterial;
-                }
-            });
-        }
-    }
+    this.scene.traverse(child => {
+      if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
+        child.material = child.userData.originalMaterial;
+      }
+    });
   }
 
   private animate = (): void => {
