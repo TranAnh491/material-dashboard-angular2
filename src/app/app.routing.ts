@@ -12,7 +12,6 @@ const routes: Routes =[
     pathMatch: 'full',
   }, {
     path: '',
-    component: AdminLayoutComponent,
     children: [{
       path: '',
       loadChildren: () => import('./layouts/admin-layout/admin-layout.module').then(m => m.AdminLayoutModule)
