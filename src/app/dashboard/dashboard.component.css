@@ -22,26 +22,26 @@
 .card-title {
   font-size: 1.4rem;
   font-weight: 600;
-  color: #111;
+  color: #000;
   margin: 0.2rem 0 0.5rem;
 }
 
 .card-category {
   font-size: 0.9rem;
-  color: #444;
+  color: #000;
   margin: 0;
 }
 
 .stats,
 .table th,
 .table td {
-  color: #111 !important;
+  color: #000 !important;
   text-align: center;
   vertical-align: middle;
 }
 
 .text-muted {
-  color: #777 !important;
+  color: #000 !important;
   font-size: 0.9rem;
   opacity: 0.88;
 }
@@ -55,7 +55,7 @@
 .workorder-status-table th,
 .workorder-status-table td {
   text-align: center !important;
-  color: #111 !important;
+  color: #000 !important;
   vertical-align: middle !important;
   font-size: 0.95rem;
 }
@@ -121,7 +121,7 @@
   background: transparent;
   padding-top: 0.25rem;
   font-size: 0.85rem;
-  color: #666;
+  color: #000;
 }
 
 /* 🔄 Bounce animation */
@@ -141,4 +141,9 @@
 .table, .workorder-status-table {
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* Make top card icons 50% larger */
+.col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
+  font-size: 36px;
 }
