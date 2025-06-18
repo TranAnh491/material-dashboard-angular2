@@ -1,8 +1,8 @@
 import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
-import * as TWEEN from '@tweenjs/tween.js'
 import { GoogleSheetService } from 'app/services/google-sheet.service';
 
 @Component({
@@ -30,9 +30,10 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   ) { }
 
   ngAfterViewInit(): void {
-    this.initThree();
-    this.loadSVGAndBuildScene();
-    setTimeout(() => this.onWindowResize(), 0);
+    setTimeout(() => {
+        this.initThree();
+        this.loadSVGAndBuildScene();
+    }, 0);
   }
 
   ngOnDestroy(): void {
@@ -89,16 +90,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   }
 
   private createWarehouseFromSVG(svgDoc: Document): void {
-    const scale = 1; 
-    const defaultHeight = 40; 
-    const tallerHeight = 60; // New height for A-E shelves
-    const shelfColor = 0xffd580; // Light Orange
-    const lightYellowColor = 0xffffeb; // Light Yellow
-    const zoneColor = 0xd3d3d3; 
-    const margin = 2; // Space between 3D shelves
+    const scale = 1;
 
-    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
-
+    // Floor
     const floorRect = svgDoc.querySelector('rect');
     if (floorRect) {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
@@ -111,6 +105,15 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         floor.receiveShadow = true;
         this.scene.add(floor);
     }
+
+    // Shelves and Zones Config
+    const defaultHeight = 40; 
+    const tallerHeight = 60;
+    const shelfColor = 0xffd580; // Light Orange
+    const lightYellowColor = 0xffffeb; // Light Yellow
+    const margin = 2;
+    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
+    const fiveLevelPrefixes = ['F', 'G', 'Q', 'RL', 'RR', 'SL', 'SR', 'TL', 'TR', 'UL', 'UR', 'VL', 'VR', 'WL', 'WR', 'XL', 'XR', 'YL', 'YR', 'ZL', 'ZR', 'HL', 'HR'];
 
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
     allElements.forEach(g => {
@@ -130,23 +133,23 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const planeMat = new THREE.MeshStandardMaterial({ color: currentZoneColor, side: THREE.DoubleSide });
             const plane = new THREE.Mesh(planeGeom, planeMat);
             plane.rotation.x = -Math.PI / 2;
-            plane.position.set(x, 0.1, z); // Slightly above the floor to avoid z-fighting
+            plane.position.set(x, 0.1, z);
             this.scene.add(plane);
 
             if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 18, 'white', 'black');
+                const label = this.createTextSprite(textEl.textContent.trim(), 18, 'rgba(0,0,0,0.7)', 'white');
                 label.position.set(x, 0.2, z);
                 this.scene.add(label);
             }
         } else {
-            const locPrefix = loc.charAt(0).toUpperCase();
+            const locPrefix = loc.replace(/[0-9]/g, '');
             let currentHeight = defaultHeight;
             let levels = 0;
 
             if (['A', 'B', 'C', 'D', 'E'].includes(locPrefix)) {
                 currentHeight = tallerHeight;
                 levels = 7;
-            } else if (['F', 'G', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'H', 'Q'].includes(locPrefix)) {
+            } else if (fiveLevelPrefixes.includes(locPrefix)) {
                 levels = 5;
             }
             
@@ -154,7 +157,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const shelfDepth = depth - margin;
             const geometry = new THREE.BoxGeometry(shelfWidth, currentHeight, shelfDepth);
             const material = new THREE.MeshStandardMaterial({ color: shelfColor });
-
             const cube = new THREE.Mesh(geometry, material);
             cube.position.set(x, currentHeight / 2, z);
             cube.castShadow = true;
@@ -164,21 +166,18 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
             cube.add(line);
             
-            // Add levels for shelves that need them
             if (levels > 0) {
                 const levelHeight = currentHeight / levels;
                 const levelLineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
-
                 for (let i = 1; i < levels; i++) {
                     const yPos = (i * levelHeight) - (currentHeight / 2);
-                    
-                    const points = [];
-                    points.push(new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2));
-                    points.push(new THREE.Vector3( shelfWidth / 2, yPos, -shelfDepth / 2));
-                    points.push(new THREE.Vector3( shelfWidth / 2, yPos,  shelfDepth / 2));
-                    points.push(new THREE.Vector3(-shelfWidth / 2, yPos,  shelfDepth / 2));
-                    points.push(new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2)); // Close the loop
-
+                    const points = [
+                        new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2),
+                        new THREE.Vector3( shelfWidth / 2, yPos, -shelfDepth / 2),
+                        new THREE.Vector3( shelfWidth / 2, yPos,  shelfDepth / 2),
+                        new THREE.Vector3(-shelfWidth / 2, yPos,  shelfDepth / 2),
+                        new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2)
+                    ];
                     const levelGeometry = new THREE.BufferGeometry().setFromPoints(points);
                     const levelLine = new THREE.Line(levelGeometry, levelLineMaterial);
                     cube.add(levelLine);
@@ -190,7 +189,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             this.originalMaterials[loc] = cube.material;
 
             if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 36, 'rgba(0, 0, 0, 0)', 'black'); // No background
+                const label = this.createTextSprite(textEl.textContent.trim(), 36, 'rgba(0,0,0,0)', 'black');
                 label.position.set(x, currentHeight + 15, z);
                 this.scene.add(label);
             }
@@ -202,31 +201,22 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const fontface = 'Arial';
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    
     context.font = `Bold ${fontsize}px ${fontface}`;
     
     const metrics = context.measureText(message);
     const textWidth = metrics.width;
-    const textHeight = fontsize;
     
-    canvas.width = textWidth + 4; // padding
-    canvas.height = textHeight + 4; // padding
+    canvas.width = textWidth + 8;
+    canvas.height = fontsize + 8;
     
     context.font = `Bold ${fontsize}px ${fontface}`;
-    
-    // Draw background
     context.fillStyle = backgroundColor;
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Center text
-    const x = canvas.width / 2;
-    const y = canvas.height / 2;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    
-    // Draw text
     context.fillStyle = textColor;
-    context.fillText(message, x, y);
+    context.fillText(message, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -241,27 +231,28 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   public findShelf(code: string): void {
     if (!code) return;
     this.resetHighlights();
+    const upperCaseCode = code.toUpperCase();
     
-    const searchRange = 'Inventory!A:B'; 
+    // Direct search for shelf
+    if (this.objects[upperCaseCode]) {
+        this.highlightShelf(this.objects[upperCaseCode]);
+        return;
+    }
+    
+    // Search by item code in Google Sheet
+    const searchRange = 'Inventory!A:B';
     this.googleSheetService.getSheet(searchRange).subscribe((response: any) => {
       const rows = response.values;
-      if (!rows) {
-        console.warn(`No data found in sheet 'Inventory'`);
-        return;
-      }
-      let location = '';
-      for (const row of rows) {
-        if (row[0] && row[0].toUpperCase() === code.toUpperCase()) {
-          location = row[1];
-          break;
-        }
-      }
-      if (location) {
-        const shelf = this.objects[location.toUpperCase()];
+      if (!rows) return;
+      
+      const foundRow = rows.find(row => row[0] && row[0].toUpperCase() === upperCaseCode);
+      if (foundRow && foundRow[1]) {
+        const location = foundRow[1].toUpperCase();
+        const shelf = this.objects[location];
         if (shelf) {
           this.highlightShelf(shelf);
         } else {
-          console.warn(`Shelf location '${location}' not in 3D model.`);
+          console.warn(`Item found at '${location}', but shelf not in 3D model.`);
         }
       } else {
         console.warn(`Item code '${code}' not found.`);
@@ -296,9 +287,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   }
 
   private onWindowResize = (): void => {
-    const container = this.rendererContainer.nativeElement;
-    this.camera.aspect = container.clientWidth / container.clientHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
+    if(this.camera && this.renderer) {
+        const container = this.rendererContainer.nativeElement;
+        this.camera.aspect = container.clientWidth / container.clientHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(container.clientWidth, container.clientHeight);
+    }
   }
 } 

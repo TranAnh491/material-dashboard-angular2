@@ -34,6 +34,7 @@ import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.compone
 import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
+import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 @NgModule({
@@ -67,6 +68,7 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     InboundMaterialsComponent,
     OutboundMaterialsComponent,
     MaterialsInventoryComponent,
+    DocumentsComponent,
     Layout3dComponent
   ]
 })
