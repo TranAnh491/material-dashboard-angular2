@@ -137,7 +137,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             this.scene.add(plane);
 
             if (textEl && textEl.textContent) {
-                const label = this.createTextSprite(textEl.textContent.trim(), 18, 'rgba(0,0,0,0.7)', 'white');
+                const label = this.createTextSprite(textEl.textContent.trim(), 18, 'rgba(255, 255, 255, 0.8)', 'black');
                 label.position.set(x, 0.2, z);
                 this.scene.add(label);
             }
@@ -221,9 +221,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
 
-    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false, transparent: true });
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
     const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.scale.set(0.05 * canvas.width, 0.05 * canvas.height, 1);
+    
+    const scaleFactor = 0.2; 
+    sprite.scale.set(textWidth * scaleFactor, fontsize * scaleFactor, 1.0);
     
     return sprite;
   }
