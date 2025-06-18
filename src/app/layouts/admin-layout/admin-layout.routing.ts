@@ -20,6 +20,7 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent },
@@ -27,9 +28,8 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'table-list',           component: TableListComponent },
   { path: 'typography',           component: TypographyComponent },
   { path: 'icons',                component: IconsComponent },
-  { path: 'documents',            component: DocumentsComponent },
-  { path: 'maps',                 component: MapsComponent },
-  { path: 'schedules',            component: NotificationsComponent },
+  { path: 'maps',                 component: Layout3dComponent },
+  { path: 'notifications',        component: NotificationsComponent },
   { path: 'kpi-reports',        component: KpiReportsComponent },
   { path: 'equipment',            component: EquipmentComponent },
   { path: 'upgrade',              component: UpgradeComponent },

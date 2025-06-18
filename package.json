@@ -48,6 +48,7 @@
     "perfect-scrollbar": "1.5.5",
     "popper.js": "1.16.1",
     "rxjs": "~7.5.0",
+    "three": "^0.177.0",
     "tslib": "^2.3.0",
     "web-animations-js": "2.3.2",
     "zone.js": "~0.11.4"
@@ -65,6 +66,7 @@
     "@types/jquery": "3.5.6",
     "@types/node": "^17.0.21",
     "@types/papaparse": "^5.3.16",
+    "@types/three": "^0.177.0",
     "codelyzer": "6.0.2",
     "jasmine-core": "~4.4.0",
     "jasmine-spec-reporter": "~7.0.0",
