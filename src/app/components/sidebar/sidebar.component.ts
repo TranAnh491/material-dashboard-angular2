@@ -25,8 +25,8 @@ export const ROUTES: RouteInfo[] = [
     svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 7V3m8 4V3M4 11h16M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>`,
     class: '',
     children: [
-      { path: '/work-order-status', title: 'Work order status', icon: 'list_alt', svg: '', class: '' },
-      { path: '/shipment', title: 'Shipment', icon: 'local_shipping', svg: '', class: '' }
+      { path: '/work-order-status', title: 'Work order status', svg: '', class: '' },
+      { path: '/shipment', title: 'Shipment', svg: '', class: '' }
     ]
   },
   {
@@ -35,9 +35,9 @@ export const ROUTES: RouteInfo[] = [
     svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M20 13V6a2 2 0 00-2-2h-5.586a1 1 0 00-.707.293l-8 8a1 1 0 000 1.414l5.586 5.586a1 1 0 001.414 0l8-8A1 1 0 0020 13z"/></svg>`,
     class: '',
     children: [
-      { path: '/inbound-materials', title: 'Inbound materials', icon: 'arrow_downward', svg: '', class: '' },
-      { path: '/outbound-materials', title: 'Outbound materials', icon: 'arrow_upward', svg: '', class: '' },
-      { path: '/materials-inventory', title: 'Materials inventory', icon: 'inventory_2', svg: '', class: '' }
+      { path: '/inbound-materials', title: 'Inbound materials', svg: '', class: '' },
+      { path: '/outbound-materials', title: 'Outbound materials', svg: '', class: '' },
+      { path: '/materials-inventory', title: 'Materials inventory', svg: '', class: '' }
     ]
   },
   {
@@ -46,9 +46,9 @@ export const ROUTES: RouteInfo[] = [
     svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 4h16v16H4V4z"/><path d="M8 8h8v8H8V8z"/></svg>`,
     class: '',
     children: [
-      { path: '/inbound-fgs', title: 'Inbound FGs', icon: 'arrow_downward', svg: '', class: '' },
-      { path: '/outbound-fgs', title: 'Outbound FGs', icon: 'arrow_upward', svg: '', class: '' },
-      { path: '/table-list', title: 'FGs Inventory', icon: 'inventory_2', svg: '', class: '' }
+      { path: '/inbound-fgs', title: 'Inbound FGs', svg: '', class: '' },
+      { path: '/outbound-fgs', title: 'Outbound FGs', svg: '', class: '' },
+      { path: '/table-list', title: 'FGs Inventory', svg: '', class: '' }
     ]
   },
   {
