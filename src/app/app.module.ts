@@ -7,8 +7,6 @@ import { AppRoutingModule } from './app.routing';
 import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
-import { DocumentsComponent } from './pages/documents/documents.component';
-import { SharedModule } from './shared/shared.module';
 
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
@@ -26,13 +24,11 @@ import { SharedModule } from './shared/shared.module';
     ComponentsModule,
     RouterModule,
     AppRoutingModule,
-    SharedModule,
   ],
   declarations: [
     AppComponent,
     AdminLayoutComponent,
-    DocumentsComponent,
-    // KHÔNG khai báo 4 component materials ở đây!
+    // DocumentsComponent removed from here
   ],
   providers: [],
   bootstrap: [AppComponent]
