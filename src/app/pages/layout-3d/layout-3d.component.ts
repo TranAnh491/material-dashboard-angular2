@@ -2,6 +2,7 @@ import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, OnDestroy } fr
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HttpClient } from '@angular/common/http';
+import * as TWEEN from '@tweenjs/tween.js'
 
 @Component({
   selector: 'app-layout-3d',
@@ -18,6 +19,9 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
   private controls: OrbitControls;
 
   private frameId: number = null;
+  private objects: { [key: string]: THREE.Mesh } = {};
+  private originalMaterials: { [key: string]: THREE.Material | THREE.Material[] } = {};
+  private highlightedMaterial: THREE.Material;
 
   constructor(private http: HttpClient) { }
 
@@ -65,6 +69,9 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
     directionalLight.castShadow = true;
     this.scene.add(directionalLight);
 
+    // Materials
+    this.highlightedMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0x550000 });
+
     window.addEventListener('resize', this.onWindowResize, false);
   }
 
@@ -97,30 +104,71 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
         this.scene.add(floor);
     }
 
-    const rects = svgDoc.querySelectorAll('rect');
-    rects.forEach(rect => {
-      // Skip the first rect, which is the floor
-      if(rect === floorRect) return;
+    const allElements = svgDoc.querySelectorAll('g[data-loc]');
+    allElements.forEach(g => {
+        const rect = g.querySelector('rect');
+        const text = g.querySelector('text');
+        if (!rect) return;
 
-      const width = parseFloat(rect.getAttribute('width')) * scale;
-      const depth = parseFloat(rect.getAttribute('height')) * scale;
-      const x = parseFloat(rect.getAttribute('x')) * scale + width / 2;
-      const z = parseFloat(rect.getAttribute('y')) * scale + depth / 2;
-      
-      const geometry = new THREE.BoxGeometry(width, defaultHeight, depth);
-      const material = new THREE.MeshStandardMaterial({ color: 0x996633 }); 
-      
-      const cube = new THREE.Mesh(geometry, material);
-      cube.position.set(x, defaultHeight / 2, z);
-      cube.castShadow = true;
-      cube.receiveShadow = true;
-      
-      this.scene.add(cube);
+        const loc = g.getAttribute('data-loc');
+        const width = parseFloat(rect.getAttribute('width'));
+        const depth = parseFloat(rect.getAttribute('height'));
+        const x = parseFloat(rect.getAttribute('x')) + width / 2;
+        const z = parseFloat(rect.getAttribute('y')) + depth / 2;
+
+        const geometry = new THREE.BoxGeometry(width, defaultHeight, depth);
+        const material = new THREE.MeshStandardMaterial({ color: 0x996633 });
+
+        const cube = new THREE.Mesh(geometry, material);
+        cube.position.set(x, defaultHeight / 2, z);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        
+        this.scene.add(cube);
+        this.objects[loc] = cube;
+        this.originalMaterials[loc] = cube.material;
     });
+  }
+
+  public findShelf(code: string): void {
+    if (!code) return;
+
+    // Reset previously highlighted object
+    for (const key in this.originalMaterials) {
+        if (this.objects[key]) {
+            this.objects[key].material = this.originalMaterials[key];
+        }
+    }
+
+    const shelf = this.objects[code.toUpperCase()];
+    if (shelf) {
+      shelf.material = this.highlightedMaterial;
+
+      // Animate camera to focus on the object
+      const targetPosition = shelf.position.clone();
+      new TWEEN.Tween(this.camera.position)
+        .to({
+            x: targetPosition.x,
+            y: targetPosition.y + 100, 
+            z: targetPosition.z + 150 
+        }, 1000)
+        .easing(TWEEN.Easing.Cubic.InOut)
+        .start();
+        
+      new TWEEN.Tween(this.controls.target)
+        .to(targetPosition, 1000)
+        .easing(TWEEN.Easing.Cubic.InOut)
+        .start();
+
+    } else {
+      console.warn(`Shelf with code '${code}' not found.`);
+      // Optionally, show a user-friendly message here
+    }
   }
 
   private animate = (): void => {
     this.frameId = requestAnimationFrame(this.animate);
+    TWEEN.update();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
