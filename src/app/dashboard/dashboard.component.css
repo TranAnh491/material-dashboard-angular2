@@ -75,8 +75,7 @@
 }
 
 .custom-card-header-purple {
-  background: linear-gradient(60deg, #ab47bc, #8e24aa);
-  color: #fff !important;
+  background: linear-gradient(60deg, #66bb6a, #43a047);
 }
 
 .custom-card-title {
@@ -84,13 +83,14 @@
   font-size: 1.0rem;
   font-weight: 700;
   letter-spacing: 0.2px;
+  color: #000 !important;
 }
 
 .custom-card-desc {
   margin: 0;
   font-size: 1rem;
-  color: #efeaff;
   opacity: 0.88;
+  color: #000 !important;
 }
 
 /* KPI Card Enhancements */
@@ -151,4 +151,10 @@
 /* Increase font size for KPI titles */
 .col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
   font-size: 1.3rem;
+}
+
+/* Force card header titles and descriptions to be black */
+.card-header .card-title,
+.card-header .card-category {
+    color: #000 !important;
 }
