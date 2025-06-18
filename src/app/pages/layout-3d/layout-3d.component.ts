@@ -4,8 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
 import { GoogleSheetService } from 'app/services/google-sheet.service';
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 
 @Component({
   selector: 'app-layout-3d',
@@ -21,7 +19,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
   private frameId: number = null;
-  private font: any;
   
   private objects: { [key: string]: THREE.Object3D } = {};
   private highlightedMaterial: THREE.Material;
@@ -34,7 +31,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     setTimeout(() => {
         this.initThree();
-        this.loadFontAndBuildScene();
+        this.loadSVGAndBuildScene();
     }, 0);
   }
 
@@ -79,14 +76,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     window.addEventListener('resize', this.onWindowResize, false);
   }
 
-  private loadFontAndBuildScene(): void {
-    const fontLoader = new FontLoader();
-    fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', (font) => {
-        this.font = font;
-        this.loadSVGAndBuildScene();
-    });
-  }
-
   private loadSVGAndBuildScene(): void {
     this.http.get('assets/img/LayoutD.svg', { responseType: 'text' }).subscribe(
       svgData => {
@@ -103,24 +92,13 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const scale = 1;
     
     // Define Colors
-    const zoneColors = {
-        'DEFAULT': 0xeeeeee,
-        'FLOOR': 0xbbbbbb, // Vibrant Grey
-        'BORDER': 0x000000,
-        // 2D Zones
-        'WH OFFICE': 0x32CD32, // LimeGreen
-        'UNNAMED OFFICE': 0x32CD32, // LimeGreen
-        'QUALITY': 0x32CD32, // LimeGreen
-        'J': 0x32CD32, // LimeGreen
-        'INBOUND STAGE': 0x32CD32, // LimeGreen
-        'K': 0x32CD32, // LimeGreen
-        'ADMIN': 0xaaaaaa, // Lighter Grey
-        'FORKLIFT': 0xFF8C00, // DarkOrange
-        'OUTBOUND STAGE': 0x1E90FF, // DodgerBlue
-        'NG': 0xFF4500, // OrangeRed
-        'IQC': 0xFFD700, // Gold
-        'WO': 0x228B22, // ForestGreen
-    };
+    const lightCementGrey = 0xd3d3d3;
+    const lightGreen = 0x90ee90;
+    const lightOrange = 0xffd580;
+    const lightBlue = 0xadd8e6;
+    const lightRed = 0xf08080;
+    const brightYellow = 0xffff00;
+    const darkGreen = 0x006400;
 
     // Floor
     const floorRect = svgDoc.querySelector('rect');
@@ -128,7 +106,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
         const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: zoneColors['FLOOR'], side: THREE.DoubleSide });
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: lightCementGrey, side: THREE.DoubleSide }); // Cement grey floor
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
@@ -143,7 +121,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             new THREE.Vector3(0, 0.1, floorHeight),
             new THREE.Vector3(0, 0.1, 0)
         ]);
-        const floorBorderMaterial = new THREE.LineBasicMaterial({ color: zoneColors['BORDER'] });
+        const floorBorderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
         const floorBorder = new THREE.Line(floorBorderGeometry, floorBorderMaterial);
         this.scene.add(floorBorder);
     }
@@ -151,6 +129,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     // Shelves and Zones Constants
     const defaultHeight = 40; 
     const tallerHeight = 60;
+    const shelfColor = 0xffd580; // This is now also the forklift color
     const margin = 2;
     const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE'];
     const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE', 'K', 'WO'];
@@ -171,7 +150,37 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
         if (twoDZones.includes(upperCaseLoc)) {
             // 2D Zones
-            const zoneColor = zoneColors[upperCaseLoc] || zoneColors['DEFAULT'];
+            let zoneColor;
+            switch(upperCaseLoc) {
+                case 'WH OFFICE':
+                case 'UNNAMED OFFICE':
+                case 'QUALITY':
+                case 'J':
+                case 'INBOUND STAGE':
+                case 'K':
+                    zoneColor = lightGreen;
+                    break;
+                case 'ADMIN':
+                    zoneColor = lightCementGrey;
+                    break;
+                case 'FORKLIFT':
+                    zoneColor = lightOrange;
+                    break;
+                case 'OUTBOUND STAGE':
+                    zoneColor = lightBlue;
+                    break;
+                case 'NG':
+                    zoneColor = lightRed;
+                    break;
+                case 'IQC':
+                    zoneColor = brightYellow;
+                    break;
+                case 'WO':
+                    zoneColor = darkGreen;
+                    break;
+                default:
+                    zoneColor = 0xeeeeee; // Fallback for zones like VP
+            }
             const planeGeom = new THREE.PlaneGeometry(width, depth);
             const planeMat = new THREE.MeshStandardMaterial({ color: zoneColor, side: THREE.DoubleSide });
             const plane = new THREE.Mesh(planeGeom, planeMat);
@@ -189,36 +198,17 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
                     new THREE.Vector3(-width / 2, 0, -depth / 2)
                 ];
                 const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
-                const borderMaterial = new THREE.LineBasicMaterial({ color: zoneColors['BORDER'] });
+                const borderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
                 const borderLine = new THREE.Line(borderGeometry, borderMaterial);
                 borderLine.position.set(x, 0.15, z); // Slightly above the plane
                 this.scene.add(borderLine);
             }
 
             if (textEl && textEl.textContent) {
-                if (upperCaseLoc === 'INBOUND STAGE') {
-                    const text = 'Inbound Stage';
-                    const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-                    const textGeometry = new TextGeometry(text, {
-                        font: this.font,
-                        size: 30, // 150% of 20
-                        depth: 2,
-                    });
-                    textGeometry.computeBoundingBox();
-                    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-
-                    // Center the text
-                    const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
-                    textMesh.position.set(x - textWidth / 2, 2, z); // Stand on the ground
-                    
-                    this.scene.add(textMesh);
-
-                } else {
-                    const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
-                    const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
-                    label.position.set(x, 0.2, z);
-                    this.scene.add(label);
-                }
+                const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
+                const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
+                label.position.set(x, 0.2, z);
+                this.scene.add(label);
             }
         } else {
             // 3D Shelves
@@ -250,7 +240,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
                 shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName);
             } else {
                 // Create a solid box for shelves without levels
-                const material = new THREE.MeshStandardMaterial({ color: 0xffa500 }); // Vibrant Orange
+                const material = new THREE.MeshStandardMaterial({ color: shelfColor });
                 const geometry = new THREE.BoxGeometry(shelfWidth, currentHeight, shelfDepth);
                 const mesh = new THREE.Mesh(geometry, material);
                 mesh.castShadow = true;
@@ -267,67 +257,67 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             }
             
             shelfObject.position.set(x, currentHeight / 2, z);
-            shelfObject.userData.isShelf = true;
-            shelfObject.userData.shelfName = upperCaseLoc;
-            this.objects[upperCaseLoc] = shelfObject;
+
             this.scene.add(shelfObject);
+            this.objects[upperCaseLoc] = shelfObject;
         }
     });
   }
 
   private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string): THREE.Group {
-    const shelfGroup = new THREE.Group();
+    const group = new THREE.Group();
 
-    // Vibrant Shelf Colors
-    const postColor = 0xFFA500; // Vibrant Orange
-    const surfaceColor = 0x40E0D0; // Turquoise
+    const postSize = 1.5;
+    const shelfThickness = 0.5;
 
-    const postRadius = 1;
-    const postHeight = height;
-    const postGeometry = new THREE.CylinderGeometry(postRadius, postRadius, postHeight, 8);
-    const postMaterial = new THREE.MeshStandardMaterial({ color: postColor });
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 }); // Orange
+    const shelfSurfaceMaterial = new THREE.MeshStandardMaterial({ color: 0x1e90ff }); // DodgerBlue
 
-    // Positions for the four corner posts
+    // 4 Vertical Posts
+    const postGeometry = new THREE.BoxGeometry(postSize, height, postSize);
     const postPositions = [
-        new THREE.Vector3(width / 2 - postRadius, 0, depth / 2 - postRadius),
-        new THREE.Vector3(-width / 2 + postRadius, 0, depth / 2 - postRadius),
-        new THREE.Vector3(width / 2 - postRadius, 0, -depth / 2 + postRadius),
-        new THREE.Vector3(-width / 2 + postRadius, 0, -depth / 2 + postRadius),
+        new THREE.Vector3(width / 2 - postSize / 2, 0, depth / 2 - postSize / 2),
+        new THREE.Vector3(-width / 2 + postSize / 2, 0, depth / 2 - postSize / 2),
+        new THREE.Vector3(width / 2 - postSize / 2, 0, -depth / 2 + postSize / 2),
+        new THREE.Vector3(-width / 2 + postSize / 2, 0, -depth / 2 + postSize / 2),
     ];
     postPositions.forEach(pos => {
         const post = new THREE.Mesh(postGeometry, postMaterial);
         post.position.copy(pos);
+        post.position.y = height / 2;
         post.castShadow = true;
         post.receiveShadow = true;
-        post.userData.originalMaterial = postMaterial; // Store for reset
-        shelfGroup.add(post);
+        post.userData.originalMaterial = postMaterial;
+        group.add(post);
     });
 
-    const surfaceHeight = 0.5;
-    const surfaceGeometry = new THREE.BoxGeometry(width, surfaceHeight, depth);
-    const surfaceMaterial = new THREE.MeshStandardMaterial({ color: surfaceColor });
+    // Horizontal Shelves
+    if (levels > 1) {
+        const shelfGeometry = new THREE.PlaneGeometry(width, depth);
+        const spacing = height / (levels -1);
+        for (let i = 0; i < levels; i++) {
+            const shelf = new THREE.Mesh(shelfGeometry, shelfSurfaceMaterial);
+            const yPos = i * spacing - height / 2;
+            shelf.position.set(0, yPos, 0);
+            shelf.castShadow = true;
+            shelf.receiveShadow = true;
+            shelf.userData.originalMaterial = shelfSurfaceMaterial;
+            shelf.rotation.x = -Math.PI / 2;
+            group.add(shelf);
 
-    for (let i = 1; i <= levels; i++) {
-        const levelY = (i * (height / (levels + 1))) - (height / 2) + surfaceHeight;
-        const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
-        surface.position.set(0, levelY, 0);
-        surface.castShadow = true;
-        surface.receiveShadow = true;
-        shelfGroup.add(surface);
-
-        // Add tier-specific label
-        const tierName = `${baseName}${i}`;
-        const label = this.createTextSprite(tierName, 12, 'rgba(0,0,0,0)', 'black');
-
-        // Position the label at the front-center of the shelf tier
-        const labelY = levelY + (surfaceHeight / 2) + 6;
-        const labelZ = depth / 2 + 1; // Position in front of the shelf
-        label.position.set(0, labelY, labelZ);
-        shelfGroup.add(label);
+            // Add tier-specific label
+            const labelText = `${baseName}${i + 1}`;
+            const label = this.createTextSprite(labelText, 10, 'rgba(0, 0, 0, 0)', 'black'); 
+            label.position.set(0, yPos + shelfThickness + 2, depth / 2); 
+            group.add(label);
+        }
     }
     
-    shelfGroup.userData.isMultiLevel = true;
-    return shelfGroup;
+    group.userData.isShelf = true;
+    group.userData.shelfId = baseName.toUpperCase();
+    this.objects[baseName.toUpperCase()] = group;
+
+    return group;
   }
 
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
