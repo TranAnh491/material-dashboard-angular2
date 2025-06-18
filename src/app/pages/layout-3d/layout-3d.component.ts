@@ -31,9 +31,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.initThree();
-    this.scene.background = new THREE.Color(0x90ee90); // Light green floor background
     this.loadSVGAndBuildScene();
-    this.animate();
   }
 
   ngOnDestroy(): void {
@@ -50,9 +48,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const container = this.rendererContainer.nativeElement;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb);
+    this.scene.background = new THREE.Color(0xf0f0f0); // Neutral grey background
 
-    this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 1, 5000);
+    this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000); // Adjusted clipping planes
     this.camera.position.set(150, 400, 600); 
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -104,7 +102,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
         const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide });
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x90ee90, side: THREE.DoubleSide }); // Light green floor
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
@@ -196,6 +194,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             }
         }
     });
+    this.animate(); // Start animation after scene is built
   }
   
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
