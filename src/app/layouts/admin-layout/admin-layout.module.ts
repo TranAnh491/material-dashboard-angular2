@@ -13,6 +13,7 @@ import { IconsComponent } from '../../icons/icons.component';
 import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
+import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -35,7 +36,6 @@ import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.compone
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 @NgModule({
   imports: [
@@ -59,16 +59,6 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MapsComponent,
     NotificationsComponent,
     UpgradeComponent,
-    KpiReportsComponent,
-    EquipmentComponent,
-    InboundFgsComponent,
-    OutboundFgsComponent,
-    ShipmentComponent,
-    WorkOrderStatusComponent,
-    InboundMaterialsComponent,
-    OutboundMaterialsComponent,
-    MaterialsInventoryComponent,
-    DocumentsComponent,
     Layout3dComponent
   ]
 })
