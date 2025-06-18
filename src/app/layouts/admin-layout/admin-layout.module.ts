@@ -40,8 +40,12 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
     CommonModule,
     RouterModule.forChild(AdminLayoutRoutes),
     FormsModule,
+    ReactiveFormsModule,
     MatButtonModule,
     MatRippleModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     MatTooltipModule,
   ],
   declarations: [
