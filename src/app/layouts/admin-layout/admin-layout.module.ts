@@ -13,7 +13,6 @@ import { IconsComponent } from '../../icons/icons.component';
 import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -41,15 +40,9 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
     CommonModule,
     RouterModule.forChild(AdminLayoutRoutes),
     FormsModule,
-    ReactiveFormsModule,
     MatButtonModule,
     MatRippleModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     MatTooltipModule,
-    MatProgressSpinnerModule,
-    SharedModule,
   ],
   declarations: [
     DashboardComponent,
@@ -65,13 +58,10 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
     InboundFgsComponent,
     OutboundFgsComponent,
     ShipmentComponent,
-
-    // 4 component materials mới
     WorkOrderStatusComponent,
     InboundMaterialsComponent,
     OutboundMaterialsComponent,
     MaterialsInventoryComponent,
-    Layout3dComponent
   ]
 })
 export class AdminLayoutModule {}

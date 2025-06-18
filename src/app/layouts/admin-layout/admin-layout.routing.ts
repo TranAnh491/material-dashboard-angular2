@@ -20,7 +20,6 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent },
@@ -28,18 +27,17 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'table-list',           component: TableListComponent },
   { path: 'typography',           component: TypographyComponent },
   { path: 'icons',                component: IconsComponent },
-  { path: 'maps',                 component: Layout3dComponent },
+  { path: 'documents',            component: DocumentsComponent },
+  { path: 'maps',                 component: MapsComponent },
   { path: 'notifications',        component: NotificationsComponent },
   { path: 'kpi-reports',        component: KpiReportsComponent },
   { path: 'equipment',            component: EquipmentComponent },
-  { path: 'upgrade',              component: UpgradeComponent },
-  { path: 'inbound-fgs',          component: InboundFgsComponent },
-  { path: 'outbound-fgs',         component: OutboundFgsComponent },
-  { path: 'shipment',             component: ShipmentComponent },
-
-  // 4 chức năng materials
   { path: 'work-order-status',    component: WorkOrderStatusComponent },
+  { path: 'shipment',             component: ShipmentComponent },
   { path: 'inbound-materials',    component: InboundMaterialsComponent },
   { path: 'outbound-materials',   component: OutboundMaterialsComponent },
-  { path: 'materials-inventory',  component: MaterialsInventoryComponent }
+  { path: 'materials-inventory',  component: MaterialsInventoryComponent },
+  { path: 'inbound-fgs',          component: InboundFgsComponent },
+  { path: 'outbound-fgs',         component: OutboundFgsComponent },
+  { path: 'upgrade',              component: UpgradeComponent },
 ];
