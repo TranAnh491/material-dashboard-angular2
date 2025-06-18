@@ -24,6 +24,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { SharedModule } from '../../shared/shared.module';
+import { ComponentsModule } from 'app/components/components.module';
 
 // Các component materials mới
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
@@ -49,6 +50,7 @@ import { DocumentsComponent } from 'app/pages/documents/documents.component';
     MatInputModule,
     MatSelectModule,
     MatTooltipModule,
+    ComponentsModule
   ],
   declarations: [
     DashboardComponent,

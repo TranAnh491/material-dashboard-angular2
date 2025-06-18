@@ -24,33 +24,33 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // We need to wait for the view to be initialized to get the container's dimensions
     // Using a timeout to ensure the DOM has been rendered and dimensions are available
-    setTimeout(() => this.init3D(), 0);
+    // setTimeout(() => this.init3D(), 0); // --- Vô hiệu hóa để kiểm tra
   }
 
   ngOnDestroy(): void {
-    if (this.frameId !== null) {
-      cancelAnimationFrame(this.frameId);
-    }
-    if (this.renderer) {
-      this.renderer.dispose();
-    }
-    // Clean up other Three.js objects like geometries, materials, textures
-    if (this.scene) {
-        this.scene.traverse(object => {
-            if (object instanceof THREE.Mesh) {
-                if (object.geometry) {
-                    object.geometry.dispose();
-                }
-                if (object.material) {
-                    if (Array.isArray(object.material)) {
-                        object.material.forEach(material => material.dispose());
-                    } else {
-                        object.material.dispose();
-                    }
-                }
-            }
-        });
-    }
+    // if (this.frameId !== null) {
+    //   cancelAnimationFrame(this.frameId);
+    // }
+    // if (this.renderer) {
+    //   this.renderer.dispose();
+    // }
+    // // Clean up other Three.js objects like geometries, materials, textures
+    // if (this.scene) {
+    //     this.scene.traverse(object => {
+    //         if (object instanceof THREE.Mesh) {
+    //             if (object.geometry) {
+    //                 object.geometry.dispose();
+    //             }
+    //             if (object.material) {
+    //                 if (Array.isArray(object.material)) {
+    //                     object.material.forEach(material => material.dispose());
+    //                 } else {
+    //                     object.material.dispose();
+    //                 }
+    //             }
+    //         }
+    //     });
+    // }
   }
 
   private init3D(): void {
