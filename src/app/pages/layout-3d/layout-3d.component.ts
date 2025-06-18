@@ -91,6 +91,15 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
   private createWarehouseFromSVG(svgDoc: Document): void {
     const scale = 1;
+    
+    // Define Colors
+    const lightCementGrey = 0xd3d3d3;
+    const lightGreen = 0x90ee90;
+    const lightOrange = 0xffd580;
+    const lightBlue = 0xadd8e6;
+    const lightRed = 0xf08080;
+    const brightYellow = 0xffff00;
+    const darkGreen = 0x006400;
 
     // Floor
     const floorRect = svgDoc.querySelector('rect');
@@ -98,7 +107,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
         const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x90ee90, side: THREE.DoubleSide });
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: lightCementGrey, side: THREE.DoubleSide }); // Cement grey floor
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
@@ -118,15 +127,14 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         this.scene.add(floorBorder);
     }
 
-    // Shelves and Zones Config
+    // Shelves and Zones Constants
     const defaultHeight = 40; 
     const tallerHeight = 60;
-    const shelfColor = 0xffd580; // Light Orange
-    const lightYellowColor = 0xffffeb; // Light Yellow
+    const shelfColor = 0xffd580; // This is now also the forklift color
     const margin = 2;
-    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
+    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE'];
+    const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'UNNAMED OFFICE', 'K', 'WO'];
     const fiveLevelPrefixes = ['F', 'G', 'Q', 'RL', 'RR', 'SL', 'SR', 'TL', 'TR', 'UL', 'UR', 'VL', 'VR', 'WL', 'WR', 'XL', 'XR', 'YL', 'YR', 'ZL', 'ZR', 'HL', 'HR'];
-    const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE'];
 
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
     allElements.forEach(g => {
@@ -141,9 +149,40 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const z = parseFloat(rect.getAttribute('y')) + depth / 2;
 
         if (twoDZones.includes(loc)) {
-            const currentZoneColor = (loc === 'IQC') ? shelfColor : lightYellowColor;
+            // 2D Zones
+            let zoneColor;
+            switch(loc) {
+                case 'WH OFFICE':
+                case 'UNNAMED OFFICE':
+                case 'QUALITY':
+                case 'J':
+                case 'INBOUND STAGE':
+                case 'K':
+                    zoneColor = lightGreen;
+                    break;
+                case 'ADMIN':
+                    zoneColor = lightCementGrey;
+                    break;
+                case 'FORKLIFT':
+                    zoneColor = lightOrange;
+                    break;
+                case 'OUTBOUND STAGE':
+                    zoneColor = lightBlue;
+                    break;
+                case 'NG':
+                    zoneColor = lightRed;
+                    break;
+                case 'IQC':
+                    zoneColor = brightYellow;
+                    break;
+                case 'WO':
+                    zoneColor = darkGreen;
+                    break;
+                default:
+                    zoneColor = 0xeeeeee; // Fallback for zones like VP
+            }
             const planeGeom = new THREE.PlaneGeometry(width, depth);
-            const planeMat = new THREE.MeshStandardMaterial({ color: currentZoneColor, side: THREE.DoubleSide });
+            const planeMat = new THREE.MeshStandardMaterial({ color: zoneColor, side: THREE.DoubleSide });
             const plane = new THREE.Mesh(planeGeom, planeMat);
             plane.rotation.x = -Math.PI / 2;
             plane.position.set(x, 0.1, z);
