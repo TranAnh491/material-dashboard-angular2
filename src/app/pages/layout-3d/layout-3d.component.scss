@@ -18,4 +18,49 @@
     flex-grow: 1;
     width: 100%;
     display: block;
+}
+
+::ng-deep .main-panel > .content {
+    padding: 0;
+}
+
+::ng-deep .sidebar-background:after {
+    opacity: 0 !important;
+}
+
+#rendererContainer {
+    width: 100%;
+    height: calc(100vh - 70px); 
+    display: block;
+}
+
+#search-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 5px;
+    display: flex;
+    gap: 5px;
+}
+
+#search-input {
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    padding: 5px;
+}
+
+#search-button {
+    padding: 5px 10px;
+    border-radius: 3px;
+    background-color: #3f51b5;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+#search-button:hover {
+    background-color: #303f9f;
 } 
