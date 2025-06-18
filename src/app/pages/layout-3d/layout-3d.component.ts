@@ -48,7 +48,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const container = this.rendererContainer.nativeElement;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf0f0f0); // Neutral grey background
+    this.scene.background = new THREE.Color(0x87ceeb); // Original light sky blue
 
     this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000); // Adjusted clipping planes
     this.camera.position.set(150, 400, 600); 
@@ -90,8 +90,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const scale = 1; 
     const defaultHeight = 40; 
     const tallerHeight = 60; // New height for A-E shelves
-    const shelfColor = 0xffd580; // Light Orange
-    const lightYellowColor = 0xffffeb; // Light Yellow
+    const shelfColor = 0x996633; // Original brown color
+    const lightYellowColor = 0xd3d3d3; // Original light gray for zones
     const zoneColor = 0xd3d3d3; 
     const margin = 2; // Space between 3D shelves
 
@@ -102,7 +102,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
         const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x90ee90, side: THREE.DoubleSide }); // Light green floor
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide }); // Original light gray floor
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
