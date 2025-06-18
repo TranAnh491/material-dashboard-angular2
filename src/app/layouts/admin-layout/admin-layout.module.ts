@@ -13,7 +13,6 @@ import { IconsComponent } from '../../icons/icons.component';
 import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -22,7 +21,21 @@ import { MatRippleModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
-import { ComponentsModule } from 'app/components/components.module';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { SharedModule } from '../../shared/shared.module';
+
+// Các component materials mới
+import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
+import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
+import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
+import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { EquipmentComponent } from '../../pages/equipment/equipment.component';
+import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
+import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
+import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
+import { ShipmentComponent } from '../../pages/shipment/shipment.component';
+import { DocumentsComponent } from 'app/pages/documents/documents.component';
+import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 @NgModule({
   imports: [
@@ -36,7 +49,6 @@ import { ComponentsModule } from 'app/components/components.module';
     MatInputModule,
     MatSelectModule,
     MatTooltipModule,
-    ComponentsModule
   ],
   declarations: [
     DashboardComponent,
@@ -47,7 +59,17 @@ import { ComponentsModule } from 'app/components/components.module';
     MapsComponent,
     NotificationsComponent,
     UpgradeComponent,
-    Layout3dComponent,
+    KpiReportsComponent,
+    EquipmentComponent,
+    InboundFgsComponent,
+    OutboundFgsComponent,
+    ShipmentComponent,
+    WorkOrderStatusComponent,
+    InboundMaterialsComponent,
+    OutboundMaterialsComponent,
+    MaterialsInventoryComponent,
+    DocumentsComponent,
+    Layout3dComponent
   ]
 })
 export class AdminLayoutModule {}
