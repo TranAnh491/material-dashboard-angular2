@@ -55,6 +55,12 @@ export const ROUTES: RouteInfo[] = [
   },
   {
     path: '/maps',
+    title: 'Find',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>`,
+    class: ''
+  },
+  {
+    path: '/layout-3d',
     title: 'Layout',
     svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 20l-5-2V4l5 2m6 14l5-2V4l-5 2M9 4l6 2m0 14V6"/></svg>`,
     class: ''

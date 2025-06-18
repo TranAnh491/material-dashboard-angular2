@@ -1,0 +1,9 @@
+<div class="search-container">
+    <mat-form-field appearance="fill">
+        <mat-label>Enter Item Code to Find</mat-label>
+        <input matInput #searchInput placeholder="e.g., B001013">
+    </mat-form-field>
+    <button mat-raised-button color="primary" (click)="findShelf(searchInput.value)">Find</button>
+</div>
+
+<div #rendererContainer class="renderer-container"></div> 
