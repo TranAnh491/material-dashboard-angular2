@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HttpClient } from '@angular/common/http';
@@ -48,9 +48,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const container = this.rendererContainer.nativeElement;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb); // Original light sky blue
+    this.scene.background = new THREE.Color(0xf0f0f0);
 
-    this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000); // Adjusted clipping planes
+    this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
     this.camera.position.set(150, 400, 600); 
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -70,7 +70,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     directionalLight.castShadow = true;
     this.scene.add(directionalLight);
     
-    this.highlightedMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0x550000 });
+    this.highlightedMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x555500 });
 
     window.addEventListener('resize', this.onWindowResize, false);
   }
@@ -81,6 +81,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const parser = new DOMParser();
         const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
         this.createWarehouseFromSVG(svgDoc);
+        this.animate();
       },
       error => console.error('Could not load SVG file', error)
     );
@@ -90,8 +91,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const scale = 1; 
     const defaultHeight = 40; 
     const tallerHeight = 60; // New height for A-E shelves
-    const shelfColor = 0x996633; // Original brown color
-    const lightYellowColor = 0xd3d3d3; // Original light gray for zones
+    const shelfColor = 0xffd580; // Light Orange
+    const lightYellowColor = 0xffffeb; // Light Yellow
     const zoneColor = 0xd3d3d3; 
     const margin = 2; // Space between 3D shelves
 
@@ -102,7 +103,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
         const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide }); // Original light gray floor
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x90ee90, side: THREE.DoubleSide });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
@@ -194,7 +195,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             }
         }
     });
-    this.animate(); // Start animation after scene is built
   }
   
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
