@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { trigger, state, style, transition, animate } from '@angular/animations';
 
 declare const $: any;
 
@@ -84,7 +85,22 @@ export const ROUTES: RouteInfo[] = [
 @Component({
   selector: 'app-sidebar',
   templateUrl: './sidebar.component.html',
-  styleUrls: ['./sidebar.component.css']
+  styleUrls: ['./sidebar.component.css'],
+  animations: [
+    trigger('slideToggle', [
+      state('in', style({
+        height: '*',
+        opacity: 1,
+        visibility: 'visible'
+      })),
+      state('out', style({
+        height: '0px',
+        opacity: 0,
+        visibility: 'hidden'
+      })),
+      transition('in <=> out', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)'))
+    ])
+  ]
 })
 export class SidebarComponent implements OnInit {
   menuItems: any[] = [];
