@@ -5,6 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import * as TWEEN from '@tweenjs/tween.js'
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { GoogleSheetService } from 'app/services/google-sheet.service';
 
 @Component({
   selector: 'app-layout-3d',
@@ -25,7 +26,10 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
   private originalMaterials: { [key: string]: THREE.Material | THREE.Material[] } = {};
   private highlightedMaterial: THREE.Material;
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private googleSheetService: GoogleSheetService
+  ) { }
 
   ngOnInit(): void {}
 
@@ -177,24 +181,48 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
   public findShelf(code: string): void {
     if (!code) return;
 
-    // Reset previously highlighted object
-    for (const key in this.originalMaterials) {
-        if (this.objects[key]) {
-            this.objects[key].material = this.originalMaterials[key];
-        }
-    }
+    // Reset previously highlighted object before searching
+    this.resetHighlights();
+    
+    // Assuming the sheet is named 'Inventory' and we search in column A for the code,
+    // and get the location from column B.
+    const searchRange = 'Inventory!A:B'; 
 
-    const shelf = this.objects[code.toUpperCase()];
-    if (shelf) {
+    this.googleSheetService.getSheet(searchRange).subscribe((response: any) => {
+      const rows = response.values;
+      let location = '';
+
+      for (const row of rows) {
+        if (row[0] === code.toUpperCase()) {
+          location = row[1];
+          break;
+        }
+      }
+
+      if (location) {
+        const shelf = this.objects[location.toUpperCase()];
+        if (shelf) {
+          this.highlightShelf(shelf, location.toUpperCase());
+        } else {
+          console.warn(`Shelf location '${location}' found for code '${code}', but not found in 3D model.`);
+        }
+      } else {
+        console.warn(`Item code '${code}' not found in inventory sheet.`);
+      }
+    }, error => {
+      console.error('Error fetching from Google Sheet:', error);
+    });
+  }
+
+  private highlightShelf(shelf: THREE.Mesh, location: string): void {
       shelf.material = this.highlightedMaterial;
 
-      // Animate camera to focus on the object
       const targetPosition = shelf.position.clone();
       new TWEEN.Tween(this.camera.position)
         .to({
             x: targetPosition.x,
-            y: targetPosition.y + 100, 
-            z: targetPosition.z + 150 
+            y: targetPosition.y + 100,
+            z: targetPosition.z + 150
         }, 1000)
         .easing(TWEEN.Easing.Cubic.InOut)
         .start();
@@ -203,10 +231,13 @@ export class Layout3dComponent implements OnInit, AfterViewInit, OnDestroy {
         .to(targetPosition, 1000)
         .easing(TWEEN.Easing.Cubic.InOut)
         .start();
+  }
 
-    } else {
-      console.warn(`Shelf with code '${code}' not found.`);
-      // Optionally, show a user-friendly message here
+  private resetHighlights(): void {
+    for (const key in this.originalMaterials) {
+        if (this.objects[key]) {
+            this.objects[key].material = this.originalMaterials[key];
+        }
     }
   }
 
