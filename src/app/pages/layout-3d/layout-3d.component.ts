@@ -1,6 +1,7 @@
 import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
 import { GoogleSheetService } from 'app/services/google-sheet.service';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
