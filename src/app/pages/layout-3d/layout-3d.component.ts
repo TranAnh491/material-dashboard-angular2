@@ -232,7 +232,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
       }
       
       // Position the entire shelf group based on SVG coords
-      shelfGroup.position.set(shelfBox.min.x, shelfBox.max.y, 0); 
+      // shelfGroup.position.set(shelfBox.min.x, shelfBox.max.y, 0); // --- Tạm thời vô hiệu hóa
+      shelfGroup.position.set(0, 10, 0); // --- Ép kệ hàng xuất hiện ở gốc tọa độ để kiểm tra
       shelfGroup.rotation.x = -Math.PI / 2; 
       
       this.scene.add(shelfGroup);
