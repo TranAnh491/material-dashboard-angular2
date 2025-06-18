@@ -20,7 +20,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private controls: OrbitControls;
   private frameId: number = null;
   
-  private objects: { [key: string]: THREE.Mesh } = {};
+  private objects: { [key: string]: THREE.Object3D } = {};
   private originalMaterials: { [key: string]: THREE.Material | THREE.Material[] } = {};
   private highlightedMaterial: THREE.Material;
 
@@ -212,6 +212,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
                 this.scene.add(label);
             }
         } else {
+            // 3D Shelves
             const locPrefix = upperCaseLoc.replace(/[0-9]/g, '');
             let currentHeight = defaultHeight;
             let levels = 0;
@@ -225,38 +226,27 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             
             const shelfWidth = width - margin;
             const shelfDepth = depth - margin;
-            const geometry = new THREE.BoxGeometry(shelfWidth, currentHeight, shelfDepth);
+            
+            let shelfObject: THREE.Object3D;
             const material = new THREE.MeshStandardMaterial({ color: shelfColor });
-            const cube = new THREE.Mesh(geometry, material);
-            cube.position.set(x, currentHeight / 2, z);
-            cube.castShadow = true;
-            cube.receiveShadow = true;
-            
-            const edges = new THREE.EdgesGeometry(geometry);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
-            cube.add(line);
-            
-            if (levels > 0) {
-                const levelHeight = currentHeight / levels;
-                const levelLineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
-                for (let i = 1; i < levels; i++) {
-                    const yPos = (i * levelHeight) - (currentHeight / 2);
-                    const points = [
-                        new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2),
-                        new THREE.Vector3( shelfWidth / 2, yPos, -shelfDepth / 2),
-                        new THREE.Vector3( shelfWidth / 2, yPos,  shelfDepth / 2),
-                        new THREE.Vector3(-shelfWidth / 2, yPos,  shelfDepth / 2),
-                        new THREE.Vector3(-shelfWidth / 2, yPos, -shelfDepth / 2)
-                    ];
-                    const levelGeometry = new THREE.BufferGeometry().setFromPoints(points);
-                    const levelLine = new THREE.Line(levelGeometry, levelLineMaterial);
-                    cube.add(levelLine);
-                }
-            }
 
-            this.scene.add(cube);
-            this.objects[upperCaseLoc] = cube;
-            this.originalMaterials[upperCaseLoc] = cube.material;
+            if (levels > 0) {
+                // Create a realistic, hollow shelf with levels
+                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, material);
+            } else {
+                // Create a solid box for shelves without levels
+                const geometry = new THREE.BoxGeometry(shelfWidth, currentHeight, shelfDepth);
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                shelfObject = mesh;
+            }
+            
+            shelfObject.position.set(x, currentHeight / 2, z);
+
+            this.scene.add(shelfObject);
+            this.objects[upperCaseLoc] = shelfObject;
+            this.originalMaterials[upperCaseLoc] = material;
 
             if (textEl && textEl.textContent) {
                 const label = this.createTextSprite(textEl.textContent.trim(), 40, 'rgba(0,0,0,0)', 'black');
@@ -266,7 +256,44 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         }
     });
   }
-  
+
+  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, material: THREE.Material): THREE.Group {
+    const group = new THREE.Group();
+    const postSize = 1.5;
+    const shelfThickness = 0.5;
+
+    // 4 Vertical Posts
+    const postGeometry = new THREE.BoxGeometry(postSize, height, postSize);
+    const postPositions = [
+        new THREE.Vector3(width / 2 - postSize / 2, 0, depth / 2 - postSize / 2),
+        new THREE.Vector3(-width / 2 + postSize / 2, 0, depth / 2 - postSize / 2),
+        new THREE.Vector3(width / 2 - postSize / 2, 0, -depth / 2 + postSize / 2),
+        new THREE.Vector3(-width / 2 + postSize / 2, 0, -depth / 2 + postSize / 2),
+    ];
+    postPositions.forEach(pos => {
+        const post = new THREE.Mesh(postGeometry, material);
+        post.position.copy(pos);
+        post.castShadow = true;
+        post.receiveShadow = true;
+        group.add(post);
+    });
+
+    // Horizontal Shelf Surfaces
+    if (levels > 1) {
+        const shelfGeometry = new THREE.BoxGeometry(width, shelfThickness, depth);
+        const spacing = height / (levels -1);
+        for (let i = 0; i < levels; i++) {
+            const shelf = new THREE.Mesh(shelfGeometry, material);
+            const yPos = i * spacing - height / 2;
+            shelf.position.set(0, yPos, 0);
+            shelf.castShadow = true;
+            shelf.receiveShadow = true;
+            group.add(shelf);
+        }
+    }
+    return group;
+  }
+
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
     const fontface = 'Arial';
     const canvas = document.createElement('canvas');
@@ -332,8 +359,12 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     }, error => console.error('Error fetching from Google Sheet:', error));
   }
 
-  private highlightShelf(shelf: THREE.Mesh): void {
-      shelf.material = this.highlightedMaterial;
+  private highlightShelf(shelf: THREE.Object3D): void {
+      shelf.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+            child.material = this.highlightedMaterial;
+        }
+      });
       const targetPosition = shelf.position.clone();
       new TWEEN.Tween(this.camera.position)
         .to({ x: targetPosition.x, y: targetPosition.y + 100, z: targetPosition.z + 150 }, 1000)
@@ -344,9 +375,15 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   }
 
   private resetHighlights(): void {
-    for (const key in this.originalMaterials) {
-        if (this.objects[key]) {
-            this.objects[key].material = this.originalMaterials[key];
+    for (const key in this.objects) {
+        const shelfObject = this.objects[key];
+        const originalMaterial = this.originalMaterials[key];
+        if (shelfObject && originalMaterial) {
+            shelfObject.traverse(child => {
+                if (child instanceof THREE.Mesh) {
+                    child.material = originalMaterial as THREE.Material;
+                }
+            });
         }
     }
   }
