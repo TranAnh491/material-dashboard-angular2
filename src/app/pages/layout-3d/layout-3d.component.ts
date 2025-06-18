@@ -298,13 +298,14 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             // Add individual label for each level
             if (baseName) {
                 const labelText = `${baseName}${i + 1}`;
-                const label = this.createTextSprite(labelText, 12, 'rgba(0,0,0,0)', 'black');
+                const label = this.createTextSprite(labelText, 24, 'rgba(0,0,0,0)', 'black');
                 
-                // Position the label at the front-right corner of the shelf surface
+                // Position the label to stand on the front-right corner of the shelf
+                const labelHeight = label.scale.y;
                 const labelWidth = label.scale.x;
-                const labelY = yPos + shelfThickness / 2 + 0.1; // Place just above the surface
-                const labelX = width / 2 - labelWidth / 2 - postSize; // Place on the right, accounting for post
-                const labelZ = depth / 2 - postSize; // Place at the front
+                const labelY = yPos + shelfThickness / 2 + labelHeight / 2; // Place its base on the surface
+                const labelX = width / 2 - labelWidth / 2 - postSize;
+                const labelZ = depth / 2 - postSize; 
                 
                 label.position.set(labelX, labelY, labelZ);
                 group.add(label);
@@ -342,8 +343,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const sprite = new THREE.Sprite(spriteMaterial);
     
     // Scale sprite to a fixed size in world units
-    const shelfThickness = 0.5;
-    const desiredHeight = shelfThickness / 2; // Half the height of the shelf surface
+    const desiredHeight = 5.0; // Set label height to 5 units
     const aspect = canvas.width / canvas.height;
     sprite.scale.set(desiredHeight * aspect, desiredHeight, 1.0);
     
