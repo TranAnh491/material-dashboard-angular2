@@ -24,33 +24,33 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // We need to wait for the view to be initialized to get the container's dimensions
     // Using a timeout to ensure the DOM has been rendered and dimensions are available
-    // setTimeout(() => this.init3D(), 0); // --- Vô hiệu hóa để kiểm tra
+    setTimeout(() => this.init3D(), 0);
   }
 
   ngOnDestroy(): void {
-    // if (this.frameId !== null) {
-    //   cancelAnimationFrame(this.frameId);
-    // }
-    // if (this.renderer) {
-    //   this.renderer.dispose();
-    // }
-    // // Clean up other Three.js objects like geometries, materials, textures
-    // if (this.scene) {
-    //     this.scene.traverse(object => {
-    //         if (object instanceof THREE.Mesh) {
-    //             if (object.geometry) {
-    //                 object.geometry.dispose();
-    //             }
-    //             if (object.material) {
-    //                 if (Array.isArray(object.material)) {
-    //                     object.material.forEach(material => material.dispose());
-    //                 } else {
-    //                     object.material.dispose();
-    //                 }
-    //             }
-    //         }
-    //     });
-    // }
+    if (this.frameId !== null) {
+      cancelAnimationFrame(this.frameId);
+    }
+    if (this.renderer) {
+      this.renderer.dispose();
+    }
+    // Clean up other Three.js objects like geometries, materials, textures
+    if (this.scene) {
+        this.scene.traverse(object => {
+            if (object instanceof THREE.Mesh) {
+                if (object.geometry) {
+                    object.geometry.dispose();
+                }
+                if (object.material) {
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(material => material.dispose());
+                    } else {
+                        object.material.dispose();
+                    }
+                }
+            }
+        });
+    }
   }
 
   private init3D(): void {
@@ -232,15 +232,10 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
       }
       
       // Position the entire shelf group based on SVG coords
-      shelfGroup.position.set(shelfBox.min.x, 0, -shelfBox.max.y); // Adjust Z from SVG Y
-      shelfGroup.rotation.x = -Math.PI / 2; // Align with our scene's XY plane
+      shelfGroup.position.set(shelfBox.min.x, shelfBox.max.y, 0); 
+      shelfGroup.rotation.x = -Math.PI / 2; 
       
-      const pivot = new THREE.Group();
-      this.scene.add(pivot);
-      pivot.add(shelfGroup);
-      pivot.rotation.x = Math.PI / 2;
-
-
+      this.scene.add(shelfGroup);
   }
 
 
