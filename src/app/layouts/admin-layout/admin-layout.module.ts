@@ -22,21 +22,7 @@ import { MatRippleModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { SharedModule } from '../../shared/shared.module';
 import { ComponentsModule } from 'app/components/components.module';
-
-// Các component materials mới
-import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
-import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
-import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
-import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
-import { EquipmentComponent } from '../../pages/equipment/equipment.component';
-import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
-import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
-import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
-import { ShipmentComponent } from '../../pages/shipment/shipment.component';
-import { DocumentsComponent } from 'app/pages/documents/documents.component';
 
 @NgModule({
   imports: [
@@ -61,7 +47,7 @@ import { DocumentsComponent } from 'app/pages/documents/documents.component';
     MapsComponent,
     NotificationsComponent,
     UpgradeComponent,
-    Layout3dComponent
+    Layout3dComponent,
   ]
 })
 export class AdminLayoutModule {}

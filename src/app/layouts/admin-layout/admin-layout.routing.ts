@@ -9,7 +9,6 @@ import { MapsComponent } from '../../maps/maps.component';
 import { NotificationsComponent } from '../../notifications/notifications.component';
 import { UpgradeComponent } from '../../upgrade/upgrade.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
@@ -21,6 +20,7 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent },
