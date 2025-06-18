@@ -3,7 +3,7 @@
  * --------------------------------------- */
 
 .sidebar-wrapper {
-  padding: 0;
+  padding: 40px 0 12px 0;
 }
 
 .logo {
@@ -15,7 +15,6 @@
   justify-content: center;
   position: relative;
   z-index: 4;
-  display: inline-block;
 }
 
 .logo-img {
@@ -41,8 +40,12 @@
 
 .nav {
   list-style: none;
-  margin: 20px 0 0 0;
+  margin: 0;
   padding: 0;
+}
+
+.sidebar-wrapper > .nav > li:first-child {
+  margin-top: 50px;
 }
 
 .nav > li {
