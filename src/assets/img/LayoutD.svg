@@ -1,4 +1,4 @@
-<svg width="320" height="520" viewBox="0 0 320 520" xmlns="http://www.w3.org/2000/svg">
+<svg width="340" height="540" viewBox="0 0 340 540" xmlns="http://www.w3.org/2000/svg">
   <!-- 
     Layout kho hàng.
     Quy ước tỉ lệ: 1 mét = 10 pixels.
@@ -6,8 +6,8 @@
     Kích thước kệ nhỏ: 1m x 3m (10x30 pixels).
   -->
 
-  <!-- Tường kho (30m x 50m) -->
-  <rect x="10" y="10" width="300" height="500" fill="#f9f9f9" stroke="#333" stroke-width="2"/>
+  <!-- Tường kho (32m x 52m) -->
+  <rect x="0" y="0" width="320" height="520" fill="#f9f9f9" stroke="#333" stroke-width="2"/>
   
   <!-- NG Area -->
   <g data-loc="NG">
