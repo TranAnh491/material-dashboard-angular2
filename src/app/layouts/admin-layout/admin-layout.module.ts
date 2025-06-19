@@ -26,6 +26,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -54,6 +55,7 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MatInputModule,
     MatSelectModule,
     MatTooltipModule,
+    MatSnackBarModule,
   ],
   declarations: [
     DashboardComponent,

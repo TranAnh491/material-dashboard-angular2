@@ -21,7 +21,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   constructor( public location: Location, private router: Router) {}
 
   public shouldShowNavbar(): boolean {
-    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status'];
+    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status', '/layout-3d'];
     return !hideNavbarOnRoutes.includes(this.location.path());
   }
 

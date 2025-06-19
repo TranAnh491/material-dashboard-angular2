@@ -5,6 +5,7 @@ import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Component({
   selector: 'app-layout-3d',
@@ -22,11 +23,14 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private frameId: number = null;
   
   private highlightedMaterial: THREE.Material;
+  private arrowHelper: THREE.ArrowHelper;
+  private hereTextSprite: THREE.Sprite;
   private securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
   private font: any;
 
   constructor(
-    private http: HttpClient
+    private http: HttpClient,
+    private snackBar: MatSnackBar
   ) { }
 
   ngAfterViewInit(): void {
@@ -74,6 +78,20 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     
     this.highlightedMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x555500 });
 
+    // Create and hide the arrow helper
+    const dir = new THREE.Vector3(0, -1, 0);
+    const origin = new THREE.Vector3(0, 0, 0);
+    const length = 40;
+    const hex = 0xff0000;
+    this.arrowHelper = new THREE.ArrowHelper(dir, origin, length, hex, 10, 5);
+    this.arrowHelper.visible = false;
+    this.scene.add(this.arrowHelper);
+
+    // Create and hide the "HERE" text sprite
+    this.hereTextSprite = this.createTextSprite('HERE', 27, 'rgba(0, 0, 0, 0)', 'red');
+    this.hereTextSprite.visible = false;
+    this.scene.add(this.hereTextSprite);
+
     window.addEventListener('resize', this.onWindowResize, false);
   }
 
@@ -86,6 +104,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const parser = new DOMParser();
             const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
             this.createWarehouseFromSVG(svgDoc);
+            this.populateShelvesFromSheet();
             this.animate();
           },
           error => console.error('Could not load SVG file', error)
@@ -575,6 +594,22 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const signMesh = this.createSignMesh(locPrefix, signWidth, signHeight);
             signMesh.position.set(shelf.position.x, signY, shelf.position.z + depth / 2 + 0.1);
             this.scene.add(signMesh);
+
+            // Add sub-signs below the main aisle sign
+            let subSignText: string;
+            const subSignY = signY - signHeight; // Position it right below the main sign
+
+            if (['A', 'B', 'C'].includes(locPrefix)) {
+                subSignText = 'FGs';
+            } else if (['D', 'E', 'F', 'G'].includes(locPrefix)) {
+                subSignText = 'Materials';
+            }
+
+            if (subSignText) {
+                const subSignMesh = this.createSignMesh(subSignText, signWidth, signHeight);
+                subSignMesh.position.set(shelf.position.x, subSignY, shelf.position.z + depth / 2 + 0.1);
+                this.scene.add(subSignMesh);
+            }
         }
     });
 
@@ -819,14 +854,28 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private createSignMesh(text: string, width: number, height: number): THREE.Mesh {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 256;
+    
+    // Use a higher resolution canvas for sharper text
+    canvas.width = 1024;
+    canvas.height = 512;
+
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.font = 'bold 200px Arial';
-    context.fillStyle = 'black';
+    
     context.textAlign = 'center';
     context.textBaseline = 'middle';
+    context.fillStyle = 'black';
+
+    // Dynamically adjust font size to fit the text
+    let fontSize = 400; // Start with a large font size
+    context.font = `bold ${fontSize}px Arial`;
+    
+    const padding = 40;
+    while (context.measureText(text).width > canvas.width - padding) {
+        fontSize -= 5;
+        context.font = `bold ${fontSize}px Arial`;
+    }
+
     context.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -886,7 +935,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
     this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
       if (!data || data.length === 0) {
-        console.warn(`No data found from Google Apps Script.`);
+        this.snackBar.open(`No data found from item list.`, 'Close', { duration: 3000 });
         return;
       }
 
@@ -901,38 +950,43 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
           console.log('Successfully found object in 3D scene:', shelfOrLevel);
           this.highlightShelf(shelfOrLevel);
         } else {
-          console.error(`Item found at location '${location}', but this location object was not found in the 3D model.`);
+          this.snackBar.open(`Item found at '${location}', but location not in 3D model.`, 'Close', { duration: 3000 });
         }
       } else {
-        console.warn(`Item code '${code}' not found in Google Apps Script data.`);
+        this.snackBar.open(`Mã hàng '${code}' không có.`, 'Close', { duration: 3000 });
       }
-    }, error => console.error('Error fetching from Google Apps Script:', error));
+    }, error => {
+        console.error('Error fetching from Google Apps Script:', error);
+        this.snackBar.open('Error connecting to item database.', 'Close', { duration: 3000 });
+    });
   }
 
   private highlightShelf(shelf: THREE.Object3D): void {
     console.log(`HIGHLIGHTING object: ${shelf.name}`, shelf);
     shelf.traverse(child => {
       if (child instanceof THREE.Mesh) {
-        console.log(`...Highlighting mesh: ${child.name}. Material before:`, child.material);
         child.material = this.highlightedMaterial;
-        console.log(`...Material after:`, child.material);
       }
     });
 
     const targetPosition = new THREE.Vector3();
     shelf.getWorldPosition(targetPosition);
-    console.log(`Calculated target position for camera:`, targetPosition);
 
-    new TWEEN.Tween(this.camera.position)
-      .to({ x: targetPosition.x, y: targetPosition.y + 100, z: targetPosition.z + 150 }, 1000)
-      .easing(TWEEN.Easing.Cubic.InOut).start();
-    new TWEEN.Tween(this.controls.target)
-      .to(targetPosition, 1000)
-      .easing(TWEEN.Easing.Cubic.InOut).start();
+    // Position and show the arrow
+    this.arrowHelper.position.set(targetPosition.x, targetPosition.y + 50, targetPosition.z);
+    this.arrowHelper.visible = true;
+
+    // Position and show the "HERE" text sprite just above the arrow's tail
+    this.hereTextSprite.position.set(targetPosition.x, this.arrowHelper.position.y + 15, targetPosition.z);
+    this.hereTextSprite.visible = true;
   }
 
   private resetHighlights(): void {
     console.log('Resetting all highlights...');
+
+    this.arrowHelper.visible = false;
+    this.hereTextSprite.visible = false;
+
     this.scene.traverse(child => {
       if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
         if (child.material !== child.userData.originalMaterial) {
@@ -940,6 +994,115 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         }
       }
     });
+  }
+
+  private populateShelvesFromSheet(): void {
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
+    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
+      if (!data || data.length === 0) {
+        console.warn(`No data found from Google Apps Script.`);
+        return;
+      }
+      console.log('--- DIAGNOSTICS: Raw data from Google Sheet ---', data);
+
+      // Group items by location
+      const itemsByLocation = data.reduce((acc, item) => {
+        const location = item.location ? String(item.location).trim().toUpperCase() : null;
+        if (location && item.code) {
+          if (!acc[location]) {
+            acc[location] = [];
+          }
+          acc[location].push(String(item.code).trim().toUpperCase());
+        }
+        return acc;
+      }, {});
+
+      console.log('--- DIAGNOSTICS: Items grouped by location ---', itemsByLocation);
+
+      // Now, place the items on the shelves
+      this.placeItemsOnShelves(itemsByLocation);
+
+    }, error => console.error('Error fetching from Google Apps Script for shelf population:', error));
+  }
+
+  private placeItemsOnShelves(itemsByLocation: { [key: string]: string[] }): void {
+    const boxSize = new THREE.Vector3(8, 8, 8); // Carton size: 0.8m x 0.8m x 0.8m
+    const maxBoxesPerRow = 10;
+    const maxBoxesPerStack = 5;
+    const targetShelf = 'G11';
+
+    for (const location in itemsByLocation) {
+      if (location === targetShelf) {
+          console.log(`--- DIAGNOSTICS: Found target shelf "${location}" in data. Attempting to find in 3D scene.`);
+          const shelf = this.scene.getObjectByName(location);
+
+          if (shelf) {
+            console.log(`--- DIAGNOSTICS: Successfully found shelf object "${location}" in the 3D scene.`);
+            if (shelf.userData.width && shelf.userData.depth) {
+                console.log(`--- DIAGNOSTICS: Shelf has valid dimensions: width=${shelf.userData.width}, depth=${shelf.userData.depth}`);
+                const items = itemsByLocation[location].slice(0, 100);
+                console.log(`--- DIAGNOSTICS: Found ${items.length} items for this shelf. Items:`, items);
+
+                const shelfWidth = shelf.userData.width;
+                const shelfDepth = shelf.userData.depth;
+
+                items.forEach((itemCode, index) => {
+                  const carton = this.createCarton(itemCode, boxSize);
+                  
+                  const stackIndex = Math.floor(index / (maxBoxesPerRow * maxBoxesPerStack));
+                  const indexOnLayer = index % (maxBoxesPerRow * maxBoxesPerStack);
+
+                  const xOffset = (indexOnLayer % maxBoxesPerRow) * boxSize.x - (shelfWidth / 2) + (boxSize.x / 2);
+                  const yOffset = Math.floor(indexOnLayer / maxBoxesPerRow) * boxSize.y + (boxSize.y / 2);
+                  const zOffset = stackIndex * boxSize.z - (shelfDepth / 2) + (boxSize.z / 2);
+
+                  carton.position.set(xOffset, yOffset, zOffset);
+                  shelf.add(carton);
+                });
+            } else {
+                console.error(`--- DIAGNOSTICS ERROR: Shelf "${location}" was found, but is missing 'width' or 'depth' in its userData.`, shelf.userData);
+            }
+          } else {
+            console.error(`--- DIAGNOSTICS ERROR: Could not find a shelf object named "${location}" in the 3D scene.`);
+          }
+      }
+    }
+  }
+
+  private createCarton(itemCode: string, size: THREE.Vector3): THREE.Group {
+    const group = new THREE.Group();
+    const cartonMaterial = new THREE.MeshStandardMaterial({ color: 0xdeb887 }); // BurlyWood - cardboard color
+    const cartonGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
+    const cartonMesh = new THREE.Mesh(cartonGeom, cartonMaterial);
+    group.add(cartonMesh);
+
+    if (this.font) {
+      let textSize = 1.5; // Initial text size
+      let textGeom;
+      let textWidth;
+
+      // Loop to find the best fit for the text
+      do {
+          textGeom = new TextGeometry(itemCode, {
+            font: this.font,
+            size: textSize,
+            depth: 0.1,
+          });
+          textGeom.computeBoundingBox();
+          textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
+          if (textWidth > size.x * 0.9) {
+              textSize *= 0.9; // Reduce size if it's too wide
+          }
+      } while (textWidth > size.x * 0.9 && textSize > 0.1);
+
+      textGeom.translate(-textWidth / 2, 0, 0);
+
+      const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      const textMesh = new THREE.Mesh(textGeom, textMaterial);
+      textMesh.position.set(0, 0, size.z / 2 + 0.1);
+      group.add(textMesh);
+    }
+    return group;
   }
 
   private animateFrameCount = 0;
