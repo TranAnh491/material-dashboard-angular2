@@ -104,7 +104,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const parser = new DOMParser();
             const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
             this.createWarehouseFromSVG(svgDoc);
-            this.populateShelvesFromSheet();
             this.animate();
           },
           error => console.error('Could not load SVG file', error)
@@ -318,7 +317,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
             if (levels > 0) {
                 const labelSize = isSecuredShelf ? 16 : 24;
-                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName, labelSize);
+                shelfObject = this.createMultiLevelShelf(shelfWidth, shelfDepth, currentHeight, levels, baseName, labelSize, upperCaseLoc);
             } else {
                 // Create a solid box for shelves without levels
                 const material = new THREE.MeshStandardMaterial({ color: shelfColor });
@@ -352,7 +351,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     this.createAisleSigns();
   }
 
-  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string, labelSize: number): THREE.Group {
+  private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string, labelSize: number, locationName: string): THREE.Group {
     const group = new THREE.Group();
     const postSize = 1.5;
     const shelfThickness = 0.5;
@@ -384,7 +383,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         for (let i = 0; i < levels; i++) {
             const shelfLevelName = `${baseName}${i + 1}`;
             const shelf = new THREE.Mesh(shelfGeometry, shelfSurfaceMaterial);
-            shelf.name = shelfLevelName; // Assign name for searching individual levels
+            shelf.name = `${locationName}-level-${i}`; // Use a unique name
             const yPos = i * spacing - height / 2;
             shelf.position.set(0, yPos, 0);
             shelf.castShadow = true;
@@ -994,115 +993,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         }
       }
     });
-  }
-
-  private populateShelvesFromSheet(): void {
-    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
-      if (!data || data.length === 0) {
-        console.warn(`No data found from Google Apps Script.`);
-        return;
-      }
-      console.log('--- DIAGNOSTICS: Raw data from Google Sheet ---', data);
-
-      // Group items by location
-      const itemsByLocation = data.reduce((acc, item) => {
-        const location = item.location ? String(item.location).trim().toUpperCase() : null;
-        if (location && item.code) {
-          if (!acc[location]) {
-            acc[location] = [];
-          }
-          acc[location].push(String(item.code).trim().toUpperCase());
-        }
-        return acc;
-      }, {});
-
-      console.log('--- DIAGNOSTICS: Items grouped by location ---', itemsByLocation);
-
-      // Now, place the items on the shelves
-      this.placeItemsOnShelves(itemsByLocation);
-
-    }, error => console.error('Error fetching from Google Apps Script for shelf population:', error));
-  }
-
-  private placeItemsOnShelves(itemsByLocation: { [key: string]: string[] }): void {
-    const boxSize = new THREE.Vector3(8, 8, 8); // Carton size: 0.8m x 0.8m x 0.8m
-    const maxBoxesPerRow = 10;
-    const maxBoxesPerStack = 5;
-    const targetShelf = 'G11';
-
-    for (const location in itemsByLocation) {
-      if (location === targetShelf) {
-          console.log(`--- DIAGNOSTICS: Found target shelf "${location}" in data. Attempting to find in 3D scene.`);
-          const shelf = this.scene.getObjectByName(location);
-
-          if (shelf) {
-            console.log(`--- DIAGNOSTICS: Successfully found shelf object "${location}" in the 3D scene.`);
-            if (shelf.userData.width && shelf.userData.depth) {
-                console.log(`--- DIAGNOSTICS: Shelf has valid dimensions: width=${shelf.userData.width}, depth=${shelf.userData.depth}`);
-                const items = itemsByLocation[location].slice(0, 100);
-                console.log(`--- DIAGNOSTICS: Found ${items.length} items for this shelf. Items:`, items);
-
-                const shelfWidth = shelf.userData.width;
-                const shelfDepth = shelf.userData.depth;
-
-                items.forEach((itemCode, index) => {
-                  const carton = this.createCarton(itemCode, boxSize);
-                  
-                  const stackIndex = Math.floor(index / (maxBoxesPerRow * maxBoxesPerStack));
-                  const indexOnLayer = index % (maxBoxesPerRow * maxBoxesPerStack);
-
-                  const xOffset = (indexOnLayer % maxBoxesPerRow) * boxSize.x - (shelfWidth / 2) + (boxSize.x / 2);
-                  const yOffset = Math.floor(indexOnLayer / maxBoxesPerRow) * boxSize.y + (boxSize.y / 2);
-                  const zOffset = stackIndex * boxSize.z - (shelfDepth / 2) + (boxSize.z / 2);
-
-                  carton.position.set(xOffset, yOffset, zOffset);
-                  shelf.add(carton);
-                });
-            } else {
-                console.error(`--- DIAGNOSTICS ERROR: Shelf "${location}" was found, but is missing 'width' or 'depth' in its userData.`, shelf.userData);
-            }
-          } else {
-            console.error(`--- DIAGNOSTICS ERROR: Could not find a shelf object named "${location}" in the 3D scene.`);
-          }
-      }
-    }
-  }
-
-  private createCarton(itemCode: string, size: THREE.Vector3): THREE.Group {
-    const group = new THREE.Group();
-    const cartonMaterial = new THREE.MeshStandardMaterial({ color: 0xdeb887 }); // BurlyWood - cardboard color
-    const cartonGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
-    const cartonMesh = new THREE.Mesh(cartonGeom, cartonMaterial);
-    group.add(cartonMesh);
-
-    if (this.font) {
-      let textSize = 1.5; // Initial text size
-      let textGeom;
-      let textWidth;
-
-      // Loop to find the best fit for the text
-      do {
-          textGeom = new TextGeometry(itemCode, {
-            font: this.font,
-            size: textSize,
-            depth: 0.1,
-          });
-          textGeom.computeBoundingBox();
-          textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
-          if (textWidth > size.x * 0.9) {
-              textSize *= 0.9; // Reduce size if it's too wide
-          }
-      } while (textWidth > size.x * 0.9 && textSize > 0.1);
-
-      textGeom.translate(-textWidth / 2, 0, 0);
-
-      const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      const textMesh = new THREE.Mesh(textGeom, textMaterial);
-      textMesh.position.set(0, 0, size.z / 2 + 0.1);
-      group.add(textMesh);
-    }
-    return group;
   }
 
   private animateFrameCount = 0;
