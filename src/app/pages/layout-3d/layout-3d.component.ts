@@ -1,9 +1,10 @@
 import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
-import { GoogleSheetService } from 'app/services/google-sheet.service';
 
 @Component({
   selector: 'app-layout-3d',
@@ -21,10 +22,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private frameId: number = null;
   
   private highlightedMaterial: THREE.Material;
+  private securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
+  private font: any;
 
   constructor(
-    private http: HttpClient,
-    private googleSheetService: GoogleSheetService
+    private http: HttpClient
   ) { }
 
   ngAfterViewInit(): void {
@@ -76,25 +78,30 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   }
 
   private loadSVGAndBuildScene(): void {
-    this.http.get('assets/img/LayoutD.svg', { responseType: 'text' }).subscribe(
-      svgData => {
-        const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
-        this.createWarehouseFromSVG(svgDoc);
-        this.animate();
-      },
-      error => console.error('Could not load SVG file', error)
-    );
+    const fontLoader = new FontLoader();
+    fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', (loadedFont) => {
+        this.font = loadedFont;
+        this.http.get('assets/img/LayoutD.svg', { responseType: 'text' }).subscribe(
+          svgData => {
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
+            this.createWarehouseFromSVG(svgDoc);
+            this.animate();
+          },
+          error => console.error('Could not load SVG file', error)
+        );
+    });
   }
 
   private createWarehouseFromSVG(svgDoc: Document): void {
     const scale = 1;
+    const wallHeight = 40;
     
     // Define Colors
-    const lightCementGrey = 0xd3d3d3;
-    const lightGreen = 0x90ee90;
-    const lightOrange = 0xffd580;
-    const lightBlue = 0xadd8e6;
+    const lightCementGrey = 0xffffff; // Pure white for warehouse floor
+    const lightGreen = 0x7CFC00; // LawnGreen - more vibrant
+    const lightOrange = 0xF28500; // Tangerine
+    const lightBlue = 0x007BA7; // Cerulean
     const lightRed = 0xf08080;
     const brightYellow = 0xffff00;
     const darkGreen = 0x006400;
@@ -104,21 +111,22 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     if (floorRect) {
         const floorWidth = parseFloat(floorRect.getAttribute('width'));
         const floorHeight = parseFloat(floorRect.getAttribute('height'));
-        const floorGeometry = new THREE.PlaneGeometry(floorWidth * scale, floorHeight * scale);
+        const floorThickness = 1.0; // 10cm
+        const floorGeometry = new THREE.BoxGeometry(floorWidth * scale, floorThickness, floorHeight * scale);
         const floorMaterial = new THREE.MeshStandardMaterial({ color: lightCementGrey, side: THREE.DoubleSide }); // Cement grey floor
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.set((floorWidth / 2) * scale, 0, (floorHeight / 2) * scale);
+        floor.position.set((floorWidth / 2) * scale, -floorThickness / 2, (floorHeight / 2) * scale);
         floor.receiveShadow = true;
         this.scene.add(floor);
 
-        // Add floor border
+        // Add floor border on top of the new thick floor
+        const borderYPosition = 0.01;
         const floorBorderGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0.1, 0),
-            new THREE.Vector3(floorWidth, 0.1, 0),
-            new THREE.Vector3(floorWidth, 0.1, floorHeight),
-            new THREE.Vector3(0, 0.1, floorHeight),
-            new THREE.Vector3(0, 0.1, 0)
+            new THREE.Vector3(0, borderYPosition, 0),
+            new THREE.Vector3(floorWidth, borderYPosition, 0),
+            new THREE.Vector3(floorWidth, borderYPosition, floorHeight),
+            new THREE.Vector3(0, borderYPosition, floorHeight),
+            new THREE.Vector3(0, borderYPosition, 0)
         ]);
         const floorBorderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
         const floorBorder = new THREE.Line(floorBorderGeometry, floorBorderMaterial);
@@ -130,12 +138,26 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const tallerHeight = 60;
     const shelfColor = 0xffd580; // This is now also the forklift color
     const margin = 2;
-    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'VP', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'SECURED WH'];
+    const twoDZones = ['ADMIN', 'QUALITY', 'NG', 'WO', 'IQC', 'WH OFFICE', 'K', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'SECURED WH'];
     const borderedZones = ['ADMIN', 'QUALITY', 'NG', 'WH OFFICE', 'J', 'FORKLIFT', 'INBOUND STAGE', 'OUTBOUND STAGE', 'SECURED WH', 'K', 'WO'];
     const fiveLevelPrefixes = ['F', 'G', 'Q', 'RL', 'RR', 'SL', 'SR', 'TL', 'TR', 'UL', 'UR', 'VL', 'VR', 'WL', 'WR', 'XL', 'XR', 'YL', 'YR', 'ZL', 'ZR', 'HL', 'HR'];
-    const securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
 
     const allElements = svgDoc.querySelectorAll('g[data-loc]');
+    let qualityWidth = 0;
+    let qualityX = 0;
+
+    // First pass to find Quality dimensions
+    allElements.forEach(g => {
+        const loc = g.getAttribute('data-loc');
+        if (loc.toUpperCase() === 'QUALITY') {
+            const rect = g.querySelector('rect');
+            if (rect) {
+                qualityWidth = parseFloat(rect.getAttribute('width'));
+                qualityX = parseFloat(rect.getAttribute('x'));
+            }
+        }
+    });
+
     allElements.forEach(g => {
         const rect = g.querySelector('rect');
         const textEl = g.querySelector('text');
@@ -143,12 +165,21 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
         const loc = g.getAttribute('data-loc');
         const upperCaseLoc = loc.toUpperCase();
-        const width = parseFloat(rect.getAttribute('width'));
+        let width = parseFloat(rect.getAttribute('width'));
         const depth = parseFloat(rect.getAttribute('height'));
-        const x = parseFloat(rect.getAttribute('x')) + width / 2;
-        const z = parseFloat(rect.getAttribute('y')) + depth / 2;
+        let x = parseFloat(rect.getAttribute('x')) + width / 2;
+        let z = parseFloat(rect.getAttribute('y')) + depth / 2;
 
-        if (twoDZones.includes(upperCaseLoc)) {
+        if (upperCaseLoc === 'ADMIN' && qualityWidth > 0) {
+            width = qualityWidth;
+            x = qualityX + width / 2;
+        }
+
+        if (upperCaseLoc === 'K') {
+            z += 10; // Move down by 1m (10 units)
+        }
+
+        if (twoDZones.includes(upperCaseLoc) || upperCaseLoc === 'SECURED WH') {
             // 2D Zones
             let zoneColor;
             switch(upperCaseLoc) {
@@ -188,8 +219,14 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             plane.position.set(x, 0.1, z);
             this.scene.add(plane);
 
+            // Add walls for specified zones
+            const walledZones = ['WH OFFICE', 'SECURED WH', 'QUALITY', 'ADMIN'];
+            if (walledZones.includes(upperCaseLoc)) {
+                this.createWallsForZone(x, z, width, depth, wallHeight, upperCaseLoc);
+            }
+
             // Add border for specified 2D zones
-            if (borderedZones.includes(upperCaseLoc)) {
+            if (borderedZones.includes(upperCaseLoc) || upperCaseLoc === 'SECURED WH') {
                 const borderPoints = [
                     new THREE.Vector3(-width / 2, 0, -depth / 2),
                     new THREE.Vector3( width / 2, 0, -depth / 2),
@@ -206,13 +243,28 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
 
             if (textEl && textEl.textContent) {
                 const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
-                const floorLabelZones = ['INBOUND STAGE', 'OUTBOUND STAGE', 'FORKLIFT', 'J', 'NG', 'K', 'WO', 'IQC', 'QUALITY', 'ADMIN', 'WH OFFICE', 'VP'];
+                const floorLabelZones = ['INBOUND STAGE', 'OUTBOUND STAGE', 'J', 'NG', 'ADMIN', 'WH OFFICE', 'VP', 'QUALITY', 'SECURED WH'];
+                const palletZones = ['IQC', 'K', 'WO'];
 
                 if (floorLabelZones.includes(upperCaseLoc)) {
-                    const label = this.createFloorLabel(displayText, width, depth);
-                    label.rotation.x = -Math.PI / 2;
-                    label.position.set(x, 0.15, z); // Place it slightly above the zone plane
+                    const labelSize = 5; // A good size for large zone labels
+                    const label = this.create3DTextLabel(displayText, labelSize, 0.5);
+                    
+                    if (upperCaseLoc === 'SECURED WH') {
+                        // Position below the zone, standing up
+                        label.position.set(x, labelSize / 2, z + depth / 2 - 10); 
+                    } else {
+                        // Position in the center of the zone, standing up
+                        label.position.set(x, labelSize / 2, z); 
+                    }
                     this.scene.add(label);
+                } else if (palletZones.includes(upperCaseLoc)) {
+                    this.createPalletsForZone(x, z, width, depth, 20);
+                } else if (upperCaseLoc === 'FORKLIFT') {
+                    const forklift = this.createForkliftModel();
+                    forklift.position.set(x, 1, z);
+                    forklift.rotation.y = Math.PI / 2; // Face towards the main aisles
+                    this.scene.add(forklift);
                 } else {
                     const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
                     label.position.set(x, 0.2, z);
@@ -224,10 +276,14 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const locPrefix = upperCaseLoc.replace(/[0-9]/g, '');
             let currentHeight = defaultHeight;
             let levels = 0;
-            const isSecuredShelf = securedWhShelvesPrefixes.includes(locPrefix) || upperCaseLoc === 'A12';
+            const isSecuredShelf = this.securedWhShelvesPrefixes.includes(locPrefix);
 
             if (upperCaseLoc === 'A12') {
                 levels = 5;
+            } else if (isSecuredShelf) {
+                levels = 7;
+            } else if (upperCaseLoc === 'VP') {
+                levels = 6;
             } else if (['A', 'B', 'C', 'D', 'E'].includes(locPrefix)) {
                 currentHeight = tallerHeight;
                 levels = 7;
@@ -265,10 +321,16 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             
             shelfObject.name = upperCaseLoc; // Assign name for searching
             shelfObject.position.set(x, currentHeight / 2, z);
+            shelfObject.userData.width = shelfWidth;
+            shelfObject.userData.depth = shelfDepth;
+            shelfObject.userData.height = currentHeight;
+            shelfObject.userData.levels = levels;
 
             this.scene.add(shelfObject);
         }
     });
+
+    this.createAisleSigns();
   }
 
   private createMultiLevelShelf(width: number, depth: number, height: number, levels: number, baseName: string, labelSize: number): THREE.Group {
@@ -312,15 +374,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             group.add(shelf);
 
             // Add individual label for each level
-            if (baseName) {
-                const label = this.createTextSprite(shelfLevelName, labelSize, 'rgba(0,0,0,0)', 'black');
-                
-                const labelHeight = label.scale.y;
-                const labelY = yPos + shelfThickness / 2 + labelHeight / 2; // Place its base on the surface
-                const labelX = 0; // Centered horizontally
-                const labelZ = 0; // Centered along the length
-                
-                label.position.set(labelX, labelY, labelZ);
+            if (baseName && this.font) {
+                const label = this.create3DTextLabel(shelfLevelName, shelfThickness * 0.8, 0.1);
+                label.position.set(0, yPos + shelfThickness, 0); 
                 group.add(label);
             }
         }
@@ -328,38 +384,455 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     return group;
   }
 
-  private createFloorLabel(message: string, planeWidth: number, planeDepth: number): THREE.Mesh {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    
-    // Normalize font size based on plane width to keep visual size consistent.
-    // The smaller the plane, the larger the font on the texture.
-    // We use a base fontsize of 50 for a reference plane width of 100.
-    const fontsize = (30 * 100) / planeWidth;
-    
-    context.font = `Bold ${fontsize}px Arial`;
-    
-    // Keep canvas resolution consistent, but maintain aspect ratio of the target plane.
-    canvas.width = 1024;
-    canvas.height = 1024 * (planeDepth / planeWidth);
-
-    context.font = `Bold ${fontsize}px Arial`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillStyle = 'black';
-    context.fillText(message, canvas.width / 2, canvas.height / 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-
-    const material = new THREE.MeshStandardMaterial({
-        map: texture,
-        transparent: true
+  private create3DTextLabel(text: string, size: number, depth: number): THREE.Mesh {
+    const textGeometry = new TextGeometry(text, {
+        font: this.font,
+        size: size,
+        depth: depth,
     });
 
-    const geometry = new THREE.PlaneGeometry(planeWidth, planeDepth);
-    const mesh = new THREE.Mesh(geometry, material);
-    return mesh;
+    // Center the geometry so rotation/position is predictable
+    textGeometry.computeBoundingBox();
+    const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+    textGeometry.translate(-textWidth / 2, 0, 0);
+
+    const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+    
+    return textMesh;
+  }
+
+  private createForkliftModel(): THREE.Group {
+    const forkliftGroup = new THREE.Group();
+    
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const operatorCabMaterial = new THREE.MeshStandardMaterial({ color: 0xFF4500 }); // OrangeRed
+    const mastMaterial = new THREE.MeshStandardMaterial({ color: 0x4B4B4B });
+    const forkMaterial = new THREE.MeshStandardMaterial({ color: 0x2B2B2B });
+    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1B1B1B });
+
+    const bodyWidth = 8, bodyHeight = 10, bodyDepth = 12;
+
+    // Main Body
+    const mainBody = new THREE.Mesh(
+        new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyDepth),
+        bodyMaterial
+    );
+    mainBody.position.y = bodyHeight / 2;
+    forkliftGroup.add(mainBody);
+
+    // Operator Cab
+    const cab = new THREE.Mesh(
+        new THREE.BoxGeometry(bodyWidth * 0.95, bodyHeight * 0.8, bodyDepth * 0.6),
+        operatorCabMaterial
+    );
+    cab.position.set(0, bodyHeight * 0.6, -bodyDepth * 0.2);
+    mainBody.add(cab);
+
+    // Mast
+    const mastHeight = 30, mastWidth = 6, mastDepth = 2;
+    const mast = new THREE.Mesh(
+        new THREE.BoxGeometry(mastWidth, mastHeight, mastDepth),
+        mastMaterial
+    );
+    mast.position.set(0, mastHeight / 2, bodyDepth / 2 + mastDepth / 2);
+    mainBody.add(mast);
+
+    // Forks
+    const forkLength = 15, forkWidth = 1, forkHeight = 0.5;
+    const forkY = 2;
+    const forkZ = bodyDepth/2 + mastDepth + forkLength/2;
+    
+    const fork1 = new THREE.Mesh(new THREE.BoxGeometry(forkWidth, forkHeight, forkLength), forkMaterial);
+    fork1.position.set(-mastWidth/4, forkY, forkZ);
+    mainBody.add(fork1);
+
+    const fork2 = new THREE.Mesh(new THREE.BoxGeometry(forkWidth, forkHeight, forkLength), forkMaterial);
+    fork2.position.set(mastWidth/4, forkY, forkZ);
+    mainBody.add(fork2);
+
+    // Wheels
+    const wheelRadius = 2.5, wheelDepth = 1.5;
+    const wheelGeom = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelDepth, 20);
+    const wheelPositions = [
+        { x: -bodyWidth/2, y: wheelRadius, z: bodyDepth/4 },
+        { x: bodyWidth/2, y: wheelRadius, z: bodyDepth/4 },
+        { x: -bodyWidth/2, y: wheelRadius, z: -bodyDepth/4 },
+        { x: bodyWidth/2, y: wheelRadius, z: -bodyDepth/4 },
+    ];
+    wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeom, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(pos.x, pos.y, pos.z);
+        mainBody.add(wheel);
+    });
+
+    return forkliftGroup;
+  }
+
+  private createComplexPallet(width: number, depth: number, height: number): THREE.Group {
+    const palletGroup = new THREE.Group();
+    const palletMaterial = new THREE.MeshStandardMaterial({ color: 0x1E90FF }); // DodgerBlue
+
+    const topDeckHeight = height * 0.15;
+    const blockHeight = height * 0.7;
+    const bottomSlatHeight = height * 0.15;
+
+    // 1. Top Deck
+    const topDeck = new THREE.Mesh(
+        new THREE.BoxGeometry(width, topDeckHeight, depth),
+        palletMaterial
+    );
+    topDeck.position.y = (height / 2) - (topDeckHeight / 2);
+    palletGroup.add(topDeck);
+
+    // 2. Nine Blocks
+    const blockWidth = width / 4;
+    const blockDepth = depth / 4;
+    const blockY = topDeck.position.y - (topDeckHeight / 2) - (blockHeight / 2);
+    
+    const blockPositions = [
+        { x: -width/2 + blockWidth/2, z: -depth/2 + blockDepth/2 },
+        { x: 0, z: -depth/2 + blockDepth/2 },
+        { x: width/2 - blockWidth/2, z: -depth/2 + blockDepth/2 },
+        { x: -width/2 + blockWidth/2, z: 0 },
+        { x: 0, z: 0 },
+        { x: width/2 - blockWidth/2, z: 0 },
+        { x: -width/2 + blockWidth/2, z: depth/2 - blockDepth/2 },
+        { x: 0, z: depth/2 - blockDepth/2 },
+        { x: width/2 - blockWidth/2, z: depth/2 - blockDepth/2 },
+    ];
+    
+    blockPositions.forEach(pos => {
+        const block = new THREE.Mesh(
+            new THREE.BoxGeometry(blockWidth, blockHeight, blockDepth),
+            palletMaterial
+        );
+        block.position.set(pos.x, blockY, pos.z);
+        palletGroup.add(block);
+    });
+
+    // 3. Three Bottom Slats
+    const bottomSlatY = blockY - (blockHeight / 2) - (bottomSlatHeight / 2);
+    const bottomSlatGeom = new THREE.BoxGeometry(width, bottomSlatHeight, blockDepth);
+
+    const slat1 = new THREE.Mesh(bottomSlatGeom, palletMaterial);
+    slat1.position.set(0, bottomSlatY, -depth / 2 + blockDepth / 2);
+    palletGroup.add(slat1);
+
+    const slat2 = new THREE.Mesh(bottomSlatGeom, palletMaterial);
+    slat2.position.set(0, bottomSlatY, 0);
+    palletGroup.add(slat2);
+
+    const slat3 = new THREE.Mesh(bottomSlatGeom, palletMaterial);
+    slat3.position.set(0, bottomSlatY, depth / 2 - blockDepth / 2);
+    palletGroup.add(slat3);
+    
+    return palletGroup;
+  }
+
+  private createPalletsForZone(centerX: number, centerZ: number, zoneWidth: number, zoneDepth: number, palletCount: number): void {
+    const palletHeight = 1.0;
+    const individualPalletZoneDepth = zoneDepth / palletCount;
+
+    const palletModelWidth = zoneWidth * 0.95;
+    const palletModelDepth = individualPalletZoneDepth * 0.95;
+
+    for (let i = 0; i < palletCount; i++) {
+        const pallet = this.createComplexPallet(palletModelWidth, palletModelDepth, palletHeight);
+
+        const palletX = centerX;
+        const palletY = 0.1 + (palletHeight / 2);
+        const palletZ = (centerZ - zoneDepth / 2) + (i * individualPalletZoneDepth) + (individualPalletZoneDepth / 2);
+
+        pallet.position.set(palletX, palletY, palletZ);
+        
+        pallet.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
+        this.scene.add(pallet);
+    }
+  }
+
+  private createAisleSigns(): void {
+    // Part A: A-G signs (on shelf front)
+    const explicitSignShelves = ['A1', 'A7', 'B1', 'B7', 'C1', 'C7', 'D1', 'D7', 'E1', 'E7', 'F1', 'F7', 'G1', 'G7'];
+    explicitSignShelves.forEach(shelfName => {
+        const shelf = this.scene.getObjectByName(shelfName);
+        if (shelf && shelf.userData.levels >= 5) {
+            const { width, depth, height, levels } = shelf.userData;
+            const spacing = height / (levels - 1);
+            const signY = 3.5 * spacing;
+
+            const signWidth = width * 0.9;
+            const signHeight = spacing * 0.8;
+            const locPrefix = shelfName.replace(/[0-9]/g, '');
+
+            const signMesh = this.createSignMesh(locPrefix, signWidth, signHeight);
+            signMesh.position.set(shelf.position.x, signY, shelf.position.z + depth / 2 + 0.1);
+            this.scene.add(signMesh);
+        }
+    });
+
+    // Part B: Secured WH signs are now removed.
+  }
+
+  private createWallsForZone(centerX: number, centerZ: number, zoneWidth: number, zoneDepth: number, wallHeight: number, zoneName: string): void {
+    const wallThickness = 1;
+    const solidMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }); // Pure white
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.2,
+        roughness: 0.1,
+        metalness: 0.1
+    });
+
+    const bottomWallHeight = wallHeight * 0.1;
+    const glassWallHeight = wallHeight * 0.8;
+    const topWallHeight = wallHeight * 0.1;
+
+    // Helper to create a wall section
+    const createWallSegment = (width, height, depth, material, position) => {
+        const segment = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+        segment.position.copy(position);
+        segment.receiveShadow = true;
+        this.scene.add(segment);
+    };
+
+    // Back and Front Walls (with glass)
+    const horizontalWallWidth = zoneWidth + wallThickness;
+    const backWallZ = centerZ - zoneDepth / 2;
+    const frontWallZ = centerZ + zoneDepth / 2;
+
+    [backWallZ, frontWallZ].forEach(wallZ => {
+        // Bottom
+        createWallSegment(horizontalWallWidth, bottomWallHeight, wallThickness, solidMaterial, new THREE.Vector3(centerX, bottomWallHeight / 2, wallZ));
+        // Glass
+        createWallSegment(horizontalWallWidth, glassWallHeight, wallThickness, glassMaterial, new THREE.Vector3(centerX, bottomWallHeight + glassWallHeight / 2, wallZ));
+        // Top
+        createWallSegment(horizontalWallWidth, topWallHeight, wallThickness, solidMaterial, new THREE.Vector3(centerX, bottomWallHeight + glassWallHeight + topWallHeight / 2, wallZ));
+    });
+
+    // Left and Right Walls
+    const verticalWallDepth = zoneDepth - wallThickness;
+    const leftWallX = centerX - zoneWidth / 2;
+    const rightWallX = centerX + zoneWidth / 2;
+
+    // Left Wall (Full solid)
+    createWallSegment(wallThickness, wallHeight, verticalWallDepth, solidMaterial, new THREE.Vector3(leftWallX, wallHeight / 2, centerZ));
+
+    // Right Wall (with glass and a door for WH OFFICE)
+    if (zoneName === 'WH OFFICE') {
+        const doorWidth = 20; // 2m wide
+        const doorHeight = 30; // 3m high
+        const doorShiftUp = 50; // 5m shift "up" (-z direction) from the corner
+
+        const wall_z_max = centerZ + verticalWallDepth / 2;
+        const wall_z_min = centerZ - verticalWallDepth / 2;
+
+        const door_z_end = wall_z_max - doorShiftUp;
+        const door_z_start = door_z_end - doorWidth;
+
+        // Wall Segment 1: "Top" part of the wall (segment closest to Secured WH)
+        const segment1_depth = wall_z_max - door_z_end;
+        if (segment1_depth > 0.1) {
+            const segment1_centerZ = door_z_end + segment1_depth / 2;
+            createWallSegment(wallThickness, bottomWallHeight, segment1_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, segment1_centerZ));
+            createWallSegment(wallThickness, glassWallHeight, segment1_depth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, segment1_centerZ));
+            createWallSegment(wallThickness, topWallHeight, segment1_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, segment1_centerZ));
+        }
+        
+        // Wall Segment 2: "Bottom" part of the wall (segment farther from Secured WH)
+        const segment2_depth = door_z_start - wall_z_min;
+        if (segment2_depth > 0.1) {
+            const segment2_centerZ = wall_z_min + segment2_depth / 2;
+            createWallSegment(wallThickness, bottomWallHeight, segment2_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, segment2_centerZ));
+            createWallSegment(wallThickness, glassWallHeight, segment2_depth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, segment2_centerZ));
+            createWallSegment(wallThickness, topWallHeight, segment2_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, segment2_centerZ));
+        }
+
+        const lintelCenterZ = door_z_start + doorWidth / 2;
+
+        // Part over the door (lintel)
+        if (wallHeight > doorHeight) {
+            const lintelHeight = wallHeight - doorHeight;
+            createWallSegment(wallThickness, lintelHeight, doorWidth, solidMaterial, new THREE.Vector3(rightWallX, doorHeight + lintelHeight / 2, lintelCenterZ));
+        }
+        
+        // Add the door itself
+        const door = this.createFramedDoor(doorWidth, doorHeight, wallThickness - 0.2);
+        door.position.set(rightWallX, doorHeight / 2, lintelCenterZ);
+        this.scene.add(door);
+
+    } else if (zoneName === 'SECURED WH') {
+        const doorWidth = 20; // 2m
+        const doorHeight = 30; // 3m
+        
+        const wall_z_max = centerZ + verticalWallDepth / 2;
+        const wall_z_min = centerZ - verticalWallDepth / 2;
+        
+        // Bottom door
+        const bottomDoor_z_start = wall_z_min + 10;
+        const bottomDoor_z_end = bottomDoor_z_start + doorWidth;
+
+        // Top door
+        const topDoor_z_end = wall_z_max - 10;
+        const topDoor_z_start = topDoor_z_end - doorWidth;
+
+        const createGlassPillar = (pillarDepth, pillarCenterZ) => {
+            createWallSegment(wallThickness, bottomWallHeight, pillarDepth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, pillarCenterZ));
+            createWallSegment(wallThickness, glassWallHeight, pillarDepth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, pillarCenterZ));
+            createWallSegment(wallThickness, topWallHeight, pillarDepth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, pillarCenterZ));
+        };
+
+        // Create wall segments (pillars) around doors
+        // 1. Bottom-most pillar
+        const pillar1_depth = bottomDoor_z_start - wall_z_min;
+        if (pillar1_depth > 0.1) {
+            createGlassPillar(pillar1_depth, wall_z_min + pillar1_depth / 2);
+        }
+        
+        // 2. Middle pillar
+        const middlePillarDepth = topDoor_z_start - bottomDoor_z_end;
+        if (middlePillarDepth > 0.1) {
+            createGlassPillar(middlePillarDepth, bottomDoor_z_end + middlePillarDepth / 2);
+        }
+        
+        // 3. Top-most pillar
+        const pillar3_depth = wall_z_max - topDoor_z_end;
+        if (pillar3_depth > 0.1) {
+            createGlassPillar(pillar3_depth, topDoor_z_end + pillar3_depth / 2);
+        }
+
+        // Create lintels over doors
+        const lintelHeight = wallHeight - doorHeight;
+        if (lintelHeight > 0) {
+            createWallSegment(wallThickness, lintelHeight, doorWidth, solidMaterial, new THREE.Vector3(rightWallX, doorHeight + lintelHeight/2, bottomDoor_z_start + doorWidth/2));
+            createWallSegment(wallThickness, lintelHeight, doorWidth, solidMaterial, new THREE.Vector3(rightWallX, doorHeight + lintelHeight/2, topDoor_z_start + doorWidth/2));
+        }
+
+        // Create door meshes
+        const bottomDoor = this.createFramedDoor(doorWidth, doorHeight, wallThickness - 0.2);
+        bottomDoor.position.set(rightWallX, doorHeight/2, bottomDoor_z_start + doorWidth/2);
+        this.scene.add(bottomDoor);
+        
+        const topDoor = this.createFramedDoor(doorWidth, doorHeight, wallThickness - 0.2);
+        topDoor.position.set(rightWallX, doorHeight/2, topDoor_z_start + doorWidth/2);
+        this.scene.add(topDoor);
+
+    } else if (zoneName === 'ADMIN' || zoneName === 'QUALITY') {
+        const doorWidth = 20;
+        const doorHeight = 30;
+
+        // Door is in the middle of the right wall
+        const wall_z_min = centerZ - verticalWallDepth / 2;
+        const wall_z_max = centerZ + verticalWallDepth / 2;
+        const door_z_start = centerZ - doorWidth / 2;
+        const door_z_end = centerZ + doorWidth / 2;
+
+        // Wall segment 1 (before door)
+        const segment1_depth = door_z_start - wall_z_min;
+        if (segment1_depth > 0.1) {
+            const segment1_centerZ = wall_z_min + segment1_depth / 2;
+            createWallSegment(wallThickness, bottomWallHeight, segment1_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, segment1_centerZ));
+            createWallSegment(wallThickness, glassWallHeight, segment1_depth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, segment1_centerZ));
+            createWallSegment(wallThickness, topWallHeight, segment1_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, segment1_centerZ));
+        }
+
+        // Wall segment 2 (after door)
+        const segment2_depth = wall_z_max - door_z_end;
+        if (segment2_depth > 0.1) {
+            const segment2_centerZ = door_z_end + segment2_depth / 2;
+            createWallSegment(wallThickness, bottomWallHeight, segment2_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, segment2_centerZ));
+            createWallSegment(wallThickness, glassWallHeight, segment2_depth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, segment2_centerZ));
+            createWallSegment(wallThickness, topWallHeight, segment2_depth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, segment2_centerZ));
+        }
+
+        // Lintel
+        const lintelHeight = wallHeight - doorHeight;
+        if (lintelHeight > 0) {
+            createWallSegment(wallThickness, lintelHeight, doorWidth, solidMaterial, new THREE.Vector3(rightWallX, doorHeight + lintelHeight/2, centerZ));
+        }
+
+        // Door
+        const door = this.createFramedDoor(doorWidth, doorHeight, wallThickness - 0.2);
+        door.position.set(rightWallX, doorHeight/2, centerZ);
+        this.scene.add(door);
+
+    } else {
+        // Default wall with glass
+        createWallSegment(wallThickness, bottomWallHeight, verticalWallDepth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight / 2, centerZ));
+        createWallSegment(wallThickness, glassWallHeight, verticalWallDepth, glassMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight / 2, centerZ));
+        createWallSegment(wallThickness, topWallHeight, verticalWallDepth, solidMaterial, new THREE.Vector3(rightWallX, bottomWallHeight + glassWallHeight + topWallHeight / 2, centerZ));
+    }
+  }
+
+  private createFramedDoor(width: number, height: number, depth: number): THREE.Group {
+    const doorGroup = new THREE.Group();
+    const frameThickness = 1.0; 
+
+    const glassMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.2, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide
+    });
+    const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+    // Glass panel (slightly thinner than the frame)
+    const glassPanel = new THREE.Mesh(
+        new THREE.BoxGeometry(depth * 0.5, height - (2 * frameThickness), width - (2 * frameThickness)),
+        glassMaterial
+    );
+    doorGroup.add(glassPanel);
+
+    // Frame
+    const top = new THREE.Mesh(new THREE.BoxGeometry(depth, frameThickness, width), frameMaterial);
+    top.position.y = height / 2 - frameThickness / 2;
+    doorGroup.add(top);
+
+    const bottom = new THREE.Mesh(new THREE.BoxGeometry(depth, frameThickness, width), frameMaterial);
+    bottom.position.y = -height / 2 + frameThickness / 2;
+    doorGroup.add(bottom);
+
+    const left = new THREE.Mesh(new THREE.BoxGeometry(depth, height - (2 * frameThickness), frameThickness), frameMaterial);
+    left.position.z = -width / 2 + frameThickness / 2;
+    doorGroup.add(left);
+    
+    const right = new THREE.Mesh(new THREE.BoxGeometry(depth, height - (2 * frameThickness), frameThickness), frameMaterial);
+    right.position.z = width / 2 - frameThickness / 2;
+    doorGroup.add(right);
+
+    doorGroup.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+
+    return doorGroup;
+  }
+
+  // Helper function to create sign meshes
+  private createSignMesh(text: string, width: number, height: number): THREE.Mesh {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 512;
+    canvas.height = 256;
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.font = 'bold 200px Arial';
+    context.fillStyle = 'black';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const signMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, transparent: true });
+    const signGeometry = new THREE.PlaneGeometry(width, height);
+    return new THREE.Mesh(signGeometry, signMaterial);
   }
 
   private createTextSprite(message: string, fontsize: number, backgroundColor: string, textColor: string): THREE.Sprite {
@@ -403,26 +876,24 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
     const upperCaseCode = code.toUpperCase();
 
     // First, try to find the object directly in the scene by its name.
-    // This could be a whole shelf group ('G1') or a specific level ('G15').
     const directFind = this.scene.getObjectByName(upperCaseCode);
     if (directFind) {
       this.highlightShelf(directFind);
       return;
     }
 
-    // If not found directly, assume it's an item code and search the Google Sheet.
-    const searchRange = 'Inventory!A:B';
-    this.googleSheetService.getSheet(searchRange).subscribe((response: any) => {
-      const rows = response.values;
-      if (!rows || rows.length === 0) {
-        console.warn(`No data found in Google Sheet or failed to parse.`);
+    // If not found directly, assume it's an item code and search the Google Apps Script.
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
+    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
+      if (!data || data.length === 0) {
+        console.warn(`No data found from Google Apps Script.`);
         return;
       }
 
-      const foundRow = rows.find(row => row[0] && row[0].toUpperCase() === upperCaseCode);
-      if (foundRow && foundRow[1]) {
-        const location = foundRow[1].toUpperCase().trim();
-        console.log(`Item '${code}' found in Sheet. Target location: '${location}'`);
+      const foundRow = data.find(row => row.code && String(row.code).trim().toUpperCase() === upperCaseCode);
+      if (foundRow && foundRow.location) {
+        const location = String(foundRow.location).trim().toUpperCase();
+        console.log(`Item '${code}' found via Apps Script. Target location: '${location}'`);
 
         const shelfOrLevel = this.scene.getObjectByName(location);
 
@@ -433,20 +904,24 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
           console.error(`Item found at location '${location}', but this location object was not found in the 3D model.`);
         }
       } else {
-        console.warn(`Item code '${code}' not found in Google Sheet.`);
+        console.warn(`Item code '${code}' not found in Google Apps Script data.`);
       }
-    }, error => console.error('Error fetching from Google Sheet:', error));
+    }, error => console.error('Error fetching from Google Apps Script:', error));
   }
 
   private highlightShelf(shelf: THREE.Object3D): void {
+    console.log(`HIGHLIGHTING object: ${shelf.name}`, shelf);
     shelf.traverse(child => {
       if (child instanceof THREE.Mesh) {
+        console.log(`...Highlighting mesh: ${child.name}. Material before:`, child.material);
         child.material = this.highlightedMaterial;
+        console.log(`...Material after:`, child.material);
       }
     });
 
     const targetPosition = new THREE.Vector3();
-    shelf.getWorldPosition(targetPosition); // Get world position
+    shelf.getWorldPosition(targetPosition);
+    console.log(`Calculated target position for camera:`, targetPosition);
 
     new TWEEN.Tween(this.camera.position)
       .to({ x: targetPosition.x, y: targetPosition.y + 100, z: targetPosition.z + 150 }, 1000)
@@ -457,15 +932,24 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   }
 
   private resetHighlights(): void {
+    console.log('Resetting all highlights...');
     this.scene.traverse(child => {
       if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
-        child.material = child.userData.originalMaterial;
+        if (child.material !== child.userData.originalMaterial) {
+          child.material = child.userData.originalMaterial;
+        }
       }
     });
   }
 
+  private animateFrameCount = 0;
   private animate = (): void => {
     this.frameId = requestAnimationFrame(this.animate);
+    // Log only once every 60 frames to avoid spamming the console
+    if (this.animateFrameCount % 60 === 0) {
+      // console.log(`Animate loop running. Frame: ${this.animateFrameCount}`);
+    }
+    this.animateFrameCount++;
     TWEEN.update();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);

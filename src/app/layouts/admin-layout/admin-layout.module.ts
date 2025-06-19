@@ -2,7 +2,11 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { HttpClientModule } from '@angular/common/http';
 import { AdminLayoutRoutes } from './admin-layout.routing';
+
+// Import services
+import { GoogleSheetService } from '../../services/google-sheet.service';
 
 // Các component mặc định của admin layout
 import { DashboardComponent } from '../../dashboard/dashboard.component';
@@ -42,6 +46,7 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     CommonModule,
     RouterModule.forChild(AdminLayoutRoutes),
     FormsModule,
+    HttpClientModule,
     ReactiveFormsModule,
     MatButtonModule,
     MatRippleModule,
@@ -70,6 +75,9 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MaterialsInventoryComponent,
     DocumentsComponent,
     Layout3dComponent
+  ],
+  providers: [
+    GoogleSheetService
   ]
 })
 export class AdminLayoutModule {}
