@@ -1073,34 +1073,67 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   }
 
   private placeItemCodesOnShelves(itemsByLocation: { [key: string]: string[] }): void {
-    const targetDataLocation = 'G11'; 
-    const targetShelfObject = 'G1'; // The actual 3D object to attach to
+    const targetPrefixes = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const rightSidePrefixes = ['B', 'D', 'F'];
 
-    if (itemsByLocation[targetDataLocation]) {
-      const shelf = this.scene.getObjectByName(targetShelfObject);
-      if (shelf && shelf.userData.width && shelf.userData.depth && shelf.userData.height) {
-        const items = itemsByLocation[targetDataLocation];
-        const shelfWidth = shelf.userData.width;
-        const shelfHeight = shelf.userData.height;
-        const shelfDepth = shelf.userData.depth;
-        const cols = 10;
-        const textHeight = 4;
-        const cellWidth = shelfWidth / cols;
-        items.forEach((itemCode, index) => {
-          const label = this.create3DTextLabel(itemCode, 1.2, 0.1);
-          const col = index % cols;
-          const row = Math.floor(index / cols);
-          const x = (col * cellWidth) - (shelfWidth / 2) + (cellWidth / 2);
-          const y = (row * textHeight) - (shelfHeight / 2) + (textHeight / 2);
-          const z = shelfDepth / 2 - 5;
-          
-          const localPosition = new THREE.Vector3(x, y, z);
-          const worldPosition = shelf.localToWorld(localPosition.clone());
-          
-          label.position.copy(worldPosition);
-          this.scene.add(label); // Add to the scene directly
-        });
-      }
+    for (const location in itemsByLocation) {
+        if (!itemsByLocation.hasOwnProperty(location)) continue;
+
+        const bayPrefix = location.charAt(0).toUpperCase();
+        if (!targetPrefixes.includes(bayPrefix)) continue;
+        
+        // Parse 'G11' -> bay 'G1', level 1. Assumes single-digit level from data.
+        const levelStr = location.slice(-1);
+        if (!levelStr.match(/\d/)) continue; 
+
+        const level = parseInt(levelStr, 10);
+        if (level === 0) continue;
+
+        const bayName = location.slice(0, -1);
+        if (!bayName) continue;
+
+        // Model levels are 0-indexed, data levels are 1-indexed
+        const targetShelfObjectName = `${bayName}-level-${level - 1}`;
+        const shelfSurface = this.scene.getObjectByName(targetShelfObjectName) as THREE.Mesh;
+
+        if (shelfSurface && shelfSurface.geometry instanceof THREE.BoxGeometry) {
+            const items = itemsByLocation[location];
+            const shelfWidth = shelfSurface.geometry.parameters.width;
+            const shelfDepth = shelfSurface.geometry.parameters.depth;
+            const shelfThickness = shelfSurface.geometry.parameters.height;
+
+            const parentShelf = shelfSurface.parent;
+            if (!parentShelf || !parentShelf.userData.height || !parentShelf.userData.levels) continue;
+
+            const shelfUnitHeight = parentShelf.userData.height;
+            const shelfUnitLevels = parentShelf.userData.levels;
+            const verticalSpacing = shelfUnitHeight / (shelfUnitLevels > 1 ? shelfUnitLevels - 1 : 1);
+
+            const cols = 4; // Along shelf depth
+            const rows = 5; // Along shelf height
+            const cellWidth = shelfDepth / cols;
+            const cellHeight = verticalSpacing / rows;
+
+            const isOnRightSide = rightSidePrefixes.includes(bayPrefix);
+
+            items.slice(0, cols * rows).forEach((itemCode, index) => {
+                const label = this.create3DTextLabel(itemCode, 0.7, 0.1);
+                
+                // Rotate to face outwards from the correct side
+                label.rotation.y = isOnRightSide ? Math.PI / 2 : -Math.PI / 2;
+
+                const col = index % cols;
+                const row = Math.floor(index / cols);
+
+                // Position on the correct side face
+                const x = isOnRightSide ? shelfWidth / 2 + 1 : -shelfWidth / 2 - 1;
+                const y = (shelfThickness / 2) + (row * cellHeight) + (cellHeight / 2);
+                const z = (col * cellWidth) - (shelfDepth / 2) + (cellWidth / 2);
+
+                label.position.set(x, y, z);
+                shelfSurface.add(label);
+            });
+        }
     }
   }
 } 
