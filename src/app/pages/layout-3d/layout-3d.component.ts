@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, ViewChild, ElementRef, OnDestroy, NgZone, AfterViewChecked } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
@@ -12,7 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
   templateUrl: './layout-3d.component.html',
   styleUrls: ['./layout-3d.component.scss']
 })
-export class Layout3dComponent implements AfterViewInit, OnDestroy {
+export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChecked {
 
   @ViewChild('rendererContainer', { static: true }) rendererContainer: ElementRef;
 
@@ -27,17 +27,25 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
   private hereTextSprite: THREE.Sprite;
   private securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
   private font: any;
+  private threeJsInitialized = false;
 
   constructor(
     private http: HttpClient,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private ngZone: NgZone
   ) { }
 
   ngAfterViewInit(): void {
-    setTimeout(() => {
-        this.initThree();
-        this.loadSVGAndBuildScene();
-    }, 0);
+    // The view is initialized, but we will let AfterViewChecked handle the Three.js setup
+    // to ensure the container is visible and has dimensions.
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.rendererContainer && this.rendererContainer.nativeElement.offsetParent && !this.threeJsInitialized) {
+      this.threeJsInitialized = true;
+      this.initThree();
+      this.loadSVGAndBuildScene();
+    }
   }
 
   ngOnDestroy(): void {
@@ -104,6 +112,11 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
             const parser = new DOMParser();
             const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
             this.createWarehouseFromSVG(svgDoc);
+            if (this.font) {
+                this.populateShelvesWithCodes();
+            } else {
+                console.error('--- DIAGNOSTICS ERROR: Font is NOT loaded. Cannot create text labels.');
+            }
             this.animate();
           },
           error => console.error('Could not load SVG file', error)
@@ -943,8 +956,27 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         const location = String(foundRow.location).trim().toUpperCase();
         console.log(`Item '${code}' found via Apps Script. Target location: '${location}'`);
 
-        const shelfOrLevel = this.scene.getObjectByName(location);
+        let shelfOrLevel: THREE.Object3D | undefined;
 
+        // Try direct match first (for whole shelves like 'G1' or zones)
+        shelfOrLevel = this.scene.getObjectByName(location);
+
+        // If not found, parse it as Bay + Level (e.g., F62 -> bay F6, level 2)
+        if (!shelfOrLevel) {
+            const levelStr = location.slice(-1);
+            if (levelStr.match(/\d/)) { // Check if last char is a digit
+                const level = parseInt(levelStr, 10);
+                const bayName = location.slice(0, -1);
+                const bayObject = this.scene.getObjectByName(bayName);
+                if (bayObject && level > 0) {
+                    const levelObjectName = `${bayName}-level-${level - 1}`;
+                    console.log(`Direct match failed for '${location}'. Trying parsed name: '${levelObjectName}' inside '${bayName}'`);
+                    // getObjectByName searches children, which is what we want.
+                    shelfOrLevel = bayObject.getObjectByName(levelObjectName) || bayObject;
+                }
+            }
+        }
+        
         if (shelfOrLevel) {
           console.log('Successfully found object in 3D scene:', shelfOrLevel);
           this.highlightShelf(shelfOrLevel);
@@ -1014,6 +1046,61 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy {
         this.camera.aspect = container.clientWidth / container.clientHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+  }
+
+  private populateShelvesWithCodes(): void {
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
+    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
+      if (!data || data.length === 0) {
+        console.warn(`No data found from Google Apps Script.`);
+        return;
+      }
+      const itemsByLocation = data.reduce((acc, item) => {
+        const location = item.location ? String(item.location).trim().toUpperCase() : null;
+        if (location && item.code) {
+          if (!acc[location]) {
+            acc[location] = [];
+          }
+          acc[location].push(String(item.code).trim().toUpperCase());
+        }
+        return acc;
+      }, {});
+      this.ngZone.run(() => {
+        this.placeItemCodesOnShelves(itemsByLocation);
+      });
+    }, error => console.error('Error fetching from Google Apps Script for shelf population:', error));
+  }
+
+  private placeItemCodesOnShelves(itemsByLocation: { [key: string]: string[] }): void {
+    const targetDataLocation = 'G11'; 
+    const targetShelfObject = 'G1'; // The actual 3D object to attach to
+
+    if (itemsByLocation[targetDataLocation]) {
+      const shelf = this.scene.getObjectByName(targetShelfObject);
+      if (shelf && shelf.userData.width && shelf.userData.depth && shelf.userData.height) {
+        const items = itemsByLocation[targetDataLocation];
+        const shelfWidth = shelf.userData.width;
+        const shelfHeight = shelf.userData.height;
+        const shelfDepth = shelf.userData.depth;
+        const cols = 10;
+        const textHeight = 4;
+        const cellWidth = shelfWidth / cols;
+        items.forEach((itemCode, index) => {
+          const label = this.create3DTextLabel(itemCode, 1.2, 0.1);
+          const col = index % cols;
+          const row = Math.floor(index / cols);
+          const x = (col * cellWidth) - (shelfWidth / 2) + (cellWidth / 2);
+          const y = (row * textHeight) - (shelfHeight / 2) + (textHeight / 2);
+          const z = shelfDepth / 2 - 5;
+          
+          const localPosition = new THREE.Vector3(x, y, z);
+          const worldPosition = shelf.localToWorld(localPosition.clone());
+          
+          label.position.copy(worldPosition);
+          this.scene.add(label); // Add to the scene directly
+        });
+      }
     }
   }
 } 
