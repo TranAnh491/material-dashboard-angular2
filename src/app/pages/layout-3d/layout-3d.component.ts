@@ -112,11 +112,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
             const parser = new DOMParser();
             const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
             this.createWarehouseFromSVG(svgDoc);
-            if (this.font) {
-                this.populateShelvesWithCodes();
-            } else {
-                console.error('--- DIAGNOSTICS ERROR: Font is NOT loaded. Cannot create text labels.');
-            }
             this.animate();
           },
           error => console.error('Could not load SVG file', error)
@@ -407,6 +402,17 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
             // Add individual label for each level
             if (baseName && this.font) {
                 const label = this.create3DTextLabel(shelfLevelName, shelfThickness * 0.8, 0.1);
+                
+                const locPrefix = locationName.replace(/\d/g, '');
+                const leftSidePrefixes = ['A', 'C', 'E', 'G'];
+                const rightSidePrefixes = ['B', 'D', 'F'];
+
+                if (leftSidePrefixes.includes(locPrefix)) {
+                    label.rotation.y = -Math.PI / 2; // Rotate to face left
+                } else if (rightSidePrefixes.includes(locPrefix)) {
+                    label.rotation.y = Math.PI / 2; // Rotate to face right
+                }
+
                 label.position.set(0, yPos + shelfThickness, 0); 
                 group.add(label);
             }
@@ -1048,92 +1054,4 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
         this.renderer.setSize(container.clientWidth, container.clientHeight);
     }
   }
-
-  private populateShelvesWithCodes(): void {
-    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
-      if (!data || data.length === 0) {
-        console.warn(`No data found from Google Apps Script.`);
-        return;
-      }
-      const itemsByLocation = data.reduce((acc, item) => {
-        const location = item.location ? String(item.location).trim().toUpperCase() : null;
-        if (location && item.code) {
-          if (!acc[location]) {
-            acc[location] = [];
-          }
-          acc[location].push(String(item.code).trim().toUpperCase());
-        }
-        return acc;
-      }, {});
-      this.ngZone.run(() => {
-        this.placeItemCodesOnShelves(itemsByLocation);
-      });
-    }, error => console.error('Error fetching from Google Apps Script for shelf population:', error));
-  }
-
-  private placeItemCodesOnShelves(itemsByLocation: { [key: string]: string[] }): void {
-    const targetPrefixes = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
-    const rightSidePrefixes = ['B', 'D', 'F'];
-
-    for (const location in itemsByLocation) {
-        if (!itemsByLocation.hasOwnProperty(location)) continue;
-
-        const bayPrefix = location.charAt(0).toUpperCase();
-        if (!targetPrefixes.includes(bayPrefix)) continue;
-        
-        // Parse 'G11' -> bay 'G1', level 1. Assumes single-digit level from data.
-        const levelStr = location.slice(-1);
-        if (!levelStr.match(/\d/)) continue; 
-
-        const level = parseInt(levelStr, 10);
-        if (level === 0) continue;
-
-        const bayName = location.slice(0, -1);
-        if (!bayName) continue;
-
-        // Model levels are 0-indexed, data levels are 1-indexed
-        const targetShelfObjectName = `${bayName}-level-${level - 1}`;
-        const shelfSurface = this.scene.getObjectByName(targetShelfObjectName) as THREE.Mesh;
-
-        if (shelfSurface && shelfSurface.geometry instanceof THREE.BoxGeometry) {
-            const items = itemsByLocation[location];
-            const shelfWidth = shelfSurface.geometry.parameters.width;
-            const shelfDepth = shelfSurface.geometry.parameters.depth;
-            const shelfThickness = shelfSurface.geometry.parameters.height;
-
-            const parentShelf = shelfSurface.parent;
-            if (!parentShelf || !parentShelf.userData.height || !parentShelf.userData.levels) continue;
-
-            const shelfUnitHeight = parentShelf.userData.height;
-            const shelfUnitLevels = parentShelf.userData.levels;
-            const verticalSpacing = shelfUnitHeight / (shelfUnitLevels > 1 ? shelfUnitLevels - 1 : 1);
-
-            const cols = 4; // Along shelf depth
-            const rows = 5; // Along shelf height
-            const cellWidth = shelfDepth / cols;
-            const cellHeight = verticalSpacing / rows;
-
-            const isOnRightSide = rightSidePrefixes.includes(bayPrefix);
-
-            items.slice(0, cols * rows).forEach((itemCode, index) => {
-                const label = this.create3DTextLabel(itemCode, 0.7, 0.1);
-                
-                // Rotate to face outwards from the correct side
-                label.rotation.y = isOnRightSide ? Math.PI / 2 : -Math.PI / 2;
-
-                const col = index % cols;
-                const row = Math.floor(index / cols);
-
-                // Position on the correct side face
-                const x = isOnRightSide ? shelfWidth / 2 + 1 : -shelfWidth / 2 - 1;
-                const y = (shelfThickness / 2) + (row * cellHeight) + (cellHeight / 2);
-                const z = (col * cellWidth) - (shelfDepth / 2) + (cellWidth / 2);
-
-                label.position.set(x, y, z);
-                shelfSurface.add(label);
-            });
-        }
-    }
-  }
-} 
+}
