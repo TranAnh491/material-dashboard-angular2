@@ -269,7 +269,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
 
             if (textEl && textEl.textContent) {
                 const displayText = (upperCaseLoc === 'WH OFFICE') ? 'WH Office' : textEl.textContent.trim();
-                const floorLabelZones = ['INBOUND STAGE', 'OUTBOUND STAGE', 'J', 'NG', 'ADMIN', 'WH OFFICE', 'VP', 'QUALITY', 'SECURED WH'];
+                const floorLabelZones = ['INBOUND STAGE', 'OUTBOUND STAGE', 'J', 'NG', 'ADMIN', 'WH OFFICE', 'VP', 'QUALITY', 'SECURED WH', 'FORKLIFT'];
                 const palletZones = ['IQC', 'K', 'WO'];
 
                 if (floorLabelZones.includes(upperCaseLoc)) {
@@ -286,11 +286,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
                     this.scene.add(label);
                 } else if (palletZones.includes(upperCaseLoc)) {
                     this.createPalletsForZone(x, z, width, depth, 20);
-                } else if (upperCaseLoc === 'FORKLIFT') {
-                    const forklift = this.createForkliftModel();
-                    forklift.position.set(x, 1, z);
-                    forklift.rotation.y = Math.PI / 2; // Face towards the main aisles
-                    this.scene.add(forklift);
                 } else {
                     const label = this.createTextSprite(displayText, 20, 'rgba(255, 255, 255, 0.7)', 'black');
                     label.position.set(x, 0.2, z);
@@ -437,74 +432,6 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
     
     return textMesh;
-  }
-
-  private createForkliftModel(): THREE.Group {
-    const forkliftGroup = new THREE.Group();
-    
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-    const operatorCabMaterial = new THREE.MeshStandardMaterial({ color: 0xFF4500 }); // OrangeRed
-    const mastMaterial = new THREE.MeshStandardMaterial({ color: 0x4B4B4B });
-    const forkMaterial = new THREE.MeshStandardMaterial({ color: 0x2B2B2B });
-    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1B1B1B });
-
-    const bodyWidth = 8, bodyHeight = 10, bodyDepth = 12;
-
-    // Main Body
-    const mainBody = new THREE.Mesh(
-        new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyDepth),
-        bodyMaterial
-    );
-    mainBody.position.y = bodyHeight / 2;
-    forkliftGroup.add(mainBody);
-
-    // Operator Cab
-    const cab = new THREE.Mesh(
-        new THREE.BoxGeometry(bodyWidth * 0.95, bodyHeight * 0.8, bodyDepth * 0.6),
-        operatorCabMaterial
-    );
-    cab.position.set(0, bodyHeight * 0.6, -bodyDepth * 0.2);
-    mainBody.add(cab);
-
-    // Mast
-    const mastHeight = 30, mastWidth = 6, mastDepth = 2;
-    const mast = new THREE.Mesh(
-        new THREE.BoxGeometry(mastWidth, mastHeight, mastDepth),
-        mastMaterial
-    );
-    mast.position.set(0, mastHeight / 2, bodyDepth / 2 + mastDepth / 2);
-    mainBody.add(mast);
-
-    // Forks
-    const forkLength = 15, forkWidth = 1, forkHeight = 0.5;
-    const forkY = 2;
-    const forkZ = bodyDepth/2 + mastDepth + forkLength/2;
-    
-    const fork1 = new THREE.Mesh(new THREE.BoxGeometry(forkWidth, forkHeight, forkLength), forkMaterial);
-    fork1.position.set(-mastWidth/4, forkY, forkZ);
-    mainBody.add(fork1);
-
-    const fork2 = new THREE.Mesh(new THREE.BoxGeometry(forkWidth, forkHeight, forkLength), forkMaterial);
-    fork2.position.set(mastWidth/4, forkY, forkZ);
-    mainBody.add(fork2);
-
-    // Wheels
-    const wheelRadius = 2.5, wheelDepth = 1.5;
-    const wheelGeom = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelDepth, 20);
-    const wheelPositions = [
-        { x: -bodyWidth/2, y: wheelRadius, z: bodyDepth/4 },
-        { x: bodyWidth/2, y: wheelRadius, z: bodyDepth/4 },
-        { x: -bodyWidth/2, y: wheelRadius, z: -bodyDepth/4 },
-        { x: bodyWidth/2, y: wheelRadius, z: -bodyDepth/4 },
-    ];
-    wheelPositions.forEach(pos => {
-        const wheel = new THREE.Mesh(wheelGeom, wheelMaterial);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(pos.x, pos.y, pos.z);
-        mainBody.add(wheel);
-    });
-
-    return forkliftGroup;
   }
 
   private createComplexPallet(width: number, depth: number, height: number): THREE.Group {
@@ -1036,22 +963,17 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   private animateFrameCount = 0;
   private animate = (): void => {
     this.frameId = requestAnimationFrame(this.animate);
-    // Log only once every 60 frames to avoid spamming the console
-    if (this.animateFrameCount % 60 === 0) {
-      // console.log(`Animate loop running. Frame: ${this.animateFrameCount}`);
-    }
-    this.animateFrameCount++;
     TWEEN.update();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
-  }
+    this.animateFrameCount++;
+  };
 
   private onWindowResize = (): void => {
-    if(this.camera && this.renderer) {
-        const container = this.rendererContainer.nativeElement;
-        this.camera.aspect = container.clientWidth / container.clientHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(container.clientWidth, container.clientHeight);
-    }
+    if (!this.camera || !this.renderer) return;
+    const container = this.rendererContainer.nativeElement;
+    this.camera.aspect = container.clientWidth / container.clientHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(container.clientWidth, container.clientHeight);
   }
 }
