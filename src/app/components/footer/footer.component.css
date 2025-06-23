@@ -1,3 +1,19 @@
+.footer {
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-top: none;
+}
+
+.footer .copyright {
+    margin: 0;
+    font-size: 12px;
+    color: #a9afbb;
+}
+
 .footer .copyright a {
     display: inline-block;
     margin-top: 30px;  /* Tăng số px tùy ý */

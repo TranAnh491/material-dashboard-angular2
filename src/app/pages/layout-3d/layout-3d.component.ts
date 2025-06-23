@@ -384,9 +384,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
         const shelfGeometry = new THREE.BoxGeometry(width, shelfThickness, depth);
         const spacing = height / (levels - 1);
         for (let i = 0; i < levels; i++) {
-            const shelfLevelName = `${baseName}${i + 1}`;
+            const shelfLevelName = `${locationName}-${i + 1}`;
             const shelf = new THREE.Mesh(shelfGeometry, shelfSurfaceMaterial);
-            shelf.name = `${locationName}-level-${i}`; // Use a unique name
+            shelf.name = shelfLevelName; // Use a unique name
             const yPos = i * spacing - height / 2;
             shelf.position.set(0, yPos, 0);
             shelf.castShadow = true;
@@ -396,7 +396,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
 
             // Add individual label for each level
             if (baseName && this.font) {
-                const label = this.create3DTextLabel(shelfLevelName, shelfThickness * 0.8, 0.1);
+                const labelText = `${baseName}${i + 1}`;
+                const label = this.create3DTextLabel(labelText, shelfThickness * 0.8, 0.1);
                 
                 const locPrefix = locationName.replace(/\d/g, '');
                 const leftSidePrefixes = ['A', 'C', 'E', 'G'];
@@ -865,67 +866,30 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   }
 
   public findShelf(code: string): void {
-    if (!code) return;
-    this.resetHighlights();
-    const upperCaseCode = code.toUpperCase();
-
-    // First, try to find the object directly in the scene by its name.
-    const directFind = this.scene.getObjectByName(upperCaseCode);
-    if (directFind) {
-      this.highlightShelf(directFind);
-      return;
-    }
-
-    // If not found directly, assume it's an item code and search the Google Apps Script.
-    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-    this.http.get<any[]>(sheetUrl).subscribe((data: any[]) => {
-      if (!data || data.length === 0) {
-        this.snackBar.open(`No data found from item list.`, 'Close', { duration: 3000 });
-        return;
-      }
-
-      const foundRow = data.find(row => row.code && String(row.code).trim().toUpperCase() === upperCaseCode);
-      if (foundRow && foundRow.location) {
-        const location = String(foundRow.location).trim().toUpperCase();
-        console.log(`Item '${code}' found via Apps Script. Target location: '${location}'`);
-
-        let shelfOrLevel: THREE.Object3D | undefined;
-
-        // Try direct match first (for whole shelves like 'G1' or zones)
-        shelfOrLevel = this.scene.getObjectByName(location);
-
-        // If not found, parse it as Bay + Level (e.g., F62 -> bay F6, level 2)
-        if (!shelfOrLevel) {
-            const levelStr = location.slice(-1);
-            if (levelStr.match(/\d/)) { // Check if last char is a digit
-                const level = parseInt(levelStr, 10);
-                const bayName = location.slice(0, -1);
-                const bayObject = this.scene.getObjectByName(bayName);
-                if (bayObject && level > 0) {
-                    const levelObjectName = `${bayName}-level-${level - 1}`;
-                    console.log(`Direct match failed for '${location}'. Trying parsed name: '${levelObjectName}' inside '${bayName}'`);
-                    // getObjectByName searches children, which is what we want.
-                    shelfOrLevel = bayObject.getObjectByName(levelObjectName) || bayObject;
-                }
-            }
+    this.ngZone.run(() => {
+        console.log(`Searching for shelf with code: "${code}"`);
+        if (!code) {
+            this.snackBar.open('Please enter a shelf code.', 'Close', { duration: 3000 });
+            return;
         }
-        
-        if (shelfOrLevel) {
-          console.log('Successfully found object in 3D scene:', shelfOrLevel);
-          this.highlightShelf(shelfOrLevel);
+
+        const upperCaseCode = code.toUpperCase();
+        console.log(`Searching for THREE.Object3D with name: "${upperCaseCode}"`);
+        const targetObject = this.scene.getObjectByName(upperCaseCode);
+        console.log('Found object:', targetObject);
+
+        if (targetObject) {
+            this.highlightShelf(targetObject);
+            this.snackBar.open(`Found ${upperCaseCode}.`, 'Close', { duration: 3000 });
         } else {
-          this.snackBar.open(`Item found at '${location}', but location not in 3D model.`, 'Close', { duration: 3000 });
+            this.snackBar.open(`Shelf "${upperCaseCode}" not found.`, 'Close', { duration: 3000 });
+            this.resetHighlights();
         }
-      } else {
-        this.snackBar.open(`Mã hàng '${code}' không có.`, 'Close', { duration: 3000 });
-      }
-    }, error => {
-        console.error('Error fetching from Google Apps Script:', error);
-        this.snackBar.open('Error connecting to item database.', 'Close', { duration: 3000 });
     });
   }
 
   private highlightShelf(shelf: THREE.Object3D): void {
+    this.resetHighlights();
     console.log(`HIGHLIGHTING object: ${shelf.name}`, shelf);
     shelf.traverse(child => {
       if (child instanceof THREE.Mesh) {
@@ -935,6 +899,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
 
     const targetPosition = new THREE.Vector3();
     shelf.getWorldPosition(targetPosition);
+    console.log(`Object world position:`, targetPosition);
 
     // Position and show the arrow
     this.arrowHelper.position.set(targetPosition.x, targetPosition.y + 50, targetPosition.z);
@@ -970,10 +935,8 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   };
 
   private onWindowResize = (): void => {
-    if (!this.camera || !this.renderer) return;
-    const container = this.rendererContainer.nativeElement;
-    this.camera.aspect = container.clientWidth / container.clientHeight;
+    this.camera.aspect = this.rendererContainer.nativeElement.clientWidth / this.rendererContainer.nativeElement.clientHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
+    this.renderer.setSize(this.rendererContainer.nativeElement.clientWidth, this.rendererContainer.nativeElement.clientHeight);
   }
 }

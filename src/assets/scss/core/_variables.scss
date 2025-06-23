@@ -33,3 +33,12 @@ $enable-shadows: true; // enable shadows, set to false to turn off shadows
 @import "variables/snackbar";
 
 @import "variables/bootstrap-material-design";
+
+//- পরিবারের সদস্যদের জন্য فونٹ
+$font-family-sans-serif:      "Roboto", sans-serif !default;
+$font-family-serif:           "Roboto", serif !default;
+$font-family-monospace:       "Roboto", monospace !default;
+$font-family-base:            $font-family-sans-serif !default;
+
+$font-size-base:              1rem !default; // Assumes the browser default, typically 16px
+$font-size-lg:                ($font-size-base * 1.25) !default;

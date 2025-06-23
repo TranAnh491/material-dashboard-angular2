@@ -23,7 +23,16 @@ import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbo
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
 
 export const AdminLayoutRoutes: Routes = [
+  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard',            component: DashboardComponent },
+  { path: 'op-daily',             component: WorkOrderStatusComponent },
+  { path: 'materials',            component: MaterialsInventoryComponent },
+  { path: 'fg',                   component: TableListComponent },
+  { path: 'bm',                   component: TypographyComponent },
+  { path: 'find',                 component: MapsComponent },
+  { path: 'layout',               component: Layout3dComponent },
+  { path: 'checklist',            component: DocumentsComponent },
+  { path: 'equipment',            component: EquipmentComponent },
   { path: 'user-profile',         component: UserProfileComponent },
   { path: 'table-list',           component: TableListComponent },
   { path: 'typography',           component: TypographyComponent },
@@ -32,7 +41,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'maps',                 component: MapsComponent },
   { path: 'notifications',        component: NotificationsComponent },
   { path: 'kpi-reports',        component: KpiReportsComponent },
-  { path: 'equipment',            component: EquipmentComponent },
   { path: 'work-order-status',    component: WorkOrderStatusComponent },
   { path: 'shipment',             component: ShipmentComponent },
   { path: 'inbound-materials',    component: InboundMaterialsComponent },
