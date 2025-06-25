@@ -3,11 +3,15 @@ export interface RouteInfo {
     title: string;
     icon: string;
     class: string;
+    children?: RouteInfo[];
 }
 
 export const ROUTES: RouteInfo[] = [
     { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
-    { path: '/op-daily', title: 'Daily Operations', icon: 'event_note', class: ''},
+    { path: '#daily-operations', title: 'Daily Operations', icon: 'event_note', class: '', children: [
+        { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: 'ml-4' },
+        { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: 'ml-4' }
+    ]},
     { path: '/materials', title: 'Materials', icon: 'inventory_2', class: ''},
     { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
     { path: '/bm', title: 'Bonded Materials', icon: 'lock', class: ''},

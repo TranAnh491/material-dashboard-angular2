@@ -9,10 +9,20 @@
 <div class="sidebar-wrapper">
   <ul class="nav">
     <li routerLinkActive="active" *ngFor="let menuItem of menuItems" class="{{menuItem.class}} nav-item">
-      <a class="nav-link" [routerLink]="[menuItem.path]">
-          <i class="material-icons">{{menuItem.icon}}</i>
-          <p>{{menuItem.title}}</p>
+      <a class="nav-link" [routerLink]="menuItem.children ? null : [menuItem.path]" (click)="menuItem.children && toggleSubMenu(menuItem)">
+        <i class="material-icons">{{menuItem.icon}}</i>
+        <p>{{menuItem.title}}</p>
       </a>
+      <div class="collapse" [class.show]="menuItem.expanded" *ngIf="menuItem.children">
+        <ul class="nav">
+          <li routerLinkActive="active" *ngFor="let child of menuItem.children" class="nav-item">
+            <a class="nav-link" [routerLink]="[child.path]">
+              <i class="material-icons" style="font-size: 1rem; margin-right: 10px;">{{child.icon}}</i>
+              <span class="sidebar-normal">{{child.title}}</span>
+            </a>
+          </li>
+        </ul>
+      </div>
     </li>
   </ul>
 </div>

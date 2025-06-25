@@ -25,7 +25,6 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
 export const AdminLayoutRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard',            component: DashboardComponent },
-  { path: 'op-daily',             component: WorkOrderStatusComponent },
   { path: 'materials',            component: MaterialsInventoryComponent },
   { path: 'fg',                   component: TableListComponent },
   { path: 'bm',                   component: TypographyComponent },

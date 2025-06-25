@@ -56,13 +56,32 @@
     width: 100%;
 }
 
+.search-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.code-search-field {
+    width: 250px;
+    margin-right: 10px;
+}
+
+.search-button {
+    height: 36px;
+    line-height: 24px;
+}
+
+.search-message {
+    min-height: 20px;
+    font-weight: 500;
+}
+
 .svg-container {
-  margin-top: 20px;
-  width: 100%;
-  height: 600px; /* You can adjust this height */
-  overflow: auto; 
-  border: 1px solid #eee;
-  padding: 5px;
+    width: 100%;
+    height: 75vh;
+    border: 1px solid #ddd;
+    overflow: auto; /* Adds scrollbars if the SVG is larger than the container */
 }
 
 .svg-container ::ng-deep svg {

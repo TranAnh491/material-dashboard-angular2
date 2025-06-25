@@ -102,6 +102,20 @@
   color: #a1b1d1;
 }
 
+.nav > li > a p {
+  flex-grow: 1;
+  margin: 0;
+}
+
+.nav > li > a .caret {
+  margin-left: auto;
+  transition: transform 0.3s;
+}
+
+.nav > li > a[aria-expanded="true"] .caret {
+  transform: rotate(180deg);
+}
+
 .sub-menu {
   list-style: none;
   padding-left: 38px;

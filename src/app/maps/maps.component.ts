@@ -22,6 +22,7 @@ export class MapsComponent implements OnInit {
   
   public svgContent: SafeHtml;
   public searchMessage: string = '';
+  public dataLoaded: boolean = false;
   
   private itemLocations: LocationInfo = {};
   private highlightedElements: HTMLElement[] = [];
@@ -44,6 +45,7 @@ export class MapsComponent implements OnInit {
       console.log('--- Raw Data From Google Sheet: ---', data);
       this.itemLocations = this.parseLocationData(data);
       console.log('--- Parsed Item Locations: ---', this.itemLocations);
+      this.dataLoaded = true;
     });
   }
 

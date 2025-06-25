@@ -15,7 +15,7 @@ export class SidebarComponent implements OnInit {
   constructor() {}
 
   ngOnInit() {
-    this.menuItems = ROUTES.filter(menuItem => menuItem);
+    this.menuItems = ROUTES.filter(menuItem => menuItem).map(menuItem => ({...menuItem, expanded: false}));
     this.googleSheetUrl = 'https://docs.google.com/spreadsheets/d/17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84/edit#gid=GID_CUA_WO_MASS';
   }
 
@@ -25,5 +25,9 @@ export class SidebarComponent implements OnInit {
 
   openGoogleSheet() {
     window.open(this.googleSheetUrl, '_blank');
+  }
+
+  toggleSubMenu(menuItem) {
+    menuItem.expanded = !menuItem.expanded;
   }
 }

@@ -7,6 +7,11 @@ import * as TWEEN from '@tweenjs/tween.js';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
+interface ItemLocation {
+  location: string;
+  // Add other properties if needed, e.g., po, qty
+}
+
 @Component({
   selector: 'app-layout-3d',
   templateUrl: './layout-3d.component.html',
@@ -28,6 +33,9 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   private securedWhShelvesPrefixes = ['Q', 'RR', 'RL', 'SR', 'SL', 'TR', 'TL', 'UR', 'UL', 'VR', 'VL', 'WR', 'WL', 'XR', 'XL', 'YR', 'YL', 'ZR', 'ZL', 'HL', 'HR'];
   private font: any;
   private threeJsInitialized = false;
+  private itemLocations = new Map<string, ItemLocation[]>();
+  public dataLoaded = false;
+  public searchMessage: string = '';
 
   constructor(
     private http: HttpClient,
@@ -43,6 +51,7 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
   ngAfterViewChecked(): void {
     if (this.rendererContainer && this.rendererContainer.nativeElement.offsetParent && !this.threeJsInitialized) {
       this.threeJsInitialized = true;
+      this.loadItemLocations(); // Load item locations first
       this.initThree();
       this.loadSVGAndBuildScene();
     }
@@ -865,49 +874,100 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
     return sprite;
   }
 
-  public findShelf(code: string): void {
-    this.ngZone.run(() => {
-        console.log(`Searching for shelf with code: "${code}"`);
-        if (!code) {
-            this.snackBar.open('Please enter a shelf code.', 'Close', { duration: 3000 });
-            return;
-        }
-
-        const upperCaseCode = code.toUpperCase();
-        console.log(`Searching for THREE.Object3D with name: "${upperCaseCode}"`);
-        const targetObject = this.scene.getObjectByName(upperCaseCode);
-        console.log('Found object:', targetObject);
-
-        if (targetObject) {
-            this.highlightShelf(targetObject);
-            this.snackBar.open(`Found ${upperCaseCode}.`, 'Close', { duration: 3000 });
-        } else {
-            this.snackBar.open(`Shelf "${upperCaseCode}" not found.`, 'Close', { duration: 3000 });
-            this.resetHighlights();
-        }
-    });
-  }
-
-  private highlightShelf(shelf: THREE.Object3D): void {
-    this.resetHighlights();
+  private addHighlightToShelf(shelf: THREE.Object3D): void {
     console.log(`HIGHLIGHTING object: ${shelf.name}`, shelf);
     shelf.traverse(child => {
-      if (child instanceof THREE.Mesh) {
+      if (child instanceof THREE.Mesh && child.userData.originalMaterial) {
         child.material = this.highlightedMaterial;
       }
     });
 
     const targetPosition = new THREE.Vector3();
     shelf.getWorldPosition(targetPosition);
-    console.log(`Object world position:`, targetPosition);
 
-    // Position and show the arrow
-    this.arrowHelper.position.set(targetPosition.x, targetPosition.y + 50, targetPosition.z);
-    this.arrowHelper.visible = true;
+    // Position and show the arrow and text for the first highlighted shelf
+    if (!this.arrowHelper.visible) {
+      this.arrowHelper.position.set(targetPosition.x, targetPosition.y + 50, targetPosition.z);
+      this.arrowHelper.visible = true;
+      this.hereTextSprite.position.set(targetPosition.x, this.arrowHelper.position.y + 15, targetPosition.z);
+      this.hereTextSprite.visible = true;
+    }
+  }
 
-    // Position and show the "HERE" text sprite just above the arrow's tail
-    this.hereTextSprite.position.set(targetPosition.x, this.arrowHelper.position.y + 15, targetPosition.z);
-    this.hereTextSprite.visible = true;
+  private findObjectByLocationCode(code: string): THREE.Object3D {
+    // 1. Try exact match first (handles codes like "NG", "ADMIN", or even pre-named levels like "D4-1")
+    let target = this.scene.getObjectByName(code);
+    if (target) {
+        return target;
+    }
+
+    // 2. Try parsing composite codes like "D41" or "RL12"
+    // This regex looks for letters, then numbers.
+    const match = code.match(/^([A-Z]+)(\d+)$/);
+    if (match) {
+        const letters = match[1]; // e.g., "D" or "RL"
+        const numbers = match[2]; // e.g., "41" or "12"
+
+        if (numbers.length > 1) { // Likely a base+level code, e.g., D4 + 1
+            const baseCode = letters + numbers.slice(0, -1); // D4 or RL1
+            const level = numbers.slice(-1); // 1 or 2
+
+            const shelfGroup = this.scene.getObjectByName(baseCode);
+            if (shelfGroup) {
+                // First, try to find the specific level (e.g., "D4-1")
+                const levelName = `${baseCode}-${level}`;
+                const levelObject = shelfGroup.getObjectByName(levelName);
+                if (levelObject) {
+                    return levelObject;
+                }
+                // If specific level isn't found, return the whole shelf as a fallback.
+                return shelfGroup;
+            }
+        }
+    }
+    // 3. Fallback for simple base codes if they weren't matched exactly initially
+    // (e.g. if an object is just named 'D4' and somehow missed the first check)
+    target = this.scene.getObjectByName(code);
+    if (target) return target;
+
+
+    return null; // Return null if nothing is found
+  }
+
+  public findShelf(code: string): void {
+    this.ngZone.run(() => {
+        this.searchMessage = '';
+        this.resetHighlights();
+
+        if (!code) {
+            this.searchMessage = 'Please enter an item code.';
+            return;
+        }
+
+        const upperCaseCode = code.toUpperCase();
+        let foundSomething = false;
+
+        const locations = this.itemLocations.get(upperCaseCode);
+        if (locations && locations.length > 0) {
+            const foundLocations: string[] = [];
+            locations.forEach(item => {
+                const objectToHighlight = this.findObjectByLocationCode(item.location);
+                if (objectToHighlight) {
+                    this.addHighlightToShelf(objectToHighlight);
+                    foundLocations.push(item.location);
+                    foundSomething = true;
+                }
+            });
+
+            if (foundSomething) {
+                this.searchMessage = `Item ${upperCaseCode} found at: ${foundLocations.join(', ')}`;
+            } else {
+                this.searchMessage = `Item ${upperCaseCode} is in the database, but its location(s) were not found on the map.`;
+            }
+        } else {
+            this.searchMessage = `Item code "${upperCaseCode}" not found.`;
+        }
+    });
   }
 
   private resetHighlights(): void {
@@ -938,5 +998,24 @@ export class Layout3dComponent implements AfterViewInit, OnDestroy, AfterViewChe
     this.camera.aspect = this.rendererContainer.nativeElement.clientWidth / this.rendererContainer.nativeElement.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.rendererContainer.nativeElement.clientWidth, this.rendererContainer.nativeElement.clientHeight);
+  }
+
+  private loadItemLocations(): void {
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
+    this.http.get<any[]>(sheetUrl).subscribe(data => {
+      this.itemLocations.clear();
+      for (const row of data) {
+        const itemCode = row.code ? String(row.code).trim().toUpperCase() : '';
+        const location = row.location ? String(row.location).trim().toUpperCase() : '';
+        if (itemCode && location) {
+          if (!this.itemLocations.has(itemCode)) {
+            this.itemLocations.set(itemCode, []);
+          }
+          this.itemLocations.get(itemCode).push({ location });
+        }
+      }
+      this.dataLoaded = true;
+      console.log('--- Parsed Item Locations for 3D Layout: ---', this.itemLocations);
+    });
   }
 }

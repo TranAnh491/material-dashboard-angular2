@@ -28,4 +28,33 @@
 /* Ensure the input is not overly large */
 .search-container .mat-input-element {
   width: 150px;
+}
+
+.renderer-container {
+    width: 100%;
+    height: 75vh;
+    display: block;
+    border: 1px solid #ddd;
+}
+
+.search-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.item-search-field {
+    width: 250px;
+    margin-right: 10px;
+}
+
+.find-button {
+    height: 36px;
+    line-height: 24px;
+}
+
+.search-message {
+    min-height: 20px;
+    font-weight: 500;
+    color: #3C4858;
 } 

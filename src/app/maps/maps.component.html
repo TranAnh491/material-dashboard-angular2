@@ -1,18 +1,16 @@
 <div class="main-content">
   <div class="container-fluid">
     <div class="search-controls">
-      <div class="row">
-        <div class="col-md-6">
-          <mat-form-field class="example-full-width">
-            <input matInput #searchInput placeholder="Enter Item Code to find" (keyup.enter)="search(searchInput.value)">
-          </mat-form-field>
-        </div>
-        <div class="col-md-6">
-          <button mat-raised-button type="submit" class="btn btn-info pull-right" (click)="search(searchInput.value)">Search</button>
-        </div>
-      </div>
-      <h5 *ngIf="searchMessage" [innerHTML]="searchMessage"></h5>
+      <mat-form-field class="code-search-field">
+        <input matInput #searchInput 
+               placeholder="{{ dataLoaded ? 'Enter code' : 'Loading...' }}" 
+               (keyup.enter)="search(searchInput.value)"
+               (input)="searchInput.value = searchInput.value.toUpperCase()"
+               [disabled]="!dataLoaded">
+      </mat-form-field>
+      <button mat-raised-button class="btn btn-info search-button" (click)="search(searchInput.value)" [disabled]="!dataLoaded">Search</button>
     </div>
+    <h5 *ngIf="searchMessage" [innerHTML]="searchMessage" class="search-message"></h5>
     
     <!-- Container for the SVG Layout -->
     <div class="svg-container" #svgContainer [innerHTML]="svgContent">
