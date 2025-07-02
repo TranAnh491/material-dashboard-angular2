@@ -12,7 +12,12 @@ export const ROUTES: RouteInfo[] = [
         { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: 'ml-4' },
         { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: 'ml-4' }
     ]},
-    { path: '/materials', title: 'Materials', icon: 'inventory_2', class: ''},
+    { path: '#materials', title: 'Materials', icon: 'inventory_2', class: '', children: [
+        { path: '/inbound-materials', title: 'Inbound', icon: 'arrow_downward', class: 'ml-4' },
+        { path: '/outbound-materials', title: 'Outbound', icon: 'arrow_upward', class: 'ml-4' },
+        { path: '/materials-inventory', title: 'Inventory', icon: 'inventory', class: 'ml-4' },
+        { path: '/shelf-life', title: 'Shelf-Life', icon: 'hourglass_empty', class: 'ml-4' }
+    ]},
     { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
     { path: '/bm', title: 'Bonded Materials', icon: 'lock', class: ''},
     { path: '/find', title: 'Find', icon: 'search', class: '' },

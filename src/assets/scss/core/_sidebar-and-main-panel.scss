@@ -11,7 +11,7 @@
     left: 0;
     z-index: 2;
     width: 260px;
-    background: #f4f6f9;
+    background: #ffffff;
 
     display: flex;
     flex-direction: column;
@@ -46,13 +46,13 @@
     }
     .sidebar-wrapper{
         position: relative;
-        flex: 1;
+        height: calc(100vh - 160px);
         min-height: 0;
-        overflow: auto;
+        overflow-y: auto;
         width: 260px;
         z-index: 4;
-
-        padding-bottom: 30px;
+        padding-bottom: 50px;
+        margin-top: 160px;
 
         .dropdown .dropdown-backdrop{
             display: none !important;
@@ -211,7 +211,7 @@
     }
 
 
-    .sidebar-background{
+            .sidebar-background{
         position: absolute;
         z-index: 1;
         height: 100%;
@@ -229,7 +229,7 @@
             height: 100%;
             content: "";
             display: block;
-            background: #f4f6f9;
+            background: #ffffff;
             opacity: .93;
         }
     }
@@ -239,7 +239,9 @@
         margin: 0;
         display: block;
         position: relative;
-        z-index: 4;
+        z-index: 10;
+        top: 0;
+        left: 0;
 
         p{
             float: left;
@@ -307,6 +309,10 @@
     }
     &[data-color="orange"]{
         @include set-background-color-button($brand-warning);
+        .nav li.active > a{
+            background-color: rgba(255, 152, 0, 0.3);
+            box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(255, 152, 0, 0.4);
+        }
     }
     &[data-color="danger"]{
         @include set-background-color-button($brand-danger);

@@ -21,6 +21,7 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { ShelfLifeComponent } from 'app/pages/shelf-life/shelf-life.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -45,6 +46,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-materials',    component: InboundMaterialsComponent },
   { path: 'outbound-materials',   component: OutboundMaterialsComponent },
   { path: 'materials-inventory',  component: MaterialsInventoryComponent },
+  { path: 'shelf-life',           component: ShelfLifeComponent },
   { path: 'inbound-fgs',          component: InboundFgsComponent },
   { path: 'outbound-fgs',         component: OutboundFgsComponent },
   { path: 'upgrade',              component: UpgradeComponent },

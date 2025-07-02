@@ -3,18 +3,69 @@
  * --------------------------------------- */
 
 .sidebar-wrapper {
-  padding: 40px 0 12px 0;
+  padding: 10px 0 5px 0;
+  background-color: #ffffff !important;
+  margin-top: 160px;
+  position: relative;
+  overflow: hidden;
+  height: calc(100vh - 160px);
+}
+
+.sidebar-wrapper .nav {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  padding-right: 8px;
+  margin-right: -8px;
+}
+
+/* Custom scrollbar styling */
+.sidebar-wrapper .nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-wrapper .nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-wrapper .nav::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.sidebar-wrapper .nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Hide scrollbar when not needed */
+.sidebar-wrapper .nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Disable perfect scrollbar for sidebar */
+.ps__rail-y {
+  display: none !important;
+}
+
+.ps__thumb-y {
+  display: none !important;
 }
 
 .logo {
-  padding: 0 0 15px 0;
+  padding: 15px 0 15px 0;
   margin: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  position: relative;
-  z-index: 4;
+  position: fixed;
+  z-index: 10;
+  background-color: #ffffff;
+  border: none;
+  width: 260px;
+  top: 0;
+  left: 0;
 }
 
 .logo-img {
@@ -24,11 +75,18 @@
 }
 
 .logo-img img {
-  width: 100px;
-  height: 100px;
+  width: 130px !important;
+  height: 130px !important;
   object-fit: contain;
-  display: block;
+  display: block !important;
   margin: 0 auto 5px auto;
+  border: none !important;
+  border-radius: 0;
+  padding: 0;
+  background-color: transparent !important;
+  box-shadow: none;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .logo a.logo-mini {
@@ -45,11 +103,11 @@
 }
 
 .sidebar-wrapper > .nav > li:first-child {
-  margin-top: 50px;
+  margin-top: 0px;
 }
 
 .nav > li {
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .nav > li > a,
@@ -70,9 +128,9 @@
 
 .nav > li > a:hover,
 .nav > li > a.active {
-  background: #e9f2fd;
-  color: #1976d2;
-  box-shadow: 0 1px 6px #a1b1d155;
+  background: #fff3e0;
+  color: #ff9800;
+  box-shadow: 0 1px 6px rgba(255, 152, 0, 0.3);
 }
 
 .nav > li > a .material-icons {
@@ -85,7 +143,7 @@
 
 .nav > li > a.active .material-icons,
 .nav > li > a:hover .material-icons {
-  color: #1976d2;
+  color: #ff9800;
 }
 
 .nav > li > a span {
@@ -100,6 +158,11 @@
   font-size: 20px;
   margin-left: auto;
   color: #a1b1d1;
+  transition: transform 0.3s ease;
+}
+
+.nav .expand-icon.rotated {
+  transform: rotate(180deg);
 }
 
 .nav > li > a p {
@@ -138,8 +201,8 @@
 
 .sub-menu li > a:hover,
 .sub-menu li > a.active {
-  background: #e0ecfb;
-  color: #1976d2;
+  background: #fff3e0;
+  color: #ff9800;
 }
 
 .sub-menu li > a .material-icons {
@@ -150,7 +213,7 @@
 
 .sub-menu li > a.active .material-icons,
 .sub-menu li > a:hover .material-icons {
-  color: #1976d2;
+  color: #ff9800;
 }
 
 .logo {
@@ -193,4 +256,49 @@
   height: 20px;
   margin-right: 14px;
   flex-shrink: 0;
+}
+
+/* Styling for submenu items (children tabs) */
+.collapse .nav li a {
+  font-size: 0.85em !important; /* Smaller text than parent */
+  padding: 4px 15px 4px 35px !important; /* Reduced padding with extra left padding for indentation */
+}
+
+.collapse .nav li a .material-icons {
+  font-size: 16px !important; /* Smaller icon than parent (parent is 23px) */
+  margin-right: 8px !important; /* Reduced margin */
+}
+
+.collapse .nav li a .sidebar-normal {
+  font-size: 0.85em !important; /* Ensure text is smaller */
+}
+
+/* Orange styling for submenu active/hover */
+.collapse .nav li a:hover,
+.collapse .nav li a.active {
+  background: #fff3e0 !important;
+  color: #ff9800 !important;
+}
+
+.collapse .nav li a:hover .material-icons,
+.collapse .nav li a.active .material-icons {
+  color: #ff9800 !important;
+}
+
+/* Reduce spacing in submenu */
+.collapse .nav li {
+  margin-bottom: 1px !important;
+}
+
+.collapse {
+  margin-bottom: 5px !important;
+}
+
+/* Ensure last menu item is fully visible */
+.nav li:last-child {
+  margin-bottom: 20px !important;
+}
+
+.sidebar-wrapper .nav {
+  padding-bottom: 20px !important;
 }

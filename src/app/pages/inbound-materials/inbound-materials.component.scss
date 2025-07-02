@@ -1,0 +1,10 @@
+.iframe-container {
+  width: 100%;
+  height: 85vh; /* Chiếm 85% chiều cao của màn hình xem */
+}
+
+iframe {
+  width: 100%;
+  height: 100%;
+  border: none; /* Xóa đường viền mặc định */
+}

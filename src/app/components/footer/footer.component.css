@@ -6,6 +6,9 @@
     justify-content: center;
     background: transparent;
     border-top: none;
+    position: relative;
+    z-index: 1;
+    margin-left: 260px;
 }
 
 .footer .copyright {

@@ -1,7 +1,8 @@
 <div class="logo">
   <a href="https://www.airspeedllc.com/" class="simple-text logo-mini">
     <div class="logo-img">
-      <img src="assets/img/logo.png" alt="Logo" />
+      <img src="assets/img/logo.png" alt="Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+      <div style="display: none; width: 130px; height: 130px; background: #007bff; color: white; text-align: center; line-height: 130px; border-radius: 0; font-weight: bold;">LOGO</div>
     </div>
   </a>
 </div>
@@ -12,6 +13,7 @@
       <a class="nav-link" [routerLink]="menuItem.children ? null : [menuItem.path]" (click)="menuItem.children && toggleSubMenu(menuItem)">
         <i class="material-icons">{{menuItem.icon}}</i>
         <p>{{menuItem.title}}</p>
+        <i class="material-icons expand-icon" *ngIf="menuItem.children" [class.rotated]="menuItem.expanded">keyboard_arrow_down</i>
       </a>
       <div class="collapse" [class.show]="menuItem.expanded" *ngIf="menuItem.children">
         <ul class="nav">

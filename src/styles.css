@@ -1,1 +1,63 @@
 /* You can add global styles to this file, and also import other style files */
+
+/* Set white background for entire application */
+html, body {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+.main-panel {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+.main-content {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+.wrapper {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+/* Override any gray backgrounds */
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: #ffffff !important;
+}
+
+.table-striped > tbody > tr:nth-of-type(even) {
+  background-color: #ffffff !important;
+}
+
+.modal-content {
+  background-color: #ffffff !important;
+}
+
+.card {
+  background-color: #ffffff !important;
+}
+
+/* Force all elements to have white background */
+* {
+  background-color: inherit;
+}
+
+/* Override any specific gray backgrounds */
+.bg-light, .bg-gray {
+  background-color: #ffffff !important;
+}
+
+/* Angular Material overrides */
+.mat-drawer-container {
+  background-color: #ffffff !important;
+}
+
+.mat-sidenav-content {
+  background-color: #ffffff !important;
+}
+
+/* Override any remaining backgrounds */
+div, section, main, article, aside {
+  background-color: inherit !important;
+}
