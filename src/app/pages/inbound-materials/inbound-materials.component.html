@@ -1,3 +1,295 @@
-<div class="iframe-container">
-  <iframe [src]="googleSheetUrl"></iframe>
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-primary">
+            <h4 class="card-title">Inbound Materials Management</h4>
+            <p class="card-category">Manage incoming materials and inventory</p>
+          </div>
+          <div class="card-body">
+            
+            <!-- Summary Cards -->
+            <div class="row">
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats">
+                  <div class="card-header card-header-warning card-header-icon">
+                    <div class="card-icon">
+                      <i class="material-icons">assignment</i>
+                    </div>
+                    <p class="card-category">Today's Inbound</p>
+                    <h3 class="card-title">{{todayInbound}}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats">
+                  <div class="card-header card-header-info card-header-icon">
+                    <div class="card-icon">
+                      <i class="material-icons">pending_actions</i>
+                    </div>
+                    <p class="card-category">Pending Items</p>
+                    <h3 class="card-title">{{pendingItems}}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats">
+                  <div class="card-header card-header-success card-header-icon">
+                    <div class="card-icon">
+                      <i class="material-icons">inventory_2</i>
+                    </div>
+                    <p class="card-category">Total Quantity</p>
+                    <h3 class="card-title">{{totalQuantity}}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats">
+                  <div class="card-header card-header-danger card-header-icon">
+                    <div class="card-icon">
+                      <i class="material-icons">location_on</i>
+                    </div>
+                    <p class="card-category">Active Locations</p>
+                    <h3 class="card-title">{{activeLocations}}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="row">
+              <div class="col-md-12">
+                <div class="card">
+                  <div class="card-body">
+                    <div class="row">
+                      <!-- Search -->
+                      <div class="col-md-4">
+                        <mat-form-field class="full-width">
+                          <mat-label>Search Materials</mat-label>
+                          <input matInput [(ngModel)]="searchTerm" (input)="onSearchChange()" 
+                                 placeholder="Material code, name, or location">
+                          <mat-icon matSuffix>search</mat-icon>
+                        </mat-form-field>
+                      </div>
+                      
+                      <!-- Status Filter -->
+                      <div class="col-md-3">
+                        <mat-form-field class="full-width">
+                          <mat-label>Filter by Status</mat-label>
+                          <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
+                            <mat-option value="all">All Status</mat-option>
+                            <mat-option value="active">Active</mat-option>
+                            <mat-option value="expiring_soon">Expiring Soon</mat-option>
+                            <mat-option value="expired">Expired</mat-option>
+                            <mat-option value="quarantine">Quarantine</mat-option>
+                            <mat-option value="consumed">Consumed</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                      
+                      <!-- Location Filter -->
+                      <div class="col-md-3">
+                        <mat-form-field class="full-width">
+                          <mat-label>Filter by Location</mat-label>
+                          <mat-select [(value)]="locationFilter" (selectionChange)="onLocationFilterChange()">
+                            <mat-option value="all">All Locations</mat-option>
+                            <mat-option *ngFor="let location of availableLocations" [value]="location">
+                              {{location}}
+                            </mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                      
+                      <!-- Actions -->
+                      <div class="col-md-2">
+                        <button mat-raised-button color="primary" (click)="isAddingMaterial = true" class="btn-block">
+                          <mat-icon>add</mat-icon> Add Material
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add Material Form -->
+            <div class="row" *ngIf="isAddingMaterial">
+              <div class="col-md-12">
+                <div class="card">
+                  <div class="card-header card-header-success">
+                    <h4 class="card-title">Add New Inbound Material</h4>
+                  </div>
+                  <div class="card-body">
+                    <form>
+                      <div class="row">
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Material Code</mat-label>
+                            <input matInput [(ngModel)]="newMaterial.materialCode" name="materialCode" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Material Name</mat-label>
+                            <input matInput [(ngModel)]="newMaterial.materialName" name="materialName" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Quantity</mat-label>
+                            <input matInput type="number" [(ngModel)]="newMaterial.quantity" name="quantity" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Location</mat-label>
+                            <mat-select [(value)]="newMaterial.location" name="location" required>
+                              <mat-option *ngFor="let location of availableLocations" [value]="location">
+                                {{location}}
+                              </mat-option>
+                            </mat-select>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Batch Number</mat-label>
+                            <input matInput [(ngModel)]="newMaterial.batchNumber" name="batchNumber" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-4">
+                          <mat-form-field class="full-width">
+                            <mat-label>Supplier</mat-label>
+                            <input matInput [(ngModel)]="newMaterial.supplier" name="supplier" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-12">
+                          <button mat-raised-button color="primary" (click)="addNewMaterial()" [disabled]="!isValidMaterial()">
+                            <mat-icon>save</mat-icon> Save Material
+                          </button>
+                          <button mat-raised-button (click)="isAddingMaterial = false; resetForm()" class="ml-2">
+                            <mat-icon>cancel</mat-icon> Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Materials Table -->
+            <div class="row">
+              <div class="col-md-12">
+                <div class="card">
+                  <div class="card-header card-header-primary">
+                    <h4 class="card-title">Inbound Materials ({{filteredMaterials.length}} items)</h4>
+                    <div class="card-tools">
+                      <button mat-raised-button color="accent" (click)="exportToCSV()">
+                        <mat-icon>file_download</mat-icon> Export CSV
+                      </button>
+                    </div>
+                  </div>
+                  <div class="card-body table-responsive">
+                    <table class="table table-hover">
+                      <thead class="text-primary">
+                        <tr>
+                          <th>Material Code</th>
+                          <th>Material Name</th>
+                          <th>Quantity</th>
+                          <th>Location</th>
+                          <th>Batch Number</th>
+                          <th>Supplier</th>
+                          <th>Status</th>
+                          <th>Last Updated</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let material of filteredMaterials" [class]="getStatusClass(material.status)">
+                          <td><strong>{{material.materialCode}}</strong></td>
+                          <td>{{material.materialName}}</td>
+                          <td>{{material.quantity}} {{material.unitOfMeasure}}</td>
+                          <td>
+                            <span class="badge badge-info">{{material.location}}</span>
+                          </td>
+                          <td>{{material.batchNumber}}</td>
+                          <td>{{material.supplier}}</td>
+                          <td>
+                            <mat-form-field class="status-select">
+                              <mat-select [value]="material.status" (selectionChange)="updateMaterialStatus(material, $event.value)">
+                                <mat-option value="active">Active</mat-option>
+                                <mat-option value="expiring_soon">Expiring Soon</mat-option>
+                                <mat-option value="expired">Expired</mat-option>
+                                <mat-option value="quarantine">Quarantine</mat-option>
+                                <mat-option value="consumed">Consumed</mat-option>
+                              </mat-select>
+                            </mat-form-field>
+                          </td>
+                          <td>{{material.lastUpdated | date:'short'}}</td>
+                          <td>
+                            <button mat-icon-button color="warn" (click)="deleteMaterial(material)" 
+                                    matTooltip="Delete Material">
+                              <mat-icon>delete</mat-icon>
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Location Summary -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="card">
+                  <div class="card-header card-header-info">
+                    <h4 class="card-title">Location Summary</h4>
+                  </div>
+                  <div class="card-body">
+                    <div class="location-grid">
+                      <div *ngFor="let location of getLocationKeys()" class="location-item">
+                        <span class="location-name">{{location}}</span>
+                        <span class="location-count">{{getLocationCount(location)}} items</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Recent Transactions -->
+              <div class="col-md-6">
+                <div class="card">
+                  <div class="card-header card-header-success">
+                    <h4 class="card-title">Recent Inbound Transactions</h4>
+                  </div>
+                  <div class="card-body">
+                    <div class="timeline">
+                      <div *ngFor="let transaction of recentTransactions" class="timeline-item">
+                        <div class="timeline-marker"></div>
+                        <div class="timeline-content">
+                          <p class="timeline-title">{{transaction.transactionType | titlecase}}</p>
+                          <p class="timeline-description">
+                            Quantity: {{transaction.quantity}} | Location: {{transaction.location}}
+                          </p>
+                          <small class="timeline-date">{{transaction.timestamp | date:'short'}}</small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

@@ -9,7 +9,10 @@ import {
   MaterialStatus, 
   AlertLevel,
   AlertType,
-  TransactionType 
+  TransactionType,
+  WorkOrder,
+  WorkOrderStatus,
+  FactoryType
 } from '../models/material-lifecycle.model';
 
 @Injectable({
@@ -19,11 +22,13 @@ export class MaterialLifecycleService {
   private materialsCollection: AngularFirestoreCollection<MaterialLifecycle>;
   private alertsCollection: AngularFirestoreCollection<MaterialAlert>;
   private transactionsCollection: AngularFirestoreCollection<MaterialTransaction>;
+  private workOrdersCollection: AngularFirestoreCollection<WorkOrder>;
 
   constructor(private firestore: AngularFirestore) {
     this.materialsCollection = firestore.collection<MaterialLifecycle>('materials');
     this.alertsCollection = firestore.collection<MaterialAlert>('material-alerts');
     this.transactionsCollection = firestore.collection<MaterialTransaction>('material-transactions');
+    this.workOrdersCollection = firestore.collection<WorkOrder>('work-orders');
   }
 
   // Materials CRUD Operations
@@ -277,5 +282,106 @@ export class MaterialLifecycleService {
         createdAt: new Date()
       });
     }
+  }
+
+  // Work Order Management
+  getWorkOrders(): Observable<WorkOrder[]> {
+    return this.workOrdersCollection.snapshotChanges().pipe(
+      map(actions => actions.map(a => {
+        const data = a.payload.doc.data() as WorkOrder;
+        const id = a.payload.doc.id;
+        return { id, ...data };
+      }))
+    );
+  }
+
+  getWorkOrderById(id: string): Observable<WorkOrder> {
+    return this.workOrdersCollection.doc(id).valueChanges().pipe(
+      map(workOrder => ({ id, ...workOrder }))
+    );
+  }
+
+  getWorkOrdersByFactory(factory: FactoryType): Observable<WorkOrder[]> {
+    return this.firestore.collection<WorkOrder>('work-orders',
+      ref => ref.where('factory', '==', factory).orderBy('createdDate', 'desc')
+    ).snapshotChanges().pipe(
+      map(actions => actions.map(a => {
+        const data = a.payload.doc.data() as WorkOrder;
+        const id = a.payload.doc.id;
+        return { id, ...data };
+      }))
+    );
+  }
+
+  getWorkOrdersByStatus(status: WorkOrderStatus): Observable<WorkOrder[]> {
+    return this.firestore.collection<WorkOrder>('work-orders',
+      ref => ref.where('status', '==', status)
+    ).snapshotChanges().pipe(
+      map(actions => actions.map(a => {
+        const data = a.payload.doc.data() as WorkOrder;
+        const id = a.payload.doc.id;
+        return { id, ...data };
+      }))
+    );
+  }
+
+  getWorkOrdersByDateRange(startDate: Date, endDate: Date): Observable<WorkOrder[]> {
+    return this.firestore.collection<WorkOrder>('work-orders',
+      ref => ref.where('deliveryDate', '>=', startDate).where('deliveryDate', '<=', endDate)
+    ).snapshotChanges().pipe(
+      map(actions => actions.map(a => {
+        const data = a.payload.doc.data() as WorkOrder;
+        const id = a.payload.doc.id;
+        return { id, ...data };
+      }))
+    );
+  }
+
+  addWorkOrder(workOrder: WorkOrder): Promise<any> {
+    workOrder.createdDate = new Date();
+    workOrder.lastUpdated = new Date();
+    return this.workOrdersCollection.add(workOrder);
+  }
+
+  updateWorkOrder(id: string, workOrder: Partial<WorkOrder>): Promise<void> {
+    workOrder.lastUpdated = new Date();
+    return this.workOrdersCollection.doc(id).update(workOrder);
+  }
+
+  deleteWorkOrder(id: string): Promise<void> {
+    return this.workOrdersCollection.doc(id).delete();
+  }
+
+  searchWorkOrders(searchTerm: string): Observable<WorkOrder[]> {
+    return this.getWorkOrders().pipe(
+      map(workOrders => workOrders.filter(wo =>
+        wo.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wo.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wo.productionOrder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wo.customer.toLowerCase().includes(searchTerm.toLowerCase())
+      ))
+    );
+  }
+
+  getWorkOrderSummary(): Observable<any> {
+    return this.getWorkOrders().pipe(
+      map(workOrders => {
+        const summary = {
+          total: workOrders.length,
+          pending: workOrders.filter(wo => wo.status === WorkOrderStatus.PENDING).length,
+          inProgress: workOrders.filter(wo => wo.status === WorkOrderStatus.IN_PROGRESS).length,
+          completed: workOrders.filter(wo => wo.status === WorkOrderStatus.COMPLETED).length,
+          onHold: workOrders.filter(wo => wo.status === WorkOrderStatus.ON_HOLD).length,
+          cancelled: workOrders.filter(wo => wo.status === WorkOrderStatus.CANCELLED).length,
+          totalQuantity: workOrders.reduce((sum, wo) => sum + wo.quantity, 0),
+          byFactory: {
+            ASM1: workOrders.filter(wo => wo.factory === FactoryType.ASM1).length,
+            ASM2: workOrders.filter(wo => wo.factory === FactoryType.ASM2).length,
+            ASM3: workOrders.filter(wo => wo.factory === FactoryType.ASM3).length
+          }
+        };
+        return summary;
+      })
+    );
   }
 } 

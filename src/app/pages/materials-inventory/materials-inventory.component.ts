@@ -69,10 +69,10 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
       next: (materials) => {
         this.materials = materials;
         this.applyFilters();
-        this.loading = false;
+      this.loading = false;
       },
       error: (error) => {
-        this.loading = false;
+      this.loading = false;
         this.snackBar.open('Error loading inventory data', 'Close', { duration: 3000 });
         console.error('Error loading materials:', error);
       }

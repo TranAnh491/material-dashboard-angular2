@@ -17,6 +17,7 @@ html, body {
   height: 100vh; /* Chiếm toàn bộ chiều cao trình duyệt */
   display: flex;
   flex-direction: column;
+  padding: 20px;
 }
 .container-fluid {
   flex: 1;
@@ -28,4 +29,634 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.card {
+  margin-bottom: 20px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  
+  .card-header {
+    border-radius: 8px 8px 0 0;
+    
+    .card-tools {
+      float: right;
+      margin-top: -40px;
+    }
+  }
+}
+
+.card-stats {
+  .card-header-icon {
+    border-radius: 3px;
+    text-align: center;
+    
+    .card-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      text-align: center;
+      margin: -20px auto 0;
+      overflow: hidden;
+      padding: 15px;
+      
+      i {
+        line-height: 30px;
+        color: #fff;
+        font-size: 36px;
+        width: 30px;
+        height: 30px;
+      }
+    }
+  }
+  
+  .card-category {
+    color: #999;
+    margin: 0;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  
+  .card-title {
+    margin: 0;
+    color: #3c4858;
+    font-weight: 300;
+    font-size: 1.5em;
+  }
+}
+
+// Factory toggle styling
+.factory-toggle {
+  .mat-button-toggle {
+    margin-right: 10px;
+    border-radius: 4px;
+    
+    &.mat-button-toggle-checked {
+      background-color: #9c27b0;
+      color: white;
+    }
+  }
+  
+  .mat-button-toggle-label-content {
+    padding: 8px 16px;
+    font-weight: 500;
+  }
+}
+
+// Status-based row styling
+.status-pending {
+  background-color: #fff8e1;
+  border-left: 3px solid #ff9800;
+  
+  &:hover {
+    background-color: #fff3c4;
+  }
+}
+
+.status-in-progress {
+  background-color: #e3f2fd;
+  border-left: 3px solid #2196f3;
+  
+  &:hover {
+    background-color: #bbdefb;
+  }
+}
+
+.status-on-hold {
+  background-color: #fce4ec;
+  border-left: 3px solid #e91e63;
+  
+  &:hover {
+    background-color: #f8bbd9;
+  }
+}
+
+.status-completed {
+  background-color: #e8f5e8;
+  border-left: 3px solid #4caf50;
+  
+  &:hover {
+    background-color: #c8e6c9;
+  }
+}
+
+.status-cancelled {
+  background-color: #ffebee;
+  border-left: 3px solid #f44336;
+  
+  &:hover {
+    background-color: #ffcdd2;
+  }
+}
+
+.status-quality-check {
+  background-color: #f3e5f5;
+  border-left: 3px solid #9c27b0;
+  
+  &:hover {
+    background-color: #e1bee7;
+  }
+}
+
+// Priority-based styling
+.priority-overdue {
+  color: #d32f2f !important;
+  font-weight: bold;
+  animation: blink 1s infinite;
+}
+
+.priority-urgent {
+  color: #f57c00 !important;
+  font-weight: bold;
+}
+
+.priority-high {
+  color: #fbc02d !important;
+  font-weight: 500;
+}
+
+.priority-normal {
+  color: #388e3c !important;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.5; }
+}
+
+// Form styling
+.full-width {
+  width: 100%;
+}
+
+.status-select {
+  min-width: 140px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+  }
+}
+
+// Table styling
+.table-responsive {
+  .table {
+    th {
+      border-top: none;
+      padding: 12px 8px;
+      font-weight: 500;
+      color: #555;
+      background: #f8f9fa;
+      white-space: nowrap;
+    }
+    
+    td {
+      padding: 12px 8px;
+      vertical-align: middle;
+      border-top: 1px solid #e9ecef;
+    }
+    
+    .badge {
+      font-size: 0.8em;
+      padding: 4px 8px;
+    }
+  }
+}
+
+// No data message
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-style: italic;
+}
+
+// Button styling
+.btn-block {
+  width: 100%;
+}
+
+.ml-2 {
+  margin-left: 8px;
+}
+
+// Date picker styling
+.mat-form-field-appearance-outline {
+  .mat-form-field-outline {
+    color: #ddd;
+  }
+}
+
+// Card header styling
+.card-header-rose {
+  background: linear-gradient(60deg, #ec407a, #d81b60);
+  box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(233, 30, 99, 0.4);
+}
+
+// Responsive design
+@media (max-width: 1200px) {
+  .table-responsive {
+    font-size: 0.9em;
+    
+    .table td, .table th {
+      padding: 8px 4px;
+    }
+    
+    .status-select {
+      min-width: 120px;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .card-stats .card-title {
+    font-size: 1.2em;
+  }
+  
+  .factory-toggle {
+    .mat-button-toggle {
+      margin: 5px;
+      display: block;
+      width: 100%;
+    }
+  }
+  
+  .table-responsive {
+    font-size: 0.8em;
+    
+    .table td, .table th {
+      padding: 6px 3px;
+      font-size: 0.85em;
+    }
+    
+    .status-select {
+      min-width: 100px;
+    }
+  }
+  
+  .card-tools {
+    float: none !important;
+    margin-top: 10px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .main-content {
+    padding: 10px;
+  }
+  
+  .card {
+    margin-bottom: 15px;
+  }
+  
+  .factory-toggle {
+    .mat-button-toggle-label-content {
+      padding: 6px 12px;
+      font-size: 0.9em;
+    }
+  }
+  
+  .table-responsive {
+    .table {
+      font-size: 0.75em;
+      
+      td, th {
+        padding: 4px 2px;
+      }
+    }
+  }
+}
+
+// Animation for smooth transitions
+.card, .table tr {
+  transition: all 0.3s ease;
+}
+
+// Material Design elevation
+.card:hover {
+  box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+// Custom form field styling
+.mat-form-field {
+  .mat-form-field-label {
+    color: #666;
+  }
+  
+  &.mat-focused .mat-form-field-label {
+    color: #9c27b0;
+  }
+}
+
+// Textarea styling
+textarea.mat-input-element {
+  min-height: 60px;
+  resize: vertical;
+}
+
+// Button group spacing
+.row .col-md-12 button + button {
+  margin-left: 8px;
+}
+
+// Status badge colors for better visibility
+.badge {
+  &.badge-info {
+    background-color: #17a2b8;
+    color: white;
+  }
+  
+  &.badge-success {
+    background-color: #28a745;
+    color: white;
+  }
+  
+  &.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+  }
+  
+  &.badge-danger {
+    background-color: #dc3545;
+    color: white;
+  }
+}
+
+// Improved table hover effects
+.table-hover tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.075);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+// Import Dialog Styling
+.import-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.import-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  .import-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f5f5f5;
+    border-radius: 8px 8px 0 0;
+
+    h4 {
+      margin: 0;
+      color: #333;
+      font-weight: 500;
+    }
+  }
+
+  .import-dialog-content {
+    padding: 20px;
+  }
+}
+
+// Import Steps
+.import-step {
+  margin-bottom: 30px;
+  padding: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fafafa;
+
+  h5 {
+    color: #2196f3;
+    margin: 0 0 10px 0;
+    font-weight: 500;
+  }
+
+  h6 {
+    color: #333;
+    margin: 15px 0 10px 0;
+    font-weight: 500;
+  }
+
+  p {
+    color: #666;
+    margin: 0 0 15px 0;
+  }
+}
+
+// File Upload Area
+.file-upload-area {
+  padding: 20px;
+  border: 2px dashed #ddd;
+  border-radius: 6px;
+  text-align: center;
+  background: white;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: #2196f3;
+    background: #f0f8ff;
+  }
+}
+
+// Progress styling
+.progress-text {
+  text-align: center;
+  margin: 10px 0 0 0;
+  color: #666;
+  font-weight: 500;
+}
+
+.mat-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+}
+
+// Import Results
+.import-summary {
+  margin: 15px 0;
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 4px;
+
+    mat-icon {
+      margin-right: 10px;
+    }
+
+    &.success {
+      background: #e8f5e8;
+      color: #2e7d32;
+      border: 1px solid #4caf50;
+
+      mat-icon {
+        color: #4caf50;
+      }
+    }
+
+    &.error {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #f44336;
+
+      mat-icon {
+        color: #f44336;
+      }
+    }
+  }
+}
+
+// Error Details
+.error-details {
+  margin-top: 20px;
+  padding: 15px;
+  background: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 4px;
+
+  h6 {
+    color: #e65100;
+    margin: 0 0 10px 0;
+  }
+
+  .error-list {
+    max-height: 200px;
+    overflow-y: auto;
+
+    .error-item {
+      padding: 5px 0;
+      border-bottom: 1px solid #ffcc02;
+      color: #bf360c;
+      font-size: 0.9em;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      strong {
+        color: #e65100;
+      }
+    }
+  }
+}
+
+// Import Instructions
+.import-instructions {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #2196f3;
+  margin-top: 20px;
+
+  h6 {
+    color: #1976d2;
+    margin: 0 0 10px 0;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #333;
+
+    li {
+      margin: 5px 0;
+      font-size: 0.9em;
+    }
+  }
+}
+
+// Import Actions
+.import-actions {
+  margin-top: 20px;
+  text-align: center;
+}
+
+// Button spacing
+.mb-2 {
+  margin-bottom: 8px;
+}
+
+// Responsive adjustments for dialog
+@media (max-width: 768px) {
+  .import-dialog {
+    width: 95%;
+    max-height: 90vh;
+
+    .import-dialog-content {
+      padding: 15px;
+    }
+
+    .import-step {
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+  }
+}
+
+@media (max-width: 576px) {
+  .import-dialog {
+    width: 98%;
+
+    .import-dialog-header {
+      padding: 15px;
+
+      h4 {
+        font-size: 1.1em;
+      }
+    }
+
+    .import-dialog-content {
+      padding: 10px;
+    }
+
+    .import-step {
+      padding: 10px;
+    }
+  }
+}
+
+// Loading state
+.importing {
+  .file-upload-area {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+}
+
+// Custom scrollbar for dialog
+.import-dialog {
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+
+    &:hover {
+      background: #a8a8a8;
+    }
+  }
 }

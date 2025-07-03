@@ -67,4 +67,41 @@ export enum TransactionType {
   TRANSFER = 'transfer',
   ADJUSTMENT = 'adjustment',
   QUALITY_CHECK = 'quality_check'
+}
+
+// Work Order interfaces and enums
+export interface WorkOrder {
+  id?: string;
+  factory: FactoryType;
+  year: number;
+  month: number;
+  orderNumber: string;
+  productCode: string;
+  productionOrder: string;
+  quantity: number;
+  customer: string;
+  deliveryDate: Date;
+  productionLine: string;
+  status: WorkOrderStatus;
+  createdBy: string;
+  checkedBy?: string;
+  planReceivedDate: Date;
+  notes?: string;
+  createdDate: Date;
+  lastUpdated: Date;
+}
+
+export enum FactoryType {
+  ASM1 = 'ASM1',
+  ASM2 = 'ASM2',
+  ASM3 = 'ASM3'
+}
+
+export enum WorkOrderStatus {
+  PENDING = 'pending',
+  IN_PROGRESS = 'in_progress',
+  ON_HOLD = 'on_hold',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+  QUALITY_CHECK = 'quality_check'
 } 
