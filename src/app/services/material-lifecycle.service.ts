@@ -11,8 +11,7 @@ import {
   AlertType,
   TransactionType,
   WorkOrder,
-  WorkOrderStatus,
-  FactoryType
+  WorkOrderStatus
 } from '../models/material-lifecycle.model';
 
 @Injectable({
@@ -290,7 +289,118 @@ export class MaterialLifecycleService {
       map(actions => actions.map(a => {
         const data = a.payload.doc.data() as WorkOrder;
         const id = a.payload.doc.id;
-        return { id, ...data };
+        
+        // Convert Firestore timestamps to proper Date objects
+        const workOrder = { id, ...data };
+        
+        // Convert delivery date
+        if (workOrder.deliveryDate) {
+          if (workOrder.deliveryDate instanceof Date) {
+            // Already a Date object
+          } else if ((workOrder.deliveryDate as any)?.toDate) {
+            // Firestore Timestamp
+            workOrder.deliveryDate = (workOrder.deliveryDate as any).toDate();
+          } else if ((workOrder.deliveryDate as any)?.seconds) {
+            // Firestore Timestamp format
+            workOrder.deliveryDate = new Date((workOrder.deliveryDate as any).seconds * 1000);
+          } else if (typeof workOrder.deliveryDate === 'string') {
+            // String date
+            workOrder.deliveryDate = new Date(workOrder.deliveryDate);
+          } else {
+            // Fallback for unknown format
+            workOrder.deliveryDate = new Date(workOrder.deliveryDate as any);
+          }
+          
+          // Validate and fallback
+          if (!workOrder.deliveryDate || isNaN(workOrder.deliveryDate.getTime())) {
+            console.warn('Invalid delivery date for work order:', id, 'Raw value:', data.deliveryDate);
+            workOrder.deliveryDate = new Date();
+          }
+        }
+        
+        // Convert plan received date
+        if (workOrder.planReceivedDate) {
+          if (workOrder.planReceivedDate instanceof Date) {
+            // Already a Date object
+          } else if ((workOrder.planReceivedDate as any)?.toDate) {
+            // Firestore Timestamp
+            workOrder.planReceivedDate = (workOrder.planReceivedDate as any).toDate();
+          } else if ((workOrder.planReceivedDate as any)?.seconds) {
+            // Firestore Timestamp format
+            workOrder.planReceivedDate = new Date((workOrder.planReceivedDate as any).seconds * 1000);
+          } else if (typeof workOrder.planReceivedDate === 'string') {
+            // String date
+            workOrder.planReceivedDate = new Date(workOrder.planReceivedDate);
+          } else {
+            // Fallback for unknown format
+            workOrder.planReceivedDate = new Date(workOrder.planReceivedDate as any);
+          }
+          
+          // Validate and fallback
+          if (!workOrder.planReceivedDate || isNaN(workOrder.planReceivedDate.getTime())) {
+            console.warn('Invalid plan received date for work order:', id, 'Raw value:', data.planReceivedDate);
+            workOrder.planReceivedDate = new Date();
+          }
+        }
+        
+        // Convert created date
+        if (workOrder.createdDate) {
+          if (workOrder.createdDate instanceof Date) {
+            // Already a Date object
+          } else if ((workOrder.createdDate as any)?.toDate) {
+            // Firestore Timestamp
+            workOrder.createdDate = (workOrder.createdDate as any).toDate();
+          } else if ((workOrder.createdDate as any)?.seconds) {
+            // Firestore Timestamp format
+            workOrder.createdDate = new Date((workOrder.createdDate as any).seconds * 1000);
+          } else if (typeof workOrder.createdDate === 'string') {
+            // String date
+            workOrder.createdDate = new Date(workOrder.createdDate);
+          } else {
+            // Fallback for unknown format
+            workOrder.createdDate = new Date(workOrder.createdDate as any);
+          }
+          
+          // Validate and fallback
+          if (!workOrder.createdDate || isNaN(workOrder.createdDate.getTime())) {
+            workOrder.createdDate = new Date();
+          }
+        }
+        
+        // Convert last updated date
+        if (workOrder.lastUpdated) {
+          if (workOrder.lastUpdated instanceof Date) {
+            // Already a Date object
+          } else if ((workOrder.lastUpdated as any)?.toDate) {
+            // Firestore Timestamp
+            workOrder.lastUpdated = (workOrder.lastUpdated as any).toDate();
+          } else if ((workOrder.lastUpdated as any)?.seconds) {
+            // Firestore Timestamp format
+            workOrder.lastUpdated = new Date((workOrder.lastUpdated as any).seconds * 1000);
+          } else if (typeof workOrder.lastUpdated === 'string') {
+            // String date
+            workOrder.lastUpdated = new Date(workOrder.lastUpdated);
+          } else {
+            // Fallback for unknown format
+            workOrder.lastUpdated = new Date(workOrder.lastUpdated as any);
+          }
+          
+          // Validate and fallback
+          if (!workOrder.lastUpdated || isNaN(workOrder.lastUpdated.getTime())) {
+            workOrder.lastUpdated = new Date();
+          }
+        }
+        
+        console.log('Work order after date conversion:', {
+          id: workOrder.id,
+          orderNumber: workOrder.orderNumber,
+          deliveryDate: workOrder.deliveryDate,
+          planReceivedDate: workOrder.planReceivedDate,
+          deliveryDateType: typeof workOrder.deliveryDate,
+          planReceivedDateType: typeof workOrder.planReceivedDate
+        });
+        
+        return workOrder;
       }))
     );
   }
@@ -298,18 +408,6 @@ export class MaterialLifecycleService {
   getWorkOrderById(id: string): Observable<WorkOrder> {
     return this.workOrdersCollection.doc(id).valueChanges().pipe(
       map(workOrder => ({ id, ...workOrder }))
-    );
-  }
-
-  getWorkOrdersByFactory(factory: FactoryType): Observable<WorkOrder[]> {
-    return this.firestore.collection<WorkOrder>('work-orders',
-      ref => ref.where('factory', '==', factory).orderBy('createdDate', 'desc')
-    ).snapshotChanges().pipe(
-      map(actions => actions.map(a => {
-        const data = a.payload.doc.data() as WorkOrder;
-        const id = a.payload.doc.id;
-        return { id, ...data };
-      }))
     );
   }
 
@@ -338,9 +436,63 @@ export class MaterialLifecycleService {
   }
 
   addWorkOrder(workOrder: WorkOrder): Promise<any> {
+    console.log('🔄 MaterialLifecycleService.addWorkOrder called with:', {
+      orderNumber: workOrder.orderNumber,
+      productCode: workOrder.productCode,
+      customer: workOrder.customer,
+      status: workOrder.status
+    });
+    
+    try {
+      // Add timestamps
     workOrder.createdDate = new Date();
     workOrder.lastUpdated = new Date();
-    return this.workOrdersCollection.add(workOrder);
+      
+      // Validate required fields before sending to Firebase
+      if (!workOrder.orderNumber) {
+        throw new Error('Order number is required');
+      }
+      if (!workOrder.productCode) {
+        throw new Error('Product code is required');
+      }
+      if (!workOrder.customer) {
+        throw new Error('Customer is required');
+      }
+      
+      console.log('📤 Sending work order to Firebase Firestore...');
+      console.log('🔍 Full work order data:', JSON.stringify(workOrder, null, 2));
+      
+      // Add timeout wrapper to the Firebase operation
+      const savePromise = this.workOrdersCollection.add(workOrder);
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Firebase save timeout after 10 seconds')), 10000);
+      });
+      
+      // Race between save and timeout
+      return Promise.race([savePromise, timeoutPromise])
+        .then((result) => {
+          console.log('✅ Firebase save successful!', result);
+          console.log('🆔 Document ID:', (result as any)?.id);
+          return result;
+        })
+        .catch((error) => {
+          console.error('❌ Firebase save failed!', error);
+          console.error('🔍 Error details:', {
+            code: error?.code,
+            message: error?.message,
+            stack: error?.stack,
+            name: error?.name
+          });
+          
+          // Re-throw with more context
+          throw new Error(`Firebase save failed: ${error?.message || error}`);
+        });
+        
+    } catch (error) {
+      console.error('❌ Pre-Firebase validation failed:', error);
+      throw error;
+    }
   }
 
   updateWorkOrder(id: string, workOrder: Partial<WorkOrder>): Promise<void> {
@@ -368,17 +520,12 @@ export class MaterialLifecycleService {
       map(workOrders => {
         const summary = {
           total: workOrders.length,
-          pending: workOrders.filter(wo => wo.status === WorkOrderStatus.PENDING).length,
-          inProgress: workOrders.filter(wo => wo.status === WorkOrderStatus.IN_PROGRESS).length,
-          completed: workOrders.filter(wo => wo.status === WorkOrderStatus.COMPLETED).length,
-          onHold: workOrders.filter(wo => wo.status === WorkOrderStatus.ON_HOLD).length,
-          cancelled: workOrders.filter(wo => wo.status === WorkOrderStatus.CANCELLED).length,
-          totalQuantity: workOrders.reduce((sum, wo) => sum + wo.quantity, 0),
-          byFactory: {
-            ASM1: workOrders.filter(wo => wo.factory === FactoryType.ASM1).length,
-            ASM2: workOrders.filter(wo => wo.factory === FactoryType.ASM2).length,
-            ASM3: workOrders.filter(wo => wo.factory === FactoryType.ASM3).length
-          }
+          waiting: workOrders.filter(wo => wo.status === WorkOrderStatus.WAITING).length,
+          kitting: workOrders.filter(wo => wo.status === WorkOrderStatus.KITTING).length,
+          ready: workOrders.filter(wo => wo.status === WorkOrderStatus.READY).length,
+          done: workOrders.filter(wo => wo.status === WorkOrderStatus.DONE).length,
+          delay: workOrders.filter(wo => wo.status === WorkOrderStatus.DELAY).length,
+          totalQuantity: workOrders.reduce((sum, wo) => sum + wo.quantity, 0)
         };
         return summary;
       })

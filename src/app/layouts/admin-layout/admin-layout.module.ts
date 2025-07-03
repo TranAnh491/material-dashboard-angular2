@@ -30,8 +30,9 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
+
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -65,8 +66,8 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MatDatepickerModule,
     MatNativeDateModule,
     MatProgressSpinnerModule,
-    MatButtonToggleModule,
-    MatProgressBarModule
+    MatProgressBarModule,
+    MatCheckboxModule
   ],
   declarations: [
     DashboardComponent,

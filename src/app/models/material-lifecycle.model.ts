@@ -72,7 +72,6 @@ export enum TransactionType {
 // Work Order interfaces and enums
 export interface WorkOrder {
   id?: string;
-  factory: FactoryType;
   year: number;
   month: number;
   orderNumber: string;
@@ -98,10 +97,9 @@ export enum FactoryType {
 }
 
 export enum WorkOrderStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  ON_HOLD = 'on_hold',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-  QUALITY_CHECK = 'quality_check'
+  WAITING = 'waiting',
+  KITTING = 'kitting',
+  READY = 'ready',
+  DONE = 'done',
+  DELAY = 'delay'
 } 

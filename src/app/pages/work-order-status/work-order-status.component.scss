@@ -17,22 +17,339 @@ html, body {
   height: 100vh; /* Chiếm toàn bộ chiều cao trình duyệt */
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 12px 15px; /* Further increased padding */
+  margin-top: 0px; /* Remove upward pull - neutral position */
 }
 .container-fluid {
   flex: 1;
   display: flex;
   flex-direction: column;
+  margin-top: 0px; /* Remove upward pull */
 }
 .card-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-top: 12px; /* Further increased top padding */
+}
+
+// Compact header styling (now unused but keeping for potential future use)
+.compact-header {
+  margin-bottom: 5px; /* Further reduced */
+  
+  .card-header {
+    padding: 10px 15px; /* Further reduced padding */
+    
+    .card-title {
+      margin-bottom: 3px;
+      font-size: 1.4em; /* Slightly smaller */
+    }
+    
+    .card-category {
+      margin-bottom: 0;
+      font-size: 0.9em;
+    }
+  }
+}
+
+// Compact summary cards
+.summary-row {
+  margin-bottom: 12px; /* Further increased spacing */
+  margin-top: 5px; /* Add downward space */
+}
+
+.compact-stats {
+  margin-bottom: 10px; /* Reduced from 20px */
+  
+  .card-header-icon {
+    padding-bottom: 10px; /* Reduced */
+  }
+  
+  .card-category {
+    margin-top: 5px; /* Reduced from 10px */
+    font-size: 0.8em;
+  }
+  
+  .card-title {
+    font-size: 1.3em; /* Slightly smaller */
+  }
+}
+
+// Summary cards without colors and reduced height
+.summary-card {
+  height: 50% !important; /* Reduce height to 50% */
+  min-height: 60px; /* Set minimum height */
+  margin-bottom: 5px; /* Reduced spacing */
+  
+  .card-header {
+    padding: 8px 15px !important; /* Reduced padding */
+    background: #f8f9fa !important; /* Neutral background color */
+    border: none !important;
+    
+    .card-category {
+      margin: 0 0 3px 0 !important; /* Reduced margin */
+      font-size: 0.75em !important; /* Smaller font */
+      color: #6c757d !important; /* Neutral text color */
+    }
+    
+    .card-title {
+      font-size: 1.1em !important; /* Smaller title */
+      margin: 0 !important;
+      font-weight: 600;
+      color: #495057 !important; /* Neutral text color */
+    }
+  }
+}
+
+// Compact icons
+.compact-icon {
+  width: 45px !important; /* Reduced from 60px */
+  height: 45px !important; /* Reduced from 60px */
+  margin: -15px auto 0 !important; /* Adjusted margin */
+  padding: 10px !important; /* Reduced from 15px */
+  
+  i {
+    font-size: 28px !important; /* Reduced from 36px */
+    line-height: 25px !important; /* Reduced from 30px */
+    width: 25px !important; /* Reduced from 30px */
+    height: 25px !important; /* Reduced from 30px */
+  }
+}
+
+// Compact controls
+.controls-row {
+  margin-bottom: 12px; /* Further increased spacing */
+  margin-top: 3px; /* Add downward space */
+}
+
+.compact-controls {
+  margin-bottom: 5px; /* Further reduced */
+  
+  .card-body {
+    padding: 10px 15px; /* Further reduced top/bottom padding */
+  }
+}
+
+// Action buttons row
+.action-buttons-row {
+  margin-bottom: 8px; /* Consistent spacing */
+  margin-top: -2px; /* Pull up slightly */
+  
+  .card-body {
+    padding: 12px 15px; /* Balanced padding for buttons */
+  }
+  
+  .btn-action {
+    width: 100%; /* Full width within column */
+    padding: 10px 16px; /* Comfortable padding */
+    font-size: 0.95em; /* Slightly larger font */
+    font-weight: 500; /* Medium weight */
+    height: 42px; /* Fixed height for consistency */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px; /* Rounded corners */
+    transition: all 0.2s ease; /* Smooth transitions */
+    
+    mat-icon {
+      margin-right: 8px; /* Space between icon and text */
+      font-size: 20px; /* Consistent icon size */
+    }
+    
+    &:hover {
+      transform: translateY(-1px); /* Subtle hover effect */
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    &:active {
+      transform: translateY(0); /* Reset on click */
+    }
+  }
+  
+  // Responsive adjustments
+  @media (max-width: 768px) {
+    .col-md-4 {
+      margin-bottom: 8px; /* Stack vertically on small screens */
+    }
+    
+    .btn-action {
+      height: 38px; /* Slightly smaller on mobile */
+      font-size: 0.9em;
+    }
+  }
+}
+
+.compact-field {
+  .mat-form-field-wrapper {
+    padding-bottom: 0.75em; /* Reduced */
+  }
+  
+  .mat-form-field-infix {
+    padding: 0.4em 0; /* Reduced */
+  }
+}
+
+// Compact buttons
+.btn-compact {
+  width: 100%;
+  padding: 8px 12px; /* Reduced padding */
+  font-size: 0.9em;
+  margin-bottom: 0;
+}
+
+.mb-1 {
+  margin-bottom: 5px !important;
+}
+
+// Compact form
+.compact-form {
+  margin-bottom: 15px; /* Reduced from 20px */
+  
+  .card-body {
+    padding: 15px; /* Reduced */
+  }
+  
+  .mat-form-field {
+    .mat-form-field-wrapper {
+      padding-bottom: 0.75em;
+    }
+  }
+}
+
+// Table area that extends to bottom
+.table-row {
+  flex: 1;
+  display: flex;
+  margin-bottom: 0; /* Remove bottom margin */
+  
+  .col-md-12 {
+    display: flex;
+    flex: 1;
+  }
+}
+
+.table-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin-bottom: 0; /* Remove bottom margin */
+  
+  .card-header {
+    padding: 15px 20px; /* Compact header */
+    
+    .card-title {
+      font-size: 1.3em;
+      margin-bottom: 0;
+    }
+  }
+  
+  .card-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 0; /* Remove padding to maximize space */
+  }
+}
+
+.table-container {
+  flex: 1;
+  overflow-x: auto !important; /* Force horizontal scrolling */
+  overflow-y: auto !important; /* Force vertical scrolling */
+  max-height: calc(100vh - 420px); /* Adjust based on header heights */
+  padding: 15px; /* Add some padding back for the table content */
+  width: 100% !important;
+  max-width: 100% !important;
+  
+  .table {
+    margin-bottom: 0;
+    min-width: 1050px !important; /* Reduced from 1500px (30% smaller) */
+    white-space: nowrap !important; /* Prevent text wrapping in cells */
+    table-layout: fixed !important; /* Fixed table layout for consistent widths */
+    border-collapse: collapse !important; /* Ensure borders collapse properly */
+    
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f8f9fa;
+      z-index: 10;
+      min-width: 56px; /* Reduced minimum column width (30% smaller) */
+      border-right: 1px solid #dee2e6 !important; /* Vertical border */
+      border-bottom: 2px solid #dee2e6 !important; /* Header bottom border */
+      padding: 8px 6px !important; /* Reduced padding for compact look */
+      
+      &:first-child {
+        min-width: 35px; /* Checkbox column (30% smaller) */
+      }
+      
+      &:last-child {
+        border-right: none !important; /* No border on last column */
+      }
+    }
+    
+    tbody td {
+      min-width: 56px; /* Reduced minimum cell width (30% smaller) */
+      vertical-align: middle;
+      border-right: 1px solid #dee2e6 !important; /* Vertical border */
+      border-bottom: 1px solid #dee2e6 !important; /* Horizontal border */
+      padding: 6px 6px !important; /* Reduced padding for compact look */
+      
+      &:first-child {
+        min-width: 35px; /* Checkbox column (30% smaller) */
+      }
+      
+      &:last-child {
+        border-right: none !important; /* No border on last column */
+      }
+    }
+    
+    // Enhanced row borders for better visibility
+    tbody tr {
+      border-bottom: 1px solid #dee2e6;
+      
+      &:hover {
+        background-color: #f8f9fa;
+        
+        td {
+          border-right-color: #adb5bd !important; /* Darker border on hover */
+        }
+      }
+    }
+    
+    // Specific column widths - reduced by 30%
+    th:nth-child(2), td:nth-child(2) { min-width: 49px !important; } /* Year: 70px -> 49px */
+    th:nth-child(3), td:nth-child(3) { min-width: 63px !important; } /* Month: 90px -> 63px */
+    th:nth-child(4), td:nth-child(4) { min-width: 91px !important; } /* No: 130px -> 91px */
+    th:nth-child(5), td:nth-child(5) { min-width: 84px !important; } /* P/N: 120px -> 84px */
+    th:nth-child(6), td:nth-child(6) { min-width: 98px !important; } /* Work Order: 140px -> 98px */
+    th:nth-child(7), td:nth-child(7) { min-width: 63px !important; } /* Quantity: 90px -> 63px */
+    th:nth-child(8), td:nth-child(8) { min-width: 126px !important; } /* Customer: 180px -> 126px */
+    th:nth-child(9), td:nth-child(9) { min-width: 84px !important; } /* Delivery Date: 120px -> 84px */
+    th:nth-child(10), td:nth-child(10) { min-width: 63px !important; } /* Line: 90px -> 63px */
+    th:nth-child(11), td:nth-child(11) { min-width: 70px !important; } /* Status: 100px -> 70px */
+    th:nth-child(12), td:nth-child(12) { min-width: 84px !important; } /* Kitting: 120px -> 84px */
+    th:nth-child(13), td:nth-child(13) { min-width: 84px !important; } /* Checked By: 120px -> 84px */
+    th:nth-child(14), td:nth-child(14) { min-width: 84px !important; } /* Plan Received: 120px -> 84px */
+    th:nth-child(15), td:nth-child(15) { min-width: 140px !important; } /* Notes: 200px -> 140px */
+    th:nth-child(16), td:nth-child(16) { min-width: 56px !important; } /* Actions: 80px -> 56px */
+  }
+}
+
+// Additional responsive table styling with stronger selectors
+.table-responsive, .card-body.table-responsive {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  
+  table {
+    min-width: 1050px !important; /* Reduced from 1500px (30% smaller) */
+    width: max-content !important;
+  }
 }
 
 .card {
-  margin-bottom: 20px;
+  margin-bottom: 15px; /* Further increased margin */
+  margin-top: 2px; /* Add downward space */
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   border-radius: 8px;
   
@@ -85,26 +402,8 @@ html, body {
   }
 }
 
-// Factory toggle styling
-.factory-toggle {
-  .mat-button-toggle {
-    margin-right: 10px;
-    border-radius: 4px;
-    
-    &.mat-button-toggle-checked {
-      background-color: #9c27b0;
-      color: white;
-    }
-  }
-  
-  .mat-button-toggle-label-content {
-    padding: 8px 16px;
-    font-weight: 500;
-  }
-}
-
 // Status-based row styling
-.status-pending {
+.status-waiting {
   background-color: #fff8e1;
   border-left: 3px solid #ff9800;
   
@@ -113,7 +412,7 @@ html, body {
   }
 }
 
-.status-in-progress {
+.status-kitting {
   background-color: #e3f2fd;
   border-left: 3px solid #2196f3;
   
@@ -122,16 +421,16 @@ html, body {
   }
 }
 
-.status-on-hold {
-  background-color: #fce4ec;
-  border-left: 3px solid #e91e63;
+.status-ready {
+  background-color: #f3e5f5;
+  border-left: 3px solid #9c27b0;
   
   &:hover {
-    background-color: #f8bbd9;
+    background-color: #e1bee7;
   }
 }
 
-.status-completed {
+.status-done {
   background-color: #e8f5e8;
   border-left: 3px solid #4caf50;
   
@@ -140,21 +439,12 @@ html, body {
   }
 }
 
-.status-cancelled {
+.status-delay {
   background-color: #ffebee;
   border-left: 3px solid #f44336;
   
   &:hover {
     background-color: #ffcdd2;
-  }
-}
-
-.status-quality-check {
-  background-color: #f3e5f5;
-  border-left: 3px solid #9c27b0;
-  
-  &:hover {
-    background-color: #e1bee7;
   }
 }
 
@@ -197,27 +487,49 @@ html, body {
   }
 }
 
+.person-select {
+  min-width: 120px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+  }
+}
+
+.notes-field {
+  min-width: 200px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+  }
+  
+  input {
+    font-size: 0.9em;
+  }
+}
+
 // Table styling
 .table-responsive {
   .table {
     th {
       border-top: none;
-      padding: 12px 8px;
+      padding: 8px 6px; /* Reduced padding for more compact rows */
       font-weight: 500;
       color: #555;
       background: #f8f9fa;
       white-space: nowrap;
+      font-size: 0.9em;
     }
     
     td {
-      padding: 12px 8px;
+      padding: 8px 6px; /* Reduced padding for more compact rows */
       vertical-align: middle;
       border-top: 1px solid #e9ecef;
+      font-size: 0.9em;
     }
     
     .badge {
-      font-size: 0.8em;
-      padding: 4px 8px;
+      font-size: 0.75em;
+      padding: 3px 6px;
     }
   }
 }
@@ -239,6 +551,128 @@ html, body {
   margin-left: 8px;
 }
 
+.delete-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+// Enhanced delete button styling
+.enhanced-delete {
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: scale(1.1);
+    background-color: rgba(244, 67, 54, 0.1) !important;
+    
+    .mat-icon {
+      color: #d32f2f !important;
+      animation: shake 0.5s ease-in-out;
+    }
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+// Selection styling
+.mat-checkbox {
+  .mat-checkbox-frame {
+    border-color: #999;
+  }
+  
+  &.mat-checkbox-checked .mat-checkbox-background {
+    background-color: #9c27b0;
+  }
+}
+
+// Selected row highlighting
+tr.selected-row {
+  background-color: rgba(156, 39, 176, 0.08) !important;
+  border-left: 3px solid #9c27b0 !important;
+}
+
+// Bulk delete button styling
+.card-tools {
+  .mr-2 {
+    margin-right: 8px;
+  }
+  
+  button[color="warn"] {
+    background: linear-gradient(45deg, #f44336, #e91e63);
+    color: white;
+    font-weight: 500;
+    
+    &:hover {
+      background: linear-gradient(45deg, #d32f2f, #c2185b);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+    }
+  }
+}
+
+// Alert/confirmation styling improvements
+.confirmation-details {
+  font-family: monospace;
+  background: #f5f5f5;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  white-space: pre-line;
+}
+
+// Table column width adjustments for checkbox
+.table th:first-child,
+.table td:first-child {
+  width: 50px;
+  text-align: center;
+  padding: 4px !important;
+}
+
+// Responsive adjustments for checkboxes
+@media (max-width: 768px) {
+  .mat-checkbox {
+    transform: scale(0.8);
+  }
+  
+  .table th:first-child,
+  .table td:first-child {
+    width: 40px;
+    padding: 2px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .enhanced-delete {
+    width: 28px !important;
+    height: 28px !important;
+    
+    .mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+  
+  .card-tools button {
+    font-size: 0.8em;
+    padding: 6px 12px;
+  }
+}
+
 // Date picker styling
 .mat-form-field-appearance-outline {
   .mat-form-field-outline {
@@ -254,6 +688,10 @@ html, body {
 
 // Responsive design
 @media (max-width: 1200px) {
+  .table-container {
+    max-height: calc(100vh - 380px); /* Adjusted for compact layout */
+  }
+  
   .table-responsive {
     font-size: 0.9em;
     
@@ -265,18 +703,42 @@ html, body {
       min-width: 120px;
     }
   }
+  
+  .compact-icon {
+    width: 40px !important;
+    height: 40px !important;
+    
+    i {
+      font-size: 24px !important;
+      line-height: 20px !important;
+      width: 20px !important;
+      height: 20px !important;
+    }
+  }
 }
 
 @media (max-width: 768px) {
-  .card-stats .card-title {
-    font-size: 1.2em;
+  .main-content {
+    padding: 10px;
   }
   
-  .factory-toggle {
-    .mat-button-toggle {
-      margin: 5px;
-      display: block;
-      width: 100%;
+  .table-container {
+    max-height: calc(100vh - 350px); /* Further adjusted for mobile */
+  }
+  
+  .compact-stats .card-title {
+    font-size: 1.1em;
+  }
+  
+  .compact-icon {
+    width: 35px !important;
+    height: 35px !important;
+    
+    i {
+      font-size: 20px !important;
+      line-height: 18px !important;
+      width: 18px !important;
+      height: 18px !important;
     }
   }
   
@@ -297,22 +759,54 @@ html, body {
     float: none !important;
     margin-top: 10px !important;
   }
+  
+  .btn-compact {
+    font-size: 0.8em;
+    padding: 6px 10px;
+  }
 }
 
 @media (max-width: 576px) {
   .main-content {
-    padding: 10px;
+    padding: 8px;
   }
   
-  .card {
-    margin-bottom: 15px;
+  .table-container {
+    max-height: calc(100vh - 320px); /* Optimized for small screens */
   }
   
-  .factory-toggle {
-    .mat-button-toggle-label-content {
-      padding: 6px 12px;
-      font-size: 0.9em;
+  .compact-header .card-header {
+    padding: 10px 15px;
+    
+    .card-title {
+      font-size: 1.2em;
     }
+    
+    .card-category {
+      font-size: 0.8em;
+    }
+  }
+  
+  .compact-stats {
+    margin-bottom: 8px;
+  }
+  
+  .compact-icon {
+    width: 30px !important;
+    height: 30px !important;
+    margin: -10px auto 0 !important;
+    padding: 6px !important;
+    
+    i {
+      font-size: 18px !important;
+      line-height: 18px !important;
+      width: 18px !important;
+      height: 18px !important;
+    }
+  }
+  
+  .compact-controls .card-body {
+    padding: 10px;
   }
   
   .table-responsive {
@@ -323,6 +817,11 @@ html, body {
         padding: 4px 2px;
       }
     }
+  }
+  
+  .btn-compact {
+    font-size: 0.75em;
+    padding: 5px 8px;
   }
 }
 

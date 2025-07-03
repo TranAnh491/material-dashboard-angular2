@@ -3,85 +3,69 @@
     <div class="row">
       <div class="col-md-12">
         <div class="card">
-          <div class="card-header card-header-primary">
-            <h4 class="card-title">Work Order Management</h4>
-            <p class="card-category">Daily Operations - Manage production work orders</p>
-          </div>
           <div class="card-body">
             
-            <!-- Factory Selection -->
-            <div class="row">
-              <div class="col-md-12">
-                <div class="card">
-                  <div class="card-body">
-                    <h5 class="card-title">Select Factory</h5>
-                    <mat-button-toggle-group [(value)]="selectedFactory" (change)="onFactoryChange()" class="factory-toggle">
-                      <mat-button-toggle *ngFor="let factory of factories" [value]="factory">
-                        {{factory}}
-                      </mat-button-toggle>
-                    </mat-button-toggle-group>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Summary Cards -->
-            <div class="row">
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats">
-                  <div class="card-header card-header-warning card-header-icon">
-                    <div class="card-icon">
-                      <i class="material-icons">assignment</i>
-                    </div>
+            <div class="row summary-row">
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
                     <p class="card-category">Total Orders</p>
                     <h3 class="card-title">{{totalOrders}}</h3>
                   </div>
                 </div>
               </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats">
-                  <div class="card-header card-header-info card-header-icon">
-                    <div class="card-icon">
-                      <i class="material-icons">pending_actions</i>
-                    </div>
-                    <p class="card-category">Pending</p>
-                    <h3 class="card-title">{{pendingOrders}}</h3>
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Waiting</p>
+                    <h3 class="card-title">{{waitingOrders}}</h3>
                   </div>
                 </div>
               </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats">
-                  <div class="card-header card-header-success card-header-icon">
-                    <div class="card-icon">
-                      <i class="material-icons">engineering</i>
-                    </div>
-                    <p class="card-category">In Progress</p>
-                    <h3 class="card-title">{{inProgressOrders}}</h3>
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Kitting</p>
+                    <h3 class="card-title">{{kittingOrders}}</h3>
                   </div>
                 </div>
               </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats">
-                  <div class="card-header card-header-rose card-header-icon">
-                    <div class="card-icon">
-                      <i class="material-icons">task_alt</i>
-                    </div>
-                    <p class="card-category">Completed</p>
-                    <h3 class="card-title">{{completedOrders}}</h3>
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Ready</p>
+                    <h3 class="card-title">{{readyOrders}}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Done</p>
+                    <h3 class="card-title">{{doneOrders}}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Delay</p>
+                    <h3 class="card-title">{{delayOrders}}</h3>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Controls -->
-            <div class="row">
+            <div class="row controls-row">
               <div class="col-md-12">
-                <div class="card">
+                <div class="card compact-controls">
                   <div class="card-body">
                     <div class="row">
                       <!-- Search -->
                       <div class="col-md-3">
-                        <mat-form-field class="full-width">
+                        <mat-form-field class="full-width compact-field">
                           <mat-label>Search Work Orders</mat-label>
                           <input matInput [(ngModel)]="searchTerm" (input)="onSearchChange()" 
                                  placeholder="Order number, product code, customer">
@@ -91,7 +75,7 @@
                       
                       <!-- Year Filter -->
                       <div class="col-md-2">
-                        <mat-form-field class="full-width">
+                        <mat-form-field class="full-width compact-field">
                           <mat-label>Year</mat-label>
                           <mat-select [(value)]="yearFilter" (selectionChange)="onYearFilterChange()">
                             <mat-option *ngFor="let year of years" [value]="year">{{year}}</mat-option>
@@ -101,7 +85,7 @@
                       
                       <!-- Month Filter -->
                       <div class="col-md-2">
-                        <mat-form-field class="full-width">
+                        <mat-form-field class="full-width compact-field">
                           <mat-label>Month</mat-label>
                           <mat-select [(value)]="monthFilter" (selectionChange)="onMonthFilterChange()">
                             <mat-option *ngFor="let month of months" [value]="month.value">{{month.name}}</mat-option>
@@ -110,28 +94,44 @@
                       </div>
                       
                       <!-- Status Filter -->
-                      <div class="col-md-3">
-                        <mat-form-field class="full-width">
+                      <div class="col-md-5">
+                        <mat-form-field class="full-width compact-field">
                           <mat-label>Filter by Status</mat-label>
                           <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
                             <mat-option value="all">All Status</mat-option>
-                            <mat-option value="pending">Pending</mat-option>
-                            <mat-option value="in_progress">In Progress</mat-option>
-                            <mat-option value="on_hold">On Hold</mat-option>
-                            <mat-option value="completed">Completed</mat-option>
-                            <mat-option value="cancelled">Cancelled</mat-option>
-                            <mat-option value="quality_check">Quality Check</mat-option>
+                            <mat-option value="waiting">Waiting</mat-option>
+                            <mat-option value="kitting">Kitting</mat-option>
+                            <mat-option value="ready">Ready</mat-option>
+                            <mat-option value="done">Done</mat-option>
+                            <mat-option value="delay">Delay</mat-option>
                           </mat-select>
                         </mat-form-field>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+                      </div>
                       
-                      <!-- Actions -->
-                      <div class="col-md-2">
-                        <button mat-raised-button color="primary" (click)="isAddingWorkOrder = true" class="btn-block mb-2">
+            <!-- Action Buttons Row -->
+            <div class="row action-buttons-row">
+              <div class="col-md-12">
+                <div class="card compact-controls">
+                  <div class="card-body text-center">
+                    <div class="row justify-content-center">
+                      <div class="col-md-4 col-lg-3">
+                        <button mat-raised-button color="primary" (click)="isAddingWorkOrder = true" class="btn-action">
                           <mat-icon>add</mat-icon> Add Work Order
                         </button>
-                        <button mat-raised-button color="accent" (click)="openImportDialog()" class="btn-block">
+                      </div>
+                      <div class="col-md-4 col-lg-3">
+                        <button mat-raised-button color="accent" (click)="openImportDialog()" class="btn-action">
                           <mat-icon>upload_file</mat-icon> Import Excel
+                        </button>
+                      </div>
+                      <div class="col-md-4 col-lg-3">
+                        <button mat-raised-button color="warn" (click)="showAllWorkOrders()" class="btn-action">
+                          <mat-icon>visibility</mat-icon> Show All
                         </button>
                       </div>
                     </div>
@@ -143,9 +143,9 @@
             <!-- Add Work Order Form -->
             <div class="row" *ngIf="isAddingWorkOrder">
               <div class="col-md-12">
-                <div class="card">
+                <div class="card compact-form">
                   <div class="card-header card-header-success">
-                    <h4 class="card-title">Add New Work Order - {{selectedFactory}}</h4>
+                    <h4 class="card-title">Add New Work Order</h4>
                   </div>
                   <div class="card-body">
                     <form>
@@ -168,14 +168,14 @@
                         </div>
                         <div class="col-md-4">
                           <mat-form-field class="full-width">
-                            <mat-label>Order Number</mat-label>
+                            <mat-label>No</mat-label>
                             <input matInput [(ngModel)]="newWorkOrder.orderNumber" name="orderNumber" 
                                    placeholder="Auto-generated if left empty">
                           </mat-form-field>
                         </div>
                         <div class="col-md-4">
                           <mat-form-field class="full-width">
-                            <mat-label>Product Code</mat-label>
+                            <mat-label>P/N</mat-label>
                             <input matInput [(ngModel)]="newWorkOrder.productCode" name="productCode" required>
                           </mat-form-field>
                         </div>
@@ -183,7 +183,7 @@
                       <div class="row">
                         <div class="col-md-4">
                           <mat-form-field class="full-width">
-                            <mat-label>Production Order</mat-label>
+                            <mat-label>Work Order</mat-label>
                             <input matInput [(ngModel)]="newWorkOrder.productionOrder" name="productionOrder" required>
                           </mat-form-field>
                         </div>
@@ -211,7 +211,7 @@
                       <div class="row">
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
-                            <mat-label>Production Line</mat-label>
+                            <mat-label>Line</mat-label>
                             <mat-select [(value)]="newWorkOrder.productionLine" name="productionLine" required>
                               <mat-option *ngFor="let line of availableLines" [value]="line">{{line}}</mat-option>
                             </mat-select>
@@ -219,14 +219,19 @@
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
-                            <mat-label>Created By</mat-label>
-                            <input matInput [(ngModel)]="newWorkOrder.createdBy" name="createdBy" required>
+                            <mat-label>Kitting</mat-label>
+                            <mat-select [(value)]="newWorkOrder.createdBy" name="createdBy" required>
+                              <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
+                            </mat-select>
                           </mat-form-field>
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Checked By</mat-label>
-                            <input matInput [(ngModel)]="newWorkOrder.checkedBy" name="checkedBy">
+                            <mat-select [(value)]="newWorkOrder.checkedBy" name="checkedBy">
+                              <mat-option value="">None</mat-option>
+                              <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
+                            </mat-select>
                           </mat-form-field>
                         </div>
                         <div class="col-md-3">
@@ -263,40 +268,62 @@
             </div>
 
             <!-- Work Orders Table -->
-            <div class="row">
+            <div class="row table-row">
               <div class="col-md-12">
-                <div class="card">
+                <div class="card table-card">
                   <div class="card-header card-header-primary">
-                    <h4 class="card-title">Work Orders - {{selectedFactory}} ({{filteredWorkOrders.length}} orders)</h4>
+                    <h4 class="card-title">Work Orders ({{filteredWorkOrders.length}} orders)</h4>
                     <div class="card-tools">
+                      <button *ngIf="selectedWorkOrders.length > 0" 
+                              mat-raised-button color="warn" 
+                              (click)="deleteSelectedWorkOrders()" 
+                              class="mr-2">
+                        <mat-icon>delete_sweep</mat-icon> Delete Selected ({{selectedWorkOrders.length}})
+                      </button>
                       <button mat-raised-button color="accent" (click)="exportToCSV()">
                         <mat-icon>file_download</mat-icon> Export CSV
                       </button>
                     </div>
                   </div>
-                  <div class="card-body table-responsive">
+                  <div class="card-body table-responsive table-container">
                     <table class="table table-hover">
                       <thead class="text-primary">
                         <tr>
+                          <th>
+                            <mat-checkbox 
+                              [checked]="isAllSelected()" 
+                              [indeterminate]="isIndeterminate()"
+                              (change)="toggleAllSelection($event)"
+                              matTooltip="Select all work orders">
+                            </mat-checkbox>
+                          </th>
                           <th>Year</th>
                           <th>Month</th>
-                          <th>Order Number</th>
-                          <th>Product Code</th>
-                          <th>Production Order</th>
+                          <th>No</th>
+                          <th>P/N</th>
+                          <th>Work Order</th>
                           <th>Quantity</th>
                           <th>Customer</th>
                           <th>Delivery Date</th>
                           <th>Line</th>
                           <th>Status</th>
-                          <th>Created By</th>
+                          <th>Kitting</th>
                           <th>Checked By</th>
                           <th>Plan Received</th>
-                          <th>Actions</th>
+                          <th>Notes</th>
+                          <th>Del</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr *ngFor="let wo of filteredWorkOrders" 
-                            [class]="getStatusClass(wo.status) + ' ' + getPriorityClass(wo.deliveryDate)">
+                            [class]="getStatusClass(wo.status) + ' ' + getPriorityClass(wo.deliveryDate) + (isSelected(wo) ? ' selected-row' : '')">
+                          <td>
+                            <mat-checkbox 
+                              [checked]="isSelected(wo)"
+                              (change)="toggleSelection(wo, $event)"
+                              matTooltip="Select this work order">
+                            </mat-checkbox>
+                          </td>
                           <td>{{wo.year}}</td>
                           <td>{{wo.month}}</td>
                           <td><strong>{{wo.orderNumber}}</strong></td>
@@ -315,22 +342,43 @@
                           <td>
                             <mat-form-field class="status-select">
                               <mat-select [value]="wo.status" (selectionChange)="updateWorkOrderStatus(wo, $event.value)">
-                                <mat-option value="pending">Pending</mat-option>
-                                <mat-option value="in_progress">In Progress</mat-option>
-                                <mat-option value="on_hold">On Hold</mat-option>
-                                <mat-option value="completed">Completed</mat-option>
-                                <mat-option value="cancelled">Cancelled</mat-option>
-                                <mat-option value="quality_check">Quality Check</mat-option>
+                                <mat-option value="waiting">Waiting</mat-option>
+                                <mat-option value="kitting">Kitting</mat-option>
+                                <mat-option value="ready">Ready</mat-option>
+                                <mat-option value="done">Done</mat-option>
+                                <mat-option value="delay">Delay</mat-option>
                               </mat-select>
                             </mat-form-field>
                           </td>
-                          <td>{{wo.createdBy}}</td>
-                          <td>{{wo.checkedBy || '-'}}</td>
+                          <td>
+                            <mat-form-field class="person-select">
+                              <mat-select [value]="wo.createdBy" (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)">
+                                <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
+                              </mat-select>
+                            </mat-form-field>
+                          </td>
+                          <td>
+                            <mat-form-field class="person-select">
+                              <mat-select [value]="wo.checkedBy" (selectionChange)="updateWorkOrder(wo, 'checkedBy', $event.value)">
+                                <mat-option value="">None</mat-option>
+                                <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
+                              </mat-select>
+                            </mat-form-field>
+                          </td>
                           <td>{{wo.planReceivedDate | date:'dd/MM/yyyy'}}</td>
                           <td>
+                            <mat-form-field class="notes-field">
+                              <input matInput [value]="wo.notes || ''" (blur)="updateWorkOrder(wo, 'notes', $event.target.value)" placeholder="Add notes...">
+                            </mat-form-field>
+                          </td>
+                          <td>
                             <button mat-icon-button color="warn" (click)="deleteWorkOrder(wo)" 
-                                    matTooltip="Delete Work Order">
-                              <mat-icon>delete</mat-icon>
+                                    matTooltip="⚠️ Delete Work Order (Cannot be undone!)" 
+                                    matTooltipPosition="left"
+                                    class="delete-btn enhanced-delete"
+                                    [attr.aria-label]="'Delete work order ' + wo.orderNumber"
+                                    title="Delete Work Order">
+                              <mat-icon>delete_forever</mat-icon>
                             </button>
                           </td>
                         </tr>
@@ -359,7 +407,7 @@
                   <!-- Step 1: Download Template -->
                   <div class="import-step">
                     <h5>Step 1: Download Template</h5>
-                    <p>Download the Excel template with the correct format for {{selectedFactory}} factory:</p>
+                    <p>Download the Excel template with the correct format:</p>
                     <button mat-raised-button color="primary" (click)="downloadTemplate()">
                       <mat-icon>download</mat-icon> Download Template
                     </button>
