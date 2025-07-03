@@ -34,6 +34,7 @@
     "@fontsource/inter": "^5.2.6",
     "@fontsource/open-sans": "^5.2.6",
     "@tweenjs/tween.js": "^25.0.0",
+    "@types/xlsx": "^0.0.35",
     "ajv": "8.11.0",
     "arrive": "2.4.1",
     "bootstrap": "4.6.1",
@@ -58,6 +59,7 @@
     "three": "^0.177.0",
     "tslib": "^2.3.0",
     "web-animations-js": "2.3.2",
+    "xlsx": "^0.18.5",
     "zone.js": "~0.11.4"
   },
   "devDependencies": {

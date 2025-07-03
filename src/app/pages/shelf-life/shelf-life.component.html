@@ -1,5 +1,307 @@
 <div class="main-content">
   <div class="container-fluid">
-    <p>Content will be updated soon.</p>
+    
+    <!-- Header -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-primary">
+            <h4 class="card-title">Materials Lifecycle Management</h4>
+            <p class="card-category">Track expiry dates, manage alerts, and monitor material status</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row">
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card card-stats">
+          <div class="card-header card-header-success card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">inventory_2</i>
+            </div>
+            <p class="card-category">Total Materials</p>
+            <h3 class="card-title">{{ summary.total || 0 }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card card-stats">
+          <div class="card-header card-header-warning card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">schedule</i>
+            </div>
+            <p class="card-category">Expiring Soon</p>
+            <h3 class="card-title">{{ summary.expiringSoon || 0 }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card card-stats">
+          <div class="card-header card-header-danger card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">error</i>
+            </div>
+            <p class="card-category">Expired</p>
+            <h3 class="card-title">{{ summary.expired || 0 }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card card-stats">
+          <div class="card-header card-header-info card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">check_circle</i>
+            </div>
+            <p class="card-category">Active</p>
+            <h3 class="card-title">{{ summary.active || 0 }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Section -->
+    <div class="row" *ngIf="alerts.length > 0">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-warning">
+            <h4 class="card-title">Active Alerts</h4>
+          </div>
+          <div class="card-body">
+            <div class="alert" *ngFor="let alert of alerts" 
+                 [ngClass]="getAlertLevelClass(alert.severity)"
+                 (click)="markAlertAsRead(alert)">
+              <strong>{{ alert.alertType | titlecase }}:</strong> {{ alert.message }}
+              <small class="float-right">{{ formatDate(alert.createdAt) }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters and Controls -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <mat-form-field class="w-100">
+                  <input matInput placeholder="Search materials..." 
+                         [(ngModel)]="searchTerm" 
+                         (keyup.enter)="onSearch()"
+                         (input)="onSearch()">
+                  <mat-icon matSuffix>search</mat-icon>
+                </mat-form-field>
+              </div>
+              <div class="col-md-2">
+                <mat-form-field class="w-100">
+                  <mat-select placeholder="Status" 
+                             [(ngModel)]="selectedStatus" 
+                             (selectionChange)="onStatusChange()">
+                    <mat-option value="">All Status</mat-option>
+                    <mat-option value="active">Active</mat-option>
+                    <mat-option value="expiring_soon">Expiring Soon</mat-option>
+                    <mat-option value="expired">Expired</mat-option>
+                    <mat-option value="quarantine">Quarantine</mat-option>
+                    <mat-option value="consumed">Consumed</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <div class="col-md-2">
+                <mat-form-field class="w-100">
+                  <mat-select placeholder="Location" 
+                             [(ngModel)]="selectedLocation" 
+                             (selectionChange)="onLocationChange()">
+                    <mat-option value="">All Locations</mat-option>
+                    <mat-option *ngFor="let location of locationOptions" [value]="location">
+                      {{ location }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <div class="col-md-5">
+                <button mat-raised-button color="primary" 
+                        (click)="showAddMaterialForm()" 
+                        class="btn btn-primary">
+                  <i class="material-icons">add</i> Add Material
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Material Form -->
+    <div class="row" *ngIf="showAddForm">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-primary">
+            <h4 class="card-title">{{ editingMaterial ? 'Edit' : 'Add' }} Material</h4>
+          </div>
+          <div class="card-body">
+            <form [formGroup]="materialForm" (ngSubmit)="saveMaterial()">
+              <div class="row">
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Material Code" formControlName="materialCode" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Material Name" formControlName="materialName" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Batch Number" formControlName="batchNumber" required>
+                  </mat-form-field>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <input matInput type="date" placeholder="Manufacturing Date" formControlName="manufacturingDate" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <input matInput type="date" placeholder="Expiry Date" formControlName="expiryDate" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-4">
+                  <mat-form-field class="w-100">
+                    <mat-select placeholder="Location" formControlName="location" required>
+                      <mat-option *ngFor="let location of locationOptions" [value]="location">
+                        {{ location }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-3">
+                  <mat-form-field class="w-100">
+                    <input matInput type="number" placeholder="Quantity" formControlName="quantity" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-3">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Unit of Measure" formControlName="unitOfMeasure" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-3">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Supplier" formControlName="supplier" required>
+                  </mat-form-field>
+                </div>
+                <div class="col-md-3">
+                  <mat-form-field class="w-100">
+                    <input matInput placeholder="Cost Center" formControlName="costCenter" required>
+                  </mat-form-field>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-12">
+                  <mat-form-field class="w-100">
+                    <textarea matInput placeholder="Notes" formControlName="notes" rows="3"></textarea>
+                  </mat-form-field>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-12">
+                  <button mat-raised-button color="primary" type="submit" 
+                          [disabled]="!materialForm.valid" class="btn btn-primary mr-2">
+                    <i class="material-icons">save</i> Save
+                  </button>
+                  <button mat-raised-button type="button" 
+                          (click)="cancelForm()" class="btn btn-secondary">
+                    <i class="material-icons">cancel</i> Cancel
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Materials Table -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-primary">
+            <h4 class="card-title">Materials Inventory</h4>
+            <p class="card-category">{{ filteredMaterials.length }} materials found</p>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead class="text-primary">
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Batch</th>
+                    <th>Location</th>
+                    <th>Quantity</th>
+                    <th>Expiry Date</th>
+                    <th>Days Left</th>
+                    <th>Status</th>
+                    <th>Alert Level</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let material of filteredMaterials">
+                    <td>{{ material.materialCode }}</td>
+                    <td>{{ material.materialName }}</td>
+                    <td>{{ material.batchNumber }}</td>
+                    <td>{{ material.location }}</td>
+                    <td>{{ material.quantity }} {{ material.unitOfMeasure }}</td>
+                    <td>{{ formatDate(material.expiryDate) }}</td>
+                    <td>
+                      <span [ngClass]="getDaysUntilExpiry(material.expiryDate) < 0 ? 'text-danger' : 
+                                       getDaysUntilExpiry(material.expiryDate) <= 7 ? 'text-danger' :
+                                       getDaysUntilExpiry(material.expiryDate) <= 30 ? 'text-warning' : 'text-success'">
+                        {{ getDaysUntilExpiry(material.expiryDate) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge" [ngClass]="getStatusBadgeClass(material.status)">
+                        {{ material.status | titlecase }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge" [ngClass]="material.alertLevel === AlertLevel.GREEN ? 'badge-success' :
+                                                     material.alertLevel === AlertLevel.YELLOW ? 'badge-warning' : 'badge-danger'">
+                        {{ material.alertLevel | titlecase }}
+                      </span>
+                    </td>
+                    <td>
+                      <button mat-icon-button color="primary" 
+                              (click)="editMaterial(material)" 
+                              matTooltip="Edit">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                      <button mat-icon-button color="warn" 
+                              (click)="deleteMaterial(material)" 
+                              matTooltip="Delete">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredMaterials.length === 0">
+                    <td colspan="10" class="text-center">No materials found</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>

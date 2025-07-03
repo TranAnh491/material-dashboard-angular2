@@ -16,6 +16,12 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { ShelfLifeComponent } from './pages/shelf-life/shelf-life.component';
 
+// Firebase imports
+import { AngularFireModule } from '@angular/fire/compat';
+import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
+import { AngularFireAuthModule } from '@angular/fire/compat/auth';
+import { environment } from '../environments/environment';
+
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
 // import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
@@ -38,7 +44,10 @@ import { ShelfLifeComponent } from './pages/shelf-life/shelf-life.component';
     MatInputModule,
     MatSelectModule,
     MatTooltipModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    AngularFireModule.initializeApp(environment.firebase),
+    AngularFirestoreModule,
+    AngularFireAuthModule
   ],
   declarations: [
     AppComponent,

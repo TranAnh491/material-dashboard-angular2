@@ -24,3 +24,407 @@
 .table-inventory tr:nth-child(even) {
   background: #ffffff;
 }
+
+.materials-inventory {
+  .summary-cards {
+    margin-bottom: 20px;
+  }
+
+  .filters-section {
+    margin-bottom: 20px;
+    
+    .mat-form-field {
+      width: 100%;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-right: 8px;
+      
+      &:last-child {
+        margin-right: 0;
+      }
+      
+      .material-icons {
+        font-size: 18px;
+      }
+    }
+  }
+
+  .inventory-table {
+    .table {
+      margin-bottom: 0;
+      
+      th {
+        font-weight: 600;
+        font-size: 14px;
+        border-top: none;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+      
+      td {
+        vertical-align: middle;
+        font-size: 13px;
+        
+        strong {
+          font-weight: 600;
+        }
+      }
+      
+      .badge {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        
+        .material-icons {
+          font-size: 14px;
+        }
+        
+        &.badge-success {
+          background-color: #28a745;
+          color: white;
+        }
+        
+        &.badge-warning {
+          background-color: #ffc107;
+          color: #212529;
+        }
+        
+        &.badge-danger {
+          background-color: #dc3545;
+          color: white;
+        }
+        
+        &.badge-info {
+          background-color: #17a2b8;
+          color: white;
+        }
+        
+        &.badge-secondary {
+          background-color: #6c757d;
+          color: white;
+        }
+        
+        &.badge-primary {
+          background-color: #007bff;
+          color: white;
+        }
+      }
+      
+      // Row highlighting for alerts
+      &.table-warning {
+        background-color: rgba(255, 193, 7, 0.1);
+        
+        &:hover {
+          background-color: rgba(255, 193, 7, 0.2);
+        }
+      }
+      
+      &.table-danger {
+        background-color: rgba(220, 53, 69, 0.1);
+        
+        &:hover {
+          background-color: rgba(220, 53, 69, 0.2);
+        }
+      }
+      
+      tr:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+    }
+  }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #6c757d;
+    
+    .material-icons {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    
+    h5 {
+      margin-bottom: 8px;
+      color: #495057;
+    }
+    
+    p {
+      margin: 0;
+      font-size: 14px;
+    }
+  }
+
+  .loading-section {
+    .mat-spinner {
+      margin: 0 auto;
+    }
+  }
+
+  .location-summary {
+    .location-summary-item {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      text-align: center;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        background: #e9ecef;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .location-badge {
+        margin-bottom: 8px;
+        
+        .badge {
+          font-size: 14px;
+          padding: 8px 12px;
+        }
+      }
+      
+      .location-quantity {
+        font-size: 16px;
+        color: #495057;
+        
+        strong {
+          color: #007bff;
+          font-size: 20px;
+        }
+      }
+    }
+  }
+
+  // Text color classes
+  .text-success {
+    color: #28a745 !important;
+  }
+  
+  .text-warning {
+    color: #ffc107 !important;
+  }
+  
+  .text-danger {
+    color: #dc3545 !important;
+  }
+  
+  .text-info {
+    color: #17a2b8 !important;
+  }
+
+  // Utility classes
+  .w-100 {
+    width: 100% !important;
+  }
+
+  .mr-2 {
+    margin-right: 0.5rem !important;
+  }
+
+  .mt-3 {
+    margin-top: 1rem !important;
+  }
+
+  .py-4 {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  // Card stats improvements
+  .card-stats {
+    .card-header {
+      position: relative;
+      margin-top: -20px;
+      margin-left: 15px;
+      margin-right: 15px;
+      padding: 15px;
+      border-radius: 3px;
+      color: #fff;
+      
+      .card-icon {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3px;
+        
+        .material-icons {
+          font-size: 36px;
+          line-height: 56px;
+        }
+      }
+      
+      &.card-header-success {
+        background: linear-gradient(60deg, #66bb6a, #43a047);
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(76, 175, 80, 0.4);
+      }
+      
+      &.card-header-warning {
+        background: linear-gradient(60deg, #ffa726, #fb8c00);
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(255, 152, 0, 0.4);
+      }
+      
+      &.card-header-danger {
+        background: linear-gradient(60deg, #ef5350, #e53935);
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(244, 67, 54, 0.4);
+      }
+      
+      &.card-header-info {
+        background: linear-gradient(60deg, #26c6da, #00acc1);
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(0, 188, 212, 0.4);
+      }
+      
+      &.card-header-primary {
+        background: linear-gradient(60deg, #ab47bc, #8e24aa);
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(156, 39, 176, 0.4);
+      }
+    }
+    
+    .card-title {
+      margin-top: 10px;
+      margin-bottom: 0;
+      font-size: 1.8em;
+      font-weight: 300;
+    }
+    
+    .card-category {
+      color: #999;
+      margin: 0;
+      font-size: 14px;
+      margin-top: 0;
+      padding-top: 10px;
+      margin-bottom: 0;
+    }
+  }
+
+  // Material form enhancements
+  .mat-form-field {
+    .mat-input-element {
+      caret-color: #9c27b0;
+    }
+    
+    &.mat-focused {
+      .mat-form-field-label {
+        color: #9c27b0;
+      }
+      
+      .mat-form-field-underline .mat-form-field-ripple {
+        background-color: #9c27b0;
+      }
+    }
+  }
+  
+  .mat-select {
+    &.mat-focused {
+      .mat-select-trigger .mat-select-arrow {
+        color: #9c27b0;
+      }
+    }
+  }
+
+  // Responsive adjustments
+  @media (max-width: 768px) {
+    .filters-section {
+      .row {
+        > div {
+          margin-bottom: 15px;
+        }
+      }
+    }
+    
+    .inventory-table {
+      .table-responsive {
+        font-size: 12px;
+      }
+      
+      .table {
+        th, td {
+          padding: 8px 4px;
+        }
+        
+        .badge {
+          font-size: 10px;
+          padding: 2px 6px;
+        }
+      }
+    }
+    
+    .card-stats {
+      margin-bottom: 20px;
+    }
+    
+    .location-summary {
+      .location-summary-item {
+        margin-bottom: 10px;
+        padding: 12px;
+      }
+    }
+  }
+
+  // Animation for cards
+  .card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  // Button enhancements
+  .btn {
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    
+    &.btn-primary {
+      background-color: #007bff;
+      border-color: #007bff;
+      
+      &:hover {
+        background-color: #0056b3;
+        border-color: #0056b3;
+      }
+    }
+    
+    &.btn-secondary {
+      background-color: #6c757d;
+      border-color: #6c757d;
+      
+      &:hover {
+        background-color: #545b62;
+        border-color: #545b62;
+      }
+    }
+    
+    &.btn-info {
+      background-color: #17a2b8;
+      border-color: #17a2b8;
+      
+      &:hover {
+        background-color: #117a8b;
+        border-color: #117a8b;
+      }
+    }
+  }
+}
+
+// Global classes that might be needed
+.align-items-center {
+  align-items: center !important;
+}
+
+.text-center {
+  text-align: center !important;
+}

@@ -27,6 +27,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatIconModule } from '@angular/material/icon';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -56,6 +59,10 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatIconModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatProgressSpinnerModule,
   ],
   declarations: [
     DashboardComponent,
