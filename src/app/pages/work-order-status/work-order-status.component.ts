@@ -5,6 +5,9 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-work-order-status',
@@ -1286,12 +1289,23 @@ Please check the console for error details.`);
       workOrder.createdDate = new Date();
       workOrder.lastUpdated = new Date();
       
-      // Use direct Firestore API
-      const result = await this.firestore.collection('work-orders').add(workOrder);
-      console.log('✅ Direct Firestore save successful!', result);
-      return result;
+      // Try Angular Fire first
+      try {
+        const result = await this.firestore.collection('work-orders').add(workOrder);
+        console.log('✅ Angular Fire save successful!', result);
+        return result;
+      } catch (angularFireError) {
+        console.log('⚠️ Angular Fire failed, trying Firebase v9 SDK...', angularFireError);
+        
+        // Fallback to Firebase v9 modular SDK
+        const app = initializeApp(environment.firebase);
+        const db = getFirestore(app);
+        const docRef = await addDoc(collection(db, 'work-orders'), workOrder);
+        console.log('✅ Firebase v9 SDK save successful!', docRef);
+        return { id: docRef.id };
+      }
     } catch (error) {
-      console.error('❌ Direct Firestore save failed!', error);
+      console.error('❌ All Firestore save methods failed!', error);
       throw new Error(`Direct Firestore save failed: ${error?.message || error}`);
     }
   }
