@@ -1,9 +1,9 @@
 [build]
-  # Build command for Angular
-  command = "ng build --prod"
+  # Build command for Angular (updated syntax for newer Angular CLI)
+  command = "ng build --configuration=production"
   
-  # Output directory for built files
-  publish = "dist/material-dashboard-angular"
+  # Output directory for built files (files are built directly in dist/)
+  publish = "dist"
   
   # Node.js version for build
   [build.environment]
