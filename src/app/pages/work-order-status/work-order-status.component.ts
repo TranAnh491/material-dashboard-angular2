@@ -1088,6 +1088,18 @@ Please check the console for error details.`);
             try {
               console.log(`🔄 Firebase save attempt ${attempt}/3 for work order ${globalIndex + 1}`);
               
+              // Add debug logging for service method
+              console.log('🔍 Checking materialService:', {
+                serviceExists: !!this.materialService,
+                addWorkOrderExists: !!(this.materialService && this.materialService.addWorkOrder),
+                serviceType: typeof this.materialService,
+                methodType: typeof (this.materialService && this.materialService.addWorkOrder)
+              });
+              
+              if (!this.materialService || typeof this.materialService.addWorkOrder !== 'function') {
+                throw new Error('MaterialLifecycleService.addWorkOrder method not available');
+              }
+              
               const result = await this.materialService.addWorkOrder(workOrder);
               console.log(`✅ Firebase save successful on attempt ${attempt}:`, result);
               saveSuccess = true;
