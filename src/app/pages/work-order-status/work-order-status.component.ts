@@ -675,10 +675,23 @@ Please check the console for error details.`);
       
       // Always reload data to show any successful imports
       if (results.success > 0) {
-        // Wait a bit for Firestore to sync then reload
+        console.log('✅ Import successful! Reloading data and resetting filters...');
+        
+        // Close import dialog immediately to show results
+        this.closeImportDialog();
+        
+        // Wait longer for Firestore to sync then reload
         setTimeout(() => {
+          console.log('🔄 Reloading work orders after import...');
+          
+          // Reset filters to show all work orders (including newly imported ones)
+          this.resetFiltersToShowAll();
+          
+          // Reload data
           this.loadWorkOrders(); // This will automatically call assignSequentialNumbers
-        }, 1000);
+          
+          console.log('✅ Data reload completed');
+        }, 2000); // Increased to 2 seconds for better Firestore sync
       }
       
     } catch (error) {
@@ -1277,6 +1290,16 @@ Please check the console for error details.`);
 
   // Handle case when filters result in no data but work orders exist
   // Direct Firestore method as fallback for production build issues
+  // Reset filters to show all work orders (useful after import)
+  private resetFiltersToShowAll(): void {
+    console.log('🔄 Resetting filters to show all work orders...');
+    
+    // Use existing showAllWorkOrders method to truly show everything
+    this.showAllWorkOrders();
+    
+    console.log('✅ Filters reset to show all work orders');
+  }
+
   private async addWorkOrderDirect(workOrder: WorkOrder): Promise<any> {
     console.log('🔄 Direct Firestore save for work order:', {
       orderNumber: workOrder.orderNumber,
