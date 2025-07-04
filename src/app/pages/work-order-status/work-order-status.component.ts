@@ -5,7 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 
@@ -112,40 +112,110 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   loadWorkOrders(): void {
     console.log('🔄 Loading work orders from database...');
     
-    this.materialService.getWorkOrders()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (workOrders) => {
-          console.log(`📊 Loaded ${workOrders.length} work orders from database:`, workOrders);
-          this.workOrders = workOrders;
-          
-          // Auto-assign sequential numbers based on delivery date within each month
-          this.assignSequentialNumbers();
-          
-          // Debug: Check current filters
-          console.log('🔍 Current filters:', {
-            yearFilter: this.yearFilter,
-            monthFilter: this.monthFilter,
-            statusFilter: this.statusFilter,
-            searchTerm: this.searchTerm
-          });
-          
-          this.applyFilters();
-          this.calculateSummary();
-          
-          console.log(`✅ After filtering: ${this.filteredWorkOrders.length} work orders displayed`);
-          
-          // Auto-adjust filters if no data is shown but data exists
-          if (this.filteredWorkOrders.length === 0 && this.workOrders.length > 0) {
-            console.log('⚠️ No work orders match current filters, but data exists. Checking if we should adjust filters...');
-            this.handleEmptyFilterResults();
+    // Check if materialService.getWorkOrders is available
+    if (this.materialService && typeof this.materialService.getWorkOrders === 'function') {
+      console.log('📄 Using MaterialLifecycleService.getWorkOrders');
+      this.materialService.getWorkOrders()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (workOrders) => {
+            this.processLoadedWorkOrders(workOrders);
+          },
+          error: (error) => {
+            console.error('❌ MaterialLifecycleService.getWorkOrders failed:', error);
+            console.log('⚠️ Trying fallback method...');
+            this.loadWorkOrdersDirect();
           }
-        },
-        error: (error) => {
-          console.error('❌ Error loading work orders:', error);
-          alert(`⚠️ Error loading work orders: ${error.message || error}\n\nPlease check your internet connection and try refreshing the page.`);
-        }
+        });
+    } else {
+      console.log('⚠️ MaterialLifecycleService.getWorkOrders not available, using fallback');
+      this.loadWorkOrdersDirect();
+    }
+  }
+  
+  private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
+    console.log(`📊 Loaded ${workOrders.length} work orders from database:`, workOrders);
+    this.workOrders = workOrders;
+    
+    // Auto-assign sequential numbers based on delivery date within each month
+    this.assignSequentialNumbers();
+    
+    // Debug: Check current filters
+    console.log('🔍 Current filters:', {
+      yearFilter: this.yearFilter,
+      monthFilter: this.monthFilter,
+      statusFilter: this.statusFilter,
+      searchTerm: this.searchTerm
+    });
+    
+    this.applyFilters();
+    this.calculateSummary();
+    
+    console.log(`✅ After filtering: ${this.filteredWorkOrders.length} work orders displayed`);
+    
+    // Auto-adjust filters if no data is shown but data exists
+    if (this.filteredWorkOrders.length === 0 && this.workOrders.length > 0) {
+      console.log('⚠️ No work orders match current filters, but data exists. Checking if we should adjust filters...');
+      this.handleEmptyFilterResults();
+    }
+  }
+  
+  private async loadWorkOrdersDirect(): Promise<void> {
+    console.log('🔄 Loading work orders using direct Firestore...');
+    
+    try {
+      // Try Angular Fire first
+      try {
+        console.log('📄 Trying AngularFirestore...');
+        this.firestore.collection('work-orders').snapshotChanges()
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (actions) => {
+              const workOrders = actions.map(a => {
+                const data = a.payload.doc.data() as WorkOrder;
+                const id = a.payload.doc.id;
+                return { id, ...data };
+              });
+              console.log('✅ AngularFirestore load successful!');
+              this.processLoadedWorkOrders(workOrders);
+            },
+            error: (error) => {
+              console.log('⚠️ AngularFirestore failed, trying Firebase v9 SDK...', error);
+              this.loadWorkOrdersWithFirebaseV9();
+            }
+          });
+      } catch (angularFireError) {
+        console.log('⚠️ AngularFirestore failed, trying Firebase v9 SDK...', angularFireError);
+        this.loadWorkOrdersWithFirebaseV9();
+      }
+    } catch (error) {
+      console.error('❌ All Firestore load methods failed!', error);
+      alert(`⚠️ Error loading work orders: ${error?.message || error}\n\nPlease check your internet connection and try refreshing the page.`);
+    }
+  }
+  
+  private async loadWorkOrdersWithFirebaseV9(): Promise<void> {
+    try {
+      console.log('📄 Using Firebase v9 SDK to load work orders...');
+      
+      const app = initializeApp(environment.firebase);
+      const db = getFirestore(app);
+      const q = query(collection(db, 'work-orders'));
+      
+      const querySnapshot = await getDocs(q);
+      const workOrders: WorkOrder[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as WorkOrder;
+        workOrders.push({ id: doc.id, ...data });
       });
+      
+      console.log('✅ Firebase v9 SDK load successful!');
+      this.processLoadedWorkOrders(workOrders);
+    } catch (error) {
+      console.error('❌ Firebase v9 SDK load failed!', error);
+      throw error;
+    }
   }
 
   // Auto-assign sequential numbers based on delivery date within each month
