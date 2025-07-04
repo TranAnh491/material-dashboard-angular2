@@ -4,6 +4,7 @@ import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.mode
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
 
 @Component({
   selector: 'app-work-order-status',
@@ -78,7 +79,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
 
-  constructor(private materialService: MaterialLifecycleService) {
+  constructor(
+    private materialService: MaterialLifecycleService,
+    private firestore: AngularFirestore
+  ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
     for (let i = currentYear - 2; i <= currentYear + 2; i++) {
@@ -1096,11 +1100,15 @@ Please check the console for error details.`);
                 methodType: typeof (this.materialService && this.materialService.addWorkOrder)
               });
               
-              if (!this.materialService || typeof this.materialService.addWorkOrder !== 'function') {
-                throw new Error('MaterialLifecycleService.addWorkOrder method not available');
+              // Use direct Firestore method as backup for production build issues
+              let result;
+              if (this.materialService && typeof this.materialService.addWorkOrder === 'function') {
+                console.log('📄 Using MaterialLifecycleService.addWorkOrder');
+                result = await this.materialService.addWorkOrder(workOrder);
+              } else {
+                console.log('⚠️ Using fallback direct Firestore method');
+                result = await this.addWorkOrderDirect(workOrder);
               }
-              
-              const result = await this.materialService.addWorkOrder(workOrder);
               console.log(`✅ Firebase save successful on attempt ${attempt}:`, result);
               saveSuccess = true;
               break;
@@ -1265,6 +1273,29 @@ Please check the console for error details.`);
   }
 
   // Handle case when filters result in no data but work orders exist
+  // Direct Firestore method as fallback for production build issues
+  private async addWorkOrderDirect(workOrder: WorkOrder): Promise<any> {
+    console.log('🔄 Direct Firestore save for work order:', {
+      orderNumber: workOrder.orderNumber,
+      productCode: workOrder.productCode,
+      customer: workOrder.customer
+    });
+    
+    try {
+      // Add timestamps
+      workOrder.createdDate = new Date();
+      workOrder.lastUpdated = new Date();
+      
+      // Use direct Firestore API
+      const result = await this.firestore.collection('work-orders').add(workOrder);
+      console.log('✅ Direct Firestore save successful!', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Direct Firestore save failed!', error);
+      throw new Error(`Direct Firestore save failed: ${error?.message || error}`);
+    }
+  }
+
   private handleEmptyFilterResults(): void {
     console.log('🔧 Analyzing filter mismatch...');
     
