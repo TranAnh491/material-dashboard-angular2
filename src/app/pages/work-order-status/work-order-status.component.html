@@ -316,7 +316,7 @@
                       </thead>
                       <tbody>
                         <tr *ngFor="let wo of filteredWorkOrders" 
-                            [class]="getStatusClass(wo.status) + ' ' + getPriorityClass(wo.deliveryDate) + (isSelected(wo) ? ' selected-row' : '')">
+                            [class]="getStatusClass(wo.status || 'waiting') + ' ' + getPriorityClass(wo.deliveryDate) + (isSelected(wo) ? ' selected-row' : '')">
                           <td>
                             <mat-checkbox 
                               [checked]="isSelected(wo)"
@@ -333,7 +333,7 @@
                           <td>{{wo.customer}}</td>
                           <td>
                             <span [class]="getPriorityClass(wo.deliveryDate)">
-                              {{wo.deliveryDate | date:'dd/MM/yyyy'}}
+                              {{wo.deliveryDate ? (wo.deliveryDate | date:'dd/MM/yyyy') : 'N/A'}}
                             </span>
                           </td>
                           <td>
@@ -341,7 +341,7 @@
                           </td>
                           <td>
                             <mat-form-field class="status-select">
-                              <mat-select [value]="wo.status" (selectionChange)="updateWorkOrderStatus(wo, $event.value)">
+                              <mat-select [value]="wo.status || 'waiting'" (selectionChange)="updateWorkOrderStatus(wo, $event.value)">
                                 <mat-option value="waiting">Waiting</mat-option>
                                 <mat-option value="kitting">Kitting</mat-option>
                                 <mat-option value="ready">Ready</mat-option>
@@ -352,20 +352,20 @@
                           </td>
                           <td>
                             <mat-form-field class="person-select">
-                              <mat-select [value]="wo.createdBy" (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)">
+                              <mat-select [value]="wo.createdBy || ''" (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)">
                                 <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
                               </mat-select>
                             </mat-form-field>
                           </td>
                           <td>
                             <mat-form-field class="person-select">
-                              <mat-select [value]="wo.checkedBy" (selectionChange)="updateWorkOrder(wo, 'checkedBy', $event.value)">
+                              <mat-select [value]="wo.checkedBy || ''" (selectionChange)="updateWorkOrder(wo, 'checkedBy', $event.value)">
                                 <mat-option value="">None</mat-option>
                                 <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
                               </mat-select>
                             </mat-form-field>
                           </td>
-                          <td>{{wo.planReceivedDate | date:'dd/MM/yyyy'}}</td>
+                          <td>{{wo.planReceivedDate ? (wo.planReceivedDate | date:'dd/MM/yyyy') : 'N/A'}}</td>
                           <td>
                             <mat-form-field class="notes-field">
                               <input matInput [value]="wo.notes || ''" (blur)="updateWorkOrder(wo, 'notes', $event.target.value)" placeholder="Add notes...">
@@ -376,7 +376,7 @@
                                     matTooltip="⚠️ Delete Work Order (Cannot be undone!)" 
                                     matTooltipPosition="left"
                                     class="delete-btn enhanced-delete"
-                                    [attr.aria-label]="'Delete work order ' + wo.orderNumber"
+                                    [attr.aria-label]="'Delete work order ' + (wo.orderNumber || 'N/A')"
                                     title="Delete Work Order">
                               <mat-icon>delete_forever</mat-icon>
                             </button>

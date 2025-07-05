@@ -5,7 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 
@@ -101,7 +101,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       status: this.statusFilter
     });
     
-    this.loadWorkOrders();
+    // Force immediate load with fallback for tab switching issue
+    setTimeout(() => {
+      this.loadWorkOrders();
+    }, 100);
   }
 
   ngOnDestroy(): void {
@@ -112,25 +115,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   loadWorkOrders(): void {
     console.log('🔄 Loading work orders from database...');
     
-    // Check if materialService.getWorkOrders is available
-    if (this.materialService && typeof this.materialService.getWorkOrders === 'function') {
-      console.log('📄 Using MaterialLifecycleService.getWorkOrders');
-      this.materialService.getWorkOrders()
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (workOrders) => {
-            this.processLoadedWorkOrders(workOrders);
-          },
-          error: (error) => {
-            console.error('❌ MaterialLifecycleService.getWorkOrders failed:', error);
-            console.log('⚠️ Trying fallback method...');
-            this.loadWorkOrdersDirect();
-          }
-        });
-    } else {
-      console.log('⚠️ MaterialLifecycleService.getWorkOrders not available, using fallback');
-      this.loadWorkOrdersDirect();
-    }
+    // Always try fallback first for better reliability in production
+    console.log('📄 Using direct Firestore methods for better reliability');
+    this.loadWorkOrdersDirect();
   }
   
   private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
@@ -164,7 +151,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log('🔄 Loading work orders using direct Firestore...');
     
     try {
-      // Try Angular Fire first
+      // Try Firebase v9 SDK first (most reliable)
+      console.log('📄 Trying Firebase v9 SDK first...');
+      await this.loadWorkOrdersWithFirebaseV9();
+    } catch (firebaseV9Error) {
+      console.log('⚠️ Firebase v9 SDK failed, trying AngularFirestore...', firebaseV9Error);
+      
       try {
         console.log('📄 Trying AngularFirestore...');
         this.firestore.collection('work-orders').snapshotChanges()
@@ -180,17 +172,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
               this.processLoadedWorkOrders(workOrders);
             },
             error: (error) => {
-              console.log('⚠️ AngularFirestore failed, trying Firebase v9 SDK...', error);
-              this.loadWorkOrdersWithFirebaseV9();
+              console.error('❌ All Firestore load methods failed!', error);
+              // Try one more time after delay
+              setTimeout(() => {
+                console.log('🔄 Retrying load after delay...');
+                this.loadWorkOrdersWithFirebaseV9();
+              }, 2000);
             }
           });
       } catch (angularFireError) {
-        console.log('⚠️ AngularFirestore failed, trying Firebase v9 SDK...', angularFireError);
-        this.loadWorkOrdersWithFirebaseV9();
+        console.error('❌ All Firestore load methods failed!', angularFireError);
+        alert(`⚠️ Error loading work orders: ${angularFireError?.message || angularFireError}\n\nPlease check your internet connection and try refreshing the page.`);
       }
-    } catch (error) {
-      console.error('❌ All Firestore load methods failed!', error);
-      alert(`⚠️ Error loading work orders: ${error?.message || error}\n\nPlease check your internet connection and try refreshing the page.`);
     }
   }
   
@@ -509,7 +502,7 @@ Are you absolutely sure you want to delete this work order?`;
         deleteButton.setAttribute('disabled', 'true');
       }
 
-      this.materialService.deleteWorkOrder(workOrder.id!)
+      this.deleteWorkOrderWithFallback(workOrder.id!, workOrder)
         .then(() => {
           // Remove from local array
           this.workOrders = this.workOrders.filter(wo => wo.id !== workOrder.id);
@@ -555,7 +548,7 @@ ${workOrders.map(wo => `• ${wo.orderNumber} - ${wo.productCode} (${wo.customer
 Are you absolutely sure you want to delete these ${workOrders.length} work orders?`;
 
     if (confirm(confirmMessage)) {
-      const deletePromises = workOrders.map(wo => this.materialService.deleteWorkOrder(wo.id!));
+      const deletePromises = workOrders.map(wo => this.deleteWorkOrderWithFallback(wo.id!, wo));
       
       Promise.allSettled(deletePromises)
         .then(results => {
@@ -723,25 +716,24 @@ Please check the console for error details.`);
       this.importResults = results;
       // Progress will be set to 100% by bulkInsertWorkOrders
       
-      // Show detailed results message
-      let message = '';
-      if (results.success > 0 && results.failed === 0) {
-        message = `🎉 Import hoàn thành thành công!\n\n` +
-          `✅ Đã import thành công: ${results.success} work orders\n\n` +
-          `Đang tải lại dữ liệu...`;
-      } else if (results.success > 0 && results.failed > 0) {
-        message = `⚠️ Import hoàn thành với một số lỗi:\n\n` +
-          `✅ Thành công: ${results.success} work orders\n` +
-          `❌ Thất bại: ${results.failed} work orders\n\n` +
-          `Kiểm tra chi tiết lỗi trong popup import.\n\n` +
-          `Đang tải lại dữ liệu...`;
-      } else {
-        message = `❌ Import thất bại hoàn toàn!\n\n` +
+      // Show detailed results message - only alert on complete failure
+      if (results.success === 0) {
+        // Complete failure - show alert
+        const message = `❌ Import thất bại hoàn toàn!\n\n` +
           `Không có work order nào được import thành công.\n` +
           `Vui lòng kiểm tra format file Excel và thử lại.`;
+        alert(message);
+      } else if (results.success > 0 && results.failed > 0) {
+        // Partial success - log to console only, no alert to avoid confusion
+        console.log(`⚠️ Import hoàn thành với một số lỗi:
+✅ Thành công: ${results.success} work orders
+❌ Thất bại: ${results.failed} work orders
+Kiểm tra chi tiết lỗi trong popup import.`);
+      } else {
+        // Complete success - log to console only
+        console.log(`🎉 Import hoàn thành thành công!
+✅ Đã import thành công: ${results.success} work orders`);
       }
-      
-      alert(message);
       
       // Always reload data to show any successful imports
       if (results.success > 0) {
@@ -1402,6 +1394,47 @@ Please check the console for error details.`);
       throw new Error(`Direct Firestore save failed: ${error?.message || error}`);
     }
   }
+
+  // Enhanced fallback delete method to handle all production issues
+  private async deleteWorkOrderWithFallback(id: string, workOrder: WorkOrder): Promise<void> {
+    console.log('🗑️ Attempting to delete work order:', id);
+    
+    // Try method 1: MaterialLifecycleService
+    try {
+      if (this.materialService && typeof this.materialService.deleteWorkOrder === 'function') {
+        console.log('📄 Attempt 1: MaterialLifecycleService.deleteWorkOrder');
+        await this.materialService.deleteWorkOrder(id);
+        console.log('✅ MaterialLifecycleService delete successful');
+        return; // Success, exit early
+      }
+    } catch (error) {
+      console.log('⚠️ MaterialLifecycleService failed, trying fallback methods...', error);
+    }
+
+    // Try method 2: Direct AngularFirestore
+    try {
+      console.log('📄 Attempt 2: Direct AngularFirestore delete');
+      await this.firestore.collection('work-orders').doc(id).delete();
+      console.log('✅ Direct AngularFirestore delete successful');
+      return; // Success, exit early
+    } catch (error) {
+      console.log('⚠️ AngularFirestore failed, trying Firebase v9 SDK...', error);
+    }
+
+    // Try method 3: Firebase v9 SDK (final fallback)
+    try {
+      console.log('📄 Attempt 3: Firebase v9 SDK delete');
+      const app = initializeApp(environment.firebase);
+      const db = getFirestore(app);
+      await deleteDoc(doc(db, 'work-orders', id));
+      console.log('✅ Firebase v9 SDK delete successful');
+      return; // Success, exit early
+    } catch (error) {
+      console.error('❌ All delete methods failed!', error);
+      throw new Error(`All delete methods failed for work order ${id}: ${error?.message || error}`);
+    }
+  }
+
 
   private handleEmptyFilterResults(): void {
     console.log('🔧 Analyzing filter mismatch...');

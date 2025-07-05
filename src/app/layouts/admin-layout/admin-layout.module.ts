@@ -67,7 +67,8 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     MatNativeDateModule,
     MatProgressSpinnerModule,
     MatProgressBarModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    SharedModule
   ],
   declarations: [
     DashboardComponent,

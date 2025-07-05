@@ -2,14 +2,27 @@
   <div class="container-fluid documents-container" [class.embedded]="selectedDocumentUrl">
 
     <!-- Document List View -->
-    <div *ngIf="!selectedDocumentUrl">
+    <div *ngIf="!selectedDocumentUrl && !showDailyChecklist">
       <!-- Row for Checklists -->
       <div class="row checklist-row">
         <div *ngFor="let doc of documentList" class="col-md-auto checklist-card">
           <div class="card">
             <div class="card-body text-center">
               <h5 class="card-title">{{ doc.title }}</h5>
-              <button (click)="selectDocument(doc)" class="btn btn-info">Mở tài liệu</button>
+              <button (click)="selectDocument(doc)" class="btn btn-info">OPEN</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Daily Checklist Shelves Button -->
+        <div class="col-md-auto checklist-card">
+          <div class="card">
+            <div class="card-body text-center">
+                              <h5 class="card-title">📋 Daily Checklist Shelves</h5>
+              <button (click)="openDailyChecklist()" class="btn btn-primary">
+                <i class="material-icons">checklist</i>
+                OPEN
+              </button>
             </div>
           </div>
         </div>
@@ -29,6 +42,226 @@
       </div>
       <div class="iframe-container">
         <iframe [src]="selectedDocumentUrl" width="100%" height="100%" frameborder="0">Đang tải...</iframe>
+      </div>
+    </div>
+
+    <!-- Daily Checklist Shelves View -->
+    <div *ngIf="showDailyChecklist" class="daily-checklist-view">
+      <div class="toolbar compact-toolbar">
+        <button (click)="closeDailyChecklist()" class="btn btn-white btn-round btn-just-icon mr-3">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <span class="compact-header">Daily Checklist Shelves - Quay lại để xem danh sách tài liệu.</span>
+      </div>
+      
+      <div class="container">
+        <div class="header">
+          <h3 class="compact-title">📋 CHECKLIST KỆ KHO</h3>
+        </div>
+        
+        <div class="toolbar">
+          <div class="form-inputs">
+            <div class="form-group">
+              <label for="nguoiKiem">Người kiểm:</label>
+              <select id="nguoiKiem" class="form-control" [(ngModel)]="currentData.nguoiKiem">
+                <option value="">Chọn người kiểm</option>
+                <option value="Hoàng Vũ">Hoàng Vũ</option>
+                <option value="Hữu Tình">Hữu Tình</option>
+                <option value="Hoàng Tuấn">Hoàng Tuấn</option>
+                <option value="Toàn">Toàn</option>
+                <option value="Hưng">Hưng</option>
+                <option value="Phúc">Phúc</option>
+                <option value="Tú">Tú</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ngayKiem">Ngày kiểm:</label>
+              <input type="date" id="ngayKiem" class="form-control" [(ngModel)]="currentData.ngayKiem">
+            </div>
+          </div>
+          
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" (click)="startNewChecklist()" [disabled]="isLoading">
+              <span class="loading-spinner" [class.show]="isLoading"></span>
+              📝 Tạo mới
+            </button>
+            <button class="btn btn-info" (click)="toggleHistory()" [disabled]="isLoading">
+              📊 {{ showHistory ? 'Ẩn lịch sử' : 'Lịch sử' }}
+            </button>
+            <button class="btn btn-warning" (click)="toggleCalendar()" [disabled]="isLoading">
+              📅 {{ showCalendar ? 'Ẩn lịch' : 'Lịch tháng' }}
+            </button>
+            <button class="btn btn-success" (click)="exportData()" [disabled]="isLoading">
+              📋 Xuất Excel
+            </button>
+          </div>
+        </div>
+
+        <div class="main-content">
+          <div class="summary-cards">
+            <div class="summary-card total">
+              <div class="summary-number">{{ getTotalItems() }}</div>
+              <div class="summary-label">Tổng mục</div>
+            </div>
+            <div class="summary-card ok">
+              <div class="summary-number">{{ getCheckedItems() }}</div>
+              <div class="summary-label">Đã kiểm</div>
+            </div>
+            <div class="summary-card ng">
+              <div class="summary-number">{{ getNGItems() }}</div>
+              <div class="summary-label">NG</div>
+            </div>
+            <div class="summary-card pending">
+              <div class="summary-number">{{ getUncheckedItems() }}</div>
+              <div class="summary-label">Chưa kiểm</div>
+            </div>
+          </div>
+
+          <div class="checklist-section">
+            <h4 class="section-title compact-section">📋 Danh mục kiểm tra</h4>
+            <div class="table-container">
+              <table class="checklist-table">
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>Danh mục</th>
+                    <th>Mục kiểm tra</th>
+                    <th>OK</th>
+                    <th>NG</th>
+                    <th>Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of currentData.items; let i = index" [class.category-row]="item.category !== getPreviousCategory(i)">
+                    <td>{{ i + 1 }}</td>
+                    <td>{{ item.category }}</td>
+                    <td>{{ item.item }}</td>
+                    <td class="check-cell">
+                      <input 
+                        type="checkbox" 
+                        class="checkbox-custom" 
+                        [(ngModel)]="item.isOK"
+                        (change)="updateItemStatus(i)">
+                    </td>
+                    <td class="check-cell">
+                      <input 
+                        type="checkbox" 
+                        class="checkbox-custom checkbox-ng" 
+                        [(ngModel)]="item.isNG"
+                        (change)="updateItemStatus(i)">
+                    </td>
+                    <td>
+                      <input 
+                        type="text" 
+                        class="notes-input" 
+                        [(ngModel)]="item.notes"
+                        (blur)="updateItemNotes(i)"
+                        placeholder="Ghi chú...">
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="history-section" *ngIf="showHistory">
+            <h4 class="section-title compact-section">📊 Lịch sử kiểm kê</h4>
+            <div class="table-container">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Ngày kiểm</th>
+                    <th>Kệ</th>
+                    <th>Người kiểm</th>
+                    <th>Ca kiểm</th>
+                    <th>Trạng thái</th>
+                    <th>Tổng mục</th>
+                    <th>Hoàn thành</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let record of historyData">
+                    <td>{{ record.ngayKiem | date:'dd/MM/yyyy' }}</td>
+                    <td>{{ record.kiemKe }}</td>
+                    <td>{{ record.nguoiKiem }}</td>
+                    <td>{{ record.caKiem }}</td>
+                    <td>
+                      <span class="status-badge" [class]="record.status">
+                        {{ record.status === 'completed' ? 'Hoàn thành' : 'Đang thực hiện' }}
+                      </span>
+                    </td>
+                    <td>{{ record.items.length }}</td>
+                    <td>{{ getCompletedCount(record.items) }}/{{ record.items.length }}</td>
+                    <td>
+                      <button class="btn btn-info btn-sm" (click)="loadRecord(record)">📋 Xem</button>
+                      <button class="btn btn-warning btn-sm" (click)="deleteRecord(record.id)" style="margin-left: 5px;">🗑️</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="calendar-section" *ngIf="showCalendar">
+            <h4 class="section-title compact-section">📅 Lịch tháng kiểm kê</h4>
+            <div class="calendar-header">
+              <button class="btn btn-outline-primary" (click)="previousMonth()">‹ Tháng trước</button>
+              <h3 class="calendar-title">{{ getCurrentMonthYear() }}</h3>
+              <button class="btn btn-outline-primary" (click)="nextMonth()">Tháng sau ›</button>
+            </div>
+            <div class="calendar-legend">
+              <span class="legend-item">
+                <span class="legend-color no-check"></span>
+                <span>Chưa kiểm tra</span>
+              </span>
+              <span class="legend-item">
+                <span class="legend-color checked"></span>
+                <span>Đã kiểm tra</span>
+              </span>
+              <span class="legend-item">
+                <span class="legend-color today"></span>
+                <span>Hôm nay</span>
+              </span>
+            </div>
+            <div class="calendar-grid">
+              <div class="calendar-weekdays">
+                <div class="weekday">T2</div>
+                <div class="weekday">T3</div>
+                <div class="weekday">T4</div>
+                <div class="weekday">T5</div>
+                <div class="weekday">T6</div>
+                <div class="weekday">T7</div>
+                <div class="weekday">CN</div>
+              </div>
+              <div class="calendar-days">
+                <div 
+                  *ngFor="let day of getCalendarDays()" 
+                  class="calendar-day"
+                  [class.other-month]="!day.isCurrentMonth"
+                  [class.today]="day.isToday"
+                  [class.checked]="day.hasChecklist"
+                  [class.no-check]="day.isCurrentMonth && !day.hasChecklist && !day.isToday"
+                  [class.clickable]="day.isCurrentMonth"
+                  (click)="onDayClick(day)"
+                  [title]="getDayTooltip(day)"
+                >
+                  <span class="day-number">{{ day.day }}</span>
+                  <span class="day-status" *ngIf="day.hasChecklist">✓</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="floating-save" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
+        <span class="loading-spinner" [class.show]="isLoading"></span>
+        💾 {{ isLoading ? 'Đang lưu...' : 'Lưu dữ liệu' }}
+      </button>
+
+      <div class="notification" [class]="notificationClass" [class.show]="showNotification">
+        {{ notificationMessage }}
       </div>
     </div>
 
