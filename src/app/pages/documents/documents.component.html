@@ -298,7 +298,7 @@
               <div class="container">
         <div class="header">
           <h3 class="compact-title">
-            📋 CHECKLIST KỆ KHO
+            <i class="material-icons">assignment</i> CHECKLIST KỆ KHO
             <span *ngIf="hasUnsavedChanges" class="unsaved-indicator">• Chưa lưu</span>
           </h3>
         </div>
@@ -327,23 +327,23 @@
           <div class="toolbar-actions">
             <button class="btn btn-primary" (click)="startNewChecklist()" [disabled]="isLoading">
               <span class="loading-spinner" [class.show]="isLoading"></span>
-              📝 Tạo mới
+              <i class="material-icons">add</i> Tạo mới
             </button>
             <button class="btn btn-info" (click)="toggleHistory()" [disabled]="isLoading">
-              �� {{ showHistory ? 'Ẩn lịch sử' : 'Lịch sử' }}
+              <i class="material-icons">history</i> {{ showHistory ? 'Ẩn lịch sử' : 'Lịch sử' }}
             </button>
             <button class="btn btn-warning" (click)="toggleCalendar()" [disabled]="isLoading">
-              📅 {{ showCalendar ? 'Ẩn lịch' : 'Lịch tháng' }}
+              <i class="material-icons">calendar_today</i> {{ showCalendar ? 'Ẩn lịch' : 'Lịch tháng' }}
             </button>
             <button class="btn btn-success" (click)="exportData()" [disabled]="isLoading">
-              📋 Xuất Excel
+              <i class="material-icons">file_download</i> Xuất Excel
             </button>
             <button class="btn btn-primary" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
               <span class="loading-spinner" [class.show]="isLoading"></span>
-              💾 Lưu ngay
+              <i class="material-icons">save</i> Lưu ngay
             </button>
             <button class="btn btn-secondary btn-sm" (click)="debugCalendarDates()" title="Debug Calendar">
-              🐛
+              <i class="material-icons">bug_report</i>
             </button>
           </div>
         </div>
@@ -351,25 +351,31 @@
         <div class="main-content">
           <div class="summary-cards">
             <div class="summary-card total">
+              <i class="material-icons card-icon">list_alt</i>
               <div class="summary-number">{{ getTotalItems() }}</div>
               <div class="summary-label">Tổng mục</div>
             </div>
             <div class="summary-card ok">
+              <i class="material-icons card-icon">check_circle</i>
               <div class="summary-number">{{ getCheckedItems() }}</div>
               <div class="summary-label">Đã kiểm</div>
             </div>
             <div class="summary-card ng">
+              <i class="material-icons card-icon">error</i>
               <div class="summary-number">{{ getNGItems() }}</div>
               <div class="summary-label">NG</div>
             </div>
             <div class="summary-card pending">
+              <i class="material-icons card-icon">schedule</i>
               <div class="summary-number">{{ getUncheckedItems() }}</div>
               <div class="summary-label">Chưa kiểm</div>
             </div>
           </div>
 
           <div class="checklist-section">
-            <h4 class="section-title compact-section">📋 Danh mục kiểm tra</h4>
+            <h4 class="section-title compact-section">
+              <i class="material-icons">checklist</i> Danh mục kiểm tra
+            </h4>
             <div class="table-container">
               <table class="checklist-table">
                 <thead>
@@ -416,7 +422,9 @@
           </div>
 
           <div class="history-section" *ngIf="showHistory">
-            <h4 class="section-title compact-section">📊 Lịch sử kiểm kê</h4>
+            <h4 class="section-title compact-section">
+              <i class="material-icons">analytics</i> Lịch sử kiểm kê
+            </h4>
             <div class="table-container">
               <table class="history-table">
                 <thead>
@@ -445,8 +453,12 @@
                     <td>{{ record.items.length }}</td>
                     <td>{{ getCompletedCount(record.items) }}/{{ record.items.length }}</td>
                     <td>
-                      <button class="btn btn-info btn-sm" (click)="loadRecord(record)">📋 Xem</button>
-                      <button class="btn btn-warning btn-sm" (click)="deleteRecord(record.id)" style="margin-left: 5px;">🗑️</button>
+                      <button class="btn btn-info btn-sm" (click)="loadRecord(record)">
+                        <i class="material-icons">visibility</i> Xem
+                      </button>
+                      <button class="btn btn-warning btn-sm" (click)="deleteRecord(record.id)" style="margin-left: 5px;">
+                        <i class="material-icons">delete</i>
+                      </button>
                     </td>
                   </tr>
                 </tbody>
@@ -455,11 +467,17 @@
           </div>
 
           <div class="calendar-section" *ngIf="showCalendar">
-            <h4 class="section-title compact-section">📅 Lịch tháng kiểm kê</h4>
+            <h4 class="section-title compact-section">
+              <i class="material-icons">event</i> Lịch tháng kiểm kê
+            </h4>
             <div class="calendar-header">
-              <button class="btn btn-outline-primary" (click)="previousMonth()">‹ Tháng trước</button>
+              <button class="btn btn-outline-primary" (click)="previousMonth()">
+                <i class="material-icons">chevron_left</i> Tháng trước
+              </button>
               <h3 class="calendar-title">{{ getCurrentMonthYear() }}</h3>
-              <button class="btn btn-outline-primary" (click)="nextMonth()">Tháng sau ›</button>
+              <button class="btn btn-outline-primary" (click)="nextMonth()">
+                Tháng sau <i class="material-icons">chevron_right</i>
+              </button>
             </div>
             <div class="calendar-legend">
               <span class="legend-item">
@@ -491,7 +509,7 @@
                 >
                   <span class="day-weekday">{{ day.dayOfWeek }}</span>
                   <span class="day-number">{{ day.day }}</span>
-                  <span class="day-status" *ngIf="day.hasChecklist">✓</span>
+                  <i class="material-icons day-status" *ngIf="day.hasChecklist">check_circle</i>
                 </div>
               </div>
             </div>
@@ -501,7 +519,7 @@
 
       <button class="floating-save" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
         <span class="loading-spinner" [class.show]="isLoading"></span>
-        💾 {{ isLoading ? 'Đang lưu...' : 'Lưu dữ liệu' }}
+        <i class="material-icons">save</i> {{ isLoading ? 'Đang lưu...' : 'Lưu dữ liệu' }}
       </button>
 
       <div class="notification" [class]="notificationClass" [class.show]="showNotification">

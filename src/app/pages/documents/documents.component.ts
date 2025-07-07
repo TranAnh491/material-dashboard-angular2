@@ -328,12 +328,23 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     try {
+      const completedItems = this.getCheckedItems() + this.getNGItems();
+      const totalItems = this.getTotalItems();
+      const calculatedStatus = completedItems === totalItems ? 'completed' : 'pending';
+      
       const dataToSave = {
         ...this.currentData,
         createdAt: Timestamp.now(),
-        status: (this.getCheckedItems() + this.getNGItems()) === this.getTotalItems() ? 'completed' : 'pending'
+        status: calculatedStatus
       };
 
+      console.log('📝 Status calculation:', {
+        completedItems,
+        totalItems,
+        calculatedStatus,
+        checkedItems: this.getCheckedItems(),
+        ngItems: this.getNGItems()
+      });
       console.log('📝 Data to save:', dataToSave);
       console.log('📅 Date being saved:', dataToSave.ngayKiem);
 
@@ -355,7 +366,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       console.log('✅ Save operation completed successfully');
       
       this.showNotification = true;
-      this.notificationMessage = '✅ Đã lưu dữ liệu thành công!';
+      this.notificationMessage = calculatedStatus === 'completed' 
+        ? '✅ Đã lưu và hoàn thành checklist!' 
+        : '✅ Đã lưu dữ liệu thành công!';
       this.notificationClass = 'success';
       setTimeout(() => { this.showNotification = false; }, 3000);
       
@@ -564,35 +577,35 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
   // Debug method to compare calendar dates with saved dates
   debugCalendarDates() {
-    console.log('\n=== 🐛 CALENDAR DEBUG ===');
-    console.log('📅 Saved checklistDates:', Array.from(this.checklistDates).sort());
+    console.log('🐛 Debug Calendar Dates:');
+    console.log('Current checklistDates:', Array.from(this.checklistDates));
+    console.log('History data count:', this.historyData.length);
+    console.log('History data:', this.historyData.map(h => ({
+      date: h.ngayKiem,
+      user: h.nguoiKiem,
+      status: h.status,
+      completedItems: this.getCompletedCount(h.items),
+      totalItems: h.items.length
+    })));
     
-    const currentMonthDays = this.getCalendarDays()
-      .filter(day => day.isCurrentMonth)
-      .map(day => ({
-        day: day.day,
-        dateStr: this.formatDateToLocal(day.date),
-        hasChecklist: day.hasChecklist,
-        inSavedDates: this.checklistDates.has(this.formatDateToLocal(day.date))
-      }));
+    // Check current checklist status
+    const dailyChecklist = this.checklists.find(c => c.id === 'daily-shelves');
+    console.log('Daily checklist status:', dailyChecklist?.status);
     
-    console.log('📆 Current month calendar days:');
-    currentMonthDays.forEach(dayInfo => {
-      const status = dayInfo.hasChecklist ? '✅' : '❌';
-      const match = dayInfo.hasChecklist === dayInfo.inSavedDates ? '✓' : '✗ MISMATCH!';
-      console.log(`  Day ${dayInfo.day}: ${dayInfo.dateStr} ${status} ${match}`);
-    });
-    
-    // Check for any dates that are saved but not showing on calendar
-    const currentMonth = this.currentCalendarDate.getMonth() + 1;
-    const currentYear = this.currentCalendarDate.getFullYear();
-    const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-    
-    const savedDatesThisMonth = Array.from(this.checklistDates)
-      .filter(date => date.startsWith(monthPrefix));
-    
-    console.log(`📋 Saved dates for ${monthPrefix}:`, savedDatesThisMonth);
-    console.log('=== END DEBUG ===\n');
+    // Check if today's record exists and its status
+    const today = new Date().toISOString().split('T')[0];
+    const todayRecord = this.historyData.find(h => h.ngayKiem === today);
+    if (todayRecord) {
+      console.log('Today\'s record:', {
+        date: todayRecord.ngayKiem,
+        status: todayRecord.status,
+        completed: this.getCompletedCount(todayRecord.items),
+        total: todayRecord.items.length,
+        shouldBeCompleted: this.getCompletedCount(todayRecord.items) === todayRecord.items.length
+      });
+    } else {
+      console.log('No record found for today:', today);
+    }
   }
 
   getCurrentMonthYear(): string {
@@ -901,7 +914,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       'ready': 'Ready',
       'in-progress': 'In Progress',
       'pending': 'Pending',
-      'overdue': 'Overdue'
+      'overdue': 'Overdue',
+      'completed': 'Completed'
     };
     return statusLabels[status] || 'Unknown';
   }
@@ -970,24 +984,36 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       this.checklists[checklistIndex].lastUpdated = new Date(mostRecent.ngayKiem);
       this.checklists[checklistIndex].assignedUser = mostRecent.nguoiKiem;
       
-      // Determine status based on how recent the last checklist was
-      const daysSinceLastCheck = Math.floor((new Date().getTime() - new Date(mostRecent.ngayKiem).getTime()) / (1000 * 60 * 60 * 24));
+      // Check if all items are completed (OK or NG)
+      const completedItems = this.getCompletedCount(mostRecent.items);
+      const totalItems = mostRecent.items.length;
+      const isFullyCompleted = completedItems === totalItems;
       
-      if (daysSinceLastCheck === 0) {
+      // Set status based on completion
+      if (isFullyCompleted) {
         this.checklists[checklistIndex].status = 'completed';
-      } else if (daysSinceLastCheck <= 1) {
-        this.checklists[checklistIndex].status = 'ready';
-      } else if (daysSinceLastCheck <= 3) {
-        this.checklists[checklistIndex].status = 'pending';
       } else {
-        this.checklists[checklistIndex].status = 'overdue';
+        // If not completed, determine status based on how recent the last checklist was
+        const daysSinceLastCheck = Math.floor((new Date().getTime() - new Date(mostRecent.ngayKiem).getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysSinceLastCheck === 0) {
+          this.checklists[checklistIndex].status = 'pending';
+        } else if (daysSinceLastCheck <= 1) {
+          this.checklists[checklistIndex].status = 'ready';
+        } else if (daysSinceLastCheck <= 3) {
+          this.checklists[checklistIndex].status = 'pending';
+        } else {
+          this.checklists[checklistIndex].status = 'overdue';
+        }
       }
       
-      console.log('Updated checklist with most recent data:', {
+      console.log('✅ Updated checklist status:', {
         date: mostRecent.ngayKiem,
         user: mostRecent.nguoiKiem,
-        daysSince: daysSinceLastCheck,
-        status: this.checklists[checklistIndex].status
+        completedItems: completedItems,
+        totalItems: totalItems,
+        isFullyCompleted: isFullyCompleted,
+        finalStatus: this.checklists[checklistIndex].status
       });
     } else {
       // No history data - set to overdue status
@@ -1582,5 +1608,56 @@ Check console for detailed info.`);
     }
     
     return result;
+  }
+
+  async forceUpdateStatus() {
+    if (this.connectionStatus !== 'connected') {
+      console.log('Not connected to Firebase');
+      return;
+    }
+
+    try {
+      // Find the record for 2025-07-07
+      const targetDate = '2025-07-07';
+      const targetRecord = this.historyData.find(h => h.ngayKiem === targetDate);
+      
+      if (!targetRecord || !targetRecord.id) {
+        console.log('No record found for', targetDate);
+        return;
+      }
+
+      // Check if all items are completed
+      const completedItems = this.getCompletedCount(targetRecord.items);
+      const totalItems = targetRecord.items.length;
+      const shouldBeCompleted = completedItems === totalItems;
+
+      console.log('Force updating status for', targetDate, {
+        completedItems,
+        totalItems,
+        shouldBeCompleted,
+        currentStatus: targetRecord.status
+      });
+
+      if (shouldBeCompleted && targetRecord.status !== 'completed') {
+        // Update the record to completed
+        await updateDoc(doc(this.db, 'warehouse-checklist', targetRecord.id), {
+          status: 'completed'
+        });
+        
+        console.log('✅ Updated status to completed for', targetDate);
+        
+        // Reload history to reflect changes
+        await this.loadHistory();
+        
+        this.showNotification = true;
+        this.notificationMessage = '✅ Đã cập nhật trạng thái thành công!';
+        this.notificationClass = 'success';
+        setTimeout(() => { this.showNotification = false; }, 3000);
+      } else {
+        console.log('Record is already completed or not all items are done');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
   }
 }

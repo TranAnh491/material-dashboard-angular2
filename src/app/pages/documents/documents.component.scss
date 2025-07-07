@@ -328,29 +328,88 @@
   
   .summary-card {
     background: white;
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 20px;
     text-align: center;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #FF6B35, #F7931E);
+    }
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+    
+    .card-icon {
+      font-size: 32px;
+      margin-bottom: 10px;
+      color: #FF6B35;
+      display: block;
+    }
     
     .summary-number {
       font-size: 2.5em;
-      font-weight: bold;
-      margin-bottom: 10px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 5px;
+      text-shadow: none;
     }
     
     .summary-label {
-      font-size: 0.9em;
       color: #666;
+      font-size: 0.9em;
+      font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
     
-    &.total .summary-number { color: #6c757d; }
-    &.ok .summary-number { color: #28a745; }
-    &.ng .summary-number { color: #dc3545; }
-    &.pending .summary-number { color: #ffc107; }
+    &.total {
+      .card-icon {
+        color: #6c757d;
+      }
+      &::before {
+        background: linear-gradient(90deg, #6c757d, #495057);
+      }
+    }
+    
+    &.ok {
+      .card-icon {
+        color: #28a745;
+      }
+      &::before {
+        background: linear-gradient(90deg, #28a745, #20c997);
+      }
+    }
+    
+    &.ng {
+      .card-icon {
+        color: #dc3545;
+      }
+      &::before {
+        background: linear-gradient(90deg, #dc3545, #e74c3c);
+      }
+    }
+    
+    &.pending {
+      .card-icon {
+        color: #ffc107;
+      }
+      &::before {
+        background: linear-gradient(90deg, #ffc107, #fd7e14);
+      }
+    }
   }
 }
 
@@ -368,6 +427,9 @@
   margin-bottom: 20px;
   font-size: 1.5em;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .table-container {
@@ -590,9 +652,14 @@
     }
     
     .day-status {
-      font-size: 0.8em;
-      color: #4caf50;
-      margin-top: 2px;
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      font-size: 12px;
+      color: #28a745;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      padding: 1px;
     }
     
     &.other-month {
@@ -740,6 +807,9 @@
   box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
   transition: all 0.3s ease;
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   
   &:hover {
     background: #e55a2b;
@@ -751,6 +821,11 @@
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
+  }
+  
+  .material-icons {
+    margin-right: 0;
+    font-size: 18px;
   }
 }
 
@@ -1403,9 +1478,14 @@
   }
   
   .day-status {
-    font-size: 0.8em;
-    color: #4caf50;
-    margin-top: 2px;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 12px;
+    color: #28a745;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    padding: 1px;
   }
   
   &:hover {
@@ -1515,6 +1595,9 @@
       font-weight: 600;
       margin: 8px 0;
       color: #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .unsaved-indicator {
@@ -2816,5 +2899,71 @@
   
   @media (max-width: 768px) {
     font-size: 10px;
+  }
+}
+
+// Material Icons styling
+.material-icons {
+  vertical-align: middle;
+  margin-right: 6px;
+  font-size: 18px;
+  
+  &:last-child {
+    margin-right: 0;
+    margin-left: 6px;
+  }
+}
+
+// Button with icons
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  
+  .material-icons {
+    margin-right: 0;
+    font-size: 16px;
+  }
+  
+  &.btn-sm .material-icons {
+    font-size: 14px;
+  }
+}
+
+// Section titles with icons
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .material-icons {
+    margin-right: 0;
+    font-size: 20px;
+    color: #FF6B35;
+  }
+}
+
+// Compact title with icon
+.compact-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .material-icons {
+    margin-right: 0;
+    font-size: 22px;
+    color: #FF6B35;
+  }
+}
+
+// Floating save button with icon
+.floating-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .material-icons {
+    margin-right: 0;
+    font-size: 18px;
   }
 }
