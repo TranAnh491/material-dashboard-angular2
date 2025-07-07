@@ -3,6 +3,9 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { environment } from '../../../environments/environment';
+import { GoogleSheetService } from '../../services/google-sheet.service';
+import { Subscription } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
 
 interface DocumentFile {
   title: string;
@@ -34,6 +37,17 @@ interface CalendarDay {
   isCurrentMonth: boolean;
   isToday: boolean;
   hasChecklist: boolean;
+  dayOfWeek: string;
+  isSunday: boolean;
+}
+
+interface RackLoading {
+  position: string;
+  maxCapacity: number;
+  currentLoad: number;
+  usage: number; // Percentage
+  status: 'available' | 'normal' | 'warning' | 'critical';
+  itemCount: number;
 }
 
 @Component({
@@ -81,6 +95,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   private db: any;
   private unsubscribe: any;
 
+  // Auto-save timer
+  private autoSaveTimer: any = null;
+
   // Data
   currentData: ChecklistData = {
     nguoiKiem: '',
@@ -112,16 +129,66 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   currentCalendarDate = new Date();
   checklistDates: Set<string> = new Set();
 
-  constructor(private sanitizer: DomSanitizer) { }
+  // Modern checklist interface properties
+  checklists: any[] = [
+    {
+      id: 'daily-shelves',
+      title: 'Daily Checklist Shelves',
+      description: 'Daily warehouse shelf safety inspection',
+      icon: 'checklist',
+      status: 'ready',
+      completionPercentage: 0,
+      itemCount: 10,
+      assignedUser: 'Hoàng Tuấn',
+      lastUpdated: new Date(),
+      priority: 'high',
+      url: null,
+      loading: false
+    }
+  ];
+
+  // Search and filter properties
+  searchQuery: string = '';
+  statusFilter: string = '';
+  sortBy: string = 'name';
+  filteredChecklists: any[] = [];
+
+  // Rack Loading Data
+  rackLoadingData: RackLoading[] = [];
+  private rackDataSubscription: Subscription | undefined;
+  isRefreshing: boolean = false;
+  lastRackDataUpdate: Date | null = null;
+
+  // Sync state
+  isSyncing = false;
+  lastSyncTime: Date | null = null;
+  syncStatus: any = null;
+
+  constructor(private sanitizer: DomSanitizer, private googleSheetService: GoogleSheetService, private http: HttpClient) { }
 
   async ngOnInit(): Promise<void> {
     await this.initializeFirebase();
+    this.initializeChecklists();
+    this.initializeRackLoading();
     await this.loadHistory();
+    // Update checklist with recent data after loading history
+    this.updateChecklistWithRecentData();
   }
 
   ngOnDestroy(): void {
     if (this.unsubscribe) {
       this.unsubscribe();
+    }
+    
+    // Clear auto-save timer to prevent memory leaks
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+      console.log('🧹 Cleared auto-save timer on component destroy');
+    }
+
+    if (this.rackDataSubscription) {
+      this.rackDataSubscription.unsubscribe();
     }
   }
 
@@ -137,6 +204,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   // Daily Checklist Methods
   openDailyChecklist(): void {
     this.showDailyChecklist = true;
+    // Load history immediately when opening checklist to populate calendar
+    this.loadHistory();
   }
 
   closeDailyChecklist(): void {
@@ -159,7 +228,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   getTotalItems(): number {
-    return this.currentData.items.length;
+    return this.rackLoadingData.reduce((total, rack) => total + rack.itemCount, 0);
   }
 
   getCheckedItems(): number {
@@ -189,11 +258,27 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     }
     
     this.hasUnsavedChanges = true;
-    // Auto-save after 2 seconds
-    setTimeout(() => {
-      if (this.hasUnsavedChanges) {
+    console.log('🔄 Checkbox changed, setting up auto-save...');
+    
+    // Clear previous auto-save timer to prevent multiple saves
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      console.log('⏹️ Cleared previous auto-save timer');
+    }
+    
+    // Auto-save after 2 seconds with validation
+    this.autoSaveTimer = setTimeout(() => {
+      if (this.hasUnsavedChanges && this.currentData.nguoiKiem) {
+        console.log('⏰ Auto-save triggered by checkbox change');
         this.saveData();
+      } else if (!this.currentData.nguoiKiem) {
+        console.log('⚠️ Auto-save skipped: No nguoiKiem selected');
+        this.showNotification = true;
+        this.notificationMessage = '⚠️ Vui lòng chọn người kiểm trước khi tick checkbox';
+        this.notificationClass = 'warning';
+        setTimeout(() => { this.showNotification = false; }, 3000);
       }
+      this.autoSaveTimer = null;
     }, 2000);
   }
 
@@ -214,6 +299,13 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     console.log('🔄 Starting save operation...');
     console.log('Connection status:', this.connectionStatus);
     console.log('Current data:', this.currentData);
+    
+    // Clear auto-save timer if exists
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+      console.log('⏹️ Cleared auto-save timer due to manual save');
+    }
     
     if (this.connectionStatus !== 'connected') {
       console.log('❌ No Firebase connection');
@@ -243,6 +335,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       };
 
       console.log('📝 Data to save:', dataToSave);
+      console.log('📅 Date being saved:', dataToSave.ngayKiem);
 
       if (this.currentData.id) {
         // Update existing record
@@ -267,6 +360,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       setTimeout(() => { this.showNotification = false; }, 3000);
       
       await this.loadHistory();
+      
+      // Force calendar refresh if showing
+      if (this.showCalendar) {
+        console.log('🔄 Refreshing calendar view...');
+        console.log('Current checklistDates:', Array.from(this.checklistDates));
+      }
     } catch (error) {
       console.error('❌ Save error details:', error);
       console.error('Error code:', error.code);
@@ -307,10 +406,21 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         // Add to checklist dates for calendar
         if (data.ngayKiem) {
           this.checklistDates.add(data.ngayKiem);
+          console.log('📅 Added to checklistDates:', data.ngayKiem, 'from record:', doc.id);
         }
       });
       
       this.totalRecords = this.historyData.length;
+      console.log(`📊 Loaded ${this.historyData.length} records, ${this.checklistDates.size} unique dates for calendar`);
+      console.log('📅 Calendar dates:', Array.from(this.checklistDates).sort());
+      
+      // Debug: Compare current date format
+      const todayLocal = this.formatDateToLocal(new Date());
+      const todayISO = new Date().toISOString().split('T')[0];
+      console.log('🕐 Today comparison - Local format:', todayLocal, 'vs ISO format:', todayISO);
+
+      // Update checklist with most recent data
+      this.updateChecklistWithRecentData();
     } catch (error) {
       console.error('Load history error:', error);
     } finally {
@@ -327,7 +437,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
     this.currentData = {
       nguoiKiem: '',
-      ngayKiem: new Date().toISOString().split('T')[0],
+      ngayKiem: this.formatDateToLocal(new Date()),
       items: [
         // Kiểm tra kết cấu kệ
         { category: 'Kết cấu kệ', item: 'Kiểm tra nhãn tải trọng và không vượt giới hạn', isOK: false, isNG: false, notes: '' },
@@ -443,7 +553,46 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     if (this.showCalendar) {
       this.currentCalendarDate = new Date();
       this.showHistory = false;
+      // Refresh data when opening calendar to ensure latest dates are shown
+      console.log('📅 Opening calendar, refreshing data...');
+      this.loadHistory().then(() => {
+        // Debug calendar after data is loaded
+        setTimeout(() => this.debugCalendarDates(), 100);
+      });
     }
+  }
+
+  // Debug method to compare calendar dates with saved dates
+  debugCalendarDates() {
+    console.log('\n=== 🐛 CALENDAR DEBUG ===');
+    console.log('📅 Saved checklistDates:', Array.from(this.checklistDates).sort());
+    
+    const currentMonthDays = this.getCalendarDays()
+      .filter(day => day.isCurrentMonth)
+      .map(day => ({
+        day: day.day,
+        dateStr: this.formatDateToLocal(day.date),
+        hasChecklist: day.hasChecklist,
+        inSavedDates: this.checklistDates.has(this.formatDateToLocal(day.date))
+      }));
+    
+    console.log('📆 Current month calendar days:');
+    currentMonthDays.forEach(dayInfo => {
+      const status = dayInfo.hasChecklist ? '✅' : '❌';
+      const match = dayInfo.hasChecklist === dayInfo.inSavedDates ? '✓' : '✗ MISMATCH!';
+      console.log(`  Day ${dayInfo.day}: ${dayInfo.dateStr} ${status} ${match}`);
+    });
+    
+    // Check for any dates that are saved but not showing on calendar
+    const currentMonth = this.currentCalendarDate.getMonth() + 1;
+    const currentYear = this.currentCalendarDate.getFullYear();
+    const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    
+    const savedDatesThisMonth = Array.from(this.checklistDates)
+      .filter(date => date.startsWith(monthPrefix));
+    
+    console.log(`📋 Saved dates for ${monthPrefix}:`, savedDatesThisMonth);
+    console.log('=== END DEBUG ===\n');
   }
 
   getCurrentMonthYear(): string {
@@ -486,17 +635,29 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     
     // Generate 6 weeks (42 days)
     for (let i = 0; i < 42; i++) {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      // Fix timezone issue: use local date format instead of ISO
+      const dateStr = this.formatDateToLocal(currentDate);
       const isCurrentMonth = currentDate.getMonth() === month;
       const isToday = currentDate.toDateString() === today.toDateString();
       const hasChecklist = this.checklistDates.has(dateStr);
+      
+      // Debug logging for calendar generation
+      if (isCurrentMonth && hasChecklist) {
+        console.log(`📅 Calendar day ${currentDate.getDate()}: dateStr='${dateStr}', hasChecklist=${hasChecklist}`);
+      }
+      
+      const dayOfWeek = this.getDayOfWeek(currentDate);
+      
+      const isSunday = currentDate.getDay() === 0;
       
       days.push({
         day: currentDate.getDate(),
         date: new Date(currentDate),
         isCurrentMonth,
         isToday,
-        hasChecklist
+        hasChecklist,
+        dayOfWeek,
+        isSunday
       });
       
       currentDate.setDate(currentDate.getDate() + 1);
@@ -505,14 +666,33 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     return days;
   }
 
+  // Helper method to format date consistently
+  private formatDateToLocal(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   onDayClick(day: CalendarDay) {
     if (!day.isCurrentMonth) return;
     
-    const dateStr = day.date.toISOString().split('T')[0];
+    // Prevent creating checklist on Sunday
+    if (day.isSunday) {
+      this.showNotification = true;
+      this.notificationMessage = '🚫 Không thể tạo checklist vào ngày Chủ Nhật (ngày nghỉ)';
+      this.notificationClass = 'warning';
+      setTimeout(() => { this.showNotification = false; }, 3000);
+      return;
+    }
+    
+    const dateStr = this.formatDateToLocal(day.date);
+    console.log(`🖱️ Day clicked: ${day.day}, dateStr='${dateStr}', hasChecklist=${day.hasChecklist}`);
     
     if (day.hasChecklist) {
       // Find and load the checklist for this day
       const record = this.historyData.find(r => r.ngayKiem === dateStr);
+      console.log(`🔍 Looking for record with ngayKiem='${dateStr}', found:`, !!record);
       if (record) {
         this.loadRecord(record);
         this.showCalendar = false;
@@ -531,8 +711,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   getDayTooltip(day: CalendarDay): string {
     if (!day.isCurrentMonth) return '';
     
-    const dateStr = day.date.toISOString().split('T')[0];
+    const dateStr = this.formatDateToLocal(day.date);
     const record = this.historyData.find(r => r.ngayKiem === dateStr);
+    
+    if (day.isSunday) {
+      return 'Chủ Nhật - Ngày nghỉ (không kiểm tra)';
+    }
     
     if (record) {
       return `Đã kiểm tra - ${record.nguoiKiem}`;
@@ -568,7 +752,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       // Loop through all days in June 2025
       for (let day = 1; day <= 30; day++) {
         const date = new Date(2025, 5, day); // June is month 5 (0-indexed)
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = this.formatDateToLocal(date);
         
         // Skip specified days
         if (skipDays.includes(day)) {
@@ -639,6 +823,839 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     if (this.showHistory) {
       this.showCalendar = false;
       this.loadHistory();
+    }
+  }
+
+  // Modern checklist interface methods
+  initializeChecklists() {
+    this.filteredChecklists = [...this.checklists];
+  }
+
+  // Stats calculations
+  getTotalChecklists(): number {
+    return this.checklists.length;
+  }
+
+  getCompletedToday(): number {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return this.checklists.filter(checklist => 
+      checklist.completionPercentage === 100 && 
+      checklist.lastUpdated >= today
+    ).length;
+  }
+
+  getInProgressCount(): number {
+    return this.checklists.filter(checklist => checklist.status === 'in-progress').length;
+  }
+
+  getOverdueCount(): number {
+    return this.checklists.filter(checklist => checklist.status === 'overdue').length;
+  }
+
+  // Search and filter functionality
+  filterChecklists() {
+    let filtered = [...this.checklists];
+
+    // Apply search query
+    if (this.searchQuery) {
+      const query = this.searchQuery.toLowerCase();
+      filtered = filtered.filter(checklist => 
+        checklist.title.toLowerCase().includes(query) ||
+        checklist.description.toLowerCase().includes(query) ||
+        checklist.assignedUser.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply status filter
+    if (this.statusFilter) {
+      filtered = filtered.filter(checklist => checklist.status === this.statusFilter);
+    }
+
+    this.filteredChecklists = filtered;
+    this.sortChecklists();
+  }
+
+  // Sorting functionality
+  sortChecklists() {
+    this.filteredChecklists.sort((a, b) => {
+      switch (this.sortBy) {
+        case 'name':
+          return a.title.localeCompare(b.title);
+        case 'status':
+          return a.status.localeCompare(b.status);
+        case 'priority':
+          const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+        case 'date':
+          return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+        default:
+          return 0;
+      }
+    });
+  }
+
+  // Status label helper
+  getStatusLabel(status: string): string {
+    const statusLabels = {
+      'ready': 'Ready',
+      'in-progress': 'In Progress',
+      'pending': 'Pending',
+      'overdue': 'Overdue'
+    };
+    return statusLabels[status] || 'Unknown';
+  }
+
+  // Action handlers
+  openChecklist(checklist: any) {
+    checklist.loading = true;
+    
+    setTimeout(() => {
+      if (checklist.id === 'daily-shelves') {
+        this.openDailyChecklist();
+      } else {
+        this.selectDocument({ 
+          title: checklist.title, 
+          url: checklist.url, 
+          category: 'Checklist Kho' 
+        });
+      }
+      checklist.loading = false;
+    }, 500);
+  }
+
+  viewDetails(checklist: any) {
+    // Implementation for viewing checklist details
+    console.log('Viewing details for:', checklist.title);
+    // You can add a modal or detailed view here
+  }
+
+  editChecklist(checklist: any) {
+    // Implementation for editing checklist
+    console.log('Editing checklist:', checklist.title);
+    // You can add edit functionality here
+  }
+
+  loadChecklistDates() {
+    // Implementation for loading checklist dates
+    console.log('Loading checklist dates');
+  }
+
+  generateSampleHistoryData() {
+    // Implementation for generating sample history data
+    console.log('Generating sample history data');
+  }
+
+  private getDayOfWeek(date: Date): string {
+    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    return days[date.getDay()];
+  }
+
+  // Update checklist with most recent data
+  private updateChecklistWithRecentData(): void {
+    const checklistIndex = this.checklists.findIndex(c => c.id === 'daily-shelves');
+    if (checklistIndex === -1) return;
+    
+    if (this.historyData.length > 0) {
+      // Sort history by date (most recent first)
+      const sortedHistory = this.historyData.sort((a, b) => {
+        const dateA = new Date(a.ngayKiem);
+        const dateB = new Date(b.ngayKiem);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      const mostRecent = sortedHistory[0];
+      
+      // Update with most recent data
+      this.checklists[checklistIndex].lastUpdated = new Date(mostRecent.ngayKiem);
+      this.checklists[checklistIndex].assignedUser = mostRecent.nguoiKiem;
+      
+      // Determine status based on how recent the last checklist was
+      const daysSinceLastCheck = Math.floor((new Date().getTime() - new Date(mostRecent.ngayKiem).getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysSinceLastCheck === 0) {
+        this.checklists[checklistIndex].status = 'completed';
+      } else if (daysSinceLastCheck <= 1) {
+        this.checklists[checklistIndex].status = 'ready';
+      } else if (daysSinceLastCheck <= 3) {
+        this.checklists[checklistIndex].status = 'pending';
+      } else {
+        this.checklists[checklistIndex].status = 'overdue';
+      }
+      
+      console.log('Updated checklist with most recent data:', {
+        date: mostRecent.ngayKiem,
+        user: mostRecent.nguoiKiem,
+        daysSince: daysSinceLastCheck,
+        status: this.checklists[checklistIndex].status
+      });
+    } else {
+      // No history data - set to overdue status
+      this.checklists[checklistIndex].status = 'overdue';
+      this.checklists[checklistIndex].lastUpdated = new Date(2025, 6, 1); // July 1, 2025 as fallback
+      console.log('No history data found, using default status');
+    }
+    
+    // Update filtered checklists as well
+    this.filteredChecklists = [...this.checklists];
+  }
+
+  private initializeRackLoading() {
+    // Initialize rack loading data for all detailed positions
+    this.rackLoadingData = [];
+    
+    // Generate all rack positions using the service method
+    const allPositions = this.googleSheetService.generateAllRackPositions();
+    
+    // Initialize each position with default values
+    allPositions.forEach(position => {
+      this.rackLoadingData.push({
+        position: position,
+        maxCapacity: 1300, // 1300kg max capacity per rack
+        currentLoad: 0, // Will be updated from Google Sheets
+        usage: 0, // Will be calculated
+        status: 'available',
+        itemCount: 0
+      });
+    });
+    
+    // Load initial data using the new calculation method
+    this.calculateRackLoading();
+    
+    // Start auto-refresh every 5 minutes
+    this.googleSheetService.startAutoRefresh(300000);
+    
+    console.log('Initialized rack loading data for', this.rackLoadingData.length, 'positions');
+  }
+
+  private loadRackDataFromGoogleSheets() {
+    this.isRefreshing = true;
+    this.rackDataSubscription = this.googleSheetService.fetchRackLoadingData().subscribe(
+      (rackSummaries) => {
+        console.log('Received rack data from Google Sheets:', rackSummaries);
+        this.updateRackLoadingData(rackSummaries);
+        this.isRefreshing = false;
+        this.lastRackDataUpdate = new Date();
+      },
+      (error) => {
+        console.error('Error loading rack data:', error);
+        this.isRefreshing = false;
+      }
+    );
+  }
+
+  refreshRackData() {
+    if (this.isRefreshing) return;
+    
+    this.isRefreshing = true;
+    console.log('🔄 Refreshing rack data with unit weights...');
+    
+    // Use the new calculation method that incorporates unit weights
+    this.calculateRackLoading();
+  }
+
+  private updateRackLoadingData(rackSummaries: any[]) {
+    this.rackLoadingData.forEach(rack => {
+      // Match rack position with location data (first 3 characters)
+      const rackKey = rack.position.substring(0, 3); // Get first 3 characters (e.g., "A11" -> "A11")
+      const summary = rackSummaries.find(s => s.location === rackKey);
+      
+      if (summary) {
+        // Use the estimated weight from the summary
+        rack.currentLoad = summary.estimatedWeight;
+        rack.usage = Math.round((rack.currentLoad / rack.maxCapacity) * 100);
+        rack.status = this.calculateRackStatus(rack.usage);
+        rack.itemCount = summary.totalQty;
+      } else {
+        // No data found for this rack position
+        rack.currentLoad = 0;
+        rack.usage = 0;
+        rack.status = 'available';
+        rack.itemCount = 0;
+      }
+    });
+    
+    console.log('Updated rack loading data:', this.rackLoadingData);
+  }
+
+  private calculateRackStatus(usage: number): 'available' | 'normal' | 'warning' | 'critical' {
+    if (usage === 0) return 'available';
+    if (usage <= 60) return 'normal';
+    if (usage <= 95) return 'warning';
+    return 'critical';
+  }
+
+  // Rack Loading Methods
+  getRackStatusClass(usage: number): string {
+    if (usage === 0) return 'available';
+    if (usage <= 60) return 'normal';
+    if (usage <= 95) return 'warning';
+    return 'critical';
+  }
+
+  getUsageBarClass(usage: number): string {
+    if (usage === 0) return 'usage-empty';
+    if (usage <= 60) return 'usage-normal';
+    if (usage <= 95) return 'usage-warning';
+    return 'usage-critical';
+  }
+
+  getRackStatusLabel(usage: number): string {
+    if (usage === 0) return 'Available';
+    if (usage <= 60) return 'Normal';
+    if (usage <= 95) return 'Warning';
+    return 'Critical';
+  }
+
+  getTotalRacks(): number {
+    return this.rackLoadingData.length;
+  }
+
+  getHighUsageRacks(): number {
+    return this.rackLoadingData.filter(rack => rack.usage > 95).length;
+  }
+
+  getAvailableRacks(): number {
+    return this.rackLoadingData.filter(rack => rack.usage === 0).length;
+  }
+
+  getTotalWeight(): number {
+    return this.rackLoadingData.reduce((total, rack) => total + rack.currentLoad, 0);
+  }
+
+  getOccupiedRacks(): number {
+    return this.rackLoadingData.filter(rack => rack.usage > 0).length;
+  }
+
+  // Method to log all rack positions for verification
+  logAllRackPositions() {
+    const positions = this.googleSheetService.generateAllRackPositions();
+    console.log('All rack positions:', positions);
+    console.log('Total positions:', positions.length);
+    
+    // Group by series for better visualization
+    const grouped = positions.reduce((acc, pos) => {
+      const series = pos.charAt(0);
+      if (!acc[series]) acc[series] = [];
+      acc[series].push(pos);
+      return acc;
+    }, {} as any);
+    
+    console.log('Grouped by series:', grouped);
+  }
+
+  // Handle unit weight file import
+  onUnitWeightFileSelected(event: any) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        
+        if (file.name.endsWith('.csv')) {
+          // Handle CSV file
+          this.googleSheetService.importUnitWeightFromCSV(content);
+        } else if (file.name.endsWith('.json')) {
+          // Handle JSON file
+          const jsonData = JSON.parse(content);
+          this.googleSheetService.setUnitWeightData(jsonData);
+        }
+        
+        // Refresh rack data after importing unit weights
+        this.refreshRackData();
+        
+        // Show success message
+        alert('Unit weight data imported successfully!');
+        
+      } catch (error) {
+        console.error('Error importing unit weight data:', error);
+        alert('Error importing unit weight data. Please check the file format.');
+      }
+    };
+    
+    reader.readAsText(file);
+    
+    // Reset file input
+    event.target.value = '';
+  }
+
+  // Download sample CSV template
+  downloadSampleCSV() {
+    const csvContent = `code,unitWeight
+A002008,250
+A002009,300
+A005006,150
+B001001,500
+B001003,750`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'unit_weights_sample.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  // Debug method to check D44 calculation
+  debugD44Calculation() {
+    console.log('🔍 Debugging D44 calculation...');
+    
+    // Check if unit weight data is loaded
+    console.log('📋 Checking unit weight data...');
+    const sampleCodes = ['B001046', 'B001051', 'B001053']; // Some codes from D44
+    sampleCodes.forEach(code => {
+      const unitWeight = this.googleSheetService.getUnitWeight(code);
+      console.log(`Unit weight for ${code}: ${unitWeight}g`);
+    });
+    
+    // Check current rack data for D44
+    const d44Rack = this.rackLoadingData.find(rack => rack.position.startsWith('D44'));
+    if (d44Rack) {
+      console.log('📦 D44 rack data:', d44Rack);
+    }
+    
+    // Fetch raw data and check D44 specifically
+    this.googleSheetService.fetchInventoryData().subscribe(data => {
+      const d44Items = data.filter(item => item.location.substring(0, 3).toUpperCase() === 'D44');
+      console.log('📊 D44 items from API:', d44Items);
+      
+      let totalQty = 0;
+      let estimatedWeight = 0;
+      let actualWeight = 0;
+      
+      d44Items.forEach(item => {
+        totalQty += item.qty;
+        const unitWeight = this.googleSheetService.getUnitWeight(item.code);
+        
+        if (unitWeight > 0) {
+          const itemWeight = (item.qty * unitWeight) / 1000;
+          actualWeight += itemWeight;
+          console.log(`✅ ${item.code}: ${item.qty} × ${unitWeight}g = ${itemWeight}kg`);
+        } else {
+          const fallbackWeight = item.qty * 0.5;
+          estimatedWeight += fallbackWeight;
+          console.log(`❌ ${item.code}: ${item.qty} × 0.5kg = ${fallbackWeight}kg (no unit weight)`);
+        }
+      });
+      
+      console.log(`🎯 D44 Manual calculation:
+        Total Qty: ${totalQty}
+        Actual Weight (with unit weights): ${actualWeight.toFixed(2)}kg
+        Estimated Weight (fallback): ${estimatedWeight}kg
+        Final Weight: ${actualWeight > 0 ? actualWeight.toFixed(2) : estimatedWeight}kg`);
+    });
+  }
+
+  // Method to show all unit weight data
+  showUnitWeightData() {
+    console.log('📋 All unit weight data:');
+    // This will help us see what unit weights are loaded
+    this.googleSheetService.fetchUnitWeightData().subscribe(data => {
+      console.log('Unit weight data:', data);
+      console.log('Total unit weights loaded:', data.length);
+    });
+  }
+
+  async syncToFirebase() {
+    if (this.isSyncing) return;
+    
+    this.isSyncing = true;
+    console.log('🔄 Starting sync to Firebase...');
+    
+    try {
+      const result = await this.googleSheetService.syncToFirebase();
+      
+      if (result.success) {
+        this.lastSyncTime = new Date();
+        this.syncStatus = result.data;
+        alert(`✅ Sync thành công!\n\n${result.message}`);
+        
+        // Refresh rack data after successful sync
+        this.refreshRackData();
+      } else {
+        alert(`❌ Sync thất bại!\n\n${result.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Sync error:', error);
+      alert(`❌ Sync thất bại!\n\nLỗi: ${error.message || error}`);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  async getSyncStatus() {
+    try {
+      this.syncStatus = await this.googleSheetService.getSyncStatus();
+      console.log('📊 Sync status:', this.syncStatus);
+    } catch (error) {
+      console.error('❌ Error getting sync status:', error);
+    }
+  }
+
+  async getFirebaseInventory() {
+    try {
+      const inventory = await this.googleSheetService.getFirebaseInventory();
+      console.log('📦 Firebase inventory:', inventory.length, 'items');
+      return inventory;
+    } catch (error) {
+      console.error('❌ Error getting Firebase inventory:', error);
+      return [];
+    }
+  }
+
+  async checkD44Data() {
+    console.log('🔍 Checking D44 data from Google Sheets...');
+    
+    try {
+      // Get raw data from Google Sheets service
+      const data = await this.googleSheetService.fetchInventoryData().toPromise();
+      
+      if (!data || data.length === 0) {
+        alert('❌ Không có dữ liệu từ Google Sheets');
+        return;
+      }
+      
+      // Filter for D44 positions
+      const d44Items = data.filter(item => 
+        item.location && item.location.toString().substring(0, 3).toUpperCase() === 'D44'
+      );
+      
+      console.log('📊 D44 items found:', d44Items);
+      
+      // Calculate total quantity and weight for D44
+      let totalQuantity = 0;
+      let totalWeight = 0;
+      let itemsWithUnitWeight = 0;
+      let itemsWithoutUnitWeight = 0;
+      
+      d44Items.forEach(item => {
+        const qty = parseFloat(item.qty?.toString()) || 0;
+        const code = item.code || '';
+        
+        // Look up unit weight by code from imported data
+        const unitWeight = this.googleSheetService.getUnitWeight(code);
+        
+        totalQuantity += qty;
+        
+        if (unitWeight > 0) {
+          const itemWeight = (qty * unitWeight) / 1000; // Convert grams to kg
+          totalWeight += itemWeight;
+          itemsWithUnitWeight++;
+          console.log(`✅ Location: ${item.location}, Code: ${code}, Qty: ${qty} pcs × ${unitWeight}g = ${itemWeight.toFixed(3)}kg`);
+        } else {
+          itemsWithoutUnitWeight++;
+          console.log(`❌ Location: ${item.location}, Code: ${code}, Qty: ${qty} pcs - NO UNIT WEIGHT`);
+        }
+      });
+      
+      console.log(`📊 D44 Summary:
+        - Total Quantity: ${totalQuantity} pcs
+        - Total Weight: ${totalWeight.toFixed(2)} kg
+        - Items with unit weight: ${itemsWithUnitWeight}
+        - Items without unit weight: ${itemsWithoutUnitWeight}
+        - Total items: ${d44Items.length}`);
+      
+      // Check current rack data for comparison
+      const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
+      const rackTotalWeight = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
+      const rackTotalItems = d44Racks.reduce((sum, rack) => sum + rack.itemCount, 0);
+      
+      // Show detailed alert with results
+      const alertMessage = `📊 D44 Data Analysis:
+
+🔢 GOOGLE SHEETS DATA:
+• Total Quantity: ${totalQuantity} pcs
+• Total Weight: ${totalWeight.toFixed(2)} kg
+• Number of items: ${d44Items.length}
+• With unit weight: ${itemsWithUnitWeight}
+• Without unit weight: ${itemsWithoutUnitWeight}
+
+📋 RACK DISPLAY DATA:
+• Rack Weight: ${rackTotalWeight.toFixed(2)} kg
+• Rack Items: ${rackTotalItems}
+• D44 Positions: ${d44Racks.length}
+
+⚖️ CALCULATION METHOD:
+Location → Code → Unit Weight
+Qty × Unit Weight (grams) ÷ 1000 = kg
+
+${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : '✅ Data matches!'}`;
+      
+      alert(alertMessage);
+      
+    } catch (error) {
+      console.error('❌ Error checking D44 data:', error);
+      alert(`❌ Lỗi khi kiểm tra dữ liệu D44:\n\n${error.message || error}`);
+    }
+  }
+
+  private calculateRackLoading(): void {
+    // Fetch pre-calculated rack loading weights directly
+    this.googleSheetService.fetchRackLoadingWeights().subscribe(
+      (rackWeights) => {
+        console.log('📊 Using pre-calculated rack loading weights:', rackWeights.length, 'positions');
+        
+        // Auto-sync to Firebase in background (temporarily disabled for debugging)
+        // this.googleSheetService.fetchInventoryData().subscribe(inventoryData => {
+        //   this.autoSyncToFirebase(inventoryData);
+        // });
+        
+        // Create a map of position -> weight for quick lookup
+        const weightMap = new Map<string, number>();
+        rackWeights.forEach(item => {
+          weightMap.set(item.position, item.weight);
+        });
+        
+        console.log('🗺️ Weight map created with', weightMap.size, 'entries');
+        console.log('🔍 Sample weight map entries:', Array.from(weightMap.entries()).slice(0, 10));
+        console.log('🔍 D44 in weight map:', weightMap.get('D44'));
+        
+        // Convert to RackLoading format using pre-calculated weights
+        this.rackLoadingData = this.googleSheetService.generateAllRackPositions().map(position => {
+          // Match position with weight data by taking first 3 characters
+          const positionKey = position.substring(0, 3);
+          const weight = weightMap.get(positionKey) || 0;
+          const usage = (weight / 1300) * 100;
+          
+          // Debug specific positions
+          if (positionKey === 'D44') {
+            console.log(`🔍 D44 Position: ${position}, Key: ${positionKey}, Weight: ${weight}kg`);
+          }
+          
+          return {
+            position: position,
+            maxCapacity: 1300,
+            currentLoad: Math.round(weight * 100) / 100, // Round to 2 decimal places
+            usage: Math.round(usage * 10) / 10, // Round to 1 decimal place
+            status: this.calculateRackStatus(usage),
+            itemCount: 0 // Not available from pre-calculated data
+          };
+        });
+        
+        // Debug D44 specifically
+        const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
+        if (d44Racks.length > 0) {
+          console.log(`📊 All D44 Racks:`, d44Racks);
+          const totalD44Weight = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
+          console.log(`📊 D44 Total: ${totalD44Weight.toFixed(2)}kg from pre-calculated data`);
+        }
+        
+        this.lastRackDataUpdate = new Date();
+        this.isRefreshing = false;
+        
+        console.log('✅ Rack loading calculation completed using pre-calculated weights');
+      },
+      (error) => {
+        console.error('❌ Error fetching rack loading weights:', error);
+        this.isRefreshing = false;
+      }
+    );
+  }
+
+  // Auto-sync to Firebase in background
+  private async autoSyncToFirebase(data: any[]) {
+    try {
+      console.log('🔄 Auto-syncing to Firebase in background...');
+      
+      // Don't show loading states to user - run silently
+      const result = await this.googleSheetService.syncToFirebase();
+      
+      if (result.success) {
+        this.lastSyncTime = new Date();
+        this.syncStatus = result.data;
+        console.log('✅ Auto-sync to Firebase completed successfully');
+      } else {
+        console.warn('⚠️ Auto-sync to Firebase failed:', result.message);
+      }
+      
+    } catch (error) {
+      console.error('❌ Auto-sync to Firebase error:', error);
+      // Don't show error to user - just log it
+    }
+  }
+
+  testRackLoadingURL() {
+    console.log('🧪 Testing rack loading URL directly...');
+    
+    const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR-af8JLCtXJ973WV7B6VzgkUQ3BPtqRdBADNWdZkNNVbJdLTBGLQJ1xvcO58w7HNVC7j8lGXQmVA-O/pub?gid=315193175&single=true&output=csv';
+    
+    this.http.get(url, { responseType: 'text' }).subscribe(
+      (csvData) => {
+        console.log('✅ CSV data received successfully!');
+        console.log('📄 First 1000 characters:', csvData.substring(0, 1000));
+        
+        const lines = csvData.split('\n');
+        console.log('📊 Total lines:', lines.length);
+        console.log('📋 First 10 lines:');
+        lines.slice(0, 10).forEach((line, index) => {
+          console.log(`Line ${index}: "${line}"`);
+        });
+        
+        // Look for D44 specifically
+        const d44Line = lines.find(line => line.includes('D44'));
+        console.log('🔍 D44 line found:', d44Line);
+        
+        // Test parsing logic
+        console.log('🧪 Testing parsing logic:');
+        if (d44Line) {
+          const columns = d44Line.split(',');
+          console.log('📋 D44 columns:', columns);
+          
+          const position = columns[1]?.replace(/"/g, '').trim();
+          const weightStr = columns[2]?.replace(/"/g, '').trim();
+          const normalizedWeight = weightStr.replace(',', '.');
+          const weight = parseFloat(normalizedWeight);
+          
+          console.log('✅ Parsed D44:', {
+            position,
+            weightStr,
+            normalizedWeight,
+            weight
+          });
+        }
+        
+        alert('✅ CSV test completed! Check console for details.');
+      },
+      (error) => {
+        console.error('❌ Error fetching CSV:', error);
+        alert('❌ Error fetching CSV: ' + error.message);
+      }
+    );
+  }
+
+  debugWeightCalculation() {
+    console.log('🐛 Starting weight calculation debug...');
+    
+    // Step 1: Check raw Google Sheets data
+    this.googleSheetService.fetchInventoryData().subscribe(rawData => {
+      console.log('📊 Raw Google Sheets data:', rawData.length, 'items');
+      
+      const d44RawItems = rawData.filter(item => 
+        item.location && item.location.toString().substring(0, 3).toUpperCase() === 'D44'
+      );
+      console.log('📦 D44 Raw items:', d44RawItems);
+      
+      // Step 2: Check unit weight lookup for each item
+      console.log('🔍 Checking unit weight lookup for each D44 item:');
+      
+      let manualTotal = 0;
+      let manualItems = 0;
+      let foundWeights = 0;
+      let missingWeights = 0;
+      
+      d44RawItems.forEach(item => {
+        const qty = parseFloat(item.qty?.toString()) || 0;
+        const code = item.code || '';
+        const location = item.location || '';
+        
+        // Look up unit weight by code
+        const unitWeight = this.googleSheetService.getUnitWeight(code);
+        
+        if (unitWeight > 0) {
+          const itemWeight = (qty * unitWeight) / 1000;
+          manualTotal += itemWeight;
+          foundWeights++;
+          console.log(`✅ ${location} → ${code} → ${unitWeight}g: ${qty} × ${unitWeight}g = ${itemWeight.toFixed(3)}kg`);
+        } else {
+          missingWeights++;
+          console.log(`❌ ${location} → ${code} → NO UNIT WEIGHT: ${qty} pcs (skipped)`);
+        }
+        manualItems++;
+      });
+      
+      console.log(`📊 Manual calculation summary:
+        - Total items: ${manualItems}
+        - Found weights: ${foundWeights}
+        - Missing weights: ${missingWeights}
+        - Total weight: ${manualTotal.toFixed(2)}kg`);
+      
+      // Step 3: Check current rack display
+      const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
+      const displayTotal = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
+      const displayItems = d44Racks.reduce((sum, rack) => sum + rack.itemCount, 0);
+      
+      console.log(`📋 Display calculation: ${displayTotal.toFixed(2)}kg from ${displayItems} items`);
+      
+      // Step 4: Check unit weight data availability
+      console.log('📋 Checking unit weight data availability...');
+      const unitWeightCount = Object.keys(this.googleSheetService.getUnitWeight('') || {}).length;
+      console.log(`Unit weights loaded: ${unitWeightCount > 0 ? 'YES' : 'NO'}`);
+      
+      // Show comprehensive comparison
+      alert(`🐛 Weight Calculation Debug:
+
+📊 RAW DATA: ${d44RawItems.length} items
+🔍 MANUAL CALC: ${manualTotal.toFixed(2)}kg
+📋 DISPLAY: ${displayTotal.toFixed(2)}kg
+
+⚖️ UNIT WEIGHT STATUS:
+• Found: ${foundWeights} items
+• Missing: ${missingWeights} items
+• Data loaded: ${unitWeightCount > 0 ? 'YES' : 'NO'}
+
+ 🔄 CALCULATION FLOW:
+ Location → Code → Unit Weight
+ [location] → [code] → [unitWeight]g
+ Qty × Unit Weight ÷ 1000 = kg
+
+${Math.abs(manualTotal - displayTotal) > 0.1 ? '⚠️ MISMATCH!' : '✅ Match!'}`);
+    });
+  }
+
+  async checkFirebaseData() {
+    console.log('🔍 Checking Firebase data status...');
+    
+    try {
+      // Check sync status
+      const syncStatus = await this.googleSheetService.getSyncStatus();
+      
+      // Get Firebase inventory
+      const firebaseInventory = await this.googleSheetService.getFirebaseInventory();
+      
+      // Get Google Sheets data for comparison
+      const googleSheetsData = await this.googleSheetService.fetchInventoryData().toPromise();
+      
+      console.log('📊 Firebase inventory:', firebaseInventory.length, 'items');
+      console.log('📊 Google Sheets data:', googleSheetsData?.length || 0, 'items');
+      console.log('📊 Sync status:', syncStatus);
+      
+      // Calculate some statistics
+      const totalFirebaseItems = firebaseInventory.length;
+      const totalGoogleSheetsItems = googleSheetsData?.length || 0;
+      
+      // Check last sync time
+      const lastSyncTime = syncStatus?.lastSyncTime;
+      const syncTimeText = lastSyncTime ? 
+        new Date(lastSyncTime.seconds * 1000).toLocaleString() : 
+        'Never synced';
+      
+      // Show detailed status
+      const statusMessage = `🔍 Firebase Data Status:
+
+📊 DATA COUNT:
+• Firebase: ${totalFirebaseItems} items
+• Google Sheets: ${totalGoogleSheetsItems} items
+• Match: ${totalFirebaseItems === totalGoogleSheetsItems ? '✅ YES' : '❌ NO'}
+
+⏰ SYNC STATUS:
+• Last sync: ${syncTimeText}
+• Total processed: ${syncStatus?.totalRecords || 'N/A'}
+• Errors: ${syncStatus?.totalErrors || 0}
+
+🔄 RECOMMENDATION:
+${totalFirebaseItems === 0 ? '⚠️ No data in Firebase - Run sync first!' : 
+  totalFirebaseItems !== totalGoogleSheetsItems ? '⚠️ Data mismatch - Consider re-sync' : 
+  '✅ Data looks good!'}`;
+      
+      alert(statusMessage);
+      
+    } catch (error) {
+      console.error('❌ Error checking Firebase data:', error);
+      alert(`❌ Lỗi khi kiểm tra Firebase:\n\n${error.message || error}`);
     }
   }
 }
