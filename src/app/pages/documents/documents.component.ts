@@ -1048,6 +1048,16 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     // Load initial data using the new calculation method
     this.calculateRackLoading();
     
+    // Subscribe to auto-refresh updates for pre-calculated weights
+    this.rackDataSubscription = this.googleSheetService.rackWeights$.subscribe(
+      (rackWeights) => {
+        if (rackWeights && rackWeights.length > 0) {
+          console.log('🔄 Received auto-refresh weights:', rackWeights.length, 'positions');
+          this.updateRackLoadingFromWeights(rackWeights);
+        }
+      }
+    );
+    
     // Start auto-refresh every 5 minutes
     this.googleSheetService.startAutoRefresh(300000);
     
@@ -1102,6 +1112,40 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     });
     
     console.log('Updated rack loading data:', this.rackLoadingData);
+  }
+
+  private updateRackLoadingFromWeights(rackWeights: {position: string, weight: number}[]) {
+    console.log('🔄 Updating rack loading from auto-refresh weights...');
+    
+    // Create a map of position -> weight for quick lookup
+    const weightMap = new Map<string, number>();
+    rackWeights.forEach(item => {
+      weightMap.set(item.position, item.weight);
+    });
+    
+    // Update existing rack loading data with new weights
+    this.rackLoadingData.forEach(rack => {
+      // Match position with weight data by taking first 3 characters
+      const positionKey = rack.position.substring(0, 3);
+      const weight = weightMap.get(positionKey) || 0;
+      
+      // Update the rack data
+      rack.currentLoad = Math.round(weight * 100) / 100; // Round to 2 decimal places
+      rack.usage = Math.round((weight / rack.maxCapacity) * 100 * 10) / 10; // Round to 1 decimal place
+      rack.status = this.calculateRackStatus(rack.usage);
+      // itemCount remains 0 for pre-calculated data
+    });
+    
+    this.lastRackDataUpdate = new Date();
+    
+    console.log('✅ Rack loading updated from auto-refresh weights');
+    
+    // Debug D44 specifically
+    const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
+    if (d44Racks.length > 0) {
+      const totalD44Weight = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
+      console.log(`📊 D44 Total after auto-refresh: ${totalD44Weight.toFixed(2)}kg`);
+    }
   }
 
   private calculateRackStatus(usage: number): 'available' | 'normal' | 'warning' | 'critical' {
@@ -1325,6 +1369,8 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
   }
 
   private calculateRackLoading(): void {
+    this.isRefreshing = true;
+    
     // Fetch pre-calculated rack loading weights directly
     this.googleSheetService.fetchRackLoadingWeights().subscribe(
       (rackWeights) => {

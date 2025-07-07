@@ -38,6 +38,10 @@ export class GoogleSheetService {
   private rackDataSubject = new BehaviorSubject<RackSummary[]>([]);
   public rackData$ = this.rackDataSubject.asObservable();
 
+  // Add subject for pre-calculated weights
+  private rackWeightsSubject = new BehaviorSubject<{position: string, weight: number}[]>([]);
+  public rackWeights$ = this.rackWeightsSubject.asObservable();
+
   // Store unit weight data locally
   private unitWeightData: Map<string, number> = new Map();
 
@@ -296,8 +300,19 @@ export class GoogleSheetService {
 
   // Method to refresh data periodically
   startAutoRefresh(intervalMs: number = 300000): void { // Default 5 minutes
+    console.log(`🔄 Starting auto-refresh every ${intervalMs/1000/60} minutes`);
+    
     setInterval(() => {
-      this.fetchRackLoadingData().subscribe();
+      console.log('🔄 Auto-refreshing rack weights...');
+      this.fetchRackLoadingWeights().subscribe(
+        (data) => {
+          console.log('✅ Auto-refresh completed:', data.length, 'rack weights');
+          // Data is automatically emitted through rackWeightsSubject in fetchRackLoadingWeights
+        },
+        (error) => {
+          console.error('❌ Auto-refresh error:', error);
+        }
+      );
     }, intervalMs);
   }
 
@@ -400,6 +415,9 @@ export class GoogleSheetService {
         // Debug: Show all positions that start with D
         const dPositions = rackWeights.filter(item => item.position.startsWith('D'));
         console.log('🔍 All D positions:', dPositions.slice(0, 10));
+        
+        // Emit the data through the subject
+        this.rackWeightsSubject.next(rackWeights);
         
         return rackWeights;
       }),
