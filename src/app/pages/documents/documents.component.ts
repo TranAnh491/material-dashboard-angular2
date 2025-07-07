@@ -1127,6 +1127,22 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     return this.rackLoadingData.filter(rack => rack.usage > 0).length;
   }
 
+  getUseRate(): number {
+    // Calculate use rate based on D, E, F, G series only
+    const defgRacks = this.rackLoadingData.filter(rack => {
+      const series = rack.position.charAt(0);
+      return ['D', 'E', 'F', 'G'].includes(series);
+    });
+    
+    const usedRacks = defgRacks.filter(rack => rack.currentLoad > 0);
+    const totalRacks = defgRacks.length;
+    
+    if (totalRacks === 0) return 0;
+    
+    const useRate = (usedRacks.length / totalRacks) * 100;
+    return Math.round(useRate * 10) / 10; // Round to 1 decimal place
+  }
+
   // Method to log all rack positions for verification
   logAllRackPositions() {
     const positions = this.googleSheetService.generateAllRackPositions();
@@ -1144,120 +1160,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     console.log('Grouped by series:', grouped);
   }
 
-  // Handle unit weight file import
-  onUnitWeightFileSelected(event: any) {
-    const file = event.target.files[0];
-    if (!file) return;
+  // Removed unused methods: onUnitWeightFileSelected, downloadSampleCSV
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        
-        if (file.name.endsWith('.csv')) {
-          // Handle CSV file
-          this.googleSheetService.importUnitWeightFromCSV(content);
-        } else if (file.name.endsWith('.json')) {
-          // Handle JSON file
-          const jsonData = JSON.parse(content);
-          this.googleSheetService.setUnitWeightData(jsonData);
-        }
-        
-        // Refresh rack data after importing unit weights
-        this.refreshRackData();
-        
-        // Show success message
-        alert('Unit weight data imported successfully!');
-        
-      } catch (error) {
-        console.error('Error importing unit weight data:', error);
-        alert('Error importing unit weight data. Please check the file format.');
-      }
-    };
-    
-    reader.readAsText(file);
-    
-    // Reset file input
-    event.target.value = '';
-  }
-
-  // Download sample CSV template
-  downloadSampleCSV() {
-    const csvContent = `code,unitWeight
-A002008,250
-A002009,300
-A005006,150
-B001001,500
-B001003,750`;
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'unit_weights_sample.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
-  }
-
-  // Debug method to check D44 calculation
-  debugD44Calculation() {
-    console.log('🔍 Debugging D44 calculation...');
-    
-    // Check if unit weight data is loaded
-    console.log('📋 Checking unit weight data...');
-    const sampleCodes = ['B001046', 'B001051', 'B001053']; // Some codes from D44
-    sampleCodes.forEach(code => {
-      const unitWeight = this.googleSheetService.getUnitWeight(code);
-      console.log(`Unit weight for ${code}: ${unitWeight}g`);
-    });
-    
-    // Check current rack data for D44
-    const d44Rack = this.rackLoadingData.find(rack => rack.position.startsWith('D44'));
-    if (d44Rack) {
-      console.log('📦 D44 rack data:', d44Rack);
-    }
-    
-    // Fetch raw data and check D44 specifically
-    this.googleSheetService.fetchInventoryData().subscribe(data => {
-      const d44Items = data.filter(item => item.location.substring(0, 3).toUpperCase() === 'D44');
-      console.log('📊 D44 items from API:', d44Items);
-      
-      let totalQty = 0;
-      let estimatedWeight = 0;
-      let actualWeight = 0;
-      
-      d44Items.forEach(item => {
-        totalQty += item.qty;
-        const unitWeight = this.googleSheetService.getUnitWeight(item.code);
-        
-        if (unitWeight > 0) {
-          const itemWeight = (item.qty * unitWeight) / 1000;
-          actualWeight += itemWeight;
-          console.log(`✅ ${item.code}: ${item.qty} × ${unitWeight}g = ${itemWeight}kg`);
-        } else {
-          const fallbackWeight = item.qty * 0.5;
-          estimatedWeight += fallbackWeight;
-          console.log(`❌ ${item.code}: ${item.qty} × 0.5kg = ${fallbackWeight}kg (no unit weight)`);
-        }
-      });
-      
-      console.log(`🎯 D44 Manual calculation:
-        Total Qty: ${totalQty}
-        Actual Weight (with unit weights): ${actualWeight.toFixed(2)}kg
-        Estimated Weight (fallback): ${estimatedWeight}kg
-        Final Weight: ${actualWeight > 0 ? actualWeight.toFixed(2) : estimatedWeight}kg`);
-    });
-  }
-
-  // Method to show all unit weight data
-  showUnitWeightData() {
-    console.log('📋 All unit weight data:');
-    // This will help us see what unit weights are loaded
-    this.googleSheetService.fetchUnitWeightData().subscribe(data => {
-      console.log('Unit weight data:', data);
-      console.log('Total unit weights loaded:', data.length);
-    });
-  }
+  // Removed unused debug methods: debugD44Calculation, showUnitWeightData
 
   async syncToFirebase() {
     if (this.isSyncing) return;
@@ -1419,16 +1324,22 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
           // Match position with weight data by taking first 3 characters
           const positionKey = position.substring(0, 3);
           const weight = weightMap.get(positionKey) || 0;
-          const usage = (weight / 1300) * 100;
+          
+          // Determine max capacity based on position
+          // Ground level positions (ending with 1) have 10,000kg capacity
+          // Other positions have 1,300kg capacity
+          const isGroundLevel = position.endsWith('1');
+          const maxCapacity = isGroundLevel ? 10000 : 1300;
+          const usage = (weight / maxCapacity) * 100;
           
           // Debug specific positions
           if (positionKey === 'D44') {
-            console.log(`🔍 D44 Position: ${position}, Key: ${positionKey}, Weight: ${weight}kg`);
+            console.log(`🔍 D44 Position: ${position}, Key: ${positionKey}, Weight: ${weight}kg, Max: ${maxCapacity}kg`);
           }
           
           return {
             position: position,
-            maxCapacity: 1300,
+            maxCapacity: maxCapacity,
             currentLoad: Math.round(weight * 100) / 100, // Round to 2 decimal places
             usage: Math.round(usage * 10) / 10, // Round to 1 decimal place
             status: this.calculateRackStatus(usage),
@@ -1478,184 +1389,198 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
     }
   }
 
-  testRackLoadingURL() {
-    console.log('🧪 Testing rack loading URL directly...');
+  // Removed unused test method: testRackLoadingURL
+
+  // Removed unused debug method: debugWeightCalculation
+
+  // Removed unused method: checkFirebaseData
+
+  testFullFlow() {
+    console.clear();
+    console.log('🚀 Testing full flow: CSV → Parsing → Weight Map → Display');
     
     const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR-af8JLCtXJ973WV7B6VzgkUQ3BPtqRdBADNWdZkNNVbJdLTBGLQJ1xvcO58w7HNVC7j8lGXQmVA-O/pub?gid=315193175&single=true&output=csv';
     
-    this.http.get(url, { responseType: 'text' }).subscribe(
-      (csvData) => {
-        console.log('✅ CSV data received successfully!');
-        console.log('📄 First 1000 characters:', csvData.substring(0, 1000));
-        
-        const lines = csvData.split('\n');
-        console.log('📊 Total lines:', lines.length);
-        console.log('📋 First 10 lines:');
-        lines.slice(0, 10).forEach((line, index) => {
-          console.log(`Line ${index}: "${line}"`);
-        });
-        
-        // Look for D44 specifically
-        const d44Line = lines.find(line => line.includes('D44'));
-        console.log('🔍 D44 line found:', d44Line);
-        
-        // Test parsing logic
-        console.log('🧪 Testing parsing logic:');
-        if (d44Line) {
-          const columns = d44Line.split(',');
-          console.log('📋 D44 columns:', columns);
-          
-          const position = columns[1]?.replace(/"/g, '').trim();
-          const weightStr = columns[2]?.replace(/"/g, '').trim();
-          const normalizedWeight = weightStr.replace(',', '.');
-          const weight = parseFloat(normalizedWeight);
-          
-          console.log('✅ Parsed D44:', {
-            position,
-            weightStr,
-            normalizedWeight,
-            weight
-          });
+    this.http.get(url, { responseType: 'text' }).subscribe(csvData => {
+      console.log('✅ Step 1: CSV fetched successfully');
+      
+      // Step 2: Parse CSV data
+      const lines = csvData.split('\n');
+      const rackWeights: {position: string, weight: number}[] = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line) {
+          const columns = line.split(',');
+          if (columns.length >= 3) {
+            const position = columns[1]?.replace(/"/g, '').trim();
+            const weightStr = columns[2]?.replace(/"/g, '').trim();
+            
+            if (position && weightStr) {
+              const normalizedWeight = weightStr.replace(',', '.');
+              const weight = parseFloat(normalizedWeight);
+              
+              if (!isNaN(weight)) {
+                rackWeights.push({
+                  position: position.toUpperCase(),
+                  weight: weight
+                });
+              }
+            }
+          }
         }
-        
-        alert('✅ CSV test completed! Check console for details.');
-      },
-      (error) => {
-        console.error('❌ Error fetching CSV:', error);
-        alert('❌ Error fetching CSV: ' + error.message);
       }
-    );
-  }
-
-  debugWeightCalculation() {
-    console.log('🐛 Starting weight calculation debug...');
-    
-    // Step 1: Check raw Google Sheets data
-    this.googleSheetService.fetchInventoryData().subscribe(rawData => {
-      console.log('📊 Raw Google Sheets data:', rawData.length, 'items');
       
-      const d44RawItems = rawData.filter(item => 
-        item.location && item.location.toString().substring(0, 3).toUpperCase() === 'D44'
-      );
-      console.log('📦 D44 Raw items:', d44RawItems);
+      console.log('✅ Step 2: CSV parsed -', rackWeights.length, 'positions');
+      console.log('📋 Sample parsed data:', rackWeights.slice(0, 5));
       
-      // Step 2: Check unit weight lookup for each item
-      console.log('🔍 Checking unit weight lookup for each D44 item:');
+      // Step 3: Check D44 specifically
+      const d44Data = rackWeights.find(item => item.position === 'D44');
+      console.log('✅ Step 3: D44 found:', d44Data);
       
-      let manualTotal = 0;
-      let manualItems = 0;
-      let foundWeights = 0;
-      let missingWeights = 0;
-      
-      d44RawItems.forEach(item => {
-        const qty = parseFloat(item.qty?.toString()) || 0;
-        const code = item.code || '';
-        const location = item.location || '';
-        
-        // Look up unit weight by code
-        const unitWeight = this.googleSheetService.getUnitWeight(code);
-        
-        if (unitWeight > 0) {
-          const itemWeight = (qty * unitWeight) / 1000;
-          manualTotal += itemWeight;
-          foundWeights++;
-          console.log(`✅ ${location} → ${code} → ${unitWeight}g: ${qty} × ${unitWeight}g = ${itemWeight.toFixed(3)}kg`);
-        } else {
-          missingWeights++;
-          console.log(`❌ ${location} → ${code} → NO UNIT WEIGHT: ${qty} pcs (skipped)`);
-        }
-        manualItems++;
+      // Step 4: Create weight map
+      const weightMap = new Map<string, number>();
+      rackWeights.forEach(item => {
+        weightMap.set(item.position, item.weight);
       });
       
-      console.log(`📊 Manual calculation summary:
-        - Total items: ${manualItems}
-        - Found weights: ${foundWeights}
-        - Missing weights: ${missingWeights}
-        - Total weight: ${manualTotal.toFixed(2)}kg`);
+      console.log('✅ Step 4: Weight map created with', weightMap.size, 'entries');
+      console.log('🔍 D44 in weight map:', weightMap.get('D44'));
       
-      // Step 3: Check current rack display
-      const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
-      const displayTotal = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
-      const displayItems = d44Racks.reduce((sum, rack) => sum + rack.itemCount, 0);
+      // Step 5: Test position matching
+      const testPositions = ['D44', 'D41', 'D42', 'F64', 'IQC'];
+      console.log('✅ Step 5: Testing position matching:');
+      testPositions.forEach(pos => {
+        const weight = weightMap.get(pos) || 0;
+        console.log(`  ${pos}: ${weight}kg`);
+      });
       
-      console.log(`📋 Display calculation: ${displayTotal.toFixed(2)}kg from ${displayItems} items`);
+      // Step 6: Apply to actual rack loading data
+      console.log('✅ Step 6: Applying to rack loading data...');
       
-      // Step 4: Check unit weight data availability
-      console.log('📋 Checking unit weight data availability...');
-      const unitWeightCount = Object.keys(this.googleSheetService.getUnitWeight('') || {}).length;
-      console.log(`Unit weights loaded: ${unitWeightCount > 0 ? 'YES' : 'NO'}`);
+      // Generate a few test rack positions
+      const testRackPositions = ['D41', 'D42', 'D43', 'D44', 'D45'];
+      const updatedRacks = testRackPositions.map(position => {
+        const positionKey = position.substring(0, 3); // D44 -> D44, D41 -> D41
+        const weight = weightMap.get(positionKey) || 0;
+        const usage = (weight / 1300) * 100;
+        
+        return {
+          position: position,
+          maxCapacity: 1300,
+          currentLoad: Math.round(weight * 100) / 100,
+          usage: Math.round(usage * 10) / 10,
+          status: weight > 0 ? 'normal' : 'available',
+          itemCount: 0
+        };
+      });
       
-      // Show comprehensive comparison
-      alert(`🐛 Weight Calculation Debug:
+      console.log('✅ Step 7: Sample rack data with weights:');
+      updatedRacks.forEach(rack => {
+        console.log(`  ${rack.position}: ${rack.currentLoad}kg (${rack.usage}%)`);
+      });
+      
+      // Step 8: Update actual display (just for D44 positions)
+      const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D4'));
+      d44Racks.forEach(rack => {
+        const positionKey = rack.position.substring(0, 3);
+        const weight = weightMap.get(positionKey) || 0;
+        const usage = (weight / 1300) * 100;
+        
+        rack.currentLoad = Math.round(weight * 100) / 100;
+        rack.usage = Math.round(usage * 10) / 10;
+        rack.status = this.calculateRackStatus(usage);
+      });
+      
+      console.log('✅ Step 8: Updated D4x racks in display');
+      
+      alert(`🎉 Test completed!
+      
+📊 Results:
+• CSV lines: ${lines.length}
+• Parsed positions: ${rackWeights.length}
+• D44 weight: ${d44Data?.weight || 'NOT FOUND'}kg
+• Weight map size: ${weightMap.size}
 
-📊 RAW DATA: ${d44RawItems.length} items
-🔍 MANUAL CALC: ${manualTotal.toFixed(2)}kg
-📋 DISPLAY: ${displayTotal.toFixed(2)}kg
-
-⚖️ UNIT WEIGHT STATUS:
-• Found: ${foundWeights} items
-• Missing: ${missingWeights} items
-• Data loaded: ${unitWeightCount > 0 ? 'YES' : 'NO'}
-
- 🔄 CALCULATION FLOW:
- Location → Code → Unit Weight
- [location] → [code] → [unitWeight]g
- Qty × Unit Weight ÷ 1000 = kg
-
-${Math.abs(manualTotal - displayTotal) > 0.1 ? '⚠️ MISMATCH!' : '✅ Match!'}`);
+Check console for detailed logs!`);
     });
   }
 
-  async checkFirebaseData() {
-    console.log('🔍 Checking Firebase data status...');
+  debugCSVFormat() {
+    console.log('🔍 Checking multiple rack positions...');
     
-    try {
-      // Check sync status
-      const syncStatus = await this.googleSheetService.getSyncStatus();
+    this.googleSheetService.fetchRackLoadingWeights().subscribe(weights => {
+      console.log(`📊 Total weights loaded: ${weights.length} positions`);
       
-      // Get Firebase inventory
-      const firebaseInventory = await this.googleSheetService.getFirebaseInventory();
+      // Check specific positions from the CSV
+      const testPositions = ['D44', 'F64', 'IQC', 'E63', 'D34', 'F22', 'VP'];
       
-      // Get Google Sheets data for comparison
-      const googleSheetsData = await this.googleSheetService.fetchInventoryData().toPromise();
+      console.log('🔍 Testing specific positions:');
+      testPositions.forEach(pos => {
+        const found = weights.find(w => w.position === pos);
+        const rackDisplay = this.rackLoadingData.find(r => r.position === pos);
+        
+        if (found) {
+          console.log(`✅ ${pos}: CSV=${found.weight}kg, Display=${rackDisplay?.currentLoad || 'N/A'}kg`);
+        } else {
+          console.log(`❌ ${pos}: NOT FOUND in CSV`);
+        }
+      });
       
-      console.log('📊 Firebase inventory:', firebaseInventory.length, 'items');
-      console.log('📊 Google Sheets data:', googleSheetsData?.length || 0, 'items');
-      console.log('📊 Sync status:', syncStatus);
+      // Check how many positions have weight > 0
+      const withWeight = weights.filter(w => w.weight > 0);
+      const displayWithWeight = this.rackLoadingData.filter(r => r.currentLoad > 0);
       
-      // Calculate some statistics
-      const totalFirebaseItems = firebaseInventory.length;
-      const totalGoogleSheetsItems = googleSheetsData?.length || 0;
+      console.log(`📊 Positions with weight: CSV=${withWeight.length}, Display=${displayWithWeight.length}`);
       
-      // Check last sync time
-      const lastSyncTime = syncStatus?.lastSyncTime;
-      const syncTimeText = lastSyncTime ? 
-        new Date(lastSyncTime.seconds * 1000).toLocaleString() : 
-        'Never synced';
+      // Show sample of positions with weight
+      console.log('📋 Sample positions with weight:');
+      withWeight.slice(0, 10).forEach(w => {
+        const display = this.rackLoadingData.find(r => r.position === w.position);
+        console.log(`  ${w.position}: ${w.weight}kg → ${display?.currentLoad || 'N/A'}kg`);
+      });
       
-      // Show detailed status
-      const statusMessage = `🔍 Firebase Data Status:
+      alert(`✅ Position Check Results:
+      
+📊 Total positions: ${weights.length}
+📊 With weight: ${withWeight.length}
+📊 Display with weight: ${displayWithWeight.length}
 
-📊 DATA COUNT:
-• Firebase: ${totalFirebaseItems} items
-• Google Sheets: ${totalGoogleSheetsItems} items
-• Match: ${totalFirebaseItems === totalGoogleSheetsItems ? '✅ YES' : '❌ NO'}
+🔍 Test positions:
+${testPositions.map(pos => {
+  const found = weights.find(w => w.position === pos);
+  const display = this.rackLoadingData.find(r => r.position === pos);
+  return `${pos}: ${found?.weight || 'N/A'}kg → ${display?.currentLoad || 'N/A'}kg`;
+}).join('\n')}
 
-⏰ SYNC STATUS:
-• Last sync: ${syncTimeText}
-• Total processed: ${syncStatus?.totalRecords || 'N/A'}
-• Errors: ${syncStatus?.totalErrors || 0}
+Check console for detailed info.`);
+    });
+  }
 
-🔄 RECOMMENDATION:
-${totalFirebaseItems === 0 ? '⚠️ No data in Firebase - Run sync first!' : 
-  totalFirebaseItems !== totalGoogleSheetsItems ? '⚠️ Data mismatch - Consider re-sync' : 
-  '✅ Data looks good!'}`;
+  // Helper method to parse CSV line with proper quote handling
+  private parseCSVLine(line: string): string[] {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
       
-      alert(statusMessage);
-      
-    } catch (error) {
-      console.error('❌ Error checking Firebase data:', error);
-      alert(`❌ Lỗi khi kiểm tra Firebase:\n\n${error.message || error}`);
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
     }
+    
+    // Add the last field
+    if (current) {
+      result.push(current);
+    }
+    
+    return result;
   }
 }

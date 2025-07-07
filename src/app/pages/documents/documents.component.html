@@ -158,46 +158,66 @@
       <!-- Rack Loading Section -->
       <div class="rack-loading-section">
         <div class="section-header">
-          <h2 class="section-title">
+          <h3 class="section-title">
             <i class="material-icons">inventory</i>
             Rack Loading
-          </h2>
+          </h3>
           <p class="section-description">Monitor loading capacity of main warehouse racks (A-G)</p>
-          <div class="header-actions">
-            <div class="import-section">
-              <input type="file" #fileInput (change)="onUnitWeightFileSelected($event)" accept=".csv,.json" style="display: none;">
-              <button class="import-btn" (click)="fileInput.click()">
-                <i class="material-icons">upload</i>
-                Import Unit Weights
-              </button>
-              <button class="sample-btn" (click)="downloadSampleCSV()">
-                <i class="material-icons">download</i>
-                Download Sample
-              </button>
-              <button class="debug-btn" (click)="debugWeightCalculation()">
-                <i class="material-icons">bug_report</i>
-                Debug Weights
-              </button>
-              <button class="btn btn-info btn-sm" (click)="testRackLoadingURL()">
-                <i class="material-icons">link</i>
-                Test URL
-              </button>
-              <button class="refresh-btn" (click)="refreshRackData()" [disabled]="isRefreshing">
-                <i class="material-icons" [class.rotating]="isRefreshing">refresh</i>
-                {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
-              </button>
+          
+          <!-- Summary Statistics - Moved up and compact -->
+          <div class="summary-stats-compact">
+            <div class="stat-item-compact">
+              <div class="stat-icon-compact">
+                <i class="material-icons">view_module</i>
+              </div>
+              <div class="stat-content-compact">
+                <div class="stat-number-compact">{{ getTotalRacks() }}</div>
+                <div class="stat-label-compact">Total Positions</div>
+              </div>
             </div>
-            <div class="status-info">
-              <span class="last-updated" *ngIf="lastRackDataUpdate">
+            <div class="stat-item-compact">
+              <div class="stat-icon-compact">
+                <i class="material-icons">fitness_center</i>
+              </div>
+              <div class="stat-content-compact">
+                <div class="stat-number-compact">{{ getTotalWeight() | number:'1.0-0' }}</div>
+                <div class="stat-label-compact">Total Weight (kg)</div>
+              </div>
+            </div>
+            <div class="stat-item-compact">
+              <div class="stat-icon-compact">
+                <i class="material-icons">assessment</i>
+              </div>
+              <div class="stat-content-compact">
+                <div class="stat-number-compact">{{ getUseRate() }}%</div>
+                <div class="stat-label-compact">Use rate</div>
+              </div>
+            </div>
+            <div class="stat-item-compact">
+              <div class="stat-icon-compact">
+                <i class="material-icons">warning</i>
+              </div>
+              <div class="stat-content-compact">
+                <div class="stat-number-compact">{{ getHighUsageRacks() }}</div>
+                <div class="stat-label-compact">Over 95%</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="header-actions">
+            <button class="refresh-btn" (click)="refreshRackData()" [disabled]="isRefreshing">
+              <i class="material-icons">refresh</i>
+              {{ isRefreshing ? 'Loading...' : 'Refresh Data' }}
+            </button>
+            <div class="status-info" *ngIf="lastRackDataUpdate">
+              <span class="last-updated">
                 Last updated: {{ lastRackDataUpdate | date:'MMM d, h:mm a' }}
-              </span>
-              <span class="sync-status" *ngIf="lastSyncTime">
-                Last sync: {{ lastSyncTime | date:'MMM d, h:mm a' }}
               </span>
             </div>
           </div>
         </div>
-        
+
+        <!-- Rack Loading Table -->
         <div class="rack-loading-table-container">
           <!-- Loading Overlay -->
           <div class="loading-overlay" *ngIf="isRefreshing">
@@ -239,38 +259,6 @@
               </tr>
             </tbody>
           </table>
-        </div>
-        
-        <!-- Summary Statistics -->
-        <div class="rack-summary">
-          <div class="summary-item">
-            <i class="material-icons">assessment</i>
-            <div class="summary-content">
-              <span class="summary-label">Total Positions</span>
-              <span class="summary-value">{{ getTotalRacks() }}</span>
-            </div>
-          </div>
-          <div class="summary-item">
-            <i class="material-icons">scale</i>
-            <div class="summary-content">
-              <span class="summary-label">Total Weight (kg)</span>
-              <span class="summary-value">{{ getTotalWeight() | number }}</span>
-            </div>
-          </div>
-          <div class="summary-item">
-            <i class="material-icons">storage</i>
-            <div class="summary-content">
-              <span class="summary-label">Occupied</span>
-              <span class="summary-value">{{ getOccupiedRacks() }}</span>
-            </div>
-          </div>
-          <div class="summary-item">
-            <i class="material-icons">warning</i>
-            <div class="summary-content">
-              <span class="summary-label">Over 95%</span>
-              <span class="summary-value">{{ getHighUsageRacks() }}</span>
-            </div>
-          </div>
         </div>
       </div>
 

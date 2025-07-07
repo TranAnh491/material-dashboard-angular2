@@ -362,18 +362,14 @@ export class GoogleSheetService {
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (line) {
-            const columns = line.split(',');
+            // Fix: Parse CSV with proper quote handling
+            const columns = this.parseCSVLine(line);
             
-            if (i <= 5) { // Debug first few lines
-              console.log(`🔍 Line ${i}: "${line}" → Columns:`, columns);
-            }
-            
-            if (columns.length >= 3) {
-              // Remove quotes and trim
-              const position = columns[1]?.replace(/"/g, '').trim(); // Vị trí
-              const weightStr = columns[2]?.replace(/"/g, '').trim(); // Tổng trọng lượng (kg)
+            if (columns.length >= 2) {
+              const position = columns[0]?.replace(/"/g, '').trim();
+              const weightStr = columns[1]?.replace(/"/g, '').trim();
               
-              if (position && weightStr) {
+              if (position && weightStr && isNaN(parseFloat(position))) {
                 // Replace comma with dot for decimal parsing (European format)
                 const normalizedWeight = weightStr.replace(',', '.');
                 const weight = parseFloat(normalizedWeight);
@@ -412,6 +408,33 @@ export class GoogleSheetService {
         return of([]);
       })
     );
+  }
+
+  // Helper method to parse CSV line with proper quote handling
+  private parseCSVLine(line: string): string[] {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Add the last field
+    if (current) {
+      result.push(current);
+    }
+    
+    return result;
   }
 
   // Sync Google Sheets data to Firebase
