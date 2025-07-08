@@ -14,7 +14,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { ShelfLifeComponent } from './pages/shelf-life/shelf-life.component';
 
 // Firebase imports
 import { AngularFireModule } from '@angular/fire/compat';
@@ -52,7 +51,6 @@ import { environment } from '../environments/environment';
   declarations: [
     AppComponent,
     AdminLayoutComponent,
-    ShelfLifeComponent,
     // DocumentsComponent removed from here
   ],
   providers: [],

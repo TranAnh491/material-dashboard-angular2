@@ -131,7 +131,7 @@ export class MaterialLifecycleService {
 
   getUnreadAlerts(): Observable<MaterialAlert[]> {
     return this.firestore.collection<MaterialAlert>('material-alerts',
-      ref => ref.where('isRead', '==', false).orderBy('createdAt', 'desc')
+      ref => ref.where('isRead', '==', false)
     ).snapshotChanges().pipe(
       map(actions => actions.map(a => {
         const data = a.payload.doc.data() as MaterialAlert;
@@ -158,7 +158,7 @@ export class MaterialLifecycleService {
 
   getTransactionsByMaterial(materialId: string): Observable<MaterialTransaction[]> {
     return this.firestore.collection<MaterialTransaction>('material-transactions',
-      ref => ref.where('materialId', '==', materialId).orderBy('timestamp', 'desc')
+      ref => ref.where('materialId', '==', materialId)
     ).snapshotChanges().pipe(
       map(actions => actions.map(a => {
         const data = a.payload.doc.data() as MaterialTransaction;

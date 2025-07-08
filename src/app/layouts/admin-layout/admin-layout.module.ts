@@ -47,6 +47,7 @@ import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.comp
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
+import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 
 @NgModule({
   imports: [
@@ -89,7 +90,8 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
     OutboundMaterialsComponent,
     MaterialsInventoryComponent,
     DocumentsComponent,
-    Layout3dComponent
+    Layout3dComponent,
+    ShelfLifeComponent
   ],
   providers: [
     GoogleSheetService

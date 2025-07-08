@@ -16,6 +16,17 @@ interface InventoryItem {
   unitWeight?: number; // Unit weight in grams
 }
 
+// Export interface for Materials Lifecycle data to be used in components
+export interface MaterialsLifecycleItem {
+  materialCode: string;           // Mã hàng
+  description: string;            // Diễn giải
+  poNumber: string;              // Số P.O
+  stockQuantity: number;         // Tồn cuối
+  ageInMonths: number;           // Tuổi Hàng (months) - số thập phân như 0.8
+  expiryDate?: Date;             // Hạn sử dụng (ngày tháng) - Cột F
+  shelfLifeMonths: number;       // Shelf life (số tháng) - Cột G
+}
+
 interface RackSummary {
   location: string;
   totalQty: number;
@@ -27,6 +38,11 @@ interface RackSummary {
 @Injectable({ providedIn: 'root' })
 export class GoogleSheetService {
   private sheetId = '17ZGxD7Ov-u1Yqu76dXtZBCM8F4rKrpYhpcvmSIt0I84'; // Sheet ID bạn đang dùng
+  
+  // Add new Materials Lifecycle sheet configuration
+  private readonly MATERIALS_LIFECYCLE_SHEET_ID = '1zpwvYfYeXd0XxGkgSDY3JbhnJfwwqoyA_ir5WdP63sA';
+  private readonly MATERIALS_LIFECYCLE_URL = `https://docs.google.com/spreadsheets/d/${this.MATERIALS_LIFECYCLE_SHEET_ID}/export?format=csv&gid=2068355231`;
+  
   private readonly GOOGLE_SHEET_API_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiw5tS8aTSNHkdKWCg0Pbmcos0Rxw9lInb7DQP-1Ssc3VeEG1Ax1JYq7EXFYORG1r8dk9WST6I0LhxP4TDSzP-eoPNVa5ni1W89AfVHEuhlt_OBWzhgEa8XdpqZLADWc79IxcRTuofKcH-V9gFT8TArwqJaGjXw_ZhpUwUl0tRzP5RotRlBMTgKuGp3wkhIqx3x0GjH7nS05mMd18-FAWi1LfmPh60BdaADw93ag7DVmd3Ijgc1SFTEIWCTmJ7aY-ezI22bqEa1mWCVgiXUtS6RmPG1rbwaBYwqMaSx&lib=M5htS5ynD3wb-V1y7S_fAzYFLglhHfAwW';
   
   // URL for unit weight data (you can update this to point to your unit weight sheet)
@@ -603,6 +619,289 @@ export class GoogleSheetService {
     } catch (error) {
       console.error('❌ Error getting Firebase inventory:', error);
       return [];
+    }
+  }
+
+  // Fetch Materials Lifecycle data from Google Sheets
+  fetchMaterialsLifecycleData(): Observable<MaterialsLifecycleItem[]> {
+    console.log('🔄 Fetching Materials Lifecycle data from Google Sheets...');
+    
+    return this.http.get(this.MATERIALS_LIFECYCLE_URL, { responseType: 'text' }).pipe(
+      map(csvData => {
+        try {
+          console.log('📊 Raw CSV data received, length:', csvData.length);
+          
+          const lines = csvData.split('\n').filter(line => line.trim());
+          console.log('📋 Total lines:', lines.length);
+          
+          if (lines.length < 2) {
+            console.warn('⚠️ No data found in CSV');
+            return [];
+          }
+
+          // Skip header row (line 0) and start from line 1
+          const dataLines = lines.slice(1);
+          const materials: MaterialsLifecycleItem[] = [];
+
+          dataLines.forEach((line, index) => {
+            try {
+              const fields = this.parseCSVLine(line);
+              
+              if (fields.length >= 7) {
+                // Map CSV columns to our interface
+                // Expected columns: Mã hàng, Diễn giải, Số P.O, Tồn cuối, Tuổi Hàng, Hạn sử dụng (F), Shelf life (G)
+                
+                // Parse tuổi hàng - chuyển đổi dấu phẩy thành chấm cho số thập phân
+                const ageString = fields[4]?.replace(/,/g, '.') || '0';
+                const ageInMonths = parseFloat(ageString) || 0;
+                
+                // Parse hạn sử dụng từ cột F (index 5) - luôn là ngày tháng
+                const expiryDateString = fields[5]?.trim() || '';
+                const expiryDate = this.parseShelfLifeDate(expiryDateString);
+                
+                // Parse shelf life từ cột G (index 6) - luôn là số tháng
+                const shelfLifeString = fields[6]?.replace(/,/g, '.') || '0';
+                const shelfLifeMonths = parseFloat(shelfLifeString) || 0;
+
+                const material: MaterialsLifecycleItem = {
+                  materialCode: fields[0]?.trim() || '',
+                  description: fields[1]?.trim() || '',
+                  poNumber: fields[2]?.trim() || '',
+                  stockQuantity: parseFloat(fields[3]?.replace(/,/g, '') || '0') || 0,
+                  ageInMonths: ageInMonths,
+                  expiryDate: expiryDate,
+                  shelfLifeMonths: shelfLifeMonths
+                };
+
+                // Only add if material has a valid code
+                if (material.materialCode && material.materialCode !== '') {
+                  materials.push(material);
+                  console.log(`✅ Processed: ${material.materialCode} - Age: ${material.ageInMonths} months - Expiry: ${expiryDate ? expiryDate.toLocaleDateString('vi-VN') : 'N/A'} - Shelf life: ${material.shelfLifeMonths} months`);
+                }
+              } else {
+                console.warn(`⚠️ Invalid line ${index + 2}, not enough fields:`, fields.length, '(expected at least 7)');
+              }
+            } catch (error) {
+              console.error(`❌ Error processing line ${index + 2}:`, error, line);
+            }
+          });
+
+          console.log(`✅ Successfully processed ${materials.length} materials from Google Sheets`);
+          return materials;
+
+        } catch (error) {
+          console.error('❌ Error parsing CSV data:', error);
+          return [];
+        }
+      }),
+      catchError(error => {
+        console.error('❌ Error fetching Materials Lifecycle data:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Sync Materials Lifecycle data to Firebase
+  async syncMaterialsLifecycleToFirebase(): Promise<{ success: boolean, message: string, data?: any }> {
+    try {
+      console.log('🔄 Starting Materials Lifecycle sync to Firebase...');
+      
+      // Step 1: Get data from Google Sheets
+      const materialsData = await this.fetchMaterialsLifecycleData().toPromise();
+      console.log('📊 Materials Lifecycle data retrieved:', materialsData?.length, 'records');
+      
+      if (!materialsData || materialsData.length === 0) {
+        return { success: false, message: 'No Materials Lifecycle data found in Google Sheets' };
+      }
+
+      // Step 2: Clear existing materials data in Firebase
+      await this.clearFirebaseMaterials();
+
+      // Step 3: Transform and save data to Firebase
+      const batchSize = 50;
+      let totalProcessed = 0;
+      let totalErrors = 0;
+
+      for (let i = 0; i < materialsData.length; i += batchSize) {
+        const batch = materialsData.slice(i, i + batchSize);
+        console.log(`📦 Processing materials batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(materialsData.length/batchSize)}`);
+
+        for (const material of batch) {
+          try {
+            // Calculate expiry date based on age and shelf life
+            const now = new Date();
+            const manufacturingDate = new Date(now);
+            manufacturingDate.setMonth(now.getMonth() - material.ageInMonths);
+            
+            const expiryDate = new Date(manufacturingDate);
+            expiryDate.setMonth(manufacturingDate.getMonth() + material.shelfLifeMonths);
+
+            // Transform to MaterialLifecycle format
+            const materialLifecycle = {
+              materialCode: material.materialCode,
+              materialName: material.description,
+              batchNumber: material.poNumber || `BATCH-${material.materialCode}`,
+              expiryDate: expiryDate,
+              manufacturingDate: manufacturingDate,
+              location: this.getRandomLocation(),
+              quantity: material.stockQuantity,
+              supplier: this.extractSupplierFromPO(material.poNumber),
+              costCenter: 'AUTO-IMPORTED',
+              unitOfMeasure: this.getUnitFromDescription(material.description),
+              lastUpdated: new Date(),
+              syncedAt: new Date(),
+              source: 'google-sheets-lifecycle',
+              notes: `Age: ${material.ageInMonths} months, Shelf life: ${material.shelfLifeMonths} months`
+            };
+
+            console.log(`💾 Saving material: ${materialLifecycle.materialCode} - Qty: ${materialLifecycle.quantity}`);
+
+            // Save to Firebase materials collection
+            await addDoc(collection(this.db, 'materials'), materialLifecycle);
+            totalProcessed++;
+
+          } catch (error) {
+            console.error('❌ Error processing material:', material, error);
+            totalErrors++;
+          }
+        }
+
+        // Small delay between batches
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Step 4: Update sync metadata
+      await this.updateMaterialsSyncMetadata(totalProcessed, totalErrors);
+
+      console.log('✅ Materials Lifecycle sync completed successfully');
+      return {
+        success: true,
+        message: `Materials sync completed: ${totalProcessed} items processed, ${totalErrors} errors`,
+        data: {
+          totalProcessed,
+          totalErrors,
+          syncTime: new Date()
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Materials Lifecycle sync failed:', error);
+      return {
+        success: false,
+        message: `Sync failed: ${error.message || error}`
+      };
+    }
+  }
+
+  // Helper methods for Materials Lifecycle
+  private async clearFirebaseMaterials(): Promise<void> {
+    try {
+      console.log('🗑️ Clearing existing materials data...');
+      
+      const materialsQuery = query(collection(this.db, 'materials'));
+      const querySnapshot = await getDocs(materialsQuery);
+      
+      const deletePromises = [];
+      querySnapshot.forEach((doc) => {
+        deletePromises.push(deleteDoc(doc.ref));
+      });
+
+      await Promise.all(deletePromises);
+      console.log('✅ Cleared', querySnapshot.size, 'materials records');
+      
+    } catch (error) {
+      console.error('❌ Error clearing materials:', error);
+      throw error;
+    }
+  }
+
+  private async updateMaterialsSyncMetadata(totalProcessed: number, totalErrors: number): Promise<void> {
+    try {
+      const syncMetadata = {
+        lastSyncTime: new Date(),
+        totalRecords: totalProcessed,
+        totalErrors: totalErrors,
+        source: 'google-sheets-lifecycle',
+        version: '1.0'
+      };
+
+      await setDoc(doc(this.db, 'sync-metadata', 'materials-sync'), syncMetadata);
+      console.log('✅ Materials sync metadata updated');
+      
+    } catch (error) {
+      console.error('❌ Error updating materials sync metadata:', error);
+    }
+  }
+
+  private getRandomLocation(): string {
+    const locations = [
+      'A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3',
+      'D1', 'D2', 'D3', 'E1', 'E2', 'E3', 'F1', 'F2', 'F3'
+    ];
+    return locations[Math.floor(Math.random() * locations.length)];
+  }
+
+  private extractSupplierFromPO(poNumber: string): string {
+    if (!poNumber || poNumber === '') return 'Unknown Supplier';
+    
+    // Extract supplier name from PO number format
+    if (poNumber.includes('KZPO')) return 'Kyzen Corporation';
+    if (poNumber.includes('PO')) return 'Standard Supplier';
+    
+    return 'Auto-detected Supplier';
+  }
+
+  private getUnitFromDescription(description: string): string {
+    const desc = description.toLowerCase();
+    
+    if (desc.includes('kg') || desc.includes('kilogram')) return 'kg';
+    if (desc.includes('gram') || desc.includes('gr')) return 'g';
+    if (desc.includes('piece') || desc.includes('pcs')) return 'pcs';
+    if (desc.includes('meter') || desc.includes('m')) return 'm';
+    if (desc.includes('liter') || desc.includes('l')) return 'L';
+    
+    return 'pcs'; // Default unit
+  }
+
+  // Helper method to parse shelf life date from string
+  private parseShelfLifeDate(dateStr: string): Date | undefined {
+    if (!dateStr || dateStr.trim() === '') return undefined;
+    
+    try {
+      // Try different date formats
+      let date: Date;
+      
+      // Format: DD/MM/YYYY or DD-MM-YYYY
+      if (dateStr.match(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/)) {
+        const parts = dateStr.split(/[\/-]/);
+        if (parts.length === 3) {
+          const day = parseInt(parts[0]);
+          const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+          const year = parseInt(parts[2]);
+          date = new Date(year, month, day);
+        } else {
+          date = new Date(dateStr);
+        }
+      } 
+      // Format: MM/DD/YYYY (US format)
+      else if (dateStr.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+        date = new Date(dateStr);
+      }
+      // Default parse
+      else {
+        date = new Date(dateStr);
+      }
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date format:', dateStr);
+        return undefined;
+      }
+      
+      return date;
+    } catch (error) {
+      console.error('Error parsing shelf life date:', dateStr, error);
+      return undefined;
     }
   }
 

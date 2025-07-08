@@ -1,15 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Observable, Subscription, combineLatest } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { 
-  MaterialLifecycle, 
-  MaterialAlert, 
-  MaterialStatus, 
-  AlertLevel, 
-  TransactionType 
-} from '../../models/material-lifecycle.model';
-import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
+import { GoogleSheetService, MaterialsLifecycleItem } from '../../services/google-sheet.service';
 
 @Component({
   selector: 'app-shelf-life',
@@ -17,243 +9,360 @@ import { MaterialLifecycleService } from '../../services/material-lifecycle.serv
   styleUrls: ['./shelf-life.component.scss']
 })
 export class ShelfLifeComponent implements OnInit, OnDestroy {
-  materials$: Observable<MaterialLifecycle[]>;
-  alerts$: Observable<MaterialAlert[]>;
-  summary$: Observable<any>;
   
-  materials: MaterialLifecycle[] = [];
-  filteredMaterials: MaterialLifecycle[] = [];
-  alerts: MaterialAlert[] = [];
-  summary: any = {};
+  // Data properties
+  materialsData: MaterialsLifecycleItem[] = [];
+  filteredMaterials: MaterialsLifecycleItem[] = [];
   
+  // Loading and status
+  isLoading = false;
+  lastSyncTime: Date | null = null;
+  
+  // Search and filter
   searchTerm = '';
-  selectedStatus = '';
-  selectedLocation = '';
-  showAddForm = false;
-  editingMaterial: MaterialLifecycle | null = null;
+  sortBy = 'materialCode';
+  sortDirection: 'asc' | 'desc' = 'asc';
   
-  materialForm: FormGroup;
-  
-  // Enums for template
-  MaterialStatus = MaterialStatus;
-  AlertLevel = AlertLevel;
+  // Statistics will be calculated via getters
   
   private subscriptions: Subscription[] = [];
-  
-  // Location options from warehouse layout
-  locationOptions = [
-    'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9',
-    'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9',
-    'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9',
-    'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9',
-    'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9',
-    'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9',
-    'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9',
-    'Q1', 'Q2', 'Q3', 'A12', 'K', 'VP', 'IQC', 'WO'
-  ];
 
   constructor(
-    private materialService: MaterialLifecycleService,
-    private fb: FormBuilder,
+    private googleSheetService: GoogleSheetService,
     private snackBar: MatSnackBar
-  ) {
-    this.initializeForm();
-  }
+  ) {}
 
   ngOnInit(): void {
-    this.loadData();
+    this.loadMaterialsData();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 
-  private initializeForm(): void {
-    this.materialForm = this.fb.group({
-      materialCode: ['', [Validators.required]],
-      materialName: ['', [Validators.required]],
-      batchNumber: ['', [Validators.required]],
-      expiryDate: ['', [Validators.required]],
-      manufacturingDate: ['', [Validators.required]],
-      location: ['', [Validators.required]],
-      quantity: ['', [Validators.required, Validators.min(0)]],
-      supplier: ['', [Validators.required]],
-      costCenter: ['', [Validators.required]],
-      unitOfMeasure: ['', [Validators.required]],
-      notes: ['']
-    });
+  // Load materials data from Google Sheets
+  async loadMaterialsData(): Promise<void> {
+    try {
+      this.isLoading = true;
+      console.log('🔄 Loading Materials Lifecycle data...');
+      
+      const subscription = this.googleSheetService.fetchMaterialsLifecycleData().subscribe({
+        next: (data) => {
+          this.materialsData = data;
+          this.filteredMaterials = [...data];
+          this.lastSyncTime = new Date();
+          
+      this.snackBar.open(
+            `Loaded ${data.length} materials successfully`,
+        'Close',
+            {
+              duration: 3000,
+              panelClass: ['success-snackbar']
+            }
+          );
+        },
+        error: (error) => {
+          console.error('❌ Error loading materials:', error);
+          this.snackBar.open(
+            'Error loading materials data. Please try again.',
+            'Close',
+            {
+              duration: 5000,
+              panelClass: ['error-snackbar']
+            }
+          );
+        },
+        complete: () => {
+          this.isLoading = false;
+        }
+      });
+      
+      this.subscriptions.push(subscription);
+      
+    } catch (error) {
+      console.error('❌ Error in loadMaterialsData:', error);
+      this.isLoading = false;
+    }
   }
 
-  private loadData(): void {
-    // Load materials
-    this.materials$ = this.materialService.getMaterials();
-    const materialsSub = this.materials$.subscribe(materials => {
-      this.materials = materials;
-      this.applyFilters();
-    });
-    this.subscriptions.push(materialsSub);
-
-    // Load alerts
-    this.alerts$ = this.materialService.getUnreadAlerts();
-    const alertsSub = this.alerts$.subscribe(alerts => {
-      this.alerts = alerts;
-    });
-    this.subscriptions.push(alertsSub);
-
-    // Load summary
-    this.summary$ = this.materialService.getMaterialsSummary();
-    const summarySub = this.summary$.subscribe(summary => {
-      this.summary = summary;
-    });
-    this.subscriptions.push(summarySub);
-  }
-
+  // Apply search and sort filters
   applyFilters(): void {
-    let filtered = [...this.materials];
+    let filtered = [...this.materialsData];
 
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase();
+    // Apply search filter
+    if (this.searchTerm.trim()) {
+      const term = this.searchTerm.toLowerCase().trim();
       filtered = filtered.filter(material =>
         material.materialCode.toLowerCase().includes(term) ||
-        material.materialName.toLowerCase().includes(term) ||
-        material.batchNumber.toLowerCase().includes(term)
+        material.description.toLowerCase().includes(term) ||
+        material.poNumber.toLowerCase().includes(term)
       );
     }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue: any, bValue: any;
+      
+      switch (this.sortBy) {
+        case 'materialCode':
+          aValue = a.materialCode;
+          bValue = b.materialCode;
+          break;
+        case 'description':
+          aValue = a.description;
+          bValue = b.description;
+          break;
+        case 'stockQuantity':
+          aValue = a.stockQuantity;
+          bValue = b.stockQuantity;
+          break;
+        case 'ageInMonths':
+          aValue = a.ageInMonths;
+          bValue = b.ageInMonths;
+          break;
+        case 'expiryDate':
+          // Sắp xếp theo hạn sử dụng
+          aValue = a.expiryDate ? a.expiryDate.getTime() : 0;
+          bValue = b.expiryDate ? b.expiryDate.getTime() : 0;
+          break;
+        case 'shelfLifeMonths':
+          // Sắp xếp theo shelf life (tháng)
+          aValue = a.shelfLifeMonths;
+          bValue = b.shelfLifeMonths;
+          break;
 
-    if (this.selectedStatus) {
-      filtered = filtered.filter(material => material.status === this.selectedStatus);
-    }
-
-    if (this.selectedLocation) {
-      filtered = filtered.filter(material => material.location === this.selectedLocation);
-    }
+        default:
+          aValue = a[this.sortBy];
+          bValue = b[this.sortBy];
+      }
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return this.sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return this.sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
 
     this.filteredMaterials = filtered;
   }
 
+  // Statistics are now calculated automatically via getters
+
+  // Event handlers
   onSearch(): void {
     this.applyFilters();
   }
 
-  onStatusChange(): void {
+  onSort(column: string): void {
+    if (this.sortBy === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortBy = column;
+      this.sortDirection = 'asc';
+    }
     this.applyFilters();
   }
 
-  onLocationChange(): void {
-    this.applyFilters();
+  onRefresh(): void {
+    this.loadMaterialsData();
   }
 
-  showAddMaterialForm(): void {
-    this.showAddForm = true;
-    this.editingMaterial = null;
-    this.materialForm.reset();
+  // Sync data to Firebase (if needed in the future)
+  async syncToFirebase(): Promise<void> {
+    try {
+      this.isLoading = true;
+      const result = await this.googleSheetService.syncMaterialsLifecycleToFirebase();
+      
+      if (result.success) {
+        this.snackBar.open(
+          `Sync successful: ${result.data?.totalProcessed || 0} materials synced to Firebase`,
+          'Close',
+          {
+            duration: 3000,
+            panelClass: ['success-snackbar']
+          }
+        );
+      } else {
+        this.snackBar.open(
+          `Sync failed: ${result.message}`,
+          'Close',
+          {
+            duration: 5000,
+            panelClass: ['error-snackbar']
+          }
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error syncing to Firebase:', error);
+      this.snackBar.open('Error syncing to Firebase', 'Close', { duration: 5000 });
+    } finally {
+      this.isLoading = false;
+    }
   }
 
-  editMaterial(material: MaterialLifecycle): void {
-    this.editingMaterial = material;
-    this.showAddForm = true;
+  // Utility method to get material status
+  getMaterialStatus(material: MaterialsLifecycleItem): 'good' | 'warning' | 'critical' | 'expired' {
+    // Nếu có hạn sử dụng (expiryDate) thì tính theo ngày
+    if (material.expiryDate) {
+      const daysRemaining = this.getDaysRemaining(material.expiryDate);
+      
+      if (daysRemaining < 0) {
+        return 'expired'; // Quá hạn
+      } else if (daysRemaining <= 7) {
+        return 'critical'; // Sắp hết hạn (7 ngày)
+      } else if (daysRemaining <= 30) {
+        return 'warning'; // Cảnh báo (30 ngày)
+        } else {
+        return 'good'; // Còn tốt
+      }
+    }
     
-    // Convert dates for form
-    const expiryDate = new Date(material.expiryDate);
-    const manufacturingDate = new Date(material.manufacturingDate);
+    // Nếu không có hạn sử dụng nhưng có shelf life thì tính theo tháng
+    if (material.shelfLifeMonths > 0) {
+      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
+      
+      if (agePercentage >= 100) {
+        return 'expired'; // Quá hạn
+      } else if (agePercentage >= 90) {
+        return 'critical'; // Sắp hết hạn (90% tuổi)
+      } else if (agePercentage >= 70) {
+        return 'warning'; // Cảnh báo (70% tuổi)
+      } else {
+        return 'good'; // Còn tốt
+      }
+    }
     
-    this.materialForm.patchValue({
-      ...material,
-      expiryDate: expiryDate.toISOString().split('T')[0],
-      manufacturingDate: manufacturingDate.toISOString().split('T')[0]
+    // Trường hợp không có dữ liệu
+    return 'good';
+  }
+
+  // Get days remaining or overdue
+  getDaysRemaining(expiryDate: Date): number {
+    const today = new Date();
+    const timeDiff = expiryDate.getTime() - today.getTime();
+    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+  }
+
+  // Format remaining time in English
+  formatRemainingTime(material: MaterialsLifecycleItem): string {
+    if (!material.expiryDate) return 'No expiry date';
+    
+    const daysRemaining = this.getDaysRemaining(material.expiryDate);
+    
+    if (daysRemaining < 0) {
+      return `${Math.abs(daysRemaining)} days overdue`;
+    } else if (daysRemaining === 0) {
+      return 'Expires today';
+    } else {
+      return `${daysRemaining} days left`;
+    }
+  }
+
+  // Format shelf life display
+  formatShelfLife(material: MaterialsLifecycleItem): string {
+    return `${material.shelfLifeMonths} months`;
+  }
+
+  // Format expiry date display
+  formatExpiryDate(material: MaterialsLifecycleItem): string {
+    if (!material.expiryDate) return 'N/A';
+    return material.expiryDate.toLocaleDateString('en-US');
+  }
+
+  // Calculate progress percentage (0-100)
+  getProgressPercentage(material: MaterialsLifecycleItem): number {
+    // Nếu có hạn sử dụng thì tính theo ngày
+    if (material.expiryDate) {
+      const daysRemaining = this.getDaysRemaining(material.expiryDate);
+      const totalShelfLifeDays = material.shelfLifeMonths * 30; // Ước tính 30 ngày/tháng
+      
+      if (daysRemaining < 0) return 100; // Quá hạn = 100%
+      
+      const usedDays = totalShelfLifeDays - daysRemaining;
+      const percentage = (usedDays / totalShelfLifeDays) * 100;
+      
+      return Math.max(0, Math.min(100, percentage));
+    }
+    
+    // Nếu không có hạn sử dụng thì tính theo tuổi hàng vs shelf life
+    if (material.shelfLifeMonths > 0) {
+      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
+      return Math.max(0, Math.min(100, agePercentage));
+    }
+    
+    return 0;
+  }
+
+  // Get status text in English
+  getStatusText(status: 'good' | 'warning' | 'critical' | 'expired'): string {
+    switch (status) {
+      case 'good': return 'Good';
+      case 'warning': return 'Warning';
+      case 'critical': return 'Critical';
+      case 'expired': return 'Expired';
+      default: return 'Unknown';
+    }
+  }
+
+  // Get status display content for table
+  getStatusDisplay(material: MaterialsLifecycleItem): string {
+    // Nếu có hạn sử dụng thì hiển thị số ngày
+    if (material.expiryDate) {
+      return this.formatRemainingTime(material);
+    }
+    
+    // Nếu không có hạn sử dụng thì hiển thị % tuổi hàng
+    if (material.shelfLifeMonths > 0) {
+      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
+      const remaining = Math.max(0, material.shelfLifeMonths - material.ageInMonths);
+      
+      if (agePercentage >= 100) {
+        return 'Expired';
+      } else {
+        return `Remaining ${remaining.toFixed(1)} months`;
+      }
+    }
+    
+    return 'No data';
+  }
+
+  // Check if material has expiry date (to determine display type)
+  hasExpiryDate(material: MaterialsLifecycleItem): boolean {
+    return !!material.expiryDate;
+  }
+
+  // Utility method for date formatting
+  formatDate(date: Date | null): string {
+    if (!date) return 'Never';
+    return date.toLocaleDateString('en-US') + ' ' + date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   }
 
-  cancelForm(): void {
-    this.showAddForm = false;
-    this.editingMaterial = null;
-    this.materialForm.reset();
+  // Getters for template
+  get totalMaterials(): number {
+    return this.materialsData.length;
   }
 
-  async saveMaterial(): Promise<void> {
-    if (this.materialForm.valid) {
-      try {
-        const formValue = this.materialForm.value;
-        const materialData: MaterialLifecycle = {
-          ...formValue,
-          expiryDate: new Date(formValue.expiryDate),
-          manufacturingDate: new Date(formValue.manufacturingDate),
-          createdBy: 'Current User' // Replace with actual user
-        };
-
-        if (this.editingMaterial) {
-          await this.materialService.updateMaterial(this.editingMaterial.id!, materialData);
-          this.snackBar.open('Material updated successfully', 'Close', { duration: 3000 });
-        } else {
-          await this.materialService.addMaterial(materialData);
-          this.snackBar.open('Material added successfully', 'Close', { duration: 3000 });
-        }
-
-        this.cancelForm();
-      } catch (error) {
-        this.snackBar.open('Error saving material', 'Close', { duration: 3000 });
-        console.error('Error saving material:', error);
-      }
-    }
+  get materialsWithExpiryDate(): number {
+    return this.materialsData.filter(material => !!material.expiryDate).length;
   }
 
-  async deleteMaterial(material: MaterialLifecycle): Promise<void> {
-    if (confirm(`Are you sure you want to delete ${material.materialCode}?`)) {
-      try {
-        await this.materialService.deleteMaterial(material.id!);
-        this.snackBar.open('Material deleted successfully', 'Close', { duration: 3000 });
-      } catch (error) {
-        this.snackBar.open('Error deleting material', 'Close', { duration: 3000 });
-        console.error('Error deleting material:', error);
-      }
-    }
+  get averageAge(): number {
+    if (this.materialsData.length === 0) return 0;
+    const totalAge = this.materialsData.reduce((sum, material) => sum + material.ageInMonths, 0);
+    return totalAge / this.materialsData.length;
   }
 
-  async markAlertAsRead(alert: MaterialAlert): Promise<void> {
-    try {
-      await this.materialService.markAlertAsRead(alert.id!);
-    } catch (error) {
-      console.error('Error marking alert as read:', error);
-    }
+  get criticalItems(): number {
+    return this.materialsData.filter(material => {
+      const status = this.getMaterialStatus(material);
+      return status === 'critical' || status === 'expired';
+    }).length;
   }
 
-  getStatusBadgeClass(status: MaterialStatus): string {
-    switch (status) {
-      case MaterialStatus.ACTIVE:
-        return 'badge-success';
-      case MaterialStatus.EXPIRING_SOON:
-        return 'badge-warning';
-      case MaterialStatus.EXPIRED:
-        return 'badge-danger';
-      case MaterialStatus.QUARANTINE:
-        return 'badge-secondary';
-      case MaterialStatus.CONSUMED:
-        return 'badge-info';
-      default:
-        return 'badge-light';
-    }
-  }
-
-  getAlertLevelClass(alertLevel: AlertLevel): string {
-    switch (alertLevel) {
-      case AlertLevel.GREEN:
-        return 'alert-success';
-      case AlertLevel.YELLOW:
-        return 'alert-warning';
-      case AlertLevel.RED:
-        return 'alert-danger';
-      default:
-        return 'alert-info';
-    }
-  }
-
-  getDaysUntilExpiry(expiryDate: Date): number {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  formatDate(date: Date): string {
-    return new Date(date).toLocaleDateString();
-  }
 }
