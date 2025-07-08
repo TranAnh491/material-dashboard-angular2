@@ -20,6 +20,7 @@ export const ROUTES: RouteInfo[] = [
     { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
     { path: '/bm', title: 'Bonded Materials', icon: 'lock', class: ''},
     { path: '/shelf-life', title: 'Materials Lifecycle', icon: 'hourglass_empty', class: '' },
+    { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
     { path: '/find', title: 'Find', icon: 'search', class: '' },
     { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
     { path: '/checklist', title: 'Checklist', icon: 'checklist', class: '' },

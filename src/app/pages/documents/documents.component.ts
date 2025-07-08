@@ -4,7 +4,8 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { environment } from '../../../environments/environment';
 import { GoogleSheetService } from '../../services/google-sheet.service';
-import { Subscription } from 'rxjs';
+import { AuditService, AuditData, PhaseScore } from '../../services/audit.service';
+import { Subscription, Subject, takeUntil } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 
 interface DocumentFile {
@@ -41,14 +42,7 @@ interface CalendarDay {
   isSunday: boolean;
 }
 
-interface RackLoading {
-  position: string;
-  maxCapacity: number;
-  currentLoad: number;
-  usage: number; // Percentage
-  status: 'available' | 'normal' | 'warning' | 'critical';
-  itemCount: number;
-}
+
 
 @Component({
   selector: 'app-documents',
@@ -144,6 +138,20 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       priority: 'high',
       url: null,
       loading: false
+    },
+    {
+      id: 'secured-checklist',
+      title: 'Daily Secured Checklist',
+      description: 'Checklist kiểm tra an toàn và thiết bị kho hàng ngày',
+      icon: 'security',
+      status: 'ready',
+      completionPercentage: 0,
+      itemCount: 20,
+      assignedUser: 'Hoàng Tuấn',
+      lastUpdated: new Date(),
+      priority: 'high',
+      url: null,
+      loading: false
     }
   ];
 
@@ -153,29 +161,52 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   sortBy: string = 'name';
   filteredChecklists: any[] = [];
 
-  // Rack Loading Data
-  rackLoadingData: RackLoading[] = [];
-  private rackDataSubscription: Subscription | undefined;
-  isRefreshing: boolean = false;
-  lastRackDataUpdate: Date | null = null;
+
 
   // Sync state
   isSyncing = false;
   lastSyncTime: Date | null = null;
   syncStatus: any = null;
 
-  constructor(private sanitizer: DomSanitizer, private googleSheetService: GoogleSheetService, private http: HttpClient) { }
+  // 5S Audit properties
+  private destroy$ = new Subject<void>();
+  auditData: AuditData = {
+    sort: {},
+    setInOrder: {},
+    shine: {},
+    standardize: {},
+    sustain: {}
+  };
+  currentPhase: string = 'sort';
+  showAuditResults: boolean = false;
+  show5SAudit: boolean = false;
+
+  constructor(
+    private sanitizer: DomSanitizer, 
+    private googleSheetService: GoogleSheetService, 
+    private http: HttpClient,
+    public auditService: AuditService
+  ) { }
 
   async ngOnInit(): Promise<void> {
     await this.initializeFirebase();
     this.initializeChecklists();
-    this.initializeRackLoading();
     await this.loadHistory();
     // Update checklist with recent data after loading history
     this.updateChecklistWithRecentData();
+    
+    // Subscribe to audit data
+    this.auditService.auditData$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(data => {
+        this.auditData = data;
+      });
   }
 
   ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+    
     if (this.unsubscribe) {
       this.unsubscribe();
     }
@@ -187,9 +218,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       console.log('🧹 Cleared auto-save timer on component destroy');
     }
 
-    if (this.rackDataSubscription) {
-      this.rackDataSubscription.unsubscribe();
-    }
+
   }
 
   selectDocument(doc: DocumentFile): void {
@@ -201,11 +230,69 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.selectedDocumentUrl = null;
   }
 
+  // Checklist state
+  showSecuredChecklist: boolean = false;
+  securedChecklistData: ChecklistData = {
+    nguoiKiem: '',
+    ngayKiem: new Date().toISOString().split('T')[0],
+    items: [
+      // Điện và an toàn
+      { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 1-17 (kho D1 ngoài)', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 18-24 (VP kho D1)', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 25-30 (Kho lạnh D1)', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Khóa cửa trước D1', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Tắt đèn kho D1 / đèn Tolet', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Tắt máy hút ẩm/ máy lạnh/ máy tính kho lạnh', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Tắt máy tính / quạt kho D1 bên ngoài', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Tắt điện Kho lạnh', isOK: false, isNG: false, notes: '' },
+      { category: 'Điện và an toàn', item: 'Tắt đèn/ máy lạnh văn phòng kho', isOK: false, isNG: false, notes: '' },
+      
+      // Thiết bị và vật dụng
+      { category: 'Thiết bị và vật dụng', item: 'Đưa xe nâng vào vị trí', isOK: false, isNG: false, notes: '' },
+      { category: 'Thiết bị và vật dụng', item: 'Tắt nguồn máy tính băng, điện thoại, bộ đàm để vào thùng nhựa mang ra vị trí đã quy định', isOK: false, isNG: false, notes: '' },
+      { category: 'Thiết bị và vật dụng', item: 'Đưa pin xe nâng vào khu vực lưu trữ pin', isOK: false, isNG: false, notes: '' },
+      
+      // Kiểm tra cửa và lối thoát
+      { category: 'Kiểm tra cửa và lối thoát', item: 'Kiểm tra các cửa thoát hiểm đã được đóng chưa', isOK: false, isNG: false, notes: '' },
+      { category: 'Kiểm tra cửa và lối thoát', item: 'Kiểm tra và đóng tất cả các cửa sổ', isOK: false, isNG: false, notes: '' },
+      
+      // Vệ sinh và sắp xếp
+      { category: 'Vệ sinh và sắp xếp', item: 'Dọn dẹp gọn gàng, 5S khu vực bán soạn NVL, soạn Thành phẩm', isOK: false, isNG: false, notes: '' },
+      
+      // Kiểm tra dấu hiệu bất thường
+      { category: 'Kiểm tra dấu hiệu bất thường', item: 'Có dấu hiệu có tố kiến, tồ côn trùng không?', isOK: false, isNG: false, notes: '' },
+      { category: 'Kiểm tra dấu hiệu bất thường', item: 'Có phát hiện mùi ở khu vực pallet gỗ, bao bì carton không?', isOK: false, isNG: false, notes: '' },
+      
+      // Kiểm tra kết cấu kệ hàng
+      { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra các kệ hàng có cong vênh, các thanh ngang, thanh dọc có bị biến dạng hay không?', isOK: false, isNG: false, notes: '' },
+      { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra để chân kệ có được bắt ốc có định xướng nên xướng hay không?', isOK: false, isNG: false, notes: '' },
+      { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra thanh beam kệ Kho có bị cong, móp. Kệ Kho có bị nghiêng ngã hay không. Chân kệ có hở hay không?', isOK: false, isNG: false, notes: '' }
+    ],
+    createdAt: Timestamp.now(),
+    status: 'pending'
+  };
+
   // Daily Checklist Methods
   openDailyChecklist(): void {
     this.showDailyChecklist = true;
     // Load history immediately when opening checklist to populate calendar
     this.loadHistory();
+  }
+
+  // Secured Checklist Methods
+  openSecuredChecklist(): void {
+    this.showSecuredChecklist = true;
+    this.loadSecuredHistory();
+  }
+
+  closeSecuredChecklist(): void {
+    this.showSecuredChecklist = false;
+  }
+
+  async loadSecuredHistory() {
+    // For now, we'll use similar structure as daily checklist
+    // In the future, this could be extended to load specific secured checklist history
+    console.log('Loading secured checklist history...');
   }
 
   closeDailyChecklist(): void {
@@ -228,7 +315,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   getTotalItems(): number {
-    return this.rackLoadingData.reduce((total, rack) => total + rack.itemCount, 0);
+    return this.currentData.items.length;
   }
 
   getCheckedItems(): number {
@@ -243,12 +330,32 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     return this.currentData.items.filter(item => item.isNG).length;
   }
 
+  // Secured checklist helper methods
+  getSecuredTotalItems(): number {
+    return this.securedChecklistData.items.length;
+  }
+
+  getSecuredCheckedItems(): number {
+    return this.securedChecklistData.items.filter(item => item.isOK).length;
+  }
+
+  getSecuredUncheckedItems(): number {
+    return this.securedChecklistData.items.filter(item => !item.isOK && !item.isNG).length;
+  }
+
+  getSecuredNGItems(): number {
+    return this.securedChecklistData.items.filter(item => item.isNG).length;
+  }
+
   getPreviousCategory(index: number): string {
     return index > 0 ? this.currentData.items[index - 1].category : '';
   }
 
   updateItemStatus(index: number) {
-    const item = this.currentData.items[index];
+    // Determine which checklist is currently active
+    const isSecuredChecklist = this.showSecuredChecklist;
+    const item = isSecuredChecklist ? this.securedChecklistData.items[index] : this.currentData.items[index];
+    const nguoiKiem = isSecuredChecklist ? this.securedChecklistData.nguoiKiem : this.currentData.nguoiKiem;
     
     // Ensure only one checkbox can be selected at a time
     if (item.isOK && item.isNG) {
@@ -268,10 +375,10 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     
     // Auto-save after 2 seconds with validation
     this.autoSaveTimer = setTimeout(() => {
-      if (this.hasUnsavedChanges && this.currentData.nguoiKiem) {
+      if (this.hasUnsavedChanges && nguoiKiem) {
         console.log('⏰ Auto-save triggered by checkbox change');
         this.saveData();
-      } else if (!this.currentData.nguoiKiem) {
+      } else if (!nguoiKiem) {
         console.log('⚠️ Auto-save skipped: No nguoiKiem selected');
         this.showNotification = true;
         this.notificationMessage = '⚠️ Vui lòng chọn người kiểm trước khi tick checkbox';
@@ -298,7 +405,14 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   async saveData() {
     console.log('🔄 Starting save operation...');
     console.log('Connection status:', this.connectionStatus);
-    console.log('Current data:', this.currentData);
+    
+    // Determine which checklist is currently active
+    const isSecuredChecklist = this.showSecuredChecklist;
+    const activeData = isSecuredChecklist ? this.securedChecklistData : this.currentData;
+    const collectionName = isSecuredChecklist ? 'secured-checklist' : 'warehouse-checklist';
+    
+    console.log('Active data:', activeData);
+    console.log('Collection:', collectionName);
     
     // Clear auto-save timer if exists
     if (this.autoSaveTimer) {
@@ -316,7 +430,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.currentData.nguoiKiem) {
+    if (!activeData.nguoiKiem) {
       console.log('❌ Missing required fields');
       this.showNotification = true;
       this.notificationMessage = '⚠️ Vui lòng chọn người kiểm';
@@ -328,12 +442,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     try {
-      const completedItems = this.getCheckedItems() + this.getNGItems();
-      const totalItems = this.getTotalItems();
+      const completedItems = activeData.items.filter(item => item.isOK || item.isNG).length;
+      const totalItems = activeData.items.length;
       const calculatedStatus = completedItems === totalItems ? 'completed' : 'pending';
       
       const dataToSave = {
-        ...this.currentData,
+        ...activeData,
         createdAt: Timestamp.now(),
         status: calculatedStatus
       };
@@ -342,21 +456,21 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         completedItems,
         totalItems,
         calculatedStatus,
-        checkedItems: this.getCheckedItems(),
-        ngItems: this.getNGItems()
+        checkedItems: activeData.items.filter(item => item.isOK).length,
+        ngItems: activeData.items.filter(item => item.isNG).length
       });
       console.log('📝 Data to save:', dataToSave);
       console.log('📅 Date being saved:', dataToSave.ngayKiem);
 
-      if (this.currentData.id) {
+      if (activeData.id) {
         // Update existing record
-        console.log('📝 Updating existing record with ID:', this.currentData.id);
-        await updateDoc(doc(this.db, 'warehouse-checklist', this.currentData.id), dataToSave);
+        console.log('📝 Updating existing record with ID:', activeData.id);
+        await updateDoc(doc(this.db, collectionName, activeData.id), dataToSave);
       } else {
         // Create new record
         console.log('📝 Creating new record');
-        const docRef = await addDoc(collection(this.db, 'warehouse-checklist'), dataToSave);
-        this.currentData.id = docRef.id;
+        const docRef = await addDoc(collection(this.db, collectionName), dataToSave);
+        activeData.id = docRef.id;
         console.log('✅ New record created with ID:', docRef.id);
       }
 
@@ -448,29 +562,74 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.currentData = {
-      nguoiKiem: '',
-      ngayKiem: this.formatDateToLocal(new Date()),
-      items: [
-        // Kiểm tra kết cấu kệ
-        { category: 'Kết cấu kệ', item: 'Kiểm tra nhãn tải trọng và không vượt giới hạn', isOK: false, isNG: false, notes: '' },
-        { category: 'Kết cấu kệ', item: 'Kiểm tra độ thẳng đứng (lệch <1 độ)', isOK: false, isNG: false, notes: '' },
-        { category: 'Kết cấu kệ', item: 'Kiểm tra vết nứt, biến dạng, lỏng lẻo của thanh mâm kệ với thanh kệ', isOK: false, isNG: false, notes: '' },
-        { category: 'Kết cấu kệ', item: 'Kiểm tra chốt khóa và bu-lông', isOK: false, isNG: false, notes: '' },
-        { category: 'Kết cấu kệ', item: 'Kiểm tra beam ngang không móp, cong', isOK: false, isNG: false, notes: '' },
-        { category: 'Kết cấu kệ', item: 'Đứng nhìn tổng thể từ xa xem kệ có nghiêng hay không', isOK: false, isNG: false, notes: '' },
-        
-        // Kiểm tra hàng hóa
-        { category: 'Hàng hóa', item: 'Hàng nặng ở tầng thấp, không nhô ra ngoài mép', isOK: false, isNG: false, notes: '' },
-        
-        // An toàn PCCC
-        { category: 'An toàn PCCC', item: 'Khoảng cách sprinkler-hàng hóa ≥45cm', isOK: false, isNG: false, notes: '' },
-        { category: 'An toàn PCCC', item: 'Lối thoát hiểm không bị chắn', isOK: false, isNG: false, notes: '' },
-        { category: 'An toàn PCCC', item: 'Lối đi giữa các kệ thông thoáng', isOK: false, isNG: false, notes: '' }
-      ],
-      createdAt: Timestamp.now(),
-      status: 'pending'
-    };
+    // Determine which checklist is currently active
+    const isSecuredChecklist = this.showSecuredChecklist;
+    
+    if (isSecuredChecklist) {
+      this.securedChecklistData = {
+        nguoiKiem: '',
+        ngayKiem: this.formatDateToLocal(new Date()),
+        items: [
+          // Điện và an toàn
+          { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 1-17 (kho D1 ngoài)', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 18-24 (VP kho D1)', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Kiểm tra ổ điện số 25-30 (Kho lạnh D1)', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Khóa cửa trước D1', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Tắt đèn kho D1 / đèn Tolet', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Tắt máy hút ẩm/ máy lạnh/ máy tính kho lạnh', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Tắt máy tính / quạt kho D1 bên ngoài', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Tắt điện Kho lạnh', isOK: false, isNG: false, notes: '' },
+          { category: 'Điện và an toàn', item: 'Tắt đèn/ máy lạnh văn phòng kho', isOK: false, isNG: false, notes: '' },
+          
+          // Thiết bị và vật dụng
+          { category: 'Thiết bị và vật dụng', item: 'Đưa xe nâng vào vị trí', isOK: false, isNG: false, notes: '' },
+          { category: 'Thiết bị và vật dụng', item: 'Tắt nguồn máy tính băng, điện thoại, bộ đàm để vào thùng nhựa mang ra vị trí đã quy định', isOK: false, isNG: false, notes: '' },
+          { category: 'Thiết bị và vật dụng', item: 'Đưa pin xe nâng vào khu vực lưu trữ pin', isOK: false, isNG: false, notes: '' },
+          
+          // Kiểm tra cửa và lối thoát
+          { category: 'Kiểm tra cửa và lối thoát', item: 'Kiểm tra các cửa thoát hiểm đã được đóng chưa', isOK: false, isNG: false, notes: '' },
+          { category: 'Kiểm tra cửa và lối thoát', item: 'Kiểm tra và đóng tất cả các cửa sổ', isOK: false, isNG: false, notes: '' },
+          
+          // Vệ sinh và sắp xếp
+          { category: 'Vệ sinh và sắp xếp', item: 'Dọn dẹp gọn gàng, 5S khu vực bán soạn NVL, soạn Thành phẩm', isOK: false, isNG: false, notes: '' },
+          
+          // Kiểm tra dấu hiệu bất thường
+          { category: 'Kiểm tra dấu hiệu bất thường', item: 'Có dấu hiệu có tố kiến, tồ côn trùng không?', isOK: false, isNG: false, notes: '' },
+          { category: 'Kiểm tra dấu hiệu bất thường', item: 'Có phát hiện mùi ở khu vực pallet gỗ, bao bì carton không?', isOK: false, isNG: false, notes: '' },
+          
+          // Kiểm tra kết cấu kệ hàng
+          { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra các kệ hàng có cong vênh, các thanh ngang, thanh dọc có bị biến dạng hay không?', isOK: false, isNG: false, notes: '' },
+          { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra để chân kệ có được bắt ốc có định xướng nên xướng hay không?', isOK: false, isNG: false, notes: '' },
+          { category: 'Kiểm tra kết cấu kệ hàng', item: 'Kiểm tra thanh beam kệ Kho có bị cong, móp. Kệ Kho có bị nghiêng ngã hay không. Chân kệ có hở hay không?', isOK: false, isNG: false, notes: '' }
+        ],
+        createdAt: Timestamp.now(),
+        status: 'pending'
+      };
+    } else {
+      this.currentData = {
+        nguoiKiem: '',
+        ngayKiem: this.formatDateToLocal(new Date()),
+        items: [
+          // Kiểm tra kết cấu kệ
+          { category: 'Kết cấu kệ', item: 'Kiểm tra nhãn tải trọng và không vượt giới hạn', isOK: false, isNG: false, notes: '' },
+          { category: 'Kết cấu kệ', item: 'Kiểm tra độ thẳng đứng (lệch <1 độ)', isOK: false, isNG: false, notes: '' },
+          { category: 'Kết cấu kệ', item: 'Kiểm tra vết nứt, biến dạng, lỏng lẻo của thanh mâm kệ với thanh kệ', isOK: false, isNG: false, notes: '' },
+          { category: 'Kết cấu kệ', item: 'Kiểm tra chốt khóa và bu-lông', isOK: false, isNG: false, notes: '' },
+          { category: 'Kết cấu kệ', item: 'Kiểm tra beam ngang không móp, cong', isOK: false, isNG: false, notes: '' },
+          { category: 'Kết cấu kệ', item: 'Đứng nhìn tổng thể từ xa xem kệ có nghiêng hay không', isOK: false, isNG: false, notes: '' },
+          
+          // Kiểm tra hàng hóa
+          { category: 'Hàng hóa', item: 'Hàng nặng ở tầng thấp, không nhô ra ngoài mép', isOK: false, isNG: false, notes: '' },
+          
+          // An toàn PCCC
+          { category: 'An toàn PCCC', item: 'Khoảng cách sprinkler-hàng hóa ≥45cm', isOK: false, isNG: false, notes: '' },
+          { category: 'An toàn PCCC', item: 'Lối thoát hiểm không bị chắn', isOK: false, isNG: false, notes: '' },
+          { category: 'An toàn PCCC', item: 'Lối đi giữa các kệ thông thoáng', isOK: false, isNG: false, notes: '' }
+        ],
+        createdAt: Timestamp.now(),
+        status: 'pending'
+      };
+    }
     
     this.hasUnsavedChanges = false;
     this.showHistory = false;
@@ -927,6 +1086,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       if (checklist.id === 'daily-shelves') {
         this.openDailyChecklist();
+      } else if (checklist.id === 'secured-checklist') {
+        this.openSecuredChecklist();
       } else {
         this.selectDocument({ 
           title: checklist.title, 
@@ -1026,213 +1187,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.filteredChecklists = [...this.checklists];
   }
 
-  private initializeRackLoading() {
-    // Initialize rack loading data for all detailed positions
-    this.rackLoadingData = [];
-    
-    // Generate all rack positions using the service method
-    const allPositions = this.googleSheetService.generateAllRackPositions();
-    
-    // Initialize each position with default values
-    allPositions.forEach(position => {
-      this.rackLoadingData.push({
-        position: position,
-        maxCapacity: 1300, // 1300kg max capacity per rack
-        currentLoad: 0, // Will be updated from Google Sheets
-        usage: 0, // Will be calculated
-        status: 'available',
-        itemCount: 0
-      });
-    });
-    
-    // Load initial data using the new calculation method
-    this.calculateRackLoading();
-    
-    // Subscribe to auto-refresh updates for pre-calculated weights
-    this.rackDataSubscription = this.googleSheetService.rackWeights$.subscribe(
-      (rackWeights) => {
-        if (rackWeights && rackWeights.length > 0) {
-          console.log('🔄 Received auto-refresh weights:', rackWeights.length, 'positions');
-          this.updateRackLoadingFromWeights(rackWeights);
-        }
-      }
-    );
-    
-    // Start auto-refresh every 5 minutes
-    this.googleSheetService.startAutoRefresh(300000);
-    
-    console.log('Initialized rack loading data for', this.rackLoadingData.length, 'positions');
-  }
 
-  private loadRackDataFromGoogleSheets() {
-    this.isRefreshing = true;
-    this.rackDataSubscription = this.googleSheetService.fetchRackLoadingData().subscribe(
-      (rackSummaries) => {
-        console.log('Received rack data from Google Sheets:', rackSummaries);
-        this.updateRackLoadingData(rackSummaries);
-        this.isRefreshing = false;
-        this.lastRackDataUpdate = new Date();
-      },
-      (error) => {
-        console.error('Error loading rack data:', error);
-        this.isRefreshing = false;
-      }
-    );
-  }
 
-  refreshRackData() {
-    if (this.isRefreshing) return;
-    
-    this.isRefreshing = true;
-    console.log('🔄 Refreshing rack data with unit weights...');
-    
-    // Use the new calculation method that incorporates unit weights
-    this.calculateRackLoading();
-  }
 
-  private updateRackLoadingData(rackSummaries: any[]) {
-    this.rackLoadingData.forEach(rack => {
-      // Match rack position with location data (first 3 characters)
-      const rackKey = rack.position.substring(0, 3); // Get first 3 characters (e.g., "A11" -> "A11")
-      const summary = rackSummaries.find(s => s.location === rackKey);
-      
-      if (summary) {
-        // Use the estimated weight from the summary
-        rack.currentLoad = summary.estimatedWeight;
-        rack.usage = Math.round((rack.currentLoad / rack.maxCapacity) * 100);
-        rack.status = this.calculateRackStatus(rack.usage);
-        rack.itemCount = summary.totalQty;
-      } else {
-        // No data found for this rack position
-        rack.currentLoad = 0;
-        rack.usage = 0;
-        rack.status = 'available';
-        rack.itemCount = 0;
-      }
-    });
-    
-    console.log('Updated rack loading data:', this.rackLoadingData);
-  }
-
-  private updateRackLoadingFromWeights(rackWeights: {position: string, weight: number}[]) {
-    console.log('🔄 Updating rack loading from auto-refresh weights...');
-    
-    // Create a map of position -> weight for quick lookup
-    const weightMap = new Map<string, number>();
-    rackWeights.forEach(item => {
-      weightMap.set(item.position, item.weight);
-    });
-    
-    // Update existing rack loading data with new weights
-    this.rackLoadingData.forEach(rack => {
-      // Match position with weight data by taking first 3 characters
-      const positionKey = rack.position.substring(0, 3);
-      const weight = weightMap.get(positionKey) || 0;
-      
-      // Update the rack data
-      rack.currentLoad = Math.round(weight * 100) / 100; // Round to 2 decimal places
-      rack.usage = Math.round((weight / rack.maxCapacity) * 100 * 10) / 10; // Round to 1 decimal place
-      rack.status = this.calculateRackStatus(rack.usage);
-      // itemCount remains 0 for pre-calculated data
-    });
-    
-    this.lastRackDataUpdate = new Date();
-    
-    console.log('✅ Rack loading updated from auto-refresh weights');
-    
-    // Debug D44 specifically
-    const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
-    if (d44Racks.length > 0) {
-      const totalD44Weight = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
-      console.log(`📊 D44 Total after auto-refresh: ${totalD44Weight.toFixed(2)}kg`);
-    }
-  }
-
-  private calculateRackStatus(usage: number): 'available' | 'normal' | 'warning' | 'critical' {
-    if (usage === 0) return 'available';
-    if (usage <= 60) return 'normal';
-    if (usage <= 95) return 'warning';
-    return 'critical';
-  }
-
-  // Rack Loading Methods
-  getRackStatusClass(usage: number): string {
-    if (usage === 0) return 'available';
-    if (usage <= 60) return 'normal';
-    if (usage <= 95) return 'warning';
-    return 'critical';
-  }
-
-  getUsageBarClass(usage: number): string {
-    if (usage === 0) return 'usage-empty';
-    if (usage <= 60) return 'usage-normal';
-    if (usage <= 95) return 'usage-warning';
-    return 'usage-critical';
-  }
-
-  getRackStatusLabel(usage: number): string {
-    if (usage === 0) return 'Available';
-    if (usage <= 60) return 'Normal';
-    if (usage <= 95) return 'Warning';
-    return 'Critical';
-  }
-
-  getTotalRacks(): number {
-    return this.rackLoadingData.length;
-  }
-
-  getHighUsageRacks(): number {
-    return this.rackLoadingData.filter(rack => rack.usage > 95).length;
-  }
-
-  getAvailableRacks(): number {
-    return this.rackLoadingData.filter(rack => rack.usage === 0).length;
-  }
-
-  getTotalWeight(): number {
-    return this.rackLoadingData.reduce((total, rack) => total + rack.currentLoad, 0);
-  }
-
-  getOccupiedRacks(): number {
-    return this.rackLoadingData.filter(rack => rack.usage > 0).length;
-  }
-
-  getUseRate(): number {
-    // Calculate use rate based on D, E, F, G series only
-    const defgRacks = this.rackLoadingData.filter(rack => {
-      const series = rack.position.charAt(0);
-      return ['D', 'E', 'F', 'G'].includes(series);
-    });
-    
-    const usedRacks = defgRacks.filter(rack => rack.currentLoad > 0);
-    const totalRacks = defgRacks.length;
-    
-    if (totalRacks === 0) return 0;
-    
-    const useRate = (usedRacks.length / totalRacks) * 100;
-    return Math.round(useRate * 10) / 10; // Round to 1 decimal place
-  }
-
-  // Method to log all rack positions for verification
-  logAllRackPositions() {
-    const positions = this.googleSheetService.generateAllRackPositions();
-    console.log('All rack positions:', positions);
-    console.log('Total positions:', positions.length);
-    
-    // Group by series for better visualization
-    const grouped = positions.reduce((acc, pos) => {
-      const series = pos.charAt(0);
-      if (!acc[series]) acc[series] = [];
-      acc[series].push(pos);
-      return acc;
-    }, {} as any);
-    
-    console.log('Grouped by series:', grouped);
-  }
-
-  // Removed unused methods: onUnitWeightFileSelected, downloadSampleCSV
-
-  // Removed unused debug methods: debugD44Calculation, showUnitWeightData
 
   async syncToFirebase() {
     if (this.isSyncing) return;
@@ -1247,9 +1204,6 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         this.lastSyncTime = new Date();
         this.syncStatus = result.data;
         alert(`✅ Sync thành công!\n\n${result.message}`);
-        
-        // Refresh rack data after successful sync
-        this.refreshRackData();
       } else {
         alert(`❌ Sync thất bại!\n\n${result.message}`);
       }
@@ -1282,6 +1236,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Commented out - moved to Utilization component
+  /*
   async checkD44Data() {
     console.log('🔍 Checking D44 data from Google Sheets...');
     
@@ -1335,7 +1291,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         - Total items: ${d44Items.length}`);
       
       // Check current rack data for comparison
-      const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
+      // const d44Racks = this.rackLoadingData.filter(rack => rack.position.startsWith('D44'));
       const rackTotalWeight = d44Racks.reduce((sum, rack) => sum + rack.currentLoad, 0);
       const rackTotalItems = d44Racks.reduce((sum, rack) => sum + rack.itemCount, 0);
       
@@ -1367,7 +1323,10 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
       alert(`❌ Lỗi khi kiểm tra dữ liệu D44:\n\n${error.message || error}`);
     }
   }
+  */
 
+  // Commented out - moved to Utilization component
+  /*
   private calculateRackLoading(): void {
     this.isRefreshing = true;
     
@@ -1438,6 +1397,7 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
       }
     );
   }
+  */
 
   // Auto-sync to Firebase in background
   private async autoSyncToFirebase(data: any[]) {
@@ -1467,6 +1427,8 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
 
   // Removed unused method: checkFirebaseData
 
+  // Commented out - moved to Utilization component
+  /*
   testFullFlow() {
     console.clear();
     console.log('🚀 Testing full flow: CSV → Parsing → Weight Map → Display');
@@ -1577,7 +1539,9 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
 Check console for detailed logs!`);
     });
   }
+  */
 
+  /*
   debugCSVFormat() {
     console.log('🔍 Checking multiple rack positions...');
     
@@ -1628,6 +1592,7 @@ ${testPositions.map(pos => {
 Check console for detailed info.`);
     });
   }
+  */
 
   // Helper method to parse CSV line with proper quote handling
   private parseCSVLine(line: string): string[] {
@@ -1705,5 +1670,53 @@ Check console for detailed info.`);
     } catch (error) {
       console.error('Error updating status:', error);
     }
+  }
+
+  // 5S Audit Methods
+  open5SAudit() {
+    this.show5SAudit = true;
+  }
+
+  close5SAudit() {
+    this.show5SAudit = false;
+    this.showAuditResults = false;
+  }
+
+  setCurrentPhase(phase: string) {
+    this.currentPhase = phase;
+    this.showAuditResults = false;
+  }
+
+  toggleAuditResults() {
+    this.showAuditResults = !this.showAuditResults;
+  }
+
+  handleItemCheck(phase: string, itemIndex: number, value: 'good' | 'marginal' | 'poor') {
+    this.auditService.updateAuditData(phase, itemIndex, value);
+  }
+
+  calculatePhaseScore(phase: string): PhaseScore {
+    return this.auditService.calculatePhaseScore(phase, this.auditData);
+  }
+
+  getTotalScore(): PhaseScore {
+    return this.auditService.getTotalScore(this.auditData);
+  }
+
+  exportAuditResults() {
+    this.auditService.exportResults(this.auditData);
+  }
+
+  getPhaseKeys(): string[] {
+    return Object.keys(this.auditService.auditCriteria);
+  }
+
+  getItemStatus(phase: string, itemIndex: number): string {
+    return this.auditData[phase][itemIndex] || '';
+  }
+
+  // Language toggle for 5S Audit
+  toggleAuditLanguage() {
+    this.auditService.toggleLanguage();
   }
 }

@@ -8,9 +8,8 @@
     &.bs-popover-top .arrow:before,
     &.bs-popover-left .arrow:before,
     &.bs-popover-right .arrow:before,
-    &.bs-popover-bottom .arrow:before,{
+    &.bs-popover-bottom .arrow:before{
         border-top-color: transparent;
-        border-left-color: transparent;
         border-right-color: transparent;
         border-bottom-color: transparent;
     }
@@ -71,7 +70,6 @@
     }
 
     &.bs-tooltip-left .arrow:before{
-        border-left-color:$white-color;
     }
 }
 

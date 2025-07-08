@@ -334,14 +334,12 @@
             width: 86%;
 
             &:before{
-                border-left-width: 0;
                 border-right-width: 15px;
                 left: -15px;
                 right: auto;
             }
 
             &:after{
-                border-left-width: 0;
                 border-right-width: 14px;
                 left: -14px;
                 right: auto;

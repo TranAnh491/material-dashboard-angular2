@@ -278,14 +278,12 @@
 }
 .fixed-plugin .dropdown-menu:before{
     border-bottom: 16px solid rgba(0, 0, 0, 0);
-    border-left: 16px solid rgba(0,0,0,0.2);
     border-top: 16px solid rgba(0,0,0,0);
     right: -16px;
 }
 
 .fixed-plugin .dropdown-menu:after{
     border-bottom: 16px solid rgba(0, 0, 0, 0);
-    border-left: 16px solid #fff;
     border-top: 16px solid rgba(0,0,0,0);
     right: -15px;
 }

@@ -48,6 +48,7 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
+import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 
 @NgModule({
   imports: [
@@ -91,7 +92,8 @@ import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component'
     MaterialsInventoryComponent,
     DocumentsComponent,
     Layout3dComponent,
-    ShelfLifeComponent
+    ShelfLifeComponent,
+    UtilizationComponent
   ],
   providers: [
     GoogleSheetService

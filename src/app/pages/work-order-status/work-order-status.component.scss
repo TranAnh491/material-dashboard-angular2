@@ -405,7 +405,6 @@ html, body {
 // Status-based row styling
 .status-waiting {
   background-color: #fff8e1;
-  border-left: 3px solid #ff9800;
   
   &:hover {
     background-color: #fff3c4;
@@ -414,7 +413,6 @@ html, body {
 
 .status-kitting {
   background-color: #e3f2fd;
-  border-left: 3px solid #2196f3;
   
   &:hover {
     background-color: #bbdefb;
@@ -423,7 +421,6 @@ html, body {
 
 .status-ready {
   background-color: #f3e5f5;
-  border-left: 3px solid #9c27b0;
   
   &:hover {
     background-color: #e1bee7;
@@ -432,7 +429,6 @@ html, body {
 
 .status-done {
   background-color: #e8f5e8;
-  border-left: 3px solid #4caf50;
   
   &:hover {
     background-color: #c8e6c9;
@@ -441,7 +437,6 @@ html, body {
 
 .status-delay {
   background-color: #ffebee;
-  border-left: 3px solid #f44336;
   
   &:hover {
     background-color: #ffcdd2;
@@ -601,7 +596,6 @@ html, body {
 // Selected row highlighting
 tr.selected-row {
   background-color: rgba(156, 39, 176, 0.08) !important;
-  border-left: 3px solid #9c27b0 !important;
 }
 
 // Bulk delete button styling

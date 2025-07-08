@@ -70,7 +70,6 @@ iframe {
 // Status-based row styling
 .status-active {
   background-color: #f8fff8;
-  border-left: 3px solid #4caf50;
   
   &:hover {
     background-color: #f0fff0;
@@ -79,7 +78,6 @@ iframe {
 
 .status-expiring {
   background-color: #fffef8;
-  border-left: 3px solid #ff9800;
   
   &:hover {
     background-color: #fffdf0;
@@ -88,7 +86,6 @@ iframe {
 
 .status-expired {
   background-color: #fff8f8;
-  border-left: 3px solid #f44336;
   
   &:hover {
     background-color: #fff0f0;
@@ -97,7 +94,6 @@ iframe {
 
 .status-quarantine {
   background-color: #f8f8ff;
-  border-left: 3px solid #9c27b0;
   
   &:hover {
     background-color: #f0f0ff;
@@ -106,7 +102,6 @@ iframe {
 
 .status-consumed {
   background-color: #f8f8f8;
-  border-left: 3px solid #757575;
   color: #999;
   
   &:hover {

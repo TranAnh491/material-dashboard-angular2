@@ -179,4 +179,12 @@ export class NavbarComponent implements OnInit {
       }
       return 'Dashboard';
     }
+
+    isDashboard(): boolean {
+      var currentPath = this.location.prepareExternalUrl(this.location.path());
+      if(currentPath.charAt(0) === '#'){
+          currentPath = currentPath.slice( 1 );
+      }
+      return currentPath === '/dashboard' || currentPath === '';
+    }
 }

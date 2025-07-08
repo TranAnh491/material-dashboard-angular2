@@ -1,0 +1,193 @@
+<div class="utilization-container">
+  <!-- Page Header - Hidden per user request -->
+  <!--
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">
+        <i class="material-icons">inventory</i>
+        Warehouse Utilization
+      </h1>
+      <p class="page-subtitle">Monitor loading capacity and utilization of warehouse rack systems</p>
+    </div>
+  </div>
+  -->
+
+  <!-- Summary Statistics -->
+  <div class="summary-stats-grid">
+    <div class="stat-card total">
+      <div class="stat-icon">
+        <i class="material-icons">view_module</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getTotalRacks() }}</div>
+        <div class="stat-label">Total Positions</div>
+      </div>
+    </div>
+
+    <div class="stat-card weight">
+      <div class="stat-icon">
+        <i class="material-icons">fitness_center</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getTotalWeight() | number:'1.0-0' }}</div>
+        <div class="stat-label">Total Weight (kg)</div>
+      </div>
+    </div>
+
+    <!-- Hidden per user request: Overall Utilization -->
+    <!--
+    <div class="stat-card utilization">
+      <div class="stat-icon">
+        <i class="material-icons">assessment</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getUseRate() }}%</div>
+        <div class="stat-label">Overall Utilization</div>
+      </div>
+    </div>
+    -->
+
+    <div class="stat-card critical">
+      <div class="stat-icon">
+        <i class="material-icons">warning</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getHighUsageRacks() }}</div>
+        <div class="stat-label">Critical (>95%)</div>
+      </div>
+    </div>
+
+    <!-- Hidden per user request: Occupied Racks and Available Racks -->
+    <!--
+    <div class="stat-card occupied">
+      <div class="stat-icon">
+        <i class="material-icons">inventory_2</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getOccupiedRacks() }}</div>
+        <div class="stat-label">Occupied Racks</div>
+      </div>
+    </div>
+
+    <div class="stat-card available">
+      <div class="stat-icon">
+        <i class="material-icons">add_box</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ getAvailableRacks() }}</div>
+        <div class="stat-label">Available Racks</div>
+      </div>
+    </div>
+    -->
+  </div>
+
+  <!-- Controls Section -->
+  <div class="controls-section">
+    <div class="controls-row">
+      <div class="info-section">
+        <div class="last-update" *ngIf="lastRackDataUpdate">
+          <i class="material-icons">schedule</i>
+          <span>Last updated: {{ lastRackDataUpdate | date:'MMM d, h:mm a' }}</span>
+        </div>
+      </div>
+      
+      <div class="actions-section">
+        <button class="refresh-btn" (click)="refreshRackData()" [disabled]="isRefreshing">
+          <i class="material-icons" [class.rotating]="isRefreshing">refresh</i>
+          <span>{{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rack Loading Table -->
+  <div class="rack-loading-section">
+    <div class="section-header">
+      <h3 class="section-title">
+        <i class="material-icons">view_list</i>
+        Rack Loading Details
+      </h3>
+      <p class="section-description">Detailed capacity and utilization data for all warehouse rack positions</p>
+    </div>
+
+    <div class="rack-loading-table-container">
+      <!-- Loading Overlay -->
+      <div class="loading-overlay" *ngIf="isRefreshing">
+        <div class="loading-content">
+          <i class="material-icons rotating">refresh</i>
+          <span>Loading rack data...</span>
+        </div>
+      </div>
+      
+      <table class="rack-loading-table">
+        <thead>
+          <tr>
+            <th>Rack Position</th>
+            <th>Max Capacity (kg)</th>
+            <th>Current Load (kg)</th>
+            <th>Usage (%)</th>
+            <th>Status</th>
+            <th>Items</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let rack of rackLoadingData" [class]="getRackStatusClass(rack.usage)">
+            <td class="rack-position">
+              <div class="position-display">
+                <i class="material-icons">view_module</i>
+                <span class="position-code">{{ rack.position }}</span>
+              </div>
+            </td>
+            <td class="max-capacity">{{ rack.maxCapacity | number }}</td>
+            <td class="current-load">{{ rack.currentLoad | number:'1.1-1' }}</td>
+            <td class="usage-percentage">
+              <div class="usage-container">
+                <div class="usage-bar">
+                  <div class="usage-fill" 
+                       [style.width.%]="rack.usage" 
+                       [class]="getUsageBarClass(rack.usage)">
+                  </div>
+                </div>
+                <span class="usage-text">{{ rack.usage | number:'1.1-1' }}%</span>
+              </div>
+            </td>
+            <td class="status">
+              <span class="status-badge" [class]="getRackStatusClass(rack.usage)">
+                {{ getRackStatusLabel(rack.usage) }}
+              </span>
+            </td>
+            <td class="item-count">
+              <div class="items-display">
+                <i class="material-icons">inventory_2</i>
+                <span>{{ rack.itemCount }}</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend-section">
+    <h4 class="legend-title">Status Legend</h4>
+    <div class="legend-items">
+      <div class="legend-item available">
+        <div class="legend-color"></div>
+        <span>Available (&lt;20%)</span>
+      </div>
+      <div class="legend-item normal">
+        <div class="legend-color"></div>
+        <span>Normal (20-79%)</span>
+      </div>
+      <div class="legend-item warning">
+        <div class="legend-color"></div>
+        <span>Warning (80-94%)</span>
+      </div>
+      <div class="legend-item critical">
+        <div class="legend-color"></div>
+        <span>Critical (≥95%)</span>
+      </div>
+    </div>
+  </div>
+</div> 

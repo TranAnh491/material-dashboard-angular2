@@ -2,7 +2,7 @@
   <div class="container-fluid documents-container" [class.embedded]="selectedDocumentUrl">
 
     <!-- Document List View -->
-    <div *ngIf="!selectedDocumentUrl && !showDailyChecklist" class="modern-checklist-interface">
+    <div *ngIf="!selectedDocumentUrl && !showDailyChecklist && !showSecuredChecklist" class="modern-checklist-interface">
       
       <!-- Quick Stats Overview -->
       <div class="stats-overview">
@@ -43,6 +43,16 @@
           <div class="stat-content">
             <div class="stat-number">{{ getOverdueCount() }}</div>
             <div class="stat-label">Overdue Items</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <i class="material-icons">assignment_turned_in</i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-number">{{ getTotalScore().percentage }}%</div>
+            <div class="stat-label">5S Score</div>
           </div>
         </div>
       </div>
@@ -99,7 +109,8 @@
           <!-- Card Content -->
           <div class="card-content">
             <h3 class="checklist-title">{{ checklist.title }}</h3>
-            <p class="checklist-description">{{ checklist.description }}</p>
+            <!-- Hidden per user request: description -->
+            <!-- <p class="checklist-description">{{ checklist.description }}</p> -->
             
             <!-- Progress Section - Hidden -->
             <!-- <div class="progress-section">
@@ -112,7 +123,8 @@
               </div>
             </div> -->
             
-            <!-- Metadata -->
+            <!-- Metadata - Hidden per user request -->
+            <!-- 
             <div class="metadata">
               <div class="metadata-item">
                 <i class="material-icons">list</i>
@@ -127,6 +139,7 @@
                 <span>{{ checklist.lastUpdated | date:'MMM d, h:mm a' }}</span>
               </div>
             </div>
+            -->
           </div>
 
           <!-- Card Actions -->
@@ -153,114 +166,52 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Rack Loading Section -->
-      <div class="rack-loading-section">
-        <div class="section-header">
-          <h3 class="section-title">
-            <i class="material-icons">inventory</i>
-            Rack Loading
-          </h3>
-          <p class="section-description">Monitor loading capacity of main warehouse racks (A-G)</p>
-          
-          <!-- Summary Statistics - Moved up and compact -->
-          <div class="summary-stats-compact">
-            <div class="stat-item-compact">
-              <div class="stat-icon-compact">
-                <i class="material-icons">view_module</i>
-              </div>
-              <div class="stat-content-compact">
-                <div class="stat-number-compact">{{ getTotalRacks() }}</div>
-                <div class="stat-label-compact">Total Positions</div>
-              </div>
+        <!-- 5S Audit Card -->
+        <div class="modern-checklist-card ready">
+          <div class="card-header">
+            <div class="checklist-icon">
+              <i class="material-icons">assignment_turned_in</i>
             </div>
-            <div class="stat-item-compact">
-              <div class="stat-icon-compact">
-                <i class="material-icons">fitness_center</i>
-              </div>
-              <div class="stat-content-compact">
-                <div class="stat-number-compact">{{ getTotalWeight() | number:'1.0-0' }}</div>
-                <div class="stat-label-compact">Total Weight (kg)</div>
-              </div>
+            <div class="status-badge ready">
+              {{ getTotalScore().percentage >= 80 ? 'Excellent' : getTotalScore().percentage >= 60 ? 'Good' : 'Needs Improvement' }}
             </div>
-            <div class="stat-item-compact">
-              <div class="stat-icon-compact">
+          </div>
+
+          <div class="card-content">
+            <h3 class="checklist-title">{{ auditService.getUIText('auditTitle') }}</h3>
+            <!-- Hidden per user request: description -->
+            <!-- <p class="checklist-description">{{ auditService.getUIText('auditSubtitle') }}</p> -->
+            
+            <!-- Metadata - Hidden per user request -->
+            <!--
+            <div class="metadata">
+              <div class="metadata-item">
                 <i class="material-icons">assessment</i>
+                <span>{{ auditService.getUIText('overallScore') }}: {{ getTotalScore().percentage }}%</span>
               </div>
-              <div class="stat-content-compact">
-                <div class="stat-number-compact">{{ getUseRate() }}%</div>
-                <div class="stat-label-compact">Use rate</div>
+              <div class="metadata-item">
+                <i class="material-icons">check_circle</i>
+                <span>{{ auditService.getUIText('good') }}: {{ getTotalScore().good }}</span>
               </div>
-            </div>
-            <div class="stat-item-compact">
-              <div class="stat-icon-compact">
+              <div class="metadata-item">
                 <i class="material-icons">warning</i>
-              </div>
-              <div class="stat-content-compact">
-                <div class="stat-number-compact">{{ getHighUsageRacks() }}</div>
-                <div class="stat-label-compact">Over 95%</div>
+                <span>{{ auditService.isVietnamese ? 'Cần cải thiện' : 'Needs Work' }}: {{ getTotalScore().marginal + getTotalScore().poor }}</span>
               </div>
             </div>
+            -->
           </div>
-          
-          <div class="header-actions">
-            <button class="refresh-btn" (click)="refreshRackData()" [disabled]="isRefreshing">
-              <i class="material-icons">refresh</i>
-              {{ isRefreshing ? 'Loading...' : 'Refresh Data' }}
-            </button>
-            <div class="status-info" *ngIf="lastRackDataUpdate">
-              <span class="last-updated">
-                Last updated: {{ lastRackDataUpdate | date:'MMM d, h:mm a' }}
-              </span>
-            </div>
-          </div>
-        </div>
 
-        <!-- Rack Loading Table -->
-        <div class="rack-loading-table-container">
-          <!-- Loading Overlay -->
-          <div class="loading-overlay" *ngIf="isRefreshing">
-            <div class="loading-content">
-              <i class="material-icons rotating">refresh</i>
-              <span>Loading rack data...</span>
-            </div>
+          <div class="card-actions">
+            <button class="action-btn primary" (click)="open5SAudit()">
+              <i class="material-icons">open_in_new</i>
+              {{ auditService.isVietnamese ? 'Mở kiểm tra 5S' : 'Open 5S Audit' }}
+            </button>
           </div>
-          
-          <table class="rack-loading-table">
-            <thead>
-              <tr>
-                <th>Rack Position</th>
-                <th>Max Capacity (kg)</th>
-                <th>Current Load (kg)</th>
-                <th>Usage (%)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let rack of rackLoadingData" [class]="getRackStatusClass(rack.usage)">
-                <td class="rack-position">
-                  <i class="material-icons">view_module</i>
-                  {{ rack.position }}
-                </td>
-                <td class="max-capacity">{{ rack.maxCapacity | number }}</td>
-                <td class="current-load">{{ rack.currentLoad | number }}</td>
-                <td class="usage-percentage">
-                  <div class="usage-bar">
-                    <div class="usage-fill" [style.width.%]="rack.usage" [class]="getUsageBarClass(rack.usage)"></div>
-                  </div>
-                  <span class="usage-text">{{ rack.usage | number:'1.1-1' }}%</span>
-                </td>
-                <td class="status">
-                  <span class="status-badge" [class]="getRackStatusClass(rack.usage)">
-                    {{ getRackStatusLabel(rack.usage) }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
+
+
 
       <!-- Empty State -->
       <div class="empty-state" *ngIf="filteredChecklists.length === 0">
@@ -524,6 +475,318 @@
 
       <div class="notification" [class]="notificationClass" [class.show]="showNotification">
         {{ notificationMessage }}
+      </div>
+    </div>
+
+    <!-- Secured Checklist View -->
+    <div *ngIf="showSecuredChecklist" class="daily-checklist-view">
+      <div class="toolbar compact-toolbar">
+        <button (click)="closeSecuredChecklist()" class="btn btn-white btn-round btn-just-icon mr-3">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <span class="compact-header">Checklist An Toàn Kho - Quay lại để xem danh sách tài liệu.</span>
+      </div>
+      
+      <div class="container">
+        <div class="header">
+          <h3 class="compact-title">
+            <i class="material-icons">security</i> Checklist An Toàn Kho
+            <span *ngIf="hasUnsavedChanges" class="unsaved-indicator">• Chưa lưu</span>
+          </h3>
+        </div>
+        
+        <div class="toolbar">
+          <div class="form-inputs">
+            <div class="form-group">
+              <label for="nguoiKiemSecured">Người kiểm:</label>
+              <select id="nguoiKiemSecured" class="form-control" [(ngModel)]="securedChecklistData.nguoiKiem">
+                <option value="">Chọn người kiểm</option>
+                <option value="Hoàng Vũ">Hoàng Vũ</option>
+                <option value="Hữu Tình">Hữu Tình</option>
+                <option value="Hoàng Tuấn">Hoàng Tuấn</option>
+                <option value="Toàn">Toàn</option>
+                <option value="Hưng">Hưng</option>
+                <option value="Phúc">Phúc</option>
+                <option value="Tú">Tú</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ngayKiemSecured">Ngày kiểm:</label>
+              <input type="date" id="ngayKiemSecured" class="form-control" [(ngModel)]="securedChecklistData.ngayKiem">
+            </div>
+          </div>
+          
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" (click)="startNewChecklist()" [disabled]="isLoading">
+              <span class="loading-spinner" [class.show]="isLoading"></span>
+              <i class="material-icons">add</i> Tạo mới
+            </button>
+            <button class="btn btn-success" (click)="exportData()" [disabled]="isLoading">
+              <i class="material-icons">file_download</i> Xuất Excel
+            </button>
+            <button class="btn btn-primary" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
+              <span class="loading-spinner" [class.show]="isLoading"></span>
+              <i class="material-icons">save</i> Lưu ngay
+            </button>
+          </div>
+        </div>
+
+        <div class="main-content">
+          <div class="summary-cards">
+            <div class="summary-card total">
+              <i class="material-icons card-icon">list_alt</i>
+              <div class="summary-number">{{ getSecuredTotalItems() }}</div>
+              <div class="summary-label">Tổng mục</div>
+            </div>
+            <div class="summary-card ok">
+              <i class="material-icons card-icon">check_circle</i>
+              <div class="summary-number">{{ getSecuredCheckedItems() }}</div>
+              <div class="summary-label">Đã kiểm</div>
+            </div>
+            <div class="summary-card ng">
+              <i class="material-icons card-icon">error</i>
+              <div class="summary-number">{{ getSecuredNGItems() }}</div>
+              <div class="summary-label">NG</div>
+            </div>
+            <div class="summary-card pending">
+              <i class="material-icons card-icon">schedule</i>
+              <div class="summary-number">{{ getSecuredUncheckedItems() }}</div>
+              <div class="summary-label">Chưa kiểm</div>
+            </div>
+          </div>
+
+          <div class="checklist-section">
+            <h4 class="section-title compact-section">
+              <i class="material-icons">security</i> Danh mục kiểm tra an toàn
+            </h4>
+            <div class="table-container">
+              <table class="checklist-table">
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>Danh mục</th>
+                    <th>Mục kiểm tra</th>
+                    <th>OK</th>
+                    <th>NG</th>
+                    <th>Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of securedChecklistData.items; let i = index" [class.category-row]="item.category !== (i > 0 ? securedChecklistData.items[i-1].category : '')">
+                    <td>{{ i + 1 }}</td>
+                    <td>{{ item.category }}</td>
+                    <td>{{ item.item }}</td>
+                    <td class="check-cell">
+                      <input 
+                        type="checkbox" 
+                        class="checkbox-custom" 
+                        [(ngModel)]="item.isOK"
+                        (change)="updateItemStatus(i)">
+                    </td>
+                    <td class="check-cell">
+                      <input 
+                        type="checkbox" 
+                        class="checkbox-custom checkbox-ng" 
+                        [(ngModel)]="item.isNG"
+                        (change)="updateItemStatus(i)">
+                    </td>
+                    <td>
+                      <input 
+                        type="text" 
+                        class="notes-input" 
+                        [(ngModel)]="item.notes"
+                        (blur)="updateItemNotes(i)"
+                        placeholder="Ghi chú...">
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="floating-save" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
+        <span class="loading-spinner" [class.show]="isLoading"></span>
+        <i class="material-icons">save</i> {{ isLoading ? 'Đang lưu...' : 'Lưu dữ liệu' }}
+      </button>
+
+      <div class="notification" [class]="notificationClass" [class.show]="showNotification">
+        {{ notificationMessage }}
+      </div>
+    </div>
+
+    <!-- 5S Audit Interface -->
+    <div *ngIf="show5SAudit" class="audit-interface">
+      <div class="toolbar compact-toolbar">
+        <button (click)="close5SAudit()" class="btn btn-white btn-round btn-just-icon mr-3">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <span class="compact-header">{{ auditService.getUIText('auditTitle') }} - {{ auditService.getUIText('auditSubtitle') }}</span>
+      </div>
+
+      <div class="audit-container">
+        <!-- Header -->
+        <div class="audit-header">
+          <div class="header-content">
+            <h1 class="audit-title">
+              <i class="material-icons">assignment_turned_in</i>
+              {{ auditService.getUIText('auditTitle') }}
+            </h1>
+            <p class="audit-subtitle">{{ auditService.getUIText('auditSubtitle') }}</p>
+          </div>
+          <div class="score-display">
+            <div class="score-circle" [style.border-color]="auditService.getScoreColor(getTotalScore().percentage)">
+              <div class="score-percentage" [style.color]="auditService.getScoreColor(getTotalScore().percentage)">
+                {{ getTotalScore().percentage }}%
+              </div>
+              <div class="score-label">{{ auditService.getUIText('overallScore') }}</div>
+            </div>
+          </div>
+          <div class="language-toggle">
+            <button class="lang-btn" (click)="toggleAuditLanguage()">
+              <i class="material-icons">language</i>
+              {{ auditService.isVietnamese ? 'EN' : 'VI' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="phase-navigation">
+          <button 
+            *ngFor="let phase of getPhaseKeys()"
+            (click)="setCurrentPhase(phase)"
+            [class.active]="currentPhase === phase"
+            [style.border-color]="auditService.auditCriteria[phase].color"
+            [style.color]="currentPhase === phase ? 'white' : auditService.auditCriteria[phase].color"
+            [style.background-color]="currentPhase === phase ? auditService.auditCriteria[phase].color : 'white'"
+            class="phase-btn">
+            {{ auditService.getPhaseTitle(phase) }}
+            <span class="phase-score">{{ calculatePhaseScore(phase).percentage }}%</span>
+          </button>
+          <button
+            (click)="toggleAuditResults()"
+            [class.active]="showAuditResults"
+            class="results-btn">
+            <i class="material-icons">analytics</i>
+            {{ auditService.getUIText('results') }}
+          </button>
+        </div>
+
+        <!-- Results Dashboard -->
+        <div *ngIf="showAuditResults" class="results-dashboard">
+          <div class="results-grid">
+            <div class="score-summary">
+              <h3>{{ auditService.getUIText('overallPerformance') }}</h3>
+              <div class="total-score" [style.color]="auditService.getScoreColor(getTotalScore().percentage)">
+                {{ getTotalScore().percentage }}%
+              </div>
+              <p>{{ getTotalScore().score }} / {{ getTotalScore().maxScore }} {{ auditService.isVietnamese ? 'điểm' : 'points' }}</p>
+              
+              <div class="breakdown">
+                <div class="breakdown-item good">
+                  <i class="material-icons">check_circle</i>
+                  <span>{{ auditService.getUIText('good') }}: {{ getTotalScore().good }}</span>
+                </div>
+                <div class="breakdown-item marginal">
+                  <i class="material-icons">warning</i>
+                  <span>{{ auditService.getUIText('marginal') }}: {{ getTotalScore().marginal }}</span>
+                </div>
+                <div class="breakdown-item poor">
+                  <i class="material-icons">error</i>
+                  <span>{{ auditService.getUIText('poor') }}: {{ getTotalScore().poor }}</span>
+                </div>
+                <div class="breakdown-item unchecked">
+                  <i class="material-icons">help</i>
+                  <span>{{ auditService.getUIText('unchecked') }}: {{ getTotalScore().unchecked }}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="phase-breakdown">
+              <h3>{{ auditService.getUIText('phaseBreakdown') }}</h3>
+              <div class="phase-list">
+                <div *ngFor="let phase of getPhaseKeys()" class="phase-item">
+                  <div class="phase-info">
+                    <div class="phase-color" [style.background-color]="auditService.auditCriteria[phase].color"></div>
+                    <span class="phase-name">{{ auditService.getPhaseTitle(phase) }}</span>
+                  </div>
+                  <div class="phase-score-display" 
+                       [style.color]="auditService.getScoreColor(calculatePhaseScore(phase).percentage)"
+                       [style.background-color]="auditService.getScoreBackground(calculatePhaseScore(phase).percentage)">
+                    {{ calculatePhaseScore(phase).percentage }}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <button (click)="exportAuditResults()" class="export-btn">
+            <i class="material-icons">file_download</i>
+            {{ auditService.getUIText('exportReport') }}
+          </button>
+        </div>
+
+        <!-- Current Phase Audit -->
+        <div *ngIf="!showAuditResults" class="phase-audit">
+          <div class="phase-header">
+            <div class="phase-indicator" [style.background-color]="auditService.auditCriteria[currentPhase].color"></div>
+            <h2 class="phase-title">{{ auditService.getPhaseTitle(currentPhase) }}</h2>
+            <div class="phase-score-badge" 
+                 [style.color]="auditService.getScoreColor(calculatePhaseScore(currentPhase).percentage)"
+                 [style.background-color]="auditService.getScoreBackground(calculatePhaseScore(currentPhase).percentage)">
+              {{ auditService.getUIText('score') }}: {{ calculatePhaseScore(currentPhase).percentage }}%
+            </div>
+          </div>
+
+          <div class="audit-items">
+            <div *ngFor="let item of auditService.auditCriteria[currentPhase].items; let i = index" 
+                 class="audit-item">
+              <div class="item-content">
+                <p class="item-text">{{ auditService.getItemText(currentPhase, i) }}</p>
+                <div class="item-controls">
+                  <button
+                    (click)="handleItemCheck(currentPhase, i, 'good')"
+                    [class.active]="getItemStatus(currentPhase, i) === 'good'"
+                    class="control-btn good">
+                    <i class="material-icons">check_circle</i>
+                    {{ auditService.getStatusText('good') }}
+                  </button>
+                  <button
+                    (click)="handleItemCheck(currentPhase, i, 'marginal')"
+                    [class.active]="getItemStatus(currentPhase, i) === 'marginal'"
+                    class="control-btn marginal">
+                    <i class="material-icons">warning</i>
+                    {{ auditService.getStatusText('marginal') }}
+                  </button>
+                  <button
+                    (click)="handleItemCheck(currentPhase, i, 'poor')"
+                    [class.active]="getItemStatus(currentPhase, i) === 'poor'"
+                    class="control-btn poor">
+                    <i class="material-icons">error</i>
+                    {{ auditService.getStatusText('poor') }}
+                  </button>
+                </div>
+              </div>
+              <div class="item-status">
+                <div *ngIf="getItemStatus(currentPhase, i) === 'good'" class="status-indicator good">
+                  <i class="material-icons">check_circle</i>
+                </div>
+                <div *ngIf="getItemStatus(currentPhase, i) === 'marginal'" class="status-indicator marginal">
+                  <i class="material-icons">warning</i>
+                </div>
+                <div *ngIf="getItemStatus(currentPhase, i) === 'poor'" class="status-indicator poor">
+                  <i class="material-icons">error</i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="audit-footer">
+          <p>{{ auditService.getUIText('methodology') }}</p>
+        </div>
       </div>
     </div>
 
