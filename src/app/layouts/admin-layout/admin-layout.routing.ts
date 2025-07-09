@@ -23,6 +23,7 @@ import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbo
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
 import { ShelfLifeComponent } from 'app/pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
+import { TaskComponent } from '../../pages/task/task.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -53,4 +54,5 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'outbound-fgs',         component: OutboundFgsComponent },
   { path: 'upgrade',              component: UpgradeComponent },
   { path: 'layout-3d',            component: Layout3dComponent },
+  { path: 'task',        component: TaskComponent }
 ];

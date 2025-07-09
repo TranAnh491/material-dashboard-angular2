@@ -1,1 +1,92 @@
-/* Styles for Equipment page */ 
+.toolbar {
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.instruction-container {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 200px);
+}
+
+/* Left Column: Step List */
+.step-list {
+  width: 35%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  padding: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  border-left: 5px solid transparent;
+}
+
+.step-item:hover {
+  transform: translateX(5px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.step-item.material { border-left-color: #00ACC1; }
+.step-item.product { border-left-color: #5E35B1; }
+
+.step-item.active {
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.step-item.active.material { background-color: #00acc1; border-color: #00838f; }
+.step-item.active.product { background-color: #5e35b1; border-color: #4527a0; }
+
+.item-icon {
+  margin-right: 15px;
+  font-size: 28px;
+}
+
+.step-text {
+  flex-grow: 1;
+  font-weight: 500;
+}
+
+/* Right Column: Image Viewer */
+.image-viewer {
+  width: 65%;
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f2f5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-container {
+  width: 100%;
+  height: 100%;
+}
+
+.image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.no-image-placeholder {
+  text-align: center;
+  color: #777;
+}
+
+.no-image-placeholder i {
+  font-size: 80px;
+  color: #ccc;
+} 

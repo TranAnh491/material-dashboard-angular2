@@ -25,6 +25,7 @@ import { MatRippleModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatIconModule } from '@angular/material/icon';
@@ -49,6 +50,7 @@ import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
+import { TaskComponent } from '../../pages/task/task.component';
 
 @NgModule({
   imports: [
@@ -70,6 +72,7 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
     MatProgressSpinnerModule,
     MatProgressBarModule,
     MatCheckboxModule,
+    DragDropModule,
     SharedModule
   ],
   declarations: [
@@ -93,7 +96,8 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
     DocumentsComponent,
     Layout3dComponent,
     ShelfLifeComponent,
-    UtilizationComponent
+    UtilizationComponent,
+    TaskComponent
   ],
   providers: [
     GoogleSheetService

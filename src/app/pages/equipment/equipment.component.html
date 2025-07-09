@@ -1,5 +1,32 @@
 <div class="main-content">
   <div class="container-fluid">
-    <p>Content will be updated soon.</p>
+    <div class="toolbar">
+      <button class="btn btn-info" (click)="toggleLanguage()">
+        <i class="material-icons">language</i> {{ isEnglish ? 'Tiếng Việt' : 'English' }}
+      </button>
+    </div>
+    <div class="instruction-container">
+      <!-- Left Column: Step List -->
+      <div class="step-list">
+        <div *ngFor="let step of steps" 
+             class="step-item" 
+             [ngClass]="{'active': step === selectedStep, 'material': step.type === 'material', 'product': step.type === 'product'}" 
+             (click)="selectStep(step)">
+          <i class="material-icons item-icon">{{ step.icon }}</i>
+          <span class="step-text">{{ isEnglish ? step.en : step.vi }}</span>
+        </div>
+      </div>
+      <!-- Right Column: Image Viewer -->
+      <div class="image-viewer">
+        <div *ngIf="selectedStep?.imageUrl" class="image-container">
+          <img [src]="selectedStep.imageUrl" [alt]="isEnglish ? selectedStep.en : selectedStep.vi" (error)="selectedStep.imageUrl = ''">
+        </div>
+        <div *ngIf="!selectedStep?.imageUrl" class="no-image-placeholder">
+          <i class="material-icons">image</i>
+          <h3>{{ isEnglish ? 'No Image' : 'Chưa có hình ảnh' }}</h3>
+          <p>{{ isEnglish ? 'Please add an image for this step.' : 'Vui lòng thêm hình ảnh cho bước này.' }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </div> 
