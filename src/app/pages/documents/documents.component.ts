@@ -290,9 +290,40 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   async loadSecuredHistory() {
-    // For now, we'll use similar structure as daily checklist
-    // In the future, this could be extended to load specific secured checklist history
-    console.log('Loading secured checklist history...');
+    if (this.connectionStatus !== 'connected') return;
+
+    try {
+      this.isLoading = true;
+      const q = query(collection(this.db, 'secured-checklist'), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      const securedHistoryData: ChecklistData[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as ChecklistData;
+        
+        // Skip deleted records
+        if ((data as any).deleted) {
+          return;
+        }
+        
+        securedHistoryData.push({
+          id: doc.id,
+          ...data
+        });
+      });
+      
+      console.log(`📊 Loaded ${securedHistoryData.length} secured checklist records`);
+      
+      // You could store this in a separate property if needed for secured checklist history view
+      // For now, we'll just log it
+      console.log('Secured checklist history:', securedHistoryData);
+      
+    } catch (error) {
+      console.error('Load secured history error:', error);
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   closeDailyChecklist(): void {
@@ -511,13 +542,21 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
     try {
       this.isLoading = true;
-      const q = query(collection(this.db, 'warehouse-checklist'), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
+      
+      // Load from both collections for calendar
+      const wareouseQ = query(collection(this.db, 'warehouse-checklist'), orderBy('createdAt', 'desc'));
+      const securedQ = query(collection(this.db, 'secured-checklist'), orderBy('createdAt', 'desc'));
+      
+      const [warehouseSnapshot, securedSnapshot] = await Promise.all([
+        getDocs(wareouseQ),
+        getDocs(securedQ)
+      ]);
       
       this.historyData = [];
       this.checklistDates.clear();
       
-      querySnapshot.forEach((doc) => {
+      // Process warehouse checklist data
+      warehouseSnapshot.forEach((doc) => {
         const data = doc.data() as ChecklistData;
         
         // Skip deleted records
@@ -533,12 +572,28 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         // Add to checklist dates for calendar
         if (data.ngayKiem) {
           this.checklistDates.add(data.ngayKiem);
-          console.log('📅 Added to checklistDates:', data.ngayKiem, 'from record:', doc.id);
+          console.log('📅 Added to checklistDates (warehouse):', data.ngayKiem, 'from record:', doc.id);
+        }
+      });
+      
+      // Process secured checklist data for calendar only
+      securedSnapshot.forEach((doc) => {
+        const data = doc.data() as ChecklistData;
+        
+        // Skip deleted records
+        if ((data as any).deleted) {
+          return;
+        }
+        
+        // Add to checklist dates for calendar
+        if (data.ngayKiem) {
+          this.checklistDates.add(data.ngayKiem);
+          console.log('📅 Added to checklistDates (secured):', data.ngayKiem, 'from record:', doc.id);
         }
       });
       
       this.totalRecords = this.historyData.length;
-      console.log(`📊 Loaded ${this.historyData.length} records, ${this.checklistDates.size} unique dates for calendar`);
+      console.log(`📊 Loaded ${this.historyData.length} warehouse records, ${this.checklistDates.size} unique dates for calendar`);
       console.log('📅 Calendar dates:', Array.from(this.checklistDates).sort());
       
       // Debug: Compare current date format
