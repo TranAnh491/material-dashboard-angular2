@@ -1,0 +1,43 @@
+.dialog-form {
+  min-width: 300px;
+  padding: 8px;
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .color-picker {
+    margin-top: 16px;
+
+    h4 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+
+      .color-option {
+        width: 40px;
+        height: 40px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+
+        &:hover {
+          transform: scale(1.1);
+        }
+
+        &.selected {
+          border: 2px solid #000;
+          transform: scale(1.1);
+        }
+      }
+    }
+  }
+} 

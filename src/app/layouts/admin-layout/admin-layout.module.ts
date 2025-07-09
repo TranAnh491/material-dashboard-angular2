@@ -50,7 +50,9 @@ import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
-import { TaskComponent } from '../../pages/task/task.component';
+
+// Import TaskModule
+import { TaskModule } from '../../pages/task/task.module';
 
 @NgModule({
   imports: [
@@ -73,7 +75,8 @@ import { TaskComponent } from '../../pages/task/task.component';
     MatProgressBarModule,
     MatCheckboxModule,
     DragDropModule,
-    SharedModule
+    SharedModule,
+    TaskModule // Add TaskModule here
   ],
   declarations: [
     DashboardComponent,
@@ -96,8 +99,7 @@ import { TaskComponent } from '../../pages/task/task.component';
     DocumentsComponent,
     Layout3dComponent,
     ShelfLifeComponent,
-    UtilizationComponent,
-    TaskComponent
+    UtilizationComponent
   ],
   providers: [
     GoogleSheetService

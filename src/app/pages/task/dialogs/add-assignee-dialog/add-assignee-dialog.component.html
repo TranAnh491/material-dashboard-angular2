@@ -1,0 +1,47 @@
+<h2 mat-dialog-title>Assign Users</h2>
+
+<mat-dialog-content>
+  <div class="dialog-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Search Users</mat-label>
+      <input matInput [(ngModel)]="searchText" placeholder="Type to search...">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+
+    <div class="selected-users" *ngIf="selectedUsers.length">
+      <h4>Selected Users</h4>
+      <mat-chip-list>
+        <mat-chip
+          *ngFor="let user of selectedUsers"
+          [removable]="true"
+          (removed)="toggleUser(user)">
+          <img [src]="user.avatar || 'assets/img/default-avatar.png'" [alt]="user.name" class="user-avatar">
+          {{ user.name }}
+          <mat-icon matChipRemove>cancel</mat-icon>
+        </mat-chip>
+      </mat-chip-list>
+    </div>
+
+    <div class="available-users">
+      <h4>Available Users</h4>
+      <mat-selection-list [multiple]="true">
+        <mat-list-option
+          *ngFor="let user of filteredUsers"
+          [selected]="isSelected(user)"
+          (click)="toggleUser(user)">
+          <div class="user-item">
+            <img [src]="user.avatar || 'assets/img/default-avatar.png'" [alt]="user.name" class="user-avatar">
+            <span>{{ user.name }}</span>
+          </div>
+        </mat-list-option>
+      </mat-selection-list>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()">
+    Assign Users
+  </button>
+</mat-dialog-actions> 

@@ -1,0 +1,76 @@
+<h1 mat-dialog-title>Create New Task</h1>
+<div mat-dialog-content>
+  <form class="task-form">
+    <!-- Task Title -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Task Title</mat-label>
+      <input matInput [(ngModel)]="taskData.title" name="title" required>
+    </mat-form-field>
+
+    <!-- Task Description -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Detailed Description</mat-label>
+      <textarea matInput [(ngModel)]="taskData.description" name="description" rows="3"></textarea>
+    </mat-form-field>
+
+    <!-- Creator -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Creator</mat-label>
+      <mat-select [(ngModel)]="taskData.creator" name="creator" required>
+        <mat-option *ngFor="let user of availableUsers" [value]="user">
+          <div class="user-option">
+            <img [src]="user.avatar" [alt]="user.name" class="user-avatar">
+            <span>{{ user.name }}</span>
+          </div>
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Assignees -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Assignees</mat-label>
+      <mat-select [(ngModel)]="taskData.assignees" name="assignees" multiple>
+        <mat-option *ngFor="let user of availableUsers" [value]="user">
+          <div class="user-option">
+            <img [src]="user.avatar" [alt]="user.name" class="user-avatar">
+            <span>{{ user.name }}</span>
+          </div>
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Priority -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Priority</mat-label>
+      <mat-select [(ngModel)]="taskData.priority" name="priority" required>
+        <mat-option value="LOW">
+          <mat-icon class="priority-low">arrow_downward</mat-icon>
+          Low
+        </mat-option>
+        <mat-option value="MEDIUM">
+          <mat-icon class="priority-medium">drag_handle</mat-icon>
+          Medium  
+        </mat-option>
+        <mat-option value="HIGH">
+          <mat-icon class="priority-high">priority_high</mat-icon>
+          High
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Deadline -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Completion Date</mat-label>
+      <input matInput [matDatepicker]="picker" [(ngModel)]="taskData.deadline" name="deadline">
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+  </form>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="onCreate()" [disabled]="!isValid()">
+    Create Task
+  </button>
+</div> 
