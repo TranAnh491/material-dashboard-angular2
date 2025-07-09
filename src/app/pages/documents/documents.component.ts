@@ -180,6 +180,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   currentPhase: string = 'sort';
   showAuditResults: boolean = false;
   show5SAudit: boolean = false;
+  showSafetyLayout: boolean = false;
 
   constructor(
     private sanitizer: DomSanitizer, 
@@ -1773,5 +1774,13 @@ Check console for detailed info.`);
   // Language toggle for 5S Audit
   toggleAuditLanguage() {
     this.auditService.toggleLanguage();
+  }
+
+  openSafetyLayout(): void {
+    this.showSafetyLayout = true;
+  }
+
+  closeSafetyLayout(): void {
+    this.showSafetyLayout = false;
   }
 }

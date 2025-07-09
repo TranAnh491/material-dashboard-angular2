@@ -209,8 +209,45 @@
             </button>
           </div>
         </div>
+
+        <!-- Safety Layout Card -->
+        <div class="modern-checklist-card ready">
+          <div class="card-header">
+            <div class="checklist-icon">
+              <i class="material-icons">map</i>
+            </div>
+            <div class="status-badge ready">
+              Layout
+            </div>
+          </div>
+
+          <div class="card-content">
+            <h3 class="checklist-title">Warehouse Safety Layout</h3>
+          </div>
+
+          <div class="card-actions">
+            <button class="action-btn primary" (click)="openSafetyLayout()">
+              <i class="material-icons">open_in_new</i>
+              View Layout
+            </button>
+          </div>
+        </div>
       </div>
 
+      <!-- Safety Layout Modal -->
+      <div class="modal" [class.show]="showSafetyLayout">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Warehouse D1 Safety Layout</h2>
+            <button class="close-btn" (click)="closeSafetyLayout()">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <img src="assets/img/D1%20Safety%20Layout.PNG" alt="Warehouse Safety Layout" class="safety-layout-image">
+          </div>
+        </div>
+      </div>
 
 
       <!-- Empty State -->

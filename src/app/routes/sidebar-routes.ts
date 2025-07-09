@@ -23,6 +23,6 @@ export const ROUTES: RouteInfo[] = [
     { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
     { path: '/find', title: 'Find', icon: 'search', class: '' },
     { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
-    { path: '/checklist', title: 'Checklist', icon: 'checklist', class: '' },
+    { path: '/checklist', title: 'Safety', icon: 'checklist', class: '' },
     { path: '/equipment', title: 'Equipment', icon: 'settings_input_component', class: '' },
 ]; 
