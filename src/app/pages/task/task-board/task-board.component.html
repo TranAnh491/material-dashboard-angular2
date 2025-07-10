@@ -5,7 +5,7 @@
         <mat-icon matPrefix>search</mat-icon>
         <input matInput placeholder="Search tasks" [(ngModel)]="searchText" (ngModelChange)="filterTasks()">
       </mat-form-field>
-      <button mat-raised-button color="primary" (click)="openNewTaskDialog()">
+      <button mat-raised-button color="primary" (click)="openNewTaskDialog()" id="new-task-btn">
         <mat-icon>add</mat-icon>
         New Task
       </button>
@@ -70,8 +70,6 @@
 
             <!-- Creator Info -->
             <div class="task-creator">
-              <mat-icon class="creator-icon">person</mat-icon>
-              <img [src]="task.creator.avatar" [alt]="task.creator.name" class="creator-avatar">
               <span class="creator-name">{{ task.creator.name }}</span>
             </div>
 
@@ -113,10 +111,11 @@
 
             <div class="task-footer">
               <div class="assignees" *ngIf="task.assignees.length > 0">
-                <mat-icon class="assignee-icon">group</mat-icon>
-                <div class="assignee-avatars">
-                  <img *ngFor="let assignee of task.assignees.slice(0, 3)" [src]="assignee.avatar" [matTooltip]="assignee.name">
-                  <span *ngIf="task.assignees.length > 3" class="more-assignees">+{{ task.assignees.length - 3 }}</span>
+                <mat-icon class="assignee-icon">people</mat-icon>
+                <div class="assignee-names">
+                  <span *ngFor="let assignee of task.assignees; let i = index">
+                    {{ assignee.name }}<span *ngIf="i < task.assignees.length - 1">, </span>
+                  </span>
                 </div>
               </div>
               <div class="deadline" *ngIf="task.deadline">

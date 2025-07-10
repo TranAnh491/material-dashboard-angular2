@@ -51,9 +51,6 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 
-// Import TaskModule
-import { TaskModule } from '../../pages/task/task.module';
-
 @NgModule({
   imports: [
     CommonModule,
@@ -75,8 +72,7 @@ import { TaskModule } from '../../pages/task/task.module';
     MatProgressBarModule,
     MatCheckboxModule,
     DragDropModule,
-    SharedModule,
-    TaskModule // Add TaskModule here
+    SharedModule
   ],
   declarations: [
     DashboardComponent,

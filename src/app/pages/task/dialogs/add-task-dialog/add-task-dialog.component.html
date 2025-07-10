@@ -18,10 +18,7 @@
       <mat-label>Creator</mat-label>
       <mat-select [(ngModel)]="taskData.creator" name="creator" required>
         <mat-option *ngFor="let user of availableUsers" [value]="user">
-          <div class="user-option">
-            <img [src]="user.avatar" [alt]="user.name" class="user-avatar">
-            <span>{{ user.name }}</span>
-          </div>
+          <span>{{ user.name }}</span>
         </mat-option>
       </mat-select>
     </mat-form-field>
@@ -31,10 +28,7 @@
       <mat-label>Assignees</mat-label>
       <mat-select [(ngModel)]="taskData.assignees" name="assignees" multiple>
         <mat-option *ngFor="let user of availableUsers" [value]="user">
-          <div class="user-option">
-            <img [src]="user.avatar" [alt]="user.name" class="user-avatar">
-            <span>{{ user.name }}</span>
-          </div>
+          <span>{{ user.name }}</span>
         </mat-option>
       </mat-select>
     </mat-form-field>

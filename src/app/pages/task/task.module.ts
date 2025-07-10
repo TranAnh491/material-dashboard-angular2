@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 
 // Material Modules
@@ -20,6 +20,9 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatListModule } from '@angular/material/list';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDividerModule } from '@angular/material/divider';
 
 // Components
 import { TaskBoardComponent } from './task-board/task-board.component';
@@ -40,6 +43,7 @@ import { AddTaskDialogComponent } from './dialogs/add-task-dialog/add-task-dialo
       { path: '', component: TaskBoardComponent }
     ]),
     FormsModule,
+    ReactiveFormsModule,
     DragDropModule,
     MatButtonModule,
     MatIconModule,
@@ -55,7 +59,10 @@ import { AddTaskDialogComponent } from './dialogs/add-task-dialog/add-task-dialo
     MatDialogModule,
     MatListModule,
     MatSelectModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    MatMenuModule,
+    MatProgressBarModule,
+    MatDividerModule
   ]
 })
 export class TaskModule { } 
