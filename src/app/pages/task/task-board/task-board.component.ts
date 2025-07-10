@@ -162,4 +162,9 @@ export class TaskBoardComponent implements OnInit {
   filterTasks() {
     // The filtering is handled in getTasksByStatus
   }
+
+  exportToExcel() {
+    console.log('Starting Excel export...');
+    this.taskService.exportCompletedTasksToExcel();
+  }
 } 
