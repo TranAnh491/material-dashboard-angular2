@@ -1,0 +1,235 @@
+<div class="temperature-test-container">
+  <!-- Employee Information Form -->
+  <div class="container" *ngIf="currentView === 'employee-form'">
+    <div class="header">
+      <h1>BÀI KIỂM TRA QUY TRÌNH</h1>
+      <h2>GHI NHẬN NHIỆT ĐỘ, ĐỘ ẨM VÀ LƯU TRỮ SẢN PHẨM</h2>
+    </div>
+
+    <div class="employee-form-section">
+      <h3>📝 Thông tin người làm bài:</h3>
+      <form class="employee-form">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Mã số nhân viên</mat-label>
+          <input matInput [(ngModel)]="employeeInfo.employeeId" name="employeeId" required 
+                 placeholder="Nhập mã số nhân viên">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Họ và tên</mat-label>
+          <input matInput [(ngModel)]="employeeInfo.employeeName" name="employeeName" required 
+                 placeholder="Nhập họ và tên đầy đủ">
+        </mat-form-field>
+
+        <div class="form-actions">
+          <button mat-raised-button color="primary" 
+                  (click)="startPreview()" 
+                  [disabled]="!isEmployeeFormValid()">
+            <mat-icon>visibility</mat-icon>
+            Xem thông tin bài kiểm tra
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Preview Section -->
+  <div class="container" *ngIf="currentView === 'preview'">
+    <div class="header">
+      <h1>{{ testData.title.split(' ')[0] + ' ' + testData.title.split(' ')[1] + ' ' + testData.title.split(' ')[2] }}</h1>
+      <h2>{{ testData.title.split(' ').slice(3).join(' ') }}</h2>
+    </div>
+
+    <div class="employee-info-display">
+      <p><strong>Người làm bài:</strong> {{ employeeInfo.employeeName }} ({{ employeeInfo.employeeId }})</p>
+    </div>
+
+    <div class="company-info">
+      <p><strong>Mã tài liệu:</strong> {{ testData.documentCode }}</p>
+      <p><strong>Ngày ban hành:</strong> {{ testData.issueDate }}</p>
+    </div>
+
+    <div class="test-info">
+      <h3>📋 Thông tin bài kiểm tra:</h3>
+      <ul>
+        <li><strong>Tổng số câu hỏi:</strong> {{ testData.totalQuestions }} câu</li>
+        <li><strong>Thời gian làm bài:</strong> {{ testData.timeLimit }} phút</li>
+        <li><strong>Điểm đạt:</strong> {{ testData.passingScore }}% ({{ (testData.totalQuestions * testData.passingScore / 100) | number:'1.0-0' }}/{{ testData.totalQuestions }} câu đúng)</li>
+        <li><strong>Dạng câu hỏi:</strong> Trắc nghiệm, Đúng/Sai, Điền từ</li>
+      </ul>
+    </div>
+
+    <div class="action-section">
+      <button mat-raised-button color="primary" (click)="startTest()" class="start-test-btn">
+        <mat-icon>play_arrow</mat-icon>
+        Bắt đầu làm bài
+      </button>
+      <button mat-stroked-button (click)="currentView = 'employee-form'" class="back-btn">
+        <mat-icon>arrow_back</mat-icon>
+        Quay lại
+      </button>
+    </div>
+
+    <div class="download-section">
+      <h3>📥 Tải xuống tài liệu tham khảo:</h3>
+      <button mat-raised-button color="accent" class="download-btn" (click)="downloadExcel()" [disabled]="isLoading">
+        <mat-icon>file_download</mat-icon>
+        📊 Tải xuống Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Test Interface -->
+  <div class="container test-container" *ngIf="currentView === 'test'">
+    <div class="test-header">
+      <div class="test-progress">
+        <h2>{{ getCurrentSection()?.title }}</h2>
+        <p>Câu {{ getQuestionNumber() }}/{{ testData.totalQuestions }}</p>
+        <mat-progress-bar mode="determinate" [value]="(getQuestionNumber() / testData.totalQuestions) * 100"></mat-progress-bar>
+      </div>
+      <div class="employee-info">
+        <p><strong>{{ employeeInfo.employeeName }}</strong> ({{ employeeInfo.employeeId }})</p>
+      </div>
+    </div>
+
+
+
+    <div class="question-section" *ngIf="getCurrentQuestion() as question">
+      <div class="question-type-badge">
+        {{ question.type === 'multiple-choice' ? 'TRẮC NGHIỆM' : question.type === 'true-false' ? 'ĐÚNG/SAI' : 'ĐIỀN TỪ' }}
+      </div>
+      
+      <div class="question-text">
+        <h3>Câu {{ getQuestionNumber() }}: {{ question.question }}</h3>
+      </div>
+
+      <!-- Multiple Choice Questions -->
+      <div class="answer-options" *ngIf="question.type === 'multiple-choice'">
+        <mat-radio-group [value]="getSelectedAnswer()" (change)="selectAnswer($event.value)">
+          <mat-radio-button 
+            *ngFor="let option of question.options; let i = index" 
+            [value]="getOptionLabel(i)"
+            class="answer-option">
+            {{ getOptionLabel(i) }}. {{ option }}
+          </mat-radio-button>
+        </mat-radio-group>
+      </div>
+
+      <!-- True/False Questions -->
+      <div class="answer-options" *ngIf="question.type === 'true-false'">
+        <mat-radio-group [value]="getSelectedAnswer()" (change)="selectAnswer($event.value)">
+          <mat-radio-button value="true" class="answer-option">
+            ✓ ĐÚNG
+          </mat-radio-button>
+          <mat-radio-button value="false" class="answer-option">
+            ✗ SAI
+          </mat-radio-button>
+        </mat-radio-group>
+      </div>
+
+      <!-- Fill in the blank Questions -->
+      <div class="answer-options" *ngIf="question.type === 'fill-blank'">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Điền câu trả lời</mat-label>
+          <textarea matInput [value]="getSelectedAnswer() || ''" 
+                    (input)="selectAnswer($any($event.target).value)"
+                    rows="3" 
+                    placeholder="Nhập câu trả lời của bạn..."></textarea>
+        </mat-form-field>
+      </div>
+    </div>
+
+
+
+    <div class="test-navigation">
+      <button mat-stroked-button 
+              (click)="previousQuestion()" 
+              [disabled]="currentSectionIndex === 0 && currentQuestionIndex === 0">
+        <mat-icon>arrow_back</mat-icon>
+        Câu trước
+      </button>
+      
+      <button mat-raised-button color="primary" 
+              (click)="nextQuestion()" 
+              [disabled]="!canGoNext()">
+        <mat-icon>{{ isLastQuestion() ? 'check' : 'arrow_forward' }}</mat-icon>
+        {{ isLastQuestion() ? 'Hoàn thành' : 'Câu tiếp theo' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Result Display -->
+  <div class="container result-container" *ngIf="currentView === 'result' && testResult">
+    <div class="result-header">
+      <h1>KẾT QUẢ BÀI KIỂM TRA</h1>
+      <div class="result-badge" [class.passed]="testResult.passed" [class.failed]="!testResult.passed">
+        {{ testResult.passed ? 'ĐẠT' : 'KHÔNG ĐẠT' }}
+      </div>
+    </div>
+
+    <div class="result-summary">
+      <div class="result-info">
+        <p><strong>Người làm bài:</strong> {{ testResult.employeeInfo.employeeName }}</p>
+        <p><strong>Mã nhân viên:</strong> {{ testResult.employeeInfo.employeeId }}</p>
+        <p><strong>Thời gian hoàn thành:</strong> {{ formatTime(testResult.completedAt) }} - {{ formatDate(testResult.completedAt) }}</p>
+      </div>
+
+      <div class="score-display">
+        <div class="score-circle" [class.passed]="testResult.passed" [class.failed]="!testResult.passed">
+          <span class="score-percentage">{{ testResult.percentage }}%</span>
+          <span class="score-fraction">{{ testResult.score }}/{{ testResult.testData.totalQuestions }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-actions">
+      <button mat-raised-button color="primary" (click)="downloadResultFile()">
+        <mat-icon>file_download</mat-icon>
+        📄 Tải kết quả (Word)
+      </button>
+      <button mat-stroked-button (click)="restartTest()">
+        <mat-icon>refresh</mat-icon>
+        Làm lại
+      </button>
+    </div>
+
+    <div class="detailed-results">
+      <h3>Chi tiết câu trả lời:</h3>
+      <div class="section-results" *ngFor="let section of testData.sections; let sectionIndex = index">
+        <h4>{{ section.title }}</h4>
+        <div class="question-results">
+          <div *ngFor="let question of section.questions; let questionIndex = index" 
+               class="question-result"
+               [class.correct]="getAnswerResult(sectionIndex, questionIndex)?.isCorrect"
+               [class.incorrect]="!getAnswerResult(sectionIndex, questionIndex)?.isCorrect">
+            <div class="question-number">Câu {{ getDetailedQuestionNumber(sectionIndex, questionIndex) }}</div>
+            <div class="question-status">
+              <mat-icon>{{ getAnswerResult(sectionIndex, questionIndex)?.isCorrect ? 'check_circle' : 'cancel' }}</mat-icon>
+            </div>
+            <div class="question-details">
+              <p class="question-text">{{ question.question }}</p>
+              <p class="selected-answer">Đáp án chọn: {{ getAnswerResult(sectionIndex, questionIndex)?.selectedAnswer || 'Không trả lời' }}</p>
+              <p class="correct-answer">Đáp án đúng: {{ question.correctAnswer }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" [class.show]="isLoading">
+    <div class="spinner-container">
+      <mat-spinner></mat-spinner>
+      <p>{{ currentView === 'result' ? 'Đang xử lý kết quả...' : 'Đang tạo file...' }}</p>
+    </div>
+  </div>
+
+  <!-- Success Notification -->
+  <div class="notification" [class.show]="showNotification">
+    <div class="notification-content">
+      <mat-icon class="notification-icon">check_circle</mat-icon>
+      <span class="notification-text">File đã được tải xuống thành công!</span>
+    </div>
+  </div>
+</div> 

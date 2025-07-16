@@ -7,6 +7,7 @@ import { GoogleSheetService } from '../../services/google-sheet.service';
 import { AuditService, AuditData, PhaseScore } from '../../services/audit.service';
 import { Subscription, Subject, takeUntil } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 
 interface DocumentFile {
   title: string;
@@ -186,7 +187,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     private sanitizer: DomSanitizer, 
     private googleSheetService: GoogleSheetService, 
     private http: HttpClient,
-    public auditService: AuditService
+    public auditService: AuditService,
+    private router: Router
   ) { }
 
   async ngOnInit(): Promise<void> {
@@ -1782,5 +1784,9 @@ Check console for detailed info.`);
 
   closeSafetyLayout(): void {
     this.showSafetyLayout = false;
+  }
+
+  openTemperatureKnowledgeTest(): void {
+    this.router.navigate(['/temperature-knowledge-test']);
   }
 }

@@ -34,6 +34,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatRadioModule } from '@angular/material/radio';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -50,6 +51,7 @@ import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
+import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
 
 @NgModule({
   imports: [
@@ -71,6 +73,7 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
     MatProgressSpinnerModule,
     MatProgressBarModule,
     MatCheckboxModule,
+    MatRadioModule,
     DragDropModule,
     SharedModule
   ],
@@ -95,7 +98,8 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
     DocumentsComponent,
     Layout3dComponent,
     ShelfLifeComponent,
-    UtilizationComponent
+    UtilizationComponent,
+    TemperatureKnowledgeTestComponent
   ],
   providers: [
     GoogleSheetService

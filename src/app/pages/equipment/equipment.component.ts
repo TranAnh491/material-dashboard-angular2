@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 interface FlowchartStep {
   vi: string;
@@ -17,6 +18,8 @@ export class EquipmentComponent implements OnInit {
 
   isEnglish = false;
   selectedStep: FlowchartStep | null = null;
+  showWorkInstruction = false;
+  showTest = false;
 
   steps: FlowchartStep[] = [
     { vi: 'Nhận nguyên liệu', en: 'Receive Materials', icon: 'call_received', type: 'material', imageUrl: 'assets/img/instruction_step_1.png' },
@@ -29,7 +32,7 @@ export class EquipmentComponent implements OnInit {
     { vi: 'Soạn và Giao Thành phẩm', en: 'Prepare and Deliver Finished Goods', icon: 'move_to_inbox', type: 'product', imageUrl: 'assets/img/instruction_step_8.png' }
   ];
 
-  constructor() { }
+  constructor(private router: Router) { }
 
   ngOnInit(): void {
     if (this.steps.length > 0) {
@@ -43,5 +46,28 @@ export class EquipmentComponent implements OnInit {
 
   selectStep(step: FlowchartStep) {
     this.selectedStep = step;
+  }
+
+  openTemperatureKnowledgeTest() {
+    this.router.navigate(['/temperature-knowledge-test']);
+  }
+
+  toggleWorkInstruction() {
+    this.showWorkInstruction = !this.showWorkInstruction;
+    if (this.showWorkInstruction) {
+      this.showTest = false; // Đóng test box khi mở work instruction
+    }
+  }
+
+  toggleTest() {
+    this.showTest = !this.showTest;
+    if (this.showTest) {
+      this.showWorkInstruction = false; // Đóng work instruction khi mở test
+    }
+  }
+
+  closeAll() {
+    this.showWorkInstruction = false;
+    this.showTest = false;
   }
 } 

@@ -6,7 +6,8 @@
 .instruction-container {
   display: flex;
   gap: 20px;
-  height: calc(100vh - 200px);
+  padding: 20px;
+  height: 500px;
 }
 
 /* Left Column: Step List */
@@ -89,4 +90,238 @@
 .no-image-placeholder i {
   font-size: 80px;
   color: #ccc;
+}
+
+/* Menu Cards Layout */
+.menu-cards-layout {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 30px;
+  justify-content: flex-start;
+}
+
+.menu-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 300px;
+  border: 2px solid transparent;
+}
+
+.menu-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+  border-color: #667eea;
+}
+
+.menu-card-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.menu-card-icon.test {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+}
+
+.menu-card-icon i {
+  font-size: 28px;
+}
+
+.menu-card-content {
+  flex: 1;
+}
+
+.menu-card-content h3 {
+  margin: 0 0 5px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.menu-card-content p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.menu-card-arrow {
+  color: #999;
+  transition: transform 0.3s ease;
+}
+
+.menu-card-arrow i {
+  font-size: 24px;
+}
+
+/* Expanded Content */
+.expanded-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin-bottom: 20px;
+  overflow: hidden;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.content-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.content-header h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.content-header i {
+  margin-right: 10px;
+  font-size: 1.6rem;
+}
+
+.close-btn {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: scale(1.1);
+}
+
+.test-content-expanded {
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Test Card Styles */
+.modern-checklist-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.modern-checklist-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.modern-checklist-card.ready {
+  border-color: #4CAF50;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+}
+
+.checklist-icon {
+  background: rgba(255,255,255,0.2);
+  padding: 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checklist-icon i {
+  font-size: 24px;
+}
+
+.status-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.card-content {
+  padding: 24px;
+}
+
+.checklist-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.checklist-description {
+  color: #666;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.card-actions {
+  padding: 0 24px 24px;
+}
+
+.action-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.action-btn i {
+  font-size: 20px;
 } 

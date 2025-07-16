@@ -5,26 +5,110 @@
         <i class="material-icons">language</i> {{ isEnglish ? 'Tiếng Việt' : 'English' }}
       </button>
     </div>
-    <div class="instruction-container">
-      <!-- Left Column: Step List -->
-      <div class="step-list">
-        <div *ngFor="let step of steps" 
-             class="step-item" 
-             [ngClass]="{'active': step === selectedStep, 'material': step.type === 'material', 'product': step.type === 'product'}" 
-             (click)="selectStep(step)">
-          <i class="material-icons item-icon">{{ step.icon }}</i>
-          <span class="step-text">{{ isEnglish ? step.en : step.vi }}</span>
+
+    <!-- Two Menu Cards Layout -->
+    <div class="menu-cards-layout">
+      
+      <!-- Menu Card 1: Work Instruction -->
+      <div class="menu-card" (click)="toggleWorkInstruction()">
+        <div class="menu-card-icon">
+          <i class="material-icons">integration_instructions</i>
+        </div>
+        <div class="menu-card-content">
+          <h3>Work Instruction</h3>
+          <p>Hướng dẫn các bước công việc</p>
+        </div>
+        <div class="menu-card-arrow">
+          <i class="material-icons">{{ showWorkInstruction ? 'expand_less' : 'expand_more' }}</i>
         </div>
       </div>
-      <!-- Right Column: Image Viewer -->
-      <div class="image-viewer">
-        <div *ngIf="selectedStep?.imageUrl" class="image-container">
-          <img [src]="selectedStep.imageUrl" [alt]="isEnglish ? selectedStep.en : selectedStep.vi" (error)="selectedStep.imageUrl = ''">
+
+      <!-- Menu Card 2: Test -->
+      <div class="menu-card" (click)="toggleTest()">
+        <div class="menu-card-icon test">
+          <i class="material-icons">quiz</i>
         </div>
-        <div *ngIf="!selectedStep?.imageUrl" class="no-image-placeholder">
-          <i class="material-icons">image</i>
-          <h3>{{ isEnglish ? 'No Image' : 'Chưa có hình ảnh' }}</h3>
-          <p>{{ isEnglish ? 'Please add an image for this step.' : 'Vui lòng thêm hình ảnh cho bước này.' }}</p>
+        <div class="menu-card-content">
+          <h3>Test</h3>
+          <p>Kiểm tra kiến thức</p>
+        </div>
+        <div class="menu-card-arrow">
+          <i class="material-icons">{{ showTest ? 'expand_less' : 'expand_more' }}</i>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Work Instruction Content (Expanded) -->
+    <div *ngIf="showWorkInstruction" class="expanded-content work-instruction-content">
+      <div class="content-header">
+        <h2>
+          <i class="material-icons">integration_instructions</i>
+          Work Instruction
+        </h2>
+        <button class="close-btn" (click)="closeAll()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="instruction-container">
+        <!-- Left Column: Step List -->
+        <div class="step-list">
+          <div *ngFor="let step of steps" 
+               class="step-item" 
+               [ngClass]="{'active': step === selectedStep, 'material': step.type === 'material', 'product': step.type === 'product'}" 
+               (click)="selectStep(step)">
+            <i class="material-icons item-icon">{{ step.icon }}</i>
+            <span class="step-text">{{ isEnglish ? step.en : step.vi }}</span>
+          </div>
+        </div>
+        <!-- Right Column: Image Viewer -->
+        <div class="image-viewer">
+          <div *ngIf="selectedStep?.imageUrl" class="image-container">
+            <img [src]="selectedStep.imageUrl" [alt]="isEnglish ? selectedStep.en : selectedStep.vi" (error)="selectedStep.imageUrl = ''">
+          </div>
+          <div *ngIf="!selectedStep?.imageUrl" class="no-image-placeholder">
+            <i class="material-icons">image</i>
+            <h3>{{ isEnglish ? 'No Image' : 'Chưa có hình ảnh' }}</h3>
+            <p>{{ isEnglish ? 'Please add an image for this step.' : 'Vui lòng thêm hình ảnh cho bước này.' }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Content (Expanded) -->
+    <div *ngIf="showTest" class="expanded-content test-content">
+      <div class="content-header">
+        <h2>
+          <i class="material-icons">quiz</i>
+          Test
+        </h2>
+        <button class="close-btn" (click)="closeAll()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="test-content-expanded">
+        <!-- Temperature Knowledge Test Card -->
+        <div class="modern-checklist-card ready">
+          <div class="card-header">
+            <div class="checklist-icon">
+              <i class="material-icons">quiz</i>
+            </div>
+            <div class="status-badge ready">
+              Knowledge Test
+            </div>
+          </div>
+
+          <div class="card-content">
+            <h3 class="checklist-title">Kiểm tra kiến thức</h3>
+            <p class="checklist-description">Hướng dẫn ghi, lưu trữ và xử lý về nhiệt độ độ ẩm</p>
+          </div>
+
+          <div class="card-actions">
+            <button class="action-btn primary" (click)="openTemperatureKnowledgeTest()">
+              <i class="material-icons">school</i>
+              Làm bài kiểm tra
+            </button>
+          </div>
         </div>
       </div>
     </div>
