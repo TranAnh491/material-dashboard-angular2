@@ -1,4 +1,13 @@
 <div class="materials-lifecycle">
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="header-title">
+      <i class="material-icons">hourglass_empty</i>
+      Materials Lifecycle Management
+    </h1>
+    <p class="header-subtitle">Import and manage materials lifecycle data from Excel files</p>
+  </div>
+
   <!-- Statistics Cards -->
   <div class="stats-cards">
     <div class="stat-card total">
@@ -7,194 +16,150 @@
       </div>
       <div class="stat-content">
         <div class="stat-number">{{ totalMaterials | number }}</div>
-        <div class="stat-label">Total P/N</div>
+        <div class="stat-label">Total Materials</div>
       </div>
     </div>
     
     <div class="stat-card stock">
       <div class="stat-icon">
-        <i class="material-icons">schedule</i>
+        <i class="material-icons">archive</i>
       </div>
       <div class="stat-content">
-        <div class="stat-number">{{ averageAge | number:'1.1-1' }}</div>
-        <div class="stat-label">Avg Month</div>
+        <div class="stat-number">{{ totalStock | number }}</div>
+        <div class="stat-label">Total Stock</div>
       </div>
     </div>
     
-    <div class="stat-card age">
+    <div class="stat-card shelf-life">
+      <div class="stat-icon">
+        <i class="material-icons">schedule</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ avgShelfLife | number:'1.1-1' }}</div>
+        <div class="stat-label">Avg Shelf Life</div>
+      </div>
+    </div>
+    
+    <div class="stat-card aging">
       <div class="stat-icon">
         <i class="material-icons">event</i>
       </div>
       <div class="stat-content">
-        <div class="stat-number">{{ materialsWithExpiryDate | number }}</div>
-        <div class="stat-label">P/N have Exp Date</div>
-      </div>
-    </div>
-    
-    <div class="stat-card critical">
-      <div class="stat-icon">
-        <i class="material-icons">warning</i>
-      </div>
-      <div class="stat-content">
-        <div class="stat-number">{{ criticalItems | number }}</div>
-        <div class="stat-label">Critical Items</div>
+        <div class="stat-number">{{ avgAging | number:'1.1-1' }}</div>
+        <div class="stat-label">Avg Aging</div>
       </div>
     </div>
   </div>
 
   <!-- Controls Section -->
   <div class="controls-section">
-    <div class="controls-row">
-      <div class="search-group">
-        <input type="text" 
-               class="form-control" 
-               placeholder="Search material code, description..."
-               [(ngModel)]="searchTerm"
-               (input)="onSearch()">
-      </div>
+    <div class="controls-left">
+      <!-- File Import -->
+      <input #fileInput 
+             type="file" 
+             accept=".xlsx,.xls,.csv" 
+             (change)="onFileSelect($event)" 
+             style="display: none;">
       
-      <div class="button-group">
-        <button class="btn btn-primary" 
-                (click)="onRefresh()" 
-                [disabled]="isLoading">
-          <i class="material-icons">refresh</i>
-          {{ isLoading ? 'Loading...' : 'Refresh Data' }}
-        </button>
-        
-        <button class="btn btn-success" 
-                (click)="syncToFirebase()" 
-                [disabled]="isLoading">
-          <i class="material-icons">cloud_upload</i>
-          Sync Firebase
-        </button>
-      </div>
+      <button class="import-btn" 
+              (click)="triggerFileInput()" 
+              [disabled]="isLoading">
+        <i class="material-icons">upload_file</i>
+        Import Excel File
+      </button>
       
-      <div class="last-update" *ngIf="lastSyncTime">
-        <i class="material-icons">schedule</i>
-        Last updated: {{ formatDate(lastSyncTime) }}
+      <!-- Search -->
+      <div class="search-container">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Search materials...</mat-label>
+          <input matInput 
+                 [(ngModel)]="searchTerm" 
+                 (input)="applyFilter()" 
+                 placeholder="Material code, name, PO...">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
       </div>
+    </div>
+
+    <div class="controls-right">
+      <!-- Action Buttons -->
+      <button class="action-btn export" 
+              (click)="exportToExcel()" 
+              [disabled]="materialsData.length === 0">
+        <i class="material-icons">download</i>
+        Export Excel
+      </button>
+      
+      <button class="action-btn clear" 
+              (click)="clearData()" 
+              [disabled]="materialsData.length === 0">
+        <i class="material-icons">clear_all</i>
+        Clear Data
+      </button>
     </div>
   </div>
 
-  <!-- Materials Table Section -->
-  <div class="materials-table-section">
+  <!-- Data Table Section -->
+  <div class="table-section">
     <div class="table-header">
-      <h4 class="table-title">Materials List ({{ filteredMaterials.length }})</h4>
+      <h4 class="table-title">Materials Data ({{ filteredMaterials.length }})</h4>
     </div>
     
-    <div class="table-body">
-      <!-- Loading State -->
-      <div class="loading-state" *ngIf="isLoading">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Loading data from Google Sheets...</div>
-      </div>
-      
-      <!-- Empty State -->
-      <div class="empty-state" *ngIf="!isLoading && filteredMaterials.length === 0">
-        <i class="material-icons">inventory</i>
-        <h5>No Data Available</h5>
-        <p>Click "Refresh Data" to load data from Google Sheets</p>
-      </div>
-      
-      <!-- Materials Table -->
-      <div class="table-responsive" *ngIf="!isLoading && filteredMaterials.length > 0">
-        <table class="materials-table table table-hover">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th (click)="onSort('materialCode')" class="sortable">
-                Material Code
-                <i class="material-icons" *ngIf="sortBy === 'materialCode'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th (click)="onSort('description')" class="sortable">
-                Description
-                <i class="material-icons" *ngIf="sortBy === 'description'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th (click)="onSort('stockQuantity')" class="sortable text-center">
-                Stock
-                <i class="material-icons" *ngIf="sortBy === 'stockQuantity'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th (click)="onSort('ageInMonths')" class="sortable text-center">
-                Age (mo)
-                <i class="material-icons" *ngIf="sortBy === 'ageInMonths'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th (click)="onSort('expiryDate')" class="sortable text-center">
-                Expiry Date
-                <i class="material-icons" *ngIf="sortBy === 'expiryDate'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th (click)="onSort('shelfLifeMonths')" class="sortable text-center">
-                Shelf Life
-                <i class="material-icons" *ngIf="sortBy === 'shelfLifeMonths'">
-                  {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </i>
-              </th>
-              <th class="text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let material of filteredMaterials; let i = index">
-              <td class="text-center">{{ i + 1 }}</td>
-              <td class="material-code">
-                <div class="code">{{ material.materialCode }}</div>
-                <div class="po-number">PO: {{ material.poNumber }}</div>
-              </td>
-              <td class="description">
-                <span [title]="material.description">
-                  {{ material.description.length > 50 ? 
-                     (material.description | slice:0:50) + '...' : 
-                     material.description }}
-                </span>
-              </td>
-              <td class="text-center numeric">
-                {{ material.stockQuantity | number }}
-              </td>
-              <td class="text-center numeric">
-                {{ material.ageInMonths | number:'1.1-1' }}
-              </td>
-              <td class="text-center">
-                {{ formatExpiryDate(material) }}
-              </td>
-              <td class="text-center">
-                {{ formatShelfLife(material) }}
-              </td>
-              <td class="text-center">
-                <!-- Text only display for expiry date materials -->
-                <div *ngIf="hasExpiryDate(material)" 
-                     class="status-display text-only"
-                     [ngClass]="getMaterialStatus(material)">
-                  {{ getStatusDisplay(material) }}
-                </div>
-                
-                <!-- Progress bar display for shelf life only materials -->
-                <div *ngIf="!hasExpiryDate(material)" 
-                     class="status-display with-progress">
-                  <div class="progress-container">
-                    <div class="progress-fill" 
-                         [ngClass]="getMaterialStatus(material)"
-                         [style.width.%]="getProgressPercentage(material)">
-                      <span class="progress-text">{{ getProgressPercentage(material) | number:'1.0-0' }}%</span>
-                    </div>
-                  </div>
-                  <div class="status-text" 
-                       [ngClass]="getMaterialStatus(material)">
-                    {{ getStatusDisplay(material) }}
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Processing Excel file...</div>
+    </div>
+    
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="!isLoading && materialsData.length === 0">
+      <i class="material-icons">hourglass_empty</i>
+      <h5>No Data Available</h5>
+      <p>Click "Import Excel File" to load materials lifecycle data</p>
+      <button class="import-btn-large" (click)="triggerFileInput()">
+        <i class="material-icons">upload_file</i>
+        Import Excel File
+      </button>
+    </div>
+    
+    <!-- Materials Table -->
+    <div class="table-responsive" *ngIf="!isLoading && materialsData.length > 0">
+      <table class="materials-table">
+        <thead>
+          <tr>
+            <th *ngFor="let column of displayedColumns" 
+                class="sortable-header" 
+                (click)="sortData(column)">
+              {{ columnLabels[column] }}
+              <i class="material-icons sort-icon" 
+                 *ngIf="sortBy === column">
+                {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+              </i>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let material of filteredMaterials; trackBy: trackByMaterialCode" 
+              class="table-row">
+            <td>{{ material.no }}</td>
+            <td class="material-code">{{ material.materialCode }}</td>
+            <td class="material-name">{{ material.materialName }}</td>
+            <td>{{ material.unit }}</td>
+            <td class="po-number">{{ material.poNumber }}</td>
+            <td class="date">{{ material.expiryDate }}</td>
+            <td class="shelf-life">{{ material.shelfLife }}</td>
+            <td class="warehouse-code">{{ material.warehouseCode }}</td>
+            <td class="date">{{ material.importDate }}</td>
+            <td class="aging" [class.aging-high]="material.aging > 12">
+              {{ material.aging }}
+            </td>
+            <td class="stock" [class.stock-low]="material.remainingStock < 10">
+              {{ material.remainingStock | number }}
+            </td>
+            <td class="date">{{ material.dateRemain }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>

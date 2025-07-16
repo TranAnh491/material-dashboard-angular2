@@ -1,368 +1,255 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Observable, Subscription } from 'rxjs';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { GoogleSheetService, MaterialsLifecycleItem } from '../../services/google-sheet.service';
+import * as XLSX from 'xlsx';
+
+export interface MaterialLifecycleData {
+  no: number;                    // 1. No
+  materialCode: string;          // 2. Mã vật tư
+  materialName: string;          // 3. Tên vật tư
+  unit: string;                  // 4. Đvt
+  poNumber: string;              // 5. Số Po
+  expiryDate: string;            // 6. Hạn sử dụng
+  shelfLife: number;             // 7. Shelf life
+  warehouseCode: string;         // 8. Mã Kho
+  importDate: string;            // 9. Ngày nhập kho
+  aging: number;                 // 10. Aging
+  remainingStock: number;        // 11. Tồn cuối kỳ
+  dateRemain: string;            // 12. Date remain
+}
 
 @Component({
   selector: 'app-shelf-life',
   templateUrl: './shelf-life.component.html',
   styleUrls: ['./shelf-life.component.scss']
 })
-export class ShelfLifeComponent implements OnInit, OnDestroy {
+export class ShelfLifeComponent implements OnInit {
+  @ViewChild('fileInput') fileInput!: ElementRef;
   
   // Data properties
-  materialsData: MaterialsLifecycleItem[] = [];
-  filteredMaterials: MaterialsLifecycleItem[] = [];
+  materialsData: MaterialLifecycleData[] = [];
+  filteredMaterials: MaterialLifecycleData[] = [];
   
-  // Loading and status
+  // Loading state
   isLoading = false;
-  lastSyncTime: Date | null = null;
   
   // Search and filter
   searchTerm = '';
-  sortBy = 'materialCode';
+  sortBy = 'no';
   sortDirection: 'asc' | 'desc' = 'asc';
   
-  // Statistics will be calculated via getters
+  // Table columns configuration
+  displayedColumns = [
+    'no', 'materialCode', 'materialName', 'unit', 'poNumber', 
+    'expiryDate', 'shelfLife', 'warehouseCode', 'importDate', 
+    'aging', 'remainingStock', 'dateRemain'
+  ];
   
-  private subscriptions: Subscription[] = [];
+  columnLabels = {
+    no: 'No',
+    materialCode: 'Mã vật tư',
+    materialName: 'Tên vật tư',
+    unit: 'Đvt',
+    poNumber: 'Số Po',
+    expiryDate: 'Hạn sử dụng',
+    shelfLife: 'Shelf life',
+    warehouseCode: 'Mã Kho',
+    importDate: 'Ngày nhập kho',
+    aging: 'Aging',
+    remainingStock: 'Tồn cuối kỳ',
+    dateRemain: 'Date remain'
+  };
 
-  constructor(
-    private googleSheetService: GoogleSheetService,
-    private snackBar: MatSnackBar
-  ) {}
+  constructor(private snackBar: MatSnackBar) {}
 
   ngOnInit(): void {
-    this.loadMaterialsData();
+    // Initialize component
   }
 
-  ngOnDestroy(): void {
-    this.subscriptions.forEach(sub => sub.unsubscribe());
-  }
-
-  // Load materials data from Google Sheets
-  async loadMaterialsData(): Promise<void> {
-    try {
-      this.isLoading = true;
-      console.log('🔄 Loading Materials Lifecycle data...');
-      
-      const subscription = this.googleSheetService.fetchMaterialsLifecycleData().subscribe({
-        next: (data) => {
-          this.materialsData = data;
-          this.filteredMaterials = [...data];
-          this.lastSyncTime = new Date();
-          
-      this.snackBar.open(
-            `Loaded ${data.length} materials successfully`,
-        'Close',
-            {
-              duration: 3000,
-              panelClass: ['success-snackbar']
-            }
-          );
-        },
-        error: (error) => {
-          console.error('❌ Error loading materials:', error);
-          this.snackBar.open(
-            'Error loading materials data. Please try again.',
-            'Close',
-            {
-              duration: 5000,
-              panelClass: ['error-snackbar']
-            }
-          );
-        },
-        complete: () => {
-          this.isLoading = false;
-        }
-      });
-      
-      this.subscriptions.push(subscription);
-      
-    } catch (error) {
-      console.error('❌ Error in loadMaterialsData:', error);
-      this.isLoading = false;
+  // File import methods
+  onFileSelect(event: any): void {
+    const file = event.target.files[0];
+    if (file) {
+      this.importExcelFile(file);
     }
   }
 
-  // Apply search and sort filters
-  applyFilters(): void {
-    let filtered = [...this.materialsData];
+  triggerFileInput(): void {
+    this.fileInput.nativeElement.click();
+  }
 
-    // Apply search filter
-    if (this.searchTerm.trim()) {
-      const term = this.searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(material =>
-        material.materialCode.toLowerCase().includes(term) ||
-        material.description.toLowerCase().includes(term) ||
-        material.poNumber.toLowerCase().includes(term)
-      );
-    }
+  importExcelFile(file: File): void {
+    this.isLoading = true;
     
-    // Apply sorting
-    filtered.sort((a, b) => {
-      let aValue: any, bValue: any;
-      
-      switch (this.sortBy) {
-        case 'materialCode':
-          aValue = a.materialCode;
-          bValue = b.materialCode;
-          break;
-        case 'description':
-          aValue = a.description;
-          bValue = b.description;
-          break;
-        case 'stockQuantity':
-          aValue = a.stockQuantity;
-          bValue = b.stockQuantity;
-          break;
-        case 'ageInMonths':
-          aValue = a.ageInMonths;
-          bValue = b.ageInMonths;
-          break;
-        case 'expiryDate':
-          // Sắp xếp theo hạn sử dụng
-          aValue = a.expiryDate ? a.expiryDate.getTime() : 0;
-          bValue = b.expiryDate ? b.expiryDate.getTime() : 0;
-          break;
-        case 'shelfLifeMonths':
-          // Sắp xếp theo shelf life (tháng)
-          aValue = a.shelfLifeMonths;
-          bValue = b.shelfLifeMonths;
-          break;
-
-        default:
-          aValue = a[this.sortBy];
-          bValue = b[this.sortBy];
-      }
-      
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-      
-      if (aValue < bValue) return this.sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return this.sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    this.filteredMaterials = filtered;
-  }
-
-  // Statistics are now calculated automatically via getters
-
-  // Event handlers
-  onSearch(): void {
-    this.applyFilters();
-  }
-
-  onSort(column: string): void {
-    if (this.sortBy === column) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortBy = column;
-      this.sortDirection = 'asc';
-    }
-    this.applyFilters();
-  }
-
-  onRefresh(): void {
-    this.loadMaterialsData();
-  }
-
-  // Sync data to Firebase (if needed in the future)
-  async syncToFirebase(): Promise<void> {
-    try {
-      this.isLoading = true;
-      const result = await this.googleSheetService.syncMaterialsLifecycleToFirebase();
-      
-      if (result.success) {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get first worksheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        this.processExcelData(jsonData);
+        
         this.snackBar.open(
-          `Sync successful: ${result.data?.totalProcessed || 0} materials synced to Firebase`,
+          `Imported ${this.materialsData.length} materials successfully`,
           'Close',
           {
             duration: 3000,
             panelClass: ['success-snackbar']
           }
         );
-      } else {
+        
+      } catch (error) {
+        console.error('Error importing Excel file:', error);
         this.snackBar.open(
-          `Sync failed: ${result.message}`,
+          'Error importing Excel file. Please check file format.',
           'Close',
           {
             duration: 5000,
             panelClass: ['error-snackbar']
           }
         );
+      } finally {
+        this.isLoading = false;
       }
-    } catch (error) {
-      console.error('❌ Error syncing to Firebase:', error);
-      this.snackBar.open('Error syncing to Firebase', 'Close', { duration: 5000 });
-    } finally {
-      this.isLoading = false;
-    }
+    };
+    
+    reader.readAsArrayBuffer(file);
   }
 
-  // Utility method to get material status
-  getMaterialStatus(material: MaterialsLifecycleItem): 'good' | 'warning' | 'critical' | 'expired' {
-    // Nếu có hạn sử dụng (expiryDate) thì tính theo ngày
-    if (material.expiryDate) {
-      const daysRemaining = this.getDaysRemaining(material.expiryDate);
-      
-      if (daysRemaining < 0) {
-        return 'expired'; // Quá hạn
-      } else if (daysRemaining <= 7) {
-        return 'critical'; // Sắp hết hạn (7 ngày)
-      } else if (daysRemaining <= 30) {
-        return 'warning'; // Cảnh báo (30 ngày)
-        } else {
-        return 'good'; // Còn tốt
+  processExcelData(jsonData: any[]): void {
+    // Skip header row (assuming first row contains headers)
+    const dataRows = jsonData.slice(1);
+    
+    this.materialsData = dataRows.map((row: any[], index: number) => {
+      return {
+        no: index + 1,
+        materialCode: row[0] || '',
+        materialName: row[1] || '',
+        unit: row[2] || '',
+        poNumber: row[3] || '',
+        expiryDate: this.formatDate(row[4]) || '',
+        shelfLife: Number(row[5]) || 0,
+        warehouseCode: row[6] || '',
+        importDate: this.formatDate(row[7]) || '',
+        aging: Number(row[8]) || 0,
+        remainingStock: Number(row[9]) || 0,
+        dateRemain: this.formatDate(row[10]) || ''
+      };
+    }).filter(item => item.materialCode); // Filter out empty rows
+    
+    this.filteredMaterials = [...this.materialsData];
+  }
+
+  formatDate(value: any): string {
+    if (!value) return '';
+    
+    // Handle Excel date serial number
+    if (typeof value === 'number') {
+      const date = new Date((value - 25569) * 86400 * 1000);
+      return date.toLocaleDateString('vi-VN');
+    }
+    
+    // Handle string date
+    if (typeof value === 'string') {
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('vi-VN');
       }
     }
     
-    // Nếu không có hạn sử dụng nhưng có shelf life thì tính theo tháng
-    if (material.shelfLifeMonths > 0) {
-      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
-      
-      if (agePercentage >= 100) {
-        return 'expired'; // Quá hạn
-      } else if (agePercentage >= 90) {
-        return 'critical'; // Sắp hết hạn (90% tuổi)
-      } else if (agePercentage >= 70) {
-        return 'warning'; // Cảnh báo (70% tuổi)
-      } else {
-        return 'good'; // Còn tốt
-      }
-    }
-    
-    // Trường hợp không có dữ liệu
-    return 'good';
+    return value.toString();
   }
 
-  // Get days remaining or overdue
-  getDaysRemaining(expiryDate: Date): number {
-    const today = new Date();
-    const timeDiff = expiryDate.getTime() - today.getTime();
-    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+  // Search and filter methods
+  applyFilter(): void {
+    this.filteredMaterials = this.materialsData.filter(material =>
+      material.materialCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.materialName.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.poNumber.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.warehouseCode.toLowerCase().includes(this.searchTerm.toLowerCase())
+    );
   }
 
-  // Format remaining time in English
-  formatRemainingTime(material: MaterialsLifecycleItem): string {
-    if (!material.expiryDate) return 'No expiry date';
-    
-    const daysRemaining = this.getDaysRemaining(material.expiryDate);
-    
-    if (daysRemaining < 0) {
-      return `${Math.abs(daysRemaining)} days overdue`;
-    } else if (daysRemaining === 0) {
-      return 'Expires today';
+  sortData(column: string): void {
+    if (this.sortBy === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-      return `${daysRemaining} days left`;
+      this.sortBy = column;
+      this.sortDirection = 'asc';
     }
-  }
 
-  // Format shelf life display
-  formatShelfLife(material: MaterialsLifecycleItem): string {
-    return `${material.shelfLifeMonths} months`;
-  }
-
-  // Format expiry date display
-  formatExpiryDate(material: MaterialsLifecycleItem): string {
-    if (!material.expiryDate) return 'N/A';
-    return material.expiryDate.toLocaleDateString('en-US');
-  }
-
-  // Calculate progress percentage (0-100)
-  getProgressPercentage(material: MaterialsLifecycleItem): number {
-    // Nếu có hạn sử dụng thì tính theo ngày
-    if (material.expiryDate) {
-      const daysRemaining = this.getDaysRemaining(material.expiryDate);
-      const totalShelfLifeDays = material.shelfLifeMonths * 30; // Ước tính 30 ngày/tháng
+    this.filteredMaterials.sort((a, b) => {
+      const aValue = (a as any)[column];
+      const bValue = (b as any)[column];
       
-      if (daysRemaining < 0) return 100; // Quá hạn = 100%
-      
-      const usedDays = totalShelfLifeDays - daysRemaining;
-      const percentage = (usedDays / totalShelfLifeDays) * 100;
-      
-      return Math.max(0, Math.min(100, percentage));
-    }
-    
-    // Nếu không có hạn sử dụng thì tính theo tuổi hàng vs shelf life
-    if (material.shelfLifeMonths > 0) {
-      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
-      return Math.max(0, Math.min(100, agePercentage));
-    }
-    
-    return 0;
-  }
-
-  // Get status text in English
-  getStatusText(status: 'good' | 'warning' | 'critical' | 'expired'): string {
-    switch (status) {
-      case 'good': return 'Good';
-      case 'warning': return 'Warning';
-      case 'critical': return 'Critical';
-      case 'expired': return 'Expired';
-      default: return 'Unknown';
-    }
-  }
-
-  // Get status display content for table
-  getStatusDisplay(material: MaterialsLifecycleItem): string {
-    // Nếu có hạn sử dụng thì hiển thị số ngày
-    if (material.expiryDate) {
-      return this.formatRemainingTime(material);
-    }
-    
-    // Nếu không có hạn sử dụng thì hiển thị % tuổi hàng
-    if (material.shelfLifeMonths > 0) {
-      const agePercentage = (material.ageInMonths / material.shelfLifeMonths) * 100;
-      const remaining = Math.max(0, material.shelfLifeMonths - material.ageInMonths);
-      
-      if (agePercentage >= 100) {
-        return 'Expired';
-      } else {
-        return `Remaining ${remaining.toFixed(1)} months`;
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return this.sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
       }
-    }
-    
-    return 'No data';
-  }
-
-  // Check if material has expiry date (to determine display type)
-  hasExpiryDate(material: MaterialsLifecycleItem): boolean {
-    return !!material.expiryDate;
-  }
-
-  // Utility method for date formatting
-  formatDate(date: Date | null): string {
-    if (!date) return 'Never';
-    return date.toLocaleDateString('en-US') + ' ' + date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
+      
+      const aStr = aValue?.toString().toLowerCase() || '';
+      const bStr = bValue?.toString().toLowerCase() || '';
+      
+      if (this.sortDirection === 'asc') {
+        return aStr.localeCompare(bStr);
+      } else {
+        return bStr.localeCompare(aStr);
+      }
     });
   }
 
-  // Getters for template
+  // Export methods
+  exportToExcel(): void {
+    if (this.materialsData.length === 0) {
+      this.snackBar.open('No data to export', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(this.filteredMaterials);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Materials Lifecycle');
+    
+    XLSX.writeFile(workbook, `Materials_Lifecycle_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    this.snackBar.open('Data exported successfully', 'Close', { duration: 3000 });
+  }
+
+  clearData(): void {
+    this.materialsData = [];
+    this.filteredMaterials = [];
+    this.searchTerm = '';
+    
+    this.snackBar.open('Data cleared successfully', 'Close', { duration: 3000 });
+  }
+
+  // Getters for statistics
   get totalMaterials(): number {
     return this.materialsData.length;
   }
 
-  get materialsWithExpiryDate(): number {
-    return this.materialsData.filter(material => !!material.expiryDate).length;
+  get totalStock(): number {
+    return this.materialsData.reduce((sum, item) => sum + item.remainingStock, 0);
   }
 
-  get averageAge(): number {
+  get avgShelfLife(): number {
     if (this.materialsData.length === 0) return 0;
-    const totalAge = this.materialsData.reduce((sum, material) => sum + material.ageInMonths, 0);
-    return totalAge / this.materialsData.length;
+    const total = this.materialsData.reduce((sum, item) => sum + item.shelfLife, 0);
+    return total / this.materialsData.length;
   }
 
-  get criticalItems(): number {
-    return this.materialsData.filter(material => {
-      const status = this.getMaterialStatus(material);
-      return status === 'critical' || status === 'expired';
-    }).length;
+  get avgAging(): number {
+    if (this.materialsData.length === 0) return 0;
+    const total = this.materialsData.reduce((sum, item) => sum + item.aging, 0);
+    return total / this.materialsData.length;
   }
 
+  // Track by function for performance
+  trackByMaterialCode(index: number, item: MaterialLifecycleData): string {
+    return item.materialCode;
+  }
 }

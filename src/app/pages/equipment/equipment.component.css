@@ -324,4 +324,379 @@
 
 .action-btn i {
   font-size: 20px;
+}
+
+/* Report Specific Styling */
+.menu-card-icon.report {
+  background: linear-gradient(135deg, #FF9800 0%, #FF5722 100%);
+}
+
+.report-content-expanded {
+  padding: 16px;
+}
+
+.report-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.search-container {
+  flex: 1;
+  min-width: 300px;
+}
+
+.search-field {
+  width: 100%;
+  max-width: 400px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Statistics Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.stat-icon.pass {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+}
+
+.stat-icon.fail {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+}
+
+.stat-icon.expired {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+}
+
+.stat-icon.total {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+}
+
+.stat-icon i {
+  font-size: 24px;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+/* Table Container */
+.report-table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.report-table {
+  width: 100%;
+  font-size: 14px;
+}
+
+.report-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+  padding: 16px;
+}
+
+.report-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.report-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+/* Simple Status */
+.simple-status {
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.simple-status.pass {
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.simple-status.fail {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+/* Expired styling */
+.expired {
+  color: #f44336 !important;
+  font-weight: 600;
+}
+
+.expired-text {
+  color: #f44336;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Loading and Empty States */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+  text-align: center;
+}
+
+.empty-state i {
+  font-size: 48px;
+  color: #ccc;
+  margin-bottom: 16px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+  max-width: 400px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .report-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .action-buttons {
+    justify-content: center;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .report-table {
+    font-size: 12px;
+  }
+  
+  .report-table th,
+  .report-table td {
+    padding: 8px;
+  }
+}
+
+/* Action Buttons Styling */
+.actions-header {
+  text-align: center !important;
+  width: 120px;
+}
+
+.actions-cell {
+  text-align: center;
+  padding: 8px !important;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  align-items: center;
+}
+
+.download-btn {
+  color: #2196F3 !important;
+  transition: all 0.3s ease;
+}
+
+.download-btn:hover {
+  background-color: rgba(33, 150, 243, 0.1) !important;
+  transform: scale(1.1);
+}
+
+.delete-btn {
+  color: #f44336 !important;
+  transition: all 0.3s ease;
+}
+
+.delete-btn:hover {
+  background-color: rgba(244, 67, 54, 0.1) !important;
+  transform: scale(1.1);
+}
+
+.action-buttons button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.action-buttons button mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+/* Enhanced tooltips */
+.mat-tooltip {
+  font-size: 12px !important;
+  background: rgba(97, 97, 97, 0.95) !important;
+}
+
+/* Responsive design for action buttons */
+@media (max-width: 768px) {
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-buttons button {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .action-buttons button mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+  
+  .actions-header {
+    width: 80px;
+  }
+}
+
+/* Employee name cell with signature indicator */
+.employee-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.signature-indicator {
+  color: #4CAF50 !important;
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.no-signature-indicator {
+  color: #FF9800 !important;
+  font-size: 16px !important;
+  width: 16px !important;
+  height: 16px !important;
+  opacity: 0.7;
+}
+
+/* Hover effect for signature indicators */
+.signature-indicator:hover,
+.no-signature-indicator:hover {
+  transform: scale(1.2);
+  transition: transform 0.2s ease;
+}
+
+/* Header actions styling */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.refresh-btn {
+  background-color: rgba(33, 150, 243, 0.1);
+  color: #2196F3 !important;
+  transition: all 0.3s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: rgba(33, 150, 243, 0.2);
+  transform: rotate(180deg);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-btn mat-icon {
+  transition: transform 0.5s ease;
+}
+
+.refresh-btn:hover:not(:disabled) mat-icon {
+  transform: rotate(360deg);
 } 

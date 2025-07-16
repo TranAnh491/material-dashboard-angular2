@@ -6,7 +6,7 @@
       </button>
     </div>
 
-    <!-- Two Menu Cards Layout -->
+    <!-- Three Menu Cards Layout -->
     <div class="menu-cards-layout">
       
       <!-- Menu Card 1: Work Instruction -->
@@ -29,11 +29,25 @@
           <i class="material-icons">quiz</i>
         </div>
         <div class="menu-card-content">
-          <h3>Test</h3>
+          <h3>Temp + %Rh Test</h3>
           <p>Kiểm tra kiến thức</p>
         </div>
         <div class="menu-card-arrow">
           <i class="material-icons">{{ showTest ? 'expand_less' : 'expand_more' }}</i>
+        </div>
+      </div>
+
+      <!-- Menu Card 3: Report -->
+      <div class="menu-card" (click)="toggleReport()">
+        <div class="menu-card-icon report">
+          <i class="material-icons">assessment</i>
+        </div>
+        <div class="menu-card-content">
+          <h3>Report</h3>
+          <p>Báo cáo đào tạo</p>
+        </div>
+        <div class="menu-card-arrow">
+          <i class="material-icons">{{ showReport ? 'expand_less' : 'expand_more' }}</i>
         </div>
       </div>
 
@@ -80,7 +94,7 @@
       <div class="content-header">
         <h2>
           <i class="material-icons">quiz</i>
-          Test
+          Temp + %Rh Test
         </h2>
         <button class="close-btn" (click)="closeAll()">
           <i class="material-icons">close</i>
@@ -108,6 +122,143 @@
               <i class="material-icons">school</i>
               Làm bài kiểm tra
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report Content (Expanded) -->
+    <div *ngIf="showReport" class="expanded-content report-content">
+      <div class="content-header">
+        <h2>
+          <i class="material-icons">assessment</i>
+          Report
+        </h2>
+        <div class="header-actions">
+          <button mat-icon-button 
+                  color="primary" 
+                  (click)="refreshReportData()"
+                  matTooltip="Làm mới dữ liệu"
+                  class="refresh-btn"
+                  [disabled]="isLoadingReport">
+            <mat-icon>refresh</mat-icon>
+          </button>
+          <button class="close-btn" (click)="closeAll()">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+      </div>
+      <div class="report-content-expanded">
+        <!-- Simple Training Report Table -->
+        <div class="report-table-container">
+          <div *ngIf="isLoadingReport" class="loading-container">
+            <mat-spinner diameter="40"></mat-spinner>
+            <p>Đang tải danh sách báo cáo đào tạo...</p>
+            <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">
+              Đang kiểm tra dữ liệu mới nhất từ Firebase...
+            </p>
+          </div>
+
+          <div *ngIf="!isLoadingReport && filteredReportData.length === 0" class="empty-state">
+            <i class="material-icons">assignment</i>
+            <h3>Chưa có dữ liệu báo cáo</h3>
+            <p>Không có dữ liệu đào tạo nào cho nhân viên ASP.</p>
+          </div>
+
+          <div *ngIf="!isLoadingReport && filteredReportData.length > 0" class="table-responsive">
+            <div class="table-info">
+              <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 15px;">
+                <mat-icon style="font-size: 14px; vertical-align: middle;">info</mat-icon>
+                Không thấy bài kiểm tra mới nhất? Nhấn nút 
+                <mat-icon style="font-size: 14px; vertical-align: middle;">refresh</mat-icon> 
+                để làm mới dữ liệu.
+              </p>
+            </div>
+            <table mat-table [dataSource]="filteredReportData" class="report-table mat-elevation-2">
+              
+              <!-- Employee ID Column -->
+              <ng-container matColumnDef="employeeId">
+                <th mat-header-cell *matHeaderCellDef>Mã số nhân viên</th>
+                <td mat-cell *matCellDef="let element">{{ element.employeeId }}</td>
+              </ng-container>
+
+              <!-- Name Column -->
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Tên nhân viên</th>
+                <td mat-cell *matCellDef="let element">
+                  <div class="employee-name-cell">
+                    {{ element.name }}
+                    <mat-icon *ngIf="element.signature" 
+                              class="signature-indicator" 
+                              matTooltip="Có chữ ký điện tử">
+                      verified
+                    </mat-icon>
+                    <mat-icon *ngIf="!element.signature" 
+                              class="no-signature-indicator" 
+                              matTooltip="Chưa có chữ ký điện tử">
+                      edit
+                    </mat-icon>
+                  </div>
+                </td>
+              </ng-container>
+
+              <!-- Training Content Column -->
+              <ng-container matColumnDef="trainingContent">
+                <th mat-header-cell *matHeaderCellDef>Nội dung đào tạo</th>
+                <td mat-cell *matCellDef="let element">{{ element.trainingContent }}</td>
+              </ng-container>
+
+              <!-- Status Column -->
+              <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                <td mat-cell *matCellDef="let element">
+                  <span class="simple-status" [ngClass]="element.status">
+                    {{ element.status === 'pass' ? 'Đạt' : 'Không đạt' }}
+                  </span>
+                </td>
+              </ng-container>
+
+              <!-- Training Date Column -->
+              <ng-container matColumnDef="trainingDate">
+                <th mat-header-cell *matHeaderCellDef>Ngày đào tạo</th>
+                <td mat-cell *matCellDef="let element">{{ element.trainingDate | date:'dd/MM/yyyy' }}</td>
+              </ng-container>
+
+              <!-- Expiry Date Column -->
+              <ng-container matColumnDef="expiryDate">
+                <th mat-header-cell *matHeaderCellDef>Ngày hết hạn</th>
+                <td mat-cell *matCellDef="let element" [ngClass]="{'expired': isExpired(element.expiryDate)}">
+                  {{ element.expiryDate | date:'dd/MM/yyyy' }}
+                  <span *ngIf="isExpired(element.expiryDate)" class="expired-text"> (Hết hạn)</span>
+                </td>
+              </ng-container>
+
+              <!-- Actions Column -->
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef class="actions-header">Thao tác</th>
+                <td mat-cell *matCellDef="let element" class="actions-cell">
+                  <div class="action-buttons">
+                    <button mat-icon-button 
+                            color="primary" 
+                            (click)="downloadEmployeeReport(element)"
+                            matTooltip="Tải file báo cáo"
+                            class="download-btn">
+                      <mat-icon>download</mat-icon>
+                    </button>
+                    <button mat-icon-button 
+                            color="warn" 
+                            (click)="deleteEmployee(element)"
+                            matTooltip="Xóa bản ghi"
+                            class="delete-btn">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+            </table>
           </div>
         </div>
       </div>

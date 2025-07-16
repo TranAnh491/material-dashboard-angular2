@@ -1,264 +1,165 @@
-<div class="main-content">
-  <div class="container-fluid">
+<div class="materials-lifecycle">
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="header-title">
+      <i class="material-icons">inventory</i>
+      Materials Lifecycle Management
+    </h1>
+    <p class="header-subtitle">Import and manage materials lifecycle data from Excel files</p>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="stats-cards">
+    <div class="stat-card total">
+      <div class="stat-icon">
+        <i class="material-icons">inventory</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ totalMaterials | number }}</div>
+        <div class="stat-label">Total Materials</div>
+      </div>
+    </div>
     
-    <!-- Header -->
-    <div class="row">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-header card-header-primary">
-            <h4 class="card-title">Materials Inventory</h4>
-            <p class="card-category">Real-time inventory tracking with Firebase</p>
-          </div>
-        </div>
+    <div class="stat-card stock">
+      <div class="stat-icon">
+        <i class="material-icons">archive</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ totalStock | number }}</div>
+        <div class="stat-label">Total Stock</div>
+      </div>
+    </div>
+    
+    <div class="stat-card shelf-life">
+      <div class="stat-icon">
+        <i class="material-icons">schedule</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ avgShelfLife | number:'1.1-1' }}</div>
+        <div class="stat-label">Avg Shelf Life</div>
+      </div>
+    </div>
+    
+    <div class="stat-card aging">
+      <div class="stat-icon">
+        <i class="material-icons">event</i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-number">{{ avgAging | number:'1.1-1' }}</div>
+        <div class="stat-label">Avg Aging</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls Section -->
+  <div class="controls-section">
+    <div class="controls-left">
+      <!-- File Import -->
+      <input #fileInput 
+             type="file" 
+             accept=".xlsx,.xls,.csv" 
+             (change)="onFileSelect($event)" 
+             style="display: none;">
+      
+      <button class="import-btn" 
+              (click)="triggerFileInput()" 
+              [disabled]="isLoading">
+        <i class="material-icons">upload_file</i>
+        Import Excel File
+      </button>
+      
+      <!-- Search -->
+      <div class="search-container">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Search materials...</mat-label>
+          <input matInput 
+                 [(ngModel)]="searchTerm" 
+                 (input)="applyFilter()" 
+                 placeholder="Material code, name, PO...">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
       </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="row">
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-success card-header-icon">
-            <div class="card-icon">
-              <i class="material-icons">inventory_2</i>
-            </div>
-            <p class="card-category">Total Items</p>
-            <h3 class="card-title">{{ filteredMaterials.length }}</h3>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-info card-header-icon">
-            <div class="card-icon">
-              <i class="material-icons">assessment</i>
-            </div>
-            <p class="card-category">Total Quantity</p>
-            <h3 class="card-title">{{ getTotalQuantity() }}</h3>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-warning card-header-icon">
-            <div class="card-icon">
-              <i class="material-icons">location_on</i>
-            </div>
-            <p class="card-category">Active Locations</p>
-            <h3 class="card-title">{{ getActiveLocationsCount() }}</h3>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card card-stats">
-          <div class="card-header card-header-danger card-header-icon">
-            <div class="card-icon">
-              <i class="material-icons">error</i>
-            </div>
-            <p class="card-category">Alert Items</p>
-            <h3 class="card-title">{{ getAlertItemsCount() }}</h3>
-          </div>
-        </div>
-      </div>
+    <div class="controls-right">
+      <!-- Action Buttons -->
+      <button class="action-btn export" 
+              (click)="exportToExcel()" 
+              [disabled]="materialsData.length === 0">
+        <i class="material-icons">download</i>
+        Export Excel
+      </button>
+      
+      <button class="action-btn clear" 
+              (click)="clearData()" 
+              [disabled]="materialsData.length === 0">
+        <i class="material-icons">clear_all</i>
+        Clear Data
+      </button>
     </div>
+  </div>
 
-    <!-- Filters and Controls -->
-    <div class="row">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-body">
-            <div class="row align-items-center">
-              <div class="col-md-3">
-                <mat-form-field class="w-100">
-                  <input matInput placeholder="Search materials..." 
-                         [(ngModel)]="searchTerm" 
-                         (input)="onSearch()">
-                  <mat-icon matSuffix>search</mat-icon>
-                </mat-form-field>
-              </div>
-              <div class="col-md-2">
-                <mat-form-field class="w-100">
-                  <mat-select placeholder="Status" 
-                             [(ngModel)]="selectedStatus" 
-                             (selectionChange)="onStatusChange()">
-                    <mat-option value="">All Status</mat-option>
-                    <mat-option value="active">Active</mat-option>
-                    <mat-option value="expiring_soon">Expiring Soon</mat-option>
-                    <mat-option value="expired">Expired</mat-option>
-                    <mat-option value="quarantine">Quarantine</mat-option>
-                    <mat-option value="consumed">Consumed</mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-              <div class="col-md-2">
-                <mat-form-field class="w-100">
-                  <mat-select placeholder="Location" 
-                             [(ngModel)]="selectedLocation" 
-                             (selectionChange)="onLocationChange()">
-                    <mat-option value="">All Locations</mat-option>
-                    <mat-option *ngFor="let location of locationOptions" [value]="location">
-                      {{ location }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-              <div class="col-md-2">
-                <mat-form-field class="w-100">
-                  <mat-select placeholder="Alert Level" 
-                             [(ngModel)]="selectedAlertLevel" 
-                             (selectionChange)="onAlertLevelChange()">
-                    <mat-option value="">All Alerts</mat-option>
-                    <mat-option value="green">Green</mat-option>
-                    <mat-option value="yellow">Yellow</mat-option>
-                    <mat-option value="red">Red</mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-              <div class="col-md-3">
-                <button mat-raised-button color="primary" 
-                        (click)="refreshData()" 
-                        class="btn btn-primary mr-2">
-                  <i class="material-icons">refresh</i> Refresh
-                </button>
-                <button mat-raised-button 
-                        (click)="clearFilters()" 
-                        class="btn btn-secondary mr-2">
-                  <i class="material-icons">clear</i> Clear
-                </button>
-                <button mat-raised-button color="accent" 
-                        (click)="exportToCSV()" 
-                        class="btn btn-info">
-                  <i class="material-icons">file_download</i> Export
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <!-- Data Table Section -->
+  <div class="table-section">
+    <div class="table-header">
+      <h4 class="table-title">Materials Data ({{ filteredMaterials.length }})</h4>
     </div>
-
-    <!-- Loading Indicator -->
-    <div class="row" *ngIf="loading">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-body text-center">
-            <mat-spinner></mat-spinner>
-            <p class="mt-3">Loading inventory data...</p>
-          </div>
-        </div>
-      </div>
+    
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Processing Excel file...</div>
     </div>
-
-    <!-- Materials Inventory Table -->
-    <div class="row" *ngIf="!loading">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-header card-header-primary">
-            <h4 class="card-title">Inventory Items</h4>
-            <p class="card-category">{{ filteredMaterials.length }} items found</p>
-          </div>
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead class="text-primary">
-                  <tr>
-                    <th>Material Code</th>
-                    <th>Material Name</th>
-                    <th>Batch Number</th>
-                    <th>Location</th>
-                    <th>Quantity</th>
-                    <th>Expiry Date</th>
-                    <th>Days Left</th>
-                    <th>Status</th>
-                    <th>Alert Level</th>
-                    <th>Supplier</th>
-                    <th>Last Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let material of filteredMaterials; let i = index" 
-                      [class.table-warning]="isYellowAlert(material)"
-                      [class.table-danger]="isRedAlert(material)">
-                    <td>
-                      <strong>{{ material.materialCode }}</strong>
-                    </td>
-                    <td>{{ material.materialName }}</td>
-                    <td>
-                      <span class="badge badge-info">{{ material.batchNumber }}</span>
-                    </td>
-                    <td>
-                      <span class="badge badge-secondary">{{ material.location }}</span>
-                    </td>
-                    <td>
-                      <strong>{{ material.quantity }} {{ material.unitOfMeasure }}</strong>
-                    </td>
-                    <td>{{ formatDate(material.expiryDate) }}</td>
-                    <td>
-                      <span [ngClass]="getDaysUntilExpiryClass(material.expiryDate)">
-                        <strong>{{ getDaysUntilExpiry(material.expiryDate) }}</strong>
-                        <span *ngIf="isNotExpired(material.expiryDate)">days</span>
-                        <span *ngIf="isExpired(material.expiryDate)">overdue</span>
-                      </span>
-                    </td>
-                    <td>
-                      <span class="badge" [ngClass]="getStatusBadgeClass(material.status)">
-                        {{ material.status | titlecase }}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="badge" [ngClass]="getAlertLevelClass(material.alertLevel)">
-                        <i class="material-icons" *ngIf="isGreenAlert(material)">check_circle</i>
-                        <i class="material-icons" *ngIf="isYellowAlert(material)">warning</i>
-                        <i class="material-icons" *ngIf="isRedAlert(material)">error</i>
-                        {{ material.alertLevel | titlecase }}
-                      </span>
-                    </td>
-                    <td>{{ material.supplier }}</td>
-                    <td>
-                      <small>{{ formatDate(material.lastUpdated) }}</small>
-                    </td>
-                  </tr>
-                  <tr *ngIf="filteredMaterials.length === 0">
-                    <td colspan="11" class="text-center py-4">
-                      <div class="empty-state">
-                        <i class="material-icons">inbox</i>
-                        <h5>No materials found</h5>
-                        <p>Try adjusting your search criteria or add new materials.</p>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
+    
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="!isLoading && materialsData.length === 0">
+      <i class="material-icons">inventory</i>
+      <h5>No Data Available</h5>
+      <p>Click "Import Excel File" to load materials lifecycle data</p>
+      <button class="import-btn-large" (click)="triggerFileInput()">
+        <i class="material-icons">upload_file</i>
+        Import Excel File
+      </button>
     </div>
-
-    <!-- Location Summary -->
-    <div class="row" *ngIf="!loading && filteredMaterials.length > 0">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-header card-header-info">
-            <h4 class="card-title">Inventory by Location</h4>
-            <p class="card-category">Quantity distribution across warehouse locations</p>
-          </div>
-          <div class="card-body">
-            <div class="row">
-              <div class="col-md-3" *ngFor="let location of getLocationKeys()">
-                <div class="location-summary-item">
-                  <div class="location-badge">
-                    <span class="badge badge-primary">{{ location }}</span>
-                  </div>
-                  <div class="location-quantity">
-                    <strong>{{ getLocationCount(location) }}</strong> items
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    
+    <!-- Materials Table -->
+    <div class="table-responsive" *ngIf="!isLoading && materialsData.length > 0">
+      <table class="materials-table">
+        <thead>
+          <tr>
+            <th *ngFor="let column of displayedColumns" 
+                class="sortable-header" 
+                (click)="sortData(column)">
+              {{ columnLabels[column] }}
+              <i class="material-icons sort-icon" 
+                 *ngIf="sortBy === column">
+                {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+              </i>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let material of filteredMaterials; trackBy: trackByMaterialCode" 
+              class="table-row">
+            <td>{{ material.no }}</td>
+            <td class="material-code">{{ material.materialCode }}</td>
+            <td class="material-name">{{ material.materialName }}</td>
+            <td>{{ material.unit }}</td>
+            <td class="po-number">{{ material.poNumber }}</td>
+            <td class="date">{{ material.expiryDate }}</td>
+            <td class="shelf-life">{{ material.shelfLife }}</td>
+            <td class="warehouse-code">{{ material.warehouseCode }}</td>
+            <td class="date">{{ material.importDate }}</td>
+            <td class="aging" [class.aging-high]="material.aging > 12">
+              {{ material.aging }}
+            </td>
+            <td class="stock" [class.stock-low]="material.remainingStock < 10">
+              {{ material.remainingStock | number }}
+            </td>
+            <td class="date">{{ material.dateRemain }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-
   </div>
 </div>

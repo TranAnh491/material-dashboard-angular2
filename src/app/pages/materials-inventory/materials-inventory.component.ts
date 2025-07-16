@@ -1,272 +1,255 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Observable, Subscription } from 'rxjs';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { 
-  MaterialLifecycle, 
-  MaterialStatus, 
-  AlertLevel 
-} from '../../models/material-lifecycle.model';
-import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
+import * as XLSX from 'xlsx';
+
+export interface MaterialLifecycleData {
+  no: number;                    // 1. No
+  materialCode: string;          // 2. Mã vật tư
+  materialName: string;          // 3. Tên vật tư
+  unit: string;                  // 4. Đvt
+  poNumber: string;              // 5. Số Po
+  expiryDate: string;            // 6. Hạn sử dụng
+  shelfLife: number;             // 7. Shelf life
+  warehouseCode: string;         // 8. Mã Kho
+  importDate: string;            // 9. Ngày nhập kho
+  aging: number;                 // 10. Aging
+  remainingStock: number;        // 11. Tồn cuối kỳ
+  dateRemain: string;            // 12. Date remain
+}
 
 @Component({
   selector: 'app-materials-inventory',
   templateUrl: './materials-inventory.component.html',
   styleUrls: ['./materials-inventory.component.scss']
 })
-export class MaterialsInventoryComponent implements OnInit, OnDestroy {
-  materials$: Observable<MaterialLifecycle[]>;
-  materials: MaterialLifecycle[] = [];
-  filteredMaterials: MaterialLifecycle[] = [];
+export class MaterialsInventoryComponent implements OnInit {
+  @ViewChild('fileInput') fileInput!: ElementRef;
+  
+  // Data properties
+  materialsData: MaterialLifecycleData[] = [];
+  filteredMaterials: MaterialLifecycleData[] = [];
+  
+  // Loading state
+  isLoading = false;
   
   // Search and filter
   searchTerm = '';
-  selectedStatus = '';
-  selectedLocation = '';
-  selectedAlertLevel = '';
+  sortBy = 'no';
+  sortDirection: 'asc' | 'desc' = 'asc';
   
-  // Loading state
-  loading = false;
-  
-  // Enums for template
-  MaterialStatus = MaterialStatus;
-  AlertLevel = AlertLevel;
-  
-  // Expose Object for template
-  Object = Object;
-  
-  private subscriptions: Subscription[] = [];
-  
-  // Location options from warehouse layout
-  locationOptions = [
-    'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9',
-    'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9',
-    'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9',
-    'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9',
-    'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9',
-    'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9',
-    'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9',
-    'Q1', 'Q2', 'Q3', 'A12', 'K', 'VP', 'IQC', 'WO'
+  // Table columns configuration
+  displayedColumns = [
+    'no', 'materialCode', 'materialName', 'unit', 'poNumber', 
+    'expiryDate', 'shelfLife', 'warehouseCode', 'importDate', 
+    'aging', 'remainingStock', 'dateRemain'
   ];
+  
+  columnLabels = {
+    no: 'No',
+    materialCode: 'Mã vật tư',
+    materialName: 'Tên vật tư',
+    unit: 'Đvt',
+    poNumber: 'Số Po',
+    expiryDate: 'Hạn sử dụng',
+    shelfLife: 'Shelf life',
+    warehouseCode: 'Mã Kho',
+    importDate: 'Ngày nhập kho',
+    aging: 'Aging',
+    remainingStock: 'Tồn cuối kỳ',
+    dateRemain: 'Date remain'
+  };
 
-  constructor(
-    private materialService: MaterialLifecycleService,
-    private snackBar: MatSnackBar
-  ) {}
+  constructor(private snackBar: MatSnackBar) {}
 
   ngOnInit(): void {
-    this.loadInventory();
+    // Initialize component
   }
 
-  ngOnDestroy(): void {
-    this.subscriptions.forEach(sub => sub.unsubscribe());
+  // File import methods
+  onFileSelect(event: any): void {
+    const file = event.target.files[0];
+    if (file) {
+      this.importExcelFile(file);
+    }
   }
 
-  private loadInventory(): void {
-    this.loading = true;
-    this.materials$ = this.materialService.getMaterials();
+  triggerFileInput(): void {
+    this.fileInput.nativeElement.click();
+  }
+
+  importExcelFile(file: File): void {
+    this.isLoading = true;
     
-    const materialsSub = this.materials$.subscribe({
-      next: (materials) => {
-        this.materials = materials;
-        this.applyFilters();
-      this.loading = false;
-      },
-      error: (error) => {
-      this.loading = false;
-        this.snackBar.open('Error loading inventory data', 'Close', { duration: 3000 });
-        console.error('Error loading materials:', error);
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get first worksheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        this.processExcelData(jsonData);
+        
+        this.snackBar.open(
+          `Imported ${this.materialsData.length} materials successfully`,
+          'Close',
+          {
+            duration: 3000,
+            panelClass: ['success-snackbar']
+          }
+        );
+        
+      } catch (error) {
+        console.error('Error importing Excel file:', error);
+        this.snackBar.open(
+          'Error importing Excel file. Please check file format.',
+          'Close',
+          {
+            duration: 5000,
+            panelClass: ['error-snackbar']
+          }
+        );
+      } finally {
+        this.isLoading = false;
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+  }
+
+  processExcelData(jsonData: any[]): void {
+    // Skip header row (assuming first row contains headers)
+    const dataRows = jsonData.slice(1);
+    
+    this.materialsData = dataRows.map((row: any[], index: number) => {
+      return {
+        no: index + 1,
+        materialCode: row[0] || '',
+        materialName: row[1] || '',
+        unit: row[2] || '',
+        poNumber: row[3] || '',
+        expiryDate: this.formatDate(row[4]) || '',
+        shelfLife: Number(row[5]) || 0,
+        warehouseCode: row[6] || '',
+        importDate: this.formatDate(row[7]) || '',
+        aging: Number(row[8]) || 0,
+        remainingStock: Number(row[9]) || 0,
+        dateRemain: this.formatDate(row[10]) || ''
+      };
+    }).filter(item => item.materialCode); // Filter out empty rows
+    
+    this.filteredMaterials = [...this.materialsData];
+  }
+
+  formatDate(value: any): string {
+    if (!value) return '';
+    
+    // Handle Excel date serial number
+    if (typeof value === 'number') {
+      const date = new Date((value - 25569) * 86400 * 1000);
+      return date.toLocaleDateString('vi-VN');
+    }
+    
+    // Handle string date
+    if (typeof value === 'string') {
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('vi-VN');
+      }
+    }
+    
+    return value.toString();
+  }
+
+  // Search and filter methods
+  applyFilter(): void {
+    this.filteredMaterials = this.materialsData.filter(material =>
+      material.materialCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.materialName.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.poNumber.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+      material.warehouseCode.toLowerCase().includes(this.searchTerm.toLowerCase())
+    );
+  }
+
+  sortData(column: string): void {
+    if (this.sortBy === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortBy = column;
+      this.sortDirection = 'asc';
+    }
+
+    this.filteredMaterials.sort((a, b) => {
+      const aValue = (a as any)[column];
+      const bValue = (b as any)[column];
+      
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return this.sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+      
+      const aStr = aValue?.toString().toLowerCase() || '';
+      const bStr = bValue?.toString().toLowerCase() || '';
+      
+      if (this.sortDirection === 'asc') {
+        return aStr.localeCompare(bStr);
+      } else {
+        return bStr.localeCompare(aStr);
       }
     });
+  }
+
+  // Export methods
+  exportToExcel(): void {
+    if (this.materialsData.length === 0) {
+      this.snackBar.open('No data to export', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(this.filteredMaterials);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Materials Lifecycle');
     
-    this.subscriptions.push(materialsSub);
+    XLSX.writeFile(workbook, `Materials_Lifecycle_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    this.snackBar.open('Data exported successfully', 'Close', { duration: 3000 });
   }
 
-  applyFilters(): void {
-    let filtered = [...this.materials];
-
-    // Search filter
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(material =>
-        material.materialCode.toLowerCase().includes(term) ||
-        material.materialName.toLowerCase().includes(term) ||
-        material.batchNumber.toLowerCase().includes(term) ||
-        material.supplier.toLowerCase().includes(term)
-      );
-    }
-
-    // Status filter
-    if (this.selectedStatus) {
-      filtered = filtered.filter(material => material.status === this.selectedStatus);
-    }
-
-    // Location filter
-    if (this.selectedLocation) {
-      filtered = filtered.filter(material => material.location === this.selectedLocation);
-    }
-
-    // Alert level filter
-    if (this.selectedAlertLevel) {
-      filtered = filtered.filter(material => material.alertLevel === this.selectedAlertLevel);
-    }
-
-    this.filteredMaterials = filtered;
-  }
-
-  onSearch(): void {
-    this.applyFilters();
-  }
-
-  onStatusChange(): void {
-    this.applyFilters();
-  }
-
-  onLocationChange(): void {
-    this.applyFilters();
-  }
-
-  onAlertLevelChange(): void {
-    this.applyFilters();
-  }
-
-  clearFilters(): void {
+  clearData(): void {
+    this.materialsData = [];
+    this.filteredMaterials = [];
     this.searchTerm = '';
-    this.selectedStatus = '';
-    this.selectedLocation = '';
-    this.selectedAlertLevel = '';
-    this.applyFilters();
+    
+    this.snackBar.open('Data cleared successfully', 'Close', { duration: 3000 });
   }
 
-  refreshData(): void {
-    this.loadInventory();
-    this.snackBar.open('Inventory data refreshed', 'Close', { duration: 2000 });
+  // Getters for statistics
+  get totalMaterials(): number {
+    return this.materialsData.length;
   }
 
-  getStatusBadgeClass(status: MaterialStatus): string {
-    switch (status) {
-      case MaterialStatus.ACTIVE:
-        return 'badge-success';
-      case MaterialStatus.EXPIRING_SOON:
-        return 'badge-warning';
-      case MaterialStatus.EXPIRED:
-        return 'badge-danger';
-      case MaterialStatus.QUARANTINE:
-        return 'badge-secondary';
-      case MaterialStatus.CONSUMED:
-        return 'badge-info';
-      default:
-        return 'badge-light';
-    }
+  get totalStock(): number {
+    return this.materialsData.reduce((sum, item) => sum + item.remainingStock, 0);
   }
 
-  getAlertLevelClass(alertLevel: AlertLevel): string {
-    switch (alertLevel) {
-      case AlertLevel.GREEN:
-        return 'badge-success';
-      case AlertLevel.YELLOW:
-        return 'badge-warning';
-      case AlertLevel.RED:
-        return 'badge-danger';
-      default:
-        return 'badge-info';
-    }
+  get avgShelfLife(): number {
+    if (this.materialsData.length === 0) return 0;
+    const total = this.materialsData.reduce((sum, item) => sum + item.shelfLife, 0);
+    return total / this.materialsData.length;
   }
 
-  getDaysUntilExpiry(expiryDate: Date): number {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  get avgAging(): number {
+    if (this.materialsData.length === 0) return 0;
+    const total = this.materialsData.reduce((sum, item) => sum + item.aging, 0);
+    return total / this.materialsData.length;
   }
 
-  getDaysUntilExpiryClass(expiryDate: Date): string {
-    const days = this.getDaysUntilExpiry(expiryDate);
-    if (days < 0) return 'text-danger';
-    if (days <= 7) return 'text-danger';
-    if (days <= 30) return 'text-warning';
-    return 'text-success';
-  }
-
-  isExpired(expiryDate: Date): boolean {
-    return this.getDaysUntilExpiry(expiryDate) < 0;
-  }
-
-  isNotExpired(expiryDate: Date): boolean {
-    return this.getDaysUntilExpiry(expiryDate) >= 0;
-  }
-
-  formatDate(date: Date): string {
-    return new Date(date).toLocaleDateString();
-  }
-
-  getTotalQuantity(): number {
-    return this.filteredMaterials.reduce((total, material) => total + material.quantity, 0);
-  }
-
-  getTotalValue(): number {
-    // Assuming you have price per unit in the future
-    return this.filteredMaterials.length;
-  }
-
-  getAlertItemsCount(): number {
-    return this.filteredMaterials.filter(m => m.alertLevel === AlertLevel.RED).length;
-  }
-
-  getActiveLocationsCount(): number {
-    return Object.keys(this.getLocationCounts()).length;
-  }
-
-  isYellowAlert(material: MaterialLifecycle): boolean {
-    return material.alertLevel === AlertLevel.YELLOW;
-  }
-
-  isRedAlert(material: MaterialLifecycle): boolean {
-    return material.alertLevel === AlertLevel.RED;
-  }
-
-  isGreenAlert(material: MaterialLifecycle): boolean {
-    return material.alertLevel === AlertLevel.GREEN;
-  }
-
-  getLocationCounts(): { [key: string]: number } {
-    const counts: { [key: string]: number } = {};
-    this.filteredMaterials.forEach(material => {
-      counts[material.location] = (counts[material.location] || 0) + material.quantity;
-    });
-    return counts;
-  }
-
-  getLocationKeys(): string[] {
-    return Object.keys(this.getLocationCounts());
-  }
-
-  getLocationCount(location: string): number {
-    return this.getLocationCounts()[location] || 0;
-  }
-
-  exportToCSV(): void {
-    const headers = ['Code', 'Name', 'Batch', 'Location', 'Quantity', 'Unit', 'Expiry Date', 'Status', 'Supplier'];
-    const csvData = this.filteredMaterials.map(material => [
-      material.materialCode,
-      material.materialName,
-      material.batchNumber,
-      material.location,
-      material.quantity,
-      material.unitOfMeasure,
-      this.formatDate(material.expiryDate),
-      material.status,
-      material.supplier
-    ]);
-
-    const csvContent = [headers, ...csvData]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `materials-inventory-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+  // Track by function for performance
+  trackByMaterialCode(index: number, item: MaterialLifecycleData): string {
+    return item.materialCode;
   }
 }

@@ -182,10 +182,55 @@
       </div>
     </div>
 
-    <div class="result-actions">
+    <!-- Signature Section -->
+    <div class="signature-section" *ngIf="signatureRequired">
+      <div class="signature-prompt">
+        <h3>✍️ Chữ ký xác nhận</h3>
+        <p>Vui lòng ký tên để xác nhận kết quả bài kiểm tra và lưu vào hệ thống.</p>
+        <p style="font-size: 14px; color: #e67e22; font-weight: 500;">
+          <mat-icon style="font-size: 16px; vertical-align: middle;">info</mat-icon>
+          Sau khi ký (hoặc bỏ qua), kết quả sẽ được lưu vào Firebase và bạn có thể tải PDF.
+        </p>
+        
+        <div class="signature-pad-container" *ngIf="showSignature">
+          <div class="signature-canvas-wrapper">
+            <canvas #signatureCanvas 
+                    width="400" 
+                    height="200" 
+                    style="border: 2px solid #ddd; border-radius: 8px; background: white;">
+            </canvas>
+          </div>
+          
+          <div class="signature-controls">
+            <button mat-stroked-button (click)="clearSignature()" class="clear-btn">
+              <mat-icon>clear</mat-icon>
+              Xóa chữ ký
+            </button>
+            <button mat-raised-button color="primary" (click)="saveSignature()" 
+                    [disabled]="isSignatureEmpty()" class="save-signature-btn">
+              <mat-icon>check</mat-icon>
+              Lưu chữ ký
+            </button>
+          </div>
+        </div>
+
+        <div class="signature-actions" *ngIf="!showSignature">
+          <button mat-raised-button color="accent" (click)="showSignaturePad()" class="sign-btn">
+            <mat-icon>edit</mat-icon>
+            Ký tên
+          </button>
+          <button mat-stroked-button color="primary" (click)="skipSignature()" class="skip-btn">
+            <mat-icon>skip_next</mat-icon>
+            Bỏ qua chữ ký
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-actions" *ngIf="!signatureRequired">
       <button mat-raised-button color="primary" (click)="downloadResultFile()">
-        <mat-icon>file_download</mat-icon>
-        📄 Tải kết quả (Word)
+        <mat-icon>picture_as_pdf</mat-icon>
+        📄 Tải kết quả PDF
       </button>
       <button mat-stroked-button (click)="restartTest()">
         <mat-icon>refresh</mat-icon>

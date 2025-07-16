@@ -35,6 +35,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatTableModule } from '@angular/material/table';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -74,6 +75,7 @@ import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowl
     MatProgressBarModule,
     MatCheckboxModule,
     MatRadioModule,
+    MatTableModule,
     DragDropModule,
     SharedModule
   ],

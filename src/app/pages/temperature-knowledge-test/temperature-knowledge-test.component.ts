@@ -1,7 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, Timestamp } from 'firebase/firestore';
 import { environment } from '../../../environments/environment';
+import SignaturePad from 'signature_pad';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Interfaces
 interface TestQuestion {
@@ -46,6 +49,7 @@ interface TestResult {
   passed: boolean;
   completedAt: Date;
   testData: TestData;
+  signature?: string; // Base64 encoded signature image
 }
 
 @Component({
@@ -53,7 +57,7 @@ interface TestResult {
   templateUrl: './temperature-knowledge-test.component.html',
   styleUrls: ['./temperature-knowledge-test.component.scss']
 })
-export class TemperatureKnowledgeTestComponent implements OnInit {
+export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit {
   isLoading = false;
   showNotification = false;
   
@@ -76,9 +80,15 @@ export class TemperatureKnowledgeTestComponent implements OnInit {
   // Firebase
   private db: any;
 
+  // Signature Pad
+  @ViewChild('signatureCanvas', { static: false }) signatureCanvas!: ElementRef<HTMLCanvasElement>;
+  signaturePad: SignaturePad | null = null;
+  showSignature = false;
+  signatureRequired = false;
+
   // Test data
   testData: TestData = {
-    title: "BÀI KIỂM TRA QUY TRÌNH GHI NHẬN NHIỆT ĐỘ, ĐỘ ẨM VÀ LƯU TRỮ SẢN PHẨM",
+    title: "BÀI KIỂM TRA HƯỚNG DẪN GHI NHẬN NHIỆT ĐỘ, ĐỘ ẨM VÀ LƯU TRỮ SẢN PHẨM",
     documentCode: "WH-WI0036(Ver00)",
     issueDate: "17/07/2025",
     totalQuestions: 18, // Sẽ được tính tự động
@@ -290,6 +300,85 @@ export class TemperatureKnowledgeTestComponent implements OnInit {
     this.calculateTotalQuestions();
   }
 
+  ngAfterViewInit(): void {
+    // Initialize signature pad after view is ready
+    if (this.signatureCanvas) {
+      this.initializeSignaturePad();
+    }
+  }
+
+  private initializeSignaturePad(): void {
+    if (this.signatureCanvas && this.signatureCanvas.nativeElement) {
+      const canvas = this.signatureCanvas.nativeElement;
+      this.signaturePad = new SignaturePad(canvas, {
+        backgroundColor: 'rgba(255, 255, 255, 0)',
+        penColor: 'rgb(0, 0, 0)',
+        minWidth: 1,
+        maxWidth: 3
+      });
+    }
+  }
+
+  // Signature management methods
+  clearSignature(): void {
+    if (this.signaturePad) {
+      this.signaturePad.clear();
+    }
+  }
+
+  isSignatureEmpty(): boolean {
+    return this.signaturePad ? this.signaturePad.isEmpty() : true;
+  }
+
+  async saveSignature(): Promise<void> {
+    if (this.signaturePad && !this.signaturePad.isEmpty()) {
+      const signatureData = this.signaturePad.toDataURL();
+      if (this.testResult) {
+        this.testResult.signature = signatureData;
+        console.log('✍️ Signature captured, now saving to Firebase...');
+        
+        this.isLoading = true;
+        
+        // Now save to Firebase with signature
+        await this.saveTestResult(this.testResult);
+        
+        this.isLoading = false;
+        console.log('💾 Test result with signature saved to Firebase successfully!');
+      }
+      this.showSignature = false;
+      this.signatureRequired = false;
+    }
+  }
+
+  async skipSignature(): Promise<void> {
+    if (this.testResult) {
+      console.log('⏭️ User chose to skip signature, saving without signature...');
+      
+      this.isLoading = true;
+      
+      // Save to Firebase without signature
+      await this.saveTestResult(this.testResult);
+      
+      this.isLoading = false;
+      console.log('💾 Test result saved to Firebase without signature!');
+      
+      this.showSignature = false;
+      this.signatureRequired = false;
+    }
+  }
+
+  showSignaturePad(): void {
+    this.showSignature = true;
+    this.signatureRequired = true;
+    
+    // Initialize signature pad if not already done
+    setTimeout(() => {
+      if (!this.signaturePad && this.signatureCanvas) {
+        this.initializeSignaturePad();
+      }
+    }, 100);
+  }
+
   private calculateTotalQuestions(): void {
     let total = 0;
     this.testData.sections.forEach(section => {
@@ -453,19 +542,20 @@ export class TemperatureKnowledgeTestComponent implements OnInit {
       testData: this.testData
     };
 
-    // Save to Firebase
-    await this.saveTestResult(this.testResult);
+    // DON'T save to Firebase yet - wait for signature first
+    console.log('✅ Test completed, waiting for signature before saving to Firebase...');
     
     this.currentView = 'result';
     this.isLoading = false;
     
-    // Auto-download result file
-    this.downloadResultFile();
+    // Prompt for signature before saving to Firebase
+    this.signatureRequired = true;
+    this.showSignaturePad();
   }
 
   private async saveTestResult(result: TestResult): Promise<void> {
     try {
-      const docRef = await addDoc(collection(this.db, 'temperature-test-results'), {
+      const resultData: any = {
         employeeId: result.employeeInfo.employeeId,
         employeeName: result.employeeInfo.employeeName,
         score: result.score,
@@ -475,7 +565,14 @@ export class TemperatureKnowledgeTestComponent implements OnInit {
         completedAt: Timestamp.fromDate(result.completedAt),
         testTitle: result.testData.title,
         documentCode: result.testData.documentCode
-      });
+      };
+
+      // Add signature if available
+      if (result.signature) {
+        resultData.signature = result.signature;
+      }
+
+      const docRef = await addDoc(collection(this.db, 'temperature-test-results'), resultData);
       console.log('Test result saved with ID: ', docRef.id);
     } catch (error) {
       console.error('Error saving test result: ', error);
@@ -485,19 +582,221 @@ export class TemperatureKnowledgeTestComponent implements OnInit {
   downloadResultFile(): void {
     if (!this.testResult) return;
 
-    const content = this.generateWordContent(this.testResult);
-    const blob = new Blob([content], { 
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+    // Check if signature is required but not provided
+    if (this.signatureRequired && (!this.testResult.signature || this.testResult.signature === '')) {
+      alert('Vui lòng ký tên trước khi tải xuống kết quả!');
+      this.showSignaturePad();
+      return;
+    }
+
+    this.generatePDF();
+  }
+
+  async generatePDF(): Promise<void> {
+    if (!this.testResult) return;
+
+    this.isLoading = true;
+
+    try {
+      // Create PDF content as HTML
+      const pdfContent = this.createPDFContent();
+      
+      // Create a temporary container
+      const tempContainer = document.createElement('div');
+      tempContainer.innerHTML = pdfContent;
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '-9999px';
+      tempContainer.style.width = '794px'; // A4 width in pixels at 96 DPI
+      tempContainer.style.backgroundColor = 'white';
+      tempContainer.style.fontFamily = 'Arial, sans-serif';
+      tempContainer.style.fontSize = '14px';
+      tempContainer.style.lineHeight = '1.5';
+      tempContainer.style.color = '#000';
+      tempContainer.style.padding = '40px';
+      
+      document.body.appendChild(tempContainer);
+
+      // Wait a bit for fonts to load
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Convert to canvas using html2canvas
+      const canvas = await html2canvas(tempContainer, {
+        width: 794,
+        height: 1123, // A4 height in pixels at 96 DPI
+        scale: 2, // Higher resolution
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff'
+      });
+
+      // Remove temporary container
+      document.body.removeChild(tempContainer);
+
+      // Create PDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210; // A4 width in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Add main page
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+      // Add detailed answers page if needed
+      if (this.testResult.testData.sections.length > 0) {
+        const detailsContent = this.createDetailedAnswersContent();
+        
+        const tempContainer2 = document.createElement('div');
+        tempContainer2.innerHTML = detailsContent;
+        tempContainer2.style.position = 'absolute';
+        tempContainer2.style.left = '-9999px';
+        tempContainer2.style.top = '-9999px';
+        tempContainer2.style.width = '794px';
+        tempContainer2.style.backgroundColor = 'white';
+        tempContainer2.style.fontFamily = 'Arial, sans-serif';
+        tempContainer2.style.fontSize = '12px';
+        tempContainer2.style.lineHeight = '1.4';
+        tempContainer2.style.color = '#000';
+        tempContainer2.style.padding = '40px';
+        
+        document.body.appendChild(tempContainer2);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const canvas2 = await html2canvas(tempContainer2, {
+          width: 794,
+          height: 1123,
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff'
+        });
+
+        document.body.removeChild(tempContainer2);
+
+        pdf.addPage();
+        const imgData2 = canvas2.toDataURL('image/png');
+        const imgHeight2 = (canvas2.height * imgWidth) / canvas2.width;
+        pdf.addImage(imgData2, 'PNG', 0, 0, imgWidth, imgHeight2);
+      }
+
+      // Save the PDF
+      const fileName = `Ket_Qua_${this.testResult.employeeInfo.employeeId}_${this.formatDate(this.testResult.completedAt)}.pdf`;
+      pdf.save(fileName);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Có lỗi xảy ra khi tạo file PDF. Vui lòng thử lại!');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private createPDFContent(): string {
+    if (!this.testResult) return '';
+
+    return `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="margin: 0 0 10px 0; font-size: 20px; font-weight: bold; color: #2c3e50;">KẾT QUẢ BÀI KIỂM TRA</h1>
+        <h2 style="margin: 0 0 8px 0; font-size: 16px; font-weight: normal; color: #34495e;">${this.testResult.testData.title}</h2>
+        <p style="margin: 0; font-size: 14px; color: #7f8c8d;">Mã tài liệu: ${this.testResult.testData.documentCode}</p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa; width: 40%;">Mã nhân viên:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.testResult.employeeInfo.employeeId}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Tên nhân viên:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.testResult.employeeInfo.employeeName}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Ngày thực hiện:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.formatDate(this.testResult.completedAt)}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Thời gian hoàn thành:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.formatTime(this.testResult.completedAt)}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Điểm số:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.testResult.score}/${this.testResult.testData.totalQuestions}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Tỷ lệ đúng:</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${this.testResult.percentage}%</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; background-color: #f8f9fa;">Kết quả:</td>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: ${this.testResult.passed ? '#27ae60' : '#e74c3c'};">
+            ${this.testResult.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+          </td>
+        </tr>
+      </table>
+
+      ${this.testResult.signature ? `
+        <div style="margin-bottom: 30px;">
+          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">Chữ ký nhân viên:</h3>
+          <div style="border: 2px solid #ddd; padding: 10px; border-radius: 8px; text-align: center; background-color: #f8f9fa;">
+            <img src="${this.testResult.signature}" style="max-width: 200px; max-height: 100px;" />
+          </div>
+        </div>
+      ` : ''}
+
+      <div style="text-align: center; margin-top: 50px; font-size: 12px; color: #7f8c8d;">
+        <p>Báo cáo được tạo tự động bởi hệ thống vào ${this.formatTime(new Date())} - ${this.formatDate(new Date())}</p>
+      </div>
+    `;
+  }
+
+  private createDetailedAnswersContent(): string {
+    if (!this.testResult) return '';
+
+    let content = `
+      <div style="margin-bottom: 20px;">
+        <h2 style="margin: 0 0 20px 0; font-size: 18px; font-weight: bold; color: #2c3e50; text-align: center;">CHI TIẾT CÂU TRẢ LỜI</h2>
+      </div>
+    `;
+
+    let questionNumber = 1;
+    this.testResult.testData.sections.forEach((section, sectionIndex) => {
+      content += `
+        <div style="margin-bottom: 15px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #34495e; background-color: #ecf0f1; padding: 8px; border-radius: 4px;">
+            ${section.title}
+          </h3>
+        </div>
+      `;
+
+      section.questions.forEach((question, questionIndex) => {
+        const answer = this.testResult!.answers.find(a => 
+          a.sectionIndex === sectionIndex && a.questionIndex === questionIndex
+        );
+        
+        const isCorrect = answer?.isCorrect || false;
+
+        content += `
+          <div style="margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; background-color: ${isCorrect ? '#d4edda' : '#f8d7da'};">
+            <div style="font-weight: bold; margin-bottom: 8px; color: #2c3e50;">
+              Câu ${questionNumber}: ${question.question}
+            </div>
+            <div style="margin-bottom: 4px;">
+              <strong>Đáp án chọn:</strong> ${answer?.selectedAnswer || 'Không trả lời'}
+            </div>
+            <div style="margin-bottom: 4px;">
+              <strong>Đáp án đúng:</strong> ${question.correctAnswer}
+            </div>
+            <div style="font-weight: bold; color: ${isCorrect ? '#27ae60' : '#e74c3c'};">
+              ${isCorrect ? '✓ ĐÚNG' : '✗ SAI'}
+            </div>
+          </div>
+        `;
+        questionNumber++;
+      });
     });
-    const url = window.URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Ket_Qua_${this.testResult.employeeInfo.employeeId}_${this.formatDate(this.testResult.completedAt)}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+
+    return content;
   }
 
   private generateWordContent(result: TestResult): string {
