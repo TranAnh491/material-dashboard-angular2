@@ -1876,3 +1876,240 @@
     image-rendering: -webkit-optimize-contrast;
   }
 } 
+
+/* Performance Optimizations for Matrix Training */
+/* Reduce animations and improve rendering performance on all devices */
+
+.matrix-training-content {
+  will-change: transform; /* Promote to composite layer for better performance */
+  contain: layout style paint; /* CSS containment for better performance */
+}
+
+.matrix-table-container {
+  /* GPU acceleration for scrolling */
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+}
+
+.matrix-table {
+  /* Optimize table rendering */
+  table-layout: fixed; /* Better performance for large tables */
+  contain: layout;
+}
+
+.circular-progress {
+  /* Optimize SVG rendering */
+  will-change: transform;
+  contain: layout style paint;
+  transform: translateZ(0); /* Force GPU rendering */
+}
+
+.progress-ring-fill {
+  /* Optimize SVG stroke animations */
+  will-change: stroke-dashoffset;
+  transform: translateZ(0);
+}
+
+/* Reduce motion for users who prefer it and low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  .menu-card,
+  .step-item,
+  .modern-checklist-card,
+  .stat-card,
+  .summary-card {
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  .circular-progress,
+  .progress-ring-fill {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  .new-badge {
+    animation: none !important;
+  }
+}
+
+/* Performance optimizations for low-end devices */
+@media (max-width: 768px) and (max-device-width: 768px) {
+  /* Disable complex animations on mobile for better performance */
+  .menu-card:hover {
+    transform: none !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
+  }
+  
+  .step-item:hover {
+    transform: none !important;
+  }
+  
+  .stat-card:hover,
+  .summary-card:hover {
+    transform: none !important;
+  }
+  
+  /* Simplify matrix table for mobile performance */
+  .matrix-table {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+  
+  .matrix-table td,
+  .matrix-table th {
+    contain: layout style;
+  }
+  
+  /* Optimize circular progress for mobile */
+  .circular-progress {
+    transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  
+  /* Reduce visual complexity on low-end devices */
+  .progress-ring-background,
+  .progress-ring-fill {
+    stroke-width: 4px; /* Thinner stroke for better performance */
+  }
+}
+
+/* Critical performance fix for matrix training lag */
+.matrix-training-content-expanded {
+  /* Enable hardware acceleration */
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  
+  /* CSS containment */
+  contain: layout style paint;
+  
+  /* Optimize repaints */
+  will-change: transform, opacity;
+}
+
+/* Optimize employee table rows */
+.matrix-table tr {
+  contain: layout style;
+  will-change: background-color;
+}
+
+.name-with-avatar {
+  contain: layout;
+}
+
+.employee-avatar {
+  /* Optimize avatar rendering */
+  will-change: transform;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Battery and performance aware optimizations */
+@media (prefers-reduced-motion: no-preference) and (min-width: 769px) {
+  /* Only enable smooth animations on desktop with no motion preference */
+  .menu-card,
+  .step-item {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+}
+
+/* Reduce repaints during scrolling */
+.matrix-table-container {
+  overflow-anchor: none; /* Prevent scroll anchoring issues */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto; /* Disable smooth scroll for performance */
+}
+
+/* Memory optimization */
+.matrix-training-content:not(.active) {
+  /* Reduce memory usage when not visible */
+  contain: strict;
+  content-visibility: auto;
+  contain-intrinsic-size: 500px;
+} 
+
+/* Matrix Pagination Styles */
+.matrix-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  font-size: 14px;
+}
+
+.pagination-info {
+  color: #666;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-indicator {
+  font-weight: 600;
+  color: #333;
+  padding: 0 10px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.pagination-controls button {
+  width: 40px;
+  height: 40px;
+  transition: all 0.2s ease;
+}
+
+.pagination-controls button:not(:disabled) {
+  background-color: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
+}
+
+.pagination-controls button:not(:disabled):hover {
+  background-color: rgba(33, 150, 243, 0.2);
+  transform: scale(1.05);
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Mobile pagination styles */
+@media (max-width: 768px) {
+  .matrix-pagination {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 15px;
+  }
+  
+  .pagination-info {
+    font-size: 12px;
+    text-align: center;
+  }
+  
+  .pagination-controls {
+    gap: 15px;
+  }
+  
+  .pagination-controls button {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .page-indicator {
+    font-size: 16px;
+    min-width: 80px;
+  }
+} 

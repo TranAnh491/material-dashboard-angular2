@@ -373,7 +373,7 @@
               <i class="material-icons">people</i>
             </div>
             <div class="summary-info">
-              <h3>{{ getMatrixEmployees().length }}</h3>
+              <h3>{{ allMatrixEmployees.length }}</h3>
               <p>{{ isEnglish ? 'Total Employees' : 'Tổng số nhân viên' }}</p>
             </div>
           </div>
@@ -393,7 +393,7 @@
               <i class="material-icons">trending_up</i>
             </div>
             <div class="summary-info">
-              <h3>{{ getAverageCompletionRate() }}%</h3>
+              <h3>{{ averageCompletionRate }}%</h3>
               <p>{{ isEnglish ? 'Average Completion' : 'Tỷ lệ hoàn thành TB' }}</p>
             </div>
           </div>
@@ -412,7 +412,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let employee of getMatrixEmployees()">
+                <tr *ngFor="let employee of matrixEmployees">
                   <td class="employee-id">{{ employee.employeeId }}</td>
                   <td class="employee-name">
                     <div class="name-with-avatar">
@@ -433,21 +433,43 @@
                                 stroke="#4CAF50" 
                                 stroke-width="6" 
                                 fill="transparent"
-                                [style.stroke-dasharray]="getCircumference()"
-                                [style.stroke-dashoffset]="getStrokeDashOffset(employee.completedSkills, employee.totalSkills)"/>
+                                [style.stroke-dasharray]="circumference"
+                                [style.stroke-dashoffset]="employee.strokeDashOffset"/>
                       </svg>
                       <div class="progress-text">{{ employee.completedSkills }}/{{ employee.totalSkills }}</div>
                     </div>
                   </td>
                   <td class="skill-status">
-                    <div class="skill-indicator" [ngClass]="getSkillStatus(employee.employeeId, 'temperature')">
-                      <i class="material-icons">{{ getSkillIcon(employee.employeeId, 'temperature') }}</i>
-                      <span>{{ getSkillStatusText(employee.employeeId, 'temperature') }}</span>
+                    <div class="skill-indicator" [ngClass]="employee.skillStatusClass">
+                      <i class="material-icons">{{ employee.skillIcon }}</i>
+                      <span>{{ employee.skillStatusText }}</span>
                     </div>
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Matrix Pagination Controls -->
+        <div *ngIf="totalMatrixPages > 1" class="matrix-pagination">
+          <div class="pagination-info">
+            <span>{{ isEnglish ? 'Showing' : 'Hiển thị' }} {{ (currentMatrixPage * matrixPageSize) + 1 }} - {{ Math.min((currentMatrixPage + 1) * matrixPageSize, allMatrixEmployees.length) }} {{ isEnglish ? 'of' : 'trong tổng số' }} {{ allMatrixEmployees.length }} {{ isEnglish ? 'employees' : 'nhân viên' }}</span>
+          </div>
+          <div class="pagination-controls">
+            <button mat-icon-button 
+                    [disabled]="!hasMatrixPrevPage" 
+                    (click)="prevMatrixPage()"
+                    [matTooltip]="isEnglish ? 'Previous page' : 'Trang trước'">
+              <mat-icon>chevron_left</mat-icon>
+            </button>
+            <span class="page-indicator">{{ currentMatrixPage + 1 }} / {{ totalMatrixPages }}</span>
+            <button mat-icon-button 
+                    [disabled]="!hasMatrixNextPage" 
+                    (click)="nextMatrixPage()"
+                    [matTooltip]="isEnglish ? 'Next page' : 'Trang sau'">
+              <mat-icon>chevron_right</mat-icon>
+            </button>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
 import { DeleteConfirmationService } from '../../services/delete-confirmation.service';
@@ -19,16 +19,25 @@ interface MatrixEmployee {
   completedSkills: number;
   totalSkills: number;
   temperatureSkill?: 'passed' | 'failed' | 'pending';
+  // Add cached progress values
+  progressPercentage?: number;
+  strokeDashOffset?: string;
+  skillIcon?: string;
+  skillStatusText?: string;
+  skillStatusClass?: string;
 }
-
 
 @Component({
   selector: 'app-equipment',
   templateUrl: './equipment.component.html',
-  styleUrls: ['./equipment.component.css']
+  styleUrls: ['./equipment.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EquipmentComponent implements OnInit {
 
+  // Make Math available in template
+  Math = Math;
+  
   isEnglish = false;
   selectedStep: FlowchartStep | null = null;
   showWorkInstruction = false;
@@ -41,6 +50,84 @@ export class EquipmentComponent implements OnInit {
   filteredReportData: TrainingRecord[] = [];
   isLoadingReport = false;
   displayedColumns: string[] = ['employeeId', 'name', 'trainingContent', 'status', 'trainingDate', 'expiryDate', 'actions'];
+
+  // Cached matrix training data
+  private _cachedMatrixEmployees: MatrixEmployee[] = [];
+  private _averageCompletionRate: number = 0;
+  private _circumference: string = '';
+  
+  // Matrix pagination for performance
+  private _currentMatrixPage: number = 0;
+  private _matrixPageSize: number = 10; // Show 10 employees per page
+  private _paginatedMatrixEmployees: MatrixEmployee[] = [];
+  
+  // Matrix training computed properties
+  get matrixEmployees(): MatrixEmployee[] {
+    return this._paginatedMatrixEmployees;
+  }
+  
+  get allMatrixEmployees(): MatrixEmployee[] {
+    return this._cachedMatrixEmployees;
+  }
+  
+  get currentMatrixPage(): number {
+    return this._currentMatrixPage;
+  }
+  
+  get matrixPageSize(): number {
+    return this._matrixPageSize;
+  }
+  
+  get totalMatrixPages(): number {
+    return Math.ceil(this._cachedMatrixEmployees.length / this._matrixPageSize);
+  }
+  
+  get hasMatrixPrevPage(): boolean {
+    return this._currentMatrixPage > 0;
+  }
+  
+  get hasMatrixNextPage(): boolean {
+    return this._currentMatrixPage < this.totalMatrixPages - 1;
+  }
+  
+  get averageCompletionRate(): number {
+    return this._averageCompletionRate;
+  }
+  
+  get circumference(): string {
+    return this._circumference;
+  }
+  
+  // Matrix pagination methods
+  goToMatrixPage(page: number): void {
+    if (page >= 0 && page < this.totalMatrixPages) {
+      this._currentMatrixPage = page;
+      this.updatePaginatedMatrixEmployees();
+      this.cdr.markForCheck();
+    }
+  }
+  
+  nextMatrixPage(): void {
+    if (this.hasMatrixNextPage) {
+      this._currentMatrixPage++;
+      this.updatePaginatedMatrixEmployees();
+      this.cdr.markForCheck();
+    }
+  }
+  
+  prevMatrixPage(): void {
+    if (this.hasMatrixPrevPage) {
+      this._currentMatrixPage--;
+      this.updatePaginatedMatrixEmployees();
+      this.cdr.markForCheck();
+    }
+  }
+  
+  private updatePaginatedMatrixEmployees(): void {
+    const startIndex = this._currentMatrixPage * this._matrixPageSize;
+    const endIndex = startIndex + this._matrixPageSize;
+    this._paginatedMatrixEmployees = this._cachedMatrixEmployees.slice(startIndex, endIndex);
+  }
 
   steps: FlowchartStep[] = [
     { vi: 'Nhận nguyên liệu', en: 'Receive Materials', icon: 'call_received', type: 'material', imageUrl: 'assets/img/instruction_step_1.png' },
@@ -56,8 +143,12 @@ export class EquipmentComponent implements OnInit {
   constructor(
     private router: Router,
     private trainingReportService: TrainingReportService,
-    private deleteConfirmationService: DeleteConfirmationService
-  ) { }
+    private deleteConfirmationService: DeleteConfirmationService,
+    private cdr: ChangeDetectorRef
+  ) {
+    // Pre-calculate circumference once
+    this._circumference = this.calculateCircumference();
+  }
 
   ngOnInit(): void {
     if (this.steps.length > 0) {
@@ -132,6 +223,7 @@ export class EquipmentComponent implements OnInit {
       this.showWorkInstruction = false; // Đóng work instruction khi mở matrix training
       this.showTest = false; // Đóng test khi mở matrix training
       this.showReport = false; // Đóng report khi mở matrix training
+      this.cacheMatrixTrainingData(); // Cache data to improve performance
     }
   }
 
@@ -154,11 +246,17 @@ export class EquipmentComponent implements OnInit {
       this.reportData.forEach(record => {
         console.log(`👤 ${record.employeeId} (${record.name}): Signature = ${record.signature ? 'Available' : 'Not available'}`);
       });
+      
+      // Pre-cache matrix training data for better performance
+      this.cacheMatrixTrainingData();
+      
     } catch (error) {
       console.error('❌ Error loading report data:', error);
       // Fallback to empty array if Firebase fails
       this.reportData = [];
       this.filteredReportData = [];
+      // Still cache matrix data with mock data
+      this.cacheMatrixTrainingData();
     }
     this.isLoadingReport = false;
   }
@@ -519,8 +617,8 @@ export class EquipmentComponent implements OnInit {
     return content;
   }
 
-  // Matrix Training Functions
-  getMatrixEmployees(): MatrixEmployee[] {
+  // Matrix Training Functions - Optimized with caching
+  private cacheMatrixTrainingData(): void {
     // Create matrix data from existing report data plus some mock employees
     const matrixEmployees: MatrixEmployee[] = [];
     
@@ -555,28 +653,65 @@ export class EquipmentComponent implements OnInit {
       });
     }
 
-    return matrixEmployees.sort((a, b) => a.employeeId.localeCompare(b.employeeId));
+    // Sort and cache with pre-calculated values
+    this._cachedMatrixEmployees = matrixEmployees
+      .sort((a, b) => a.employeeId.localeCompare(b.employeeId))
+      .map(emp => this.enhanceEmployeeWithCalculations(emp));
+    
+    // Calculate and cache average completion rate
+    this.calculateAverageCompletionRate();
+    
+    // Reset pagination and update paginated data
+    this._currentMatrixPage = 0;
+    this.updatePaginatedMatrixEmployees();
+    
+    // Trigger change detection
+    this.cdr.markForCheck();
   }
 
-  getAverageCompletionRate(): number {
-    const employees = this.getMatrixEmployees();
-    if (employees.length === 0) return 0;
+  private enhanceEmployeeWithCalculations(employee: MatrixEmployee): MatrixEmployee {
+    const progressPercentage = (employee.completedSkills / employee.totalSkills) * 100;
+    const strokeDashOffset = this.calculateStrokeDashOffset(employee.completedSkills, employee.totalSkills);
+    const skillIcon = this.calculateSkillIcon(employee.temperatureSkill);
+    const skillStatusText = this.calculateSkillStatusText(employee.temperatureSkill);
+    const skillStatusClass = employee.temperatureSkill || 'pending';
+
+    return {
+      ...employee,
+      progressPercentage,
+      strokeDashOffset,
+      skillIcon,
+      skillStatusText,
+      skillStatusClass
+    };
+  }
+
+  // Legacy method for backward compatibility
+  getMatrixEmployees(): MatrixEmployee[] {
+    return this._cachedMatrixEmployees;
+  }
+
+  private calculateAverageCompletionRate(): void {
+    if (this._cachedMatrixEmployees.length === 0) {
+      this._averageCompletionRate = 0;
+      return;
+    }
     
-    const totalCompletionRate = employees.reduce((sum, emp) => {
+    const totalCompletionRate = this._cachedMatrixEmployees.reduce((sum, emp) => {
       return sum + (emp.completedSkills / emp.totalSkills);
     }, 0);
     
-    return Math.round((totalCompletionRate / employees.length) * 100);
+    this._averageCompletionRate = Math.round((totalCompletionRate / this._cachedMatrixEmployees.length) * 100);
   }
 
-  // Circular Progress Functions
-  getCircumference(): string {
+  // Circular Progress Functions - Optimized
+  private calculateCircumference(): string {
     const radius = 25;
     const circumference = 2 * Math.PI * radius;
     return `${circumference} ${circumference}`;
   }
 
-  getStrokeDashOffset(completed: number, total: number): string {
+  private calculateStrokeDashOffset(completed: number, total: number): string {
     const radius = 25;
     const circumference = 2 * Math.PI * radius;
     const progress = completed / total;
@@ -584,9 +719,40 @@ export class EquipmentComponent implements OnInit {
     return offset.toString();
   }
 
-  // Skill Status Functions
+  // Skill Status Functions - Optimized
+  private calculateSkillIcon(temperatureSkill?: 'passed' | 'failed' | 'pending'): string {
+    switch (temperatureSkill) {
+      case 'passed': return 'check_circle';
+      case 'failed': return 'cancel';
+      case 'pending': return 'schedule';
+      default: return 'schedule';
+    }
+  }
+
+  private calculateSkillStatusText(temperatureSkill?: 'passed' | 'failed' | 'pending'): string {
+    switch (temperatureSkill) {
+      case 'passed': return this.isEnglish ? 'Passed' : 'Đạt';
+      case 'failed': return this.isEnglish ? 'Failed' : 'Không đạt';
+      case 'pending': return this.isEnglish ? 'Not Taken' : 'Chưa làm';
+      default: return this.isEnglish ? 'Not Taken' : 'Chưa làm';
+    }
+  }
+
+  // Legacy methods for backward compatibility - these should not be called from template
+  getAverageCompletionRate(): number {
+    return this._averageCompletionRate;
+  }
+
+  getCircumference(): string {
+    return this._circumference;
+  }
+
+  getStrokeDashOffset(completed: number, total: number): string {
+    return this.calculateStrokeDashOffset(completed, total);
+  }
+
   getSkillStatus(employeeId: string, skillType: string): string {
-    const employee = this.getMatrixEmployees().find(emp => emp.employeeId === employeeId);
+    const employee = this._cachedMatrixEmployees.find(emp => emp.employeeId === employeeId);
     if (!employee) return 'pending';
     
     if (skillType === 'temperature') {
@@ -597,22 +763,14 @@ export class EquipmentComponent implements OnInit {
   }
 
   getSkillIcon(employeeId: string, skillType: string): string {
-    const status = this.getSkillStatus(employeeId, skillType);
-    switch (status) {
-      case 'passed': return 'check_circle';
-      case 'failed': return 'cancel';
-      case 'pending': return 'schedule';
-      default: return 'schedule';
-    }
+    const employee = this._cachedMatrixEmployees.find(emp => emp.employeeId === employeeId);
+    if (!employee) return 'schedule';
+    return employee.skillIcon || 'schedule';
   }
 
   getSkillStatusText(employeeId: string, skillType: string): string {
-    const status = this.getSkillStatus(employeeId, skillType);
-    switch (status) {
-      case 'passed': return this.isEnglish ? 'Passed' : 'Đạt';
-      case 'failed': return this.isEnglish ? 'Failed' : 'Không đạt';
-      case 'pending': return this.isEnglish ? 'Not Taken' : 'Chưa làm';
-      default: return this.isEnglish ? 'Not Taken' : 'Chưa làm';
-    }
+    const employee = this._cachedMatrixEmployees.find(emp => emp.employeeId === employeeId);
+    if (!employee) return this.isEnglish ? 'Not Taken' : 'Chưa làm';
+    return employee.skillStatusText || (this.isEnglish ? 'Not Taken' : 'Chưa làm');
   }
 } 
