@@ -1,7 +1,4 @@
-.toolbar {
-  margin-bottom: 20px;
-  text-align: right;
-}
+
 
 .instruction-container {
   display: flex;
@@ -224,106 +221,161 @@
   transform: scale(1.1);
 }
 
+/* Test Content Styling */
 .test-content-expanded {
-  padding: 30px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 20px;
 }
 
-/* Test Card Styles */
 .modern-checklist-card {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-  overflow: hidden;
-  transition: all 0.3s ease;
-  border: 2px solid transparent;
-}
-
-.modern-checklist-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-}
-
-.modern-checklist-card.ready {
-  border-color: #4CAF50;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 20px;
-  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-  color: white;
+  border: 1px solid #e0e0e0;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
 }
 
-.checklist-icon {
-  background: rgba(255,255,255,0.2);
-  padding: 10px;
+/* Materials Test Card - Green */
+.modern-checklist-card.materials {
+  background: #E8F5E8;
+  border-left: 4px solid #4CAF50;
+}
+
+.modern-checklist-card.materials .checklist-icon {
+  background: #4CAF50;
+  color: white;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.checklist-icon i {
-  font-size: 24px;
-}
-
-.status-badge {
-  background: rgba(255,255,255,0.2);
-  padding: 6px 12px;
-  border-radius: 20px;
+.modern-checklist-card.materials .status-badge {
+  background: #4CAF50;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 15px;
   font-size: 0.85rem;
   font-weight: 500;
 }
 
+/* Finished Goods Test Card - Orange */
+.modern-checklist-card.finished-goods {
+  background: #FFF3E0;
+  border-left: 4px solid #FF9800;
+}
+
+.modern-checklist-card.finished-goods .checklist-icon {
+  background: #FF9800;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modern-checklist-card.finished-goods .status-badge {
+  background: #FF9800;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 15px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Temperature Test Card - Blue */
+.modern-checklist-card.temperature {
+  background: #E3F2FD;
+  border-left: 4px solid #2196F3;
+}
+
+.modern-checklist-card.temperature .checklist-icon {
+  background: #2196F3;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modern-checklist-card.temperature .status-badge {
+  background: #2196F3;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 15px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Card Structure */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
 .card-content {
-  padding: 24px;
+  flex: 1;
+  margin-bottom: 15px;
 }
 
 .checklist-title {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   color: #333;
 }
 
 .checklist-description {
+  font-size: 0.9rem;
   color: #666;
-  margin: 0 0 20px 0;
-  line-height: 1.5;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.test-info {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.test-detail {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: #555;
+  font-weight: 500;
 }
 
 .card-actions {
-  padding: 0 24px 24px;
+  margin-top: auto;
 }
 
-.action-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.action-btn.primary {
+  background: #007bff;
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  transition: all 0.3s ease;
   width: 100%;
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.action-btn i {
-  font-size: 20px;
+  justify-content: center;
 }
 
 /* Report Specific Styling */
@@ -699,4 +751,446 @@
 
 .refresh-btn:hover:not(:disabled) mat-icon {
   transform: rotate(360deg);
+} 
+
+/* Main Content Positioning */
+.main-content {
+  position: relative;
+}
+
+/* Language Toolbar at Top Left Corner */
+.language-toolbar {
+  position: absolute !important;
+  top: -23px !important;
+  left: 20px !important;
+  z-index: 1000 !important;
+  text-align: left !important;
+  margin-top: 0 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+.language-toolbar .btn {
+  padding: 10px 20px !important;
+  border-radius: 30px !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  background: #FFF3E0 !important;
+  border: none !important;
+  color: #333 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition: background 0.3s ease !important;
+}
+
+.language-toolbar .btn:hover {
+  background: #FFE0B2 !important;
+}
+
+.language-toolbar .btn i {
+  font-size: 1.2rem !important;
+}
+
+/* Page Header Styling */
+.page-header {
+  text-align: center;
+  margin-bottom: 15px;
+  margin-top: 10px;
+  padding: 10px;
+  background: #fff;
+  color: #333;
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.page-title i {
+  font-size: 2rem;
+}
+
+.page-subtitle {
+  font-size: 1rem;
+  margin: 8px 0 0 0;
+  color: #666;
+  font-weight: normal;
+  font-style: italic;
+}
+
+/* Header Divider */
+.header-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
+  margin: 15px 0;
+}
+
+/* Menu Cards with Different Colors */
+.menu-cards-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+  margin-bottom: 15px;
+  margin-top: 5px;
+}
+
+/* Menu Card Base Styling */
+.menu-card {
+  background: white;
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 80px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+/* Work Instructions - Light Blue */
+.menu-card.work-instruction {
+  background: #E3F2FD;
+  color: #1976D2;
+}
+
+/* Test - Light Green */
+.menu-card.test {
+  background: #E8F5E8;
+  color: #388E3C;
+}
+
+/* Report - Light Orange */
+.menu-card.report {
+  background: #FFF3E0;
+  color: #F57C00;
+}
+
+/* Matrix Training - Light Pink */
+.menu-card.matrix-training {
+  background: #FCE4EC;
+  color: #C2185B;
+}
+
+.menu-card-icon {
+  font-size: 2rem;
+}
+
+.menu-card-content {
+  flex: 1;
+}
+
+.menu-card-content h3 {
+  margin: 0 0 5px 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.menu-card-content p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.menu-card-arrow {
+  font-size: 1.2rem;
+}
+
+/* New Badge for Test Cards */
+.new-badge {
+  background: #FF5722;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 600;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* Matrix Training Content */
+.matrix-training-content {
+  background: white;
+  margin-top: 15px;
+}
+
+.matrix-training-content-expanded {
+  padding: 25px;
+}
+
+/* Matrix Summary Stats */
+.matrix-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.summary-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.summary-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #E3F2FD;
+  color: #1976D2;
+}
+
+.summary-info h3 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.summary-info p {
+  margin: 5px 0 0 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+/* Matrix Table Container */
+.matrix-table-container {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 25px;
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.matrix-table th {
+  background: #F5F5F5;
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.matrix-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.matrix-table tr:hover {
+  background: #fafafa;
+}
+
+/* Employee columns */
+.employee-id {
+  font-weight: 600;
+  color: #1976D2;
+  font-size: 0.9rem;
+}
+
+.name-with-avatar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.employee-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: #E3F2FD;
+  color: #1976D2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Circular Progress */
+.skill-level {
+  text-align: center;
+}
+
+.circular-progress {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 60px;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+}
+
+.progress-ring-background {
+  stroke: #FFE0B2;
+}
+
+.progress-ring-fill {
+  stroke: #4CAF50;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Skill Status */
+.skill-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.skill-indicator.passed {
+  background: #E8F5E8;
+  color: #4CAF50;
+}
+
+.skill-indicator.failed {
+  background: #FFEBEE;
+  color: #F44336;
+}
+
+.skill-indicator.pending {
+  background: #FFF3E0;
+  color: #FF9800;
+}
+
+.skill-indicator i {
+  font-size: 1rem;
+}
+
+/* Legend */
+.matrix-legend {
+  background: #F9F9F9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.matrix-legend h4 {
+  margin: 0 0 10px 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.legend-items {
+  display: flex;
+  gap: 25px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+
+.legend-item i.passed {
+  color: #4CAF50;
+}
+
+.legend-item i.failed {
+  color: #F44336;
+}
+
+.legend-item i.pending {
+  color: #FF9800;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .matrix-summary {
+    grid-template-columns: 1fr;
+  }
+  
+  .legend-items {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .matrix-table {
+    font-size: 0.85rem;
+  }
+  
+  .matrix-table th,
+  .matrix-table td {
+    padding: 10px 8px;
+  }
+  
+  .name-with-avatar {
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+  }
+}
+
+/* Remove old matrix grid and card styles - replaced with table */
+.matrix-grid {
+  display: none;
+}
+
+.matrix-card {
+  display: none;
+}
+
+.matrix-card-header {
+  display: none;
+}
+
+.matrix-icon {
+  display: none;
+}
+
+.matrix-card-content {
+  display: none;
+}
+
+.matrix-stats {
+  display: none;
+}
+
+.stat {
+  display: none;
+}
+
+.matrix-card-actions .action-btn.secondary {
+  display: none;
 } 

@@ -13,6 +13,13 @@ interface FlowchartStep {
   imageUrl?: string;
 }
 
+interface MatrixEmployee {
+  employeeId: string;
+  name: string;
+  completedSkills: number;
+  totalSkills: number;
+  temperatureSkill?: 'passed' | 'failed' | 'pending';
+}
 
 
 @Component({
@@ -27,6 +34,7 @@ export class EquipmentComponent implements OnInit {
   showWorkInstruction = false;
   showTest = false;
   showReport = false;
+  showMatrixTraining = false;
 
   // Report properties
   reportData: TrainingRecord[] = [];
@@ -70,11 +78,32 @@ export class EquipmentComponent implements OnInit {
     this.router.navigate(['/temperature-knowledge-test']);
   }
 
+  openMaterialsTest() {
+    // Navigate to Materials Test component (to be created)
+    console.log('Opening Materials Test - WH-WI0005 Part A');
+    // TODO: Create materials test component and navigate
+    // this.router.navigate(['/materials-test']);
+    alert(this.isEnglish ? 
+      'Materials Test (WH-WI0005 Part A)\n20 questions about raw materials import/export procedures.\nThis test will be implemented soon.' : 
+      'Kiểm tra Nguyên vật liệu (WH-WI0005 Phần A)\n20 câu hỏi về quy trình xuất nhập kho nguyên vật liệu.\nBài kiểm tra này sẽ được triển khai sớm.');
+  }
+
+  openFinishedGoodsTest() {
+    // Navigate to Finished Goods Test component (to be created)
+    console.log('Opening Finished Goods Test - WH-WI0005 Part B');
+    // TODO: Create finished goods test component and navigate
+    // this.router.navigate(['/finished-goods-test']);
+    alert(this.isEnglish ? 
+      'Finished Goods Test (WH-WI0005 Part B)\n20 questions about finished goods import/export procedures.\nThis test will be implemented soon.' : 
+      'Kiểm tra Thành phẩm (WH-WI0005 Phần B)\n20 câu hỏi về quy trình xuất nhập kho thành phẩm.\nBài kiểm tra này sẽ được triển khai sớm.');
+  }
+
   toggleWorkInstruction() {
     this.showWorkInstruction = !this.showWorkInstruction;
     if (this.showWorkInstruction) {
       this.showTest = false; // Đóng test box khi mở work instruction
       this.showReport = false; // Đóng report khi mở work instruction
+      this.showMatrixTraining = false; // Đóng matrix training khi mở work instruction
     }
   }
 
@@ -83,6 +112,7 @@ export class EquipmentComponent implements OnInit {
     if (this.showTest) {
       this.showWorkInstruction = false; // Đóng work instruction khi mở test
       this.showReport = false; // Đóng report khi mở test
+      this.showMatrixTraining = false; // Đóng matrix training khi mở test
     }
   }
 
@@ -91,7 +121,17 @@ export class EquipmentComponent implements OnInit {
     if (this.showReport) {
       this.showWorkInstruction = false; // Đóng work instruction khi mở report
       this.showTest = false; // Đóng test khi mở report
+      this.showMatrixTraining = false; // Đóng matrix training khi mở report
       this.refreshReportData(); // Force refresh data when opening report
+    }
+  }
+
+  toggleMatrixTraining() {
+    this.showMatrixTraining = !this.showMatrixTraining;
+    if (this.showMatrixTraining) {
+      this.showWorkInstruction = false; // Đóng work instruction khi mở matrix training
+      this.showTest = false; // Đóng test khi mở matrix training
+      this.showReport = false; // Đóng report khi mở matrix training
     }
   }
 
@@ -99,6 +139,7 @@ export class EquipmentComponent implements OnInit {
     this.showWorkInstruction = false;
     this.showTest = false;
     this.showReport = false;
+    this.showMatrixTraining = false;
   }
 
   // Report methods
@@ -476,5 +517,102 @@ export class EquipmentComponent implements OnInit {
     console.log(`✅ Generated content for ${questionNumber - 1} questions total`);
     content += `</div>`;
     return content;
+  }
+
+  // Matrix Training Functions
+  getMatrixEmployees(): MatrixEmployee[] {
+    // Create matrix data from existing report data plus some mock employees
+    const matrixEmployees: MatrixEmployee[] = [];
+    
+    // Add employees from report data
+    this.reportData.forEach(record => {
+      const existing = matrixEmployees.find(emp => emp.employeeId === record.employeeId);
+      if (!existing) {
+        matrixEmployees.push({
+          employeeId: record.employeeId,
+          name: record.name,
+          completedSkills: record.status === 'pass' ? 1 : 0,
+          totalSkills: 1,
+          temperatureSkill: record.status === 'pass' ? 'passed' : 'failed'
+        });
+      }
+    });
+
+    // Add some mock employees if we don't have enough data
+    if (matrixEmployees.length < 5) {
+      const mockEmployees = [
+        { employeeId: 'ASP001', name: 'Nguyễn Văn A', completedSkills: 1, totalSkills: 1, temperatureSkill: 'passed' as const },
+        { employeeId: 'ASP002', name: 'Trần Thị B', completedSkills: 0, totalSkills: 1, temperatureSkill: 'failed' as const },
+        { employeeId: 'ASP003', name: 'Lê Văn C', completedSkills: 0, totalSkills: 1, temperatureSkill: 'pending' as const },
+        { employeeId: 'ASP004', name: 'Phạm Thị D', completedSkills: 1, totalSkills: 1, temperatureSkill: 'passed' as const },
+        { employeeId: 'ASP005', name: 'Hoàng Văn E', completedSkills: 0, totalSkills: 1, temperatureSkill: 'failed' as const }
+      ];
+
+      mockEmployees.forEach(mock => {
+        if (!matrixEmployees.find(emp => emp.employeeId === mock.employeeId)) {
+          matrixEmployees.push(mock);
+        }
+      });
+    }
+
+    return matrixEmployees.sort((a, b) => a.employeeId.localeCompare(b.employeeId));
+  }
+
+  getAverageCompletionRate(): number {
+    const employees = this.getMatrixEmployees();
+    if (employees.length === 0) return 0;
+    
+    const totalCompletionRate = employees.reduce((sum, emp) => {
+      return sum + (emp.completedSkills / emp.totalSkills);
+    }, 0);
+    
+    return Math.round((totalCompletionRate / employees.length) * 100);
+  }
+
+  // Circular Progress Functions
+  getCircumference(): string {
+    const radius = 25;
+    const circumference = 2 * Math.PI * radius;
+    return `${circumference} ${circumference}`;
+  }
+
+  getStrokeDashOffset(completed: number, total: number): string {
+    const radius = 25;
+    const circumference = 2 * Math.PI * radius;
+    const progress = completed / total;
+    const offset = circumference - (progress * circumference);
+    return offset.toString();
+  }
+
+  // Skill Status Functions
+  getSkillStatus(employeeId: string, skillType: string): string {
+    const employee = this.getMatrixEmployees().find(emp => emp.employeeId === employeeId);
+    if (!employee) return 'pending';
+    
+    if (skillType === 'temperature') {
+      return employee.temperatureSkill || 'pending';
+    }
+    
+    return 'pending';
+  }
+
+  getSkillIcon(employeeId: string, skillType: string): string {
+    const status = this.getSkillStatus(employeeId, skillType);
+    switch (status) {
+      case 'passed': return 'check_circle';
+      case 'failed': return 'cancel';
+      case 'pending': return 'schedule';
+      default: return 'schedule';
+    }
+  }
+
+  getSkillStatusText(employeeId: string, skillType: string): string {
+    const status = this.getSkillStatus(employeeId, skillType);
+    switch (status) {
+      case 'passed': return this.isEnglish ? 'Passed' : 'Đạt';
+      case 'failed': return this.isEnglish ? 'Failed' : 'Không đạt';
+      case 'pending': return this.isEnglish ? 'Not Taken' : 'Chưa làm';
+      default: return this.isEnglish ? 'Not Taken' : 'Chưa làm';
+    }
   }
 } 

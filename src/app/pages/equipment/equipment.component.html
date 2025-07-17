@@ -1,53 +1,78 @@
 <div class="main-content">
   <div class="container-fluid">
-    <div class="toolbar">
+    <!-- Language Toggle at Top Left Corner -->
+    <div class="language-toolbar">
       <button class="btn btn-info" (click)="toggleLanguage()">
         <i class="material-icons">language</i> {{ isEnglish ? 'Tiếng Việt' : 'English' }}
       </button>
     </div>
 
-    <!-- Three Menu Cards Layout -->
+    <!-- Main Title -->
+    <div class="page-header">
+      <h1 class="page-title">
+        <i class="material-icons">precision_manufacturing</i>
+        {{ isEnglish ? 'Training & Instructions' : 'Training & Instructions' }}
+      </h1>
+      <p class="page-subtitle">{{ isEnglish ? 'Training and Work Instructions' : 'Đào tạo và Hướng dẫn Công việc' }}</p>
+    </div>
+    <div class="header-divider"></div>
+
+    <!-- Four Menu Cards Layout -->
     <div class="menu-cards-layout">
       
-      <!-- Menu Card 1: Work Instruction -->
-      <div class="menu-card" (click)="toggleWorkInstruction()">
+      <!-- Menu Card 1: Work Instruction (Light Blue) -->
+      <div class="menu-card work-instruction" (click)="toggleWorkInstruction()">
         <div class="menu-card-icon">
           <i class="material-icons">integration_instructions</i>
         </div>
         <div class="menu-card-content">
-          <h3>Work Instruction</h3>
-          <p>Hướng dẫn các bước công việc</p>
+          <h3>{{ isEnglish ? 'Work Instructions' : 'Work Instructions' }}</h3>
+          <p>{{ isEnglish ? 'Step-by-step work guidance' : 'Hướng dẫn các bước công việc' }}</p>
         </div>
         <div class="menu-card-arrow">
           <i class="material-icons">{{ showWorkInstruction ? 'expand_less' : 'expand_more' }}</i>
         </div>
       </div>
 
-      <!-- Menu Card 2: Test -->
-      <div class="menu-card" (click)="toggleTest()">
-        <div class="menu-card-icon test">
+      <!-- Menu Card 2: Test (Light Green) -->
+      <div class="menu-card test" (click)="toggleTest()">
+        <div class="menu-card-icon">
           <i class="material-icons">quiz</i>
         </div>
         <div class="menu-card-content">
-          <h3>Temp + %Rh Test</h3>
-          <p>Kiểm tra kiến thức</p>
+          <h3>{{ isEnglish ? 'Knowledge Test' : 'Knowledge Test' }}</h3>
+          <p>{{ isEnglish ? 'Knowledge assessment' : 'Kiểm tra kiến thức' }}</p>
         </div>
         <div class="menu-card-arrow">
           <i class="material-icons">{{ showTest ? 'expand_less' : 'expand_more' }}</i>
         </div>
       </div>
 
-      <!-- Menu Card 3: Report -->
-      <div class="menu-card" (click)="toggleReport()">
-        <div class="menu-card-icon report">
+      <!-- Menu Card 3: Report (Light Orange) -->
+      <div class="menu-card report" (click)="toggleReport()">
+        <div class="menu-card-icon">
           <i class="material-icons">assessment</i>
         </div>
         <div class="menu-card-content">
-          <h3>Report</h3>
-          <p>Báo cáo đào tạo</p>
+          <h3>{{ isEnglish ? 'Training Report' : 'Training Report' }}</h3>
+          <p>{{ isEnglish ? 'Training reports' : 'Báo cáo đào tạo' }}</p>
         </div>
         <div class="menu-card-arrow">
           <i class="material-icons">{{ showReport ? 'expand_less' : 'expand_more' }}</i>
+        </div>
+      </div>
+
+      <!-- Menu Card 4: Matrix Training (Light Pink) -->
+      <div class="menu-card matrix-training" (click)="toggleMatrixTraining()">
+        <div class="menu-card-icon">
+          <i class="material-icons">grid_view</i>
+        </div>
+        <div class="menu-card-content">
+          <h3>{{ isEnglish ? 'Matrix Training' : 'Matrix Training' }}</h3>
+          <p>{{ isEnglish ? 'Training matrix' : 'Ma trận đào tạo' }}</p>
+        </div>
+        <div class="menu-card-arrow">
+          <i class="material-icons">{{ showMatrixTraining ? 'expand_less' : 'expand_more' }}</i>
         </div>
       </div>
 
@@ -58,7 +83,7 @@
       <div class="content-header">
         <h2>
           <i class="material-icons">integration_instructions</i>
-          Work Instruction
+          {{ isEnglish ? 'Work Instructions' : 'Work Instructions' }}
         </h2>
         <button class="close-btn" (click)="closeAll()">
           <i class="material-icons">close</i>
@@ -94,36 +119,100 @@
       <div class="content-header">
         <h2>
           <i class="material-icons">quiz</i>
-          Temp + %Rh Test
+          {{ isEnglish ? 'Test list' : 'Test list' }}
         </h2>
         <button class="close-btn" (click)="closeAll()">
           <i class="material-icons">close</i>
         </button>
       </div>
       <div class="test-content-expanded">
-        <!-- Temperature Knowledge Test Card -->
-        <div class="modern-checklist-card ready">
+        
+        <!-- Materials Test Card -->
+        <div class="modern-checklist-card materials">
           <div class="card-header">
             <div class="checklist-icon">
-              <i class="material-icons">quiz</i>
+              <i class="material-icons">inventory_2</i>
             </div>
-            <div class="status-badge ready">
-              Knowledge Test
+            <div class="status-badge materials">
+              {{ isEnglish ? 'Materials Test' : 'Kiểm tra Nguyên vật liệu' }}
+              <span class="new-badge">{{ isEnglish ? 'New' : 'Mới' }}</span>
             </div>
           </div>
 
           <div class="card-content">
-            <h3 class="checklist-title">Kiểm tra kiến thức</h3>
-            <p class="checklist-description">Hướng dẫn ghi, lưu trữ và xử lý về nhiệt độ độ ẩm</p>
+            <h3 class="checklist-title">{{ isEnglish ? 'Raw Materials Import/Export Test' : 'Kiểm tra Xuất nhập Nguyên vật liệu' }}</h3>
+            <p class="checklist-description">{{ isEnglish ? 'Warehouse import/export procedures for raw materials (WH-WI0005 - Part A)' : 'Hướng dẫn xuất nhập kho nguyên vật liệu (WH-WI0005 - Phần A)' }}</p>
+            <div class="test-info">
+              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
+              <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <button class="action-btn primary" (click)="openMaterialsTest()">
+              <i class="material-icons">inventory_2</i>
+              {{ isEnglish ? 'Start Materials Test' : 'Làm bài kiểm tra Nguyên vật liệu' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Finished Goods Test Card -->
+        <div class="modern-checklist-card finished-goods">
+          <div class="card-header">
+            <div class="checklist-icon">
+              <i class="material-icons">check_circle_outline</i>
+            </div>
+            <div class="status-badge finished-goods">
+              {{ isEnglish ? 'Finished Goods Test' : 'Kiểm tra Thành phẩm' }}
+              <span class="new-badge">{{ isEnglish ? 'New' : 'Mới' }}</span>
+            </div>
+          </div>
+
+          <div class="card-content">
+            <h3 class="checklist-title">{{ isEnglish ? 'Finished Goods Import/Export Test' : 'Kiểm tra Xuất nhập Thành phẩm' }}</h3>
+            <p class="checklist-description">{{ isEnglish ? 'Warehouse import/export procedures for finished goods (WH-WI0005 - Part B)' : 'Hướng dẫn xuất nhập kho thành phẩm (WH-WI0005 - Phần B)' }}</p>
+            <div class="test-info">
+              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
+              <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <button class="action-btn primary" (click)="openFinishedGoodsTest()">
+              <i class="material-icons">check_circle_outline</i>
+              {{ isEnglish ? 'Start Finished Goods Test' : 'Làm bài kiểm tra Thành phẩm' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Temperature Knowledge Test Card -->
+        <div class="modern-checklist-card temperature">
+          <div class="card-header">
+            <div class="checklist-icon">
+              <i class="material-icons">thermostat</i>
+            </div>
+            <div class="status-badge temperature">
+              {{ isEnglish ? 'Temperature Test' : 'Kiểm tra Nhiệt độ' }}
+            </div>
+          </div>
+
+          <div class="card-content">
+            <h3 class="checklist-title">{{ isEnglish ? 'Temperature & Humidity Knowledge Test' : 'Kiểm tra kiến thức Nhiệt độ & Độ ẩm' }}</h3>
+            <p class="checklist-description">{{ isEnglish ? 'Temperature and humidity recording, storage and processing guidelines' : 'Hướng dẫn ghi, lưu trữ và xử lý về nhiệt độ độ ẩm' }}</p>
+            <div class="test-info">
+              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
+              <span class="test-detail">{{ isEnglish ? 'Time: 25 minutes' : 'Thời gian: 25 phút' }}</span>
+            </div>
           </div>
 
           <div class="card-actions">
             <button class="action-btn primary" (click)="openTemperatureKnowledgeTest()">
-              <i class="material-icons">school</i>
-              Làm bài kiểm tra
+              <i class="material-icons">thermostat</i>
+              {{ isEnglish ? 'Start Temperature Test' : 'Làm bài kiểm tra Nhiệt độ' }}
             </button>
           </div>
         </div>
+
       </div>
     </div>
 
@@ -132,13 +221,13 @@
       <div class="content-header">
         <h2>
           <i class="material-icons">assessment</i>
-          Report
+          {{ isEnglish ? 'Training Report' : 'Report' }}
         </h2>
         <div class="header-actions">
           <button mat-icon-button 
                   color="primary" 
                   (click)="refreshReportData()"
-                  matTooltip="Làm mới dữ liệu"
+                  [matTooltip]="isEnglish ? 'Refresh data' : 'Làm mới dữ liệu'"
                   class="refresh-btn"
                   [disabled]="isLoadingReport">
             <mat-icon>refresh</mat-icon>
@@ -153,49 +242,49 @@
         <div class="report-table-container">
           <div *ngIf="isLoadingReport" class="loading-container">
             <mat-spinner diameter="40"></mat-spinner>
-            <p>Đang tải danh sách báo cáo đào tạo...</p>
+            <p>{{ isEnglish ? 'Loading training report list...' : 'Đang tải danh sách báo cáo đào tạo...' }}</p>
             <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">
-              Đang kiểm tra dữ liệu mới nhất từ Firebase...
+              {{ isEnglish ? 'Checking latest data from Firebase...' : 'Đang kiểm tra dữ liệu mới nhất từ Firebase...' }}
             </p>
           </div>
 
           <div *ngIf="!isLoadingReport && filteredReportData.length === 0" class="empty-state">
             <i class="material-icons">assignment</i>
-            <h3>Chưa có dữ liệu báo cáo</h3>
-            <p>Không có dữ liệu đào tạo nào cho nhân viên ASP.</p>
+            <h3>{{ isEnglish ? 'No report data available' : 'Chưa có dữ liệu báo cáo' }}</h3>
+            <p>{{ isEnglish ? 'No training data available for ASP employees.' : 'Không có dữ liệu đào tạo nào cho nhân viên ASP.' }}</p>
           </div>
 
           <div *ngIf="!isLoadingReport && filteredReportData.length > 0" class="table-responsive">
             <div class="table-info">
               <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 15px;">
                 <mat-icon style="font-size: 14px; vertical-align: middle;">info</mat-icon>
-                Không thấy bài kiểm tra mới nhất? Nhấn nút 
+                {{ isEnglish ? 'Not seeing the latest test? Click the' : 'Không thấy bài kiểm tra mới nhất? Nhấn nút' }}
                 <mat-icon style="font-size: 14px; vertical-align: middle;">refresh</mat-icon> 
-                để làm mới dữ liệu.
+                {{ isEnglish ? 'button to refresh data.' : 'để làm mới dữ liệu.' }}
               </p>
             </div>
             <table mat-table [dataSource]="filteredReportData" class="report-table mat-elevation-2">
               
               <!-- Employee ID Column -->
               <ng-container matColumnDef="employeeId">
-                <th mat-header-cell *matHeaderCellDef>Mã số nhân viên</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Employee ID' : 'Mã số nhân viên' }}</th>
                 <td mat-cell *matCellDef="let element">{{ element.employeeId }}</td>
               </ng-container>
 
               <!-- Name Column -->
               <ng-container matColumnDef="name">
-                <th mat-header-cell *matHeaderCellDef>Tên nhân viên</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Employee Name' : 'Tên nhân viên' }}</th>
                 <td mat-cell *matCellDef="let element">
                   <div class="employee-name-cell">
                     {{ element.name }}
                     <mat-icon *ngIf="element.signature" 
                               class="signature-indicator" 
-                              matTooltip="Có chữ ký điện tử">
+                              [matTooltip]="isEnglish ? 'Digital signature available' : 'Có chữ ký điện tử'">
                       verified
                     </mat-icon>
                     <mat-icon *ngIf="!element.signature" 
                               class="no-signature-indicator" 
-                              matTooltip="Chưa có chữ ký điện tử">
+                              [matTooltip]="isEnglish ? 'No digital signature' : 'Chưa có chữ ký điện tử'">
                       edit
                     </mat-icon>
                   </div>
@@ -204,51 +293,51 @@
 
               <!-- Training Content Column -->
               <ng-container matColumnDef="trainingContent">
-                <th mat-header-cell *matHeaderCellDef>Nội dung đào tạo</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Training Content' : 'Nội dung đào tạo' }}</th>
                 <td mat-cell *matCellDef="let element">{{ element.trainingContent }}</td>
               </ng-container>
 
               <!-- Status Column -->
               <ng-container matColumnDef="status">
-                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Status' : 'Trạng thái' }}</th>
                 <td mat-cell *matCellDef="let element">
                   <span class="simple-status" [ngClass]="element.status">
-                    {{ element.status === 'pass' ? 'Đạt' : 'Không đạt' }}
+                    {{ element.status === 'pass' ? (isEnglish ? 'Pass' : 'Đạt') : (isEnglish ? 'Fail' : 'Không đạt') }}
                   </span>
                 </td>
               </ng-container>
 
               <!-- Training Date Column -->
               <ng-container matColumnDef="trainingDate">
-                <th mat-header-cell *matHeaderCellDef>Ngày đào tạo</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Training Date' : 'Ngày đào tạo' }}</th>
                 <td mat-cell *matCellDef="let element">{{ element.trainingDate | date:'dd/MM/yyyy' }}</td>
               </ng-container>
 
               <!-- Expiry Date Column -->
               <ng-container matColumnDef="expiryDate">
-                <th mat-header-cell *matHeaderCellDef>Ngày hết hạn</th>
+                <th mat-header-cell *matHeaderCellDef>{{ isEnglish ? 'Expiry Date' : 'Ngày hết hạn' }}</th>
                 <td mat-cell *matCellDef="let element" [ngClass]="{'expired': isExpired(element.expiryDate)}">
                   {{ element.expiryDate | date:'dd/MM/yyyy' }}
-                  <span *ngIf="isExpired(element.expiryDate)" class="expired-text"> (Hết hạn)</span>
+                  <span *ngIf="isExpired(element.expiryDate)" class="expired-text"> {{ isEnglish ? '(Expired)' : '(Hết hạn)' }}</span>
                 </td>
               </ng-container>
 
               <!-- Actions Column -->
               <ng-container matColumnDef="actions">
-                <th mat-header-cell *matHeaderCellDef class="actions-header">Thao tác</th>
+                <th mat-header-cell *matHeaderCellDef class="actions-header">{{ isEnglish ? 'Actions' : 'Thao tác' }}</th>
                 <td mat-cell *matCellDef="let element" class="actions-cell">
                   <div class="action-buttons">
                     <button mat-icon-button 
                             color="primary" 
                             (click)="downloadEmployeeReport(element)"
-                            matTooltip="Tải file báo cáo"
+                            [matTooltip]="isEnglish ? 'Download report file' : 'Tải file báo cáo'"
                             class="download-btn">
                       <mat-icon>download</mat-icon>
                     </button>
                     <button mat-icon-button 
                             color="warn" 
                             (click)="deleteEmployee(element)"
-                            matTooltip="Xóa bản ghi"
+                            [matTooltip]="isEnglish ? 'Delete record' : 'Xóa bản ghi'"
                             class="delete-btn">
                       <mat-icon>delete</mat-icon>
                     </button>
@@ -261,6 +350,126 @@
             </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Matrix Training Content (Expanded) -->
+    <div *ngIf="showMatrixTraining" class="expanded-content matrix-training-content">
+      <div class="content-header">
+        <h2>
+          <i class="material-icons">grid_view</i>
+          {{ isEnglish ? 'Training Matrix Report' : 'Báo cáo Ma trận Đào tạo' }}
+        </h2>
+        <button class="close-btn" (click)="closeAll()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="matrix-training-content-expanded">
+        
+        <!-- Matrix Summary Stats -->
+        <div class="matrix-summary">
+          <div class="summary-card">
+            <div class="summary-icon">
+              <i class="material-icons">people</i>
+            </div>
+            <div class="summary-info">
+              <h3>{{ getMatrixEmployees().length }}</h3>
+              <p>{{ isEnglish ? 'Total Employees' : 'Tổng số nhân viên' }}</p>
+            </div>
+          </div>
+          
+          <div class="summary-card">
+            <div class="summary-icon">
+              <i class="material-icons">school</i>
+            </div>
+            <div class="summary-info">
+              <h3>1</h3>
+              <p>{{ isEnglish ? 'Available Skills' : 'Kỹ năng có sẵn' }}</p>
+            </div>
+          </div>
+          
+          <div class="summary-card">
+            <div class="summary-icon">
+              <i class="material-icons">trending_up</i>
+            </div>
+            <div class="summary-info">
+              <h3>{{ getAverageCompletionRate() }}%</h3>
+              <p>{{ isEnglish ? 'Average Completion' : 'Tỷ lệ hoàn thành TB' }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Training Matrix Table -->
+        <div class="matrix-table-container">
+          <div class="table-responsive">
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th>{{ isEnglish ? 'Employee ID' : 'Mã số' }}</th>
+                  <th>{{ isEnglish ? 'Name' : 'Tên nhân viên' }}</th>
+                  <th>{{ isEnglish ? 'Skill Level' : 'Level kỹ năng' }}</th>
+                  <th>{{ isEnglish ? 'Temperature & Humidity' : 'Nhiệt độ & Độ ẩm' }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let employee of getMatrixEmployees()">
+                  <td class="employee-id">{{ employee.employeeId }}</td>
+                  <td class="employee-name">
+                    <div class="name-with-avatar">
+                      <div class="employee-avatar">{{ employee.name.charAt(0) }}</div>
+                      {{ employee.name }}
+                    </div>
+                  </td>
+                  <td class="skill-level">
+                    <div class="circular-progress">
+                      <svg class="progress-ring" width="60" height="60">
+                        <circle class="progress-ring-background" 
+                                cx="30" cy="30" r="25" 
+                                stroke="#FFE0B2" 
+                                stroke-width="6" 
+                                fill="transparent"/>
+                        <circle class="progress-ring-fill" 
+                                cx="30" cy="30" r="25" 
+                                stroke="#4CAF50" 
+                                stroke-width="6" 
+                                fill="transparent"
+                                [style.stroke-dasharray]="getCircumference()"
+                                [style.stroke-dashoffset]="getStrokeDashOffset(employee.completedSkills, employee.totalSkills)"/>
+                      </svg>
+                      <div class="progress-text">{{ employee.completedSkills }}/{{ employee.totalSkills }}</div>
+                    </div>
+                  </td>
+                  <td class="skill-status">
+                    <div class="skill-indicator" [ngClass]="getSkillStatus(employee.employeeId, 'temperature')">
+                      <i class="material-icons">{{ getSkillIcon(employee.employeeId, 'temperature') }}</i>
+                      <span>{{ getSkillStatusText(employee.employeeId, 'temperature') }}</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="matrix-legend">
+          <h4>{{ isEnglish ? 'Legend' : 'Chú giải' }}</h4>
+          <div class="legend-items">
+            <div class="legend-item">
+              <i class="material-icons passed">check_circle</i>
+              <span>{{ isEnglish ? 'Passed' : 'Đạt' }}</span>
+            </div>
+            <div class="legend-item">
+              <i class="material-icons failed">cancel</i>
+              <span>{{ isEnglish ? 'Failed' : 'Không đạt' }}</span>
+            </div>
+            <div class="legend-item">
+              <i class="material-icons pending">schedule</i>
+              <span>{{ isEnglish ? 'Not Taken' : 'Chưa làm' }}</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
