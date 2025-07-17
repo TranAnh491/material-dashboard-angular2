@@ -4,235 +4,85 @@
     <!-- Document List View -->
     <div *ngIf="!selectedDocumentUrl && !showDailyChecklist && !showSecuredChecklist" class="modern-checklist-interface">
       
-      <!-- Quick Stats Overview -->
-      <div class="stats-overview">
-        <div class="stat-card">
-          <div class="stat-icon">
-            <i class="material-icons">assignment</i>
-          </div>
-          <div class="stat-content">
-            <div class="stat-number">{{ getTotalChecklists() }}</div>
-            <div class="stat-label">Total Checklists</div>
-          </div>
-        </div>
+      <!-- Two Column Layout: Checklist Left, Layout Right -->
+      <div class="two-column-layout">
         
-        <div class="stat-card">
-          <div class="stat-icon completed">
-            <i class="material-icons">check_circle</i>
-          </div>
-          <div class="stat-content">
-            <div class="stat-number">{{ getCompletedToday() }}</div>
-            <div class="stat-label">Completed Today</div>
-          </div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon in-progress">
-            <i class="material-icons">hourglass_empty</i>
-          </div>
-          <div class="stat-content">
-            <div class="stat-number">{{ getInProgressCount() }}</div>
-            <div class="stat-label">In Progress</div>
-          </div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon overdue">
-            <i class="material-icons">warning</i>
-          </div>
-          <div class="stat-content">
-            <div class="stat-number">{{ getOverdueCount() }}</div>
-            <div class="stat-label">Overdue Items</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">
-            <i class="material-icons">assignment_turned_in</i>
-          </div>
-          <div class="stat-content">
-            <div class="stat-number">{{ getTotalScore().percentage }}%</div>
-            <div class="stat-label">5S Score</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Search and Filter Section -->
-      <div class="search-filter-section">
-        <div class="search-container">
-          <i class="material-icons search-icon">search</i>
-          <input type="text" 
-                 class="search-input" 
-                 placeholder="Search checklists..." 
-                 [(ngModel)]="searchQuery"
-                 (input)="filterChecklists()">
-        </div>
-        
-        <div class="filter-controls">
-          <div class="filter-group">
-            <label>Status:</label>
-            <select class="filter-select" [(ngModel)]="statusFilter" (change)="filterChecklists()">
-              <option value="">All Status</option>
-              <option value="ready">Ready</option>
-              <option value="in-progress">In Progress</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
-            </select>
-          </div>
-          
-          <div class="filter-group">
-            <label>Sort by:</label>
-            <select class="filter-select" [(ngModel)]="sortBy" (change)="sortChecklists()">
-              <option value="name">Name</option>
-              <option value="status">Status</option>
-              <option value="priority">Priority</option>
-              <option value="date">Last Updated</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modern Checklist Cards Grid -->
-      <div class="checklist-grid">
-        <div *ngFor="let checklist of filteredChecklists" class="modern-checklist-card" [class]="checklist.status">
-          
-          <!-- Card Header -->
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">{{ checklist.icon }}</i>
-            </div>
-            <div class="status-badge" [class]="checklist.status">
-              {{ getStatusLabel(checklist.status) }}
-            </div>
-          </div>
-
-          <!-- Card Content -->
-          <div class="card-content">
-            <h3 class="checklist-title">{{ checklist.title }}</h3>
-            <!-- Hidden per user request: description -->
-            <!-- <p class="checklist-description">{{ checklist.description }}</p> -->
-            
-            <!-- Progress Section - Hidden -->
-            <!-- <div class="progress-section">
-              <div class="progress-info">
-                <span class="progress-label">Progress</span>
-                <span class="progress-percentage">{{ checklist.completionPercentage }}%</span>
+        <!-- Left Column: Checklist Items -->
+        <div class="checklist-column">
+          <h3 class="column-title">
+            <i class="material-icons">checklist</i>
+            Checklist
+          </h3>
+          <div class="checklist-grid compact">
+            <!-- Dynamic Checklist Cards -->
+            <div *ngFor="let checklist of filteredChecklists" class="modern-checklist-card compact" [class]="checklist.status">
+              
+              <!-- Card Header -->
+              <div class="card-header">
+                <div class="checklist-icon">
+                  <i class="material-icons">{{ checklist.icon }}</i>
+                </div>
+                <div class="status-badge" [class]="checklist.status">
+                  {{ getStatusLabel(checklist.status) }}
+                </div>
               </div>
-              <div class="progress-bar">
-                <div class="progress-fill" [style.width.%]="checklist.completionPercentage"></div>
+
+              <!-- Card Content -->
+              <div class="card-content">
+                <h3 class="checklist-title">{{ checklist.title }}</h3>
               </div>
-            </div> -->
-            
-            <!-- Metadata - Hidden per user request -->
-            <!-- 
-            <div class="metadata">
-              <div class="metadata-item">
-                <i class="material-icons">list</i>
-                <span>{{ checklist.itemCount }} items</span>
+
+              <!-- Card Actions -->
+              <div class="card-actions">
+                <button class="action-btn primary" (click)="openChecklist(checklist)">
+                  <i class="material-icons">open_in_new</i>
+                  Open
+                </button>
               </div>
-              <div class="metadata-item">
-                <i class="material-icons">person</i>
-                <span>{{ checklist.assignedUser }}</span>
-              </div>
-              <div class="metadata-item">
-                <i class="material-icons">schedule</i>
-                <span>{{ checklist.lastUpdated | date:'MMM d, h:mm a' }}</span>
+
+              <!-- Loading Overlay -->
+              <div class="loading-overlay" *ngIf="checklist.loading">
+                <div class="loading-spinner">
+                  <i class="material-icons rotating">refresh</i>
+                </div>
               </div>
             </div>
-            -->
-          </div>
 
-          <!-- Card Actions -->
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="openChecklist(checklist)">
-              <i class="material-icons">open_in_new</i>
-              Open
-            </button>
-            <!-- Removed Details and Edit buttons -->
-            <!-- <button class="action-btn secondary" (click)="viewDetails(checklist)">
-              <i class="material-icons">visibility</i>
-              Details
-            </button>
-            <button class="action-btn tertiary" (click)="editChecklist(checklist)">
-              <i class="material-icons">edit</i>
-              Edit
-            </button> -->
-          </div>
 
-          <!-- Loading Overlay -->
-          <div class="loading-overlay" *ngIf="checklist.loading">
-            <div class="loading-spinner">
-              <i class="material-icons rotating">refresh</i>
-            </div>
           </div>
         </div>
 
-        <!-- 5S Audit Card -->
-        <div class="modern-checklist-card ready">
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">assignment_turned_in</i>
-            </div>
-            <div class="status-badge ready">
-              {{ getTotalScore().percentage >= 80 ? 'Excellent' : getTotalScore().percentage >= 60 ? 'Good' : 'Needs Improvement' }}
-            </div>
-          </div>
+        <!-- Right Column: Layout Items -->
+        <div class="layout-column">
+          <h3 class="column-title">
+            <i class="material-icons">map</i>
+            Layout
+          </h3>
+          <div class="layout-grid compact">
+            <!-- Safety Layout Card -->
+            <div class="modern-checklist-card compact ready">
+              <div class="card-header">
+                <div class="checklist-icon">
+                  <i class="material-icons">map</i>
+                </div>
+                <div class="status-badge ready">
+                  Layout
+                </div>
+              </div>
 
-          <div class="card-content">
-            <h3 class="checklist-title">{{ auditService.getUIText('auditTitle') }}</h3>
-            <!-- Hidden per user request: description -->
-            <!-- <p class="checklist-description">{{ auditService.getUIText('auditSubtitle') }}</p> -->
-            
-            <!-- Metadata - Hidden per user request -->
-            <!--
-            <div class="metadata">
-              <div class="metadata-item">
-                <i class="material-icons">assessment</i>
-                <span>{{ auditService.getUIText('overallScore') }}: {{ getTotalScore().percentage }}%</span>
+              <div class="card-content">
+                <h3 class="checklist-title">Warehouse Safety Layout</h3>
               </div>
-              <div class="metadata-item">
-                <i class="material-icons">check_circle</i>
-                <span>{{ auditService.getUIText('good') }}: {{ getTotalScore().good }}</span>
-              </div>
-              <div class="metadata-item">
-                <i class="material-icons">warning</i>
-                <span>{{ auditService.isVietnamese ? 'Cần cải thiện' : 'Needs Work' }}: {{ getTotalScore().marginal + getTotalScore().poor }}</span>
+
+              <div class="card-actions">
+                <button class="action-btn primary" (click)="openSafetyLayout()">
+                  <i class="material-icons">open_in_new</i>
+                  View Layout
+                </button>
               </div>
             </div>
-            -->
-          </div>
-
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="open5SAudit()">
-              <i class="material-icons">open_in_new</i>
-              {{ auditService.isVietnamese ? 'Mở kiểm tra 5S' : 'Open 5S Audit' }}
-            </button>
           </div>
         </div>
-
-        <!-- Safety Layout Card -->
-        <div class="modern-checklist-card ready">
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">map</i>
-            </div>
-            <div class="status-badge ready">
-              Layout
-            </div>
-          </div>
-
-          <div class="card-content">
-            <h3 class="checklist-title">Warehouse Safety Layout</h3>
-          </div>
-
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="openSafetyLayout()">
-              <i class="material-icons">open_in_new</i>
-              View Layout
-            </button>
-          </div>
-        </div>
-
 
       </div>
 
@@ -250,7 +100,6 @@
           </div>
         </div>
       </div>
-
 
       <!-- Empty State -->
       <div class="empty-state" *ngIf="filteredChecklists.length === 0">

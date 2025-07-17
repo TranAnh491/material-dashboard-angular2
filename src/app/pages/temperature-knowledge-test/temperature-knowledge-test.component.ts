@@ -21,7 +21,6 @@ interface TestSection {
 
 interface TestData {
   title: string;
-  documentCode: string;
   issueDate: string;
   totalQuestions: number;
   timeLimit: number;
@@ -89,9 +88,8 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
   // Test data
   testData: TestData = {
     title: "BÀI KIỂM TRA HƯỚNG DẪN GHI NHẬN NHIỆT ĐỘ, ĐỘ ẨM VÀ LƯU TRỮ SẢN PHẨM",
-    documentCode: "WH-WI0036(Ver00)",
     issueDate: "17/07/2025",
-    totalQuestions: 18, // Sẽ được tính tự động
+    totalQuestions: 20, // Will be calculated automatically
     timeLimit: 30,
     passingScore: 80,
     sections: [
@@ -528,9 +526,29 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
   async finishTest(): Promise<void> {
     this.isLoading = true;
     
+    // Validate that all questions are answered
+    const totalQuestions = this.testData.totalQuestions;
+    const answeredQuestions = this.answers.length;
+    
+    console.log('🔍 Finishing test - Validation:');
+    console.log(`- Total questions: ${totalQuestions}`);
+    console.log(`- Answered questions: ${answeredQuestions}`);
+    console.log(`- All answers:`, this.answers);
+
+    if (answeredQuestions !== totalQuestions) {
+      alert(`Bạn chưa trả lời đủ tất cả câu hỏi!\nĐã trả lời: ${answeredQuestions}/${totalQuestions} câu`);
+      this.isLoading = false;
+      return;
+    }
+    
     const correctAnswers = this.answers.filter(a => a.isCorrect).length;
-    const percentage = Math.round((correctAnswers / this.testData.totalQuestions) * 100);
+    const percentage = Math.round((correctAnswers / totalQuestions) * 100);
     const passed = percentage >= this.testData.passingScore;
+
+    console.log(`📊 Test Results:
+    - Correct answers: ${correctAnswers}/${totalQuestions}
+    - Percentage: ${percentage}%
+    - Passed: ${passed}`);
 
     this.testResult = {
       employeeInfo: this.employeeInfo,
@@ -555,16 +573,40 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
 
   private async saveTestResult(result: TestResult): Promise<void> {
     try {
+      console.log('🔍 Saving test result - Debug Info:');
+      console.log('Total sections:', result.testData.sections.length);
+      console.log('Total answers:', result.answers.length);
+      
+      // Calculate total questions for verification
+      let totalQuestions = 0;
+      result.testData.sections.forEach(section => {
+        totalQuestions += section.questions.length;
+        console.log(`Section "${section.title}": ${section.questions.length} questions`);
+      });
+      console.log('Calculated total questions:', totalQuestions);
+
       const resultData: any = {
         employeeId: result.employeeInfo.employeeId,
         employeeName: result.employeeInfo.employeeName,
         score: result.score,
         percentage: result.percentage,
         passed: result.passed,
-        totalQuestions: result.testData.totalQuestions,
+        totalQuestions: totalQuestions, // Use calculated value
         completedAt: Timestamp.fromDate(result.completedAt),
         testTitle: result.testData.title,
-        documentCode: result.testData.documentCode
+        // Add detailed answers for report generation
+        answers: result.answers,
+        testData: {
+          sections: result.testData.sections.map(section => ({
+            title: section.title,
+            questions: section.questions.map(q => ({
+              question: q.question,
+              options: q.options,
+              correctAnswer: q.correctAnswer,
+              type: q.type
+            }))
+          }))
+        }
       };
 
       // Add signature if available
@@ -572,10 +614,15 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
         resultData.signature = result.signature;
       }
 
+      console.log('💾 Data being saved to Firebase:');
+      console.log('- Total questions in data:', resultData.totalQuestions);
+      console.log('- Number of sections:', resultData.testData.sections.length);
+      console.log('- Number of answers:', resultData.answers.length);
+
       const docRef = await addDoc(collection(this.db, 'temperature-test-results'), resultData);
-      console.log('Test result saved with ID: ', docRef.id);
+      console.log('✅ Test result saved with ID: ', docRef.id);
     } catch (error) {
-      console.error('Error saving test result: ', error);
+      console.error('❌ Error saving test result: ', error);
     }
   }
 
@@ -699,7 +746,7 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
       <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="margin: 0 0 10px 0; font-size: 20px; font-weight: bold; color: #2c3e50;">KẾT QUẢ BÀI KIỂM TRA</h1>
         <h2 style="margin: 0 0 8px 0; font-size: 16px; font-weight: normal; color: #34495e;">${this.testResult.testData.title}</h2>
-        <p style="margin: 0; font-size: 14px; color: #7f8c8d;">Mã tài liệu: ${this.testResult.testData.documentCode}</p>
+
       </div>
 
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
@@ -832,7 +879,7 @@ body { font-family: Arial, sans-serif; margin: 40px; }
 <div class="header">
 <div class="title">KẾT QUẢ BÀI KIỂM TRA</div>
 <div>${result.testData.title}</div>
-<div>Mã tài liệu: ${result.testData.documentCode}</div>
+
 </div>
 
 <table class="info-table">
@@ -984,7 +1031,7 @@ body { font-family: Arial, sans-serif; margin: 40px; }
   private generateExcelContent(): string {
     // Mock Excel content - in a real implementation, you would use a library like xlsx
     let content = `${this.testData.title}\n`;
-    content += `Mã tài liệu: ${this.testData.documentCode}\n`;
+
     content += `Ngày ban hành: ${this.testData.issueDate}\n\n`;
     
     this.testData.sections.forEach((section, sectionIndex) => {

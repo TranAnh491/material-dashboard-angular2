@@ -238,29 +238,55 @@ export class EquipmentComponent implements OnInit {
       // Wait for fonts to load
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Convert to canvas
+      // Convert to canvas with proper height handling
       const canvas = await html2canvas(tempContainer, {
         width: 794,
-        height: 1123,
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        height: tempContainer.scrollHeight,
+        scrollX: 0,
+        scrollY: 0
       });
 
       // Remove temporary container
       document.body.removeChild(tempContainer);
 
-      // Create PDF
+      console.log(`📄 Canvas created: ${canvas.width}x${canvas.height}`);
+
+      // Create PDF with multiple pages if needed
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210;
+      const pdfWidth = 210; // A4 width in mm
+      const pdfHeight = 297; // A4 height in mm
+      
+      const imgWidth = pdfWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
       const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      
+      console.log(`📄 Image dimensions: ${imgWidth}mm x ${imgHeight}mm`);
+      
+      // If content fits on one page
+      if (imgHeight <= pdfHeight) {
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      } else {
+        // Split content across multiple pages
+        const totalPages = Math.ceil(imgHeight / pdfHeight);
+        console.log(`📄 Creating ${totalPages} pages for PDF`);
+        
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) {
+            pdf.addPage();
+          }
+          
+          const offsetY = -(i * pdfHeight);
+          pdf.addImage(imgData, 'PNG', 0, offsetY, imgWidth, imgHeight);
+        }
+      }
 
       // Save the PDF
-      const fileName = `Bao_Cao_${record.employeeId}_${record.trainingDate.toLocaleDateString('vi-VN').replace(/\//g, '_')}.pdf`;
+      const fileName = `Bao_Cao_Chi_Tiet_${record.employeeId}_${record.trainingDate.toLocaleDateString('vi-VN').replace(/\//g, '_')}.pdf`;
       pdf.save(fileName);
       
       console.log(`✅ PDF saved successfully: ${fileName} ${signature ? '(with signature)' : '(without signature)'}`);
@@ -289,7 +315,7 @@ export class EquipmentComponent implements OnInit {
       <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="margin: 0 0 10px 0; font-size: 20px; font-weight: bold; color: #2c3e50;">BÁO CÁO ĐÀO TẠO NHÂN VIÊN</h1>
         <h2 style="margin: 0 0 8px 0; font-size: 16px; font-weight: normal; color: #34495e;">${record.trainingContent}</h2>
-        <p style="margin: 0; font-size: 14px; color: #7f8c8d;">Mã tài liệu: ${fullRecord.documentCode || 'WH-WI0036(Ver00)'}</p>
+
       </div>
 
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
@@ -348,10 +374,104 @@ export class EquipmentComponent implements OnInit {
          </div>
        `}
 
+      ${this.createDetailedAnswersSection(fullRecord)}
+
       <div style="text-align: center; margin-top: 50px; font-size: 12px; color: #7f8c8d;">
         <p>Báo cáo được tạo từ hệ thống vào ${formatTime(new Date())} - ${formatDate(new Date())}</p>
         <p><strong>Trạng thái đào tạo:</strong> ${record.status === 'pass' ? 'Hợp lệ' : 'Cần đào tạo lại'}</p>
       </div>
     `;
+  }
+
+  private createDetailedAnswersSection(fullRecord: any): string {
+    console.log('🔍 Creating detailed answers section - Debug Info:');
+    console.log('Full record exists:', !!fullRecord);
+    console.log('Answers exist:', !!fullRecord?.answers);
+    console.log('TestData exists:', !!fullRecord?.testData);
+    console.log('Sections exist:', !!fullRecord?.testData?.sections);
+
+    if (!fullRecord.answers || !fullRecord.testData || !fullRecord.testData.sections) {
+      console.log('❌ Missing data for detailed answers section');
+      return `
+        <div style="margin-bottom: 30px;">
+          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">Lịch sử bài kiểm tra:</h3>
+          <div style="border: 2px dashed #ddd; padding: 20px; border-radius: 8px; text-align: center; background-color: #f8f9fa;">
+            <p style="color: #7f8c8d; margin: 0; font-style: italic;">Chi tiết câu hỏi không có sẵn cho bài kiểm tra này</p>
+          </div>
+        </div>
+      `;
+    }
+
+    console.log('📊 Data available:');
+    console.log('- Number of sections:', fullRecord.testData.sections.length);
+    console.log('- Number of answers:', fullRecord.answers.length);
+
+    let content = `
+      <div style="margin-bottom: 30px;">
+        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">Lịch sử bài kiểm tra chi tiết:</h3>
+    `;
+
+    let questionNumber = 1;
+    fullRecord.testData.sections.forEach((section: any, sectionIndex: number) => {
+      console.log(`📝 Processing section ${sectionIndex}: "${section.title}" with ${section.questions.length} questions`);
+      
+      content += `
+        <div style="margin-bottom: 20px;">
+          <h4 style="margin: 0 0 15px 0; font-size: 14px; font-weight: bold; color: #34495e; background-color: #ecf0f1; padding: 10px; border-radius: 6px;">
+            ${section.title} (${section.questions.length} câu)
+          </h4>
+        </div>
+      `;
+
+      section.questions.forEach((question: any, questionIndex: number) => {
+        console.log(`  - Question ${questionNumber}: Processing question ${questionIndex} in section ${sectionIndex}`);
+        
+        const answer = fullRecord.answers.find((a: any) => 
+          a.sectionIndex === sectionIndex && a.questionIndex === questionIndex
+        );
+        
+        console.log(`    Answer found:`, !!answer, answer ? `(${answer.selectedAnswer}, ${answer.isCorrect ? 'correct' : 'incorrect'})` : '');
+        
+        const isCorrect = answer?.isCorrect || false;
+        const selectedAnswer = answer?.selectedAnswer || 'Không trả lời';
+
+        // Format options for multiple choice questions
+        let optionsText = '';
+        if (question.options && question.options.length > 0) {
+          optionsText = question.options.map((opt: string, idx: number) => 
+            `${String.fromCharCode(65 + idx)}. ${opt}`
+          ).join(' | ');
+        }
+
+        content += `
+          <div style="margin-bottom: 15px; border: 2px solid ${isCorrect ? '#27ae60' : '#e74c3c'}; border-radius: 8px; padding: 15px; background-color: ${isCorrect ? '#d5f4e6' : '#fdeaea'};">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #2c3e50; font-size: 14px;">
+              Câu ${questionNumber}: ${question.question}
+            </div>
+            ${optionsText ? `
+            <div style="margin-bottom: 8px; font-size: 12px; color: #7f8c8d; background-color: #f8f9fa; padding: 8px; border-radius: 4px;">
+              <strong>Các lựa chọn:</strong> ${optionsText}
+            </div>
+            ` : ''}
+            <div style="margin-bottom: 6px; font-size: 13px;">
+              <strong style="color: #2c3e50;">Đáp án đã chọn:</strong> 
+              <span style="color: ${isCorrect ? '#27ae60' : '#e74c3c'}; font-weight: bold;">${selectedAnswer}</span>
+            </div>
+            <div style="margin-bottom: 8px; font-size: 13px;">
+              <strong style="color: #2c3e50;">Đáp án chính xác:</strong> 
+              <span style="color: #27ae60; font-weight: bold;">${question.correctAnswer}</span>
+            </div>
+            <div style="font-weight: bold; font-size: 14px; color: ${isCorrect ? '#27ae60' : '#e74c3c'}; text-align: center; margin-top: 8px;">
+              ${isCorrect ? '✓ ĐÚNG' : '✗ SAI'}
+            </div>
+          </div>
+        `;
+        questionNumber++;
+      });
+    });
+
+    console.log(`✅ Generated content for ${questionNumber - 1} questions total`);
+    content += `</div>`;
+    return content;
   }
 } 
