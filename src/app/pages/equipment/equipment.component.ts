@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
+import { DeleteConfirmationService } from '../../services/delete-confirmation.service';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -46,7 +47,8 @@ export class EquipmentComponent implements OnInit {
 
   constructor(
     private router: Router,
-    private trainingReportService: TrainingReportService
+    private trainingReportService: TrainingReportService,
+    private deleteConfirmationService: DeleteConfirmationService
   ) { }
 
   ngOnInit(): void {
@@ -146,11 +148,12 @@ export class EquipmentComponent implements OnInit {
       return;
     }
 
-    const confirmDelete = confirm(
-      `Bạn có chắc chắn muốn xóa bản ghi đào tạo của nhân viên ${record.name} (${record.employeeId})?`
-    );
+    // Use Delete Confirmation Dialog with authentication
+    const confirmed = await this.deleteConfirmationService.confirmDeleteRecord(
+      `${record.name} (${record.employeeId})`
+    ).toPromise();
 
-    if (confirmDelete) {
+    if (confirmed) {
       try {
         const success = await this.trainingReportService.deleteTrainingRecord(record.id);
         if (success) {

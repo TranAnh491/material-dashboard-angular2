@@ -1,0 +1,231 @@
+<div class="main-content">
+  <div class="container-fluid">
+    
+    <!-- Admin Login Section -->
+    <div *ngIf="!isAdminLoggedIn" class="admin-login">
+      <div class="login-card">
+        <div class="login-header">
+          <mat-icon>admin_panel_settings</mat-icon>
+          <h2>Admin Login</h2>
+          <p>Vui lòng đăng nhập để truy cập Settings</p>
+        </div>
+        
+        <form (ngSubmit)="adminLogin()" #loginForm="ngForm">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Tên đăng nhập</mat-label>
+            <input matInput 
+                   type="text" 
+                   [(ngModel)]="adminUsername" 
+                   name="username"
+                   required>
+            <mat-icon matSuffix>person</mat-icon>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Mật khẩu</mat-label>
+            <input matInput 
+                   type="password" 
+                   [(ngModel)]="adminPassword" 
+                   name="password"
+                   required>
+            <mat-icon matSuffix>lock</mat-icon>
+          </mat-form-field>
+
+          <div *ngIf="loginError" class="error-message">
+            <mat-icon>error</mat-icon>
+            {{ loginError }}
+          </div>
+
+          <button mat-raised-button 
+                  color="primary" 
+                  type="submit"
+                  [disabled]="!adminUsername || !adminPassword"
+                  class="login-btn">
+            <mat-icon>login</mat-icon>
+            Đăng nhập
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Settings Dashboard -->
+    <div *ngIf="isAdminLoggedIn" class="settings-dashboard">
+      
+      <!-- Header -->
+      <div class="settings-header">
+        <div class="header-content">
+          <h1>
+            <mat-icon>settings</mat-icon>
+            Settings Management
+          </h1>
+          <p>Quản lý quyền xóa cho nhân viên</p>
+        </div>
+        <button mat-stroked-button (click)="logout()" class="logout-btn">
+          <mat-icon>logout</mat-icon>
+          Đăng xuất
+        </button>
+      </div>
+
+      <!-- Add User Section -->
+      <div class="add-user-section">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="toggleAddUserForm()"
+                class="add-user-btn">
+          <mat-icon>{{ showAddUserForm ? 'close' : 'person_add' }}</mat-icon>
+          {{ showAddUserForm ? 'Hủy' : 'Thêm nhân viên' }}
+        </button>
+
+        <div *ngIf="showAddUserForm" class="add-user-form">
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Mã nhân viên</mat-label>
+              <input matInput 
+                     type="text" 
+                     [(ngModel)]="newEmployeeId"
+                     placeholder="VD: ASP001">
+              <mat-icon matSuffix>badge</mat-icon>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Mật khẩu</mat-label>
+              <input matInput 
+                     type="text" 
+                     [(ngModel)]="newPassword"
+                     placeholder="Nhập mật khẩu">
+              <mat-icon matSuffix>key</mat-icon>
+            </mat-form-field>
+
+            <mat-checkbox [(ngModel)]="hasDeletePermission" class="delete-permission-checkbox">
+              Quyền xóa
+            </mat-checkbox>
+
+            <button mat-raised-button 
+                    color="primary" 
+                    (click)="addUser()"
+                    [disabled]="!newEmployeeId || !newPassword || isLoading">
+              <mat-icon>save</mat-icon>
+              Thêm
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users List -->
+      <div class="users-list">
+        <div *ngIf="isLoading" class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+          <p>Đang tải danh sách nhân viên...</p>
+        </div>
+
+        <div *ngIf="!isLoading && userPermissions.length === 0" class="empty-state">
+          <mat-icon>people_outline</mat-icon>
+          <h3>Chưa có nhân viên nào</h3>
+          <p>Hãy thêm nhân viên đầu tiên để bắt đầu quản lý quyền.</p>
+        </div>
+
+        <div *ngIf="!isLoading && userPermissions.length > 0" class="users-table">
+          <table mat-table [dataSource]="userPermissions" class="mat-elevation-2">
+            
+            <!-- Employee ID Column -->
+            <ng-container matColumnDef="employeeId">
+              <th mat-header-cell *matHeaderCellDef>Mã nhân viên</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="employee-id">
+                  <mat-icon>badge</mat-icon>
+                  {{ user.employeeId }}
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Password Column -->
+            <ng-container matColumnDef="password">
+              <th mat-header-cell *matHeaderCellDef>Mật khẩu</th>
+              <td mat-cell *matCellDef="let user">
+                <div *ngIf="editingUser?.id !== user.id" class="password-display">
+                  <span class="password-mask">{{ '•'.repeat(user.password.length) }}</span>
+                </div>
+                <div *ngIf="editingUser?.id === user.id">
+                  <mat-form-field appearance="outline" class="edit-password">
+                    <input matInput [(ngModel)]="editingUser.password" type="text">
+                  </mat-form-field>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Delete Permission Column -->
+            <ng-container matColumnDef="deletePermission">
+              <th mat-header-cell *matHeaderCellDef>Quyền xóa</th>
+              <td mat-cell *matCellDef="let user">
+                <div *ngIf="editingUser?.id !== user.id">
+                  <mat-chip [class.permission-yes]="user.hasDeletePermission" 
+                           [class.permission-no]="!user.hasDeletePermission">
+                    <mat-icon>{{ user.hasDeletePermission ? 'check_circle' : 'cancel' }}</mat-icon>
+                    {{ user.hasDeletePermission ? 'Có' : 'Không' }}
+                  </mat-chip>
+                </div>
+                <div *ngIf="editingUser?.id === user.id">
+                  <mat-checkbox [(ngModel)]="editingUser.hasDeletePermission">
+                    Quyền xóa
+                  </mat-checkbox>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Last Updated Column -->
+            <ng-container matColumnDef="lastUpdated">
+              <th mat-header-cell *matHeaderCellDef>Cập nhật lần cuối</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="date-info">
+                  <mat-icon>schedule</mat-icon>
+                  {{ user.updatedAt | date:'dd/MM/yyyy HH:mm' }}
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="action-buttons">
+                  <div *ngIf="editingUser?.id !== user.id">
+                    <button mat-icon-button 
+                            color="primary" 
+                            (click)="editUser(user)"
+                            matTooltip="Chỉnh sửa">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button mat-icon-button 
+                            color="warn" 
+                            (click)="deleteUser(user)"
+                            matTooltip="Xóa">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                  <div *ngIf="editingUser?.id === user.id">
+                    <button mat-icon-button 
+                            color="primary" 
+                            (click)="updateUser()"
+                            matTooltip="Lưu">
+                      <mat-icon>save</mat-icon>
+                    </button>
+                    <button mat-icon-button 
+                            (click)="cancelEdit()"
+                            matTooltip="Hủy">
+                      <mat-icon>cancel</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['employeeId', 'password', 'deletePermission', 'lastUpdated', 'actions']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['employeeId', 'password', 'deletePermission', 'lastUpdated', 'actions'];"></tr>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div> 

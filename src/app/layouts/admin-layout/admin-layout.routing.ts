@@ -24,6 +24,7 @@ import { MaterialsInventoryComponent } from '../../pages/materials-inventory/mat
 import { ShelfLifeComponent } from 'app/pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
+import { SettingsComponent } from '../../pages/settings/settings.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -55,5 +56,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'upgrade',              component: UpgradeComponent },
   { path: 'layout-3d',            component: Layout3dComponent },
   { path: 'temperature-knowledge-test', component: TemperatureKnowledgeTestComponent },
-  { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule) }
+  { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule) },
+  { path: 'settings',             component: SettingsComponent }
 ];
