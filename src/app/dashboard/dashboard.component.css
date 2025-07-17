@@ -158,3 +158,238 @@
 .card-header .card-category {
     color: #000 !important;
 }
+
+/* 📱 Mobile Optimizations */
+@media (max-width: 768px) {
+  
+  /* Main Layout */
+  .main-content {
+    padding: 10px;
+  }
+
+  /* Chart Cards Mobile */
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart {
+    max-height: 200px;
+  }
+
+  .card-chart {
+    margin-bottom: 15px;
+    border-radius: 12px;
+  }
+
+  .card-chart:hover {
+    transform: none; /* Disable hover transform on mobile */
+  }
+
+  .card-title {
+    font-size: 1.2rem;
+    margin: 0.1rem 0 0.3rem;
+  }
+
+  .card-category {
+    font-size: 0.8rem;
+  }
+
+  /* KPI Cards Mobile */
+  .card.card-stats {
+    margin-bottom: 15px;
+    padding: 15px;
+    border-radius: 12px;
+  }
+
+  .card.card-stats:hover {
+    transform: none;
+  }
+
+  .card-header-icon {
+    width: 48px;
+    height: 48px;
+    margin: -24px auto 8px;
+  }
+
+  .col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
+    font-size: 28px;
+  }
+
+  .col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
+    font-size: 1.1rem;
+  }
+
+  .card-footer {
+    font-size: 0.8rem;
+    padding-top: 0.2rem;
+  }
+
+  /* Table Mobile */
+  .workorder-status-table {
+    font-size: 0.8rem;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    padding: 8px 4px;
+    font-size: 0.8rem;
+  }
+
+  .workorder-status-table th {
+    font-size: 0.85rem;
+  }
+
+  /* Custom Card Header Mobile */
+  .custom-card-header {
+    padding: 15px 18px 8px 18px;
+  }
+
+  .custom-card-title {
+    font-size: 0.9rem;
+  }
+
+  .custom-card-desc {
+    font-size: 0.9rem;
+  }
+
+  /* Table Container Mobile */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table, .workorder-status-table {
+    min-width: 500px;
+    border-radius: 8px;
+  }
+
+  /* Animation Adjustments */
+  .animate-icon {
+    animation-duration: 2s; /* Slower animation for better mobile performance */
+  }
+
+  /* Touch Optimizations */
+  .card.card-stats,
+  .card-chart {
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+    touch-action: manipulation;
+  }
+}
+
+/* Small Mobile Devices */
+@media (max-width: 480px) {
+  
+  .main-content {
+    padding: 8px;
+  }
+
+  /* Charts Ultra Compact */
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart {
+    max-height: 180px;
+  }
+
+  .card-chart {
+    margin-bottom: 12px;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    margin: 0 0 0.2rem;
+  }
+
+  .card-category {
+    font-size: 0.75rem;
+  }
+
+  /* KPI Cards Ultra Compact */
+  .card.card-stats {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .card-header-icon {
+    width: 40px;
+    height: 40px;
+    margin: -20px auto 6px;
+  }
+
+  .col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
+    font-size: 24px;
+  }
+
+  .col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
+    font-size: 1rem;
+  }
+
+  /* Table Ultra Compact */
+  .workorder-status-table {
+    font-size: 0.75rem;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    padding: 6px 2px;
+    font-size: 0.75rem;
+  }
+
+  .custom-card-header {
+    padding: 12px 15px 6px 15px;
+  }
+
+  .custom-card-title {
+    font-size: 0.85rem;
+  }
+
+  .custom-card-desc {
+    font-size: 0.85rem;
+  }
+}
+
+/* Tablet Optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+  
+  .card-title {
+    font-size: 1.3rem;
+  }
+
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart {
+    max-height: 220px;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    font-size: 0.9rem;
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart {
+    max-height: 160px;
+  }
+
+  .card.card-stats {
+    padding: 10px;
+  }
+
+  .card-header-icon {
+    width: 40px;
+    height: 40px;
+    margin: -20px auto 6px;
+  }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  
+  .card-header-icon,
+  .material-icons {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

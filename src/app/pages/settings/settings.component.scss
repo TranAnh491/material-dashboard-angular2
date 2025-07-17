@@ -338,31 +338,358 @@
   }
 }
 
-// Responsive Design
+// Enhanced Mobile Optimizations
 @media (max-width: 768px) {
   .main-content {
-    padding: 15px;
+    padding: 10px;
   }
   
   .admin-login .login-card {
-    padding: 30px 20px;
+    padding: 25px 15px;
+    margin: 0 10px;
+    max-width: 100%;
+    
+    .login-header {
+      margin-bottom: 25px;
+      
+      mat-icon {
+        font-size: 40px;
+        width: 40px;
+        height: 40px;
+      }
+      
+      h2 {
+        font-size: 1.3rem;
+      }
+      
+      p {
+        font-size: 13px;
+      }
+    }
+    
+    .full-width {
+      margin-bottom: 18px;
+    }
+    
+    .error-message {
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
+    
+    .login-btn {
+      height: 48px;
+      font-size: 15px;
+      
+      mat-icon {
+        margin-right: 6px;
+      }
+    }
   }
   
-  .settings-header {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 20px;
-    
-    .logout-btn {
-      align-self: flex-end;
+  .settings-dashboard {
+    .settings-header {
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+      
+      .header-content {
+        width: 100%;
+        
+        h1 {
+          font-size: 1.5rem;
+          gap: 10px;
+          
+          mat-icon {
+            font-size: 28px;
+            width: 28px;
+            height: 28px;
+          }
+        }
+        
+        p {
+          font-size: 14px;
+        }
+      }
+      
+      .logout-btn {
+        align-self: flex-end;
+        height: 36px;
+        font-size: 14px;
+        
+        mat-icon {
+          margin-right: 6px;
+        }
+      }
     }
+    
+    .add-user-section {
+      padding: 20px;
+      margin-bottom: 20px;
+      
+      .add-user-btn {
+        height: 44px;
+        font-size: 15px;
+        width: 100%;
+        
+        mat-icon {
+          margin-right: 6px;
+        }
+      }
+      
+      .add-user-form {
+        margin-top: 20px;
+        padding-top: 20px;
+        
+        .form-row {
+          grid-template-columns: 1fr;
+          gap: 15px;
+          
+          .delete-permission-checkbox {
+            margin-bottom: 5px;
+            align-self: start;
+          }
+          
+          button {
+            height: 44px;
+            min-width: 100%;
+            
+            mat-icon {
+              margin-right: 6px;
+            }
+          }
+        }
+      }
+    }
+    
+    .users-list {
+      .loading-container {
+        padding: 40px 15px;
+        
+        p {
+          font-size: 14px;
+        }
+      }
+      
+      .empty-state {
+        padding: 40px 15px;
+        
+        mat-icon {
+          font-size: 48px;
+          width: 48px;
+          height: 48px;
+        }
+        
+        h3 {
+          font-size: 1.2rem;
+        }
+        
+        p {
+          font-size: 14px;
+        }
+      }
+      
+      .users-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        
+        .report-table {
+          min-width: 700px;
+          font-size: 0.85rem;
+          
+          .mat-header-cell {
+            font-size: 13px;
+            padding: 12px 8px;
+          }
+          
+          .mat-cell {
+            padding: 12px 8px;
+            
+            .employee-id {
+              gap: 6px;
+              
+              mat-icon {
+                font-size: 18px;
+              }
+            }
+            
+            .password-display {
+              .password-mask {
+                font-size: 14px;
+              }
+            }
+            
+            .edit-password {
+              width: 120px;
+            }
+            
+            mat-chip {
+              font-size: 0.75rem;
+              
+              mat-icon {
+                margin-right: 4px;
+                font-size: 16px;
+              }
+            }
+            
+            .date-info {
+              font-size: 12px;
+              gap: 4px;
+              
+              mat-icon {
+                font-size: 14px;
+                width: 14px;
+                height: 14px;
+              }
+            }
+            
+            .action-buttons {
+              gap: 6px;
+              
+              button {
+                width: 36px;
+                height: 36px;
+                
+                mat-icon {
+                  font-size: 18px;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Small Mobile Devices
+@media (max-width: 480px) {
+  .main-content {
+    padding: 8px;
+  }
+  
+  .admin-login .login-card {
+    padding: 20px 12px;
+    
+    .login-header {
+      h2 {
+        font-size: 1.2rem;
+      }
+    }
+    
+    .login-btn {
+      height: 44px;
+      font-size: 14px;
+    }
+  }
+  
+  .settings-dashboard {
+    .settings-header {
+      padding: 15px;
+      
+      .header-content h1 {
+        font-size: 1.3rem;
+      }
+    }
+    
+    .add-user-section {
+      padding: 15px;
+      
+      .add-user-btn {
+        font-size: 14px;
+      }
+    }
+    
+    .users-list .users-table .report-table {
+      min-width: 600px;
+      font-size: 0.8rem;
+      
+      .mat-header-cell {
+        font-size: 12px;
+        padding: 10px 6px;
+      }
+      
+      .mat-cell {
+        padding: 10px 6px;
+        
+        .action-buttons button {
+          width: 32px;
+          height: 32px;
+          
+          mat-icon {
+            font-size: 16px;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Tablet Optimizations
+@media (min-width: 769px) and (max-width: 1024px) {
+  .admin-login .login-card {
+    max-width: 450px;
+  }
+  
+  .settings-dashboard {
+    .add-user-section .add-user-form .form-row {
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 15px;
+    }
+  }
+}
+
+// Landscape Mobile
+@media (max-width: 768px) and (orientation: landscape) {
+  .admin-login .login-card {
+    padding: 20px;
+    
+    .login-header {
+      margin-bottom: 20px;
+      
+      h2 {
+        font-size: 1.2rem;
+      }
+    }
+  }
+  
+  .settings-dashboard {
+    .settings-header {
+      flex-direction: row;
+      align-items: center !important;
+    }
+    
+    .add-user-section .add-user-form .form-row {
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+    }
+  }
+}
+
+// Touch Optimizations
+@media (max-width: 768px) {
+  button, .mat-button, .mat-raised-button {
+    min-height: 44px;
+    min-width: 44px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+    touch-action: manipulation;
+  }
+  
+  mat-form-field {
+    -webkit-tap-highlight-color: transparent;
   }
   
   .users-table {
-    overflow-x: auto;
-    
-    .report-table {
-      min-width: 600px;
-    }
+    -webkit-overflow-scrolling: touch;
+    transform: translateZ(0);
+  }
+}
+
+// High DPI Support
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  mat-icon {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 } 

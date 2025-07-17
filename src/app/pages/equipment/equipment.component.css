@@ -1194,3 +1194,685 @@
 .matrix-card-actions .action-btn.secondary {
   display: none;
 } 
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  
+  /* Main Content */
+  .main-content {
+    padding: 10px;
+  }
+
+  /* Language Toolbar for Mobile */
+  .language-toolbar {
+    position: fixed !important;
+    top: 10px !important;
+    right: 10px !important;
+    left: auto !important;
+    z-index: 9999 !important;
+  }
+
+  .language-toolbar .btn {
+    padding: 12px 16px !important;
+    font-size: 0.9rem !important;
+    min-height: 44px !important; /* iOS recommended touch target */
+    border-radius: 25px !important;
+  }
+
+  /* Page Header Mobile */
+  .page-header {
+    margin-top: 60px; /* Space for fixed language button */
+    padding: 15px 10px;
+  }
+
+  .page-title {
+    font-size: 1.6rem;
+    gap: 8px;
+    flex-wrap: wrap;
+    text-align: center;
+  }
+
+  .page-title i {
+    font-size: 1.6rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.9rem;
+    margin-top: 10px;
+    line-height: 1.4;
+  }
+
+  /* Menu Cards Mobile Layout */
+  .menu-cards-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 15px 0;
+  }
+
+  .menu-card {
+    padding: 18px;
+    min-height: 70px;
+    border-radius: 12px;
+    touch-action: manipulation; /* Improve touch response */
+  }
+
+  .menu-card-icon {
+    font-size: 1.8rem;
+    min-width: 50px;
+  }
+
+  .menu-card-content h3 {
+    font-size: 1.05rem;
+    line-height: 1.3;
+  }
+
+  .menu-card-content p {
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+
+  .menu-card-arrow {
+    font-size: 1.1rem;
+    min-width: 30px;
+  }
+
+  /* Expanded Content Mobile */
+  .expanded-content {
+    margin: 10px 0;
+    border-radius: 12px;
+  }
+
+  .content-header {
+    padding: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .content-header h2 {
+    font-size: 1.2rem;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  /* Test Content Mobile */
+  .test-content-expanded {
+    padding: 15px;
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .modern-checklist-card {
+    padding: 18px;
+    min-height: auto;
+    border-radius: 12px;
+  }
+
+  .card-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .checklist-icon {
+    width: 45px;
+    height: 45px;
+  }
+
+  .status-badge {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .new-badge {
+    margin-left: 5px;
+    padding: 3px 8px;
+    font-size: 0.65rem;
+  }
+
+  .checklist-title {
+    font-size: 1.05rem;
+    line-height: 1.3;
+    margin-bottom: 10px;
+  }
+
+  .checklist-description {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin-bottom: 15px;
+  }
+
+  .test-info {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .test-detail {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    border-radius: 15px;
+  }
+
+  .action-btn.primary {
+    padding: 14px 20px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    min-height: 48px;
+  }
+
+  /* Matrix Training Mobile */
+  .matrix-training-content-expanded {
+    padding: 15px;
+  }
+
+  .matrix-summary {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .summary-card {
+    padding: 15px;
+    border-radius: 10px;
+  }
+
+  .summary-icon {
+    width: 45px;
+    height: 45px;
+  }
+
+  .summary-info h3 {
+    font-size: 1.5rem;
+  }
+
+  .summary-info p {
+    font-size: 0.8rem;
+  }
+
+  /* Matrix Table Mobile */
+  .matrix-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+  }
+
+  .matrix-table {
+    min-width: 600px; /* Ensure horizontal scroll */
+    font-size: 0.8rem;
+  }
+
+  .matrix-table th,
+  .matrix-table td {
+    padding: 12px 8px;
+    white-space: nowrap;
+  }
+
+  .matrix-table th {
+    font-size: 0.75rem;
+    position: sticky;
+    top: 0;
+    background: #F5F5F5;
+    z-index: 10;
+  }
+
+  /* Employee columns mobile */
+  .employee-id {
+    font-size: 0.8rem;
+    min-width: 80px;
+  }
+
+  .name-with-avatar {
+    min-width: 140px;
+    gap: 8px;
+  }
+
+  .employee-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.8rem;
+  }
+
+  /* Circular Progress Mobile */
+  .circular-progress {
+    width: 50px;
+    height: 50px;
+  }
+
+  .progress-ring {
+    width: 50px;
+    height: 50px;
+  }
+
+  .progress-ring-background,
+  .progress-ring-fill {
+    r: 20;
+    stroke-width: 5;
+  }
+
+  .progress-text {
+    font-size: 0.7rem;
+  }
+
+  /* Skill Status Mobile */
+  .skill-indicator {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 15px;
+    min-width: 80px;
+    justify-content: center;
+  }
+
+  .skill-indicator i {
+    font-size: 0.9rem;
+  }
+
+  /* Legend Mobile */
+  .matrix-legend {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .matrix-legend h4 {
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+  }
+
+  .legend-items {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend-item {
+    font-size: 0.8rem;
+    gap: 8px;
+  }
+
+  /* Work Instructions Mobile */
+  .instruction-container {
+    flex-direction: column;
+    height: auto;
+    padding: 15px;
+    gap: 15px;
+  }
+
+  .step-list {
+    width: 100%;
+    max-width: none;
+    max-height: 300px;
+    padding-right: 0;
+  }
+
+  .step-item {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .item-icon {
+    font-size: 1.5rem;
+    margin-right: 12px;
+  }
+
+  .step-text {
+    font-size: 0.9rem;
+    line-height: 1.3;
+  }
+
+  .image-viewer {
+    width: 100%;
+    height: 250px;
+    border-radius: 8px;
+  }
+
+  .no-image-placeholder {
+    padding: 20px;
+  }
+
+  .no-image-placeholder i {
+    font-size: 60px;
+  }
+
+  .no-image-placeholder h3 {
+    font-size: 1rem;
+    margin: 10px 0 5px 0;
+  }
+
+  .no-image-placeholder p {
+    font-size: 0.85rem;
+  }
+
+  /* Report Content Mobile */
+  .report-content-expanded {
+    padding: 15px;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .refresh-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .report-table-container {
+    border-radius: 10px;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .report-table {
+    min-width: 700px;
+    font-size: 0.8rem;
+  }
+
+  .report-table th,
+  .report-table td {
+    padding: 10px 8px;
+  }
+
+  .employee-name-cell {
+    min-width: 120px;
+    gap: 6px;
+  }
+
+  .signature-indicator,
+  .no-signature-indicator {
+    font-size: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .action-buttons {
+    gap: 6px;
+  }
+
+  .action-buttons button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .loading-container,
+  .empty-state {
+    padding: 40px 15px;
+  }
+
+  .loading-container p,
+  .empty-state p {
+    font-size: 0.85rem;
+  }
+
+  /* Touch improvements */
+  button, .menu-card, .step-item {
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Ensure minimum touch targets */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Improve scroll performance */
+  .test-content-expanded,
+  .matrix-training-content-expanded,
+  .report-content-expanded {
+    -webkit-overflow-scrolling: touch;
+    transform: translateZ(0);
+  }
+} 
+
+/* Tablet Optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+  
+  /* Language Toolbar for Tablet */
+  .language-toolbar {
+    top: 15px !important;
+    right: 15px !important;
+  }
+
+  .language-toolbar .btn {
+    padding: 10px 18px !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* Page Header Tablet */
+  .page-header {
+    margin-top: 20px;
+    padding: 20px 15px;
+  }
+
+  .page-title {
+    font-size: 1.8rem;
+  }
+
+  /* Menu Cards Tablet Layout */
+  .menu-cards-layout {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    margin: 20px 0;
+  }
+
+  .menu-card {
+    padding: 20px;
+    min-height: 80px;
+  }
+
+  /* Test Content Tablet */
+  .test-content-expanded {
+    padding: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+  }
+
+  /* Matrix Training Tablet */
+  .matrix-summary {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+  }
+
+  .matrix-table-container {
+    overflow-x: auto;
+  }
+
+  .matrix-table {
+    font-size: 0.85rem;
+  }
+
+  /* Work Instructions Tablet */
+  .instruction-container {
+    flex-direction: row;
+    height: 450px;
+    padding: 20px;
+  }
+
+  .step-list {
+    width: 40%;
+    max-height: none;
+  }
+
+  .image-viewer {
+    width: 60%;
+    height: auto;
+  }
+}
+
+/* Small Mobile Devices */
+@media (max-width: 480px) {
+  
+  /* Ultra compact for small phones */
+  .page-title {
+    font-size: 1.4rem;
+  }
+
+  .page-title i {
+    font-size: 1.4rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .menu-card {
+    padding: 15px;
+    min-height: 60px;
+  }
+
+  .menu-card-content h3 {
+    font-size: 1rem;
+  }
+
+  .menu-card-content p {
+    font-size: 0.8rem;
+  }
+
+  .modern-checklist-card {
+    padding: 15px;
+  }
+
+  .checklist-title {
+    font-size: 1rem;
+  }
+
+  .checklist-description {
+    font-size: 0.8rem;
+  }
+
+  .action-btn.primary {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+  }
+
+  .matrix-table {
+    font-size: 0.75rem;
+  }
+
+  .circular-progress {
+    width: 45px;
+    height: 45px;
+  }
+
+  .progress-ring {
+    width: 45px;
+    height: 45px;
+  }
+
+  .progress-ring-background,
+  .progress-ring-fill {
+    r: 18;
+    stroke-width: 4;
+  }
+
+  .progress-text {
+    font-size: 0.65rem;
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  
+  .page-header {
+    margin-top: 70px;
+    padding: 10px;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .menu-cards-layout {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .menu-card {
+    min-height: 60px;
+    padding: 15px;
+  }
+
+  .test-content-expanded {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .instruction-container {
+    flex-direction: row;
+    height: 300px;
+  }
+
+  .step-list {
+    width: 35%;
+    max-height: none;
+  }
+
+  .image-viewer {
+    width: 65%;
+    height: auto;
+  }
+}
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+  
+  .menu-card,
+  .modern-checklist-card,
+  .step-item {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .action-btn.primary,
+  .close-btn,
+  .refresh-btn {
+    -webkit-appearance: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Fix iOS zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Android specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  
+  .menu-card,
+  .modern-checklist-card {
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+  }
+  
+  /* Smooth scrolling for Android */
+  .test-content-expanded,
+  .matrix-training-content-expanded,
+  .report-content-expanded {
+    scroll-behavior: smooth;
+  }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  
+  .menu-card-icon,
+  .checklist-icon,
+  .summary-icon {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  .circular-progress {
+    image-rendering: -webkit-optimize-contrast;
+  }
+} 
