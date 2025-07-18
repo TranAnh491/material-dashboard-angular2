@@ -27,44 +27,98 @@
       <mat-icon>qr_code_scanner</mat-icon>
       <span class="tab-text">Check Label Quality</span>
     </button>
+    
+    <button 
+      mat-raised-button 
+      [color]="activeTab === 'calibration' ? 'primary' : ''"
+      [class.active]="activeTab === 'calibration'"
+      (click)="switchTab('calibration')">
+      <mat-icon>straighten</mat-icon>
+      <span class="tab-text">Calibration Sheet</span>
+    </button>
   </div>
 
   <!-- Print Schedules Section -->
   <div class="schedules-section" *ngIf="activeTab === 'schedules'">
     <div class="schedules-container">
+      <!-- Import Controls -->
+      <div class="import-section">
+        <div class="import-controls">
+          <button 
+            mat-raised-button 
+            color="primary"
+            (click)="triggerFileInput()"
+            [disabled]="isImporting">
+            <mat-icon>upload_file</mat-icon>
+            Import Excel
+          </button>
+          
+          <button 
+            mat-stroked-button 
+            color="accent"
+            (click)="exportSchedules()"
+            [disabled]="filteredRealSchedules.length === 0">
+            <mat-icon>download</mat-icon>
+            Export Excel
+          </button>
+          
+          <div class="import-status" *ngIf="isImporting">
+            <mat-spinner diameter="20"></mat-spinner>
+            <span>Đang xử lý...</span>
+          </div>
+        </div>
+        
+        <input 
+          #fileInput 
+          type="file" 
+          accept=".xlsx,.xls" 
+          (change)="onFileSelected($event)"
+          style="display: none;">
+      </div>
+
       <!-- Filters and Search -->
       <div class="filters-section">
         <div class="search-container">
           <mat-form-field appearance="outline" class="search-field">
-            <mat-label>Search schedules...</mat-label>
+            <mat-label>Tìm kiếm lịch in...</mat-label>
             <input 
               matInput 
               [(ngModel)]="searchTerm" 
               (input)="onSearchChange()"
-              placeholder="Search by label type, ID, or requester">
+              placeholder="Tìm theo mã tem, khách hàng, mã sản phẩm...">
             <mat-icon matSuffix>search</mat-icon>
           </mat-form-field>
         </div>
         
         <div class="filter-controls">
           <mat-form-field appearance="outline">
-            <mat-label>Status</mat-label>
-            <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
-              <mat-option value="all">All Status</mat-option>
-              <mat-option value="pending">Pending</mat-option>
-              <mat-option value="printing">Printing</mat-option>
-              <mat-option value="completed">Completed</mat-option>
-              <mat-option value="failed">Failed</mat-option>
+            <mat-label>Năm</mat-label>
+            <mat-select [(value)]="yearFilter" (selectionChange)="onYearFilterChange()">
+              <mat-option value="all">Tất cả năm</mat-option>
+              <mat-option *ngFor="let year of availableYears" [value]="year.toString()">
+                {{ year }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Khách hàng</mat-label>
+            <mat-select [(value)]="customerFilter" (selectionChange)="onCustomerFilterChange()">
+              <mat-option value="all">Tất cả khách hàng</mat-option>
+              <mat-option *ngFor="let customer of availableCustomers" [value]="customer">
+                {{ customer }}
+              </mat-option>
             </mat-select>
           </mat-form-field>
           
           <mat-form-field appearance="outline">
-            <mat-label>Priority</mat-label>
-            <mat-select [(value)]="priorityFilter" (selectionChange)="onPriorityFilterChange()">
-              <mat-option value="all">All Priority</mat-option>
-              <mat-option value="high">High</mat-option>
-              <mat-option value="medium">Medium</mat-option>
-              <mat-option value="low">Low</mat-option>
+            <mat-label>Trạng thái</mat-label>
+            <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
+              <mat-option value="all">Tất cả trạng thái</mat-option>
+              <mat-option value="pending">Chờ xử lý</mat-option>
+              <mat-option value="printing">Đang in</mat-option>
+              <mat-option value="completed">Hoàn thành</mat-option>
+              <mat-option value="failed">Thất bại</mat-option>
             </mat-select>
           </mat-form-field>
         </div>
@@ -75,98 +129,128 @@
         <div class="table-header">
           <h3>
             <i class="material-icons">view_list</i>
-            Print Schedules ({{ filteredSchedules.length }})
+            Lịch In Tem ({{ filteredRealSchedules.length }})
           </h3>
         </div>
         
         <div class="schedule-cards">
-          <div *ngFor="let schedule of filteredSchedules" class="schedule-card">
+          <div *ngFor="let schedule of filteredRealSchedules" class="schedule-card">
             <div class="card-header">
               <div class="schedule-info">
-                <h4>{{ schedule.labelType }}</h4>
-                <span class="schedule-id">ID: {{ schedule.id }}</span>
+                <h4>{{ schedule.maTem }} - {{ schedule.kichThuocKhoi }}</h4>
+                <span class="schedule-id">{{ schedule.nam }}/{{ schedule.thang }} - STT: {{ schedule.stt }}</span>
               </div>
-              <div class="priority-badge" [style.background]="getPriorityColor(schedule.priority)">
-                {{ schedule.priority | uppercase }}
+              <div class="status-badge" [style.background]="getStatusColor(schedule.status || 'pending')">
+                {{ (schedule.status || 'pending') === 'pending' ? 'CHỜ XỬ LÝ' : 
+                    (schedule.status === 'printing' ? 'ĐANG IN' : 
+                    (schedule.status === 'completed' ? 'HOÀN THÀNH' : 'THẤT BẠI')) }}
               </div>
             </div>
             
             <div class="card-content">
               <div class="schedule-details">
                 <div class="detail-item">
-                  <i class="material-icons">person</i>
-                  <span>{{ schedule.requestedBy }}</span>
+                  <i class="material-icons">business</i>
+                  <span>{{ schedule.khachHang }}</span>
                 </div>
                 <div class="detail-item">
                   <i class="material-icons">inventory</i>
-                  <span>{{ schedule.quantity }} labels</span>
+                  <span>{{ schedule.soLuongYeuCau }} tem</span>
                 </div>
                 <div class="detail-item">
+                  <i class="material-icons">qr_code</i>
+                  <span>{{ schedule.maSanPham }}</span>
+                </div>
+                <div class="detail-item">
+                  <i class="material-icons">assignment</i>
+                  <span>{{ schedule.soLenhSanXuat }}</span>
+                </div>
+                <div class="detail-item" *ngIf="schedule.nguoiDi">
+                  <i class="material-icons">person</i>
+                  <span>{{ schedule.nguoiDi }}</span>
+                </div>
+                <div class="detail-item" *ngIf="schedule.ngayKhoiTao">
                   <i class="material-icons">event</i>
-                  <span>Due: {{ schedule.dueDate | date:'short' }}</span>
+                  <span>{{ schedule.ngayKhoiTao | date:'dd/MM/yyyy' }}</span>
                 </div>
               </div>
               
               <div class="status-section">
-                <div class="status-badge" [style.background]="getStatusColor(schedule.status)">
-                  {{ schedule.status | uppercase }}
-                </div>
-                
                 <div class="progress-container" *ngIf="schedule.status === 'printing' || schedule.status === 'completed'">
                   <mat-progress-bar 
                     mode="determinate" 
-                    [value]="schedule.progress"
+                    [value]="schedule.progress || 0"
                     [color]="schedule.status === 'completed' ? 'primary' : 'accent'">
                   </mat-progress-bar>
-                  <span class="progress-text">{{ schedule.progress }}%</span>
+                  <span class="progress-text">{{ schedule.progress || 0 }}%</span>
+                </div>
+                
+                <div class="schedule-meta" *ngIf="schedule.note">
+                  <small><strong>Ghi chú:</strong> {{ schedule.note }}</small>
                 </div>
               </div>
             </div>
             
             <div class="card-actions">
               <button 
-                *ngIf="schedule.status === 'pending'"
+                *ngIf="schedule.status === 'pending' || !schedule.status"
                 mat-raised-button 
                 color="primary"
-                (click)="startPrinting(schedule)">
+                (click)="updateScheduleStatus(schedule, 'printing')">
                 <mat-icon>play_arrow</mat-icon>
-                Start Printing
+                Bắt đầu in
               </button>
               
               <button 
                 *ngIf="schedule.status === 'printing'"
                 mat-stroked-button 
                 color="warn"
-                (click)="pausePrinting(schedule)">
+                (click)="updateScheduleStatus(schedule, 'pending')">
                 <mat-icon>pause</mat-icon>
-                Pause
+                Tạm dừng
+              </button>
+              
+              <button 
+                *ngIf="schedule.status === 'printing'"
+                mat-raised-button 
+                color="accent"
+                (click)="updateScheduleStatus(schedule, 'completed')">
+                <mat-icon>check</mat-icon>
+                Hoàn thành
               </button>
               
               <button 
                 *ngIf="schedule.status === 'printing' || schedule.status === 'pending'"
                 mat-stroked-button 
                 color="warn"
-                (click)="cancelPrinting(schedule)">
+                (click)="updateScheduleStatus(schedule, 'failed')">
                 <mat-icon>stop</mat-icon>
-                Cancel
+                Hủy bỏ
               </button>
               
               <button 
-                *ngIf="schedule.status === 'completed'"
-                mat-stroked-button 
-                color="primary">
-                <mat-icon>download</mat-icon>
-                Download Report
+                mat-icon-button 
+                color="warn"
+                (click)="deleteSchedule(schedule)"
+                matTooltip="Xóa lịch in">
+                <mat-icon>delete</mat-icon>
               </button>
             </div>
           </div>
         </div>
         
         <!-- Empty State -->
-        <div *ngIf="filteredSchedules.length === 0" class="empty-state">
+        <div *ngIf="filteredRealSchedules.length === 0 && !isImporting" class="empty-state">
           <i class="material-icons">inbox</i>
-          <h3>No schedules found</h3>
-          <p>Try adjusting your search or filter criteria</p>
+          <h3>Không có lịch in nào</h3>
+          <p>Hãy import file Excel để thêm lịch in mới</p>
+          <button 
+            mat-raised-button 
+            color="primary"
+            (click)="triggerFileInput()">
+            <mat-icon>upload_file</mat-icon>
+            Import Excel
+          </button>
         </div>
       </div>
     </div>
@@ -174,6 +258,24 @@
 
   <!-- Check Label Section -->
   <div class="check-label-section" *ngIf="activeTab === 'check'">
+    
+    <!-- Mode Selection -->
+    <div class="mode-selection">
+      <div class="mode-toggle-container">
+        <mat-slide-toggle 
+          [(ngModel)]="isCalibrationMode"
+          color="primary"
+          class="calibration-toggle">
+          <strong>Calibration Mode</strong>
+        </mat-slide-toggle>
+        <p class="mode-description">
+          {{ isCalibrationMode 
+            ? 'So sánh với Calibration Sheet - Chụp tờ calibration đã dán tem' 
+            : 'So sánh 2 tem riêng biệt - Chụp tem mẫu và tem in' }}
+        </p>
+      </div>
+    </div>
+
     <!-- Camera Section -->
     <div class="camera-section" *ngIf="!isLoading">
       <div class="camera-container">
@@ -383,22 +485,28 @@
 
       <!-- Detailed Results -->
       <div class="detailed-results">
-        <div class="result-item" [ngClass]="{ 'pass': comparisonResults.sizeMatch, 'fail': !comparisonResults.sizeMatch }">
-          <mat-icon>{{ comparisonResults.sizeMatch ? 'check_circle' : 'error' }}</mat-icon>
-          <span>Size & Dimensions</span>
-          <span class="status">{{ comparisonResults.sizeMatch ? 'MATCH' : 'MISMATCH' }}</span>
+        <div class="result-item" [ngClass]="{ 'good': comparisonResults.labelSize >= 85, 'warning': comparisonResults.labelSize >= 70 && comparisonResults.labelSize < 85, 'poor': comparisonResults.labelSize < 70 }">
+          <mat-icon>{{ comparisonResults.labelSize >= 85 ? 'check_circle' : comparisonResults.labelSize >= 70 ? 'warning' : 'error' }}</mat-icon>
+          <span>Kích thước tem</span>
+          <span class="score">{{ comparisonResults.labelSize }}%</span>
         </div>
         
-        <div class="result-item" [ngClass]="{ 'pass': comparisonResults.fontMatch, 'fail': !comparisonResults.fontMatch }">
-          <mat-icon>{{ comparisonResults.fontMatch ? 'check_circle' : 'error' }}</mat-icon>
-          <span>Font Style</span>
-          <span class="status">{{ comparisonResults.fontMatch ? 'MATCH' : 'MISMATCH' }}</span>
+        <div class="result-item" [ngClass]="{ 'good': comparisonResults.fontMatch >= 85, 'warning': comparisonResults.fontMatch >= 70 && comparisonResults.fontMatch < 85, 'poor': comparisonResults.fontMatch < 70 }">
+          <mat-icon>{{ comparisonResults.fontMatch >= 85 ? 'check_circle' : comparisonResults.fontMatch >= 70 ? 'warning' : 'error' }}</mat-icon>
+          <span>Font chữ</span>
+          <span class="score">{{ comparisonResults.fontMatch }}%</span>
         </div>
         
-        <div class="result-item" [ngClass]="{ 'pass': comparisonResults.textSizeMatch, 'fail': !comparisonResults.textSizeMatch }">
-          <mat-icon>{{ comparisonResults.textSizeMatch ? 'check_circle' : 'error' }}</mat-icon>
-          <span>Text Size</span>
-          <span class="status">{{ comparisonResults.textSizeMatch ? 'MATCH' : 'MISMATCH' }}</span>
+        <div class="result-item" [ngClass]="{ 'good': comparisonResults.textSize >= 85, 'warning': comparisonResults.textSize >= 70 && comparisonResults.textSize < 85, 'poor': comparisonResults.textSize < 70 }">
+          <mat-icon>{{ comparisonResults.textSize >= 85 ? 'check_circle' : comparisonResults.textSize >= 70 ? 'warning' : 'error' }}</mat-icon>
+          <span>Size chữ</span>
+          <span class="score">{{ comparisonResults.textSize }}%</span>
+        </div>
+
+        <div class="result-item" [ngClass]="{ 'good': comparisonResults.overallShape >= 85, 'warning': comparisonResults.overallShape >= 70 && comparisonResults.overallShape < 85, 'poor': comparisonResults.overallShape < 70 }">
+          <mat-icon>{{ comparisonResults.overallShape >= 85 ? 'check_circle' : comparisonResults.overallShape >= 70 ? 'warning' : 'error' }}</mat-icon>
+          <span>Hình dạng tổng thể</span>
+          <span class="score">{{ comparisonResults.overallShape }}%</span>
         </div>
       </div>
 
@@ -442,7 +550,343 @@
       </div>
     </div>
 
-    <!-- Hidden canvas for image processing -->
+          <!-- Hidden canvas for image processing -->
     <canvas #canvasElement style="display: none;"></canvas>
   </div>
+
+  <!-- Calibration Sheet Section -->
+  <div class="calibration-section" *ngIf="activeTab === 'calibration'">
+    
+    <!-- Controls Section (Not printed) -->
+    <div class="controls-section no-print">
+      <div class="controls-container">
+        <h2>
+          <mat-icon>straighten</mat-icon>
+          Calibration Sheet Generator
+        </h2>
+        <p>Generate precision calibration sheet for print quality verification</p>
+        
+        <div class="control-buttons">
+          <button 
+            mat-raised-button 
+            color="primary"
+            (click)="downloadCalibrationSheet()">
+            <mat-icon>download</mat-icon>
+            Tải xuống & In
+          </button>
+          
+          <button 
+            mat-stroked-button 
+            color="accent"
+            (click)="printCalibrationSheet()">
+            <mat-icon>print</mat-icon>
+            In trực tiếp
+          </button>
+          
+
+        </div>
+        
+        <div class="instructions">
+          <h3>Hướng dẫn sử dụng:</h3>
+          <ol>
+            <li>In calibration sheet này trên giấy A4 với tỷ lệ 100% (không scale)</li>
+            <li>Dán tem đã in vào khu vực ở giữa tờ</li>
+            <li>Chuyển sang tab "Check Label Quality" để chụp hình và so sánh</li>
+            <li>Phần mềm sẽ tự động phân tích kích thước, font, size chữ và hình dạng</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calibration Sheet (Printable) -->
+    <div id="calibration-sheet" class="calibration-sheet">
+      
+      <!-- Grid Lines -->
+      <div class="grid-container">
+        <!-- Horizontal grid lines every 1mm -->
+        <div 
+          *ngFor="let mark of verticalMarks" 
+          class="grid-line-h"
+          [style.top.mm]="mark">
+        </div>
+        
+        <!-- Vertical grid lines every 1mm -->
+        <div 
+          *ngFor="let mark of horizontalMarks" 
+          class="grid-line-v"
+          [style.left.mm]="mark">
+        </div>
+      </div>
+
+      <!-- Horizontal Ruler -->
+      <div class="ruler-horizontal">
+        <div 
+          *ngFor="let mark of horizontalMarks" 
+          class="ruler-mark-h"
+          [class.major-mark-h]="isMajorMark(mark)"
+          [class.minor-mark-h]="isMinorMark(mark)"
+          [style.left.mm]="mark">
+        </div>
+        
+        <!-- Ruler numbers -->
+        <ng-container *ngFor="let mark of horizontalMarks">
+          <div 
+            *ngIf="shouldShowNumber(mark)"
+            class="ruler-number-h"
+            [style.left.mm]="mark">
+            {{ mark }}
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Vertical Ruler -->
+      <div class="ruler-vertical">
+        <div 
+          *ngFor="let mark of verticalMarks" 
+          class="ruler-mark-v"
+          [class.major-mark-v]="isMajorMark(mark)"
+          [class.minor-mark-v]="isMinorMark(mark)"
+          [style.top.mm]="mark">
+        </div>
+        
+        <!-- Ruler numbers -->
+        <ng-container *ngFor="let mark of verticalMarks">
+          <div 
+            *ngIf="shouldShowNumber(mark)"
+            class="ruler-number-v"
+            [style.top.mm]="mark">
+            {{ mark }}
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Content Area -->
+      <div class="content-area">
+        
+        <!-- Header -->
+        <div class="header">
+          <h1>RSBG Print Quality Calibration Sheet</h1>
+          <p>A4 Size: 210mm × 297mm | Date: {{ 'now' | date:'dd/MM/yyyy HH:mm' }}</p>
+        </div>
+
+        <!-- Font Size Reference Chart -->
+        <div class="font-chart">
+          <h2>Font Size Reference Chart - Arial Font Family</h2>
+          
+          <div *ngFor="let font of fontSizes" class="font-row">
+            <div class="font-info">
+              {{ font.pt }}pt<br>
+              ({{ font.mm }}mm)
+            </div>
+            <div 
+              class="font-sample-bold"
+              [style.font-size.pt]="font.pt">
+              {{ sampleText }}
+            </div>
+            <div 
+              class="font-sample-regular"
+              [style.font-size.pt]="font.pt">
+              {{ sampleText }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Measurement Section -->
+        <div class="measurement-section">
+          <h2>Label Placement Measurement Area</h2>
+          
+          <div class="measurement-boxes">
+            <div class="measurement-box" data-size="20×20mm"></div>
+            <div class="measurement-box" data-size="20×20mm"></div>
+            <div class="measurement-box" data-size="20×20mm"></div>
+            <div class="measurement-box" data-size="20×20mm"></div>
+          </div>
+          
+          <div class="measurement-info">
+            <p><strong>Cách sử dụng:</strong></p>
+            <ul>
+              <li>Đặt tem đã in vào các ô đo lường phía trên</li>
+              <li>So sánh kích thước tem với các vạch lưới</li>
+              <li>Kiểm tra cỡ chữ với bảng tham chiếu font</li>
+              <li>Kiểm tra độ chính xác vị trí bằng thước kẻ</li>
+              <li>Đảm bảo màu sắc và chất lượng in đáp ứng yêu cầu</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Test Patterns -->
+        <div class="test-patterns">
+          <h2>Print Quality Test Patterns</h2>
+          
+          <div class="pattern-row">
+            <div class="pattern-item">
+              <h4>Line Weight Test</h4>
+              <div class="line-test">
+                <div style="border-top: 0.1mm solid #000; margin: 1mm 0;"></div>
+                <div style="border-top: 0.2mm solid #000; margin: 1mm 0;"></div>
+                <div style="border-top: 0.5mm solid #000; margin: 1mm 0;"></div>
+                <div style="border-top: 1mm solid #000; margin: 1mm 0;"></div>
+              </div>
+              <small>0.1mm, 0.2mm, 0.5mm, 1mm</small>
+            </div>
+            
+            <div class="pattern-item">
+              <h4>Gray Scale Test</h4>
+              <div class="grayscale-test">
+                <div style="background: #000; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
+                <div style="background: #333; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
+                <div style="background: #666; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
+                <div style="background: #999; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
+                <div style="background: #ccc; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
+              </div>
+              <small>100%, 80%, 60%, 40%, 20%</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- QR Code and Barcode Test Area -->
+        <div class="code-test-section">
+          <h2>Barcode & QR Code Test Area</h2>
+          
+          <div class="code-containers">
+            <div class="code-container">
+              <div class="code-frame" style="width: 25mm; height: 25mm; border: 0.2mm solid #000;">
+                <span class="code-label">QR Code<br>25×25mm</span>
+              </div>
+            </div>
+            
+            <div class="code-container">
+              <div class="code-frame" style="width: 40mm; height: 10mm; border: 0.2mm solid #000;">
+                <span class="code-label">Barcode 40×10mm</span>
+              </div>
+            </div>
+            
+            <div class="code-container">
+              <div class="code-frame" style="width: 15mm; height: 15mm; border: 0.2mm solid #000;">
+                <span class="code-label">Small QR<br>15×15mm</span>
+              </div>
+            </div>
+          </div>
+          
+          <p class="code-instructions">
+            Đặt QR code và barcode đã in vào khung phía trên để kiểm tra độ chính xác kích thước
+          </p>
+        </div>
+
+        <!-- Central Label Placement Area -->
+        <div class="central-label-area">
+          <h2>KHU VỰC DÁN TEM</h2>
+          
+          <div class="main-placement-frame">
+            <div class="placement-guide">
+              <p>Dán tem đã in vào đây</p>
+              <div class="center-guidelines">
+                <div class="horizontal-line"></div>
+                <div class="vertical-line"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="placement-instructions">
+            <p><strong>Lưu ý:</strong> Dán tem chính giữa khung, căn chỉnh theo đường thẳng đứng và ngang</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p>
+          RSBG Project © {{ 'now' | date:'yyyy' }} | 
+          Print Settings: 100% Scale, No Margins | 
+          Paper: A4 (210×297mm) | 
+          Generated: {{ 'now' | date:'dd/MM/yyyy HH:mm:ss' }}
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+<!-- Import Dialog -->
+<div class="import-dialog-overlay" *ngIf="showImportDialog" (click)="cancelImport()">
+  <div class="import-dialog" (click)="$event.stopPropagation()">
+    <div class="dialog-header">
+      <h3>
+        <mat-icon>upload_file</mat-icon>
+        Xác nhận Import Excel
+      </h3>
+      <button mat-icon-button (click)="cancelImport()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    
+    <div class="dialog-content">
+      <div class="import-summary" *ngIf="importResult">
+        <div class="summary-stats">
+          <div class="stat-item success">
+            <mat-icon>check_circle</mat-icon>
+            <span>{{ importResult.validRows }} dòng hợp lệ</span>
+          </div>
+          <div class="stat-item total">
+            <mat-icon>description</mat-icon>
+            <span>{{ importResult.totalRows }} tổng số dòng</span>
+          </div>
+          <div class="stat-item error" *ngIf="importResult.errors.length > 0">
+            <mat-icon>error</mat-icon>
+            <span>{{ importResult.errors.length }} lỗi</span>
+          </div>
+        </div>
+        
+        <!-- Error List -->
+        <div class="error-list" *ngIf="importResult.errors.length > 0">
+          <h4>Danh sách lỗi:</h4>
+          <div class="error-scroll">
+            <div *ngFor="let error of importResult.errors" class="error-item">
+              <mat-icon>warning</mat-icon>
+              <span>{{ error }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Preview Data -->
+        <div class="preview-data" *ngIf="importResult.data.length > 0">
+          <h4>Xem trước dữ liệu ({{ importResult.data.length > 5 ? '5 dòng đầu' : 'tất cả' }}):</h4>
+          <div class="preview-table">
+            <div class="preview-row header">
+              <span>Mã tem</span>
+              <span>Khách hàng</span>
+              <span>Số lượng</span>
+              <span>Năm/Tháng</span>
+            </div>
+            <div *ngFor="let item of importResult.data.slice(0, 5)" class="preview-row">
+              <span>{{ item.maTem }}</span>
+              <span>{{ item.khachHang }}</span>
+              <span>{{ item.soLuongYeuCau }}</span>
+              <span>{{ item.nam }}/{{ item.thang }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="dialog-actions">
+      <button 
+        mat-stroked-button 
+        (click)="cancelImport()"
+        [disabled]="isImporting">
+        Hủy bỏ
+      </button>
+      
+      <button 
+        mat-raised-button 
+        color="primary"
+        (click)="confirmImport()"
+        [disabled]="isImporting || !importResult?.data.length">
+        <mat-icon *ngIf="!isImporting">save</mat-icon>
+        <mat-spinner *ngIf="isImporting" diameter="16"></mat-spinner>
+        {{ isImporting ? 'Đang lưu...' : 'Lưu vào Firebase' }}
+      </button>
+    </div>
+  </div>
+</div>
 </div> 

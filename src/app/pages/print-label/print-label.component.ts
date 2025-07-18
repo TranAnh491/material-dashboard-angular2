@@ -1,5 +1,8 @@
 import { Component, OnInit, ViewChild, ElementRef, OnDestroy } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { LabelScheduleService } from '../../services/label-schedule.service';
+import { LabelScheduleData, ExcelImportResult, LabelScheduleFilter } from '../../models/label-schedule.model';
 
 interface CapturedImage {
   dataUrl: string;
@@ -8,6 +11,7 @@ interface CapturedImage {
   name: string;
 }
 
+// Keep old interface for backward compatibility, but we'll use LabelScheduleData for the real data
 interface PrintSchedule {
   id: string;
   labelType: string;
@@ -28,16 +32,36 @@ interface PrintSchedule {
 export class PrintLabelComponent implements OnInit, OnDestroy {
   @ViewChild('videoElement', { static: false }) videoElement!: ElementRef<HTMLVideoElement>;
   @ViewChild('canvasElement', { static: false }) canvasElement!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('calibrationVideoElement', { static: false }) calibrationVideoElement!: ElementRef<HTMLVideoElement>;
 
   // Active tab management
-  activeTab: 'schedules' | 'check' = 'schedules';
+  activeTab: 'schedules' | 'check' | 'calibration' = 'schedules';
 
-  // Print Schedules properties
+  // Print Schedules properties - Real data from Firebase
+  realSchedules: LabelScheduleData[] = [];
+  filteredRealSchedules: LabelScheduleData[] = [];
+  
+  // Mock data for demo purposes (will be replaced by real data)
   printSchedules: PrintSchedule[] = [];
   filteredSchedules: PrintSchedule[] = [];
+  
+  // Search and filter properties
   searchTerm = '';
   statusFilter = 'all';
   priorityFilter = 'all';
+  yearFilter = 'all';
+  customerFilter = 'all';
+  
+  // Excel import properties
+  @ViewChild('fileInput', { static: false }) fileInput!: ElementRef<HTMLInputElement>;
+  isImporting = false;
+  importResult: ExcelImportResult | null = null;
+  showImportDialog = false;
+  
+  // Filter options
+  availableYears: number[] = [];
+  availableCustomers: string[] = [];
+  availableStatuses: string[] = [];
 
   // Check Label properties (từ CheckLabelComponent)
   isCameraActive = false;
@@ -53,18 +77,61 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
   
   // Comparison results
   comparisonResults = {
-    sizeMatch: false,
-    fontMatch: false,
-    textSizeMatch: false,
+    labelSize: 0,
+    fontMatch: 0,
+    textSize: 0,
+    overallShape: 0,
     overallMatch: false,
     confidence: 0
   };
 
-  constructor(private snackBar: MatSnackBar) {}
+  // Comparison mode
+  isCalibrationMode = false;
+
+  // Calibration sheet properties
+  fontSizes = [
+    { pt: 8, mm: 2.8 },
+    { pt: 10, mm: 3.5 },
+    { pt: 12, mm: 4.2 },
+    { pt: 14, mm: 4.9 },
+    { pt: 16, mm: 5.6 },
+    { pt: 18, mm: 6.3 },
+    { pt: 20, mm: 7.1 },
+    { pt: 22, mm: 7.8 },
+    { pt: 24, mm: 8.5 }
+  ];
+
+  sampleText = 'RSBG Project Label';
+  
+  // Calibration verification properties
+  isCalibrationCameraActive = false;
+  calibrationMediaStream: MediaStream | null = null;
+  calibrationCapturedImage: CapturedImage | null = null;
+  showCalibrationVerification = false;
+  calibrationResults = {
+    alignmentAccuracy: 0,
+    sizeAccuracy: 0,
+    positionAccuracy: 0,
+    overallAccuracy: 0,
+    isPassing: false
+  };
+  
+  // Ruler increments for A4 sheet
+  horizontalMarks: number[] = [];
+  verticalMarks: number[] = [];
+
+  constructor(
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog,
+    private labelScheduleService: LabelScheduleService
+  ) {}
 
   ngOnInit(): void {
     this.loadMockPrintSchedules();
+    this.loadRealSchedules();
+    this.loadFilterOptions();
     this.filterSchedules();
+    this.generateRulerMarks();
   }
 
   ngOnDestroy(): void {
@@ -72,7 +139,7 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
   }
 
   // Tab Management
-  switchTab(tab: 'schedules' | 'check'): void {
+  switchTab(tab: 'schedules' | 'check' | 'calibration'): void {
     this.activeTab = tab;
     if (tab === 'check') {
       // Initialize camera when switching to check tab
@@ -83,8 +150,56 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
     }
   }
 
+  generateRulerMarks(): void {
+    // Generate horizontal marks (0-210mm for A4 width)
+    for (let i = 0; i <= 210; i++) {
+      this.horizontalMarks.push(i);
+    }
+
+    // Generate vertical marks (0-297mm for A4 height)
+    for (let i = 0; i <= 297; i++) {
+      this.verticalMarks.push(i);
+    }
+  }
+
   // === PRINT SCHEDULES FUNCTIONALITY ===
   
+  private loadRealSchedules(): void {
+    this.labelScheduleService.getAllSchedules().subscribe({
+      next: (schedules) => {
+        this.realSchedules = schedules;
+        this.filterRealSchedules();
+      },
+      error: (error) => {
+        console.error('Error loading schedules:', error);
+        this.showNotification('Lỗi khi tải dữ liệu lịch in', 'error');
+      }
+    });
+  }
+
+  private loadFilterOptions(): void {
+    // Load years for filter
+    this.labelScheduleService.getUniqueYears().subscribe({
+      next: (years) => {
+        this.availableYears = years;
+      }
+    });
+
+    // Load customers for filter
+    this.labelScheduleService.getUniqueCustomers().subscribe({
+      next: (customers) => {
+        this.availableCustomers = customers;
+      }
+    });
+
+    // Load statuses for filter
+    this.labelScheduleService.getUniqueStatuses().subscribe({
+      next: (statuses) => {
+        this.availableStatuses = statuses;
+      }
+    });
+  }
+
   private loadMockPrintSchedules(): void {
     this.printSchedules = [
       {
@@ -158,16 +273,161 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
     });
   }
 
+  filterRealSchedules(): void {
+    this.filteredRealSchedules = this.realSchedules.filter(schedule => {
+      const matchesSearch = this.searchTerm === '' || 
+                           schedule.maTem.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                           schedule.khachHang.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                           schedule.maSanPham.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                           schedule.soLenhSanXuat.toLowerCase().includes(this.searchTerm.toLowerCase());
+      
+      const matchesStatus = this.statusFilter === 'all' || schedule.status === this.statusFilter;
+      const matchesYear = this.yearFilter === 'all' || schedule.nam === parseInt(this.yearFilter);
+      const matchesCustomer = this.customerFilter === 'all' || schedule.khachHang === this.customerFilter;
+      
+      return matchesSearch && matchesStatus && matchesYear && matchesCustomer;
+    });
+  }
+
   onSearchChange(): void {
     this.filterSchedules();
+    this.filterRealSchedules();
   }
 
   onStatusFilterChange(): void {
     this.filterSchedules();
+    this.filterRealSchedules();
   }
 
   onPriorityFilterChange(): void {
     this.filterSchedules();
+    this.filterRealSchedules();
+  }
+
+  onYearFilterChange(): void {
+    this.filterRealSchedules();
+  }
+
+  onCustomerFilterChange(): void {
+    this.filterRealSchedules();
+  }
+
+  // === EXCEL IMPORT FUNCTIONALITY ===
+  
+  triggerFileInput(): void {
+    if (this.fileInput) {
+      this.fileInput.nativeElement.click();
+    }
+  }
+
+  onFileSelected(event: any): void {
+    const file = event.target.files[0];
+    if (file) {
+      this.importExcelFile(file);
+    }
+    // Reset file input
+    event.target.value = '';
+  }
+
+  async importExcelFile(file: File): Promise<void> {
+    if (!file.name.match(/\.(xlsx|xls)$/)) {
+      this.showNotification('Vui lòng chọn file Excel (.xlsx hoặc .xls)', 'error');
+      return;
+    }
+
+    this.isImporting = true;
+    this.importResult = null;
+
+    try {
+      const result = await this.labelScheduleService.importFromExcel(file);
+      this.importResult = result;
+      
+      if (result.success) {
+        this.showNotification(
+          `Import thành công! ${result.validRows}/${result.totalRows} dòng hợp lệ`, 
+          'success'
+        );
+        
+        if (result.validRows > 0) {
+          this.showImportDialog = true;
+        }
+      } else {
+        this.showNotification('Import thất bại. Kiểm tra lại file Excel', 'error');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      this.showNotification('Lỗi khi đọc file Excel', 'error');
+    } finally {
+      this.isImporting = false;
+    }
+  }
+
+  async confirmImport(): Promise<void> {
+    if (!this.importResult || !this.importResult.data.length) {
+      return;
+    }
+
+    this.isImporting = true;
+    
+    try {
+      await this.labelScheduleService.bulkAddSchedules(this.importResult.data);
+      this.showNotification(
+        `Đã lưu ${this.importResult.data.length} lịch in thành công!`, 
+        'success'
+      );
+      this.showImportDialog = false;
+      this.importResult = null;
+      this.loadRealSchedules(); // Reload data
+    } catch (error) {
+      console.error('Save error:', error);
+      this.showNotification('Lỗi khi lưu dữ liệu', 'error');
+    } finally {
+      this.isImporting = false;
+    }
+  }
+
+  cancelImport(): void {
+    this.showImportDialog = false;
+    this.importResult = null;
+  }
+
+  exportSchedules(): void {
+    if (this.filteredRealSchedules.length === 0) {
+      this.showNotification('Không có dữ liệu để export', 'warning');
+      return;
+    }
+
+    const filename = `label-schedules-${new Date().toISOString().split('T')[0]}`;
+    this.labelScheduleService.exportToExcel(this.filteredRealSchedules, filename);
+    this.showNotification('File Excel đã được tải xuống', 'success');
+  }
+
+  // === SCHEDULE OPERATIONS ===
+  
+  deleteSchedule(schedule: LabelScheduleData): void {
+    if (!schedule.id) return;
+    
+    if (confirm(`Bạn có chắc muốn xóa lịch in "${schedule.maTem}"?`)) {
+      this.labelScheduleService.deleteSchedule(schedule.id).then(() => {
+        this.showNotification('Đã xóa lịch in', 'success');
+        this.loadRealSchedules();
+      }).catch(error => {
+        console.error('Delete error:', error);
+        this.showNotification('Lỗi khi xóa lịch in', 'error');
+      });
+    }
+  }
+
+  updateScheduleStatus(schedule: LabelScheduleData, status: string): void {
+    if (!schedule.id) return;
+    
+    this.labelScheduleService.updateSchedule(schedule.id, { status: status as any }).then(() => {
+      this.showNotification(`Đã cập nhật trạng thái thành ${status}`, 'success');
+      this.loadRealSchedules();
+    }).catch(error => {
+      console.error('Update error:', error);
+      this.showNotification('Lỗi khi cập nhật trạng thái', 'error');
+    });
   }
 
   startPrinting(schedule: PrintSchedule): void {
@@ -362,19 +622,22 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
   }
 
   private generateMockComparisonResults() {
-    const sizeMatch = Math.random() > 0.2;
-    const fontMatch = Math.random() > 0.15;
-    const textSizeMatch = Math.random() > 0.1;
+    // Generate scores from 60-100 for each metric
+    const labelSize = Math.floor(60 + Math.random() * 40);
+    const fontMatch = Math.floor(65 + Math.random() * 35);
+    const textSize = Math.floor(70 + Math.random() * 30);
+    const overallShape = Math.floor(55 + Math.random() * 45);
     
-    const overallMatch = sizeMatch && fontMatch && textSizeMatch;
-    const confidence = overallMatch ? 
-      Math.floor(85 + Math.random() * 15) :
-      Math.floor(45 + Math.random() * 40);
+    // Overall accuracy is average of all metrics
+    const avgScore = Math.round((labelSize + fontMatch + textSize + overallShape) / 4);
+    const overallMatch = avgScore >= 80;
+    const confidence = avgScore;
 
     return {
-      sizeMatch,
+      labelSize,
       fontMatch,
-      textSizeMatch,
+      textSize,
+      overallShape,
       overallMatch,
       confidence
     };
@@ -439,4 +702,283 @@ export class PrintLabelComponent implements OnInit, OnDestroy {
   get canCompare(): boolean {
     return this.selectedSampleImage !== null && this.selectedPrintedImage !== null;
   }
+
+  // === CALIBRATION SHEET FUNCTIONALITY ===
+
+  printCalibrationSheet(): void {
+    window.print();
+  }
+
+  downloadCalibrationSheet(): void {
+    const printContents = document.getElementById('calibration-sheet')?.innerHTML;
+    
+    if (printContents) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>RSBG Calibration Sheet</title>
+              <style>
+                @page {
+                  size: A4;
+                  margin: 0;
+                }
+                
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
+                
+                body {
+                  font-family: Arial, sans-serif;
+                  background: white;
+                }
+                
+                .calibration-sheet {
+                  width: 210mm;
+                  height: 297mm;
+                  position: relative;
+                  background: white;
+                  overflow: hidden;
+                }
+                
+                /* Grid Lines */
+                .grid-container {
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 100%;
+                }
+                
+                .grid-line-h {
+                  position: absolute;
+                  left: 0;
+                  right: 0;
+                  height: 0.1mm;
+                  background: #ddd;
+                }
+                
+                .grid-line-v {
+                  position: absolute;
+                  top: 0;
+                  bottom: 0;
+                  width: 0.1mm;
+                  background: #ddd;
+                }
+                
+                /* Rulers */
+                .ruler-horizontal {
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 10mm;
+                  background: white;
+                  border-bottom: 1px solid #000;
+                }
+                
+                .ruler-vertical {
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 10mm;
+                  height: 100%;
+                  background: white;
+                  border-right: 1px solid #000;
+                }
+                
+                .ruler-mark-h {
+                  position: absolute;
+                  bottom: 0;
+                  width: 0.2mm;
+                  background: #000;
+                }
+                
+                .ruler-mark-v {
+                  position: absolute;
+                  right: 0;
+                  height: 0.2mm;
+                  background: #000;
+                }
+                
+                .major-mark-h {
+                  height: 3mm;
+                }
+                
+                .minor-mark-h {
+                  height: 1.5mm;
+                }
+                
+                .major-mark-v {
+                  width: 3mm;
+                }
+                
+                .minor-mark-v {
+                  width: 1.5mm;
+                }
+                
+                .ruler-number-h {
+                  position: absolute;
+                  bottom: 3.5mm;
+                  font-size: 6pt;
+                  font-weight: bold;
+                  color: #000;
+                  transform: translateX(-50%);
+                }
+                
+                .ruler-number-v {
+                  position: absolute;
+                  right: 3.5mm;
+                  font-size: 6pt;
+                  font-weight: bold;
+                  color: #000;
+                  transform: translateY(-50%) rotate(-90deg);
+                  transform-origin: center;
+                }
+                
+                /* Content Area */
+                .content-area {
+                  position: absolute;
+                  top: 15mm;
+                  left: 15mm;
+                  right: 10mm;
+                  bottom: 10mm;
+                }
+                
+                .header {
+                  text-align: center;
+                  margin-bottom: 8mm;
+                }
+                
+                .header h1 {
+                  font-size: 16pt;
+                  font-weight: bold;
+                  margin-bottom: 2mm;
+                }
+                
+                .header p {
+                  font-size: 10pt;
+                  color: #666;
+                }
+                
+                .font-chart {
+                  margin-bottom: 10mm;
+                }
+                
+                .font-chart h2 {
+                  font-size: 12pt;
+                  font-weight: bold;
+                  margin-bottom: 5mm;
+                  border-bottom: 0.5mm solid #000;
+                  padding-bottom: 1mm;
+                }
+                
+                .font-row {
+                  display: flex;
+                  align-items: center;
+                  margin-bottom: 3mm;
+                  padding: 1mm 0;
+                  border-bottom: 0.1mm solid #eee;
+                }
+                
+                .font-info {
+                  width: 25mm;
+                  font-size: 8pt;
+                  color: #666;
+                  flex-shrink: 0;
+                }
+                
+                .font-sample-bold {
+                  font-weight: bold;
+                  margin-right: 5mm;
+                  min-width: 60mm;
+                }
+                
+                .font-sample-regular {
+                  font-weight: normal;
+                }
+                
+                .measurement-section {
+                  margin-top: 15mm;
+                }
+                
+                .measurement-section h2 {
+                  font-size: 12pt;
+                  font-weight: bold;
+                  margin-bottom: 5mm;
+                  border-bottom: 0.5mm solid #000;
+                  padding-bottom: 1mm;
+                }
+                
+                .measurement-boxes {
+                  display: grid;
+                  grid-template-columns: repeat(4, 1fr);
+                  gap: 5mm;
+                  margin-bottom: 10mm;
+                }
+                
+                .measurement-box {
+                  border: 0.2mm solid #000;
+                  width: 20mm;
+                  height: 20mm;
+                  position: relative;
+                }
+                
+                .measurement-box::after {
+                  content: attr(data-size);
+                  position: absolute;
+                  bottom: -4mm;
+                  left: 50%;
+                  transform: translateX(-50%);
+                  font-size: 7pt;
+                  color: #000;
+                }
+                
+                .footer {
+                  position: absolute;
+                  bottom: 5mm;
+                  left: 15mm;
+                  right: 10mm;
+                  text-align: center;
+                  font-size: 8pt;
+                  color: #666;
+                  border-top: 0.1mm solid #ccc;
+                  padding-top: 2mm;
+                }
+                
+                @media print {
+                  .no-print {
+                    display: none !important;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              ${printContents}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  }
+
+  isMinorMark(value: number): boolean {
+    return value % 5 !== 0;
+  }
+
+  isMajorMark(value: number): boolean {
+    return value % 5 === 0;
+  }
+
+  shouldShowNumber(value: number): boolean {
+    return value % 10 === 0 && value > 0;
+  }
+
+
 } 
