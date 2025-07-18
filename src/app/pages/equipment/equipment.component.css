@@ -187,7 +187,7 @@
 .content-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 20px;
+  padding: 12px 20px; /* Reduced from 20px to 12px */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -793,7 +793,7 @@
   font-size: 1.2rem !important;
 }
 
-/* Page Header Styling */
+/* Page Header Styling - Hidden for more space */
 .page-header {
   text-align: center;
   margin-bottom: 15px;
@@ -801,6 +801,7 @@
   padding: 10px;
   background: #fff;
   color: #333;
+  display: none; /* Hidden to maximize content space */
 }
 
 .page-title {
@@ -825,11 +826,12 @@
   font-style: italic;
 }
 
-/* Header Divider */
+/* Header Divider - Hidden */
 .header-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
   margin: 15px 0;
+  display: none; /* Hidden since header is hidden */
 }
 
 /* Menu Cards with Different Colors */
@@ -838,7 +840,7 @@
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 15px;
   margin-bottom: 15px;
-  margin-top: 5px;
+  margin-top: 20px; /* Increased since header is hidden */
 }
 
 /* Menu Card Base Styling */
@@ -927,95 +929,140 @@
 }
 
 .matrix-training-content-expanded {
-  padding: 25px;
+  padding: 15px 25px; /* Reduced top/bottom padding */
 }
 
-/* Matrix Summary Stats */
+/* Matrix Summary Stats - Compact */
 .matrix-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; /* Reduced from 20px */
+  margin-bottom: 15px; /* Reduced from 30px */
 }
 
 .summary-card {
   background: white;
   border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
+  border-radius: 6px; /* Reduced from 8px */
+  padding: 12px; /* Reduced from 20px */
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px; /* Reduced from 15px */
 }
 
 .summary-icon {
-  width: 50px;
-  height: 50px;
+  width: 40px; /* Reduced from 50px */
+  height: 40px; /* Reduced from 50px */
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #E3F2FD;
   color: #1976D2;
+  font-size: 18px; /* Added to scale icon */
 }
 
 .summary-info h3 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.4rem; /* Reduced from 1.8rem */
   font-weight: 700;
   color: #333;
 }
 
 .summary-info p {
-  margin: 5px 0 0 0;
-  font-size: 0.9rem;
+  margin: 2px 0 0 0; /* Reduced from 5px */
+  font-size: 0.8rem; /* Reduced from 0.9rem */
   color: #666;
 }
 
-/* Matrix Table Container */
+/* Matrix Table Container - Extended Height (+1cm) */
 .matrix-table-container {
   background: white;
-  border: 1px solid #e0e0e0;
   border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
   margin-bottom: 25px;
+  max-height: 540px; /* Extended by 40px (~1cm) for more data visibility */
+  position: relative;
+  /* Performance optimizations */
+  contain: layout;
+  transform: translateZ(0);
 }
+
+.matrix-table-container .table-responsive {
+  overflow-x: auto;
+  overflow-y: auto; /* Enable vertical scrolling */
+  max-height: 540px; /* Match the container height */
+  /* Custom scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+  /* Performance optimizations */
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
+}
+
+/* Custom scrollbar for webkit browsers */
+.matrix-table-container .table-responsive::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.matrix-table-container .table-responsive::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.matrix-table-container .table-responsive::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.matrix-table-container .table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+
 
 .matrix-table {
   width: 100%;
+  font-size: 14px; /* Match report table font size */
   border-collapse: collapse;
 }
 
 .matrix-table th {
-  background: #F5F5F5;
-  padding: 15px 12px;
-  text-align: left;
+  background: #f5f5f5; /* Exact match with report table */
   font-weight: 600;
   color: #333;
-  border-bottom: 2px solid #e0e0e0;
+  padding: 16px; /* Match report table padding */
+  text-align: left;
+  position: sticky; /* Keep headers visible when scrolling */
+  top: 0;
+  z-index: 10;
 }
 
 .matrix-table td {
-  padding: 15px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 16px; /* Match report table padding */
+  border-bottom: 1px solid #eee; /* Match report table border */
   vertical-align: middle;
 }
 
 .matrix-table tr:hover {
-  background: #fafafa;
+  background-color: #f9f9f9; /* Exact match with report table */
 }
 
-/* Employee columns */
+/* Employee columns - Matching Training Report Style */
 .employee-id {
   font-weight: 600;
-  color: #1976D2;
-  font-size: 0.9rem;
+  color: #333; /* Match report table text color */
+  font-size: 14px; /* Match report table font size */
 }
 
 .name-with-avatar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px; /* Match employee-name-cell gap */
 }
 
 .employee-avatar {
@@ -1219,10 +1266,11 @@
     border-radius: 25px !important;
   }
 
-  /* Page Header Mobile */
+  /* Page Header Mobile - Hidden */
   .page-header {
     margin-top: 60px; /* Space for fixed language button */
     padding: 15px 10px;
+    display: none; /* Hidden to save space */
   }
 
   .page-title {
@@ -1246,7 +1294,7 @@
   .menu-cards-layout {
     grid-template-columns: 1fr;
     gap: 12px;
-    margin: 15px 0;
+    margin: 20px 0 15px 0; /* Adjusted top margin since header is hidden */
   }
 
   .menu-card {
@@ -1283,15 +1331,15 @@
   }
 
   .content-header {
-    padding: 15px;
+    padding: 10px 15px; /* Reduced vertical padding */
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px; /* Reduced gap */
   }
 
   .content-header h2 {
-    font-size: 1.2rem;
+    font-size: 1.1rem; /* Slightly smaller */
     flex: 1;
-    min-width: 200px;
+    min-width: 180px; /* Reduced min-width */
   }
 
   .close-btn {
@@ -1368,48 +1416,55 @@
 
   /* Matrix Training Mobile */
   .matrix-training-content-expanded {
-    padding: 15px;
+    padding: 10px; /* Reduced from 15px */
   }
 
   .matrix-summary {
     grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 8px; /* Reduced from 12px */
+    margin-bottom: 10px; /* Reduced from 20px */
   }
 
   .summary-card {
-    padding: 15px;
-    border-radius: 10px;
+    padding: 10px; /* Reduced from 15px */
+    border-radius: 6px; /* Reduced from 10px */
   }
 
   .summary-icon {
-    width: 45px;
-    height: 45px;
+    width: 35px; /* Reduced from 45px */
+    height: 35px; /* Reduced from 45px */
+    font-size: 16px;
   }
 
   .summary-info h3 {
-    font-size: 1.5rem;
+    font-size: 1.2rem; /* Reduced from 1.5rem */
   }
 
   .summary-info p {
-    font-size: 0.8rem;
+    font-size: 0.7rem; /* Reduced from 0.8rem */
   }
 
-  /* Matrix Table Mobile */
+  /* Matrix Table Mobile - Extended View (+1cm) */
   .matrix-table-container {
+    max-height: 440px; /* Extended by 40px (~1cm) for mobile */
+    border-radius: 8px;
+  }
+
+  .matrix-table-container .table-responsive {
     overflow-x: auto;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    border-radius: 10px;
+    max-height: 440px;
   }
 
   .matrix-table {
     min-width: 600px; /* Ensure horizontal scroll */
-    font-size: 0.8rem;
+    font-size: 12px; /* Match report table mobile size */
   }
 
   .matrix-table th,
   .matrix-table td {
-    padding: 12px 8px;
+    padding: 8px; /* Match report table mobile padding */
     white-space: nowrap;
   }
 
@@ -1417,7 +1472,7 @@
     font-size: 0.75rem;
     position: sticky;
     top: 0;
-    background: #F5F5F5;
+    background: #f5f5f5; /* Consistent with desktop */
     z-index: 10;
   }
 
@@ -1650,10 +1705,11 @@
     font-size: 0.95rem !important;
   }
 
-  /* Page Header Tablet */
+  /* Page Header Tablet - Hidden */
   .page-header {
     margin-top: 20px;
     padding: 20px 15px;
+    display: none; /* Hidden to save space */
   }
 
   .page-title {
@@ -1664,7 +1720,7 @@
   .menu-cards-layout {
     grid-template-columns: repeat(2, 1fr);
     gap: 18px;
-    margin: 20px 0;
+    margin: 25px 0 20px 0; /* Adjusted top margin since header is hidden */
   }
 
   .menu-card {
@@ -1682,15 +1738,19 @@
   /* Matrix Training Tablet */
   .matrix-summary {
     grid-template-columns: repeat(3, 1fr);
-    gap: 15px;
+    gap: 10px; /* Reduced from 15px */
   }
 
   .matrix-table-container {
-    overflow-x: auto;
+    max-height: 490px; /* Extended by 40px (~1cm) for tablet */
+  }
+
+  .matrix-table-container .table-responsive {
+    max-height: 490px;
   }
 
   .matrix-table {
-    font-size: 0.85rem;
+    font-size: 13px; /* Slightly larger for tablet */
   }
 
   /* Work Instructions Tablet */
@@ -1715,6 +1775,10 @@
 @media (max-width: 480px) {
   
   /* Ultra compact for small phones */
+  .page-header {
+    display: none; /* Hidden to save space */
+  }
+  
   .page-title {
     font-size: 1.4rem;
   }
@@ -1761,6 +1825,15 @@
     font-size: 0.75rem;
   }
 
+  /* Matrix table extended for small devices */
+  .matrix-table-container {
+    max-height: 420px; /* Extended for small mobile */
+  }
+
+  .matrix-table-container .table-responsive {
+    max-height: 420px;
+  }
+
   .circular-progress {
     width: 45px;
     height: 45px;
@@ -1788,6 +1861,7 @@
   .page-header {
     margin-top: 70px;
     padding: 10px;
+    display: none; /* Hidden to save space */
   }
 
   .page-title {
@@ -1797,6 +1871,7 @@
   .menu-cards-layout {
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
+    margin-top: 15px; /* Adjusted since header is hidden */
   }
 
   .menu-card {
@@ -1806,6 +1881,15 @@
 
   .test-content-expanded {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Matrix table extended for landscape mobile */
+  .matrix-table-container {
+    max-height: 460px; /* Extended for landscape mobile */
+  }
+
+  .matrix-table-container .table-responsive {
+    max-height: 460px;
   }
 
   .instruction-container {
@@ -1930,6 +2014,11 @@
   
   .new-badge {
     animation: none !important;
+  }
+  
+  /* Simplify matrix table for better performance */
+  .matrix-table tr:hover {
+    background-color: inherit !important;
   }
 }
 
@@ -2112,4 +2201,8 @@
     font-size: 16px;
     min-width: 80px;
   }
-} 
+}
+
+
+
+ 

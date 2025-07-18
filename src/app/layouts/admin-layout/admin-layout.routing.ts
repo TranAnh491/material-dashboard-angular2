@@ -25,6 +25,7 @@ import { ShelfLifeComponent } from 'app/pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
+import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 
 export const AdminLayoutRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -36,6 +37,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'layout',               component: Layout3dComponent },
   { path: 'checklist',            component: DocumentsComponent },
   { path: 'equipment',            component: EquipmentComponent },
+  { path: 'print-label',          component: PrintLabelComponent },
   { path: 'user-profile',         component: UserProfileComponent },
   { path: 'table-list',           component: TableListComponent },
   { path: 'typography',           component: TypographyComponent },

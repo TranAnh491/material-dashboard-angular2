@@ -56,6 +56,7 @@ import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component'
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
+import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 
 @NgModule({
   imports: [
@@ -107,7 +108,8 @@ import { SettingsComponent } from '../../pages/settings/settings.component';
     ShelfLifeComponent,
     UtilizationComponent,
     TemperatureKnowledgeTestComponent,
-    SettingsComponent
+    SettingsComponent,
+    PrintLabelComponent
   ],
   providers: [
     GoogleSheetService

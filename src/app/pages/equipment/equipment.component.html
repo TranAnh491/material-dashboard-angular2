@@ -7,15 +7,15 @@
       </button>
     </div>
 
-    <!-- Main Title -->
-    <div class="page-header">
+    <!-- Main Title - Hidden for more space -->
+    <!-- <div class="page-header">
       <h1 class="page-title">
         <i class="material-icons">precision_manufacturing</i>
         {{ isEnglish ? 'Training & Instructions' : 'Training & Instructions' }}
       </h1>
       <p class="page-subtitle">{{ isEnglish ? 'Training and Work Instructions' : 'Đào tạo và Hướng dẫn Công việc' }}</p>
     </div>
-    <div class="header-divider"></div>
+    <div class="header-divider"></div> -->
 
     <!-- Four Menu Cards Layout -->
     <div class="menu-cards-layout">
@@ -366,6 +366,8 @@
       </div>
       <div class="matrix-training-content-expanded">
         
+
+        
         <!-- Matrix Summary Stats -->
         <div class="matrix-summary">
           <div class="summary-card">
@@ -384,7 +386,7 @@
             </div>
             <div class="summary-info">
               <h3>1</h3>
-              <p>{{ isEnglish ? 'Available Skills' : 'Kỹ năng có sẵn' }}</p>
+              <p>{{ isEnglish ? 'Training Skills' : 'Kỹ năng đào tạo' }}</p>
             </div>
           </div>
           
@@ -401,7 +403,18 @@
 
         <!-- Training Matrix Table -->
         <div class="matrix-table-container">
-          <div class="table-responsive">
+          <!-- Empty State -->
+          <div *ngIf="allMatrixEmployees.length === 0" class="empty-state">
+            <i class="material-icons">grid_view</i>
+            <h3>{{ isEnglish ? 'No Matrix Training Data' : 'Chưa có dữ liệu Ma trận Đào tạo' }}</h3>
+            <p>{{ isEnglish ? 'Matrix training data will be generated from completed temperature knowledge tests. Please ensure employees have completed their training tests first.' : 'Dữ liệu ma trận đào tạo sẽ được tạo từ các bài kiểm tra nhiệt độ đã hoàn thành. Vui lòng đảm bảo nhân viên đã hoàn thành bài kiểm tra đào tạo trước.' }}</p>
+            <p style="margin-top: 15px; font-size: 12px; color: #999;">
+              {{ isEnglish ? 'Training data source: Training Report section' : 'Nguồn dữ liệu: Phần Training Report' }}
+            </p>
+          </div>
+
+          <!-- Matrix Data Table -->
+          <div *ngIf="allMatrixEmployees.length > 0" class="table-responsive">
             <table class="matrix-table">
               <thead>
                 <tr>
@@ -452,7 +465,7 @@
         </div>
 
         <!-- Matrix Pagination Controls -->
-        <div *ngIf="totalMatrixPages > 1" class="matrix-pagination">
+        <div *ngIf="allMatrixEmployees.length > 0 && totalMatrixPages > 1" class="matrix-pagination">
           <div class="pagination-info">
             <span>{{ isEnglish ? 'Showing' : 'Hiển thị' }} {{ (currentMatrixPage * matrixPageSize) + 1 }} - {{ Math.min((currentMatrixPage + 1) * matrixPageSize, allMatrixEmployees.length) }} {{ isEnglish ? 'of' : 'trong tổng số' }} {{ allMatrixEmployees.length }} {{ isEnglish ? 'employees' : 'nhân viên' }}</span>
           </div>

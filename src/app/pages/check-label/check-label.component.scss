@@ -1,0 +1,622 @@
+.check-label-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  background: #f8f9fa;
+  min-height: calc(100vh - 80px);
+
+  // Header Section
+  .header-section {
+    text-align: center;
+    margin-bottom: 30px;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    .page-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 10px;
+
+      i {
+        font-size: 2.5rem;
+        color: #2196F3;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #333;
+      }
+    }
+
+    .subtitle {
+      margin: 0;
+      color: #666;
+      font-size: 1.1rem;
+    }
+  }
+
+  // Camera Section
+  .camera-section {
+    margin-bottom: 30px;
+
+    .camera-container {
+      background: white;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+      .camera-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+
+        h3 {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+          color: #333;
+          font-size: 1.3rem;
+
+          i {
+            color: #4CAF50;
+          }
+        }
+
+        .capture-mode {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          .mode-label {
+            font-weight: 500;
+            color: #666;
+          }
+
+          .mode-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: white;
+
+            &.sample {
+              background: #2196F3;
+            }
+
+            &.printed {
+              background: #FF9800;
+            }
+          }
+        }
+      }
+
+      .camera-view {
+        position: relative;
+        width: 100%;
+        height: 400px;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 20px;
+
+        .video-feed {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .camera-placeholder {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: white;
+          text-align: center;
+
+          i {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            opacity: 0.7;
+          }
+
+          h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+          }
+
+          p {
+            margin: 0;
+            opacity: 0.8;
+          }
+        }
+
+        .camera-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          pointer-events: none;
+
+          .capture-guidelines {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60%;
+            border: 2px dashed rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 20px;
+
+            .guideline-text {
+              background: rgba(0, 0, 0, 0.7);
+              color: white;
+              padding: 8px 16px;
+              border-radius: 20px;
+              font-size: 0.9rem;
+            }
+          }
+        }
+      }
+
+      .camera-controls {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        flex-wrap: wrap;
+
+        .active-controls {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+
+          .capture-btn {
+            width: 64px;
+            height: 64px;
+            
+            mat-icon {
+              font-size: 2rem;
+              width: 2rem;
+              height: 2rem;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Loading Section
+  .loading-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    p {
+      margin-top: 20px;
+      color: #666;
+      font-size: 1.1rem;
+    }
+  }
+
+  // Images Section
+  .images-section {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    h3 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 25px 0;
+      color: #333;
+      font-size: 1.3rem;
+
+      i {
+        color: #673AB7;
+      }
+    }
+
+    .images-grid {
+      margin-bottom: 25px;
+
+      .image-category {
+        margin-bottom: 30px;
+
+        h4 {
+          margin: 0 0 15px 0;
+          color: #555;
+          font-size: 1.1rem;
+          font-weight: 600;
+        }
+
+        .image-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          gap: 15px;
+
+          .image-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+
+            &:hover {
+              border-color: #2196F3;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            }
+
+            &.selected {
+              border-color: #2196F3;
+              background: #f3f8ff;
+              box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+            }
+
+            img {
+              width: 100%;
+              height: 150px;
+              object-fit: cover;
+            }
+
+            .image-info {
+              padding: 10px;
+
+              .image-name {
+                display: block;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 4px;
+              }
+
+              .image-time {
+                display: block;
+                font-size: 0.8rem;
+                color: #666;
+              }
+            }
+
+            .image-actions {
+              display: flex;
+              justify-content: space-between;
+              padding: 0 10px 10px 10px;
+              gap: 5px;
+            }
+          }
+        }
+      }
+    }
+
+    .comparison-controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+  }
+
+  // Comparison Section
+  .comparison-section {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    .comparison-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+      gap: 15px;
+
+      h3 {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        color: #333;
+        font-size: 1.3rem;
+
+        i {
+          color: #FF5722;
+        }
+      }
+
+      .overall-status {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 15px 25px;
+        border-radius: 8px;
+        text-align: center;
+
+        &.pass {
+          background: #E8F5E8;
+          color: #4CAF50;
+        }
+
+        &.fail {
+          background: #FFEBEE;
+          color: #F44336;
+        }
+
+        .status-text {
+          font-size: 1.2rem;
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+
+        .confidence {
+          font-size: 0.9rem;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .comparison-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 25px;
+      margin-bottom: 25px;
+
+      .comparison-image {
+        text-align: center;
+
+        h4 {
+          margin: 0 0 10px 0;
+          color: #555;
+          font-size: 1rem;
+        }
+
+        img {
+          width: 100%;
+          max-height: 250px;
+          object-fit: contain;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+        }
+      }
+    }
+
+    .detailed-results {
+      margin-bottom: 25px;
+
+      .result-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #e0e0e0;
+
+        &.pass {
+          background: #E8F5E8;
+          border-color: #4CAF50;
+          color: #2E7D32;
+
+          mat-icon {
+            color: #4CAF50;
+          }
+        }
+
+        &.fail {
+          background: #FFEBEE;
+          border-color: #F44336;
+          color: #C62828;
+
+          mat-icon {
+            color: #F44336;
+          }
+        }
+
+        span:first-of-type {
+          flex: 1;
+          font-weight: 500;
+        }
+
+        .status {
+          font-weight: 600;
+          font-size: 0.9rem;
+        }
+      }
+    }
+
+    .report-actions {
+      display: flex;
+      justify-content: center;
+    }
+  }
+
+  // Instructions Section
+  .instructions-section {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    .instructions-card {
+      h3 {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 20px 0;
+        color: #333;
+        font-size: 1.3rem;
+
+        i {
+          color: #009688;
+        }
+      }
+
+      ol {
+        margin-bottom: 25px;
+        
+        li {
+          margin-bottom: 8px;
+          line-height: 1.5;
+          color: #555;
+
+          strong {
+            color: #333;
+          }
+        }
+      }
+
+      .tips {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid #009688;
+
+        h4 {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0 0 15px 0;
+          color: #333;
+          font-size: 1.1rem;
+
+          i {
+            color: #FFC107;
+          }
+        }
+
+        ul {
+          margin: 0;
+
+          li {
+            margin-bottom: 6px;
+            color: #555;
+          }
+        }
+      }
+    }
+  }
+
+  // Responsive Design
+  @media (max-width: 768px) {
+    padding: 15px;
+
+    .header-section {
+      padding: 20px;
+
+      .page-title {
+        flex-direction: column;
+        gap: 10px;
+
+        i {
+          font-size: 2rem;
+        }
+
+        h1 {
+          font-size: 1.5rem;
+        }
+      }
+
+      .subtitle {
+        font-size: 1rem;
+      }
+    }
+
+    .camera-section .camera-container {
+      padding: 15px;
+
+      .camera-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+
+        h3 {
+          font-size: 1.1rem;
+        }
+      }
+
+      .camera-view {
+        height: 300px;
+      }
+    }
+
+    .comparison-section {
+      .comparison-images {
+        grid-template-columns: 1fr;
+        gap: 15px;
+      }
+
+      .comparison-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    .images-section .images-grid .image-category .image-list {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .camera-section .camera-container .camera-controls {
+      flex-direction: column;
+      align-items: center;
+
+      .active-controls {
+        flex-direction: column;
+        gap: 10px;
+      }
+    }
+
+    .comparison-controls {
+      flex-direction: column;
+      align-items: center;
+    }
+  }
+}
+
+// Snackbar styling
+::ng-deep {
+  .snackbar-success .mat-mdc-snack-bar-container {
+    background-color: #4CAF50;
+    color: white;
+  }
+
+  .snackbar-error .mat-mdc-snack-bar-container {
+    background-color: #F44336;
+    color: white;
+  }
+
+  .snackbar-warning .mat-mdc-snack-bar-container {
+    background-color: #FF9800;
+    color: white;
+  }
+
+  .snackbar-info .mat-mdc-snack-bar-container {
+    background-color: #2196F3;
+    color: white;
+  }
+} 

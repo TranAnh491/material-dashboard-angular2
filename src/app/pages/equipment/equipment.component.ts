@@ -58,7 +58,7 @@ export class EquipmentComponent implements OnInit {
   
   // Matrix pagination for performance
   private _currentMatrixPage: number = 0;
-  private _matrixPageSize: number = 10; // Show 10 employees per page
+  private _matrixPageSize: number = 20; // Show 20 employees per page (real data only)
   private _paginatedMatrixEmployees: MatrixEmployee[] = [];
   
   // Matrix training computed properties
@@ -127,6 +127,18 @@ export class EquipmentComponent implements OnInit {
     const startIndex = this._currentMatrixPage * this._matrixPageSize;
     const endIndex = startIndex + this._matrixPageSize;
     this._paginatedMatrixEmployees = this._cachedMatrixEmployees.slice(startIndex, endIndex);
+    
+    // Only log pagination details if we have data
+    if (this._cachedMatrixEmployees.length > 0) {
+      console.log(`📄 Pagination Update - Page ${this._currentMatrixPage + 1}:`);
+      console.log(`   📊 Total cached: ${this._cachedMatrixEmployees.length}`);
+      console.log(`   📄 Page size: ${this._matrixPageSize}`);
+      console.log(`   🔍 Start index: ${startIndex}, End index: ${endIndex}`);
+      console.log(`   👥 Showing ${this._paginatedMatrixEmployees.length} employees on this page`);
+      if (this._paginatedMatrixEmployees.length > 0) {
+        console.log(`   📋 Page employees:`, this._paginatedMatrixEmployees.map(emp => `${emp.employeeId} (${emp.name})`));
+      }
+    }
   }
 
   steps: FlowchartStep[] = [
@@ -617,13 +629,18 @@ export class EquipmentComponent implements OnInit {
     return content;
   }
 
-  // Matrix Training Functions - Optimized with caching
+  // Matrix Training Functions - Optimized with caching (Real data only)
   private cacheMatrixTrainingData(): void {
-    // Create matrix data from existing report data plus some mock employees
+    console.log('🔍 Matrix Training Debug - Starting cache process...');
+    console.log('📊 Report data length:', this.reportData.length);
+    
+    // Create matrix data ONLY from existing report data (no mock data)
     const matrixEmployees: MatrixEmployee[] = [];
     
-    // Add employees from report data
+    // Add employees from report data only
+    console.log('👥 Processing employees from Training Report data:');
     this.reportData.forEach(record => {
+      console.log(`  - Processing: ${record.employeeId} (${record.name}) - Status: ${record.status}`);
       const existing = matrixEmployees.find(emp => emp.employeeId === record.employeeId);
       if (!existing) {
         matrixEmployees.push({
@@ -633,30 +650,42 @@ export class EquipmentComponent implements OnInit {
           totalSkills: 1,
           temperatureSkill: record.status === 'pass' ? 'passed' : 'failed'
         });
+        console.log(`    ✅ Added real employee: ${record.employeeId} (${record.name})`);
+      } else {
+        console.log(`    ⚠️ Duplicate employee found, skipping: ${record.employeeId}`);
       }
     });
 
-    // Add some mock employees if we don't have enough data
-    if (matrixEmployees.length < 5) {
-      const mockEmployees = [
-        { employeeId: 'ASP001', name: 'Nguyễn Văn A', completedSkills: 1, totalSkills: 1, temperatureSkill: 'passed' as const },
-        { employeeId: 'ASP002', name: 'Trần Thị B', completedSkills: 0, totalSkills: 1, temperatureSkill: 'failed' as const },
-        { employeeId: 'ASP003', name: 'Lê Văn C', completedSkills: 0, totalSkills: 1, temperatureSkill: 'pending' as const },
-        { employeeId: 'ASP004', name: 'Phạm Thị D', completedSkills: 1, totalSkills: 1, temperatureSkill: 'passed' as const },
-        { employeeId: 'ASP005', name: 'Hoàng Văn E', completedSkills: 0, totalSkills: 1, temperatureSkill: 'failed' as const }
-      ];
+    console.log(`📈 Total real employees from Training Report: ${matrixEmployees.length}`);
 
-      mockEmployees.forEach(mock => {
-        if (!matrixEmployees.find(emp => emp.employeeId === mock.employeeId)) {
-          matrixEmployees.push(mock);
-        }
-      });
+    // Handle empty data case
+    if (matrixEmployees.length === 0) {
+      console.log('⚠️ No training report data available for Matrix Training');
+      console.log('💡 Matrix Training will show empty state');
     }
 
+    console.log(`📋 Total employees before sorting: ${matrixEmployees.length}`);
+    
     // Sort and cache with pre-calculated values
     this._cachedMatrixEmployees = matrixEmployees
       .sort((a, b) => a.employeeId.localeCompare(b.employeeId))
       .map(emp => this.enhanceEmployeeWithCalculations(emp));
+    
+    console.log(`✅ Matrix Training Cache Complete (Training Report Data Only):`);
+    console.log(`   📊 Total cached employees: ${this._cachedMatrixEmployees.length}`);
+    
+    if (this._cachedMatrixEmployees.length > 0) {
+      console.log(`   📄 Page size: ${this._matrixPageSize}`);
+      console.log(`   📃 Total pages: ${Math.ceil(this._cachedMatrixEmployees.length / this._matrixPageSize)}`);
+      
+      // List all employees for debugging
+      console.log('👥 All Matrix Employees (from Training Report):');
+      this._cachedMatrixEmployees.forEach((emp, index) => {
+        console.log(`   ${index + 1}. ${emp.employeeId} - ${emp.name} (${emp.temperatureSkill})`);
+      });
+    } else {
+      console.log('   ℹ️ No employees to display - Matrix will show empty state');
+    }
     
     // Calculate and cache average completion rate
     this.calculateAverageCompletionRate();
@@ -664,6 +693,13 @@ export class EquipmentComponent implements OnInit {
     // Reset pagination and update paginated data
     this._currentMatrixPage = 0;
     this.updatePaginatedMatrixEmployees();
+    
+    if (this._cachedMatrixEmployees.length > 0) {
+      console.log(`📄 First page employees (showing ${this._paginatedMatrixEmployees.length} of ${this._cachedMatrixEmployees.length}):`);
+      this._paginatedMatrixEmployees.forEach((emp, index) => {
+        console.log(`   Page 1 - ${index + 1}. ${emp.employeeId} - ${emp.name}`);
+      });
+    }
     
     // Trigger change detection
     this.cdr.markForCheck();
