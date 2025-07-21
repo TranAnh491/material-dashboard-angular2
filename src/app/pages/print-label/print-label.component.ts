@@ -485,9 +485,9 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
 
-    // A5 dimensions in pixels (148mm x 210mm at 96 DPI)
-    const width = 560;  // 148mm * 96 DPI / 25.4
-    const height = 794; // 210mm * 96 DPI / 25.4
+    // A5 dimensions in pixels (148mm x 210mm at 300 DPI for print quality)
+    const width = 1748;  // 148mm * 300 DPI / 25.4
+    const height = 2480; // 210mm * 300 DPI / 25.4
     
     canvas.width = width;
     canvas.height = height;
@@ -496,10 +496,10 @@ export class PrintLabelComponent implements OnInit {
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw grid pattern
+    // Draw grid pattern (5mm grid)
     ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 1;
-    const gridSize = 20; // 5mm grid
+    ctx.lineWidth = 2;
+    const gridSize = 59; // 5mm = 5 * 300 DPI / 25.4 = 59 pixels
     
     for (let x = 0; x <= width; x += gridSize) {
       ctx.beginPath();
@@ -517,36 +517,42 @@ export class PrintLabelComponent implements OnInit {
 
     // Title
     ctx.fillStyle = '#333';
-    ctx.font = 'bold 24px Arial';
+    ctx.font = 'bold 72px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Label Calibration Template - A5', width/2, 40);
+    ctx.fillText('Label Calibration Template - A5', width/2, 120);
+    
+    // Instructions
+    ctx.font = '36px Arial';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Print this template and place your label in the red area', width/2, 180);
+    ctx.fillText('Use the scales to measure label size, font, and font size', width/2, 220);
 
-    // Font samples
+    // Font samples with different sizes
     ctx.textAlign = 'left';
     ctx.fillStyle = '#333';
     
-    let yPos = 80;
-    const fontSizes = [8, 10, 12, 14, 16];
-    const fontNames = ['8pt', '10pt', '12pt', '14pt', '16pt Bold'];
+    let yPos = 280;
+    const fontSizes = [24, 30, 36, 42, 48, 54, 60];
+    const fontNames = ['24pt', '30pt', '36pt', '42pt', '48pt', '54pt', '60pt'];
     
     fontSizes.forEach((size, index) => {
-      ctx.font = `${index === 4 ? 'bold ' : ''}${size}px Arial`;
-      ctx.fillText(`Arial ${fontNames[index]}: Sample Text ABCD 1234`, 30, yPos);
-      yPos += size + 8;
+      ctx.font = `bold ${size}px Arial`;
+      ctx.fillText(`Arial ${fontNames[index]}: Sample Text ABCD 1234`, 60, yPos);
+      yPos += size + 20;
     });
 
     // Label placement area
     const labelArea = {
-      x: 50,
-      y: yPos + 20,
-      width: width - 100,
-      height: 200
+      x: 150,
+      y: yPos + 40,
+      width: width - 300,
+      height: 600
     };
 
     // Draw dashed border for label area
     ctx.strokeStyle = 'red';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 5]);
+    ctx.lineWidth = 9;
+    ctx.setLineDash([30, 15]);
     ctx.strokeRect(labelArea.x, labelArea.y, labelArea.width, labelArea.height);
     ctx.setLineDash([]);
 
@@ -556,28 +562,80 @@ export class PrintLabelComponent implements OnInit {
 
     // Label area text
     ctx.fillStyle = 'red';
-    ctx.font = 'bold 16px Arial';
+    ctx.font = 'bold 48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PLACE LABEL HERE', width/2, labelArea.y + labelArea.height/2 - 10);
-    ctx.font = '12px Arial';
-    ctx.fillText('Align label edges with red border', width/2, labelArea.y + labelArea.height/2 + 15);
+    ctx.fillText('PLACE LABEL HERE', width/2, labelArea.y + labelArea.height/2 - 30);
+    ctx.font = '36px Arial';
+    ctx.fillText('Align label edges with red border', width/2, labelArea.y + labelArea.height/2 + 45);
 
-    // Reference scale
-    const scaleY = height - 40;
+    // Horizontal scale (top)
+    const scaleYTop = 100;
     ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(30, scaleY);
-    ctx.lineTo(width - 30, scaleY);
+    ctx.moveTo(150, scaleYTop);
+    ctx.lineTo(width - 150, scaleYTop);
     ctx.stroke();
 
-    // Scale markers
-    ctx.font = '10px Arial';
+    // Vertical scale (left)
+    const scaleXLeft = 100;
+    ctx.beginPath();
+    ctx.moveTo(scaleXLeft, 150);
+    ctx.lineTo(scaleXLeft, height - 150);
+    ctx.stroke();
+
+    // Draw centimeter ticks for horizontal scale
+    ctx.font = '30px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'black';
-    ctx.fillText('0cm', 30, scaleY - 10);
-    ctx.fillText('5cm', width/2, scaleY - 10);
-    ctx.fillText('10cm', width - 30, scaleY - 10);
+    
+    const cmInPixels = 300 / 25.4; // 1cm = 300 DPI / 25.4mm = 118.11 pixels
+    for (let cm = 0; cm <= 12; cm++) {
+      const x = 150 + (cm * cmInPixels);
+      if (x <= width - 150) {
+        // Draw tick mark
+        ctx.beginPath();
+        ctx.moveTo(x, scaleYTop - 15);
+        ctx.lineTo(x, scaleYTop + 15);
+        ctx.stroke();
+        
+        // Draw centimeter number
+        ctx.fillText(`${cm}cm`, x, scaleYTop - 25);
+      }
+    }
+
+    // Draw centimeter ticks for vertical scale
+    ctx.textAlign = 'right';
+    for (let cm = 0; cm <= 20; cm++) {
+      const y = 150 + (cm * cmInPixels);
+      if (y <= height - 150) {
+        // Draw tick mark
+        ctx.beginPath();
+        ctx.moveTo(scaleXLeft - 15, y);
+        ctx.lineTo(scaleXLeft + 15, y);
+        ctx.stroke();
+        
+        // Draw centimeter number
+        ctx.fillText(`${cm}cm`, scaleXLeft - 25, y + 10);
+      }
+    }
+
+    // Reference line at 5cm from bottom
+    const refY = height - (5 * cmInPixels);
+    ctx.strokeStyle = 'blue';
+    ctx.lineWidth = 6;
+    ctx.setLineDash([30, 15]);
+    ctx.beginPath();
+    ctx.moveTo(150, refY);
+    ctx.lineTo(width - 150, refY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Reference line text
+    ctx.fillStyle = 'blue';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('5cm from bottom edge', width/2, refY - 30);
 
     // Convert canvas to blob and download
     canvas.toBlob((blob) => {
