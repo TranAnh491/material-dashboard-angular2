@@ -23,7 +23,7 @@
     </div>
     
   </div>
-  
+
   <!-- Content Area -->
   <div style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 10px; min-height: 200px;">
     
@@ -38,15 +38,15 @@
       <!-- Control Buttons -->
       <div style="margin-bottom: 20px;">
         <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
-        <button 
+          <button 
           type="button"
           (click)="fileInput.click()" 
           style="background: #4caf50; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
           📥 Import Excel
-        </button>
-        <button 
+          </button>
+          <button 
           type="button"
-          (click)="downloadTemplate()" 
+            (click)="downloadTemplate()"
           style="background: #ff9800; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
           📄 Download Template
         </button>
@@ -57,20 +57,20 @@
           style="background: #9c27b0; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; opacity: 0.7;"
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           📤 Export Excel
-        </button>
-        <button 
+          </button>
+          <button 
           type="button"
           (click)="clearScheduleData()" 
           [disabled]="scheduleData.length === 0"
           style="background: #f44336; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;"
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           🗑️ Xóa dữ liệu
-        </button>
+          </button>
       </div>
 
       <!-- Schedule Table -->
       <div *ngIf="scheduleData.length > 0" style="margin-top: 20px;">
-        <h5 style="color: #1976d2; text-align: center; margin-bottom: 15px;">📋 Print Schedule Report</h5>
+        <!-- <h5 style="color: #1976d2; text-align: center; margin-bottom: 15px;">📋 Print Schedule Report</h5> -->
         
         <div style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -94,6 +94,7 @@
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Tình trạng</th>
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Bản vẽ</th>
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Ghi chú</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 80px;">So sánh</th>
               </tr>
             </thead>
             <tbody>
@@ -109,7 +110,7 @@
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
                   </select>
-                </td>
+              </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maTem || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongYeuCau || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongPhoi || ''}}</td>
@@ -132,7 +133,7 @@
                     <option value="Phúc">Phúc</option>
                     <option value="Tú">Tú</option>
                   </select>
-                </td>
+              </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.tinhTrang" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
                     <option value="">Chọn tình trạng</option>
@@ -141,15 +142,25 @@
                     <option value="Đã in">Đã in</option>
                     <option value="Done">Done</option>
                   </select>
-                </td>
+              </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.banVe" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
                     <option value="">Chọn bản vẽ</option>
                     <option value="Có">Có</option>
                     <option value="Chưa có">Chưa có</option>
                   </select>
-                </td>
+              </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ghiChu || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    (click)="captureAndCompareLabel(item)"
+                    [title]="getComparisonTooltip(item)"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 5px; border-radius: 5px; transition: all 0.3s;"
+                    [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
+                    [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
+                    {{getComparisonIcon(item)}}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -170,134 +181,121 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Check Label Content -->
     <div *ngIf="selectedFunction === 'check'">
-      <h4 style="color: #c2185b; margin-bottom: 20px;">🔍 Check Label Functions</h4>
+      <h4 style="color: #c2185b; margin-bottom: 20px;">🔍 Check Label - So sánh tem</h4>
       
-      <!-- Control Buttons - Mobile Optimized -->
-      <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
-        
-        <!-- Design Photo Capture -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input #designPhotoInput type="file" accept="image/*" capture="camera" (change)="onDesignPhotoSelected($event)" style="display: none;">
-          <button 
-            type="button"
-            (click)="designPhotoInput.click()" 
-            style="flex: 1; background: #673ab7; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-            📷 Chụp hình mẫu thiết kế
-          </button>
-        </div>
-
-        <!-- A5 Template Download -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <button 
-            type="button"
-            (click)="downloadA5Template()" 
-            style="flex: 1; background: #ff5722; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-            📄 Tải template A5
-          </button>
-        </div>
-
-        <!-- Label Photo Capture -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input #labelPhotoInput type="file" accept="image/*" capture="camera" (change)="onLabelPhotoSelected($event)" style="display: none;">
-          <button 
-            type="button"
-            (click)="labelPhotoInput.click()" 
-            style="flex: 1; background: #4caf50; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-            📷 Chụp hình tem đã in
-          </button>
-        </div>
-
-        <!-- Analyze Button -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <button 
-            type="button"
-            (click)="analyzeLabels()" 
-            [disabled]="!designPhoto || !labelPhoto"
-            [style.opacity]="designPhoto && labelPhoto ? '1' : '0.5'"
-            style="flex: 1; background: #009688; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-            🔍 Phân tích và so sánh
-          </button>
-        </div>
+      <!-- Simplified Instructions -->
+      <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 20px;">
+        <h5 style="color: #1976d2; margin-bottom: 15px;">📸 Hướng dẫn sử dụng</h5>
+        <p style="color: #1976d2; font-size: 16px; line-height: 1.5;">
+          1. Vào tab "Print Schedules"<br>
+          2. Click nút 📸 ở cột "So sánh"<br>
+          3. Chụp ảnh cả mẫu thiết kế và tem thực tế<br>
+          4. Hệ thống tự động so sánh và lưu kết quả
+        </p>
       </div>
 
-      <!-- Status Panel - Mobile Optimized -->
-      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-        <h5 style="margin: 0 0 15px 0; color: #c2185b; text-align: center;">📊 Trạng thái:</h5>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: white; border-radius: 5px;">
-            <span style="font-weight: bold; font-size: 14px;">📷 Mẫu thiết kế:</span> 
-            <span [style.color]="designPhoto ? '#4caf50' : '#999'" style="font-size: 14px;">
-              {{designPhoto ? 'Đã chụp' : 'Chưa chụp'}}
-            </span>
+      <!-- Status Summary -->
+      <div style="background: #f5f5f5; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        <h6 style="color: #333; margin-bottom: 10px; text-align: center;">📊 Thống kê so sánh</h6>
+        <div style="display: flex; justify-content: space-around; text-align: center;">
+          <div>
+            <div style="font-size: 24px; color: #4caf50;">{{passedCount}}</div>
+            <div style="font-size: 12px; color: #666;">✅ PASS</div>
           </div>
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: white; border-radius: 5px;">
-            <span style="font-weight: bold; font-size: 14px;">📷 Tem đã in:</span> 
-            <span [style.color]="labelPhoto ? '#4caf50' : '#999'" style="font-size: 14px;">
-              {{labelPhoto ? 'Đã chụp' : 'Chưa chụp'}}
-            </span>
+          <div>
+            <div style="font-size: 24px; color: #f44336;">{{failedCount}}</div>
+            <div style="font-size: 12px; color: #666;">❌ FAIL</div>
+          </div>
+          <div>
+            <div style="font-size: 24px; color: #2196f3;">{{notComparedCount}}</div>
+            <div style="font-size: 12px; color: #666;">📸 Chưa so sánh</div>
           </div>
         </div>
       </div>
-
-      <!-- Photo Previews - Mobile Optimized -->
-      <div *ngIf="designPhotoPreview || labelPhotoPreview" style="margin-bottom: 20px;">
-        
-        <!-- Design Photo Preview -->
-        <div *ngIf="designPhotoPreview" style="background: white; border: 2px solid #673ab7; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-          <h5 style="color: #673ab7; margin: 0 0 10px 0; text-align: center;">📷 Mẫu thiết kế:</h5>
-          <div style="text-align: center;">
-            <img [src]="designPhotoPreview" alt="Design Photo" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 5px;">
-          </div>
-        </div>
-
-        <!-- Label Photo Preview -->
-        <div *ngIf="labelPhotoPreview" style="background: white; border: 2px solid #4caf50; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-          <h5 style="color: #4caf50; margin: 0 0 10px 0; text-align: center;">📷 Tem đã in:</h5>
-          <div style="text-align: center;">
-            <img [src]="labelPhotoPreview" alt="Label Photo" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 5px;">
-          </div>
-        </div>
-      </div>
+    </div>
 
       <!-- A5 Calibration Template Preview -->
       <div *ngIf="showA5Preview" style="background: white; border: 2px solid #ff5722; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center;">
-        <h5 style="color: #ff5722; margin: 0 0 15px 0;">📄 A5 Calibration Template Preview</h5>
+        <h5 style="color: #ff5722; margin: 0 0 15px 0;">📄 A5 Calibration Template Preview (1mm Grid)</h5>
         <div style="width: 100%; max-width: 400px; margin: 0 auto; border: 1px solid #ddd; background: white; padding: 15px; aspect-ratio: 1.414;">
-          <!-- A5 Grid Template -->
-          <div style="position: relative; width: 100%; height: 100%; background: linear-gradient(90deg, #eee 1px, transparent 1px), linear-gradient(180deg, #eee 1px, transparent 1px); background-size: 10px 10px;">
+          <!-- A5 Grid Template with 1mm grid -->
+          <div style="position: relative; width: 100%; height: 100%; background: linear-gradient(90deg, #e0e0e0 1px, transparent 1px), linear-gradient(180deg, #e0e0e0 1px, transparent 1px); background-size: 12px 12px;">
             
             <!-- Title -->
-            <div style="text-align: center; margin-bottom: 15px; font-weight: bold; color: #333;">
-              Label Calibration Template
-            </div>
-            
+            <div style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 12px;">
+              A5 Calibration Template - 1mm Grid
+    </div>
+
+            <!-- Instructions -->
+            <div style="text-align: center; margin-bottom: 10px; font-size: 8px; color: #666;">
+              Print this template and use for precise measurements
+    </div>
+
+            <!-- Centimeter markers (top) -->
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 20px; border-top: 2px solid #999;">
+              <div style="position: absolute; left: 0; top: 2px; font-size: 8px;">0</div>
+              <div style="position: absolute; left: 8.33%; top: 2px; font-size: 8px;">1</div>
+              <div style="position: absolute; left: 16.67%; top: 2px; font-size: 8px;">2</div>
+              <div style="position: absolute; left: 25%; top: 2px; font-size: 8px;">3</div>
+              <div style="position: absolute; left: 33.33%; top: 2px; font-size: 8px;">4</div>
+              <div style="position: absolute; left: 41.67%; top: 2px; font-size: 8px;">5</div>
+              <div style="position: absolute; left: 50%; top: 2px; font-size: 8px;">6</div>
+              <div style="position: absolute; left: 58.33%; top: 2px; font-size: 8px;">7</div>
+              <div style="position: absolute; left: 66.67%; top: 2px; font-size: 8px;">8</div>
+              <div style="position: absolute; left: 75%; top: 2px; font-size: 8px;">9</div>
+              <div style="position: absolute; left: 83.33%; top: 2px; font-size: 8px;">10</div>
+              <div style="position: absolute; left: 91.67%; top: 2px; font-size: 8px;">11</div>
+              <div style="position: absolute; right: 0; top: 2px; font-size: 8px;">12</div>
+  </div>
+
+            <!-- Centimeter markers (left) -->
+            <div style="position: absolute; top: 0; bottom: 0; left: 0; width: 20px; border-left: 2px solid #999;">
+              <div style="position: absolute; left: 2px; top: 0; font-size: 8px;">0</div>
+              <div style="position: absolute; left: 2px; top: 5%; font-size: 8px;">1</div>
+              <div style="position: absolute; left: 2px; top: 10%; font-size: 8px;">2</div>
+              <div style="position: absolute; left: 2px; top: 15%; font-size: 8px;">3</div>
+              <div style="position: absolute; left: 2px; top: 20%; font-size: 8px;">4</div>
+              <div style="position: absolute; left: 2px; top: 25%; font-size: 8px;">5</div>
+              <div style="position: absolute; left: 2px; top: 30%; font-size: 8px;">6</div>
+              <div style="position: absolute; left: 2px; top: 35%; font-size: 8px;">7</div>
+              <div style="position: absolute; left: 2px; top: 40%; font-size: 8px;">8</div>
+              <div style="position: absolute; left: 2px; top: 45%; font-size: 8px;">9</div>
+              <div style="position: absolute; left: 2px; top: 50%; font-size: 8px;">10</div>
+              <div style="position: absolute; left: 2px; top: 55%; font-size: 8px;">11</div>
+              <div style="position: absolute; left: 2px; top: 60%; font-size: 8px;">12</div>
+              <div style="position: absolute; left: 2px; top: 65%; font-size: 8px;">13</div>
+              <div style="position: absolute; left: 2px; top: 70%; font-size: 8px;">14</div>
+              <div style="position: absolute; left: 2px; top: 75%; font-size: 8px;">15</div>
+              <div style="position: absolute; left: 2px; top: 80%; font-size: 8px;">16</div>
+              <div style="position: absolute; left: 2px; top: 85%; font-size: 8px;">17</div>
+              <div style="position: absolute; left: 2px; top: 90%; font-size: 8px;">18</div>
+              <div style="position: absolute; left: 2px; top: 95%; font-size: 8px;">19</div>
+              <div style="position: absolute; left: 2px; bottom: 0; font-size: 8px;">20</div>
+        </div>
+        
             <!-- Font Samples -->
-            <div style="margin-bottom: 10px;">
-              <div style="font-family: Arial; font-size: 8px; margin: 2px 0;">Arial 8px: Sample Text ABCD 1234</div>
-              <div style="font-family: Arial; font-size: 10px; margin: 2px 0;">Arial 10px: Sample Text ABCD 1234</div>
-              <div style="font-family: Arial; font-size: 12px; margin: 2px 0;">Arial 12px: Sample Text ABCD 1234</div>
-              <div style="font-family: Arial; font-size: 14px; margin: 2px 0;">Arial 14px: Sample Text ABCD 1234</div>
-              <div style="font-family: Arial; font-size: 16px; margin: 2px 0; font-weight: bold;">Arial 16px Bold: Sample Text ABCD 1234</div>
-            </div>
-            
+            <div style="position: absolute; top: 30px; left: 30px; right: 30px; font-size: 8px; color: #333;">
+              <div style="font-size: 8px; margin: 1px 0;">Arial 8pt: Sample Text ABCD 1234</div>
+              <div style="font-size: 10px; margin: 1px 0;">Arial 10pt: Sample Text ABCD 1234</div>
+              <div style="font-size: 12px; margin: 1px 0;">Arial 12pt: Sample Text ABCD 1234</div>
+              <div style="font-size: 14px; margin: 1px 0;">Arial 14pt: Sample Text ABCD 1234</div>
+              <div style="font-size: 16px; margin: 1px 0;">Arial 16pt: Sample Text ABCD 1234</div>
+              <div style="font-size: 18px; margin: 1px 0;">Arial 18pt: Sample Text ABCD 1234</div>
+    </div>
+
+            <!-- Reference line at 5cm from bottom -->
+            <div style="position: absolute; bottom: 60px; left: 30px; right: 30px; height: 2px; background: blue; border-top: 2px dashed blue;"></div>
+            <div style="position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); color: blue; font-weight: bold; font-size: 8px;">5cm from bottom edge</div>
+
             <!-- Label Placement Area -->
-            <div style="border: 3px dashed red; padding: 20px; margin: 10px 0; background: rgba(255,0,0,0.1); text-align: center;">
-              <div style="color: red; font-weight: bold; font-size: 12px;">PLACE LABEL HERE</div>
-              <div style="color: red; font-size: 10px;">Align label edges with red border</div>
-            </div>
-            
-            <!-- Reference Scale -->
-            <div style="position: absolute; bottom: 10px; left: 10px; right: 10px;">
-              <div style="height: 2px; background: black; position: relative;">
-                <div style="position: absolute; left: 0; top: -15px; font-size: 8px;">0cm</div>
-                <div style="position: absolute; left: 25%; top: -15px; font-size: 8px;">2.5cm</div>
-                <div style="position: absolute; right: 0; top: -15px; font-size: 8px;">10cm</div>
-              </div>
-            </div>
-          </div>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px dashed red; padding: 15px; background: rgba(255,0,0,0.1); text-align: center; min-width: 100px;">
+              <div style="color: red; font-weight: bold; font-size: 10px;">PLACE LABEL HERE</div>
+              <div style="color: red; font-size: 8px;">Align label edges with red border</div>
+      </div>
+      </div>
         </div>
         <button 
           type="button"
@@ -315,46 +313,67 @@
 
       <!-- Analysis Result - Mobile Optimized -->
       <div *ngIf="analysisResult" style="background: white; border: 2px solid #009688; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-        <h5 style="color: #009688; margin: 0 0 15px 0; text-align: center;">🔍 Kết quả phân tích:</h5>
+        <h5 style="color: #009688; margin: 0 0 15px 0; text-align: center;">🔍 Kết quả phân tích thông minh:</h5>
         
         <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
           <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; text-align: center;">
             <div style="font-weight: bold; color: #0277bd; font-size: 14px;">Độ khớp tổng thể:</div>
-            <div style="font-size: 28px; color: #0277bd; font-weight: bold;">{{analysisResult.overallMatch}}%</div>
-          </div>
-          <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #7b1fa2; font-size: 14px;">Khớp font:</div>
-            <div style="font-size: 24px; color: #7b1fa2;">{{analysisResult.fontMatch}}%</div>
-          </div>
+            <div style="font-size: 28px; color: #0277bd; font-weight: bold;">{{analysisResult.comparison.overallMatch}}%</div>
+    </div>
           <div style="background: #e8f5e8; padding: 12px; border-radius: 8px; text-align: center;">
             <div style="font-weight: bold; color: #388e3c; font-size: 14px;">Khớp kích thước:</div>
-            <div style="font-size: 24px; color: #388e3c;">{{analysisResult.sizeMatch}}%</div>
+            <div style="font-size: 24px; color: #388e3c;">{{analysisResult.comparison.sizeMatch}}%</div>
+  </div>
+          <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #7b1fa2; font-size: 14px;">Khớp font:</div>
+            <div style="font-size: 24px; color: #7b1fa2;">{{analysisResult.comparison.fontMatch}}%</div>
           </div>
           <div style="background: #fff3e0; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #f57c00; font-size: 14px;">Khớp vị trí:</div>
-            <div style="font-size: 24px; color: #f57c00;">{{analysisResult.positionMatch}}%</div>
+            <div style="font-weight: bold; color: #f57c00; font-size: 14px;">Khớp nội dung:</div>
+            <div style="font-size: 24px; color: #f57c00;">{{analysisResult.comparison.textMatch}}%</div>
+          </div>
+          <div style="background: #fce4ec; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #c2185b; font-size: 14px;">Chất lượng in:</div>
+            <div style="font-size: 24px; color: #c2185b;">{{analysisResult.comparison.qualityMatch}}%</div>
           </div>
         </div>
-
+        
+        <!-- Design vs Label Comparison -->
         <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-          <h6 style="margin: 0 0 10px 0; color: #333; text-align: center;">📝 Chi tiết phân tích:</h6>
-          <ul style="margin: 0; padding-left: 20px; font-size: 14px;">
-            <li *ngFor="let detail of analysisResult.details" [style.color]="getDetailColor(detail.status)">
-              {{detail.message}}
+          <h6 style="margin: 0 0 10px 0; color: #333; text-align: center;">📐 So sánh thiết kế vs thực tế:</h6>
+          <div style="font-size: 12px; line-height: 1.4;">
+            <div style="margin-bottom: 8px;">
+              <strong>Kích thước:</strong> {{analysisResult.designSpecs.labelSize.width}}x{{analysisResult.designSpecs.labelSize.height}}mm 
+              → {{analysisResult.labelMeasurements.actualSize.width}}x{{analysisResult.labelMeasurements.actualSize.height}}mm
+            </div>
+            <div style="margin-bottom: 8px;">
+              <strong>Font:</strong> {{analysisResult.designSpecs.fontSpecs.family}} {{analysisResult.designSpecs.fontSpecs.size}}pt 
+              → {{analysisResult.labelMeasurements.fontAnalysis.detectedFont}} {{analysisResult.labelMeasurements.fontAnalysis.fontSize}}pt
+            </div>
+            <div>
+              <strong>OCR:</strong> {{analysisResult.labelMeasurements.textRecognition.accuracy}}% chính xác
+            </div>
+          </div>
+        </div>
+        
+        <!-- Recommendations -->
+        <div style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+          <h6 style="margin: 0 0 10px 0; color: #2e7d32; text-align: center;">💡 Khuyến nghị:</h6>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.4;">
+            <li *ngFor="let rec of analysisResult.comparison.recommendations" style="margin-bottom: 5px;">
+              {{rec}}
             </li>
           </ul>
-        </div>
-
+            </div>
+        
         <div style="text-align: center;">
           <span 
-            [style.background]="analysisResult.overallMatch >= 90 ? '#4caf50' : analysisResult.overallMatch >= 70 ? '#ff9800' : '#f44336'"
+            [style.background]="analysisResult.comparison.overallMatch >= 90 ? '#4caf50' : analysisResult.comparison.overallMatch >= 70 ? '#ff9800' : '#f44336'"
             style="color: white; padding: 10px 20px; border-radius: 25px; font-weight: bold; font-size: 16px;">
-            {{getQualityStatus(analysisResult.overallMatch)}}
+            {{getQualityStatus(analysisResult.comparison.overallMatch)}}
           </span>
         </div>
       </div>
     </div>
     
   </div>
-  
-</div> 

@@ -174,6 +174,10 @@ export class NavbarComponent implements OnInit {
 
       for(var item = 0; item < this.listTitles.length; item++){
           if(this.listTitles[item].path === titlee){
+              // Hide "Label" title in navbar
+              if(this.listTitles[item].title === 'Label'){
+                  return '';
+              }
               return this.listTitles[item].title;
           }
       }
