@@ -37,7 +37,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'layout',               component: Layout3dComponent },
   { path: 'checklist',            component: DocumentsComponent },
   { path: 'equipment',            component: EquipmentComponent },
-  { path: 'print-label',          component: PrintLabelComponent },
+  { path: 'label',                component: PrintLabelComponent },
   { path: 'user-profile',         component: UserProfileComponent },
   { path: 'table-list',           component: TableListComponent },
   { path: 'typography',           component: TypographyComponent },

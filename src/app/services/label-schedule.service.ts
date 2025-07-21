@@ -140,27 +140,26 @@ export class LabelScheduleService {
     const dataRows = rawData.slice(1);
     result.totalRows = dataRows.length;
 
-    // Map Excel columns to our model (based on the Excel structure in the image)
+    // Map Excel columns to our model (based on the new structure)
     const columnMapping = {
-      0: 'nam',           // Năm
-      1: 'thang',         // Tháng  
-      2: 'stt',           // STT
-      3: 'kichThuocKhoi', // Kích thước khôi
-      4: 'maTem',         // Mã tem
-      5: 'soLuongYeuCau', // Số lượng yêu cầu
-      6: 'soLuongAuto1',  // Số lượng (auto) *3
-      7: 'maSanPham',     // Mã sản phẩm
-      8: 'soLenhSanXuat', // Số lệnh sản xuất
-      9: 'khachHang',     // Khách hàng (auto)
-      10: 'ngayKhoiTao',  // Ngày khởi tạo lệnh gửi
-      11: 'vt',           // VT
-      12: 'hw',           // HW
-      13: 'lua',          // Lửa
-      14: 'nguoiDi',      // Người đi
-      15: 'tinhTrang',    // Tình trạng
-      16: 'donVi',        // Đơn vị
-      17: 'note',         // Note
-      18: 'thoiGianInPhai' // Thời gian in (phải)
+      0: 'nam',               // Năm
+      1: 'thang',             // Tháng  
+      2: 'stt',               // STT
+      3: 'kichThuocKhoi',     // Kích thước khối
+      4: 'maTem',             // Mã tem
+      5: 'soLuongYeuCau',     // Số lượng yêu cầu
+      6: 'soLuongPhoi',       // Số lượng phôi
+      7: 'maHang',            // Mã Hàng
+      8: 'lenhSanXuat',       // Lệnh sản xuất
+      9: 'khachHang',         // Khách hàng
+      10: 'ngayNhanKeHoach',  // Ngày nhận kế hoạch
+      11: 'yy',               // YY
+      12: 'ww',               // WW
+      13: 'lineNhan',         // Line nhận
+      14: 'nguoiIn',          // Người in
+      15: 'tinhTrang',        // Tình trạng
+      16: 'banVe',            // Bản vẽ
+      17: 'ghiChu'            // Ghi chú
     };
 
     dataRows.forEach((row, index) => {
@@ -180,12 +179,11 @@ export class LabelScheduleService {
             case 'thang':
             case 'stt':
             case 'soLuongYeuCau':
-            case 'soLuongAuto1':
+            case 'soLuongPhoi':
               schedule[fieldName] = this.parseNumber(value);
               break;
               
-            case 'ngayKhoiTao':
-            case 'thoiGianInPhai':
+            case 'ngayNhanKeHoach':
               schedule[fieldName] = this.parseDate(value);
               break;
               
@@ -242,15 +240,103 @@ export class LabelScheduleService {
   }
 
   private validateSchedule(schedule: LabelScheduleData): boolean {
-    return !!(schedule.maTem && schedule.nam && schedule.thang);
+    const isValid = !!(schedule.maTem && schedule.nam && schedule.thang);
+    if (!isValid) {
+      console.warn('⚠️ Invalid schedule:', schedule);
+    }
+    return isValid;
   }
 
   // Export to Excel
   exportToExcel(schedules: LabelScheduleData[], filename: string = 'label-schedules'): void {
-    const ws = XLSX.utils.json_to_sheet(schedules);
+    try {
+      // Transform data for export with proper column headers
+      const exportData = schedules.map(schedule => ({
+        'Năm': schedule.nam,
+        'Tháng': schedule.thang,
+        'STT': schedule.stt,
+        'Kích thước khối': schedule.kichThuocKhoi,
+        'Mã tem': schedule.maTem,
+        'Số lượng yêu cầu': schedule.soLuongYeuCau,
+        'Số lượng phôi': schedule.soLuongPhoi,
+        'Mã Hàng': schedule.maHang,
+        'Lệnh sản xuất': schedule.lenhSanXuat,
+        'Khách hàng': schedule.khachHang,
+        'Ngày nhận kế hoạch': schedule.ngayNhanKeHoach,
+        'YY': schedule.yy,
+        'WW': schedule.ww,
+        'Line nhận': schedule.lineNhan,
+        'Người in': schedule.nguoiIn,
+        'Tình trạng': schedule.tinhTrang,
+        'Bản vẽ': schedule.banVe,
+        'Ghi chú': schedule.ghiChu
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Label Schedules');
+      XLSX.utils.book_append_sheet(wb, ws, 'Lịch in tem');
     XLSX.writeFile(wb, `${filename}.xlsx`);
+    } catch (error) {
+      console.error('Export error:', error);
+      throw error;
+    }
+  }
+
+  // Create and download Excel template
+  createTemplate(templateData: any[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create worksheet
+        const worksheet = XLSX.utils.json_to_sheet(templateData);
+        
+        // Set column widths
+        const colWidths = [
+          { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 15 }, { wch: 12 }, 
+          { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 },
+          { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+          { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }
+        ];
+        worksheet['!cols'] = colWidths;
+
+        // Create workbook
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch in tem');
+
+        // Add instructions sheet
+        const instructionsData = [
+          { 'Cột': 'Năm', 'Mô tả': 'Năm lập lịch (ví dụ: 2024)', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Tháng', 'Mô tả': 'Tháng lập lịch (1-12)', 'Bắt buộc': 'Có' },
+          { 'Cột': 'STT', 'Mô tả': 'Số thứ tự', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Kích thước khối', 'Mô tả': 'Kích thước khối in (ví dụ: 40*25)', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Mã tem', 'Mô tả': 'Mã định danh tem', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Số lượng yêu cầu', 'Mô tả': 'Số lượng tem cần in', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Số lượng phôi', 'Mô tả': 'Số lượng phôi cần thiết', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Mã Hàng', 'Mô tả': 'Mã sản phẩm cần dán tem', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Lệnh sản xuất', 'Mô tả': 'Số lệnh sản xuất', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Khách hàng', 'Mô tả': 'Tên khách hàng', 'Bắt buộc': 'Có' },
+          { 'Cột': 'Ngày nhận kế hoạch', 'Mô tả': 'Ngày nhận kế hoạch (YYYY-MM-DD)', 'Bắt buộc': 'Không' },
+          { 'Cột': 'YY', 'Mô tả': 'Mã năm (ví dụ: 25 cho 2025)', 'Bắt buộc': 'Không' },
+          { 'Cột': 'WW', 'Mô tả': 'Mã tuần (ví dụ: 07 cho tuần 7)', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Line nhận', 'Mô tả': 'Line nhận hàng', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Người in', 'Mô tả': 'Người thực hiện in', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Tình trạng', 'Mô tả': 'Trạng thái: Chờ xử lý/Đang in/Hoàn thành', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Bản vẽ', 'Mô tả': 'Mã bản vẽ', 'Bắt buộc': 'Không' },
+          { 'Cột': 'Ghi chú', 'Mô tả': 'Ghi chú thêm', 'Bắt buộc': 'Không' }
+        ];
+        
+        const instructionsSheet = XLSX.utils.json_to_sheet(instructionsData);
+        instructionsSheet['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Hướng dẫn');
+
+        // Download file
+        const filename = `template-lich-in-tem-${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(workbook, filename);
+        
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   // Get unique values for filters

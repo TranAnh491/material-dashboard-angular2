@@ -25,7 +25,7 @@ export const ROUTES: RouteInfo[] = [
     { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
     { path: '/checklist', title: 'Safety', icon: 'checklist', class: '' },
     { path: '/equipment', title: 'Instruction and Test', icon: 'integration_instructions', class: '' },
-    { path: '/print-label', title: 'Print Label', icon: 'print', class: '' },
+    { path: '/label', title: '', icon: 'label', class: '' },
     { path: '/task', title: 'Task Board', icon: 'view_kanban', class: '' },
     { path: '/settings', title: 'Settings', icon: 'settings', class: '' }
 ]; 

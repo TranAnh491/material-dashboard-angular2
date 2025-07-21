@@ -3,24 +3,21 @@ export interface LabelScheduleData {
   nam: number; // Năm
   thang: number; // Tháng
   stt: number; // STT
-  kichThuocKhoi: string; // Kích thước khôi
+  kichThuocKhoi: string; // Kích thước khối
   maTem: string; // Mã tem
   soLuongYeuCau: number; // Số lượng yêu cầu
-  soLuongAuto1: number; // Số lượng (auto) *3 - cột 1
-  soLuongAuto2: number; // Số lượng (auto) *3 - cột 2  
-  soLuongAuto3: number; // Số lượng (auto) *3 - cột 3
-  maSanPham: string; // Mã sản phẩm
-  soLenhSanXuat: string; // Số lệnh sản xuất
-  khachHang: string; // Khách hàng (auto)
-  ngayKhoiTao: Date; // Ngày khởi tạo lệnh gửi
-  vt: string; // VT
-  hw: string; // HW
-  lua: string; // Lửa
-  nguoiDi: string; // Người đi
+  soLuongPhoi: number; // Số lượng phôi
+  maHang: string; // Mã Hàng
+  lenhSanXuat: string; // Lệnh sản xuất
+  khachHang: string; // Khách hàng
+  ngayNhanKeHoach: Date; // Ngày nhận kế hoạch
+  yy: string; // YY
+  ww: string; // WW
+  lineNhan: string; // Line nhận
+  nguoiIn: string; // Người in
   tinhTrang: string; // Tình trạng
-  donVi: string; // Đơn vị
-  note: string; // Note
-  thoiGianInPhai: Date; // Thời gian in (phải)
+  banVe: string; // Bản vẽ
+  ghiChu: string; // Ghi chú
   
   // Additional fields for processing
   status?: 'pending' | 'printing' | 'completed' | 'failed';

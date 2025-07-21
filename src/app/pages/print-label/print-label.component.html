@@ -1,892 +1,360 @@
-<div class="print-label-container">
-  <!-- Header Section -->
-  <div class="header-section">
-    <div class="page-title">
-      <i class="material-icons">print</i>
-      <h1>Print Label Management</h1>
+<div class="label-container" style="padding: 20px;">
+    <!-- Two Function Boxes -->
+  <div style="display: flex; gap: 20px; margin: 20px 0;">
+    
+    <!-- Print Schedules Box -->
+    <div 
+      (click)="selectFunction('print')"
+      [style.background]="selectedFunction === 'print' ? '#1976d2' : '#e3f2fd'"
+      [style.color]="selectedFunction === 'print' ? 'white' : '#1976d2'"
+      style="flex: 1; padding: 20px; border: 3px solid #2196f3; border-radius: 10px; cursor: pointer; text-align: center; transition: all 0.3s ease;">
+      <h4 style="margin: 0 0 8px 0;">📋 Print Schedules</h4>
+      <p style="margin: 0; opacity: 0.8; font-size: 14px;">Manage label printing schedules</p>
     </div>
-    <p class="subtitle">Manage label printing schedules and perform quality control checks</p>
-  </div>
-
-        <!-- Tab Navigation -->
-  <div class="tab-navigation">
-    <button 
-      mat-raised-button 
-      [color]="activeTab === 'schedules' ? 'primary' : ''"
-      [class.active]="activeTab === 'schedules'"
-      (click)="switchTab('schedules')">
-      <mat-icon>schedule</mat-icon>
-      <span class="tab-text">Label Print Schedules</span>
-    </button>
     
-    <button 
-      mat-raised-button 
-      [color]="activeTab === 'check' ? 'primary' : ''"
-      [class.active]="activeTab === 'check'"
-      (click)="switchTab('check')">
-      <mat-icon>qr_code_scanner</mat-icon>
-      <span class="tab-text">Check Label Quality</span>
-    </button>
+    <!-- Check Label Box -->
+    <div 
+      (click)="selectFunction('check')"
+      [style.background]="selectedFunction === 'check' ? '#c2185b' : '#fce4ec'"
+      [style.color]="selectedFunction === 'check' ? 'white' : '#c2185b'"
+      style="flex: 1; padding: 20px; border: 3px solid #e91e63; border-radius: 10px; cursor: pointer; text-align: center; transition: all 0.3s ease;">
+      <h4 style="margin: 0 0 8px 0;">🔍 Check Label</h4>
+      <p style="margin: 0; opacity: 0.8; font-size: 14px;">Quality control and comparison</p>
+    </div>
     
-    <button 
-      mat-raised-button 
-      [color]="activeTab === 'calibration' ? 'primary' : ''"
-      [class.active]="activeTab === 'calibration'"
-      (click)="switchTab('calibration')">
-      <mat-icon>straighten</mat-icon>
-      <span class="tab-text">Calibration Sheet</span>
-    </button>
   </div>
+  
+  <!-- Content Area -->
+  <div style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 10px; min-height: 200px;">
+    
+    <!-- No Selection -->
+    <div *ngIf="!selectedFunction" style="text-align: center;">
+      <p style="color: #999; font-size: 18px; margin: 0;">👆 Please select a function above</p>
+    </div>
+    
+    <!-- Print Schedules Content -->
+    <div *ngIf="selectedFunction === 'print'">
+      
+      <!-- Control Buttons -->
+      <div style="margin-bottom: 20px;">
+        <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
+        <button 
+          type="button"
+          (click)="fileInput.click()" 
+          style="background: #4caf50; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
+          📥 Import Excel
+        </button>
+        <button 
+          type="button"
+          (click)="downloadTemplate()" 
+          style="background: #ff9800; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
+          📄 Download Template
+        </button>
+        <button 
+          type="button"
+          (click)="exportExcel()" 
+          [disabled]="scheduleData.length === 0"
+          style="background: #9c27b0; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; opacity: 0.7;"
+          [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
+          📤 Export Excel
+        </button>
+        <button 
+          type="button"
+          (click)="clearScheduleData()" 
+          [disabled]="scheduleData.length === 0"
+          style="background: #f44336; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;"
+          [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
+          🗑️ Xóa dữ liệu
+        </button>
+      </div>
 
-  <!-- Print Schedules Section -->
-  <div class="schedules-section" *ngIf="activeTab === 'schedules'">
-    <div class="schedules-container">
-      <!-- Import Controls -->
-      <div class="import-section">
-        <div class="import-controls">
-          <button 
-            mat-raised-button 
-            color="primary"
-            (click)="triggerFileInput()"
-            [disabled]="isImporting">
-            <mat-icon>upload_file</mat-icon>
-            Import Excel
-          </button>
-          
-          <button 
-            mat-stroked-button 
-            color="accent"
-            (click)="exportSchedules()"
-            [disabled]="filteredRealSchedules.length === 0">
-            <mat-icon>download</mat-icon>
-            Export Excel
-          </button>
-          
-          <div class="import-status" *ngIf="isImporting">
-            <mat-spinner diameter="20"></mat-spinner>
-            <span>Đang xử lý...</span>
+      <!-- Schedule Table -->
+      <div *ngIf="scheduleData.length > 0" style="margin-top: 20px;">
+        <h5 style="color: #1976d2; text-align: center; margin-bottom: 15px;">📋 Print Schedule Report</h5>
+        
+        <div style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
+              <tr>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 60px;">Năm</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 70px;">Tháng</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 50px;">STT</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Size Phôi</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Mã tem</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Số lượng yêu cầu</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Số lượng phôi</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Mã Hàng</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 130px;">Lệnh sản xuất</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Khách hàng</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 140px;">Ngày nhận kế hoạch</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 50px;">YY</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 50px;">WW</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Line nhãn</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Người in</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Tình trạng</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Bản vẽ</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of scheduleData; let i = index" 
+                  [style.background]="i % 2 === 0 ? '#f9f9f9' : 'white'"
+                  style="border-bottom: 1px solid #e0e0e0;">
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.nam || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.stt || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <select [(ngModel)]="item.sizePhoi" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                    <option value="">Chọn size</option>
+                    <option value="40x20">40x20</option>
+                    <option value="40x25">40x25</option>
+                  </select>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maTem || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongYeuCau || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongPhoi || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maHang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lenhSanXuat || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.khachHang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ngayNhanKeHoach || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.yy || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ww || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lineNhan || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <select [(ngModel)]="item.nguoiIn" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                    <option value="">Chọn người in</option>
+                    <option value="Tuấn">Tuấn</option>
+                    <option value="Tình">Tình</option>
+                    <option value="Hưng">Hưng</option>
+                    <option value="Vũ">Vũ</option>
+                    <option value="Toàn">Toàn</option>
+                    <option value="Ninh">Ninh</option>
+                    <option value="Phúc">Phúc</option>
+                    <option value="Tú">Tú</option>
+                  </select>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <select [(ngModel)]="item.tinhTrang" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                    <option value="">Chọn tình trạng</option>
+                    <option value="IQC">IQC</option>
+                    <option value="Chờ in">Chờ in</option>
+                    <option value="Đã in">Đã in</option>
+                    <option value="Done">Done</option>
+                  </select>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <select [(ngModel)]="item.banVe" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                    <option value="">Chọn bản vẽ</option>
+                    <option value="Có">Có</option>
+                    <option value="Chưa có">Chưa có</option>
+                  </select>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ghiChu || ''}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div style="text-align: center; margin-top: 15px; color: #666;">
+          <p>Total records: {{scheduleData.length}}</p>
+          <div *ngIf="firebaseSaved" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">
+            <span style="color: #4caf50; font-size: 16px;">✅</span>
+            <span style="color: #4caf50; font-weight: bold;">Data saved to Firebase</span>
+            <span style="color: #ff9800; font-size: 16px;">🔥</span>
+          </div>
+          <div *ngIf="!firebaseSaved && scheduleData.length > 0" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">
+            <span style="color: #ff9800; font-size: 16px;">⏳</span>
+            <span style="color: #ff9800; font-weight: bold;">Saving to Firebase...</span>
+            <span style="color: #ff9800; font-size: 16px;">🔥</span>
           </div>
         </div>
-        
-        <input 
-          #fileInput 
-          type="file" 
-          accept=".xlsx,.xls" 
-          (change)="onFileSelected($event)"
-          style="display: none;">
       </div>
-
-      <!-- Filters and Search -->
-      <div class="filters-section">
-        <div class="search-container">
-          <mat-form-field appearance="outline" class="search-field">
-            <mat-label>Tìm kiếm lịch in...</mat-label>
-            <input 
-              matInput 
-              [(ngModel)]="searchTerm" 
-              (input)="onSearchChange()"
-              placeholder="Tìm theo mã tem, khách hàng, mã sản phẩm...">
-            <mat-icon matSuffix>search</mat-icon>
-          </mat-form-field>
-        </div>
+    </div>
+    
+    <!-- Check Label Content -->
+    <div *ngIf="selectedFunction === 'check'">
+      <h4 style="color: #c2185b; margin-bottom: 20px;">🔍 Check Label Functions</h4>
+      
+      <!-- Control Buttons - Mobile Optimized -->
+      <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
         
-        <div class="filter-controls">
-          <mat-form-field appearance="outline">
-            <mat-label>Năm</mat-label>
-            <mat-select [(value)]="yearFilter" (selectionChange)="onYearFilterChange()">
-              <mat-option value="all">Tất cả năm</mat-option>
-              <mat-option *ngFor="let year of availableYears" [value]="year.toString()">
-                {{ year }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Khách hàng</mat-label>
-            <mat-select [(value)]="customerFilter" (selectionChange)="onCustomerFilterChange()">
-              <mat-option value="all">Tất cả khách hàng</mat-option>
-              <mat-option *ngFor="let customer of availableCustomers" [value]="customer">
-                {{ customer }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-          
-          <mat-form-field appearance="outline">
-            <mat-label>Trạng thái</mat-label>
-            <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
-              <mat-option value="all">Tất cả trạng thái</mat-option>
-              <mat-option value="pending">Chờ xử lý</mat-option>
-              <mat-option value="printing">Đang in</mat-option>
-              <mat-option value="completed">Hoàn thành</mat-option>
-              <mat-option value="failed">Thất bại</mat-option>
-            </mat-select>
-          </mat-form-field>
-        </div>
-      </div>
-
-      <!-- Schedules Table -->
-      <div class="schedules-table">
-        <div class="table-header">
-          <h3>
-            <i class="material-icons">view_list</i>
-            Lịch In Tem ({{ filteredRealSchedules.length }})
-          </h3>
-        </div>
-        
-        <div class="schedule-cards">
-          <div *ngFor="let schedule of filteredRealSchedules" class="schedule-card">
-            <div class="card-header">
-              <div class="schedule-info">
-                <h4>{{ schedule.maTem }} - {{ schedule.kichThuocKhoi }}</h4>
-                <span class="schedule-id">{{ schedule.nam }}/{{ schedule.thang }} - STT: {{ schedule.stt }}</span>
-              </div>
-              <div class="status-badge" [style.background]="getStatusColor(schedule.status || 'pending')">
-                {{ (schedule.status || 'pending') === 'pending' ? 'CHỜ XỬ LÝ' : 
-                    (schedule.status === 'printing' ? 'ĐANG IN' : 
-                    (schedule.status === 'completed' ? 'HOÀN THÀNH' : 'THẤT BẠI')) }}
-              </div>
-            </div>
-            
-            <div class="card-content">
-              <div class="schedule-details">
-                <div class="detail-item">
-                  <i class="material-icons">business</i>
-                  <span>{{ schedule.khachHang }}</span>
-                </div>
-                <div class="detail-item">
-                  <i class="material-icons">inventory</i>
-                  <span>{{ schedule.soLuongYeuCau }} tem</span>
-                </div>
-                <div class="detail-item">
-                  <i class="material-icons">qr_code</i>
-                  <span>{{ schedule.maSanPham }}</span>
-                </div>
-                <div class="detail-item">
-                  <i class="material-icons">assignment</i>
-                  <span>{{ schedule.soLenhSanXuat }}</span>
-                </div>
-                <div class="detail-item" *ngIf="schedule.nguoiDi">
-                  <i class="material-icons">person</i>
-                  <span>{{ schedule.nguoiDi }}</span>
-                </div>
-                <div class="detail-item" *ngIf="schedule.ngayKhoiTao">
-                  <i class="material-icons">event</i>
-                  <span>{{ schedule.ngayKhoiTao | date:'dd/MM/yyyy' }}</span>
-                </div>
-              </div>
-              
-              <div class="status-section">
-                <div class="progress-container" *ngIf="schedule.status === 'printing' || schedule.status === 'completed'">
-                  <mat-progress-bar 
-                    mode="determinate" 
-                    [value]="schedule.progress || 0"
-                    [color]="schedule.status === 'completed' ? 'primary' : 'accent'">
-                  </mat-progress-bar>
-                  <span class="progress-text">{{ schedule.progress || 0 }}%</span>
-                </div>
-                
-                <div class="schedule-meta" *ngIf="schedule.note">
-                  <small><strong>Ghi chú:</strong> {{ schedule.note }}</small>
-                </div>
-              </div>
-            </div>
-            
-            <div class="card-actions">
-              <button 
-                *ngIf="schedule.status === 'pending' || !schedule.status"
-                mat-raised-button 
-                color="primary"
-                (click)="updateScheduleStatus(schedule, 'printing')">
-                <mat-icon>play_arrow</mat-icon>
-                Bắt đầu in
-              </button>
-              
-              <button 
-                *ngIf="schedule.status === 'printing'"
-                mat-stroked-button 
-                color="warn"
-                (click)="updateScheduleStatus(schedule, 'pending')">
-                <mat-icon>pause</mat-icon>
-                Tạm dừng
-              </button>
-              
-              <button 
-                *ngIf="schedule.status === 'printing'"
-                mat-raised-button 
-                color="accent"
-                (click)="updateScheduleStatus(schedule, 'completed')">
-                <mat-icon>check</mat-icon>
-                Hoàn thành
-              </button>
-              
-              <button 
-                *ngIf="schedule.status === 'printing' || schedule.status === 'pending'"
-                mat-stroked-button 
-                color="warn"
-                (click)="updateScheduleStatus(schedule, 'failed')">
-                <mat-icon>stop</mat-icon>
-                Hủy bỏ
-              </button>
-              
-              <button 
-                mat-icon-button 
-                color="warn"
-                (click)="deleteSchedule(schedule)"
-                matTooltip="Xóa lịch in">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Empty State -->
-        <div *ngIf="filteredRealSchedules.length === 0 && !isImporting" class="empty-state">
-          <i class="material-icons">inbox</i>
-          <h3>Không có lịch in nào</h3>
-          <p>Hãy import file Excel để thêm lịch in mới</p>
+        <!-- Design Photo Capture -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input #designPhotoInput type="file" accept="image/*" capture="camera" (change)="onDesignPhotoSelected($event)" style="display: none;">
           <button 
-            mat-raised-button 
-            color="primary"
-            (click)="triggerFileInput()">
-            <mat-icon>upload_file</mat-icon>
-            Import Excel
+            type="button"
+            (click)="designPhotoInput.click()" 
+            style="flex: 1; background: #673ab7; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            📷 Chụp hình mẫu thiết kế
+          </button>
+        </div>
+
+        <!-- A5 Template Download -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button 
+            type="button"
+            (click)="downloadA5Template()" 
+            style="flex: 1; background: #ff5722; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            📄 Tải template A5
+          </button>
+        </div>
+
+        <!-- Label Photo Capture -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input #labelPhotoInput type="file" accept="image/*" capture="camera" (change)="onLabelPhotoSelected($event)" style="display: none;">
+          <button 
+            type="button"
+            (click)="labelPhotoInput.click()" 
+            style="flex: 1; background: #4caf50; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            📷 Chụp hình tem đã in
+          </button>
+        </div>
+
+        <!-- Analyze Button -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button 
+            type="button"
+            (click)="analyzeLabels()" 
+            [disabled]="!designPhoto || !labelPhoto"
+            [style.opacity]="designPhoto && labelPhoto ? '1' : '0.5'"
+            style="flex: 1; background: #009688; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            🔍 Phân tích và so sánh
           </button>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Check Label Section -->
-  <div class="check-label-section" *ngIf="activeTab === 'check'">
-    
-    <!-- Mode Selection -->
-    <div class="mode-selection">
-      <div class="mode-toggle-container">
-        <mat-slide-toggle 
-          [(ngModel)]="isCalibrationMode"
-          color="primary"
-          class="calibration-toggle">
-          <strong>Calibration Mode</strong>
-        </mat-slide-toggle>
-        <p class="mode-description">
-          {{ isCalibrationMode 
-            ? 'So sánh với Calibration Sheet - Chụp tờ calibration đã dán tem' 
-            : 'So sánh 2 tem riêng biệt - Chụp tem mẫu và tem in' }}
-        </p>
-      </div>
-    </div>
-
-    <!-- Camera Section -->
-    <div class="camera-section" *ngIf="!isLoading">
-      <div class="camera-container">
-        <div class="camera-header">
-          <h3>
-            <i class="material-icons">camera_alt</i>
-            Camera View
-          </h3>
-          <div class="capture-mode">
-            <span class="mode-label">Capturing:</span>
-            <span class="mode-badge" [ngClass]="currentCaptureMode">
-              {{ currentCaptureMode === 'sample' ? 'Sample Label' : 'Printed Label' }}
+      <!-- Status Panel - Mobile Optimized -->
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <h5 style="margin: 0 0 15px 0; color: #c2185b; text-align: center;">📊 Trạng thái:</h5>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: white; border-radius: 5px;">
+            <span style="font-weight: bold; font-size: 14px;">📷 Mẫu thiết kế:</span> 
+            <span [style.color]="designPhoto ? '#4caf50' : '#999'" style="font-size: 14px;">
+              {{designPhoto ? 'Đã chụp' : 'Chưa chụp'}}
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: white; border-radius: 5px;">
+            <span style="font-weight: bold; font-size: 14px;">📷 Tem đã in:</span> 
+            <span [style.color]="labelPhoto ? '#4caf50' : '#999'" style="font-size: 14px;">
+              {{labelPhoto ? 'Đã chụp' : 'Chưa chụp'}}
             </span>
           </div>
         </div>
-        
-        <div class="camera-view">
-          <video 
-            #videoElement 
-            *ngIf="isCameraActive" 
-            autoplay 
-            playsinline
-            class="video-feed">
-          </video>
-          
-          <div *ngIf="!isCameraActive" class="camera-placeholder">
-            <i class="material-icons">videocam_off</i>
-            <h3>Camera Not Active</h3>
-            <p>Click "Start Camera" to begin capturing labels</p>
-          </div>
+      </div>
 
-          <!-- Camera overlay with guidelines -->
-          <div class="camera-overlay" *ngIf="isCameraActive">
-            <div class="capture-guidelines">
-              <div class="guideline-box">
-                <span class="guideline-text">Position label within frame</span>
-              </div>
-            </div>
+      <!-- Photo Previews - Mobile Optimized -->
+      <div *ngIf="designPhotoPreview || labelPhotoPreview" style="margin-bottom: 20px;">
+        
+        <!-- Design Photo Preview -->
+        <div *ngIf="designPhotoPreview" style="background: white; border: 2px solid #673ab7; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+          <h5 style="color: #673ab7; margin: 0 0 10px 0; text-align: center;">📷 Mẫu thiết kế:</h5>
+          <div style="text-align: center;">
+            <img [src]="designPhotoPreview" alt="Design Photo" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 5px;">
           </div>
         </div>
-        
-        <div class="camera-controls">
-          <button 
-            mat-raised-button 
-            color="primary" 
-            *ngIf="!isCameraActive"
-            (click)="startCamera()"
-            [disabled]="isLoading">
-            <mat-icon>videocam</mat-icon>
-            Start Camera
-          </button>
-          
-          <div *ngIf="isCameraActive" class="active-controls">
-            <button 
-              mat-fab 
-              color="accent" 
-              (click)="captureImage()"
-              class="capture-btn"
-              [disabled]="isLoading">
-              <mat-icon>camera</mat-icon>
-            </button>
+
+        <!-- Label Photo Preview -->
+        <div *ngIf="labelPhotoPreview" style="background: white; border: 2px solid #4caf50; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+          <h5 style="color: #4caf50; margin: 0 0 10px 0; text-align: center;">📷 Tem đã in:</h5>
+          <div style="text-align: center;">
+            <img [src]="labelPhotoPreview" alt="Label Photo" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 5px;">
+          </div>
+        </div>
+      </div>
+
+      <!-- A5 Calibration Template Preview -->
+      <div *ngIf="showA5Preview" style="background: white; border: 2px solid #ff5722; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center;">
+        <h5 style="color: #ff5722; margin: 0 0 15px 0;">📄 A5 Calibration Template Preview</h5>
+        <div style="width: 100%; max-width: 400px; margin: 0 auto; border: 1px solid #ddd; background: white; padding: 15px; aspect-ratio: 1.414;">
+          <!-- A5 Grid Template -->
+          <div style="position: relative; width: 100%; height: 100%; background: linear-gradient(90deg, #eee 1px, transparent 1px), linear-gradient(180deg, #eee 1px, transparent 1px); background-size: 10px 10px;">
             
-            <button 
-              mat-stroked-button 
-              color="warn"
-              (click)="stopCamera()">
-              <mat-icon>videocam_off</mat-icon>
-              Stop Camera
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading Section -->
-    <div *ngIf="isLoading" class="loading-section">
-      <mat-spinner diameter="60"></mat-spinner>
-      <p>Processing...</p>
-    </div>
-
-    <!-- Captured Images Section -->
-    <div class="images-section" *ngIf="capturedImages.length > 0">
-      <h3>
-        <i class="material-icons">photo_library</i>
-        Captured Images ({{ capturedImages.length }})
-      </h3>
-      
-      <div class="images-grid">
-        <!-- Sample Images -->
-        <div class="image-category" *ngIf="sampleImages.length > 0">
-          <h4>Sample Labels ({{ sampleImages.length }})</h4>
-          <div class="image-list">
-            <div 
-              *ngFor="let image of sampleImages" 
-              class="image-card"
-              [class.selected]="selectedSampleImage === image"
-              (click)="selectImage(image)">
-              <img [src]="image.dataUrl" [alt]="image.name" />
-              <div class="image-info">
-                <span class="image-name">{{ image.name }}</span>
-                <span class="image-time">{{ image.timestamp | date:'short' }}</span>
-              </div>
-              <div class="image-actions">
-                <button 
-                  mat-icon-button 
-                  color="primary"
-                  (click)="retakeImage('sample')"
-                  matTooltip="Retake sample">
-                  <mat-icon>refresh</mat-icon>
-                </button>
-                <button 
-                  mat-icon-button 
-                  color="warn"
-                  (click)="deleteImage(image)"
-                  matTooltip="Delete image">
-                  <mat-icon>delete</mat-icon>
-                </button>
+            <!-- Title -->
+            <div style="text-align: center; margin-bottom: 15px; font-weight: bold; color: #333;">
+              Label Calibration Template
+            </div>
+            
+            <!-- Font Samples -->
+            <div style="margin-bottom: 10px;">
+              <div style="font-family: Arial; font-size: 8px; margin: 2px 0;">Arial 8px: Sample Text ABCD 1234</div>
+              <div style="font-family: Arial; font-size: 10px; margin: 2px 0;">Arial 10px: Sample Text ABCD 1234</div>
+              <div style="font-family: Arial; font-size: 12px; margin: 2px 0;">Arial 12px: Sample Text ABCD 1234</div>
+              <div style="font-family: Arial; font-size: 14px; margin: 2px 0;">Arial 14px: Sample Text ABCD 1234</div>
+              <div style="font-family: Arial; font-size: 16px; margin: 2px 0; font-weight: bold;">Arial 16px Bold: Sample Text ABCD 1234</div>
+            </div>
+            
+            <!-- Label Placement Area -->
+            <div style="border: 3px dashed red; padding: 20px; margin: 10px 0; background: rgba(255,0,0,0.1); text-align: center;">
+              <div style="color: red; font-weight: bold; font-size: 12px;">PLACE LABEL HERE</div>
+              <div style="color: red; font-size: 10px;">Align label edges with red border</div>
+            </div>
+            
+            <!-- Reference Scale -->
+            <div style="position: absolute; bottom: 10px; left: 10px; right: 10px;">
+              <div style="height: 2px; background: black; position: relative;">
+                <div style="position: absolute; left: 0; top: -15px; font-size: 8px;">0cm</div>
+                <div style="position: absolute; left: 25%; top: -15px; font-size: 8px;">2.5cm</div>
+                <div style="position: absolute; right: 0; top: -15px; font-size: 8px;">10cm</div>
               </div>
             </div>
           </div>
         </div>
+        <button 
+          type="button"
+          (click)="printA5Template()"
+          style="background: #ff5722; color: white; padding: 10px 20px; margin-top: 15px; border: none; border-radius: 5px; cursor: pointer;">
+          🖨️ Print Template
+        </button>
+      </div>
 
-        <!-- Printed Images -->
-        <div class="image-category" *ngIf="printedImages.length > 0">
-          <h4>Printed Labels ({{ printedImages.length }})</h4>
-          <div class="image-list">
-            <div 
-              *ngFor="let image of printedImages" 
-              class="image-card"
-              [class.selected]="selectedPrintedImage === image"
-              (click)="selectImage(image)">
-              <img [src]="image.dataUrl" [alt]="image.name" />
-              <div class="image-info">
-                <span class="image-name">{{ image.name }}</span>
-                <span class="image-time">{{ image.timestamp | date:'short' }}</span>
-              </div>
-              <div class="image-actions">
-                <button 
-                  mat-icon-button 
-                  color="primary"
-                  (click)="retakeImage('printed')"
-                  matTooltip="Retake printed">
-                  <mat-icon>refresh</mat-icon>
-                </button>
-                <button 
-                  mat-icon-button 
-                  color="warn"
-                  (click)="deleteImage(image)"
-                  matTooltip="Delete image">
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </div>
-            </div>
+      <!-- Image Preview -->
+      <div *ngIf="capturedImagePreview" style="background: white; border: 2px solid #4caf50; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
+        <h5 style="color: #4caf50; margin: 0 0 15px 0;">📷 Captured Image:</h5>
+        <img [src]="capturedImagePreview" alt="Captured Label" style="max-width: 100%; max-height: 300px; border: 1px solid #ddd; border-radius: 5px;">
+      </div>
+
+      <!-- Analysis Result - Mobile Optimized -->
+      <div *ngIf="analysisResult" style="background: white; border: 2px solid #009688; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        <h5 style="color: #009688; margin: 0 0 15px 0; text-align: center;">🔍 Kết quả phân tích:</h5>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+          <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #0277bd; font-size: 14px;">Độ khớp tổng thể:</div>
+            <div style="font-size: 28px; color: #0277bd; font-weight: bold;">{{analysisResult.overallMatch}}%</div>
+          </div>
+          <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #7b1fa2; font-size: 14px;">Khớp font:</div>
+            <div style="font-size: 24px; color: #7b1fa2;">{{analysisResult.fontMatch}}%</div>
+          </div>
+          <div style="background: #e8f5e8; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #388e3c; font-size: 14px;">Khớp kích thước:</div>
+            <div style="font-size: 24px; color: #388e3c;">{{analysisResult.sizeMatch}}%</div>
+          </div>
+          <div style="background: #fff3e0; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="font-weight: bold; color: #f57c00; font-size: 14px;">Khớp vị trí:</div>
+            <div style="font-size: 24px; color: #f57c00;">{{analysisResult.positionMatch}}%</div>
           </div>
         </div>
-      </div>
 
-      <!-- Comparison Controls -->
-      <div class="comparison-controls">
-        <button 
-          mat-raised-button 
-          color="primary"
-          [disabled]="!canCompare || isLoading"
-          (click)="performComparison()">
-          <mat-icon>compare</mat-icon>
-          Compare Labels
-        </button>
-        
-        <button 
-          mat-stroked-button 
-          color="warn"
-          (click)="clearAll()">
-          <mat-icon>clear_all</mat-icon>
-          Clear All
-        </button>
-      </div>
-    </div>
-
-    <!-- Comparison Results Section -->
-    <div class="comparison-section" *ngIf="showComparison">
-      <div class="comparison-header">
-        <h3>
-          <i class="material-icons">analytics</i>
-          Comparison Results
-        </h3>
-        <div class="overall-status" [ngClass]="{ 'pass': comparisonResults.overallMatch, 'fail': !comparisonResults.overallMatch }">
-          <span class="status-text">
-            {{ comparisonResults.overallMatch ? 'PASS' : 'FAIL' }}
-          </span>
-          <span class="confidence">
-            {{ comparisonResults.confidence }}% confidence
-          </span>
-        </div>
-      </div>
-
-      <!-- Side by side comparison -->
-      <div class="comparison-images">
-        <div class="comparison-image">
-          <h4>Sample Label</h4>
-          <img *ngIf="selectedSampleImage" [src]="selectedSampleImage.dataUrl" alt="Sample label" />
-        </div>
-        <div class="comparison-image">
-          <h4>Printed Label</h4>
-          <img *ngIf="selectedPrintedImage" [src]="selectedPrintedImage.dataUrl" alt="Printed label" />
-        </div>
-      </div>
-
-      <!-- Detailed Results -->
-      <div class="detailed-results">
-        <div class="result-item" [ngClass]="{ 'good': comparisonResults.labelSize >= 85, 'warning': comparisonResults.labelSize >= 70 && comparisonResults.labelSize < 85, 'poor': comparisonResults.labelSize < 70 }">
-          <mat-icon>{{ comparisonResults.labelSize >= 85 ? 'check_circle' : comparisonResults.labelSize >= 70 ? 'warning' : 'error' }}</mat-icon>
-          <span>Kích thước tem</span>
-          <span class="score">{{ comparisonResults.labelSize }}%</span>
-        </div>
-        
-        <div class="result-item" [ngClass]="{ 'good': comparisonResults.fontMatch >= 85, 'warning': comparisonResults.fontMatch >= 70 && comparisonResults.fontMatch < 85, 'poor': comparisonResults.fontMatch < 70 }">
-          <mat-icon>{{ comparisonResults.fontMatch >= 85 ? 'check_circle' : comparisonResults.fontMatch >= 70 ? 'warning' : 'error' }}</mat-icon>
-          <span>Font chữ</span>
-          <span class="score">{{ comparisonResults.fontMatch }}%</span>
-        </div>
-        
-        <div class="result-item" [ngClass]="{ 'good': comparisonResults.textSize >= 85, 'warning': comparisonResults.textSize >= 70 && comparisonResults.textSize < 85, 'poor': comparisonResults.textSize < 70 }">
-          <mat-icon>{{ comparisonResults.textSize >= 85 ? 'check_circle' : comparisonResults.textSize >= 70 ? 'warning' : 'error' }}</mat-icon>
-          <span>Size chữ</span>
-          <span class="score">{{ comparisonResults.textSize }}%</span>
-        </div>
-
-        <div class="result-item" [ngClass]="{ 'good': comparisonResults.overallShape >= 85, 'warning': comparisonResults.overallShape >= 70 && comparisonResults.overallShape < 85, 'poor': comparisonResults.overallShape < 70 }">
-          <mat-icon>{{ comparisonResults.overallShape >= 85 ? 'check_circle' : comparisonResults.overallShape >= 70 ? 'warning' : 'error' }}</mat-icon>
-          <span>Hình dạng tổng thể</span>
-          <span class="score">{{ comparisonResults.overallShape }}%</span>
-        </div>
-      </div>
-
-      <!-- Download Report -->
-      <div class="report-actions">
-        <button 
-          mat-raised-button 
-          color="primary"
-          (click)="downloadComparison()">
-          <mat-icon>download</mat-icon>
-          Download Report
-        </button>
-      </div>
-    </div>
-
-    <!-- Instructions Section -->
-    <div class="instructions-section" *ngIf="capturedImages.length === 0">
-      <div class="instructions-card">
-        <h3>
-          <i class="material-icons">help_outline</i>
-          How to Use
-        </h3>
-        <ol>
-          <li>Click "Start Camera" to activate the camera</li>
-          <li>Position your <strong>sample label</strong> within the frame guidelines</li>
-          <li>Click the capture button to take a photo</li>
-          <li>Position your <strong>printed label</strong> and capture it</li>
-          <li>The system will automatically compare both labels</li>
-          <li>Review the results and download the report if needed</li>
-        </ol>
-        
-        <div class="tips">
-          <h4><i class="material-icons">lightbulb_outline</i> Tips</h4>
-          <ul>
-            <li>Ensure good lighting for clear images</li>
-            <li>Keep labels flat and properly aligned</li>
-            <li>Use the same distance for both sample and printed labels</li>
-            <li>Avoid shadows and reflections</li>
+        <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+          <h6 style="margin: 0 0 10px 0; color: #333; text-align: center;">📝 Chi tiết phân tích:</h6>
+          <ul style="margin: 0; padding-left: 20px; font-size: 14px;">
+            <li *ngFor="let detail of analysisResult.details" [style.color]="getDetailColor(detail.status)">
+              {{detail.message}}
+            </li>
           </ul>
         </div>
-      </div>
-    </div>
 
-          <!-- Hidden canvas for image processing -->
-    <canvas #canvasElement style="display: none;"></canvas>
-  </div>
-
-  <!-- Calibration Sheet Section -->
-  <div class="calibration-section" *ngIf="activeTab === 'calibration'">
-    
-    <!-- Controls Section (Not printed) -->
-    <div class="controls-section no-print">
-      <div class="controls-container">
-        <h2>
-          <mat-icon>straighten</mat-icon>
-          Calibration Sheet Generator
-        </h2>
-        <p>Generate precision calibration sheet for print quality verification</p>
-        
-        <div class="control-buttons">
-          <button 
-            mat-raised-button 
-            color="primary"
-            (click)="downloadCalibrationSheet()">
-            <mat-icon>download</mat-icon>
-            Tải xuống & In
-          </button>
-          
-          <button 
-            mat-stroked-button 
-            color="accent"
-            (click)="printCalibrationSheet()">
-            <mat-icon>print</mat-icon>
-            In trực tiếp
-          </button>
-          
-
-        </div>
-        
-        <div class="instructions">
-          <h3>Hướng dẫn sử dụng:</h3>
-          <ol>
-            <li>In calibration sheet này trên giấy A4 với tỷ lệ 100% (không scale)</li>
-            <li>Dán tem đã in vào khu vực ở giữa tờ</li>
-            <li>Chuyển sang tab "Check Label Quality" để chụp hình và so sánh</li>
-            <li>Phần mềm sẽ tự động phân tích kích thước, font, size chữ và hình dạng</li>
-          </ol>
-        </div>
-      </div>
-    </div>
-
-    <!-- Calibration Sheet (Printable) -->
-    <div id="calibration-sheet" class="calibration-sheet">
-      
-      <!-- Grid Lines -->
-      <div class="grid-container">
-        <!-- Horizontal grid lines every 1mm -->
-        <div 
-          *ngFor="let mark of verticalMarks" 
-          class="grid-line-h"
-          [style.top.mm]="mark">
-        </div>
-        
-        <!-- Vertical grid lines every 1mm -->
-        <div 
-          *ngFor="let mark of horizontalMarks" 
-          class="grid-line-v"
-          [style.left.mm]="mark">
-        </div>
-      </div>
-
-      <!-- Horizontal Ruler -->
-      <div class="ruler-horizontal">
-        <div 
-          *ngFor="let mark of horizontalMarks" 
-          class="ruler-mark-h"
-          [class.major-mark-h]="isMajorMark(mark)"
-          [class.minor-mark-h]="isMinorMark(mark)"
-          [style.left.mm]="mark">
-        </div>
-        
-        <!-- Ruler numbers -->
-        <ng-container *ngFor="let mark of horizontalMarks">
-          <div 
-            *ngIf="shouldShowNumber(mark)"
-            class="ruler-number-h"
-            [style.left.mm]="mark">
-            {{ mark }}
-          </div>
-        </ng-container>
-      </div>
-
-      <!-- Vertical Ruler -->
-      <div class="ruler-vertical">
-        <div 
-          *ngFor="let mark of verticalMarks" 
-          class="ruler-mark-v"
-          [class.major-mark-v]="isMajorMark(mark)"
-          [class.minor-mark-v]="isMinorMark(mark)"
-          [style.top.mm]="mark">
-        </div>
-        
-        <!-- Ruler numbers -->
-        <ng-container *ngFor="let mark of verticalMarks">
-          <div 
-            *ngIf="shouldShowNumber(mark)"
-            class="ruler-number-v"
-            [style.top.mm]="mark">
-            {{ mark }}
-          </div>
-        </ng-container>
-      </div>
-
-      <!-- Content Area -->
-      <div class="content-area">
-        
-        <!-- Header -->
-        <div class="header">
-          <h1>RSBG Print Quality Calibration Sheet</h1>
-          <p>A4 Size: 210mm × 297mm | Date: {{ 'now' | date:'dd/MM/yyyy HH:mm' }}</p>
-        </div>
-
-        <!-- Font Size Reference Chart -->
-        <div class="font-chart">
-          <h2>Font Size Reference Chart - Arial Font Family</h2>
-          
-          <div *ngFor="let font of fontSizes" class="font-row">
-            <div class="font-info">
-              {{ font.pt }}pt<br>
-              ({{ font.mm }}mm)
-            </div>
-            <div 
-              class="font-sample-bold"
-              [style.font-size.pt]="font.pt">
-              {{ sampleText }}
-            </div>
-            <div 
-              class="font-sample-regular"
-              [style.font-size.pt]="font.pt">
-              {{ sampleText }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Measurement Section -->
-        <div class="measurement-section">
-          <h2>Label Placement Measurement Area</h2>
-          
-          <div class="measurement-boxes">
-            <div class="measurement-box" data-size="20×20mm"></div>
-            <div class="measurement-box" data-size="20×20mm"></div>
-            <div class="measurement-box" data-size="20×20mm"></div>
-            <div class="measurement-box" data-size="20×20mm"></div>
-          </div>
-          
-          <div class="measurement-info">
-            <p><strong>Cách sử dụng:</strong></p>
-            <ul>
-              <li>Đặt tem đã in vào các ô đo lường phía trên</li>
-              <li>So sánh kích thước tem với các vạch lưới</li>
-              <li>Kiểm tra cỡ chữ với bảng tham chiếu font</li>
-              <li>Kiểm tra độ chính xác vị trí bằng thước kẻ</li>
-              <li>Đảm bảo màu sắc và chất lượng in đáp ứng yêu cầu</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Test Patterns -->
-        <div class="test-patterns">
-          <h2>Print Quality Test Patterns</h2>
-          
-          <div class="pattern-row">
-            <div class="pattern-item">
-              <h4>Line Weight Test</h4>
-              <div class="line-test">
-                <div style="border-top: 0.1mm solid #000; margin: 1mm 0;"></div>
-                <div style="border-top: 0.2mm solid #000; margin: 1mm 0;"></div>
-                <div style="border-top: 0.5mm solid #000; margin: 1mm 0;"></div>
-                <div style="border-top: 1mm solid #000; margin: 1mm 0;"></div>
-              </div>
-              <small>0.1mm, 0.2mm, 0.5mm, 1mm</small>
-            </div>
-            
-            <div class="pattern-item">
-              <h4>Gray Scale Test</h4>
-              <div class="grayscale-test">
-                <div style="background: #000; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
-                <div style="background: #333; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
-                <div style="background: #666; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
-                <div style="background: #999; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
-                <div style="background: #ccc; width: 10mm; height: 5mm; display: inline-block; margin: 0.5mm;"></div>
-              </div>
-              <small>100%, 80%, 60%, 40%, 20%</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- QR Code and Barcode Test Area -->
-        <div class="code-test-section">
-          <h2>Barcode & QR Code Test Area</h2>
-          
-          <div class="code-containers">
-            <div class="code-container">
-              <div class="code-frame" style="width: 25mm; height: 25mm; border: 0.2mm solid #000;">
-                <span class="code-label">QR Code<br>25×25mm</span>
-              </div>
-            </div>
-            
-            <div class="code-container">
-              <div class="code-frame" style="width: 40mm; height: 10mm; border: 0.2mm solid #000;">
-                <span class="code-label">Barcode 40×10mm</span>
-              </div>
-            </div>
-            
-            <div class="code-container">
-              <div class="code-frame" style="width: 15mm; height: 15mm; border: 0.2mm solid #000;">
-                <span class="code-label">Small QR<br>15×15mm</span>
-              </div>
-            </div>
-          </div>
-          
-          <p class="code-instructions">
-            Đặt QR code và barcode đã in vào khung phía trên để kiểm tra độ chính xác kích thước
-          </p>
-        </div>
-
-        <!-- Central Label Placement Area -->
-        <div class="central-label-area">
-          <h2>KHU VỰC DÁN TEM</h2>
-          
-          <div class="main-placement-frame">
-            <div class="placement-guide">
-              <p>Dán tem đã in vào đây</p>
-              <div class="center-guidelines">
-                <div class="horizontal-line"></div>
-                <div class="vertical-line"></div>
-              </div>
-            </div>
-          </div>
-          
-          <div class="placement-instructions">
-            <p><strong>Lưu ý:</strong> Dán tem chính giữa khung, căn chỉnh theo đường thẳng đứng và ngang</p>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Footer -->
-      <div class="footer">
-        <p>
-          RSBG Project © {{ 'now' | date:'yyyy' }} | 
-          Print Settings: 100% Scale, No Margins | 
-          Paper: A4 (210×297mm) | 
-          Generated: {{ 'now' | date:'dd/MM/yyyy HH:mm:ss' }}
-        </p>
-      </div>
-
-    </div>
-  </div>
-
-<!-- Import Dialog -->
-<div class="import-dialog-overlay" *ngIf="showImportDialog" (click)="cancelImport()">
-  <div class="import-dialog" (click)="$event.stopPropagation()">
-    <div class="dialog-header">
-      <h3>
-        <mat-icon>upload_file</mat-icon>
-        Xác nhận Import Excel
-      </h3>
-      <button mat-icon-button (click)="cancelImport()">
-        <mat-icon>close</mat-icon>
-      </button>
-    </div>
-    
-    <div class="dialog-content">
-      <div class="import-summary" *ngIf="importResult">
-        <div class="summary-stats">
-          <div class="stat-item success">
-            <mat-icon>check_circle</mat-icon>
-            <span>{{ importResult.validRows }} dòng hợp lệ</span>
-          </div>
-          <div class="stat-item total">
-            <mat-icon>description</mat-icon>
-            <span>{{ importResult.totalRows }} tổng số dòng</span>
-          </div>
-          <div class="stat-item error" *ngIf="importResult.errors.length > 0">
-            <mat-icon>error</mat-icon>
-            <span>{{ importResult.errors.length }} lỗi</span>
-          </div>
-        </div>
-        
-        <!-- Error List -->
-        <div class="error-list" *ngIf="importResult.errors.length > 0">
-          <h4>Danh sách lỗi:</h4>
-          <div class="error-scroll">
-            <div *ngFor="let error of importResult.errors" class="error-item">
-              <mat-icon>warning</mat-icon>
-              <span>{{ error }}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Preview Data -->
-        <div class="preview-data" *ngIf="importResult.data.length > 0">
-          <h4>Xem trước dữ liệu ({{ importResult.data.length > 5 ? '5 dòng đầu' : 'tất cả' }}):</h4>
-          <div class="preview-table">
-            <div class="preview-row header">
-              <span>Mã tem</span>
-              <span>Khách hàng</span>
-              <span>Số lượng</span>
-              <span>Năm/Tháng</span>
-            </div>
-            <div *ngFor="let item of importResult.data.slice(0, 5)" class="preview-row">
-              <span>{{ item.maTem }}</span>
-              <span>{{ item.khachHang }}</span>
-              <span>{{ item.soLuongYeuCau }}</span>
-              <span>{{ item.nam }}/{{ item.thang }}</span>
-            </div>
-          </div>
+        <div style="text-align: center;">
+          <span 
+            [style.background]="analysisResult.overallMatch >= 90 ? '#4caf50' : analysisResult.overallMatch >= 70 ? '#ff9800' : '#f44336'"
+            style="color: white; padding: 10px 20px; border-radius: 25px; font-weight: bold; font-size: 16px;">
+            {{getQualityStatus(analysisResult.overallMatch)}}
+          </span>
         </div>
       </div>
     </div>
     
-    <div class="dialog-actions">
-      <button 
-        mat-stroked-button 
-        (click)="cancelImport()"
-        [disabled]="isImporting">
-        Hủy bỏ
-      </button>
-      
-      <button 
-        mat-raised-button 
-        color="primary"
-        (click)="confirmImport()"
-        [disabled]="isImporting || !importResult?.data.length">
-        <mat-icon *ngIf="!isImporting">save</mat-icon>
-        <mat-spinner *ngIf="isImporting" diameter="16"></mat-spinner>
-        {{ isImporting ? 'Đang lưu...' : 'Lưu vào Firebase' }}
-      </button>
-    </div>
   </div>
-</div>
+  
 </div> 

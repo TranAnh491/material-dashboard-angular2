@@ -36,8 +36,11 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatTableModule } from '@angular/material/table';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatSortModule } from '@angular/material/sort';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { SharedModule } from '../../shared/shared.module';
 
 // Các component materials mới
@@ -80,8 +83,11 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
     MatCheckboxModule,
     MatRadioModule,
     MatTableModule,
+    MatPaginatorModule,
+    MatSortModule,
     MatDialogModule,
     MatChipsModule,
+    MatSlideToggleModule,
     DragDropModule,
     SharedModule
   ],
