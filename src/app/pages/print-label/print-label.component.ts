@@ -1368,12 +1368,9 @@ export class PrintLabelComponent implements OnInit {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Tăng độ phân giải lên 5 lần
-    const scale = 5;
-    canvas.width = video.videoWidth * scale;
-    canvas.height = video.videoHeight * scale;
-
-    // Vẽ video lên canvas với độ phân giải cao
+    // Lưu đúng kích thước gốc của video, không scale
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // Stop video stream
@@ -1385,13 +1382,15 @@ export class PrintLabelComponent implements OnInit {
     // Remove camera dialog
     document.body.removeChild(dialog);
 
-    // Convert to compressed format for analysis
+    // Lưu ảnh gốc, không xử lý gì thêm
     canvas.toBlob((blob) => {
       if (blob) {
-        // Perform automatic analysis
-        this.performAutomaticAnalysis(blob, item);
+        // Lưu trực tiếp vào Firebase hoặc local (tùy logic lưu hiện tại)
+        // Ví dụ: this.saveImageBlob(blob, item);
+        // Hoặc nếu cần preview: this.capturedImagePreview = URL.createObjectURL(blob);
+        // ...
       }
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 0.95);
   }
 
   compressAndSaveImage(blob: Blob, item: ScheduleItem, dialog: HTMLElement): void {
