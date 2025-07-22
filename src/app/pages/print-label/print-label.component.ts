@@ -1916,8 +1916,7 @@ export class PrintLabelComponent implements OnInit {
         { value: 'EXP: 2026/12', bbox: { x: 10, y: 130, width: 90, height: 20 } }
       ];
 
-    // Simulate OCR missing some texts randomly
-    const detectedTexts = allTexts.filter(() => Math.random() > 0.2); // 80% chance to detect each
+    const detectedTexts: DetectedText[] = allTexts; // Không random bỏ sót nữa
     const text = detectedTexts.map(t => t.value);
     
     return {
@@ -1965,10 +1964,10 @@ export class PrintLabelComponent implements OnInit {
     if (positionMatch < 90) mismatchDetails.push(`📍 Vị trí không đúng (${positionMatch}%)`);
     
     // Compare detectedTexts for missing/undetected texts
-    const missingOnSample = (sampleInfo.detectedTexts || []).filter(
+    const missingOnSample: DetectedText[] = (sampleInfo.detectedTexts || []).filter(
       t => !(sampleInfo.text || []).includes(t.value)
     );
-    const missingOnPrinted = (sampleInfo.detectedTexts || []).filter(
+    const missingOnPrinted: DetectedText[] = (sampleInfo.detectedTexts || []).filter(
       t => !(printedInfo.text || []).includes(t.value)
     );
     sampleInfo.missingTexts = missingOnSample;
