@@ -41,8 +41,11 @@
           <button 
           type="button"
           (click)="fileInput.click()" 
-          style="background: #4caf50; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
-          📥 Import Excel
+          [disabled]="isSaving || isLoading"
+          style="background: #4caf50; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;"
+          [style.opacity]="isSaving || isLoading ? '0.6' : '1'">
+          <span *ngIf="isSaving">⏳ Đang lưu Firebase...</span>
+          <span *ngIf="!isSaving">📥 Import Excel</span>
           </button>
           <button 
           type="button"
@@ -66,6 +69,19 @@
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           🗑️ Xóa dữ liệu
           </button>
+      </div>
+
+      <!-- Loading/Status Indicators -->
+      <div *ngIf="isLoading" style="text-align: center; padding: 20px; background: #e3f2fd; border-radius: 8px; margin-bottom: 20px;">
+        <div style="font-size: 18px; color: #1976d2;">🔄 Đang tải dữ liệu từ Firebase...</div>
+      </div>
+
+      <div *ngIf="isSaving" style="text-align: center; padding: 20px; background: #fff3e0; border-radius: 8px; margin-bottom: 20px;">
+        <div style="font-size: 18px; color: #f57c00;">⏳ Đang lưu dữ liệu vào Firebase...</div>
+      </div>
+
+      <div *ngIf="firebaseSaved && !isSaving" style="text-align: center; padding: 15px; background: #e8f5e8; border-radius: 8px; margin-bottom: 20px;">
+        <div style="font-size: 16px; color: #4caf50;">✅ Dữ liệu đã được lưu thành công vào Firebase!</div>
       </div>
 
       <!-- Schedule Table -->

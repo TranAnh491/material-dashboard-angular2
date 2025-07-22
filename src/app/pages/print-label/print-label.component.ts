@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
 import * as XLSX from 'xlsx';
 
 interface ScheduleItem {
@@ -39,11 +40,14 @@ export class PrintLabelComponent implements OnInit {
   scheduleData: ScheduleItem[] = [];
   firebaseSaved: boolean = false;
   capturedImagePreview: string | null = null;
+  isSaving: boolean = false;
+  isLoading: boolean = false;
 
-  constructor() { }
+  constructor(private firestore: AngularFirestore) { }
 
   ngOnInit(): void {
     console.log('Label Component initialized successfully!');
+    this.loadDataFromFirebase();
   }
 
 
@@ -58,6 +62,22 @@ export class PrintLabelComponent implements OnInit {
     const file = event.target.files[0];
     if (file) {
       console.log('File selected:', file.name);
+      
+      // Validate file type
+      const validTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel'
+      ];
+      
+      if (!validTypes.includes(file.type)) {
+        alert('❌ Vui lòng chọn file Excel (.xlsx hoặc .xls)');
+        return;
+      }
+      
+      // Reset states
+      this.firebaseSaved = false;
+      this.isSaving = false;
+      
       this.readExcelFile(file);
     }
   }
@@ -76,7 +96,13 @@ export class PrintLabelComponent implements OnInit {
         
         // Convert to JSON array
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        console.log('📊 Raw Excel data:', jsonData);
         
+        // Validate Excel structure
+        if (!jsonData || jsonData.length < 2) {
+          throw new Error('Excel file is empty or has no data rows');
+        }
+
         // Remove header row and convert to ScheduleItem format
         const dataRows = jsonData.slice(1); // Skip header row
         this.scheduleData = dataRows.map((row: any, index: number) => ({
@@ -97,16 +123,22 @@ export class PrintLabelComponent implements OnInit {
           nguoiIn: row[14]?.toString() || '',
           tinhTrang: row[15]?.toString() || '',
           banVe: row[16]?.toString() || '',
-          ghiChu: row[17]?.toString() || '',
-          labelComparison: undefined // Initialize as undefined
+          ghiChu: row[17]?.toString() || ''
+          // Remove labelComparison: undefined - Firebase doesn't allow undefined values
         }));
         
-        // Save to Firebase
+        // Validate data before saving
+        if (this.scheduleData.length === 0) {
+          throw new Error('No data found in Excel file');
+        }
+
+        // Save to Firebase 
         this.saveToFirebase(this.scheduleData);
         
         alert(`✅ Successfully imported ${this.scheduleData.length} records from ${file.name} and saved to Firebase 🔥`);
       } catch (error) {
         console.error('Error reading file:', error);
+        this.isSaving = false; // Reset saving state on error
         alert('❌ Error reading Excel file. Please check the format.');
       }
     };
@@ -116,33 +148,75 @@ export class PrintLabelComponent implements OnInit {
   saveToFirebase(data: ScheduleItem[]): void {
     console.log('🔥 Saving data to Firebase...');
     
-    // TODO: Implement Firebase save logic
-    // Example structure:
-    // firebase.firestore().collection('printSchedules').add({
-    //   data: data,
-    //   importedAt: new Date(),
-    //   month: this.getCurrentMonth(),
-    //   fileName: file.name,
-    //   recordCount: data.length
-    // });
+    // Validate data before saving
+    if (!data || data.length === 0) {
+      console.error('❌ No data to save to Firebase');
+      alert('❌ Không có dữ liệu để lưu vào Firebase!');
+      return;
+    }
     
-    // For now, just log the data structure
-    data.forEach((item, index) => {
-      console.log(`🔥 Record ${index + 1}:`, {
-        nam: item.nam,
-        thang: item.thang,
-        sizePhoi: item.sizePhoi,
-        nguoiIn: item.nguoiIn,
-        tinhTrang: item.tinhTrang,
-        banVe: item.banVe
+    this.isSaving = true;
+    
+    const printScheduleDoc = {
+      data: data,
+      importedAt: new Date(),
+      month: this.getCurrentMonth(),
+      recordCount: data.length,
+      lastUpdated: new Date()
+    };
+
+    // Add timeout to Firebase save
+    const savePromise = this.firestore.collection('printSchedules').add(printScheduleDoc);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
+    );
+
+    Promise.race([savePromise, timeoutPromise])
+      .then((docRef: any) => {
+        console.log('✅ Data successfully saved to Firebase with ID: ', docRef.id);
+        this.firebaseSaved = true;
+        this.isSaving = false;
+        alert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
+      })
+      .catch((error) => {
+        console.error('❌ Error saving to Firebase: ', error);
+        this.isSaving = false;
+        this.firebaseSaved = false;
+        alert(`❌ Lỗi khi lưu dữ liệu vào Firebase: ${error.message || error}`);
       });
-    });
+  }
+
+  loadDataFromFirebase(): void {
+    console.log('🔥 Loading data from Firebase...');
+    this.isLoading = true;
     
-    // Simulate Firebase save success
-    setTimeout(() => {
-      console.log('✅ Data successfully saved to Firebase!');
-      this.firebaseSaved = true;
-    }, 1000);
+    const loadPromise = this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise();
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Firebase load timeout after 10 seconds')), 10000)
+    );
+
+    Promise.race([loadPromise, timeoutPromise])
+      .then((querySnapshot: any) => {
+        this.isLoading = false;
+        if (querySnapshot && !querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          const docData = doc.data() as any;
+          this.scheduleData = docData.data || [];
+          console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase`);
+          console.log(`📅 Data imported at: ${docData.importedAt?.toDate()}`);
+        } else {
+          console.log('🔥 No data found in Firebase');
+          this.scheduleData = [];
+        }
+      })
+      .catch((error) => {
+        console.error('🔥 Error loading from Firebase:', error);
+        this.isLoading = false;
+        this.scheduleData = [];
+      });
   }
 
   getCurrentMonth(): string {
