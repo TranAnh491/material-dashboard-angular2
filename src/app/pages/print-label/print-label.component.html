@@ -74,12 +74,12 @@
       <!-- Loading/Status Indicators -->
       <div *ngIf="isLoading" style="text-align: center; padding: 20px; background: #e3f2fd; border-radius: 8px; margin-bottom: 20px;">
         <div style="font-size: 18px; color: #1976d2;">🔄 Đang tải dữ liệu từ Firebase...</div>
-      </div>
+          </div>
 
       <div *ngIf="isSaving" style="text-align: center; padding: 20px; background: #fff3e0; border-radius: 8px; margin-bottom: 20px;">
         <div style="font-size: 18px; color: #f57c00;">⏳ Đang lưu dữ liệu vào Firebase...</div>
-      </div>
-
+        </div>
+        
       <div *ngIf="firebaseSaved && !isSaving" style="text-align: center; padding: 15px; background: #e8f5e8; border-radius: 8px; margin-bottom: 20px;">
         <div style="font-size: 16px; color: #4caf50;">✅ Dữ liệu đã được lưu thành công vào Firebase!</div>
       </div>
@@ -92,12 +92,12 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
           <div style="background: #e3f2fd; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #1976d2;">
             📊 Total: {{scheduleData.length}} records
-          </div>
+        </div>
           <div style="font-size: 11px; color: #666; text-align: right; line-height: 1.3;">
             💡 📸 So sánh | 🗑️📸 Xóa so sánh | 🗑️📋 Xóa dòng
           </div>
         </div>
-        
+
         <div style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
             <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
@@ -187,7 +187,7 @@
                       [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
                       {{getComparisonIcon(item)}}
                     </button>
-                    <button 
+                  <button 
                       *ngIf="item.labelComparison"
                       (click)="deleteComparisonImage(item)"
                       title="Xóa kết quả so sánh"
@@ -195,17 +195,17 @@
                       onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
                       onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
                       🗑️📸
-                    </button>
-                    <button 
+                  </button>
+                  <button 
                       (click)="deleteScheduleItem(i)"
                       title="Xóa toàn bộ dòng"
                       style="background: #f44336; color: white; border: none; font-size: 12px; cursor: pointer; padding: 3px 5px; border-radius: 3px; transition: all 0.3s; font-weight: bold;"
                       onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
                       onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
                       🗑️📋
-                    </button>
-                  </div>
-                </td>
+                  </button>
+                </div>
+              </td>
               </tr>
             </tbody>
           </table>
@@ -240,7 +240,7 @@
           3. Chụp ảnh cả mẫu thiết kế và tem thực tế<br>
           4. Hệ thống tự động so sánh và lưu kết quả
         </p>
-      </div>
+              </div>
       -->
 
       <!-- Status Summary -->
@@ -250,7 +250,7 @@
           <div style="min-width: 80px; margin: 5px;">
             <div style="font-size: 24px; color: #4caf50;">{{passedCount}}</div>
             <div style="font-size: 12px; color: #666;">✅ PASS</div>
-          </div>
+              </div>
           <div style="min-width: 80px; margin: 5px;">
             <div style="font-size: 24px; color: #f44336;">{{failedCount}}</div>
             <div style="font-size: 12px; color: #666;">❌ FAIL</div>
@@ -275,9 +275,9 @@
           <button (click)="refreshComparisonReport()" 
                   style="background: #2196f3; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 14px;">
             🔄 Refresh
-          </button>
+        </button>
         </div>
-
+        
         <!-- Simple Comparison Table -->
         <div *ngIf="getComparedItems().length > 0" style="max-height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -340,7 +340,7 @@
                             onmouseleave="this.style.background='#9e9e9e'">
                       🗑️
                     </button>
-                  </div>
+        </div>
                 </td>
               </tr>
             </tbody>
@@ -365,7 +365,7 @@
             <!-- Title -->
             <div style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 12px;">
               A5 Calibration Template - 1mm Grid
-    </div>
+        </div>
 
             <!-- Instructions -->
             <div style="text-align: center; margin-bottom: 10px; font-size: 8px; color: #666;">
@@ -514,4 +514,4 @@
       </div>
     </div>
     
-  </div>
+</div> 
