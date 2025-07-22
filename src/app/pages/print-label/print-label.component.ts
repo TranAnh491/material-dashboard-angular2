@@ -34,14 +34,21 @@ interface ScheduleItem {
   };
 }
 
+interface DetectedText {
+  value: string;
+  bbox: { x: number; y: number; width: number; height: number };
+}
+
 interface LabelSpecifications {
   text?: string[];
+  detectedTexts?: DetectedText[];
   fontSize?: number[];
   fontStyle?: string[];
   colors?: string[];
   dimensions?: {width: number, height: number};
   position?: {x: number, y: number};
   quality?: number;
+  missingTexts?: DetectedText[]; // highlight info
 }
 
 interface ImageAnalysisResult {
@@ -1361,7 +1368,12 @@ export class PrintLabelComponent implements OnInit {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Capture frame from video
+    // Tăng độ phân giải lên 5 lần
+    const scale = 5;
+    canvas.width = video.videoWidth * scale;
+    canvas.height = video.videoHeight * scale;
+
+    // Vẽ video lên canvas với độ phân giải cao
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // Stop video stream
@@ -1679,18 +1691,32 @@ export class PrintLabelComponent implements OnInit {
     const status = result.result === 'Pass' ? '✅ PASS' : '❌ FAIL';
     const details = result.detailedAnalysis;
     
+    // Separate text details from other details
+    const textDetails = result.mismatchDetails.filter(detail => detail.includes('📝'));
+    const otherDetails = result.mismatchDetails.filter(detail => !detail.includes('📝'));
+    
+    let detailsText = '';
+    if (textDetails.length > 0) {
+      detailsText += '\n\n📝 Chi tiết so sánh Text:\n' + textDetails.map(detail => `• ${detail.replace('📝 Text không khớp (', '').replace('%)', '')}`).join('\n');
+    }
+    
+    if (otherDetails.length > 0) {
+      detailsText += '\n\n🔍 Các vấn đề khác:\n' + otherDetails.map(detail => `• ${detail}`).join('\n');
+    }
+    
+    if (result.mismatchDetails.length === 0) {
+      detailsText = '\n\n✅ Tất cả yếu tố đều khớp!';
+    }
+    
     const message = `${status} - ${item.maTem}\n\n` +
       `📊 Kết quả chi tiết:\n` +
       `• Tổng điểm: ${result.matchPercentage}%\n\n` +
       `🔍 Phân tích từng yếu tố:\n` +
       `• Nội dung text: ${details.textMatch}%\n` +
       `• Font size: ${details.fontMatch}%\n` +
-      `• Màu sắc: ${details.colorMatch}%\n` +
       `• Kích thước: ${details.sizeMatch}%\n` +
-      `• Vị trí: ${details.positionMatch}%\n\n` +
-      (result.mismatchDetails.length > 0 ? 
-        `⚠️ Vấn đề phát hiện:\n• ${result.mismatchDetails.join('\n• ')}\n\n` : '') +
-      `💾 Đã lưu vào Firebase`;
+      `• Vị trí: ${details.positionMatch}%\n` +
+      detailsText + '\n\n💾 Đã lưu vào Firebase';
 
     alert(message);
   }
@@ -1854,22 +1880,49 @@ export class PrintLabelComponent implements OnInit {
   extractLabelInformation(region: any, item: ScheduleItem, type: 'sample' | 'printed'): LabelSpecifications {
     console.log(`📝 Extracting information from ${type} label...`);
     
-    // Simulate OCR and analysis
+    // Simulate OCR and analysis with more realistic data
     const texts = type === 'sample' ? 
       ['Sample', 'Made in Vietnam', 'ABC123', 'LOT: 2025001'] :
       ['Made in Vietnam', 'ABC123', 'LOT: 2025001', 'EXP: 2026/12'];
     
-    const fontSizes = [12, 14, 16, 18];
+    // More realistic font sizes based on typical label text
+    const fontSizes = type === 'sample' ? 
+      [16, 14, 12, 10] : // Sample: Title larger, details smaller
+      [14, 12, 10, 8];   // Printed: Slightly smaller overall
+    
     const fontStyles = ['Arial', 'Arial', 'Arial', 'Arial'];
     const colors = ['#000000', '#000000', '#000000', '#000000'];
     
-    // Simulate dimensions and position
-    const dimensions = { width: 40, height: 20 };
+    // More realistic dimensions based on typical label sizes
+    const dimensions = type === 'sample' ? 
+      { width: 40, height: 25 } : // Sample: Standard size
+      { width: 38, height: 23 };  // Printed: Slightly different (realistic variation)
+    
     const position = { x: region?.x || 0, y: region?.y || 0 };
     const quality = Math.floor(Math.random() * 20) + 80; // 80-100
     
+    // Simulate OCR with bounding boxes and possible missing texts
+    const allTexts = type === 'sample' ?
+      [
+        { value: 'Sample', bbox: { x: 10, y: 10, width: 60, height: 20 } },
+        { value: 'Made in Vietnam', bbox: { x: 10, y: 40, width: 120, height: 20 } },
+        { value: 'ABC123', bbox: { x: 10, y: 70, width: 60, height: 20 } },
+        { value: 'LOT: 2025001', bbox: { x: 10, y: 100, width: 100, height: 20 } }
+      ] :
+      [
+        { value: 'Made in Vietnam', bbox: { x: 10, y: 40, width: 120, height: 20 } },
+        { value: 'ABC123', bbox: { x: 10, y: 70, width: 60, height: 20 } },
+        { value: 'LOT: 2025001', bbox: { x: 10, y: 100, width: 100, height: 20 } },
+        { value: 'EXP: 2026/12', bbox: { x: 10, y: 130, width: 90, height: 20 } }
+      ];
+
+    // Simulate OCR missing some texts randomly
+    const detectedTexts = allTexts.filter(() => Math.random() > 0.2); // 80% chance to detect each
+    const text = detectedTexts.map(t => t.value);
+    
     return {
-      text: texts,
+      text,
+      detectedTexts,
       fontSize: fontSizes,
       fontStyle: fontStyles,
       colors: colors,
@@ -1882,14 +1935,11 @@ export class PrintLabelComponent implements OnInit {
   compareLabelInformation(sampleInfo: LabelSpecifications, printedInfo: LabelSpecifications, item: ScheduleItem): ComparisonResult {
     console.log('🔍 Comparing extracted label information...');
     
-    // Compare texts
-    const textMatch = this.compareTextArrays(sampleInfo.text || [], printedInfo.text || []);
+    // Compare texts with detailed analysis
+    const textComparison = this.compareTextArraysDetailed(sampleInfo.text || [], printedInfo.text || []);
     
     // Compare font sizes
     const fontMatch = this.compareNumberArrays(sampleInfo.fontSize || [], printedInfo.fontSize || []);
-    
-    // Compare colors
-    const colorMatch = this.compareTextArrays(sampleInfo.colors || [], printedInfo.colors || []);
     
     // Compare dimensions
     const sizeMatch = this.compareDimensions(sampleInfo.dimensions, printedInfo.dimensions);
@@ -1897,29 +1947,115 @@ export class PrintLabelComponent implements OnInit {
     // Compare positions
     const positionMatch = this.comparePositions(sampleInfo.position, printedInfo.position);
     
-    // Calculate overall match
-    const overallMatch = Math.round((textMatch + fontMatch + colorMatch + sizeMatch + positionMatch) / 5);
+    // Calculate overall match (excluding color)
+    const overallMatch = Math.round((textComparison.matchPercentage + fontMatch + sizeMatch + positionMatch) / 4);
     const result: 'Pass' | 'Fail' = overallMatch >= 85 ? 'Pass' : 'Fail';
     
-    // Generate mismatch details
+    // Generate detailed mismatch details
     const mismatchDetails: string[] = [];
-    if (textMatch < 90) mismatchDetails.push(`Text không khớp (${textMatch}%)`);
-    if (fontMatch < 90) mismatchDetails.push(`Font size sai lệch (${fontMatch}%)`);
-    if (colorMatch < 90) mismatchDetails.push(`Màu sắc không đúng (${colorMatch}%)`);
-    if (sizeMatch < 90) mismatchDetails.push(`Kích thước sai (${sizeMatch}%)`);
-    if (positionMatch < 90) mismatchDetails.push(`Vị trí không đúng (${positionMatch}%)`);
+    
+    // Add detailed text comparison results
+    if (textComparison.matchPercentage < 90) {
+      mismatchDetails.push(`📝 Text không khớp (${textComparison.matchPercentage}%)`);
+      mismatchDetails.push(...textComparison.details);
+    }
+    
+    if (fontMatch < 90) mismatchDetails.push(`🔤 Font size sai lệch (${fontMatch}%)`);
+    if (sizeMatch < 90) mismatchDetails.push(`📏 Kích thước sai (${sizeMatch}%)`);
+    if (positionMatch < 90) mismatchDetails.push(`📍 Vị trí không đúng (${positionMatch}%)`);
+    
+    // Compare detectedTexts for missing/undetected texts
+    const missingOnSample = (sampleInfo.detectedTexts || []).filter(
+      t => !(sampleInfo.text || []).includes(t.value)
+    );
+    const missingOnPrinted = (sampleInfo.detectedTexts || []).filter(
+      t => !(printedInfo.text || []).includes(t.value)
+    );
+    sampleInfo.missingTexts = missingOnSample;
+    printedInfo.missingTexts = missingOnPrinted;
     
     return {
       result,
       matchPercentage: overallMatch,
       mismatchDetails,
       detailedAnalysis: {
-        textMatch: textMatch,
+        textMatch: textComparison.matchPercentage,
         fontMatch: fontMatch,
-        colorMatch: colorMatch,
+        colorMatch: 100, // Always 100 since we don't compare colors
         sizeMatch: sizeMatch,
         positionMatch: positionMatch
       }
+    };
+  }
+
+  compareTextArraysDetailed(sample: string[], printed: string[]): {
+    matchPercentage: number;
+    details: string[];
+    sampleTexts: string[];
+    printedTexts: string[];
+  } {
+    if (sample.length === 0 || printed.length === 0) {
+      return {
+        matchPercentage: 0,
+        details: ['Không phát hiện được text nào'],
+        sampleTexts: sample,
+        printedTexts: printed
+      };
+    }
+    
+    let matches = 0;
+    const details: string[] = [];
+    const matchedTexts: string[] = [];
+    const missingTexts: string[] = [];
+    const extraTexts: string[] = [];
+    
+    // Check each sample text against printed texts
+    sample.forEach(sampleText => {
+      const found = printed.find(printedText => 
+        printedText.toLowerCase().includes(sampleText.toLowerCase()) || 
+        sampleText.toLowerCase().includes(printedText.toLowerCase())
+      );
+      
+      if (found) {
+        matches++;
+        matchedTexts.push(`${sampleText} ↔ ${found}`);
+      } else {
+        missingTexts.push(sampleText);
+      }
+    });
+    
+    // Find extra texts in printed that are not in sample
+    printed.forEach(printedText => {
+      const found = sample.find(sampleText => 
+        printedText.toLowerCase().includes(sampleText.toLowerCase()) || 
+        sampleText.toLowerCase().includes(printedText.toLowerCase())
+      );
+      
+      if (!found) {
+        extraTexts.push(printedText);
+      }
+    });
+    
+    // Generate detailed comparison report
+    if (matchedTexts.length > 0) {
+      details.push(`✅ Text khớp: ${matchedTexts.join(', ')}`);
+    }
+    
+    if (missingTexts.length > 0) {
+      details.push(`❌ Text thiếu trên tem in: ${missingTexts.join(', ')}`);
+    }
+    
+    if (extraTexts.length > 0) {
+      details.push(`➕ Text thêm trên tem in: ${extraTexts.join(', ')}`);
+    }
+    
+    const matchPercentage = Math.round((matches / sample.length) * 100);
+    
+    return {
+      matchPercentage,
+      details,
+      sampleTexts: sample,
+      printedTexts: printed
     };
   }
 
@@ -2231,8 +2367,20 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
 
-    const details = item.labelComparison.mismatchDetails.join('\n• ');
-    const message = `❌ Chi tiết lỗi cho ${item.maTem} - ${item.maHang}:\n\n• ${details}\n\nĐộ khớp: ${item.labelComparison.matchPercentage}%`;
+    // Separate text details from other details
+    const textDetails = item.labelComparison.mismatchDetails.filter(detail => detail.includes('📝'));
+    const otherDetails = item.labelComparison.mismatchDetails.filter(detail => !detail.includes('📝'));
+    
+    let detailsText = '';
+    if (textDetails.length > 0) {
+      detailsText += '\n\n📝 Chi tiết so sánh Text:\n' + textDetails.map(detail => `• ${detail.replace('📝 Text không khớp (', '').replace('%)', '')}`).join('\n');
+    }
+    
+    if (otherDetails.length > 0) {
+      detailsText += '\n\n🔍 Các vấn đề khác:\n' + otherDetails.map(detail => `• ${detail}`).join('\n');
+    }
+    
+    const message = `❌ Chi tiết lỗi cho ${item.maTem} - ${item.maHang}:\n\nĐộ khớp: ${item.labelComparison.matchPercentage}%${detailsText}`;
     
     alert(message);
   }
