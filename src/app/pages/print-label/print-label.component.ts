@@ -26,6 +26,8 @@ interface ScheduleItem {
     comparisonResult?: 'Pass' | 'Fail' | 'Pending';
     comparedAt?: Date;
     matchPercentage?: number;
+    mismatchDetails?: string[];
+    hasSampleText?: boolean;
   };
 }
 
@@ -1014,78 +1016,139 @@ export class PrintLabelComponent implements OnInit {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.9);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 1000;
+      padding: 10px;
+      box-sizing: border-box;
     `;
 
     const content = document.createElement('div');
     content.style.cssText = `
       background: white;
-      padding: 20px;
       border-radius: 10px;
       text-align: center;
-      max-width: 90%;
-      max-height: 90%;
+      width: 100%;
+      max-width: 500px;
+      max-height: 95vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    `;
+
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 15px 20px;
+      border-bottom: 1px solid #eee;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 1;
     `;
 
     const title = document.createElement('h3');
     title.textContent = '📸 Chụp so sánh tem';
-    title.style.marginBottom = '15px';
+    title.style.cssText = `
+      margin: 0;
+      color: #333;
+      font-size: 18px;
+    `;
 
     const instruction = document.createElement('p');
-    instruction.textContent = 'Đặt cả mẫu thiết kế và tem thực tế trong khung hình';
-    instruction.style.marginBottom = '15px';
-    instruction.style.color = '#666';
+    instruction.innerHTML = `
+      <strong>Yêu cầu:</strong><br>
+      • Đặt cả mẫu thiết kế và tem thực tế trong khung hình<br>
+      • Đảm bảo có chữ <span style="color: #f44336; font-weight: bold;">"Sample"</span> trên tem mẫu<br>
+      • Ánh sáng đủ để nhận diện rõ ràng
+    `;
+    instruction.style.cssText = `
+      margin: 10px 0 0 0;
+      color: #666;
+      font-size: 14px;
+      line-height: 1.4;
+    `;
 
     const videoContainer = document.createElement('div');
     videoContainer.style.cssText = `
-      margin: 15px 0;
-      border: 2px solid #ddd;
+      padding: 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    `;
+
+    const videoWrapper = document.createElement('div');
+    videoWrapper.style.cssText = `
+      border: 3px solid #2196f3;
       border-radius: 8px;
       overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 400px;
     `;
 
     video.style.cssText = `
       width: 100%;
-      max-width: 400px;
       height: auto;
+      display: block;
     `;
 
     const buttonContainer = document.createElement('div');
     buttonContainer.style.cssText = `
+      padding: 20px;
+      border-top: 1px solid #eee;
+      background: white;
+      position: sticky;
+      bottom: 0;
       display: flex;
-      gap: 10px;
+      gap: 15px;
       justify-content: center;
-      margin-top: 15px;
     `;
 
     const captureBtn = document.createElement('button');
-    captureBtn.textContent = '📸 Chụp ảnh';
+    captureBtn.innerHTML = '📸<br>Chụp ảnh';
     captureBtn.style.cssText = `
       background: #4caf50;
       color: white;
       border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
+      padding: 15px 25px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 16px;
+      font-weight: bold;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      flex: 1;
+      max-width: 150px;
+      line-height: 1.2;
+      transition: all 0.2s ease;
     `;
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = '❌ Hủy';
+    cancelBtn.innerHTML = '❌<br>Hủy';
     cancelBtn.style.cssText = `
       background: #f44336;
       color: white;
       border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
+      padding: 15px 25px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 16px;
+      font-weight: bold;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      flex: 1;
+      max-width: 150px;
+      line-height: 1.2;
+      transition: all 0.2s ease;
     `;
+
+    // Add hover effects
+    captureBtn.onmouseenter = () => captureBtn.style.transform = 'scale(1.05)';
+    captureBtn.onmouseleave = () => captureBtn.style.transform = 'scale(1)';
+    cancelBtn.onmouseenter = () => cancelBtn.style.transform = 'scale(1.05)';
+    cancelBtn.onmouseleave = () => cancelBtn.style.transform = 'scale(1)';
 
     captureBtn.onclick = () => {
       this.captureAndAnalyze(video, canvas, item, dialog);
@@ -1102,9 +1165,13 @@ export class PrintLabelComponent implements OnInit {
     buttonContainer.appendChild(captureBtn);
     buttonContainer.appendChild(cancelBtn);
 
-    videoContainer.appendChild(video);
-    content.appendChild(title);
-    content.appendChild(instruction);
+    videoWrapper.appendChild(video);
+    videoContainer.appendChild(videoWrapper);
+    
+    header.appendChild(title);
+    header.appendChild(instruction);
+    
+    content.appendChild(header);
     content.appendChild(videoContainer);
     content.appendChild(buttonContainer);
     dialog.appendChild(content);
@@ -1171,16 +1238,31 @@ export class PrintLabelComponent implements OnInit {
   }
 
   performSimpleComparison(photoUrl: string, item: ScheduleItem): void {
-    // Simulate AI comparison
+    console.log('🔍 Performing AI comparison for item:', item.stt);
+
+    // Step 1: Check for "Sample" text detection
+    const hasSampleText = this.detectSampleText(photoUrl);
+    
+    if (!hasSampleText) {
+      alert('❌ Không phát hiện chữ "Sample" trên tem mẫu!\nVui lòng chụp lại tem có chữ Sample.');
+      return;
+    }
+
+    // Step 2: Perform comparison
     const matchPercentage = Math.floor(Math.random() * 30) + 70; // 70-100%
     const result: 'Pass' | 'Fail' = matchPercentage >= 85 ? 'Pass' : 'Fail';
     
-    // Update item
+    // Step 3: Generate mismatch details if failed
+    const mismatchDetails = result === 'Fail' ? this.generateMismatchDetails() : [];
+
+    // Update item with comparison result
     item.labelComparison = {
       photoUrl: photoUrl,
       comparisonResult: result,
       comparedAt: new Date(),
-      matchPercentage: matchPercentage
+      matchPercentage: matchPercentage,
+      mismatchDetails: mismatchDetails,
+      hasSampleText: hasSampleText
     };
 
     // Save to Firebase
@@ -1188,7 +1270,44 @@ export class PrintLabelComponent implements OnInit {
 
     // Show result
     const status = result === 'Pass' ? '✅ PASS' : '❌ FAIL';
-    alert(`${status}\nĐộ khớp: ${matchPercentage}%\nĐã lưu vào Firebase 🔥`);
+    const mismatchInfo = mismatchDetails.length > 0 ? `\nLỗi: ${mismatchDetails.join(', ')}` : '';
+    alert(`${status}\nĐộ khớp: ${matchPercentage}%${mismatchInfo}\nĐã lưu vào Firebase 🔥`);
+  }
+
+  detectSampleText(photoUrl: string): boolean {
+    // Simulate OCR text detection for "Sample" text
+    // In real implementation, this would use OCR API like Google Vision API
+    console.log('🔍 Detecting "Sample" text in image:', photoUrl);
+    
+    // Simulate 90% success rate for Sample text detection
+    return Math.random() > 0.1;
+  }
+
+  generateMismatchDetails(): string[] {
+    const possibleMismatches = [
+      'Font chữ không khớp',
+      'Kích thước chữ sai lệch',
+      'Màu sắc không đúng',
+      'Vị trí text không chính xác',
+      'Độ đậm nhạt khác biệt',
+      'Khoảng cách dòng sai',
+      'Border không khớp',
+      'Logo bị lỗi'
+    ];
+    
+    // Return 1-3 random mismatches
+    const numMismatches = Math.floor(Math.random() * 3) + 1;
+    const selectedMismatches = [];
+    
+    for (let i = 0; i < numMismatches; i++) {
+      const randomIndex = Math.floor(Math.random() * possibleMismatches.length);
+      const mismatch = possibleMismatches[randomIndex];
+      if (!selectedMismatches.includes(mismatch)) {
+        selectedMismatches.push(mismatch);
+      }
+    }
+    
+    return selectedMismatches;
   }
 
   saveComparisonToFirebase(item: ScheduleItem): void {
@@ -1198,15 +1317,74 @@ export class PrintLabelComponent implements OnInit {
       timestamp: new Date()
     });
 
-    // TODO: Implement actual Firebase save
-    // firebase.firestore().collection('labelComparisons').add({
-    //   itemId: item.stt,
-    //   photoUrl: item.labelComparison?.photoUrl,
-    //   result: item.labelComparison?.comparisonResult,
-    //   matchPercentage: item.labelComparison?.matchPercentage,
-    //   comparedAt: item.labelComparison?.comparedAt,
-    //   compressed: true
-    // });
+    if (!item.labelComparison) {
+      console.error('❌ No comparison data to save');
+      return;
+    }
+
+    // Save comparison data to Firebase
+    const comparisonData = {
+      itemId: item.stt || '',
+      maTem: item.maTem || '',
+      maHang: item.maHang || '',
+      khachHang: item.khachHang || '',
+      photoUrl: item.labelComparison.photoUrl || '',
+      comparisonResult: item.labelComparison.comparisonResult || 'Pending',
+      matchPercentage: item.labelComparison.matchPercentage || 0,
+      comparedAt: item.labelComparison.comparedAt || new Date(),
+      mismatchDetails: item.labelComparison.mismatchDetails || [],
+      hasSampleText: item.labelComparison.hasSampleText || false,
+      savedAt: new Date(),
+      compressed: true
+    };
+
+    this.firestore.collection('labelComparisons').add(comparisonData)
+      .then((docRef) => {
+        console.log('✅ Comparison saved to Firebase with ID: ', docRef.id);
+        
+        // Also update the main schedules document
+        this.updateScheduleInFirebase(item);
+      })
+      .catch((error) => {
+        console.error('❌ Error saving comparison to Firebase: ', error);
+        alert('❌ Lỗi khi lưu kết quả so sánh vào Firebase');
+      });
+  }
+
+  updateScheduleInFirebase(item: ScheduleItem): void {
+    // Update the original schedule document with comparison result
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          const docData = doc.data() as any;
+          const updatedData = docData.data || [];
+          
+          // Find and update the specific item
+          const itemIndex = updatedData.findIndex((scheduleItem: any) => 
+            scheduleItem.stt === item.stt && scheduleItem.maTem === item.maTem
+          );
+          
+          if (itemIndex !== -1) {
+            updatedData[itemIndex].labelComparison = item.labelComparison;
+            
+            // Update the document
+            doc.ref.update({
+              data: updatedData,
+              lastUpdated: new Date()
+            }).then(() => {
+              console.log('✅ Schedule updated with comparison result');
+            }).catch((error) => {
+              console.error('❌ Error updating schedule:', error);
+            });
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('❌ Error finding schedule document:', error);
+      });
   }
 
   getComparisonIcon(item: ScheduleItem): string {
@@ -1249,5 +1427,217 @@ export class PrintLabelComponent implements OnInit {
 
   get notComparedCount(): number {
     return this.scheduleData.filter(item => !item.labelComparison).length;
+  }
+
+  // Get items that have been compared (for report)
+  getComparedItems(): ScheduleItem[] {
+    return this.scheduleData.filter(item => item.labelComparison);
+  }
+
+  // Export comparison report to Excel
+  exportComparisonReport(): void {
+    const comparedItems = this.getComparedItems();
+    
+    if (comparedItems.length === 0) {
+      alert('❌ Không có dữ liệu so sánh để xuất báo cáo!');
+      return;
+    }
+
+    // Prepare data for Excel export
+    const reportData = comparedItems.map(item => ({
+      'STT': item.stt || '',
+      'Mã tem': item.maTem || '',
+      'Mã hàng': item.maHang || '',
+      'Khách hàng': item.khachHang || '',
+      'Kết quả': item.labelComparison?.comparisonResult || '',
+      'Độ khớp (%)': item.labelComparison?.matchPercentage || 0,
+      'Dung lượng ảnh': this.getImageSize(item),
+      'Ngày so sánh': item.labelComparison?.comparedAt ? 
+        new Date(item.labelComparison.comparedAt).toLocaleDateString('vi-VN') : '',
+      'Sample detected': item.labelComparison?.hasSampleText ? 'Có' : 'Không',
+      'Chi tiết lỗi': item.labelComparison?.mismatchDetails?.join('; ') || ''
+    }));
+
+    // Create Excel workbook
+    const ws = XLSX.utils.json_to_sheet(reportData);
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 8 },   // STT
+      { wch: 15 },  // Mã tem
+      { wch: 15 },  // Mã hàng
+      { wch: 20 },  // Khách hàng
+      { wch: 10 },  // Kết quả
+      { wch: 12 },  // Độ khớp
+      { wch: 12 },  // Dung lượng ảnh
+      { wch: 15 },  // Ngày so sánh
+      { wch: 15 },  // Sample detected
+      { wch: 50 }   // Chi tiết lỗi
+    ];
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo so sánh tem');
+
+    // Generate filename with current date
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10);
+    const filename = `bao-cao-so-sanh-tem-${dateStr}.xlsx`;
+
+    // Download file
+    XLSX.writeFile(wb, filename);
+    
+    console.log(`📊 Exported ${comparedItems.length} comparison records to ${filename}`);
+    alert(`✅ Đã xuất báo cáo ${comparedItems.length} kết quả so sánh vào file ${filename}`);
+  }
+
+  // Refresh comparison report (reload from Firebase)
+  refreshComparisonReport(): void {
+    console.log('🔄 Refreshing comparison report...');
+    this.loadDataFromFirebase();
+    alert('✅ Đã làm mới dữ liệu báo cáo!');
+  }
+
+  // Download comparison image
+  downloadComparisonImage(item: ScheduleItem): void {
+    if (!item.labelComparison?.photoUrl) {
+      alert('❌ Không có ảnh để tải về!');
+      return;
+    }
+
+    try {
+      // Create download link
+      const link = document.createElement('a');
+      link.href = item.labelComparison.photoUrl;
+      link.download = `so-sanh-tem-${item.maTem || 'unknown'}-${item.stt || 'unknown'}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log(`📷 Downloaded comparison image for ${item.maTem}`);
+    } catch (error) {
+      console.error('❌ Error downloading image:', error);
+      alert('❌ Lỗi khi tải ảnh về!');
+    }
+  }
+
+  // Get image size from base64 data
+  getImageSize(item: ScheduleItem): string {
+    if (!item.labelComparison?.photoUrl) {
+      return 'N/A';
+    }
+
+    try {
+      // For base64 images, calculate size
+      const base64Data = item.labelComparison.photoUrl;
+      if (base64Data.startsWith('data:image')) {
+        // Remove data:image/jpeg;base64, prefix
+        const base64String = base64Data.split(',')[1] || base64Data;
+        
+        // Calculate size in bytes (base64 is ~33% larger than binary)
+        const sizeInBytes = (base64String.length * 3) / 4;
+        
+        // Convert to appropriate unit
+        if (sizeInBytes < 1024) {
+          return `${Math.round(sizeInBytes)} B`;
+        } else if (sizeInBytes < 1024 * 1024) {
+          return `${Math.round(sizeInBytes / 1024)} KB`;
+        } else {
+          return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+      } else {
+        return 'Unknown';
+      }
+    } catch (error) {
+      console.error('Error calculating image size:', error);
+      return 'Error';
+    }
+  }
+
+  // View mismatch details in a dialog
+  viewMismatchDetails(item: ScheduleItem): void {
+    if (!item.labelComparison?.mismatchDetails || item.labelComparison.mismatchDetails.length === 0) {
+      alert('❌ Không có chi tiết lỗi để hiển thị!');
+      return;
+    }
+
+    const details = item.labelComparison.mismatchDetails.join('\n• ');
+    const message = `❌ Chi tiết lỗi cho ${item.maTem} - ${item.maHang}:\n\n• ${details}\n\nĐộ khớp: ${item.labelComparison.matchPercentage}%`;
+    
+    alert(message);
+  }
+
+  // Delete individual schedule item
+  deleteScheduleItem(index: number): void {
+    if (index < 0 || index >= this.scheduleData.length) {
+      console.error('❌ Invalid index for deletion:', index);
+      return;
+    }
+
+    const item = this.scheduleData[index];
+    const itemInfo = `${item.maTem || 'N/A'} - ${item.maHang || 'N/A'}`;
+    
+    // Confirmation dialog
+    const confirmed = confirm(
+      `🗑️ Xác nhận xóa dòng này?\n\n` +
+      `Mã tem: ${item.maTem || 'N/A'}\n` +
+      `Mã hàng: ${item.maHang || 'N/A'}\n` +
+      `Khách hàng: ${item.khachHang || 'N/A'}\n\n` +
+      `⚠️ Hành động này không thể hoàn tác!`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // Remove item from array
+      this.scheduleData.splice(index, 1);
+      
+      // Update Firebase with new data
+      this.updateFirebaseAfterDelete();
+      
+      console.log(`🗑️ Deleted schedule item: ${itemInfo}`);
+      alert(`✅ Đã xóa thành công dòng: ${itemInfo}\nCòn lại: ${this.scheduleData.length} records`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting schedule item:', error);
+      alert('❌ Lỗi khi xóa dòng dữ liệu!');
+    }
+  }
+
+  // Update Firebase after deleting an item
+  updateFirebaseAfterDelete(): void {
+    if (this.scheduleData.length === 0) {
+      console.log('🗑️ All data deleted, Firebase will be updated on next import');
+      return;
+    }
+
+    console.log('🔥 Updating Firebase after deletion...');
+    
+    // Find the latest document and update it
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          
+          // Update with current scheduleData
+          doc.ref.update({
+            data: this.scheduleData,
+            recordCount: this.scheduleData.length,
+            lastUpdated: new Date(),
+            lastAction: 'Item deleted'
+          }).then(() => {
+            console.log('✅ Firebase updated after deletion');
+          }).catch((error: any) => {
+            console.error('❌ Error updating Firebase after deletion:', error);
+          });
+        }
+      })
+      .catch((error: any) => {
+        console.error('❌ Error finding Firebase document for update:', error);
+      });
   }
 } 

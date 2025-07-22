@@ -8,6 +8,72 @@
   z-index: 1;
   overflow: visible;
 
+  // Mobile Responsive Design
+  @media (max-width: 768px) {
+    padding: 10px;
+    min-height: calc(100vh - 60px);
+    
+    // Table responsive adjustments
+    .table-container {
+      font-size: 12px;
+      
+      th, td {
+        padding: 6px 4px !important;
+        min-width: 60px !important;
+      }
+      
+      // Action buttons mobile optimization
+      button {
+        padding: 4px 6px !important;
+        font-size: 14px !important;
+        
+        &:hover {
+          transform: scale(1.05) !important;
+        }
+      }
+    }
+
+    // Comparison report table mobile adjustments
+    table {
+      th, td {
+        &:nth-child(6) { // Dung lượng column
+          min-width: 50px !important;
+        }
+        &:nth-child(7) { // Ngày column  
+          min-width: 60px !important;
+        }
+        &:nth-child(8) { // Thao tác column
+          min-width: 60px !important;
+        }
+      }
+    }
+  }
+
+  @media (max-width: 480px) {
+    padding: 5px;
+    
+    .table-container {
+      font-size: 11px;
+      
+      th, td {
+        padding: 4px 2px !important;
+        min-width: 50px !important;
+      }
+      
+      // Stack action buttons vertically on very small screens
+      .action-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        
+        button {
+          padding: 3px 5px !important;
+          font-size: 12px !important;
+        }
+      }
+    }
+  }
+
   // Force all child elements to not interfere with tabs
   * {
     pointer-events: auto;
@@ -48,6 +114,21 @@
       outline: none;
       pointer-events: auto !important;
       z-index: 10000 !important;
+
+      // Mobile responsive
+      @media (max-width: 768px) {
+        min-width: 150px;
+        padding: 12px 20px;
+        font-size: 13px;
+      }
+
+      @media (max-width: 480px) {
+        min-width: 120px;
+        padding: 10px 15px;
+        font-size: 12px;
+        flex-direction: column;
+        gap: 4px;
+      }
       position: relative !important;
 
       .material-icons, i {
