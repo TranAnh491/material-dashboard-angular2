@@ -972,195 +972,285 @@ export class PrintLabelComponent implements OnInit {
 
   // Simplified Label Comparison Methods
   captureAndCompareLabel(item: ScheduleItem): void {
+    console.log('🚀 Starting camera capture for item:', item.maTem);
+    
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert('❌ Camera not available on this device');
       return;
     }
 
+    // Enhanced camera constraints for mobile
+    const constraints = {
+      video: {
+        facingMode: 'environment', // Use rear camera
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+        aspectRatio: 16/9
+      }
+    };
+
     // Request camera access
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(constraints)
       .then(stream => {
+        console.log('📹 Camera stream obtained');
+        
         // Create video element for camera preview
         const video = document.createElement('video');
         video.srcObject = stream;
-        video.play();
-
+        video.autoplay = true;
+        video.playsInline = true; // Important for iOS
+        video.muted = true; // Prevent audio feedback
+        
         // Create canvas for capturing
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
         if (!ctx) {
           alert('❌ Cannot create canvas context');
+          stream.getTracks().forEach(track => track.stop());
           return;
         }
 
         // Set canvas size
-        canvas.width = 640;
-        canvas.height = 480;
+        canvas.width = 1280;
+        canvas.height = 720;
 
-        // Show capture dialog
-        const captureDialog = this.createCaptureDialog(video, canvas, item);
-        document.body.appendChild(captureDialog);
+        // Wait for video to be ready
+        video.onloadedmetadata = () => {
+          console.log('📺 Video metadata loaded, showing dialog');
+          // Show capture dialog
+          const captureDialog = this.createCaptureDialog(video, canvas, item);
+          document.body.appendChild(captureDialog);
+        };
+
+        // Fallback in case onloadedmetadata doesn't fire
+        setTimeout(() => {
+          if (!document.querySelector('.camera-dialog')) {
+            console.log('⏰ Fallback: Showing dialog after timeout');
+            const captureDialog = this.createCaptureDialog(video, canvas, item);
+            document.body.appendChild(captureDialog);
+          }
+        }, 2000);
       })
       .catch(error => {
-        console.error('Camera error:', error);
-        alert('❌ Cannot access camera. Please check permissions.');
+        console.error('❌ Camera error:', error);
+        if (error.name === 'NotAllowedError') {
+          alert('❌ Camera permission denied. Please allow camera access and try again.');
+        } else if (error.name === 'NotFoundError') {
+          alert('❌ No camera found on this device.');
+        } else {
+          alert('❌ Cannot access camera: ' + error.message);
+        }
       });
   }
 
   createCaptureDialog(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem): HTMLElement {
     const dialog = document.createElement('div');
+    dialog.className = 'camera-dialog';
     dialog.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.9);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 10px;
-      box-sizing: border-box;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(0,0,0,0.95) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+      z-index: 99999 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
     `;
 
     const content = document.createElement('div');
     content.style.cssText = `
-      background: white;
-      border-radius: 10px;
-      text-align: center;
-      width: 100%;
-      max-width: 500px;
-      max-height: 95vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
+      background: white !important;
+      border-radius: 0 !important;
+      text-align: center !important;
+      width: 100% !important;
+      height: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
     `;
 
     const header = document.createElement('div');
     header.style.cssText = `
-      padding: 15px 20px;
-      border-bottom: 1px solid #eee;
-      position: sticky;
-      top: 0;
-      background: white;
-      z-index: 1;
+      padding: 15px 20px !important;
+      border-bottom: 2px solid #eee !important;
+      background: #f8f9fa !important;
+      flex-shrink: 0 !important;
+      position: relative !important;
     `;
 
     const title = document.createElement('h3');
     title.textContent = '📸 Chụp so sánh tem';
     title.style.cssText = `
-      margin: 0;
-      color: #333;
-      font-size: 18px;
+      margin: 0 !important;
+      color: #333 !important;
+      font-size: 18px !important;
+      font-weight: bold !important;
     `;
 
     const instruction = document.createElement('p');
     instruction.innerHTML = `
       <strong>Yêu cầu:</strong><br>
       • Đặt cả mẫu thiết kế và tem thực tế trong khung hình<br>
-      • Đảm bảo có chữ <span style="color: #f44336; font-weight: bold;">"Sample"</span> trên tem mẫu<br>
-      • Ánh sáng đủ để nhận diện rõ ràng
+      • Đảm bảo có chữ <span style="color: #f44336; font-weight: bold;">"Sample"</span> trên tem mẫu
     `;
     instruction.style.cssText = `
-      margin: 10px 0 0 0;
-      color: #666;
-      font-size: 14px;
-      line-height: 1.4;
+      margin: 8px 0 0 0 !important;
+      color: #666 !important;
+      font-size: 12px !important;
+      line-height: 1.3 !important;
     `;
 
     const videoContainer = document.createElement('div');
     videoContainer.style.cssText = `
-      padding: 20px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      flex: 1 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 10px !important;
+      background: #000 !important;
+      position: relative !important;
     `;
 
     const videoWrapper = document.createElement('div');
     videoWrapper.style.cssText = `
-      border: 3px solid #2196f3;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      width: 100%;
-      max-width: 400px;
+      width: 100% !important;
+      max-width: 100% !important;
+      aspect-ratio: 4/3 !important;
+      border: 2px solid #4caf50 !important;
+      border-radius: 8px !important;
+      overflow: hidden !important;
+      background: #000 !important;
+      position: relative !important;
     `;
 
     video.style.cssText = `
-      width: 100%;
-      height: auto;
-      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      display: block !important;
     `;
 
     const buttonContainer = document.createElement('div');
     buttonContainer.style.cssText = `
-      padding: 20px;
-      border-top: 1px solid #eee;
-      background: white;
-      position: sticky;
-      bottom: 0;
-      display: flex;
-      gap: 15px;
-      justify-content: center;
+      padding: 15px 20px !important;
+      border-top: 2px solid #eee !important;
+      background: #f8f9fa !important;
+      flex-shrink: 0 !important;
+      display: flex !important;
+      gap: 15px !important;
+      justify-content: center !important;
+      align-items: center !important;
+      position: relative !important;
     `;
 
     const captureBtn = document.createElement('button');
-    captureBtn.innerHTML = '📸<br>Chụp ảnh';
+    captureBtn.innerHTML = '📸 Chụp ảnh';
     captureBtn.style.cssText = `
-      background: #4caf50;
-      color: white;
-      border: none;
-      padding: 15px 25px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: bold;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      flex: 1;
-      max-width: 150px;
-      line-height: 1.2;
-      transition: all 0.2s ease;
+      background: #4caf50 !important;
+      color: white !important;
+      border: none !important;
+      padding: 18px 30px !important;
+      border-radius: 12px !important;
+      cursor: pointer !important;
+      font-size: 18px !important;
+      font-weight: bold !important;
+      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3) !important;
+      flex: 1 !important;
+      max-width: 200px !important;
+      min-height: 60px !important;
+      transition: all 0.2s ease !important;
+      text-align: center !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      -webkit-tap-highlight-color: transparent !important;
+      touch-action: manipulation !important;
     `;
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.innerHTML = '❌<br>Hủy';
+    cancelBtn.innerHTML = '❌ Hủy';
     cancelBtn.style.cssText = `
-      background: #f44336;
-      color: white;
-      border: none;
-      padding: 15px 25px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: bold;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      flex: 1;
-      max-width: 150px;
-      line-height: 1.2;
-      transition: all 0.2s ease;
+      background: #f44336 !important;
+      color: white !important;
+      border: none !important;
+      padding: 18px 30px !important;
+      border-radius: 12px !important;
+      cursor: pointer !important;
+      font-size: 18px !important;
+      font-weight: bold !important;
+      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3) !important;
+      flex: 1 !important;
+      max-width: 200px !important;
+      min-height: 60px !important;
+      transition: all 0.2s ease !important;
+      text-align: center !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      -webkit-tap-highlight-color: transparent !important;
+      touch-action: manipulation !important;
     `;
 
-    // Add hover effects
-    captureBtn.onmouseenter = () => captureBtn.style.transform = 'scale(1.05)';
-    captureBtn.onmouseleave = () => captureBtn.style.transform = 'scale(1)';
-    cancelBtn.onmouseenter = () => cancelBtn.style.transform = 'scale(1.05)';
-    cancelBtn.onmouseleave = () => cancelBtn.style.transform = 'scale(1)';
-
-    captureBtn.onclick = () => {
+    // Add multiple event handlers for better mobile support
+    const handleCaptureClick = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('📸 Capture button activated!');
       this.captureAndAnalyze(video, canvas, item, dialog);
     };
 
-    cancelBtn.onclick = () => {
+    const handleCancelClick = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('❌ Cancel button activated!');
       document.body.removeChild(dialog);
       if (video.srcObject) {
         const tracks = (video.srcObject as MediaStream).getTracks();
         tracks.forEach(track => track.stop());
       }
     };
+
+    // Add multiple event types for better mobile compatibility
+    captureBtn.addEventListener('click', handleCaptureClick);
+    captureBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      captureBtn.style.transform = 'scale(0.95)';
+      captureBtn.style.background = '#45a049';
+    });
+    captureBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      captureBtn.style.transform = 'scale(1)';
+      captureBtn.style.background = '#4caf50';
+      handleCaptureClick(e);
+    });
+    
+    cancelBtn.addEventListener('click', handleCancelClick);
+    cancelBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      cancelBtn.style.transform = 'scale(0.95)';
+      cancelBtn.style.background = '#d32f2f';
+    });
+    cancelBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      cancelBtn.style.transform = 'scale(1)';
+      cancelBtn.style.background = '#f44336';
+      handleCancelClick(e);
+    });
+
+    // No need for onclick handlers as we have addEventListener above
+
+    // Ensure buttons are clickable
+    captureBtn.style.pointerEvents = 'auto';
+    cancelBtn.style.pointerEvents = 'auto';
+    buttonContainer.style.pointerEvents = 'auto';
 
     buttonContainer.appendChild(captureBtn);
     buttonContainer.appendChild(cancelBtn);
@@ -1176,6 +1266,16 @@ export class PrintLabelComponent implements OnInit {
     content.appendChild(buttonContainer);
     dialog.appendChild(content);
 
+    // Add debug info
+    console.log('🎥 Camera dialog created with buttons:', {
+      captureBtn: captureBtn,
+      cancelBtn: cancelBtn,
+      buttonContainer: buttonContainer
+    });
+
+    // Ensure dialog is on top
+    dialog.style.zIndex = '999999';
+    
     return dialog;
   }
 
@@ -1439,7 +1539,7 @@ export class PrintLabelComponent implements OnInit {
     const comparedItems = this.getComparedItems();
     
     if (comparedItems.length === 0) {
-      alert('❌ Không có dữ liệu so sánh để xuất báo cáo!');
+      alert('❌ Không có dữ liệu so sánh để xuất báo cáo!\nVui lòng thực hiện so sánh tem trước khi xuất báo cáo.');
       return;
     }
 
@@ -1565,6 +1665,119 @@ export class PrintLabelComponent implements OnInit {
     const message = `❌ Chi tiết lỗi cho ${item.maTem} - ${item.maHang}:\n\n• ${details}\n\nĐộ khớp: ${item.labelComparison.matchPercentage}%`;
     
     alert(message);
+  }
+
+  // Delete comparison image and reset comparison data
+  deleteComparisonImage(item: ScheduleItem): void {
+    if (!item.labelComparison) {
+      alert('❌ Không có dữ liệu so sánh để xóa!');
+      return;
+    }
+
+    const itemInfo = `${item.maTem || 'N/A'} - ${item.maHang || 'N/A'}`;
+    
+    // Confirmation dialog
+    const confirmed = confirm(
+      `🗑️ Xác nhận xóa dữ liệu so sánh?\n\n` +
+      `Mã tem: ${item.maTem || 'N/A'}\n` +
+      `Mã hàng: ${item.maHang || 'N/A'}\n` +
+      `Kết quả: ${item.labelComparison.comparisonResult || 'N/A'}\n` +
+      `Độ khớp: ${item.labelComparison.matchPercentage || 0}%\n\n` +
+      `⚠️ Hành động này sẽ xóa:\n` +
+      `• Hình ảnh đã chụp\n` +
+      `• Kết quả so sánh\n` +
+      `• Chi tiết lỗi\n\n` +
+      `Bạn có chắc chắn muốn xóa?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // Remove comparison data from item
+      delete item.labelComparison;
+      
+      // Update Firebase - remove from comparison collection and update main schedule
+      this.deleteComparisonFromFirebase(item);
+      
+      console.log(`🗑️ Deleted comparison data for: ${itemInfo}`);
+      alert(`✅ Đã xóa thành công dữ liệu so sánh cho: ${itemInfo}`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting comparison data:', error);
+      alert('❌ Lỗi khi xóa dữ liệu so sánh!');
+    }
+  }
+
+  // Delete comparison from Firebase
+  deleteComparisonFromFirebase(item: ScheduleItem): void {
+    console.log('🔥 Deleting comparison from Firebase for item:', item.stt);
+    
+    // Delete from labelComparisons collection
+    this.firestore.collection('labelComparisons', ref => 
+      ref.where('itemId', '==', item.stt || '')
+        .where('maTem', '==', item.maTem || '')
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          // Delete all matching comparison documents
+          const batch = this.firestore.firestore.batch();
+          querySnapshot.docs.forEach((doc: any) => {
+            batch.delete(doc.ref);
+          });
+          
+          return batch.commit();
+        }
+        return Promise.resolve();
+      })
+      .then(() => {
+        console.log('✅ Comparison deleted from labelComparisons collection');
+        
+        // Update main schedule document
+        return this.updateScheduleAfterComparisonDelete(item);
+      })
+      .catch((error) => {
+        console.error('❌ Error deleting from Firebase:', error);
+      });
+  }
+
+  // Update main schedule after deleting comparison
+  updateScheduleAfterComparisonDelete(item: ScheduleItem): Promise<void> {
+    return this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          const docData = doc.data() as any;
+          const updatedData = docData.data || [];
+          
+          // Find and update the specific item
+          const itemIndex = updatedData.findIndex((scheduleItem: any) => 
+            scheduleItem.stt === item.stt && scheduleItem.maTem === item.maTem
+          );
+          
+          if (itemIndex !== -1) {
+            // Remove labelComparison from the item
+            delete updatedData[itemIndex].labelComparison;
+            
+            // Update the document
+            return doc.ref.update({
+              data: updatedData,
+              lastUpdated: new Date(),
+              lastAction: 'Comparison deleted'
+            }).then(() => {
+              console.log('✅ Schedule updated after comparison deletion');
+            });
+          }
+        }
+        return Promise.resolve();
+      })
+      .catch((error) => {
+        console.error('❌ Error updating schedule after comparison deletion:', error);
+        return Promise.resolve();
+      });
   }
 
   // Delete individual schedule item

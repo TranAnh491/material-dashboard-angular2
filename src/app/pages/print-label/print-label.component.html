@@ -93,8 +93,8 @@
           <div style="background: #e3f2fd; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #1976d2;">
             📊 Total: {{scheduleData.length}} records
           </div>
-          <div style="font-size: 12px; color: #666;">
-            💡 Click 🗑️ để xóa từng dòng, click 📸 để so sánh tem
+          <div style="font-size: 11px; color: #666; text-align: right; line-height: 1.3;">
+            💡 📸 So sánh | 🗑️📸 Xóa so sánh | 🗑️📋 Xóa dòng
           </div>
         </div>
         
@@ -178,22 +178,31 @@
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ghiChu || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <div class="action-buttons" style="display: flex; gap: 5px; justify-content: center; align-items: center;">
+                  <div class="action-buttons" style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: wrap;">
                     <button 
                       (click)="captureAndCompareLabel(item)"
                       [title]="getComparisonTooltip(item)"
-                      style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s;"
+                      style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s;"
                       [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
                       [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
                       {{getComparisonIcon(item)}}
                     </button>
                     <button 
+                      *ngIf="item.labelComparison"
+                      (click)="deleteComparisonImage(item)"
+                      title="Xóa kết quả so sánh"
+                      style="background: #ff9800; color: white; border: none; font-size: 12px; cursor: pointer; padding: 3px 5px; border-radius: 3px; transition: all 0.3s; font-weight: bold;"
+                      onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
+                      🗑️📸
+                    </button>
+                    <button 
                       (click)="deleteScheduleItem(i)"
-                      title="Xóa dòng này"
-                      style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; font-weight: bold;"
-                      onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.1)'"
+                      title="Xóa toàn bộ dòng"
+                      style="background: #f44336; color: white; border: none; font-size: 12px; cursor: pointer; padding: 3px 5px; border-radius: 3px; transition: all 0.3s; font-weight: bold;"
+                      onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
                       onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
-                      🗑️
+                      🗑️📋
                     </button>
                   </div>
                 </td>
@@ -312,17 +321,26 @@
                   {{item.labelComparison?.comparedAt | date:'dd/MM HH:mm'}}
                 </td>
                 <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">
-                  <button (click)="downloadComparisonImage(item)" 
-                          style="background: #ff9800; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 11px; margin: 1px;"
-                          title="Tải ảnh về">
-                    📷
-                  </button>
-                  <button (click)="viewMismatchDetails(item)" 
-                          *ngIf="item.labelComparison?.comparisonResult === 'Fail'"
-                          style="background: #f44336; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 11px; margin: 1px;"
-                          title="Xem chi tiết lỗi">
-                    ❌
-                  </button>
+                  <div style="display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;">
+                    <button (click)="downloadComparisonImage(item)" 
+                            style="background: #ff9800; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 11px; min-width: 24px;"
+                            title="Tải ảnh về">
+                      📷
+                    </button>
+                    <button (click)="viewMismatchDetails(item)" 
+                            *ngIf="item.labelComparison?.comparisonResult === 'Fail'"
+                            style="background: #f44336; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 11px; min-width: 24px;"
+                            title="Xem chi tiết lỗi">
+                      ❌
+                    </button>
+                    <button (click)="deleteComparisonImage(item)" 
+                            style="background: #9e9e9e; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 11px; min-width: 24px;"
+                            title="Xóa hình ảnh và kết quả so sánh"
+                            onmouseenter="this.style.background='#757575'"
+                            onmouseleave="this.style.background='#9e9e9e'">
+                      🗑️
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
