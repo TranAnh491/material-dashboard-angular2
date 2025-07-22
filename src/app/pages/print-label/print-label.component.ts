@@ -1070,19 +1070,21 @@ export class PrintLabelComponent implements OnInit {
       border-radius: 0 !important;
       text-align: center !important;
       width: 100% !important;
-      height: 100% !important;
+      height: 100vh !important;
       display: flex !important;
       flex-direction: column !important;
       overflow: hidden !important;
+      position: relative !important;
     `;
 
     const header = document.createElement('div');
     header.style.cssText = `
-      padding: 15px 20px !important;
+      padding: 10px 15px !important;
       border-bottom: 2px solid #eee !important;
       background: #f8f9fa !important;
       flex-shrink: 0 !important;
       position: relative !important;
+      min-height: 80px !important;
     `;
 
     const title = document.createElement('h3');
@@ -1114,9 +1116,11 @@ export class PrintLabelComponent implements OnInit {
       flex-direction: column !important;
       align-items: center !important;
       justify-content: center !important;
-      padding: 10px !important;
+      padding: 5px !important;
       background: #000 !important;
       position: relative !important;
+      min-height: 200px !important;
+      overflow: hidden !important;
     `;
 
     const videoWrapper = document.createElement('div');
@@ -1148,7 +1152,14 @@ export class PrintLabelComponent implements OnInit {
       gap: 15px !important;
       justify-content: center !important;
       align-items: center !important;
-      position: relative !important;
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      z-index: 1000 !important;
+      min-height: 90px !important;
     `;
 
     const captureBtn = document.createElement('button');
@@ -1156,16 +1167,16 @@ export class PrintLabelComponent implements OnInit {
     captureBtn.style.cssText = `
       background: #4caf50 !important;
       color: white !important;
-      border: none !important;
-      padding: 18px 30px !important;
-      border-radius: 12px !important;
+      border: 3px solid white !important;
+      padding: 20px 35px !important;
+      border-radius: 15px !important;
       cursor: pointer !important;
-      font-size: 18px !important;
+      font-size: 20px !important;
       font-weight: bold !important;
-      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3) !important;
+      box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4) !important;
       flex: 1 !important;
-      max-width: 200px !important;
-      min-height: 60px !important;
+      max-width: 180px !important;
+      min-height: 70px !important;
       transition: all 0.2s ease !important;
       text-align: center !important;
       display: flex !important;
@@ -1173,6 +1184,8 @@ export class PrintLabelComponent implements OnInit {
       justify-content: center !important;
       -webkit-tap-highlight-color: transparent !important;
       touch-action: manipulation !important;
+      position: relative !important;
+      z-index: 1001 !important;
     `;
 
     const cancelBtn = document.createElement('button');
@@ -1180,16 +1193,16 @@ export class PrintLabelComponent implements OnInit {
     cancelBtn.style.cssText = `
       background: #f44336 !important;
       color: white !important;
-      border: none !important;
-      padding: 18px 30px !important;
-      border-radius: 12px !important;
+      border: 3px solid white !important;
+      padding: 20px 35px !important;
+      border-radius: 15px !important;
       cursor: pointer !important;
-      font-size: 18px !important;
+      font-size: 20px !important;
       font-weight: bold !important;
-      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3) !important;
+      box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4) !important;
       flex: 1 !important;
-      max-width: 200px !important;
-      min-height: 60px !important;
+      max-width: 180px !important;
+      min-height: 70px !important;
       transition: all 0.2s ease !important;
       text-align: center !important;
       display: flex !important;
@@ -1197,6 +1210,8 @@ export class PrintLabelComponent implements OnInit {
       justify-content: center !important;
       -webkit-tap-highlight-color: transparent !important;
       touch-action: manipulation !important;
+      position: relative !important;
+      z-index: 1001 !important;
     `;
 
     // Add multiple event handlers for better mobile support
@@ -1261,20 +1276,63 @@ export class PrintLabelComponent implements OnInit {
     header.appendChild(title);
     header.appendChild(instruction);
     
+    // Add margin bottom to video container to avoid overlap with fixed buttons
+    videoContainer.style.marginBottom = '120px';
+    
     content.appendChild(header);
     content.appendChild(videoContainer);
-    content.appendChild(buttonContainer);
     dialog.appendChild(content);
+    dialog.appendChild(buttonContainer); // Add buttons directly to dialog for fixed positioning
 
     // Add debug info
     console.log('🎥 Camera dialog created with buttons:', {
       captureBtn: captureBtn,
       cancelBtn: cancelBtn,
-      buttonContainer: buttonContainer
+      buttonContainer: buttonContainer,
+      dialogSize: {width: dialog.style.width, height: dialog.style.height}
     });
 
-    // Ensure dialog is on top
+    // Ensure dialog is on top and force display
     dialog.style.zIndex = '999999';
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.visibility = 'visible';
+    
+    // Force buttons to be visible
+    captureBtn.style.display = 'flex';
+    captureBtn.style.visibility = 'visible';
+    cancelBtn.style.display = 'flex';
+    cancelBtn.style.visibility = 'visible';
+    
+    console.log('🔧 Button visibility forced:', {
+      containerDisplay: buttonContainer.style.display,
+      captureDisplay: captureBtn.style.display,
+      cancelDisplay: cancelBtn.style.display
+    });
+
+    // Add visible indicator to ensure buttons are there
+    const debugIndicator = document.createElement('div');
+    debugIndicator.style.cssText = `
+      position: fixed !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      background: rgba(255, 255, 255, 0.9) !important;
+      padding: 10px !important;
+      border-radius: 5px !important;
+      z-index: 1002 !important;
+      font-size: 14px !important;
+      color: black !important;
+      pointer-events: none !important;
+    `;
+    debugIndicator.textContent = '🎯 Buttons should be at bottom';
+    dialog.appendChild(debugIndicator);
+    
+    // Remove debug indicator after 3 seconds
+    setTimeout(() => {
+      if (debugIndicator.parentNode) {
+        debugIndicator.parentNode.removeChild(debugIndicator);
+      }
+    }, 3000);
     
     return dialog;
   }
