@@ -95,6 +95,8 @@ export class PrintLabelComponent implements OnInit {
 
 
 
+
+
   selectFunction(functionName: string): void {
     console.log('Selecting function:', functionName);
     this.selectedFunction = functionName;
@@ -126,6 +128,8 @@ export class PrintLabelComponent implements OnInit {
   }
 
   readExcelFile(file: File): void {
+    console.log('📁 Reading Excel file:', file.name, 'Size:', file.size, 'bytes');
+    
     const reader = new FileReader();
     reader.onload = (e: any) => {
       try {
@@ -170,6 +174,8 @@ export class PrintLabelComponent implements OnInit {
           // Remove labelComparison: undefined - Firebase doesn't allow undefined values
         }));
         
+        console.log('📋 Processed schedule data:', this.scheduleData.length, 'items');
+        
         // Validate data before saving
         if (this.scheduleData.length === 0) {
           throw new Error('No data found in Excel file');
@@ -184,6 +190,10 @@ export class PrintLabelComponent implements OnInit {
         this.isSaving = false; // Reset saving state on error
         alert('❌ Error reading Excel file. Please check the format.');
       }
+    };
+    reader.onerror = (error) => {
+      console.error('❌ Error reading file:', error);
+      alert('❌ Lỗi khi đọc file Excel');
     };
     reader.readAsArrayBuffer(file);
   }
@@ -208,6 +218,12 @@ export class PrintLabelComponent implements OnInit {
       lastUpdated: new Date()
     };
 
+    console.log('📤 Attempting to save schedule data:', {
+      recordCount: printScheduleDoc.recordCount,
+      month: printScheduleDoc.month,
+      timestamp: printScheduleDoc.importedAt
+    });
+
     // Add timeout to Firebase save
     const savePromise = this.firestore.collection('printSchedules').add(printScheduleDoc);
     const timeoutPromise = new Promise((_, reject) => 
@@ -219,13 +235,15 @@ export class PrintLabelComponent implements OnInit {
         console.log('✅ Data successfully saved to Firebase with ID: ', docRef.id);
         this.firebaseSaved = true;
         this.isSaving = false;
+        console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
         alert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
         this.isSaving = false;
         this.firebaseSaved = false;
-        alert(`❌ Lỗi khi lưu dữ liệu vào Firebase: ${error.message || error}`);
+        console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
+        alert(`❌ Lỗi khi lưu dữ liệu vào Firebase:\n${error.message || error}`);
       });
   }
 
@@ -248,17 +266,21 @@ export class PrintLabelComponent implements OnInit {
           const doc = querySnapshot.docs[0];
           const docData = doc.data() as any;
           this.scheduleData = docData.data || [];
+          this.firebaseSaved = this.scheduleData.length > 0;
           console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase`);
           console.log(`📅 Data imported at: ${docData.importedAt?.toDate()}`);
-    } else {
+          console.log(`💾 Firebase Saved status: ${this.firebaseSaved}`);
+        } else {
           console.log('🔥 No data found in Firebase');
           this.scheduleData = [];
+          this.firebaseSaved = false;
         }
       })
       .catch((error) => {
         console.error('🔥 Error loading from Firebase:', error);
         this.isLoading = false;
         this.scheduleData = [];
+        this.firebaseSaved = false;
       });
   }
 
@@ -995,16 +1017,16 @@ export class PrintLabelComponent implements OnInit {
     return 'CẦN CẢI THIỆN';
   }
 
-  // Simplified Label Comparison Methods
+  // Simple Photo Capture for Labels
   captureAndCompareLabel(item: ScheduleItem): void {
-    console.log('🚀 Starting camera capture for item:', item.maTem);
+    console.log('📸 Starting photo capture for item:', item.maTem);
     
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert('❌ Camera not available on this device');
       return;
     }
 
-    // Enhanced camera constraints for mobile
+    // Camera constraints
     const constraints = {
       video: {
         facingMode: 'environment', // Use rear camera
@@ -1023,8 +1045,8 @@ export class PrintLabelComponent implements OnInit {
         const video = document.createElement('video');
         video.srcObject = stream;
         video.autoplay = true;
-        video.playsInline = true; // Important for iOS
-        video.muted = true; // Prevent audio feedback
+        video.playsInline = true;
+        video.muted = true;
         
         // Create canvas for capturing
         const canvas = document.createElement('canvas');
@@ -1033,8 +1055,8 @@ export class PrintLabelComponent implements OnInit {
         if (!ctx) {
           alert('❌ Cannot create canvas context');
           stream.getTracks().forEach(track => track.stop());
-      return;
-    }
+          return;
+        }
 
         // Set canvas size
         canvas.width = 1280;
@@ -1043,16 +1065,15 @@ export class PrintLabelComponent implements OnInit {
         // Wait for video to be ready
         video.onloadedmetadata = () => {
           console.log('📺 Video metadata loaded, showing dialog');
-          // Show capture dialog
-          const captureDialog = this.createCaptureDialog(video, canvas, item);
+          const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
           document.body.appendChild(captureDialog);
         };
 
-        // Fallback in case onloadedmetadata doesn't fire
+        // Fallback timeout
         setTimeout(() => {
           if (!document.querySelector('.camera-dialog')) {
             console.log('⏰ Fallback: Showing dialog after timeout');
-            const captureDialog = this.createCaptureDialog(video, canvas, item);
+            const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
             document.body.appendChild(captureDialog);
           }
         }, 2000);
@@ -1069,7 +1090,7 @@ export class PrintLabelComponent implements OnInit {
       });
   }
 
-  createCaptureDialog(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem): HTMLElement {
+  createSimpleCaptureDialog(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem): HTMLElement {
     const dialog = document.createElement('div');
     dialog.className = 'camera-dialog';
     dialog.style.cssText = `
@@ -1113,7 +1134,7 @@ export class PrintLabelComponent implements OnInit {
     `;
 
     const title = document.createElement('h3');
-    title.textContent = '📸 Chụp so sánh tem';
+    title.textContent = '📸 Chụp hình tem - ' + (item.maTem || 'Unknown');
     title.style.cssText = `
       margin: 0 !important;
       color: #333 !important;
@@ -1123,11 +1144,10 @@ export class PrintLabelComponent implements OnInit {
 
     const instruction = document.createElement('p');
     instruction.innerHTML = `
-      <strong>Hướng dẫn chụp:</strong><br>
-      • Đặt tem SAMPLE (có chữ "Sample") bên TRÁI<br>
-      • Đặt tem ĐÃ IN (thành phẩm) bên PHẢI<br>
-      • Đảm bảo đủ ánh sáng và chụp thẳng<br>
-      • Phần mềm sẽ tự động đọc và so sánh thông tin
+      <strong>Hướng dẫn:</strong><br>
+      • Đặt tem vào giữa khung hình<br>
+      • Đảm bảo đủ ánh sáng và chụp rõ nét<br>
+      • Hình sẽ được lưu vào Firebase
     `;
     instruction.style.cssText = `
       margin: 8px 0 0 0 !important;
@@ -1246,7 +1266,7 @@ export class PrintLabelComponent implements OnInit {
       e.preventDefault();
       e.stopPropagation();
       console.log('📸 Capture button activated!');
-      this.captureAndAnalyze(video, canvas, item, dialog);
+      this.captureAndSavePhoto(video, canvas, item, dialog);
     };
 
     const handleCancelClick = (e: Event) => {
@@ -1364,11 +1384,13 @@ export class PrintLabelComponent implements OnInit {
     return dialog;
   }
 
-  captureAndAnalyze(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, dialog: HTMLElement): void {
+  captureAndSavePhoto(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, dialog: HTMLElement): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Lưu đúng kích thước gốc của video, không scale
+    console.log('📸 Capturing photo for item:', item.maTem);
+
+    // Capture image from video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -1382,57 +1404,69 @@ export class PrintLabelComponent implements OnInit {
     // Remove camera dialog
     document.body.removeChild(dialog);
 
-    // Lưu ảnh gốc, không xử lý gì thêm
+    // Convert to blob and save
     canvas.toBlob((blob) => {
       if (blob) {
-        // Lưu trực tiếp vào Firebase hoặc local (tùy logic lưu hiện tại)
-        // Ví dụ: this.saveImageBlob(blob, item);
-        // Hoặc nếu cần preview: this.capturedImagePreview = URL.createObjectURL(blob);
-        // ...
+        console.log('📷 Photo captured, size:', blob.size, 'bytes');
+        this.savePhotoToFirebase(blob, item);
+      } else {
+        alert('❌ Lỗi khi chụp hình');
       }
-    }, 'image/jpeg', 0.95);
+    }, 'image/jpeg', 0.8);
   }
 
-  compressAndSaveImage(blob: Blob, item: ScheduleItem, dialog: HTMLElement): void {
-    // Create a smaller canvas for further compression
-    const smallCanvas = document.createElement('canvas');
-    const smallCtx = smallCanvas.getContext('2d');
+  savePhotoToFirebase(blob: Blob, item: ScheduleItem): void {
+    console.log('💾 Saving photo to Firebase for item:', item.maTem);
     
-    if (!smallCtx) return;
-
-    // Set smaller size for mobile optimization
-    smallCanvas.width = 320;
-    smallCanvas.height = 240;
-
-    const img = new Image();
-    img.onload = () => {
-      smallCtx.drawImage(img, 0, 0, smallCanvas.width, smallCanvas.height);
+    // Convert blob to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Data = reader.result as string;
+      console.log('📄 Base64 data created, length:', base64Data.length);
       
-      // Convert to very compressed format
-      smallCanvas.toBlob((compressedBlob) => {
-        if (compressedBlob) {
-          // Convert to base64 for Firebase storage
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64Data = reader.result as string;
-            
-            // Simulate analysis
-            this.performSimpleComparison(base64Data, item);
-            
-            // Close dialog
-            document.body.removeChild(dialog);
-            // Stop camera stream
-            const videoElement = dialog.querySelector('video');
-            if (videoElement && videoElement.srcObject) {
-              const tracks = (videoElement.srcObject as MediaStream).getTracks();
-              tracks.forEach(track => track.stop());
-            }
+      // Create photo document for Firebase
+      const photoData = {
+        itemId: item.stt || '',
+        maTem: item.maTem || '',
+        maHang: item.maHang || '',
+        khachHang: item.khachHang || '',
+        photoUrl: base64Data,
+        capturedAt: new Date(),
+        savedAt: new Date()
+      };
+
+      // Save to Firebase
+      this.firestore.collection('labelPhotos').add(photoData)
+        .then((docRef) => {
+          console.log('✅ Photo saved to Firebase with ID:', docRef.id);
+          
+          // Update item with photo info
+          item.labelComparison = {
+            photoUrl: base64Data,
+                         comparisonResult: 'Pass',
+            comparedAt: new Date(),
+            matchPercentage: 100,
+            mismatchDetails: [],
+            hasSampleText: true
           };
-          reader.readAsDataURL(compressedBlob);
-        }
-      }, 'image/jpeg', 0.5); // 50% quality for minimal size
+
+          // Update schedule in Firebase
+          this.updateScheduleInFirebase(item);
+          
+          alert('✅ Đã chụp và lưu hình thành công!');
+        })
+        .catch((error) => {
+          console.error('❌ Error saving photo to Firebase:', error);
+          alert('❌ Lỗi khi lưu hình vào Firebase:\n' + error.message);
+        });
     };
-    img.src = URL.createObjectURL(blob);
+    
+    reader.onerror = (error) => {
+      console.error('❌ Error reading blob:', error);
+      alert('❌ Lỗi khi xử lý hình ảnh');
+    };
+    
+    reader.readAsDataURL(blob);
   }
 
   performSimpleComparison(photoUrl: string, item: ScheduleItem): void {
@@ -1775,15 +1809,15 @@ export class PrintLabelComponent implements OnInit {
           const sampleInfo = this.extractLabelInformation(detectionResult.sampleRegion, item, 'sample');
           const printedInfo = this.extractLabelInformation(detectionResult.printedRegion, item, 'printed');
           
-                     // Update processing message
-           processingDialog.querySelector('div')!.innerHTML = `
-             <div style="font-size: 24px; margin-bottom: 15px;">🔍</div>
-             <div>Đang so sánh thông tin...</div>
-             <div style="margin-top: 15px; font-size: 14px; opacity: 0.8;">
-               Sample: ${sampleInfo.text?.length || 0} texts, ${sampleInfo.colors?.length || 0} colors<br>
-               Printed: ${printedInfo.text?.length || 0} texts, ${printedInfo.colors?.length || 0} colors
-             </div>
-           `;
+          // Update processing message
+          processingDialog.querySelector('div')!.innerHTML = `
+            <div style="font-size: 24px; margin-bottom: 15px;">🔍</div>
+            <div>Đang so sánh thông tin...</div>
+            <div style="margin-top: 15px; font-size: 14px; opacity: 0.8;">
+              Sample: ${sampleInfo.text?.length || 0} texts, ${sampleInfo.colors?.length || 0} colors<br>
+              Printed: ${printedInfo.text?.length || 0} texts, ${printedInfo.colors?.length || 0} colors
+            </div>
+          `;
           
           setTimeout(() => {
             // Step 3: Perform intelligent comparison
@@ -1801,11 +1835,18 @@ export class PrintLabelComponent implements OnInit {
               printedSpecs: printedInfo
             };
             
+            console.log('📊 Comparison result created:', item.labelComparison);
+            
             // Clean up
             document.body.removeChild(processingDialog);
             
-            // Save to Firebase
-            this.saveComparisonToFirebase(item);
+            // Save to Firebase with error handling
+            try {
+              this.saveComparisonToFirebase(item);
+            } catch (error) {
+              console.error('❌ Error in saveComparisonToFirebase:', error);
+              alert('❌ Lỗi khi lưu kết quả so sánh:\n' + error);
+            }
             
             // Show detailed result
             this.showDetailedComparisonResult(comparisonResult, item);
@@ -2123,6 +2164,7 @@ export class PrintLabelComponent implements OnInit {
 
     if (!item.labelComparison) {
       console.error('❌ No comparison data to save');
+      alert('❌ Không có dữ liệu so sánh để lưu');
       return;
     }
 
@@ -2142,20 +2184,27 @@ export class PrintLabelComponent implements OnInit {
       compressed: true
     };
 
+    console.log('📤 Attempting to save comparison data:', comparisonData);
+
     this.firestore.collection('labelComparisons').add(comparisonData)
       .then((docRef) => {
         console.log('✅ Comparison saved to Firebase with ID: ', docRef.id);
         
         // Also update the main schedules document
         this.updateScheduleInFirebase(item);
+        
+        // Show success message
+        alert('✅ Đã lưu kết quả so sánh thành công!');
       })
       .catch((error) => {
         console.error('❌ Error saving comparison to Firebase: ', error);
-        alert('❌ Lỗi khi lưu kết quả so sánh vào Firebase');
+        alert('❌ Lỗi khi lưu kết quả so sánh vào Firebase:\n' + error.message);
       });
   }
 
   updateScheduleInFirebase(item: ScheduleItem): void {
+    console.log('🔄 Updating schedule in Firebase for item:', item.stt);
+    
     // Update the original schedule document with comparison result
     this.firestore.collection('printSchedules', ref => 
       ref.orderBy('importedAt', 'desc').limit(1)
@@ -2166,12 +2215,15 @@ export class PrintLabelComponent implements OnInit {
           const docData = doc.data() as any;
           const updatedData = docData.data || [];
           
+          console.log('📋 Found schedule document with', updatedData.length, 'items');
+          
           // Find and update the specific item
           const itemIndex = updatedData.findIndex((scheduleItem: any) => 
             scheduleItem.stt === item.stt && scheduleItem.maTem === item.maTem
           );
           
           if (itemIndex !== -1) {
+            console.log('✅ Found item at index:', itemIndex);
             updatedData[itemIndex].labelComparison = item.labelComparison;
             
             // Update the document
@@ -2182,84 +2234,155 @@ export class PrintLabelComponent implements OnInit {
               console.log('✅ Schedule updated with comparison result');
             }).catch((error) => {
               console.error('❌ Error updating schedule:', error);
+              alert('❌ Lỗi khi cập nhật lịch trình:\n' + error.message);
             });
+          } else {
+            console.warn('⚠️ Item not found in schedule data');
+            console.log('Available items:', updatedData.map((i: any) => ({ stt: i.stt, maTem: i.maTem })));
           }
+        } else {
+          console.warn('⚠️ No schedule documents found');
         }
       })
       .catch((error) => {
         console.error('❌ Error finding schedule document:', error);
+        alert('❌ Lỗi khi tìm tài liệu lịch trình:\n' + error.message);
       });
   }
 
   getComparisonIcon(item: ScheduleItem): string {
     if (!item.labelComparison) return '📸';
     
-    switch (item.labelComparison.comparisonResult) {
-      case 'Pass': return '✅';
-      case 'Fail': return '❌';
-      default: return '⏳';
+    if (item.labelComparison.photoUrl) {
+      return '📷'; // Photo captured
     }
+    
+    return '📸'; // Not captured yet
   }
 
   getComparisonTooltip(item: ScheduleItem): string {
-    if (!item.labelComparison) return 'Chưa so sánh';
+    if (!item.labelComparison) return 'Chưa chụp hình';
     
-    const result = item.labelComparison.comparisonResult;
-    const percentage = item.labelComparison.matchPercentage;
-    const date = item.labelComparison.comparedAt;
-    
-    if (result === 'Pass') {
-      return `✅ PASS (${percentage}%) - ${date?.toLocaleString()}`;
-    } else if (result === 'Fail') {
-      return `❌ FAIL (${percentage}%) - ${date?.toLocaleString()}`;
+    if (item.labelComparison.photoUrl) {
+      const date = item.labelComparison.comparedAt;
+      return `📷 Đã chụp hình - ${date?.toLocaleString()}`;
     }
     
-    return '⏳ Đang xử lý...';
+    return 'Chưa chụp hình';
   }
 
   labelComparisonDialog = false;
   currentComparisonIndex = -1;
 
-  // Getter methods for template counting
-  get passedCount(): number {
-    return this.scheduleData.filter(item => item.labelComparison?.comparisonResult === 'Pass').length;
-  }
 
-  get failedCount(): number {
-    return this.scheduleData.filter(item => item.labelComparison?.comparisonResult === 'Fail').length;
-  }
-
-  get notComparedCount(): number {
-    return this.scheduleData.filter(item => !item.labelComparison).length;
-  }
 
   // Get items that have been compared (for report)
   getComparedItems(): ScheduleItem[] {
     return this.scheduleData.filter(item => item.labelComparison);
   }
 
-  // Export comparison report to Excel
-  exportComparisonReport(): void {
-    const comparedItems = this.getComparedItems();
+  // Get items that have photos captured
+  getPhotoCapturedItems(): ScheduleItem[] {
+    return this.scheduleData.filter(item => item.labelComparison?.photoUrl);
+  }
+
+  // View full image in new window/tab
+  viewFullImage(photoUrl: string | undefined): void {
+    if (!photoUrl) {
+      alert('❌ Không có hình để hiển thị');
+      return;
+    }
     
-    if (comparedItems.length === 0) {
-      alert('❌ Không có dữ liệu so sánh để xuất báo cáo!\nVui lòng thực hiện so sánh tem trước khi xuất báo cáo.');
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(`
+        <html>
+          <head><title>Label Photo</title></head>
+          <body style="margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000;">
+            <img src="${photoUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+          </body>
+        </html>
+      `);
+    }
+  }
+
+  // Download photo
+  downloadPhoto(item: ScheduleItem): void {
+    if (!item.labelComparison?.photoUrl) {
+      alert('❌ Không có hình để tải về');
+      return;
+    }
+
+    try {
+      const link = document.createElement('a');
+      link.href = item.labelComparison.photoUrl;
+      link.download = `tem-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log(`📷 Downloaded photo for ${item.maTem}`);
+    } catch (error) {
+      console.error('❌ Error downloading photo:', error);
+      alert('❌ Lỗi khi tải hình về!');
+    }
+  }
+
+  // Delete photo
+  deletePhoto(item: ScheduleItem): void {
+    if (!item.labelComparison) {
+      alert('❌ Không có hình để xóa');
+      return;
+    }
+
+    const confirmed = confirm(
+      `🗑️ Xác nhận xóa hình?\n\n` +
+      `Mã tem: ${item.maTem || 'N/A'}\n` +
+      `Mã hàng: ${item.maHang || 'N/A'}\n\n` +
+      `Hành động này không thể hoàn tác!`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      // Remove photo data
+      delete item.labelComparison;
+      
+      // Update Firebase
+      this.deleteComparisonFromFirebase(item);
+      
+      console.log(`🗑️ Deleted photo for: ${item.maTem}`);
+      alert(`✅ Đã xóa hình thành công!`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting photo:', error);
+      alert('❌ Lỗi khi xóa hình!');
+    }
+  }
+
+  // Export photo report to Excel
+  exportPhotoReport(): void {
+    const photoCapturedItems = this.getPhotoCapturedItems();
+    
+    if (photoCapturedItems.length === 0) {
+      alert('❌ Không có hình nào để xuất báo cáo!\nVui lòng chụp hình trước khi xuất báo cáo.');
       return;
     }
 
     // Prepare data for Excel export
-    const reportData = comparedItems.map(item => ({
+    const reportData = photoCapturedItems.map(item => ({
       'STT': item.stt || '',
       'Mã tem': item.maTem || '',
       'Mã hàng': item.maHang || '',
       'Khách hàng': item.khachHang || '',
-      'Kết quả': item.labelComparison?.comparisonResult || '',
-      'Độ khớp (%)': item.labelComparison?.matchPercentage || 0,
+      'Lệnh sản xuất': item.lenhSanXuat || '',
+      'Line nhãn': item.lineNhan || '',
+      'Người in': item.nguoiIn || '',
+      'Ngày chụp': item.labelComparison?.comparedAt ? 
+        new Date(item.labelComparison.comparedAt).toLocaleDateString('vi-VN') + ' ' +
+        new Date(item.labelComparison.comparedAt).toLocaleTimeString('vi-VN') : '',
       'Dung lượng ảnh': this.getImageSize(item),
-      'Ngày so sánh': item.labelComparison?.comparedAt ? 
-        new Date(item.labelComparison.comparedAt).toLocaleDateString('vi-VN') : '',
-      'Sample detected': item.labelComparison?.hasSampleText ? 'Có' : 'Không',
-      'Chi tiết lỗi': item.labelComparison?.mismatchDetails?.join('; ') || ''
+      'Trạng thái': 'Đã chụp hình'
     }));
 
     // Create Excel workbook
@@ -2271,36 +2394,31 @@ export class PrintLabelComponent implements OnInit {
       { wch: 15 },  // Mã tem
       { wch: 15 },  // Mã hàng
       { wch: 20 },  // Khách hàng
-      { wch: 10 },  // Kết quả
-      { wch: 12 },  // Độ khớp
+      { wch: 15 },  // Lệnh sản xuất
+      { wch: 12 },  // Line nhãn
+      { wch: 12 },  // Người in
+      { wch: 18 },  // Ngày chụp
       { wch: 12 },  // Dung lượng ảnh
-      { wch: 15 },  // Ngày so sánh
-      { wch: 15 },  // Sample detected
-      { wch: 50 }   // Chi tiết lỗi
+      { wch: 15 }   // Trạng thái
     ];
     ws['!cols'] = colWidths;
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo so sánh tem');
+    XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo hình chụp');
 
     // Generate filename with current date
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10);
-    const filename = `bao-cao-so-sanh-tem-${dateStr}.xlsx`;
+    const filename = `bao-cao-hinh-chup-tem-${dateStr}.xlsx`;
 
     // Download file
     XLSX.writeFile(wb, filename);
     
-    console.log(`📊 Exported ${comparedItems.length} comparison records to ${filename}`);
-    alert(`✅ Đã xuất báo cáo ${comparedItems.length} kết quả so sánh vào file ${filename}`);
+    console.log(`📊 Exported ${photoCapturedItems.length} photo records to ${filename}`);
+    alert(`✅ Đã xuất báo cáo ${photoCapturedItems.length} hình chụp vào file ${filename}`);
   }
 
-  // Refresh comparison report (reload from Firebase)
-  refreshComparisonReport(): void {
-    console.log('🔄 Refreshing comparison report...');
-    this.loadDataFromFirebase();
-    alert('✅ Đã làm mới dữ liệu báo cáo!');
-  }
+
 
   // Download comparison image
   downloadComparisonImage(item: ScheduleItem): void {
