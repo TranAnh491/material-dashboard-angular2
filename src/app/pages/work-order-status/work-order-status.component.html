@@ -5,6 +5,52 @@
         <div class="card">
           <div class="card-body">
             
+            <!-- Import Section -->
+            <div class="import-section" *ngIf="selectedFunction === 'import'">
+              <h4 class="section-title">
+                <i class="material-icons">upload_file</i> Import Work Orders
+              </h4>
+              
+              <div class="import-controls">
+                <div class="file-input-container">
+                  <input type="file" 
+                         id="excelFileInput" 
+                         accept=".xlsx,.xls" 
+                         (change)="onFileSelected($event)" 
+                         style="display: none;">
+                  <label for="excelFileInput" class="btn btn-primary">
+                    <i class="material-icons">file_upload</i> Chọn file Excel
+                  </label>
+                  <button class="btn btn-outline-primary" (click)="downloadTemplate()">
+                    <i class="material-icons">download</i> Tải template
+                  </button>
+                </div>
+                
+                <div class="import-info">
+                  <p>💡 Hướng dẫn:</p>
+                  <ul>
+                    <li>File Excel phải có header: Năm, Tháng, Số thứ tự, Mã sản phẩm, Lệnh sản xuất, Số lượng, Khách hàng, Ngày giao hàng, Line sản xuất, Trạng thái, Người tạo, Ngày nhận kế hoạch, Ghi chú</li>
+                    <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
+                    <li>File tối đa 10MB</li>
+                  </ul>
+                </div>
+                
+                <div class="firebase-status" *ngIf="firebaseSaved">
+                  <span class="status-success">✅ Đã lưu vào Firebase</span>
+                </div>
+                
+                <div class="loading-indicator" *ngIf="isSaving">
+                  <div class="spinner"></div>
+                  <span>Đang lưu vào Firebase...</span>
+                </div>
+                
+                <div class="loading-indicator" *ngIf="isLoading">
+                  <div class="spinner"></div>
+                  <span>Đang xử lý file Excel...</span>
+                </div>
+              </div>
+            </div>
+            
             <!-- Summary Cards -->
             <div class="row summary-row">
               <div class="col-lg-2 col-md-4 col-sm-6">
@@ -57,8 +103,31 @@
               </div>
             </div>
 
+            <!-- Function Selection -->
+            <div class="row function-selection-row">
+              <div class="col-md-12">
+                <div class="function-buttons">
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFunction === 'import'"
+                          (click)="selectFunction('import')">
+                    <i class="material-icons">upload_file</i> Import Excel
+                  </button>
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFunction === 'view'"
+                          (click)="selectFunction('view')">
+                    <i class="material-icons">list</i> Xem Work Orders
+                  </button>
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFunction === 'add'"
+                          (click)="selectFunction('add')">
+                    <i class="material-icons">add</i> Thêm mới
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Controls -->
-            <div class="row controls-row">
+            <div class="row controls-row" *ngIf="selectedFunction === 'view'">
               <div class="col-md-12">
                 <div class="card compact-controls">
                   <div class="card-body">
@@ -113,32 +182,7 @@
               </div>
                       </div>
                       
-            <!-- Action Buttons Row -->
-            <div class="row action-buttons-row">
-              <div class="col-md-12">
-                <div class="card compact-controls">
-                  <div class="card-body text-center">
-                    <div class="row justify-content-center">
-                      <div class="col-md-4 col-lg-3">
-                        <button mat-raised-button color="primary" (click)="isAddingWorkOrder = true" class="btn-action">
-                          <mat-icon>add</mat-icon> Add Work Order
-                        </button>
-                      </div>
-                      <div class="col-md-4 col-lg-3">
-                        <button mat-raised-button color="accent" (click)="openImportDialog()" class="btn-action">
-                          <mat-icon>upload_file</mat-icon> Import Excel
-                        </button>
-                      </div>
-                      <div class="col-md-4 col-lg-3">
-                        <button mat-raised-button color="warn" (click)="showAllWorkOrders()" class="btn-action">
-                          <mat-icon>visibility</mat-icon> Show All
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+
 
             <!-- Add Work Order Form -->
             <div class="row" *ngIf="isAddingWorkOrder">
@@ -297,21 +341,23 @@
                               matTooltip="Select all work orders">
                             </mat-checkbox>
                           </th>
-                          <th>Year</th>
-                          <th>Month</th>
-                          <th>No</th>
-                          <th>P/N</th>
-                          <th>Work Order</th>
-                          <th>Quantity</th>
-                          <th>Customer</th>
-                          <th>Delivery Date</th>
-                          <th>Line</th>
-                          <th>Status</th>
-                          <th>Kitting</th>
-                          <th>Checked By</th>
-                          <th>Plan Received</th>
-                          <th>Notes</th>
-                          <th>Del</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">Năm</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 42px; font-size: 8.4px;">Tháng</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 30px; font-size: 8.4px;">STT</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Mã TP VN</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 78px; font-size: 8.4px;">LSX</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 72px; font-size: 8.4px;">Lượng sản phẩm</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 72px; font-size: 8.4px;">Khách hàng</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 30px; font-size: 8.4px;">Gấp</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 84px; font-size: 8.4px; background-color: #ff00ff; color: white;">Ngày Giao NVL</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Line</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">NVL thiếu</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Người soạn</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Tình trạng</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Đủ/Thiếu</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 84px; font-size: 8.4px;">Ngày nhận thông tin</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Ghi Chú</th>
+                          <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 108px; font-size: 8.4px;">Thao tác</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -332,12 +378,25 @@
                           <td>{{wo.quantity | number}}</td>
                           <td>{{wo.customer}}</td>
                           <td>
+                            <span class="badge badge-warning" *ngIf="wo.isUrgent">Gấp</span>
+                          </td>
+                          <td style="background-color: #ff00ff; color: white;">
                             <span [class]="getPriorityClass(wo.deliveryDate)">
                               {{wo.deliveryDate ? (wo.deliveryDate | date:'dd/MM/yyyy') : 'N/A'}}
                             </span>
                           </td>
                           <td>
                             <span class="badge badge-info">{{wo.productionLine}}</span>
+                          </td>
+                          <td>
+                            <span class="badge badge-danger" *ngIf="wo.missingMaterials">{{wo.missingMaterials}}</span>
+                          </td>
+                          <td>
+                            <mat-form-field class="person-select">
+                              <mat-select [value]="wo.createdBy || ''" (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)">
+                                <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
+                              </mat-select>
+                            </mat-form-field>
                           </td>
                           <td>
                             <mat-form-field class="status-select">
@@ -351,19 +410,8 @@
                             </mat-form-field>
                           </td>
                           <td>
-                            <mat-form-field class="person-select">
-                              <mat-select [value]="wo.createdBy || ''" (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)">
-                                <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
-                              </mat-select>
-                            </mat-form-field>
-                          </td>
-                          <td>
-                            <mat-form-field class="person-select">
-                              <mat-select [value]="wo.checkedBy || ''" (selectionChange)="updateWorkOrder(wo, 'checkedBy', $event.value)">
-                                <mat-option value="">None</mat-option>
-                                <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
-                              </mat-select>
-                            </mat-form-field>
+                            <span class="badge badge-success" *ngIf="wo.materialsComplete">Đủ</span>
+                            <span class="badge badge-danger" *ngIf="!wo.materialsComplete">Thiếu</span>
                           </td>
                           <td>{{wo.planReceivedDate ? (wo.planReceivedDate | date:'dd/MM/yyyy') : 'N/A'}}</td>
                           <td>
@@ -372,14 +420,16 @@
                             </mat-form-field>
                           </td>
                           <td>
-                            <button mat-icon-button color="warn" (click)="deleteWorkOrder(wo)" 
-                                    matTooltip="⚠️ Delete Work Order (Cannot be undone!)" 
-                                    matTooltipPosition="left"
-                                    class="delete-btn enhanced-delete"
-                                    [attr.aria-label]="'Delete work order ' + (wo.orderNumber || 'N/A')"
-                                    title="Delete Work Order">
-                              <mat-icon>delete_forever</mat-icon>
-                            </button>
+                            <div class="action-buttons">
+                              <button mat-icon-button color="primary" (click)="editWorkOrder(wo)" 
+                                      matTooltip="Edit Work Order" class="action-btn">
+                                <mat-icon>edit</mat-icon>
+                              </button>
+                              <button mat-icon-button color="warn" (click)="deleteWorkOrder(wo)" 
+                                      matTooltip="Delete Work Order" class="action-btn">
+                                <mat-icon>delete</mat-icon>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       </tbody>

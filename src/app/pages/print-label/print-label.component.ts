@@ -222,41 +222,35 @@ export class PrintLabelComponent implements OnInit {
     
     this.isSaving = true;
     
-    const printScheduleDoc = {
-      data: data,
-      importedAt: new Date(),
-      month: this.getCurrentMonth(),
-      recordCount: data.length,
-      lastUpdated: new Date(),
-      importHistory: [
-        {
-          importedAt: new Date(),
-          recordCount: data.length,
-          month: this.getCurrentMonth(),
-          description: `Import ${data.length} records`
-        }
-      ]
-    };
-
-    console.log('📤 Attempting to save schedule data:', {
-      recordCount: printScheduleDoc.recordCount,
-      month: printScheduleDoc.month,
-      timestamp: printScheduleDoc.importedAt
+    // Save each record individually to avoid document size limit
+    const savePromises = data.map((item, index) => {
+      const recordDoc = {
+        ...item,
+        importedAt: new Date(),
+        month: this.getCurrentMonth(),
+        recordIndex: index,
+        totalRecords: data.length,
+        lastUpdated: new Date()
+      };
+      
+      return this.firestore.collection('printSchedules').add(recordDoc);
     });
 
+    console.log(`📤 Attempting to save ${data.length} individual records to Firebase`);
+
     // Add timeout to Firebase save
-    const savePromise = this.firestore.collection('printSchedules').add(printScheduleDoc);
+    const savePromise = Promise.all(savePromises);
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
+      setTimeout(() => reject(new Error('Firebase save timeout after 30 seconds')), 30000)
     );
 
     Promise.race([savePromise, timeoutPromise])
-      .then((docRef: any) => {
-        console.log('✅ Data successfully saved to Firebase with ID: ', docRef.id);
+      .then((docRefs: any) => {
+        console.log('✅ Data successfully saved to Firebase with IDs: ', docRefs.map((ref: any) => ref.id));
         this.firebaseSaved = true;
         this.isSaving = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
+        alert(`✅ Đã lưu thành công ${data.length} records vào Firebase!`);
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
@@ -272,23 +266,27 @@ export class PrintLabelComponent implements OnInit {
     this.isLoading = true;
     
     const loadPromise = this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').limit(1)
+      ref.orderBy('importedAt', 'desc').orderBy('recordIndex', 'asc')
     ).get().toPromise();
 
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Firebase load timeout after 10 seconds')), 10000)
+      setTimeout(() => reject(new Error('Firebase load timeout after 15 seconds')), 15000)
     );
 
     Promise.race([loadPromise, timeoutPromise])
       .then((querySnapshot: any) => {
         this.isLoading = false;
         if (querySnapshot && !querySnapshot.empty) {
-          const doc = querySnapshot.docs[0];
-          const docData = doc.data() as any;
-          this.scheduleData = docData.data || [];
+          // Convert documents to ScheduleItem array
+          this.scheduleData = querySnapshot.docs.map((doc: any) => {
+            const data = doc.data();
+            // Remove Firebase-specific fields to get clean ScheduleItem
+            const { importedAt, month, recordIndex, totalRecords, lastUpdated, ...scheduleItem } = data;
+            return scheduleItem as ScheduleItem;
+          });
+          
           this.firebaseSaved = this.scheduleData.length > 0;
           console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase`);
-          console.log(`📅 Data imported at: ${docData.importedAt?.toDate()}`);
           console.log(`💾 Firebase Saved status: ${this.firebaseSaved}`);
         } else {
           console.log('🔥 No data found in Firebase');
@@ -1476,47 +1474,56 @@ export class PrintLabelComponent implements OnInit {
   savePhotoToFirebase(blob: Blob, item: ScheduleItem): void {
     console.log('💾 Saving photo to Firebase for item:', item.maTem);
     
-    // Convert blob to base64
+    // Convert blob to base64 and optimize
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const base64Data = reader.result as string;
-      console.log('📄 Base64 data created, length:', base64Data.length);
+      console.log('📄 Original Base64 data length:', base64Data.length);
       
-      // Create photo document for Firebase
-      const photoData = {
-        itemId: item.stt || '',
-        maTem: item.maTem || '',
-        maHang: item.maHang || '',
-        khachHang: item.khachHang || '',
-        photoUrl: base64Data,
-        capturedAt: new Date(),
-        savedAt: new Date()
-      };
+      try {
+        // Optimize image to 250KB max
+        const optimizedImage = await this.optimizeImageForStorage(base64Data, 250);
+        console.log('📄 Optimized Base64 data length:', optimizedImage.length);
+        
+        // Create photo document for Firebase
+        const photoData = {
+          itemId: item.stt || '',
+          maTem: item.maTem || '',
+          maHang: item.maHang || '',
+          khachHang: item.khachHang || '',
+          photoUrl: optimizedImage,
+          capturedAt: new Date(),
+          savedAt: new Date()
+        };
 
-      // Save to Firebase
-      this.firestore.collection('labelPhotos').add(photoData)
-        .then((docRef) => {
-          console.log('✅ Photo saved to Firebase with ID:', docRef.id);
-          
-          // Update item with photo info
-          item.labelComparison = {
-            photoUrl: base64Data,
-                         comparisonResult: 'Pass',
-            comparedAt: new Date(),
-            matchPercentage: 100,
-            mismatchDetails: [],
-            hasSampleText: true
-          };
+        // Save to Firebase
+        this.firestore.collection('labelPhotos').add(photoData)
+          .then((docRef) => {
+            console.log('✅ Photo saved to Firebase with ID:', docRef.id);
+            
+            // Update item with photo info
+            item.labelComparison = {
+              photoUrl: optimizedImage,
+              comparisonResult: 'Pass',
+              comparedAt: new Date(),
+              matchPercentage: 100,
+              mismatchDetails: [],
+              hasSampleText: true
+            };
 
-          // Update schedule in Firebase
-          this.updateScheduleInFirebase(item);
-          
-          alert('✅ Đã chụp và lưu hình thành công!');
-        })
-        .catch((error) => {
-          console.error('❌ Error saving photo to Firebase:', error);
-          alert('❌ Lỗi khi lưu hình vào Firebase:\n' + error.message);
-        });
+            // Update schedule in Firebase
+            this.updateScheduleInFirebase(item);
+            
+            alert('✅ Đã chụp và lưu hình thành công! (Đã tối ưu hóa)');
+          })
+          .catch((error) => {
+            console.error('❌ Error saving photo to Firebase:', error);
+            alert('❌ Lỗi khi lưu hình vào Firebase:\n' + error.message);
+          });
+      } catch (error) {
+        console.error('❌ Error optimizing image:', error);
+        alert('❌ Lỗi khi tối ưu hóa hình ảnh');
+      }
     };
     
     reader.onerror = (error) => {
@@ -2913,5 +2920,76 @@ export class PrintLabelComponent implements OnInit {
     // Show brief success indicator
     const input = event.target as HTMLInputElement;
     this.showNoteSaveSuccess(input);
+  }
+
+  clearOldFirebaseData(): void {
+    console.log('🗑️ Clearing old Firebase data...');
+    
+    this.firestore.collection('printSchedules').get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          const batch = this.firestore.firestore.batch();
+          querySnapshot.docs.forEach((doc: any) => {
+            batch.delete(doc.ref);
+          });
+          return batch.commit();
+        }
+      })
+      .then(() => {
+        console.log('✅ Old Firebase data cleared successfully');
+        this.scheduleData = [];
+        this.firebaseSaved = false;
+        alert('✅ Đã xóa dữ liệu cũ trong Firebase!');
+      })
+      .catch((error) => {
+        console.error('❌ Error clearing Firebase data:', error);
+        alert(`❌ Lỗi khi xóa dữ liệu Firebase:\n${error.message || error}`);
+      });
+  }
+
+  optimizeImageForStorage(base64Image: string, maxSizeKB: number = 250): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Calculate new dimensions to fit within maxSizeKB
+        let quality = 0.8;
+        let width = img.width;
+        let height = img.height;
+        
+        // Reduce size if image is too large
+        const maxDimension = 800;
+        if (width > maxDimension || height > maxDimension) {
+          const ratio = Math.min(maxDimension / width, maxDimension / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Try to compress to target size
+          const compressImage = (q: number) => {
+            const compressed = canvas.toDataURL('image/jpeg', q);
+            const sizeKB = (compressed.length * 0.75) / 1024; // Approximate size
+            
+            if (sizeKB <= maxSizeKB || q <= 0.1) {
+              resolve(compressed);
+            } else {
+              compressImage(q - 0.1);
+            }
+          };
+          
+          compressImage(quality);
+        }
+      };
+      
+      img.src = base64Image;
+    });
   }
 } 

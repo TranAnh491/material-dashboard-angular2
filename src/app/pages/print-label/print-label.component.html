@@ -81,6 +81,12 @@
           style="background: #795548; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 5px; cursor: pointer;">
           📋 Lịch sử Import
           </button>
+          <button 
+          type="button"
+          (click)="clearOldFirebaseData()" 
+          style="background: #d32f2f; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 5px; cursor: pointer;">
+          🗑️ Xóa dữ liệu Firebase
+          </button>
 
       </div>
 
@@ -93,9 +99,10 @@
         <div style="font-size: 14px; color: #f57c00;">⏳ Đang lưu dữ liệu vào Firebase...</div>
         </div>
         
-      <div *ngIf="firebaseSaved && !isSaving" style="text-align: center; padding: 10px; background: #e8f5e8; border-radius: 6px; margin-bottom: 12px;">
+              <div *ngIf="firebaseSaved && !isSaving" style="text-align: center; padding: 10px; background: #e8f5e8; border-radius: 6px; margin-bottom: 12px;">
         <div style="font-size: 14px; color: #4caf50;">✅ Dữ liệu đã được lưu thành công vào Firebase!</div>
         <div style="font-size: 11px; color: #2e7d32; margin-top: 3px;">💡 Dữ liệu mới sẽ được nối tiếp với dữ liệu cũ. Sử dụng "🔄 Import mới" để bắt đầu từ đầu.</div>
+        <div style="font-size: 11px; color: #2e7d32; margin-top: 3px;">📸 Hình ảnh sẽ được tối ưu hóa xuống 250KB để tránh lỗi Firebase size limit.</div>
       </div>
 
 

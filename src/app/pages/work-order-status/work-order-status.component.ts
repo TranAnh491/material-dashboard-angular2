@@ -5,7 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 
@@ -19,7 +19,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   workOrders: WorkOrder[] = [];
   filteredWorkOrders: WorkOrder[] = [];
   
-
+  // Import functionality
+  selectedFunction: string | null = null;
+  firebaseSaved: boolean = false;
+  isSaving: boolean = false;
+  isLoading: boolean = false;
   
   // Filters
   searchTerm: string = '';
@@ -101,15 +105,51 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       status: this.statusFilter
     });
     
-    // Force immediate load with fallback for tab switching issue
-    setTimeout(() => {
-      this.loadWorkOrders();
-    }, 100);
+    // Set default function to view
+    this.selectedFunction = 'view';
+    
+    this.loadWorkOrders();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  selectFunction(functionName: string): void {
+    this.selectedFunction = functionName;
+    console.log('🔧 Selected function:', functionName);
+  }
+
+  onFileSelected(event: any): void {
+    const file = event.target.files[0];
+    if (file) {
+      console.log('📁 File selected:', file.name, 'Size:', file.size, 'bytes');
+      
+      // Validate file type
+      const validExtensions = ['.xlsx', '.xls'];
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      
+      if (!validExtensions.includes(fileExtension)) {
+        alert('❌ Vui lòng chọn file Excel (.xlsx hoặc .xls)');
+        return;
+      }
+      
+      // Validate file size (max 10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        alert('❌ File quá lớn. Vui lòng chọn file nhỏ hơn 10MB');
+        return;
+      }
+      
+      console.log('✅ File validation passed, processing...');
+      this.readExcelFile(file).then((jsonData) => {
+        this.processExcelData(jsonData);
+      }).catch((error) => {
+        console.error('❌ Error reading Excel file:', error);
+        alert(`❌ Lỗi khi đọc file Excel:\n${error.message || error}`);
+      });
+    }
   }
 
   loadWorkOrders(): void {
@@ -649,28 +689,6 @@ Please check the console for error details.`);
     this.importProgress = 0;
   }
 
-  onFileSelected(event: any): void {
-    const file = event.target.files[0];
-    if (file) {
-      console.log('📁 File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
-      
-      // Basic file validation
-      if (!file.name.match(/\.(xlsx?|csv)$/i)) {
-        alert('❌ Please select a valid Excel file (.xlsx, .xls) or CSV file');
-        return;
-      }
-      
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        alert('❌ File size too large. Please use a file smaller than 10MB');
-        return;
-      }
-      
-      this.importExcelFile(file);
-    } else {
-      console.log('No file selected');
-    }
-  }
-
   async importExcelFile(file: File): Promise<void> {
     this.isImporting = true;
     this.importProgress = 0;
@@ -807,54 +825,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     });
   }
 
-  private readExcelFile(file: File): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e: any) => {
-        try {
-          console.log('Reading Excel workbook...');
-          
-          // Read with array buffer for better compatibility
-          const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-          
-          console.log('Workbook sheets:', workbook.SheetNames);
-          
-          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-            throw new Error('No sheets found in Excel file');
-          }
-          
-          const sheetName = workbook.SheetNames[0];
-          console.log('Using sheet:', sheetName);
-          
-          const worksheet = workbook.Sheets[sheetName];
-          if (!worksheet) {
-            throw new Error(`Sheet "${sheetName}" not found`);
-          }
-          
-          // Convert with header as first row and include empty cells
-          const data = XLSX.utils.sheet_to_json(worksheet, { 
-            header: 1,
-            defval: '', // Default value for empty cells
-            blankrows: false // Skip completely empty rows
-          });
-          
-          console.log('Extracted data rows:', data.length);
-          resolve(data);
-        } catch (error) {
-          console.error('Error reading Excel file:', error);
-          reject(`Failed to read Excel file: ${error.message || error}`);
-        }
-      };
-      
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
-        reject('Error reading file: File may be corrupted or invalid format');
-      };
-      
-      // Use readAsArrayBuffer for better compatibility
-      reader.readAsArrayBuffer(file);
-    });
-  }
+
 
   private parseExcelData(data: any[]): Partial<WorkOrder>[] {
     if (data.length < 2) {
@@ -1260,44 +1231,54 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   downloadTemplate(): void {
-    // Create template data with proper headers (No column removed)
-    const templateData = [
-      ['P/N', 'Work Order', 'Quantity', 'Customer', 'Delivery Date', 'Line', 'Plan Received'], // Headers
-      ['A005165', 'KZLSX0725/0062', '75', 'HOB', '03/07/2025', 'WH A', '26/06/2025'], // Sample 1
-      ['P002117_A.1', 'KZLSX0725/0131', '7', 'HPPS', '03/07/2025', 'USB B', '26/06/2025'], // Sample 2
-      ['P005773_A', 'KZLSX0725/0173', '3', 'GIL', '03/07/2025', 'WH C', '26/06/2025'] // Sample 3
-    ];
-
-    // Create workbook and worksheet
-    const ws = XLSX.utils.aoa_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Work Orders');
-
-    // Set column widths for better readability
-    ws['!cols'] = [
-      { wch: 15 }, // P/N
-      { wch: 20 }, // Work Order  
-      { wch: 10 }, // Quantity
-      { wch: 15 }, // Customer
-      { wch: 15 }, // Delivery Date
-      { wch: 12 }, // Line
-      { wch: 15 }  // Plan Received
-    ];
-
-    // Download the file
-    XLSX.writeFile(wb, 'work-order-import-template.xlsx');
+    console.log('📥 Creating Work Order Excel template...');
     
-    console.log('✅ Template downloaded successfully');
-    alert('📥 Template downloaded!\n\n' +
-      '📋 Format:\n' +
-      '• P/N: Product code\n' +
-      '• Work Order: Production order number\n' +
-      '• Quantity: Positive number\n' +
-      '• Customer: Customer name\n' +
-      '• Delivery Date: DD/MM/YYYY format\n' +
-      '• Line: Production line\n' +
-      '• Plan Received: DD/MM/YYYY format\n\n' +
-      '🔢 Note: No column will be auto-generated based on delivery date sequence within each month.');
+    // Create template data
+    const templateData = [
+      ['Năm', 'Tháng', 'STT', 'Mã TP VN', 'LSX', 'Lượng sản phẩm', 'Khách hàng', 'Gấp', 'Ngày Giao NVL', 'Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu', 'Ngày nhận thông tin', 'Ghi Chú'],
+      [2024, 12, 'WO001', 'P/N001', 'PO2024001', 100, 'Khách hàng A', 'Gấp', '31/12/2024', 'Line 1', 'NVL A, NVL B', 'Hoàng Tuấn', 'Waiting', 'Đủ', '01/12/2024', 'Ghi chú mẫu'],
+      [2024, 12, 'WO002', 'P/N002', 'PO2024002', 50, 'Khách hàng B', '', '15/12/2024', 'Line 2', '', 'Hữu Tình', 'Ready', 'Thiếu', '01/12/2024', ''],
+      [2024, 12, 'WO003', 'P/N003', 'PO2024003', 75, 'Khách hàng C', '', '20/12/2024', 'Line 3', 'NVL C', 'Hoàng Vũ', 'Done', 'Đủ', '01/12/2024', 'Hoàn thành']
+    ];
+    
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    
+    // Set column widths
+    const columnWidths = [
+      { wch: 8 },  // Năm
+      { wch: 8 },  // Tháng
+      { wch: 12 }, // STT
+      { wch: 15 }, // Mã TP VN
+      { wch: 15 }, // LSX
+      { wch: 12 }, // Lượng sản phẩm
+      { wch: 15 }, // Khách hàng
+      { wch: 8 },  // Gấp
+      { wch: 15 }, // Ngày Giao NVL
+      { wch: 12 }, // Line
+      { wch: 20 }, // NVL thiếu
+      { wch: 12 }, // Người soạn
+      { wch: 12 }, // Tình trạng
+      { wch: 10 }, // Đủ/Thiếu
+      { wch: 18 }, // Ngày nhận thông tin
+      { wch: 20 }  // Ghi Chú
+    ];
+    worksheet['!cols'] = columnWidths;
+    
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Work Orders Template');
+    
+    // Generate filename with current date
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const filename = `Work_Orders_Template_${dateStr}.xlsx`;
+    
+    // Download file
+    XLSX.writeFile(workbook, filename);
+    
+    console.log('✅ Work Order template downloaded:', filename);
+    alert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
   // Selection functionality methods
@@ -1435,6 +1416,185 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  readExcelFile(file: File): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      console.log('📋 Starting Excel file processing...');
+      
+      const reader = new FileReader();
+      
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Get the first sheet
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          
+          // Convert to JSON
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          console.log('📊 Raw Excel data:', jsonData.length, 'rows');
+          
+          if (jsonData.length < 2) {
+            throw new Error('File không có dữ liệu hoặc thiếu header');
+          }
+          
+          resolve(jsonData);
+          
+        } catch (error) {
+          console.error('❌ Error processing Excel file:', error);
+          reject(error);
+        }
+      };
+      
+      reader.onerror = (error) => {
+        console.error('❌ Error reading file:', error);
+        reject(error);
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  processExcelData(jsonData: any[]): void {
+    console.log('📋 Processing Excel data...');
+    this.isLoading = true;
+    
+    try {
+              // Remove header row and convert to WorkOrder format
+        const dataRows = jsonData.slice(1); // Skip header row
+        const newWorkOrderData = dataRows.map((row: any, index: number) => ({
+          year: row[0] ? parseInt(row[0].toString()) : new Date().getFullYear(),
+          month: row[1] ? parseInt(row[1].toString()) : new Date().getMonth() + 1,
+          orderNumber: row[2]?.toString() || '',
+          productCode: row[3]?.toString() || '',
+          productionOrder: row[4]?.toString() || '',
+          quantity: row[5] ? parseInt(row[5].toString()) : 0,
+          customer: row[6]?.toString() || '',
+          isUrgent: row[7]?.toString().toLowerCase() === 'gấp' || row[7]?.toString().toLowerCase() === 'urgent',
+          deliveryDate: this.parseExcelDate(row[8]) || new Date(),
+          productionLine: row[9]?.toString() || '',
+          missingMaterials: row[10]?.toString() || '',
+          createdBy: row[11]?.toString() || '',
+          status: this.parseStatus(row[12]) || WorkOrderStatus.WAITING,
+          materialsComplete: row[13]?.toString().toLowerCase() === 'đủ' || row[13]?.toString().toLowerCase() === 'complete',
+          planReceivedDate: this.parseExcelDate(row[14]) || new Date(),
+          notes: row[15]?.toString() || '',
+          createdDate: new Date(),
+          lastUpdated: new Date()
+        } as WorkOrder));
+
+      console.log('📋 Processed new work order data:', newWorkOrderData.length, 'items');
+
+      // Validate data before saving
+      if (newWorkOrderData.length === 0) {
+        throw new Error('No data found in Excel file');
+      }
+
+      // Merge with existing data instead of replacing
+      const existingData = this.workOrders || [];
+      const mergedData = [...existingData, ...newWorkOrderData];
+
+      console.log(`📊 Merging data: ${existingData.length} existing + ${newWorkOrderData.length} new = ${mergedData.length} total`);
+
+      // Update the work orders data with merged data
+      this.workOrders = mergedData;
+      this.filteredWorkOrders = mergedData;
+
+      // Save to Firebase
+      this.saveToFirebase(this.workOrders);
+
+      alert(`✅ Successfully imported ${newWorkOrderData.length} new work orders and merged with ${existingData.length} existing records. Total: ${mergedData.length} records saved to Firebase 🔥`);
+      
+    } catch (error) {
+      console.error('❌ Error processing Excel data:', error);
+      alert(`❌ Lỗi khi xử lý dữ liệu Excel:\n${error.message || error}`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  saveToFirebase(data: WorkOrder[]): void {
+    console.log('🔥 Saving work orders to Firebase...');
+    this.isSaving = true;
+    
+    const workOrderDoc = {
+      data: data,
+      importedAt: new Date(),
+      month: this.getCurrentMonth(),
+      recordCount: data.length,
+      lastUpdated: new Date(),
+      importHistory: [
+        {
+          importedAt: new Date(),
+          recordCount: data.length,
+          month: this.getCurrentMonth(),
+          description: `Import ${data.length} work orders`
+        }
+      ]
+    };
+
+    console.log('📤 Attempting to save work order data:', {
+      recordCount: workOrderDoc.recordCount,
+      month: workOrderDoc.month,
+      timestamp: workOrderDoc.importedAt
+    });
+
+    // Add timeout to Firebase save
+    const savePromise = this.firestore.collection('workOrders').add(workOrderDoc);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
+    );
+
+    Promise.race([savePromise, timeoutPromise])
+      .then((docRef: any) => {
+        console.log('✅ Data successfully saved to Firebase with ID: ', docRef.id);
+        this.firebaseSaved = true;
+        this.isSaving = false;
+        console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
+        alert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
+      })
+      .catch((error) => {
+        console.error('❌ Error saving to Firebase: ', error);
+        this.isSaving = false;
+        this.firebaseSaved = false;
+        console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
+        alert(`❌ Lỗi khi lưu dữ liệu vào Firebase:\n${error.message || error}`);
+      });
+  }
+
+  getCurrentMonth(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  parseStatus(statusStr: any): WorkOrderStatus {
+    if (!statusStr) return WorkOrderStatus.WAITING;
+    
+    const status = statusStr.toString().toLowerCase();
+    switch (status) {
+      case 'waiting':
+      case 'chờ':
+        return WorkOrderStatus.WAITING;
+      case 'kitting':
+      case 'chuẩn bị':
+        return WorkOrderStatus.KITTING;
+      case 'ready':
+      case 'sẵn sàng':
+        return WorkOrderStatus.READY;
+      case 'done':
+      case 'hoàn thành':
+        return WorkOrderStatus.DONE;
+      case 'delay':
+      case 'chậm':
+        return WorkOrderStatus.DELAY;
+      default:
+        return WorkOrderStatus.WAITING;
+    }
+  }
 
   private handleEmptyFilterResults(): void {
     console.log('🔧 Analyzing filter mismatch...');
@@ -1476,5 +1636,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     } else {
       console.log('❌ Still no data after filter adjustment');
     }
+  }
+
+  editWorkOrder(workOrder: WorkOrder): void {
+    console.log('✏️ Editing work order:', workOrder);
+    // For now, just log the action. You can implement edit functionality later
+    alert(`Chỉnh sửa Work Order: ${workOrder.orderNumber || workOrder.productCode}`);
   }
 }

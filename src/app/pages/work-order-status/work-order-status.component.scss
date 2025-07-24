@@ -131,54 +131,7 @@ html, body {
   }
 }
 
-// Action buttons row
-.action-buttons-row {
-  margin-bottom: 8px; /* Consistent spacing */
-  margin-top: -2px; /* Pull up slightly */
-  
-  .card-body {
-    padding: 12px 15px; /* Balanced padding for buttons */
-  }
-  
-  .btn-action {
-    width: 100%; /* Full width within column */
-    padding: 10px 16px; /* Comfortable padding */
-    font-size: 0.95em; /* Slightly larger font */
-    font-weight: 500; /* Medium weight */
-    height: 42px; /* Fixed height for consistency */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px; /* Rounded corners */
-    transition: all 0.2s ease; /* Smooth transitions */
-    
-    mat-icon {
-      margin-right: 8px; /* Space between icon and text */
-      font-size: 20px; /* Consistent icon size */
-    }
-    
-    &:hover {
-      transform: translateY(-1px); /* Subtle hover effect */
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    &:active {
-      transform: translateY(0); /* Reset on click */
-    }
-  }
-  
-  // Responsive adjustments
-  @media (max-width: 768px) {
-    .col-md-4 {
-      margin-bottom: 8px; /* Stack vertically on small screens */
-    }
-    
-    .btn-action {
-      height: 38px; /* Slightly smaller on mobile */
-      font-size: 0.9em;
-    }
-  }
-}
+
 
 .compact-field {
   .mat-form-field-wrapper {
@@ -1150,5 +1103,221 @@ textarea.mat-input-element {
     &:hover {
       background: #a8a8a8;
     }
+  }
+}
+
+// Import Section Styles
+.import-section {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  
+  .section-title {
+    margin-bottom: 15px;
+    color: #2c3e50;
+    font-weight: 600;
+    
+    i {
+      margin-right: 8px;
+      color: #007bff;
+    }
+  }
+  
+  .import-controls {
+    .file-input-container {
+      margin-bottom: 15px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      
+      label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        background: #007bff;
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        
+        &:hover {
+          background: #0056b3;
+          transform: translateY(-1px);
+        }
+        
+        i {
+          font-size: 18px;
+        }
+      }
+      
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+        
+        &:hover {
+          transform: translateY(-1px);
+        }
+        
+        i {
+          font-size: 18px;
+        }
+      }
+    }
+    
+    .import-info {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 6px;
+      border-left: 4px solid #2196f3;
+      margin-bottom: 15px;
+      
+      p {
+        margin: 0 0 10px 0;
+        font-weight: 600;
+        color: #1976d2;
+      }
+      
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        
+        li {
+          margin-bottom: 5px;
+          color: #424242;
+          font-size: 14px;
+        }
+      }
+    }
+    
+    .firebase-status {
+      margin-bottom: 15px;
+      
+      .status-success {
+        color: #28a745;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+    
+    .loading-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #6c757d;
+      font-weight: 500;
+      
+      .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+    }
+  }
+}
+
+// Function Selection Styles
+.function-selection-row {
+  margin-bottom: 20px;
+  
+  .function-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      
+      i {
+        font-size: 18px;
+      }
+      
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      
+      &.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// Action buttons styling
+.action-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  justify-content: center;
+  align-items: center;
+  
+  .action-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 4px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+// Badge styling
+.badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  
+  &.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+  }
+  
+  &.badge-danger {
+    background-color: #dc3545;
+    color: white;
+  }
+  
+  &.badge-success {
+    background-color: #28a745;
+    color: white;
+  }
+  
+  &.badge-info {
+    background-color: #17a2b8;
+    color: white;
   }
 }

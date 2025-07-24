@@ -546,20 +546,57 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     try {
       this.isLoading = true;
       
-      // Load from both collections for calendar
-      const wareouseQ = query(collection(this.db, 'warehouse-checklist'), orderBy('createdAt', 'desc'));
-      const securedQ = query(collection(this.db, 'secured-checklist'), orderBy('createdAt', 'desc'));
-      
-      const [warehouseSnapshot, securedSnapshot] = await Promise.all([
-        getDocs(wareouseQ),
-        getDocs(securedQ)
+      // Add timeout to prevent blocking
+      const loadPromise = Promise.race([
+        this.performHistoryLoad(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Load timeout after 10 seconds')), 10000)
+        )
       ]);
       
+      await loadPromise;
+      
+    } catch (error) {
+      console.error('🔥 Error loading from Firebase:', error);
+      this.isLoading = false;
       this.historyData = [];
       this.checklistDates.clear();
       
-      // Process warehouse checklist data
-      warehouseSnapshot.forEach((doc) => {
+      // Show error notification
+      this.showNotification = true;
+      this.notificationMessage = '❌ Lỗi khi tải dữ liệu từ Firebase';
+      this.notificationClass = 'error';
+      setTimeout(() => { this.showNotification = false; }, 3000);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async performHistoryLoad() {
+    // Load from both collections for calendar
+    const wareouseQ = query(collection(this.db, 'warehouse-checklist'), orderBy('createdAt', 'desc'));
+    const securedQ = query(collection(this.db, 'secured-checklist'), orderBy('createdAt', 'desc'));
+    
+    const [warehouseSnapshot, securedSnapshot] = await Promise.all([
+      getDocs(wareouseQ),
+      getDocs(securedQ)
+    ]);
+    
+    this.historyData = [];
+    this.checklistDates.clear();
+    
+    // Process warehouse checklist data with chunking to prevent blocking
+    const warehouseDocs = warehouseSnapshot.docs;
+    const securedDocs = securedSnapshot.docs;
+    
+    // Process in chunks to prevent UI blocking
+    const chunkSize = 10;
+    
+    // Process warehouse data in chunks
+    for (let i = 0; i < warehouseDocs.length; i += chunkSize) {
+      const chunk = warehouseDocs.slice(i, i + chunkSize);
+      
+      chunk.forEach((doc) => {
         const data = doc.data() as ChecklistData;
         
         // Skip deleted records
@@ -579,38 +616,39 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         }
       });
       
-      // Process secured checklist data for calendar only
-      securedSnapshot.forEach((doc) => {
-        const data = doc.data() as ChecklistData;
-        
-        // Skip deleted records
-        if ((data as any).deleted) {
-          return;
-        }
-        
-        // Add to checklist dates for calendar
-        if (data.ngayKiem) {
-          this.checklistDates.add(data.ngayKiem);
-          console.log('📅 Added to checklistDates (secured):', data.ngayKiem, 'from record:', doc.id);
-        }
-      });
-      
-      this.totalRecords = this.historyData.length;
-      console.log(`📊 Loaded ${this.historyData.length} warehouse records, ${this.checklistDates.size} unique dates for calendar`);
-      console.log('📅 Calendar dates:', Array.from(this.checklistDates).sort());
-      
-      // Debug: Compare current date format
-      const todayLocal = this.formatDateToLocal(new Date());
-      const todayISO = new Date().toISOString().split('T')[0];
-      console.log('🕐 Today comparison - Local format:', todayLocal, 'vs ISO format:', todayISO);
-
-      // Update checklist with most recent data
-      this.updateChecklistWithRecentData();
-    } catch (error) {
-      console.error('Load history error:', error);
-    } finally {
-      this.isLoading = false;
+      // Allow UI to update between chunks
+      if (i + chunkSize < warehouseDocs.length) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
     }
+    
+    // Process secured checklist data for calendar only
+    securedDocs.forEach((doc) => {
+      const data = doc.data() as ChecklistData;
+      
+      // Skip deleted records
+      if ((data as any).deleted) {
+        return;
+      }
+      
+      // Add to checklist dates for calendar
+      if (data.ngayKiem) {
+        this.checklistDates.add(data.ngayKiem);
+        console.log('📅 Added to checklistDates (secured):', data.ngayKiem, 'from record:', doc.id);
+      }
+    });
+    
+    this.totalRecords = this.historyData.length;
+    console.log(`📊 Loaded ${this.historyData.length} warehouse records, ${this.checklistDates.size} unique dates for calendar`);
+    console.log('📅 Calendar dates:', Array.from(this.checklistDates).sort());
+    
+    // Debug: Compare current date format
+    const todayLocal = this.formatDateToLocal(new Date());
+    const todayISO = new Date().toISOString().split('T')[0];
+    console.log('🕐 Today comparison - Local format:', todayLocal, 'vs ISO format:', todayISO);
+
+    // Update checklist with most recent data
+    this.updateChecklistWithRecentData();
   }
 
   startNewChecklist() {
@@ -785,10 +823,20 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       this.showHistory = false;
       // Refresh data when opening calendar to ensure latest dates are shown
       console.log('📅 Opening calendar, refreshing data...');
-      this.loadHistory().then(() => {
-        // Debug calendar after data is loaded
-        setTimeout(() => this.debugCalendarDates(), 100);
-      });
+      
+      // Add timeout to prevent blocking UI
+      setTimeout(() => {
+        this.loadHistory().then(() => {
+          // Debug calendar after data is loaded
+          setTimeout(() => this.debugCalendarDates(), 100);
+        }).catch(error => {
+          console.error('❌ Error loading history for calendar:', error);
+          this.showNotification = true;
+          this.notificationMessage = '❌ Lỗi khi tải dữ liệu lịch sử cho lịch';
+          this.notificationClass = 'error';
+          setTimeout(() => { this.showNotification = false; }, 3000);
+        });
+      }, 100);
     }
   }
 
@@ -833,67 +881,99 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   previousMonth() {
-    this.currentCalendarDate = new Date(
-      this.currentCalendarDate.getFullYear(),
-      this.currentCalendarDate.getMonth() - 1,
-      1
-    );
+    try {
+      this.currentCalendarDate = new Date(
+        this.currentCalendarDate.getFullYear(),
+        this.currentCalendarDate.getMonth() - 1,
+        1
+      );
+      
+      // Refresh calendar data if needed
+      if (this.showCalendar && this.checklistDates.size > 0) {
+        setTimeout(() => {
+          this.debugCalendarDates();
+        }, 100);
+      }
+    } catch (error) {
+      console.error('❌ Error navigating to previous month:', error);
+    }
   }
 
   nextMonth() {
-    this.currentCalendarDate = new Date(
-      this.currentCalendarDate.getFullYear(),
-      this.currentCalendarDate.getMonth() + 1,
-      1
-    );
+    try {
+      this.currentCalendarDate = new Date(
+        this.currentCalendarDate.getFullYear(),
+        this.currentCalendarDate.getMonth() + 1,
+        1
+      );
+      
+      // Refresh calendar data if needed
+      if (this.showCalendar && this.checklistDates.size > 0) {
+        setTimeout(() => {
+          this.debugCalendarDates();
+        }, 100);
+      }
+    } catch (error) {
+      console.error('❌ Error navigating to next month:', error);
+    }
   }
 
   getCalendarDays(): CalendarDay[] {
-    const year = this.currentCalendarDate.getFullYear();
-    const month = this.currentCalendarDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const today = new Date();
-    
-    // Get first day of week (Monday = 1, Sunday = 0)
-    const firstDayOfWeek = firstDay.getDay();
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - (firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1));
-    
-    const days: CalendarDay[] = [];
-    const currentDate = new Date(startDate);
-    
-    // Generate 6 weeks (42 days)
-    for (let i = 0; i < 42; i++) {
-      // Fix timezone issue: use local date format instead of ISO
-      const dateStr = this.formatDateToLocal(currentDate);
-      const isCurrentMonth = currentDate.getMonth() === month;
-      const isToday = currentDate.toDateString() === today.toDateString();
-      const hasChecklist = this.checklistDates.has(dateStr);
+    try {
+      const year = this.currentCalendarDate.getFullYear();
+      const month = this.currentCalendarDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const today = new Date();
       
-      // Debug logging for calendar generation
-      if (isCurrentMonth && hasChecklist) {
-        console.log(`📅 Calendar day ${currentDate.getDate()}: dateStr='${dateStr}', hasChecklist=${hasChecklist}`);
+      // Get first day of week (Monday = 1, Sunday = 0)
+      const firstDayOfWeek = firstDay.getDay();
+      const startDate = new Date(firstDay);
+      startDate.setDate(startDate.getDate() - (firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1));
+      
+      const days: CalendarDay[] = [];
+      const currentDate = new Date(startDate);
+      
+      // Generate 6 weeks (42 days) with performance optimization
+      for (let i = 0; i < 42; i++) {
+        // Fix timezone issue: use local date format instead of ISO
+        const dateStr = this.formatDateToLocal(currentDate);
+        const isCurrentMonth = currentDate.getMonth() === month;
+        const isToday = currentDate.toDateString() === today.toDateString();
+        
+        // Optimize checklist check - only check if we have data
+        let hasChecklist = false;
+        if (this.checklistDates && this.checklistDates.size > 0) {
+          hasChecklist = this.checklistDates.has(dateStr);
+        }
+        
+        // Debug logging for calendar generation (only for current month)
+        if (isCurrentMonth && hasChecklist) {
+          console.log(`📅 Calendar day ${currentDate.getDate()}: dateStr='${dateStr}', hasChecklist=${hasChecklist}`);
+        }
+        
+        const dayOfWeek = this.getDayOfWeek(currentDate);
+        const isSunday = currentDate.getDay() === 0;
+        
+        days.push({
+          day: currentDate.getDate(),
+          date: new Date(currentDate),
+          isCurrentMonth,
+          isToday,
+          hasChecklist,
+          dayOfWeek,
+          isSunday
+        });
+        
+        currentDate.setDate(currentDate.getDate() + 1);
       }
       
-      const dayOfWeek = this.getDayOfWeek(currentDate);
-      
-      const isSunday = currentDate.getDay() === 0;
-      
-      days.push({
-        day: currentDate.getDate(),
-        date: new Date(currentDate),
-        isCurrentMonth,
-        isToday,
-        hasChecklist,
-        dayOfWeek,
-        isSunday
-      });
-      
-      currentDate.setDate(currentDate.getDate() + 1);
+      return days;
+    } catch (error) {
+      console.error('❌ Error generating calendar days:', error);
+      // Return empty array if there's an error
+      return [];
     }
-    
-    return days;
   }
 
   // Helper method to format date consistently
@@ -905,35 +985,67 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   onDayClick(day: CalendarDay) {
-    if (!day.isCurrentMonth) return;
-    
-    // Prevent creating checklist on Sunday
-    if (day.isSunday) {
-      this.showNotification = true;
-      this.notificationMessage = '🚫 Không thể tạo checklist vào ngày Chủ Nhật (ngày nghỉ)';
-      this.notificationClass = 'warning';
-      setTimeout(() => { this.showNotification = false; }, 3000);
-      return;
-    }
-    
-    const dateStr = this.formatDateToLocal(day.date);
-    console.log(`🖱️ Day clicked: ${day.day}, dateStr='${dateStr}', hasChecklist=${day.hasChecklist}`);
-    
-    if (day.hasChecklist) {
-      // Find and load the checklist for this day
-      const record = this.historyData.find(r => r.ngayKiem === dateStr);
-      console.log(`🔍 Looking for record with ngayKiem='${dateStr}', found:`, !!record);
-      if (record) {
-        this.loadRecord(record);
-        this.showCalendar = false;
+    try {
+      if (!day.isCurrentMonth) return;
+      
+      // Prevent creating checklist on Sunday
+      if (day.isSunday) {
+        this.showNotification = true;
+        this.notificationMessage = '🚫 Không thể tạo checklist vào ngày Chủ Nhật (ngày nghỉ)';
+        this.notificationClass = 'warning';
+        setTimeout(() => { this.showNotification = false; }, 3000);
+        return;
       }
-    } else {
-      // Create new checklist for this day
-      this.currentData.ngayKiem = dateStr;
-      this.showCalendar = false;
+      
+      const dateStr = this.formatDateToLocal(day.date);
+      console.log(`🖱️ Day clicked: ${day.day}, dateStr='${dateStr}', hasChecklist=${day.hasChecklist}`);
+      
+      // Add loading state to prevent multiple clicks
+      this.isLoading = true;
+      
+      // Use setTimeout to prevent UI blocking
+      setTimeout(() => {
+        try {
+          if (day.hasChecklist) {
+            // Find and load the checklist for this day
+            const record = this.historyData.find(r => r.ngayKiem === dateStr);
+            console.log(`🔍 Looking for record with ngayKiem='${dateStr}', found:`, !!record);
+            if (record) {
+              this.loadRecord(record);
+              this.showCalendar = false;
+            } else {
+              console.warn('Record not found for date:', dateStr);
+              this.showNotification = true;
+              this.notificationMessage = '❌ Không tìm thấy dữ liệu cho ngày này';
+              this.notificationClass = 'error';
+              setTimeout(() => { this.showNotification = false; }, 3000);
+            }
+          } else {
+            // Create new checklist for this day
+            this.currentData.ngayKiem = dateStr;
+            this.showCalendar = false;
+            this.showNotification = true;
+            this.notificationMessage = `📅 Đã chọn ngày ${day.day}/${day.date.getMonth() + 1}/${day.date.getFullYear()} để tạo checklist mới`;
+            this.notificationClass = 'info';
+            setTimeout(() => { this.showNotification = false; }, 3000);
+          }
+        } catch (error) {
+          console.error('❌ Error handling day click:', error);
+          this.showNotification = true;
+          this.notificationMessage = '❌ Lỗi khi xử lý ngày được chọn';
+          this.notificationClass = 'error';
+          setTimeout(() => { this.showNotification = false; }, 3000);
+        } finally {
+          this.isLoading = false;
+        }
+      }, 50);
+      
+    } catch (error) {
+      console.error('❌ Error in onDayClick:', error);
+      this.isLoading = false;
       this.showNotification = true;
-      this.notificationMessage = `📅 Đã chọn ngày ${day.day}/${day.date.getMonth() + 1}/${day.date.getFullYear()} để tạo checklist mới`;
-      this.notificationClass = 'info';
+      this.notificationMessage = '❌ Lỗi khi xử lý sự kiện click';
+      this.notificationClass = 'error';
       setTimeout(() => { this.showNotification = false; }, 3000);
     }
   }

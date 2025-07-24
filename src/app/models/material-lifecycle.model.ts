@@ -88,6 +88,10 @@ export interface WorkOrder {
   notes?: string;
   createdDate: Date;
   lastUpdated: Date;
+  // New fields for the updated format
+  isUrgent?: boolean;
+  missingMaterials?: string;
+  materialsComplete?: boolean;
 }
 
 export enum FactoryType {

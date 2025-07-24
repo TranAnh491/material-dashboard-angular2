@@ -333,7 +333,14 @@
               </span>
             </div>
             <div class="calendar-grid">
-              <div class="calendar-days">
+              <!-- Loading indicator -->
+              <div *ngIf="isLoading" class="calendar-loading">
+                <div class="loading-spinner"></div>
+                <p>Đang tải dữ liệu lịch...</p>
+              </div>
+              
+              <!-- Calendar days -->
+              <div class="calendar-days" *ngIf="!isLoading">
                 <div 
                   *ngFor="let day of getCalendarDays()" 
                   class="calendar-day"
@@ -345,6 +352,7 @@
                   [class.sunday]="day.isSunday"
                   (click)="onDayClick(day)"
                   [title]="getDayTooltip(day)"
+                  [disabled]="isLoading"
                 >
                   <span class="day-weekday">{{ day.dayOfWeek }}</span>
                   <span class="day-number">{{ day.day }}</span>
