@@ -69,6 +69,18 @@
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           🗑️ Xóa dữ liệu
           </button>
+          <button 
+          type="button"
+          (click)="startFreshImport()" 
+          style="background: #607d8b; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
+          🔄 Import mới
+          </button>
+          <button 
+          type="button"
+          (click)="showImportHistory()" 
+          style="background: #795548; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer;">
+          📋 Lịch sử Import
+          </button>
 
       </div>
 
@@ -83,6 +95,7 @@
         
       <div *ngIf="firebaseSaved && !isSaving" style="text-align: center; padding: 15px; background: #e8f5e8; border-radius: 8px; margin-bottom: 20px;">
         <div style="font-size: 16px; color: #4caf50;">✅ Dữ liệu đã được lưu thành công vào Firebase!</div>
+        <div style="font-size: 12px; color: #2e7d32; margin-top: 5px;">💡 Dữ liệu mới sẽ được nối tiếp với dữ liệu cũ. Sử dụng "🔄 Import mới" để bắt đầu từ đầu.</div>
       </div>
 
 
@@ -93,15 +106,53 @@
         
         <!-- Record Count and Actions -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-          <div style="background: #e3f2fd; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #1976d2;">
-            📊 Total: {{scheduleData.length}} records
-        </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <div style="background: #e3f2fd; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #1976d2;">
+              📊 Total: {{scheduleData.length}} records
+            </div>
+            <div style="background: #e8f5e8; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #4caf50;">
+              ✅ Hoàn thành: {{getCompletedItemsCount()}}
+            </div>
+            <div style="background: #fff3e0; padding: 8px 15px; border-radius: 20px; font-weight: bold; color: #ff9800;">
+              ⏳ Chưa hoàn thành: {{getIncompleteItemsCount()}}
+            </div>
+          </div>
           <div style="font-size: 11px; color: #666; text-align: right; line-height: 1.3;">
-            💡 📸 So sánh | 🗑️📸 Xóa so sánh | 🗑️📋 Xóa dòng
+            💡 📸 So sánh | 🗑️📸 Xóa so sánh | 🗑️📋 Xóa dòng | ✅ Hoàn thành | 📝 Ghi chú trực tiếp
           </div>
         </div>
 
-        <div style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;">
+        <!-- Completion Control Buttons -->
+        <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+          <button 
+            type="button"
+            (click)="toggleShowCompletedItems()" 
+            [style.background]="showCompletedItems ? '#ff9800' : '#2196f3'"
+            style="color: white; padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
+            {{showCompletedItems ? '🙈 Ẩn hoàn thành' : '👁️ Hiện tất cả'}}
+          </button>
+          <button 
+            type="button"
+            (click)="markAllVisibleAsCompleted()" 
+            [disabled]="getIncompleteItemsCount() === 0"
+            style="background: #4caf50; color: white; padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;"
+            [style.opacity]="getIncompleteItemsCount() > 0 ? '1' : '0.5'">
+            ✅ Hoàn thành tất cả
+          </button>
+        </div>
+
+        <!-- No data message -->
+        <div *ngIf="getDisplayScheduleData().length === 0" style="text-align: center; padding: 40px; background: #f5f5f5; border-radius: 8px; margin-bottom: 20px;">
+          <div style="font-size: 48px; margin-bottom: 15px;">{{showCompletedItems ? '📋' : '✅'}}</div>
+          <h5 style="color: #666; margin: 0 0 10px 0;">
+            {{showCompletedItems ? 'Không có dữ liệu nào' : 'Tất cả đã hoàn thành!'}}
+          </h5>
+          <p style="color: #666; margin: 0; font-size: 14px;">
+            {{showCompletedItems ? 'Vui lòng import dữ liệu Excel' : 'Tất cả items đã được đánh dấu hoàn thành'}}
+          </p>
+        </div>
+
+        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
             <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
               <tr>
@@ -123,12 +174,13 @@
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Tình trạng</th>
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Bản vẽ</th>
                 <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Ghi chú</th>
-                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Thao tác</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 180px;">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of scheduleData; let i = index" 
-                  [style.background]="i % 2 === 0 ? '#f9f9f9' : 'white'"
+              <tr *ngFor="let item of getDisplayScheduleData(); let i = index" 
+                  [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f9f9f9' : 'white')"
+                  [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 1px solid #e0e0e0;">
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.nam || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
@@ -179,43 +231,75 @@
                     <option value="Chưa có">Chưa có</option>
                   </select>
               </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ghiChu || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <div class="action-buttons" style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                  <input 
+                    type="text" 
+                    [(ngModel)]="item.ghiChu" 
+                    placeholder="Ghi chú..."
+                    (blur)="onNoteBlur(item, $event)"
+                    (keypress)="onNoteKeyPress($event, item)"
+                    (input)="onNoteChange(item)"
+                    style="width: 100%; padding: 4px 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; text-align: center; background: white; transition: all 0.3s ease;"
+                    title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <div class="action-buttons" style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-direction: row;">
                     <button 
                       (click)="captureAndCompareLabel(item)"
                       [title]="getComparisonTooltip(item)"
-                      style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s;"
+                      style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                       [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
                       [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
                       {{getComparisonIcon(item)}}
                     </button>
-                  <button 
+                    <button 
+                      *ngIf="!item.isCompleted"
+                      (click)="markAsCompleted(item)"
+                      title="Đánh dấu hoàn thành"
+                      style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                      onmouseenter="this.style.background='#45a049'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                      ✅
+                    </button>
+                    <button 
+                      *ngIf="item.isCompleted"
+                      (click)="markAsIncomplete(item)"
+                      title="Bỏ đánh dấu hoàn thành"
+                      style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                      onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
+                      🔄
+                    </button>
+                    <button 
                       *ngIf="item.labelComparison"
                       (click)="deleteComparisonImage(item)"
                       title="Xóa kết quả so sánh"
-                      style="background: #ff9800; color: white; border: none; font-size: 12px; cursor: pointer; padding: 3px 5px; border-radius: 3px; transition: all 0.3s; font-weight: bold;"
+                      style="background: #ff9800; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                       onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
                       onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
                       🗑️📸
-                  </button>
-                  <button 
+                    </button>
+                    <button 
                       (click)="deleteScheduleItem(i)"
                       title="Xóa toàn bộ dòng"
-                      style="background: #f44336; color: white; border: none; font-size: 12px; cursor: pointer; padding: 3px 5px; border-radius: 3px; transition: all 0.3s; font-weight: bold;"
+                      style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                       onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
                       onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
                       🗑️📋
-                  </button>
-                </div>
-              </td>
+                    </button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         
         <div style="text-align: center; margin-top: 15px; color: #666;">
-          <p>Total records: {{scheduleData.length}}</p>
+          <p>Hiển thị: {{getDisplayScheduleData().length}} / {{scheduleData.length}} records 
+            <span *ngIf="!showCompletedItems && getCompletedItemsCount() > 0" style="color: #4caf50;">
+              ({{getCompletedItemsCount()}} đã ẩn)
+            </span>
+          </p>
           <div *ngIf="firebaseSaved" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">
             <span style="color: #4caf50; font-size: 16px;">✅</span>
             <span style="color: #4caf50; font-weight: bold;">Data saved to Firebase</span>

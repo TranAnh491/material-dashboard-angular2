@@ -21,6 +21,9 @@ interface ScheduleItem {
   tinhTrang?: string;
   banVe?: string;
   ghiChu?: string;
+  isCompleted?: boolean;
+  completedAt?: Date;
+  completedBy?: string;
   labelComparison?: {
     photoUrl?: string;
     comparisonResult?: 'Pass' | 'Fail' | 'Pending';
@@ -152,7 +155,7 @@ export class PrintLabelComponent implements OnInit {
 
         // Remove header row and convert to ScheduleItem format
         const dataRows = jsonData.slice(1); // Skip header row
-        this.scheduleData = dataRows.map((row: any, index: number) => ({
+        const newScheduleData = dataRows.map((row: any, index: number) => ({
           nam: row[0]?.toString() || '',
           thang: row[1]?.toString() || '',
           stt: row[2]?.toString() || '',
@@ -174,17 +177,26 @@ export class PrintLabelComponent implements OnInit {
           // Remove labelComparison: undefined - Firebase doesn't allow undefined values
         }));
         
-        console.log('📋 Processed schedule data:', this.scheduleData.length, 'items');
+        console.log('📋 Processed new schedule data:', newScheduleData.length, 'items');
         
         // Validate data before saving
-        if (this.scheduleData.length === 0) {
+        if (newScheduleData.length === 0) {
           throw new Error('No data found in Excel file');
         }
+
+        // Merge with existing data instead of replacing
+        const existingData = this.scheduleData || [];
+        const mergedData = [...existingData, ...newScheduleData];
+        
+        console.log(`📊 Merging data: ${existingData.length} existing + ${newScheduleData.length} new = ${mergedData.length} total`);
+        
+        // Update the schedule data with merged data
+        this.scheduleData = mergedData;
 
         // Save to Firebase 
         this.saveToFirebase(this.scheduleData);
         
-        alert(`✅ Successfully imported ${this.scheduleData.length} records from ${file.name} and saved to Firebase 🔥`);
+        alert(`✅ Successfully imported ${newScheduleData.length} new records from ${file.name} and merged with ${existingData.length} existing records. Total: ${mergedData.length} records saved to Firebase 🔥`);
       } catch (error) {
         console.error('Error reading file:', error);
         this.isSaving = false; // Reset saving state on error
@@ -215,7 +227,15 @@ export class PrintLabelComponent implements OnInit {
       importedAt: new Date(),
       month: this.getCurrentMonth(),
       recordCount: data.length,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
+      importHistory: [
+        {
+          importedAt: new Date(),
+          recordCount: data.length,
+          month: this.getCurrentMonth(),
+          description: `Import ${data.length} records`
+        }
+      ]
     };
 
     console.log('📤 Attempting to save schedule data:', {
@@ -560,18 +580,56 @@ export class PrintLabelComponent implements OnInit {
   }
 
   clearScheduleData(): void {
-    if (this.scheduleData.length === 0) {
-      alert('Không có dữ liệu để xóa!');
-        return;
-      }
-      
-    const confirmDelete = confirm(`Bạn có chắc muốn xóa ${this.scheduleData.length} bản ghi đã import?\n\nDữ liệu sẽ bị mất vĩnh viễn!`);
-    
-    if (confirmDelete) {
+    if (confirm('⚠️ Bạn có chắc chắn muốn xóa tất cả dữ liệu hiện tại? Hành động này không thể hoàn tác!')) {
+      console.log('🗑️ Clearing all schedule data...');
       this.scheduleData = [];
       this.firebaseSaved = false;
-      console.log('Schedule data cleared');
-      alert('✅ Đã xóa tất cả dữ liệu!');
+      
+      // Save empty data to Firebase to clear it
+      this.saveToFirebase([]);
+      
+      alert('🗑️ Đã xóa tất cả dữ liệu lịch trình in!');
+    }
+  }
+
+  // Add function to show import history
+  showImportHistory(): void {
+    console.log('📋 Showing import history...');
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc')
+    ).get().subscribe((querySnapshot) => {
+      let historyText = '📋 Lịch sử Import:\n\n';
+      let totalRecords = 0;
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as any;
+        const importDate = data.importedAt?.toDate() || new Date();
+        const recordCount = data.recordCount || 0;
+        totalRecords += recordCount;
+        
+        historyText += `📅 ${importDate.toLocaleString('vi-VN')}\n`;
+        historyText += `📊 Số bản ghi: ${recordCount}\n`;
+        historyText += `📁 Tháng: ${data.month || 'N/A'}\n`;
+        historyText += `🆔 ID: ${doc.id}\n`;
+        historyText += '─'.repeat(50) + '\n\n';
+      });
+      
+      historyText += `📈 Tổng cộng: ${totalRecords} bản ghi trong ${querySnapshot.size} lần import`;
+      
+      alert(historyText);
+    }, (error) => {
+      console.error('❌ Error loading import history:', error);
+      alert('❌ Lỗi khi tải lịch sử import');
+    });
+  }
+
+  // Add function to start fresh import (clear existing data first)
+  startFreshImport(): void {
+    if (confirm('🔄 Bạn muốn bắt đầu import mới? Dữ liệu cũ sẽ bị xóa và thay thế bằng dữ liệu mới.')) {
+      console.log('🔄 Starting fresh import...');
+      this.scheduleData = [];
+      this.firebaseSaved = false;
+      alert('🔄 Đã sẵn sàng cho import mới. Vui lòng chọn file Excel.');
     }
   }
 
@@ -2686,5 +2744,174 @@ export class PrintLabelComponent implements OnInit {
       .catch((error: any) => {
         console.error('❌ Error finding Firebase document for update:', error);
       });
+  }
+
+  // Add function to mark item as completed
+  markAsCompleted(item: ScheduleItem): void {
+    if (confirm(`✅ Đánh dấu hoàn thành cho mã tem: ${item.maTem}?`)) {
+      console.log('✅ Marking item as completed:', item.maTem);
+      
+      item.isCompleted = true;
+      item.completedAt = new Date();
+      item.completedBy = 'User'; // You can get this from user service later
+      
+      // Update Firebase
+      this.updateScheduleInFirebase(item);
+      
+      alert(`✅ Đã đánh dấu hoàn thành cho mã tem: ${item.maTem}`);
+    }
+  }
+
+  // Add function to mark item as incomplete
+  markAsIncomplete(item: ScheduleItem): void {
+    if (confirm(`🔄 Bỏ đánh dấu hoàn thành cho mã tem: ${item.maTem}?`)) {
+      console.log('🔄 Marking item as incomplete:', item.maTem);
+      
+      item.isCompleted = false;
+      item.completedAt = undefined;
+      item.completedBy = undefined;
+      
+      // Update Firebase
+      this.updateScheduleInFirebase(item);
+      
+      alert(`🔄 Đã bỏ đánh dấu hoàn thành cho mã tem: ${item.maTem}`);
+    }
+  }
+
+  // Add function to get filtered data (hide completed items)
+  getFilteredScheduleData(): ScheduleItem[] {
+    return this.scheduleData.filter(item => !item.isCompleted);
+  }
+
+  // Add function to get completed items count
+  getCompletedItemsCount(): number {
+    return this.scheduleData.filter(item => item.isCompleted).length;
+  }
+
+  // Add function to get incomplete items count
+  getIncompleteItemsCount(): number {
+    return this.scheduleData.filter(item => !item.isCompleted).length;
+  }
+
+  // Add function to toggle show/hide completed items
+  showCompletedItems: boolean = false;
+
+  toggleShowCompletedItems(): void {
+    this.showCompletedItems = !this.showCompletedItems;
+    console.log('🔄 Toggle show completed items:', this.showCompletedItems);
+  }
+
+  // Add function to get display data based on filter
+  getDisplayScheduleData(): ScheduleItem[] {
+    if (this.showCompletedItems) {
+      return this.scheduleData; // Show all items
+    } else {
+      return this.getFilteredScheduleData(); // Hide completed items
+    }
+  }
+
+  // Add function to mark all visible items as completed
+  markAllVisibleAsCompleted(): void {
+    const visibleItems = this.getDisplayScheduleData();
+    const incompleteItems = visibleItems.filter(item => !item.isCompleted);
+    
+    if (incompleteItems.length === 0) {
+      alert('ℹ️ Không có item nào để đánh dấu hoàn thành!');
+      return;
+    }
+    
+    if (confirm(`✅ Đánh dấu hoàn thành cho ${incompleteItems.length} items?`)) {
+      console.log('✅ Marking all visible items as completed');
+      
+      incompleteItems.forEach(item => {
+        item.isCompleted = true;
+        item.completedAt = new Date();
+        item.completedBy = 'User';
+      });
+      
+      // Update Firebase
+      this.updateFirebaseAfterBulkUpdate();
+      
+      alert(`✅ Đã đánh dấu hoàn thành cho ${incompleteItems.length} items!`);
+    }
+  }
+
+  // Add function to update Firebase after bulk update
+  updateFirebaseAfterBulkUpdate(): void {
+    console.log('🔥 Updating Firebase after bulk completion update...');
+    
+    const updatePromise = this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise().then((querySnapshot: any) => {
+      if (querySnapshot && !querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        return doc.ref.update({
+          data: this.scheduleData,
+          lastUpdated: new Date(),
+          completedCount: this.getCompletedItemsCount(),
+          incompleteCount: this.getIncompleteItemsCount()
+        });
+      }
+    });
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Firebase update timeout after 10 seconds')), 10000)
+    );
+
+    Promise.race([updatePromise, timeoutPromise])
+      .then(() => {
+        console.log('✅ Firebase updated successfully after bulk completion');
+      })
+      .catch((error) => {
+        console.error('❌ Error updating Firebase after bulk completion:', error);
+        alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
+      });
+  }
+
+  // Add function to show note save success message
+  showNoteSaveSuccess(input: HTMLInputElement): void {
+    const originalBackground = input.style.background;
+    const originalColor = input.style.color;
+    const originalBorder = input.style.border;
+    
+    input.style.background = '#e8f5e8';
+    input.style.color = '#4caf50';
+    input.style.border = '1px solid #4caf50';
+    
+    setTimeout(() => {
+      input.style.background = originalBackground;
+      input.style.color = originalColor;
+      input.style.border = originalBorder;
+    }, 800);
+  }
+
+  // Add function to handle note input with Enter key
+  onNoteKeyPress(event: KeyboardEvent, item: ScheduleItem): void {
+    if (event.key === 'Enter') {
+      console.log('💾 Saving note for item:', item.maTem, 'Note:', item.ghiChu);
+      this.updateScheduleInFirebase(item);
+      
+      // Show success message
+      this.showNoteSaveSuccess(event.target as HTMLInputElement);
+      
+      // Optional: Move focus to next input or blur
+      (event.target as HTMLInputElement).blur();
+    }
+  }
+
+  // Add function to handle note input change
+  onNoteChange(item: ScheduleItem): void {
+    console.log('📝 Note changed for item:', item.maTem, 'New note:', item.ghiChu);
+    // You can add additional validation or processing here if needed
+  }
+
+  // Add function to handle note blur (auto-save)
+  onNoteBlur(item: ScheduleItem, event: any): void {
+    console.log('💾 Auto-saving note for item:', item.maTem, 'Note:', item.ghiChu);
+    this.updateScheduleInFirebase(item);
+    
+    // Show brief success indicator
+    const input = event.target as HTMLInputElement;
+    this.showNoteSaveSuccess(input);
   }
 } 
