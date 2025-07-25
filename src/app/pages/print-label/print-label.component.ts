@@ -97,6 +97,9 @@ export class PrintLabelComponent implements OnInit {
   loginError: string = '';
   showLoginDialog: boolean = false;
 
+  // Camera capture properties
+  isCapturingPhoto: boolean = false;
+
   constructor(
     private firestore: AngularFirestore,
     private permissionService: PermissionService
@@ -105,6 +108,25 @@ export class PrintLabelComponent implements OnInit {
   ngOnInit(): void {
     console.log('Label Component initialized successfully!');
     this.loadDataFromFirebase();
+  }
+
+  ngOnDestroy(): void {
+    // Clean up any existing camera streams
+    const existingDialog = document.querySelector('.camera-dialog');
+    if (existingDialog) {
+      document.body.removeChild(existingDialog);
+    }
+    
+    // Stop all media streams
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(stream => {
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(() => {
+          // Ignore errors when cleaning up
+        });
+    }
   }
 
 
@@ -288,40 +310,75 @@ export class PrintLabelComponent implements OnInit {
       .then((querySnapshot: any) => {
         this.isLoading = false;
         if (querySnapshot && !querySnapshot.empty) {
-          // Convert documents to ScheduleItem array
-          this.scheduleData = querySnapshot.docs.map((doc: any) => {
-            const data = doc.data();
-            
-            // Create clean ScheduleItem by removing Firebase-specific fields
-            const scheduleItem: ScheduleItem = {
-              nam: data.nam || '',
-              thang: data.thang || '',
-              stt: data.stt || '',
-              sizePhoi: data.sizePhoi || '',
-              maTem: data.maTem || '',
-              soLuongYeuCau: data.soLuongYeuCau || '',
-              soLuongPhoi: data.soLuongPhoi || '',
-              maHang: data.maHang || '',
-              lenhSanXuat: data.lenhSanXuat || '',
-              khachHang: data.khachHang || '',
-              ngayNhanKeHoach: data.ngayNhanKeHoach || '',
-              yy: data.yy || '',
-              ww: data.ww || '',
-              lineNhan: data.lineNhan || '',
-              nguoiIn: data.nguoiIn || '',
-              tinhTrang: data.tinhTrang || '',
-              banVe: data.banVe || '',
-              ghiChu: data.ghiChu || '',
-              isCompleted: data.isCompleted || false,
-              completedAt: data.completedAt ? new Date(data.completedAt.toDate()) : undefined,
-              completedBy: data.completedBy || '',
-              labelComparison: data.labelComparison || undefined
-            };
-            
-            return scheduleItem;
-          });
+          // Try to load from the latest document's data field first
+          const latestDoc = querySnapshot.docs[0];
+          const latestData = latestDoc.data();
           
-          // Sort data by recordIndex if available, otherwise by importedAt
+          if (latestData.data && Array.isArray(latestData.data) && latestData.data.length > 0) {
+            console.log('📋 Loading from latest document data field');
+            this.scheduleData = latestData.data.map((item: any) => {
+              return {
+                nam: item.nam || '',
+                thang: item.thang || '',
+                stt: item.stt || '',
+                sizePhoi: item.sizePhoi || '',
+                maTem: item.maTem || '',
+                soLuongYeuCau: item.soLuongYeuCau || '',
+                soLuongPhoi: item.soLuongPhoi || '',
+                maHang: item.maHang || '',
+                lenhSanXuat: item.lenhSanXuat || '',
+                khachHang: item.khachHang || '',
+                ngayNhanKeHoach: item.ngayNhanKeHoach || '',
+                yy: item.yy || '',
+                ww: item.ww || '',
+                lineNhan: item.lineNhan || '',
+                nguoiIn: item.nguoiIn || '',
+                tinhTrang: item.tinhTrang || '',
+                banVe: item.banVe || '',
+                ghiChu: item.ghiChu || '',
+                isCompleted: item.isCompleted || false,
+                completedAt: item.completedAt ? new Date(item.completedAt.toDate()) : undefined,
+                completedBy: item.completedBy || '',
+                labelComparison: item.labelComparison || undefined
+              };
+            });
+          } else {
+            // Fallback: load from individual documents (old format)
+            console.log('📋 Loading from individual documents (fallback)');
+            this.scheduleData = querySnapshot.docs.map((doc: any) => {
+              const data = doc.data();
+              
+              // Create clean ScheduleItem by removing Firebase-specific fields
+              const scheduleItem: ScheduleItem = {
+                nam: data.nam || '',
+                thang: data.thang || '',
+                stt: data.stt || '',
+                sizePhoi: data.sizePhoi || '',
+                maTem: data.maTem || '',
+                soLuongYeuCau: data.soLuongYeuCau || '',
+                soLuongPhoi: data.soLuongPhoi || '',
+                maHang: data.maHang || '',
+                lenhSanXuat: data.lenhSanXuat || '',
+                khachHang: data.khachHang || '',
+                ngayNhanKeHoach: data.ngayNhanKeHoach || '',
+                yy: data.yy || '',
+                ww: data.ww || '',
+                lineNhan: data.lineNhan || '',
+                nguoiIn: data.nguoiIn || '',
+                tinhTrang: data.tinhTrang || '',
+                banVe: data.banVe || '',
+                ghiChu: data.ghiChu || '',
+                isCompleted: data.isCompleted || false,
+                completedAt: data.completedAt ? new Date(data.completedAt.toDate()) : undefined,
+                completedBy: data.completedBy || '',
+                labelComparison: data.labelComparison || undefined
+              };
+              
+              return scheduleItem;
+            });
+          }
+          
+          // Sort data by STT
           this.scheduleData.sort((a, b) => {
             const aIndex = parseInt(a.stt || '0');
             const bIndex = parseInt(b.stt || '0');
@@ -1124,8 +1181,20 @@ export class PrintLabelComponent implements OnInit {
   captureAndCompareLabel(item: ScheduleItem): void {
     console.log('📸 Starting photo capture for item:', item.maTem);
     
+    // Prevent multiple captures
+    if (this.isCapturingPhoto) {
+      console.log('⚠️ Already capturing photo, please wait...');
+      return;
+    }
+    
+    this.isCapturingPhoto = true;
+    
+    // Clean up any existing camera streams first
+    this.cleanupCameraStreams();
+    
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert('❌ Camera not available on this device');
+      this.isCapturingPhoto = false;
       return;
     }
 
@@ -1161,15 +1230,18 @@ export class PrintLabelComponent implements OnInit {
           return;
         }
 
-        // Set canvas size
-        canvas.width = 1280;
-        canvas.height = 720;
-
-        // Wait for video to be ready
+        // Set canvas size based on video dimensions
         video.onloadedmetadata = () => {
-          console.log('📺 Video metadata loaded, showing dialog');
-          const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
-          document.body.appendChild(captureDialog);
+          console.log('📺 Video metadata loaded, setting canvas size');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          // Wait a bit for video to be ready
+          setTimeout(() => {
+            console.log('📺 Video ready, showing dialog');
+            const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
+            document.body.appendChild(captureDialog);
+          }, 500);
         };
 
         // Fallback timeout
@@ -1179,10 +1251,20 @@ export class PrintLabelComponent implements OnInit {
             const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
             document.body.appendChild(captureDialog);
           }
-        }, 2000);
+        }, 3000);
+
+        // Safety timeout to reset flag and cleanup
+        setTimeout(() => {
+          if (this.isCapturingPhoto) {
+            console.log('⚠️ Safety timeout: Resetting capture flag and cleaning up');
+            this.isCapturingPhoto = false;
+            this.cleanupCameraStreams();
+          }
+        }, 10000);
       })
       .catch(error => {
         console.error('❌ Camera error:', error);
+        this.isCapturingPhoto = false;
         if (error.name === 'NotAllowedError') {
           alert('❌ Camera permission denied. Please allow camera access and try again.');
         } else if (error.name === 'NotFoundError') {
@@ -1290,7 +1372,20 @@ export class PrintLabelComponent implements OnInit {
       height: 100% !important;
       object-fit: cover !important;
       display: block !important;
+      background: #000 !important;
     `;
+
+    // Ensure video is playing
+    video.play().then(() => {
+      console.log('✅ Video started playing successfully');
+    }).catch(error => {
+      console.error('❌ Error playing video:', error);
+    });
+
+    // Add error handling for video
+    video.onerror = (error) => {
+      console.error('❌ Video error:', error);
+    };
 
     const buttonContainer = document.createElement('div');
     buttonContainer.style.cssText = `
@@ -1376,11 +1471,18 @@ export class PrintLabelComponent implements OnInit {
       e.preventDefault();
       e.stopPropagation();
       console.log('❌ Cancel button activated!');
-      document.body.removeChild(dialog);
+      
+      // Stop video stream
       if (video.srcObject) {
         const tracks = (video.srcObject as MediaStream).getTracks();
         tracks.forEach(track => track.stop());
       }
+      
+      // Remove camera dialog
+      this.removeCameraDialog(dialog);
+      
+      // Reset capture flag
+      this.isCapturingPhoto = false;
     };
 
     // Add multiple event types for better mobile compatibility
@@ -1489,23 +1591,47 @@ export class PrintLabelComponent implements OnInit {
 
   captureAndSavePhoto(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, dialog: HTMLElement): void {
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.error('❌ Cannot get canvas context');
+      this.isCapturingPhoto = false;
+      this.removeCameraDialog(dialog);
+      return;
+    }
 
     console.log('📸 Capturing photo for item:', item.maTem);
 
-    // Capture image from video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Stop video stream
-    if (video.srcObject) {
-      const tracks = (video.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
+    // Ensure video is playing and has valid dimensions
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log('⚠️ Video dimensions not ready, waiting...');
+      setTimeout(() => {
+        this.captureAndSavePhoto(video, canvas, item, dialog);
+      }, 500);
+      return;
     }
 
-    // Remove camera dialog
-    document.body.removeChild(dialog);
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    console.log('📐 Canvas size set to:', canvas.width, 'x', canvas.height);
+    
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Stop video stream immediately
+    if (video.srcObject) {
+      const tracks = (video.srcObject as MediaStream).getTracks();
+      tracks.forEach(track => {
+        track.stop();
+        console.log('🛑 Stopped video track:', track.kind);
+      });
+    }
+
+    // Remove camera dialog immediately
+    this.removeCameraDialog(dialog);
+    
+    // Reset capture flag immediately
+    this.isCapturingPhoto = false;
 
     // Convert to blob and save
     canvas.toBlob((blob) => {
@@ -1513,7 +1639,11 @@ export class PrintLabelComponent implements OnInit {
         console.log('📷 Photo captured, size:', blob.size, 'bytes');
         this.savePhotoToFirebase(blob, item);
       } else {
+        console.error('❌ Failed to create blob from canvas');
         alert('❌ Lỗi khi chụp hình');
+        this.isCapturingPhoto = false;
+        // Double-check dialog removal
+        this.removeCameraDialog(dialog);
       }
     }, 'image/jpeg', 0.8);
   }
@@ -1561,11 +1691,23 @@ export class PrintLabelComponent implements OnInit {
             // Update schedule in Firebase
             this.updateScheduleInFirebase(item);
             
+            // Reset capture flag and ensure dialog is removed
+            this.isCapturingPhoto = false;
+            
+            // Force cleanup of any remaining camera dialogs
+            this.cleanupCameraStreams();
+            
+            // Double-check dialog removal after a short delay
+            setTimeout(() => {
+              this.cleanupCameraStreams();
+            }, 200);
+            
             alert('✅ Đã chụp và lưu hình thành công! (Đã tối ưu hóa)');
           })
           .catch((error) => {
             console.error('❌ Error saving photo to Firebase:', error);
             alert('❌ Lỗi khi lưu hình vào Firebase:\n' + error.message);
+            this.isCapturingPhoto = false;
           });
       } catch (error) {
         console.error('❌ Error optimizing image:', error);
@@ -2317,40 +2459,66 @@ export class PrintLabelComponent implements OnInit {
   updateScheduleInFirebase(item: ScheduleItem): void {
     console.log('🔄 Updating schedule in Firebase for item:', item.stt);
     
-    // Update the original schedule document with comparison result
+    // Clean the item data to remove undefined values
+    const cleanItem = this.cleanScheduleItem(item);
+    
+    // Find the specific document that contains this item
     this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').limit(1)
+      ref.orderBy('importedAt', 'desc')
     ).get().toPromise()
       .then((querySnapshot: any) => {
         if (querySnapshot && !querySnapshot.empty) {
-          const doc = querySnapshot.docs[0];
-          const docData = doc.data() as any;
-          const updatedData = docData.data || [];
+          // Search through all documents to find the one containing this item
+          let foundDoc = null;
+          let foundItemIndex = -1;
           
-          console.log('📋 Found schedule document with', updatedData.length, 'items');
+          for (const doc of querySnapshot.docs) {
+            const docData = doc.data();
+            const scheduleData = docData.data || [];
+            
+            const itemIndex = scheduleData.findIndex((scheduleItem: any) => 
+              scheduleItem.stt === cleanItem.stt && scheduleItem.maTem === cleanItem.maTem
+            );
+            
+            if (itemIndex !== -1) {
+              foundDoc = doc;
+              foundItemIndex = itemIndex;
+              break;
+            }
+          }
           
-          // Find and update the specific item
-          const itemIndex = updatedData.findIndex((scheduleItem: any) => 
-            scheduleItem.stt === item.stt && scheduleItem.maTem === item.maTem
-          );
-          
-          if (itemIndex !== -1) {
-            console.log('✅ Found item at index:', itemIndex);
-            updatedData[itemIndex].labelComparison = item.labelComparison;
+          if (foundDoc && foundItemIndex !== -1) {
+            console.log('✅ Found item in document:', foundDoc.id, 'at index:', foundItemIndex);
+            
+            const docData = foundDoc.data();
+            const updatedData = docData.data || [];
+            
+            // Update all fields of the item
+            updatedData[foundItemIndex] = {
+              ...updatedData[foundItemIndex],
+              ...cleanItem
+            };
+            
+            // Clean the entire data array to remove undefined values
+            const cleanData = updatedData.map((item: any) => this.cleanScheduleItem(item));
             
             // Update the document
-            doc.ref.update({
-              data: updatedData,
-              lastUpdated: new Date()
+            foundDoc.ref.update({
+              data: cleanData,
+              lastUpdated: new Date(),
+              lastAction: 'Item updated'
             }).then(() => {
-              console.log('✅ Schedule updated with comparison result');
+              console.log('✅ Schedule updated successfully');
             }).catch((error) => {
               console.error('❌ Error updating schedule:', error);
               alert('❌ Lỗi khi cập nhật lịch trình:\n' + error.message);
             });
           } else {
-            console.warn('⚠️ Item not found in schedule data');
-            console.log('Available items:', updatedData.map((i: any) => ({ stt: i.stt, maTem: i.maTem })));
+            console.warn('⚠️ Item not found in any schedule document');
+            console.log('Searching for item:', { stt: cleanItem.stt, maTem: cleanItem.maTem });
+            
+            // Fallback: update the entire schedule data
+            this.updateEntireScheduleInFirebase();
           }
         } else {
           console.warn('⚠️ No schedule documents found');
@@ -2944,6 +3112,57 @@ export class PrintLabelComponent implements OnInit {
     }, 800);
   }
 
+  // Add function to show field save success message
+  showFieldSaveSuccess(fieldName: string): void {
+    // Create a temporary success indicator
+    const successIndicator = document.createElement('div');
+    successIndicator.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4caf50;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 10000;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease;
+    `;
+    
+    // Add CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Set field name mapping
+    const fieldNames: { [key: string]: string } = {
+      'sizePhoi': 'Size phôi',
+      'nguoiIn': 'Người in',
+      'tinhTrang': 'Tình trạng',
+      'banVe': 'Bản vẽ',
+      'ghiChu': 'Ghi chú'
+    };
+    
+    successIndicator.textContent = `✅ Đã lưu ${fieldNames[fieldName] || fieldName}`;
+    document.body.appendChild(successIndicator);
+    
+    // Remove after 2 seconds
+    setTimeout(() => {
+      if (successIndicator.parentNode) {
+        successIndicator.parentNode.removeChild(successIndicator);
+      }
+      if (style.parentNode) {
+        style.parentNode.removeChild(style);
+      }
+    }, 2000);
+  }
+
   // Add function to handle note input with Enter key
   onNoteKeyPress(event: KeyboardEvent, item: ScheduleItem): void {
     if (event.key === 'Enter') {
@@ -2972,6 +3191,110 @@ export class PrintLabelComponent implements OnInit {
     // Show brief success indicator
     const input = event.target as HTMLInputElement;
     this.showNoteSaveSuccess(input);
+  }
+
+  // Add function to handle field changes (auto-save)
+  onFieldChange(item: ScheduleItem, fieldName: string): void {
+    console.log(`💾 Field changed for item: ${item.maTem}, Field: ${fieldName}, New value:`, item[fieldName as keyof ScheduleItem]);
+    
+    // Update Firebase immediately
+    this.updateScheduleInFirebase(item);
+    
+    // Show brief success indicator
+    this.showFieldSaveSuccess(fieldName);
+    
+    // Debug: log current state
+    console.log('🔍 Current scheduleData length:', this.scheduleData.length);
+    console.log('🔍 Updated item:', item);
+  }
+
+  // Add function to update entire schedule data in Firebase
+  updateEntireScheduleInFirebase(): void {
+    console.log('🔄 Updating entire schedule in Firebase...');
+    
+    // Clean all schedule data to remove undefined values
+    const cleanScheduleData = this.scheduleData.map(item => this.cleanScheduleItem(item));
+    
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        if (querySnapshot && !querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          
+          // Update the document with cleaned schedule data
+          doc.ref.update({
+            data: cleanScheduleData,
+            lastUpdated: new Date(),
+            lastAction: 'Bulk update',
+            recordCount: cleanScheduleData.length
+          }).then(() => {
+            console.log('✅ Entire schedule updated successfully');
+          }).catch((error) => {
+            console.error('❌ Error updating entire schedule:', error);
+          });
+        } else {
+          console.warn('⚠️ No schedule documents found for bulk update');
+        }
+      })
+      .catch((error) => {
+        console.error('❌ Error finding schedule document for bulk update:', error);
+      });
+  }
+
+  // Add function to clean schedule item data
+  cleanScheduleItem(item: any): any {
+    const cleanItem: any = {};
+    
+    // Only include defined values
+    Object.keys(item).forEach(key => {
+      if (item[key] !== undefined && item[key] !== null) {
+        cleanItem[key] = item[key];
+      }
+    });
+    
+    return cleanItem;
+  }
+
+  // Add function to debug Firebase data
+  debugFirebaseData(): void {
+    console.log('🔍 Debugging Firebase data...');
+    
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc')
+    ).get().toPromise()
+      .then((querySnapshot: any) => {
+        console.log('📊 Total documents in Firebase:', querySnapshot.size);
+        
+        querySnapshot.docs.forEach((doc: any, index: number) => {
+          const data = doc.data();
+          console.log(`📄 Document ${index + 1} (${doc.id}):`);
+          console.log('  - importedAt:', data.importedAt);
+          console.log('  - data length:', data.data?.length || 0);
+          console.log('  - lastUpdated:', data.lastUpdated);
+          console.log('  - lastAction:', data.lastAction);
+          
+          if (data.data && data.data.length > 0) {
+            console.log('  - Sample items:');
+            data.data.slice(0, 3).forEach((item: any, i: number) => {
+              console.log(`    ${i + 1}. STT: ${item.stt}, MaTem: ${item.maTem}, SizePhoi: ${item.sizePhoi}, NguoiIn: ${item.nguoiIn}`);
+            });
+          }
+        });
+        
+        // Show summary alert
+        const summary = `📊 Firebase Debug Summary:\n\n` +
+          `Total documents: ${querySnapshot.size}\n` +
+          `Latest document: ${querySnapshot.docs[0]?.id || 'None'}\n` +
+          `Current local data: ${this.scheduleData.length} items\n\n` +
+          `Check console for detailed information.`;
+        
+        alert(summary);
+      })
+      .catch((error) => {
+        console.error('❌ Error debugging Firebase data:', error);
+        alert('❌ Error debugging Firebase data: ' + error.message);
+      });
   }
 
   // Authentication methods
@@ -3055,6 +3378,90 @@ export class PrintLabelComponent implements OnInit {
     this.currentPassword = '';
     this.loginError = '';
     console.log('🔓 User logged out');
+  }
+
+  // Remove camera dialog safely
+  removeCameraDialog(dialog: HTMLElement): void {
+    try {
+      // Remove all camera dialogs to be safe
+      const allDialogs = document.querySelectorAll('.camera-dialog');
+      console.log('🗑️ Found', allDialogs.length, 'camera dialogs to remove');
+      
+      allDialogs.forEach((dialogElement, index) => {
+        if (dialogElement.parentNode) {
+          // Stop any video streams in this dialog first
+          const videos = dialogElement.querySelectorAll('video');
+          videos.forEach(video => {
+            if (video.srcObject) {
+              const tracks = (video.srcObject as MediaStream).getTracks();
+              tracks.forEach(track => {
+                track.stop();
+                console.log('🛑 Stopped video track in dialog:', track.kind);
+              });
+            }
+          });
+          
+          // Remove the dialog
+          dialogElement.parentNode.removeChild(dialogElement);
+          console.log('🗑️ Removed camera dialog', index + 1);
+        }
+      });
+      
+      // Also remove any video elements that might be left
+      const videoElements = document.querySelectorAll('video');
+      videoElements.forEach(video => {
+        if (video.srcObject) {
+          const tracks = (video.srcObject as MediaStream).getTracks();
+          tracks.forEach(track => {
+            track.stop();
+            console.log('🛑 Stopped remaining video track:', track.kind);
+          });
+        }
+      });
+      
+      console.log('🗑️ Camera dialog and video streams cleaned up successfully');
+    } catch (error) {
+      console.error('❌ Error removing camera dialog:', error);
+    }
+  }
+
+  // Clean up camera streams
+  cleanupCameraStreams(): void {
+    console.log('🧹 Cleaning up camera streams...');
+    
+    // Remove all camera dialogs
+    this.removeCameraDialog(document.createElement('div'));
+    
+    // Stop all video elements that might be playing
+    const videoElements = document.querySelectorAll('video');
+    videoElements.forEach(video => {
+      if (video.srcObject) {
+        const tracks = (video.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => {
+          track.stop();
+          console.log('🛑 Stopped video track during cleanup:', track.kind);
+        });
+      }
+    });
+    
+    // Stop all media streams
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(stream => {
+          stream.getTracks().forEach(track => {
+            track.stop();
+            console.log('🛑 Stopped media stream track during cleanup:', track.kind);
+          });
+        })
+        .catch(() => {
+          // Ignore errors when cleaning up
+        });
+    }
+    
+    // Reset capture flag
+    this.isCapturingPhoto = false;
+    
+    console.log('✅ Camera cleanup completed');
   }
 
   clearOldFirebaseData(): void {
