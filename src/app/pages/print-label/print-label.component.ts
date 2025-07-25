@@ -3020,6 +3020,11 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => !item.isCompleted).length;
   }
 
+  // Add function to get IQC items count
+  getIQCItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
+  }
+
   // Add function to toggle show/hide completed items
   showCompletedItems: boolean = false;
 

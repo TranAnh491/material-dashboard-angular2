@@ -95,12 +95,7 @@
           style="background: #ff5722; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 5px; cursor: pointer;">
           🔓 Đăng xuất
           </button>
-          <button 
-          type="button"
-          (click)="debugFirebaseData()" 
-          style="background: #9c27b0; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 5px; cursor: pointer;">
-          🔍 Debug Firebase
-          </button>
+
 
       </div>
 
@@ -139,6 +134,9 @@
           </div>
           <div style="background: #fff3e0; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #ff9800; font-size: 12px;">
             ⏳ Chưa hoàn thành: {{getIncompleteItemsCount()}}
+          </div>
+          <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px;">
+            🔍 IQC: {{getIQCItemsCount()}}
           </div>
           </div>
           <div style="font-size: 11px; color: #666; text-align: right; line-height: 1.3;">
@@ -241,7 +239,7 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.stt || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn size</option>
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
@@ -258,7 +256,7 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ww || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lineNhan || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option value="Tuấn">Tuấn</option>
                     <option value="Tình">Tình</option>
@@ -271,7 +269,7 @@
                   </select>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Chờ in">Chờ in</option>
@@ -280,7 +278,7 @@
                   </select>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                  <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn bản vẽ</option>
                     <option value="Có">Có</option>
                     <option value="Chưa có">Chưa có</option>
@@ -294,7 +292,11 @@
                     (blur)="onNoteBlur(item, $event)"
                     (keypress)="onNoteKeyPress($event, item)"
                     (input)="onNoteChange(item)"
-                    style="width: 100%; padding: 4px 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; text-align: center; background: white; transition: all 0.3s ease;"
+                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 12px; text-align: center; outline: none; transition: all 0.3s ease;"
+                    onmouseover="this.style.background='#f0f8ff'" 
+                    onmouseout="this.style.background='transparent'" 
+                    onfocus="this.style.background='#e6f3ff'" 
+                    onblur="this.style.background='transparent'"
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
