@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { PermissionService } from '../../services/permission.service';
 import * as XLSX from 'xlsx';
 
 interface ScheduleItem {
@@ -89,7 +90,17 @@ export class PrintLabelComponent implements OnInit {
   isSaving: boolean = false;
   isLoading: boolean = false;
 
-  constructor(private firestore: AngularFirestore) { }
+  // Authentication properties
+  isAuthenticated: boolean = false;
+  currentEmployeeId: string = '';
+  currentPassword: string = '';
+  loginError: string = '';
+  showLoginDialog: boolean = false;
+
+  constructor(
+    private firestore: AngularFirestore,
+    private permissionService: PermissionService
+  ) { }
 
   ngOnInit(): void {
     console.log('Label Component initialized successfully!');
@@ -266,7 +277,7 @@ export class PrintLabelComponent implements OnInit {
     this.isLoading = true;
     
     const loadPromise = this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').orderBy('recordIndex', 'asc')
+      ref.orderBy('importedAt', 'desc')
     ).get().toPromise();
 
     const timeoutPromise = new Promise((_, reject) => 
@@ -280,14 +291,45 @@ export class PrintLabelComponent implements OnInit {
           // Convert documents to ScheduleItem array
           this.scheduleData = querySnapshot.docs.map((doc: any) => {
             const data = doc.data();
-            // Remove Firebase-specific fields to get clean ScheduleItem
-            const { importedAt, month, recordIndex, totalRecords, lastUpdated, ...scheduleItem } = data;
-            return scheduleItem as ScheduleItem;
+            
+            // Create clean ScheduleItem by removing Firebase-specific fields
+            const scheduleItem: ScheduleItem = {
+              nam: data.nam || '',
+              thang: data.thang || '',
+              stt: data.stt || '',
+              sizePhoi: data.sizePhoi || '',
+              maTem: data.maTem || '',
+              soLuongYeuCau: data.soLuongYeuCau || '',
+              soLuongPhoi: data.soLuongPhoi || '',
+              maHang: data.maHang || '',
+              lenhSanXuat: data.lenhSanXuat || '',
+              khachHang: data.khachHang || '',
+              ngayNhanKeHoach: data.ngayNhanKeHoach || '',
+              yy: data.yy || '',
+              ww: data.ww || '',
+              lineNhan: data.lineNhan || '',
+              nguoiIn: data.nguoiIn || '',
+              tinhTrang: data.tinhTrang || '',
+              banVe: data.banVe || '',
+              ghiChu: data.ghiChu || '',
+              isCompleted: data.isCompleted || false,
+              completedAt: data.completedAt ? new Date(data.completedAt.toDate()) : undefined,
+              completedBy: data.completedBy || '',
+              labelComparison: data.labelComparison || undefined
+            };
+            
+            return scheduleItem;
+          });
+          
+          // Sort data by recordIndex if available, otherwise by importedAt
+          this.scheduleData.sort((a, b) => {
+            const aIndex = parseInt(a.stt || '0');
+            const bIndex = parseInt(b.stt || '0');
+            return aIndex - bIndex;
           });
           
           this.firebaseSaved = this.scheduleData.length > 0;
           console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase`);
-          console.log(`💾 Firebase Saved status: ${this.firebaseSaved}`);
         } else {
           console.log('🔥 No data found in Firebase');
           this.scheduleData = [];
@@ -578,6 +620,11 @@ export class PrintLabelComponent implements OnInit {
   }
 
   clearScheduleData(): void {
+    if (!this.hasPermission()) {
+      this.showLoginDialogForAction('clearData');
+      return;
+    }
+
     if (confirm('⚠️ Bạn có chắc chắn muốn xóa tất cả dữ liệu hiện tại? Hành động này không thể hoàn tác!')) {
       console.log('🗑️ Clearing all schedule data...');
       this.scheduleData = [];
@@ -2681,6 +2728,11 @@ export class PrintLabelComponent implements OnInit {
 
   // Delete individual schedule item
   deleteScheduleItem(index: number): void {
+    if (!this.hasPermission()) {
+      this.showLoginDialogForAction('deleteItem');
+      return;
+    }
+
     if (index < 0 || index >= this.scheduleData.length) {
       console.error('❌ Invalid index for deletion:', index);
       return;
@@ -2922,7 +2974,95 @@ export class PrintLabelComponent implements OnInit {
     this.showNoteSaveSuccess(input);
   }
 
+  // Authentication methods
+  showLoginDialogForAction(action: string): void {
+    this.showLoginDialog = true;
+    this.loginError = '';
+    this.currentEmployeeId = '';
+    this.currentPassword = '';
+    
+    // Store the action to perform after successful login
+    (window as any).pendingAction = action;
+  }
+
+  async authenticateUser(): Promise<void> {
+    if (!this.currentEmployeeId || !this.currentPassword) {
+      this.loginError = 'Vui lòng nhập đầy đủ thông tin!';
+      return;
+    }
+
+    try {
+      const isValid = await this.permissionService.validateUserCredentials(
+        this.currentEmployeeId, 
+        this.currentPassword
+      );
+      
+      if (isValid) {
+        this.isAuthenticated = true;
+        this.showLoginDialog = false;
+        this.loginError = '';
+        
+        // Perform the pending action
+        const pendingAction = (window as any).pendingAction;
+        if (pendingAction) {
+          this.performAuthenticatedAction(pendingAction);
+          (window as any).pendingAction = null;
+        }
+      } else {
+        this.loginError = 'Mã nhân viên hoặc mật khẩu không đúng, hoặc bạn không có quyền thực hiện hành động này!';
+        this.currentPassword = '';
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
+      this.loginError = 'Có lỗi xảy ra khi xác thực thông tin!';
+      this.currentPassword = '';
+    }
+  }
+
+  cancelLogin(): void {
+    this.showLoginDialog = false;
+    this.loginError = '';
+    this.currentEmployeeId = '';
+    this.currentPassword = '';
+    (window as any).pendingAction = null;
+  }
+
+  performAuthenticatedAction(action: string): void {
+    switch (action) {
+      case 'clearData':
+        this.clearScheduleData();
+        break;
+      case 'clearFirebase':
+        this.clearOldFirebaseData();
+        break;
+      case 'deleteItem':
+        // This will be handled by the specific delete method
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
+  }
+
+  // Check if user has permission for sensitive actions
+  hasPermission(): boolean {
+    return this.isAuthenticated;
+  }
+
+  // Logout method
+  logout(): void {
+    this.isAuthenticated = false;
+    this.currentEmployeeId = '';
+    this.currentPassword = '';
+    this.loginError = '';
+    console.log('🔓 User logged out');
+  }
+
   clearOldFirebaseData(): void {
+    if (!this.hasPermission()) {
+      this.showLoginDialogForAction('clearFirebase');
+      return;
+    }
+
     console.log('🗑️ Clearing old Firebase data...');
     
     this.firestore.collection('printSchedules').get().toPromise()
