@@ -106,8 +106,13 @@ export class PrintLabelComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    console.log('Label Component initialized successfully!');
+    console.log('🚀 PrintLabelComponent initialized');
+    
+    // Load data from Firebase on component initialization
     this.loadDataFromFirebase();
+    
+    // Load storage information
+    this.refreshStorageInfo();
   }
 
   ngOnDestroy(): void {
@@ -664,7 +669,7 @@ export class PrintLabelComponent implements OnInit {
     // Generate Excel file
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    
+
     // Download file
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1658,11 +1663,11 @@ export class PrintLabelComponent implements OnInit {
       console.log('📄 Original Base64 data length:', base64Data.length);
       
       try {
-        // Optimize image to 250KB max
-        const optimizedImage = await this.optimizeImageForStorage(base64Data, 250);
+        // Optimize image to 150KB max (giảm từ 250KB)
+        const optimizedImage = await this.optimizeImageForStorage(base64Data, 150);
         console.log('📄 Optimized Base64 data length:', optimizedImage.length);
         
-        // Create photo document for Firebase
+        // Create photo document for Firebase (tách riêng)
         const photoData = {
           itemId: item.stt || '',
           maTem: item.maTem || '',
@@ -1678,9 +1683,9 @@ export class PrintLabelComponent implements OnInit {
           .then((docRef) => {
             console.log('✅ Photo saved to Firebase with ID:', docRef.id);
             
-            // Update item with photo info
+            // Update item with photo reference only (không lưu base64)
             item.labelComparison = {
-              photoUrl: optimizedImage,
+              photoUrl: docRef.id, // Chỉ lưu ID thay vì base64
               comparisonResult: 'Pass',
               comparedAt: new Date(),
               matchPercentage: 100,
@@ -1688,8 +1693,11 @@ export class PrintLabelComponent implements OnInit {
               hasSampleText: true
             };
 
-            // Update schedule in Firebase
+            // Update schedule in Firebase (không có base64)
             this.updateScheduleInFirebase(item);
+            
+            // Refresh storage information after saving photo
+            this.refreshStorageInfo();
             
             // Reset capture flag and ensure dialog is removed
             this.isCapturingPhoto = false;
@@ -2567,10 +2575,22 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // View full image in new window/tab
-  viewFullImage(photoUrl: string | undefined): void {
+  async viewFullImage(photoUrl: string | undefined): Promise<void> {
     if (!photoUrl) {
       alert('❌ Không có hình để hiển thị');
       return;
+    }
+
+    // Kiểm tra nếu photoUrl là ID (không bắt đầu bằng data: hoặc http)
+    let actualPhotoUrl = photoUrl;
+    if (!photoUrl.startsWith('data:') && !photoUrl.startsWith('http')) {
+      // Đây là ID, cần lấy URL từ Firebase
+      const url = await this.getPhotoFromFirebase(photoUrl);
+      if (!url) {
+        alert('❌ Không tìm thấy hình ảnh');
+        return;
+      }
+      actualPhotoUrl = url;
     }
     
     const newWindow = window.open('', '_blank');
@@ -2579,7 +2599,7 @@ export class PrintLabelComponent implements OnInit {
         <html>
           <head><title>Label Photo</title></head>
           <body style="margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000;">
-            <img src="${photoUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+            <img src="${actualPhotoUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
           </body>
         </html>
       `);
@@ -2587,15 +2607,27 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Download photo
-  downloadPhoto(item: ScheduleItem): void {
+  async downloadPhoto(item: ScheduleItem): Promise<void> {
     if (!item.labelComparison?.photoUrl) {
       alert('❌ Không có hình để tải về');
       return;
     }
 
     try {
+      let photoUrl = item.labelComparison.photoUrl;
+      
+      // Kiểm tra nếu photoUrl là ID
+      if (!photoUrl.startsWith('data:') && !photoUrl.startsWith('http')) {
+        const url = await this.getPhotoFromFirebase(photoUrl);
+        if (!url) {
+          alert('❌ Không tìm thấy hình ảnh');
+          return;
+        }
+        photoUrl = url;
+      }
+
       const link = document.createElement('a');
-      link.href = item.labelComparison.photoUrl;
+      link.href = photoUrl;
       link.download = `tem-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.jpg`;
       document.body.appendChild(link);
       link.click();
@@ -3543,5 +3575,242 @@ export class PrintLabelComponent implements OnInit {
       
       img.src = base64Image;
     });
+  }
+
+  // Thêm hàm để lấy hình ảnh từ Firebase
+  async getPhotoFromFirebase(photoId: string): Promise<string | null> {
+    try {
+      const doc = await this.firestore.collection('labelPhotos').doc(photoId).get().toPromise();
+      if (doc && doc.exists) {
+        const data = doc.data() as any;
+        return data?.photoUrl || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting photo from Firebase:', error);
+      return null;
+    }
+  }
+
+  // Hàm để hiển thị hình ảnh từ ID
+  async viewPhotoFromId(photoId: string): Promise<void> {
+    const photoUrl = await this.getPhotoFromFirebase(photoId);
+    if (photoUrl) {
+      this.viewFullImage(photoUrl);
+    } else {
+      alert('❌ Không tìm thấy hình ảnh');
+    }
+  }
+
+  // Thêm hàm để kiểm tra và tối ưu hóa dữ liệu hiện tại
+  async optimizeCurrentData(): Promise<void> {
+    console.log('🔧 Optimizing current data...');
+    
+    try {
+      // Lấy dữ liệu hiện tại
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc')
+      ).get().toPromise();
+
+      if (!querySnapshot || querySnapshot.empty) {
+        alert('❌ Không có dữ liệu để tối ưu hóa');
+        return;
+      }
+
+      let optimizedCount = 0;
+      const batch = this.firestore.firestore.batch();
+
+      for (const doc of querySnapshot.docs) {
+        const docData = doc.data() as any;
+        const scheduleData = docData.data || [];
+        let hasChanges = false;
+
+        // Kiểm tra và tối ưu hóa từng item
+        for (let i = 0; i < scheduleData.length; i++) {
+          const item = scheduleData[i];
+          
+          // Nếu có labelComparison với photoUrl là base64, chuyển thành ID
+          if (item.labelComparison?.photoUrl && 
+              item.labelComparison.photoUrl.startsWith('data:')) {
+            
+            // Tạo document mới cho photo
+            const photoRef = this.firestore.collection('labelPhotos').doc();
+            const photoData = {
+              itemId: item.stt || '',
+              maTem: item.maTem || '',
+              maHang: item.maHang || '',
+              khachHang: item.khachHang || '',
+              photoUrl: item.labelComparison.photoUrl,
+              capturedAt: item.labelComparison.comparedAt || new Date(),
+              savedAt: new Date()
+            };
+            
+            batch.set(photoRef.ref, photoData);
+            
+            // Cập nhật item để chỉ lưu ID
+            scheduleData[i] = {
+              ...item,
+              labelComparison: {
+                ...item.labelComparison,
+                photoUrl: photoRef.ref.id
+              }
+            };
+            
+            hasChanges = true;
+            optimizedCount++;
+          }
+        }
+
+        // Nếu có thay đổi, cập nhật document
+        if (hasChanges) {
+          batch.update(doc.ref, {
+            data: scheduleData,
+            lastUpdated: new Date(),
+            lastAction: 'Data optimized'
+          });
+        }
+      }
+
+      // Thực hiện batch update
+      await batch.commit();
+      
+      console.log(`✅ Optimized ${optimizedCount} items`);
+      alert(`✅ Đã tối ưu hóa ${optimizedCount} items thành công!`);
+      
+    } catch (error) {
+      console.error('❌ Error optimizing data:', error);
+      alert('❌ Lỗi khi tối ưu hóa dữ liệu:\n' + error.message);
+    }
+  }
+
+  // Thêm hàm để tính tổng dung lượng hình ảnh đã lưu trên Firebase
+  async getTotalPhotoStorageSize(): Promise<{ totalSizeKB: number; totalSizeMB: number; photoCount: number }> {
+    try {
+      const querySnapshot = await this.firestore.collection('labelPhotos').get().toPromise();
+      
+      if (!querySnapshot || querySnapshot.empty) {
+        return { totalSizeKB: 0, totalSizeMB: 0, photoCount: 0 };
+      }
+
+      let totalSizeBytes = 0;
+      let photoCount = 0;
+
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data() as any;
+        if (data.photoUrl && data.photoUrl.startsWith('data:')) {
+          // Tính kích thước từ base64
+          const base64Length = data.photoUrl.length;
+          const sizeBytes = (base64Length * 0.75); // Base64 to bytes conversion
+          totalSizeBytes += sizeBytes;
+          photoCount++;
+        }
+      }
+
+      const totalSizeKB = Math.round(totalSizeBytes / 1024);
+      const totalSizeMB = Math.round((totalSizeKB / 1024) * 100) / 100; // 2 decimal places
+
+      return { totalSizeKB, totalSizeMB, photoCount };
+    } catch (error) {
+      console.error('❌ Error calculating total photo storage size:', error);
+      return { totalSizeKB: 0, totalSizeMB: 0, photoCount: 0 };
+    }
+  }
+
+  // Thêm hàm để format dung lượng
+  formatStorageSize(sizeKB: number): string {
+    if (sizeKB < 1024) {
+      return `${sizeKB} KB`;
+    } else {
+      const sizeMB = sizeKB / 1024;
+      return `${sizeMB.toFixed(2)} MB`;
+    }
+  }
+
+  // Thêm hàm để kiểm tra giới hạn dung lượng
+  async checkStorageLimit(): Promise<{ isNearLimit: boolean; percentageUsed: number; limitMB: number }> {
+    const { totalSizeMB } = await this.getTotalPhotoStorageSize();
+    const limitMB = 100; // Giả sử giới hạn 100MB
+    const percentageUsed = (totalSizeMB / limitMB) * 100;
+    const isNearLimit = percentageUsed > 80; // Cảnh báo khi sử dụng > 80%
+
+    return { isNearLimit, percentageUsed, limitMB };
+  }
+
+  // Thêm hàm để refresh thông tin dung lượng
+  async refreshStorageInfo(): Promise<void> {
+    try {
+      const { totalSizeKB, totalSizeMB, photoCount } = await this.getTotalPhotoStorageSize();
+      
+      // Cập nhật DOM elements
+      const totalStorageElement = document.getElementById('totalStorageSize');
+      const photoCountElement = document.getElementById('photoCount');
+      const avgSizeElement = document.getElementById('avgSize');
+      
+      if (totalStorageElement) {
+        totalStorageElement.textContent = this.formatStorageSize(totalSizeKB);
+        totalStorageElement.style.color = totalSizeMB > 50 ? '#f44336' : '#2e7d32'; // Đỏ nếu > 50MB
+      }
+      
+      if (photoCountElement) {
+        photoCountElement.textContent = photoCount.toString();
+      }
+      
+      if (avgSizeElement && photoCount > 0) {
+        const avgSizeKB = Math.round(totalSizeKB / photoCount);
+        avgSizeElement.textContent = this.formatStorageSize(avgSizeKB);
+        avgSizeElement.style.color = avgSizeKB > 200 ? '#f44336' : '#9c27b0'; // Đỏ nếu > 200KB
+      } else if (avgSizeElement) {
+        avgSizeElement.textContent = '0 KB';
+        avgSizeElement.style.color = '#9c27b0';
+      }
+      
+      // Kiểm tra giới hạn dung lượng
+      const { isNearLimit, percentageUsed } = await this.checkStorageLimit();
+      
+      if (isNearLimit) {
+        console.warn('⚠️ Storage usage is near limit:', percentageUsed.toFixed(1) + '%');
+        // Hiển thị cảnh báo cho user
+        if (totalStorageElement) {
+          totalStorageElement.style.background = '#ffebee';
+          totalStorageElement.style.padding = '2px 6px';
+          totalStorageElement.style.borderRadius = '4px';
+        }
+        
+        // Hiển thị cảnh báo
+        const warningElement = document.getElementById('storageWarning');
+        if (warningElement) {
+          warningElement.style.display = 'block';
+        }
+      } else {
+        // Ẩn cảnh báo nếu không cần
+        const warningElement = document.getElementById('storageWarning');
+        if (warningElement) {
+          warningElement.style.display = 'none';
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error refreshing storage info:', error);
+      
+      // Hiển thị lỗi trong UI
+      const totalStorageElement = document.getElementById('totalStorageSize');
+      const photoCountElement = document.getElementById('photoCount');
+      const avgSizeElement = document.getElementById('avgSize');
+      
+      if (totalStorageElement) {
+        totalStorageElement.textContent = 'Lỗi';
+        totalStorageElement.style.color = '#f44336';
+      }
+      
+      if (photoCountElement) {
+        photoCountElement.textContent = 'Lỗi';
+        photoCountElement.style.color = '#f44336';
+      }
+      
+      if (avgSizeElement) {
+        avgSizeElement.textContent = 'Lỗi';
+        avgSizeElement.style.color = '#f44336';
+      }
+    }
   }
 } 

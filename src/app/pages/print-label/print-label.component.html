@@ -394,6 +394,42 @@
         </div>
       </div>
 
+      <!-- Storage Information -->
+      <div style="background: #e8f5e8; border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+        <h6 style="color: #2e7d32; margin-bottom: 10px; text-align: center;">💾 Thông tin dung lượng Firebase</h6>
+        <div style="display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap;">
+          <div style="min-width: 100px; margin: 5px;">
+            <div style="font-size: 20px; color: #2e7d32; font-weight: bold;" id="totalStorageSize">Đang tính...</div>
+            <div style="font-size: 12px; color: #666;">📦 Dung lượng đã dùng</div>
+          </div>
+          <div style="min-width: 100px; margin: 5px;">
+            <div style="font-size: 20px; color: #1976d2; font-weight: bold;" id="photoCount">Đang tính...</div>
+            <div style="font-size: 12px; color: #666;">🖼️ Số hình đã lưu</div>
+          </div>
+          <div style="min-width: 100px; margin: 5px;">
+            <div style="font-size: 20px; color: #ff9800; font-weight: bold;">150 KB</div>
+            <div style="font-size: 12px; color: #666;">📏 Giới hạn mỗi hình</div>
+          </div>
+          <div style="min-width: 100px; margin: 5px;">
+            <div style="font-size: 20px; color: #9c27b0; font-weight: bold;" id="avgSize">Đang tính...</div>
+            <div style="font-size: 12px; color: #666;">📊 Trung bình/hình</div>
+          </div>
+        </div>
+        <div style="text-align: center; margin-top: 10px;">
+          <button (click)="refreshStorageInfo()" 
+                  style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 12px;">
+            🔄 Cập nhật thông tin
+          </button>
+          <button (click)="optimizeCurrentData()" 
+                  style="background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-left: 10px;">
+            ⚡ Tối ưu dữ liệu
+          </button>
+        </div>
+        <div id="storageWarning" style="display: none; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 10px; margin-top: 10px; text-align: center;">
+          <span style="color: #856404; font-size: 12px;">⚠️ Dung lượng đang gần đạt giới hạn. Vui lòng tối ưu hóa dữ liệu hoặc xóa hình cũ.</span>
+        </div>
+      </div>
+
       <!-- Photo Report -->
       <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <h5 style="color: #1976d2; margin-bottom: 15px; text-align: center;">📋 Báo cáo hình chụp</h5>
