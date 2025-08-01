@@ -14,12 +14,18 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 // Firebase imports
 import { AngularFireModule } from '@angular/fire/compat';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
 import { environment } from '../environments/environment';
+
+// Components
+import { LoginComponent } from './pages/login/login.component';
 
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
@@ -44,6 +50,9 @@ import { environment } from '../environments/environment';
     MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatProgressSpinnerModule,
+    MatTabsModule,
+    MatSlideToggleModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
     AngularFireAuthModule
@@ -51,6 +60,7 @@ import { environment } from '../environments/environment';
   declarations: [
     AppComponent,
     AdminLayoutComponent,
+    LoginComponent,
     // DocumentsComponent removed from here
   ],
   providers: [],

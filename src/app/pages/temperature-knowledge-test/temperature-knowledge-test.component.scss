@@ -562,27 +562,41 @@ $border-radius-lg: 10px;
     }
   }
 
+  // Answer options
   .answer-options {
     .answer-option {
       display: block;
       margin-bottom: 15px;
       padding: 15px;
+      border: 2px solid #e0e0e0;
       border-radius: $border-radius;
-      @include transition();
+      cursor: pointer;
+      @include transition;
+      width: 100%;
+      text-align: left;
 
       &:hover {
+        border-color: $secondary-color;
         background: #f8f9fa;
       }
 
-      ::ng-deep .mat-radio-label {
-        font-size: 1.1rem;
+      &.mat-radio-checked {
+        border-color: $secondary-color;
+        background: #e3f2fd;
+      }
+
+      // Ensure radio button and text are properly aligned
+      .mat-radio-label {
+        display: flex;
+        align-items: center;
+        width: 100%;
+      }
+
+      .mat-radio-label-content {
+        margin-left: 10px;
+        font-size: 1rem;
         line-height: 1.4;
       }
-    }
-
-    .full-width {
-      width: 100%;
-      margin-top: 10px;
     }
   }
 }

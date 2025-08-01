@@ -2,6 +2,8 @@ import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
 import { DeleteConfirmationService } from '../../services/delete-confirmation.service';
+import { DebugFirebaseService } from '../../services/debug-firebase.service';
+import { TrainingReportDebugService } from '../../services/training-report-debug.service';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -156,6 +158,8 @@ export class EquipmentComponent implements OnInit {
     private router: Router,
     private trainingReportService: TrainingReportService,
     private deleteConfirmationService: DeleteConfirmationService,
+    private debugFirebaseService: DebugFirebaseService,
+    private trainingReportDebugService: TrainingReportDebugService,
     private cdr: ChangeDetectorRef
   ) {
     // Pre-calculate circumference once
@@ -178,27 +182,38 @@ export class EquipmentComponent implements OnInit {
   }
 
   openTemperatureKnowledgeTest() {
+    // Navigate to Temperature Knowledge Test component
     this.router.navigate(['/temperature-knowledge-test']);
   }
 
+  downloadWHWI0005Document(part: 'Part A' | 'Part B' | 'Full') {
+    const documentUrls = {
+      'Part A': 'https://docs.google.com/document/d/your-part-a-document-id/edit',
+      'Part B': 'https://docs.google.com/document/d/your-part-b-document-id/edit', 
+      'Full': 'https://docs.google.com/document/d/your-full-document-id/edit'
+    };
+    
+    const url = documentUrls[part];
+    if (url) {
+      window.open(url, '_blank');
+      console.log(`Downloading WH-WI0005 ${part} document`);
+    } else {
+      alert(this.isEnglish ? 
+        'Document link not configured yet. Please contact administrator.' :
+        'Liên kết tài liệu chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
+    }
+  }
+
   openMaterialsTest() {
-    // Navigate to Materials Test component (to be created)
+    // Navigate to Materials Test component
     console.log('Opening Materials Test - WH-WI0005 Part A');
-    // TODO: Create materials test component and navigate
-    // this.router.navigate(['/materials-test']);
-    alert(this.isEnglish ? 
-      'Materials Test (WH-WI0005 Part A)\n20 questions about raw materials import/export procedures.\nThis test will be implemented soon.' : 
-      'Kiểm tra Nguyên vật liệu (WH-WI0005 Phần A)\n20 câu hỏi về quy trình xuất nhập kho nguyên vật liệu.\nBài kiểm tra này sẽ được triển khai sớm.');
+    this.router.navigate(['/materials-test']);
   }
 
   openFinishedGoodsTest() {
-    // Navigate to Finished Goods Test component (to be created)
+    // Navigate to Finished Goods Test component
     console.log('Opening Finished Goods Test - WH-WI0005 Part B');
-    // TODO: Create finished goods test component and navigate
-    // this.router.navigate(['/finished-goods-test']);
-    alert(this.isEnglish ? 
-      'Finished Goods Test (WH-WI0005 Part B)\n20 questions about finished goods import/export procedures.\nThis test will be implemented soon.' : 
-      'Kiểm tra Thành phẩm (WH-WI0005 Phần B)\n20 câu hỏi về quy trình xuất nhập kho thành phẩm.\nBài kiểm tra này sẽ được triển khai sớm.');
+    this.router.navigate(['/finished-goods-test']);
   }
 
   toggleWorkInstruction() {
@@ -225,6 +240,16 @@ export class EquipmentComponent implements OnInit {
       this.showWorkInstruction = false; // Đóng work instruction khi mở report
       this.showTest = false; // Đóng test khi mở report
       this.showMatrixTraining = false; // Đóng matrix training khi mở report
+      
+      // Debug Firebase data first
+      this.debugFirebaseService.debugAllCollections();
+      this.debugFirebaseService.debugASPEmployees();
+      
+      // Additional detailed debugging
+      this.trainingReportDebugService.debugCollectionDetails();
+      this.trainingReportDebugService.checkNonASPData();
+      this.trainingReportDebugService.testFirestoreAccess();
+      
       this.refreshReportData(); // Force refresh data when opening report
     }
   }
@@ -251,8 +276,26 @@ export class EquipmentComponent implements OnInit {
     this.isLoadingReport = true;
     try {
       this.reportData = await this.trainingReportService.getTrainingReports();
+      
+      // Verify that all records still exist in database
+      const validRecords: TrainingRecord[] = [];
+      for (const record of this.reportData) {
+        if (record.id) {
+          const exists = await this.trainingReportService.recordExists(record.id);
+          if (exists) {
+            validRecords.push(record);
+          } else {
+            console.log(`⚠️ Record ${record.id} (${record.employeeId}) no longer exists in database, removing from list`);
+          }
+        } else {
+          // Records without ID are still valid
+          validRecords.push(record);
+        }
+      }
+      
+      this.reportData = validRecords;
       this.filteredReportData = [...this.reportData];
-      console.log(`📊 Loaded ${this.reportData.length} ASP employee training records from Firebase`);
+      console.log(`📊 Loaded ${this.reportData.length} valid ASP employee training records from Firebase`);
       
       // Debug: Log signature status for each record
       this.reportData.forEach(record => {
@@ -261,6 +304,9 @@ export class EquipmentComponent implements OnInit {
       
       // Pre-cache matrix training data for better performance
       this.cacheMatrixTrainingData();
+      
+      // Force change detection to update UI
+      this.cdr.detectChanges();
       
     } catch (error) {
       console.error('❌ Error loading report data:', error);
@@ -281,6 +327,9 @@ export class EquipmentComponent implements OnInit {
     
     // Reload data
     await this.loadReportData();
+    
+    // Force change detection to update UI
+    this.cdr.detectChanges();
     
     console.log('✅ Report data refreshed successfully');
   }
@@ -311,9 +360,17 @@ export class EquipmentComponent implements OnInit {
           // Remove from local data
           this.reportData = this.reportData.filter(r => r.id !== record.id);
           this.filteredReportData = this.filteredReportData.filter(r => r.id !== record.id);
-          alert('Đã xóa bản ghi thành công!');
+          
+          // Force change detection to update UI immediately
+          this.cdr.detectChanges();
+          
+          // Ask user if they want to refresh data
+          const shouldRefresh = confirm('Đã xóa bản ghi thành công!\n\nBạn có muốn làm mới dữ liệu để đảm bảo thay đổi được cập nhật không?');
+          if (shouldRefresh) {
+            await this.refreshReportData();
+          }
         } else {
-          alert('Có lỗi xảy ra khi xóa bản ghi!');
+          alert('Có lỗi xảy ra khi xóa bản ghi!\n\nVui lòng thử lại hoặc liên hệ quản trị viên nếu vấn đề vẫn tiếp tục.');
         }
       } catch (error) {
         console.error('Error deleting record:', error);

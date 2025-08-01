@@ -58,6 +58,8 @@ import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { ShelfLifeComponent } from '../../pages/shelf-life/shelf-life.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
+import { MaterialsTestComponent } from '../../pages/materials-test/materials-test.component';
+import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 
@@ -114,6 +116,8 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
     ShelfLifeComponent,
     UtilizationComponent,
     TemperatureKnowledgeTestComponent,
+    MaterialsTestComponent,
+    FinishedGoodsTestComponent,
     SettingsComponent,
     PrintLabelComponent
   ],

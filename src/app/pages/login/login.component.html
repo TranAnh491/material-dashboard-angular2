@@ -1,0 +1,104 @@
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h2>{{ isSignup ? 'Đăng ký' : 'Đăng nhập' }}</h2>
+      <p>{{ isSignup ? 'Tạo tài khoản mới' : 'Đăng nhập vào hệ thống' }}</p>
+    </div>
+
+    <!-- Login Form -->
+    <form [formGroup]="loginForm" (ngSubmit)="onLogin()" *ngIf="!isSignup">
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email</mat-label>
+          <input matInput formControlName="email" type="email" placeholder="Nhập email">
+          <mat-error *ngIf="loginForm.get('email')?.hasError('required')">
+            Email là bắt buộc
+          </mat-error>
+          <mat-error *ngIf="loginForm.get('email')?.hasError('email')">
+            Email không hợp lệ
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Mật khẩu</mat-label>
+          <input matInput formControlName="password" type="password" placeholder="Nhập mật khẩu">
+          <mat-error *ngIf="loginForm.get('password')?.hasError('required')">
+            Mật khẩu là bắt buộc
+          </mat-error>
+          <mat-error *ngIf="loginForm.get('password')?.hasError('minlength')">
+            Mật khẩu phải có ít nhất 6 ký tự
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <button mat-raised-button color="primary" type="submit" 
+              [disabled]="loginForm.invalid || loading" class="full-width">
+        <mat-spinner diameter="20" *ngIf="loading"></mat-spinner>
+        <span *ngIf="!loading">Đăng nhập</span>
+      </button>
+    </form>
+
+    <!-- Signup Form -->
+    <form [formGroup]="signupForm" (ngSubmit)="onSignup()" *ngIf="isSignup">
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Họ tên</mat-label>
+          <input matInput formControlName="displayName" placeholder="Nhập họ tên">
+          <mat-error *ngIf="signupForm.get('displayName')?.hasError('required')">
+            Họ tên là bắt buộc
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email</mat-label>
+          <input matInput formControlName="email" type="email" placeholder="Nhập email">
+          <mat-error *ngIf="signupForm.get('email')?.hasError('required')">
+            Email là bắt buộc
+          </mat-error>
+          <mat-error *ngIf="signupForm.get('email')?.hasError('email')">
+            Email không hợp lệ
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Mật khẩu</mat-label>
+          <input matInput formControlName="password" type="password" placeholder="Nhập mật khẩu">
+          <mat-error *ngIf="signupForm.get('password')?.hasError('required')">
+            Mật khẩu là bắt buộc
+          </mat-error>
+          <mat-error *ngIf="signupForm.get('password')?.hasError('minlength')">
+            Mật khẩu phải có ít nhất 6 ký tự
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Xác nhận mật khẩu</mat-label>
+          <input matInput formControlName="confirmPassword" type="password" placeholder="Nhập lại mật khẩu">
+          <mat-error *ngIf="signupForm.get('confirmPassword')?.hasError('required')">
+            Xác nhận mật khẩu là bắt buộc
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <button mat-raised-button color="primary" type="submit" 
+              [disabled]="signupForm.invalid || loading" class="full-width">
+        <mat-spinner diameter="20" *ngIf="loading"></mat-spinner>
+        <span *ngIf="!loading">Đăng ký</span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <button mat-button (click)="toggleMode()" [disabled]="loading">
+        {{ isSignup ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký' }}
+      </button>
+    </div>
+  </div>
+</div> 

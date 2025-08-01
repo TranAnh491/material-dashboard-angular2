@@ -21,43 +21,53 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
-import { ShelfLifeComponent } from 'app/pages/shelf-life/shelf-life.component';
+
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
+import { MaterialsTestComponent } from '../../pages/materials-test/materials-test.component';
+import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
+import { AuthGuard } from '../../guards/auth.guard';
 
 export const AdminLayoutRoutes: Routes = [
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'dashboard',            component: DashboardComponent },
-  { path: 'materials',            component: MaterialsInventoryComponent },
-  { path: 'fg',                   component: TableListComponent },
-  { path: 'bm',                   component: TypographyComponent },
-  { path: 'find',                 component: MapsComponent },
-  { path: 'layout',               component: Layout3dComponent },
-  { path: 'checklist',            component: DocumentsComponent },
-  { path: 'equipment',            component: EquipmentComponent },
-  { path: 'label',                component: PrintLabelComponent },
-  { path: 'user-profile',         component: UserProfileComponent },
-  { path: 'table-list',           component: TableListComponent },
-  { path: 'typography',           component: TypographyComponent },
-  { path: 'icons',                component: IconsComponent },
-  { path: 'documents',            component: DocumentsComponent },
-  { path: 'maps',                 component: MapsComponent },
-  { path: 'notifications',        component: NotificationsComponent },
-  { path: 'kpi-reports',          component: KpiReportsComponent },
-  { path: 'work-order-status',    component: WorkOrderStatusComponent },
-  { path: 'shipment',             component: ShipmentComponent },
-  { path: 'inbound-materials',    component: InboundMaterialsComponent },
-  { path: 'outbound-materials',   component: OutboundMaterialsComponent },
-  { path: 'materials-inventory',  component: MaterialsInventoryComponent },
-  { path: 'shelf-life',           component: ShelfLifeComponent },
-  { path: 'utilization',          component: UtilizationComponent },
-  { path: 'inbound-fgs',          component: InboundFgsComponent },
-  { path: 'outbound-fgs',         component: OutboundFgsComponent },
-  { path: 'upgrade',              component: UpgradeComponent },
-  { path: 'layout-3d',            component: Layout3dComponent },
-  { path: 'temperature-knowledge-test', component: TemperatureKnowledgeTestComponent },
-  { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule) },
-  { path: 'settings',             component: SettingsComponent }
+  { 
+    path: '', 
+    redirectTo: 'dashboard', 
+    pathMatch: 'full',
+    canActivate: [AuthGuard]
+  },
+  { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard] },
+  { path: 'materials',            component: MaterialsInventoryComponent, canActivate: [AuthGuard] },
+  { path: 'fg',                   component: TableListComponent, canActivate: [AuthGuard] },
+  { path: 'bm',                   component: TypographyComponent, canActivate: [AuthGuard] },
+  { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },
+  { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },
+  { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
+  { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard] },
+  { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard] },
+  { path: 'user-profile',         component: UserProfileComponent, canActivate: [AuthGuard] },
+  { path: 'table-list',           component: TableListComponent, canActivate: [AuthGuard] },
+  { path: 'typography',           component: TypographyComponent, canActivate: [AuthGuard] },
+  { path: 'icons',                component: IconsComponent, canActivate: [AuthGuard] },
+  { path: 'documents',            component: DocumentsComponent, canActivate: [AuthGuard] },
+  { path: 'maps',                 component: MapsComponent, canActivate: [AuthGuard] },
+  { path: 'notifications',        component: NotificationsComponent, canActivate: [AuthGuard] },
+  { path: 'kpi-reports',          component: KpiReportsComponent, canActivate: [AuthGuard] },
+  { path: 'work-order-status',    component: WorkOrderStatusComponent, canActivate: [AuthGuard] },
+  { path: 'shipment',             component: ShipmentComponent, canActivate: [AuthGuard] },
+  { path: 'inbound-materials',    component: InboundMaterialsComponent, canActivate: [AuthGuard] },
+  { path: 'outbound-materials',   component: OutboundMaterialsComponent, canActivate: [AuthGuard] },
+  { path: 'materials-inventory',  component: MaterialsInventoryComponent, canActivate: [AuthGuard] },
+
+  { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
+  { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
+  { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },
+  { path: 'upgrade',              component: UpgradeComponent, canActivate: [AuthGuard] },
+  { path: 'layout-3d',            component: Layout3dComponent, canActivate: [AuthGuard] },
+  { path: 'temperature-knowledge-test', component: TemperatureKnowledgeTestComponent, canActivate: [AuthGuard] },
+  { path: 'materials-test',       component: MaterialsTestComponent, canActivate: [AuthGuard] },
+  { path: 'finished-goods-test',  component: FinishedGoodsTestComponent, canActivate: [AuthGuard] },
+  { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule), canActivate: [AuthGuard] },
+  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard] }
 ];

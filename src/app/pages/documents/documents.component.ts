@@ -62,6 +62,11 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       title: 'Checklist ASM2',
       url: 'https://docs.google.com/spreadsheets/d/1dSSE2Wu_hWntnmm0BM4NXxySOVGR6Nd9wTJECtkIdao/edit?gid=1427962301',
       category: 'Checklist Kho'
+    },
+    {
+      title: 'WH-WI0005(Ver08) HƯỚNG DẪN XUẤT NHẬP KHO',
+      url: 'https://docs.google.com/document/d/your-document-id-here/edit',
+      category: 'Training Documents'
     }
     // Thêm các file khác vào đây
   ];

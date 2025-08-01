@@ -141,7 +141,6 @@
 
           <div class="card-content">
             <h3 class="checklist-title">{{ isEnglish ? 'Raw Materials Import/Export Test' : 'Kiểm tra Xuất nhập Nguyên vật liệu' }}</h3>
-            <p class="checklist-description">{{ isEnglish ? 'Warehouse import/export procedures for raw materials (WH-WI0005 - Part A)' : 'Hướng dẫn xuất nhập kho nguyên vật liệu (WH-WI0005 - Phần A)' }}</p>
             <div class="test-info">
               <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
               <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
@@ -170,7 +169,6 @@
 
           <div class="card-content">
             <h3 class="checklist-title">{{ isEnglish ? 'Finished Goods Import/Export Test' : 'Kiểm tra Xuất nhập Thành phẩm' }}</h3>
-            <p class="checklist-description">{{ isEnglish ? 'Warehouse import/export procedures for finished goods (WH-WI0005 - Part B)' : 'Hướng dẫn xuất nhập kho thành phẩm (WH-WI0005 - Phần B)' }}</p>
             <div class="test-info">
               <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
               <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
@@ -198,7 +196,6 @@
 
           <div class="card-content">
             <h3 class="checklist-title">{{ isEnglish ? 'Temperature & Humidity Knowledge Test' : 'Kiểm tra kiến thức Nhiệt độ & Độ ẩm' }}</h3>
-            <p class="checklist-description">{{ isEnglish ? 'Temperature and humidity recording, storage and processing guidelines' : 'Hướng dẫn ghi, lưu trữ và xử lý về nhiệt độ độ ẩm' }}</p>
             <div class="test-info">
               <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
               <span class="test-detail">{{ isEnglish ? 'Time: 25 minutes' : 'Thời gian: 25 phút' }}</span>
@@ -252,6 +249,58 @@
             <i class="material-icons">assignment</i>
             <h3>{{ isEnglish ? 'No report data available' : 'Chưa có dữ liệu báo cáo' }}</h3>
             <p>{{ isEnglish ? 'No training data available for ASP employees.' : 'Không có dữ liệu đào tạo nào cho nhân viên ASP.' }}</p>
+            
+            <!-- Debug buttons for testing -->
+            <div class="debug-actions" style="margin-top: 20px; text-align: center;">
+              <button mat-raised-button 
+                      color="primary" 
+                      (click)="debugFirebaseService.debugAllCollections()"
+                      style="margin-right: 10px;">
+                <mat-icon>bug_report</mat-icon>
+                Debug Firebase
+              </button>
+              <button mat-raised-button 
+                      color="accent" 
+                      (click)="debugFirebaseService.createTestData()"
+                      style="margin-right: 10px;">
+                <mat-icon>add</mat-icon>
+                Create Test Data
+              </button>
+              <button mat-raised-button 
+                      color="warn" 
+                      (click)="debugFirebaseService.clearTestData()"
+                      style="margin-right: 10px;">
+                <mat-icon>delete</mat-icon>
+                Clear Test Data
+              </button>
+              <button mat-raised-button 
+                      color="primary" 
+                      (click)="trainingReportDebugService.debugCollectionDetails()"
+                      style="margin-right: 10px;">
+                <mat-icon>search</mat-icon>
+                Debug Details
+              </button>
+              <button mat-raised-button 
+                      color="accent" 
+                      (click)="trainingReportDebugService.checkNonASPData()"
+                      style="margin-right: 10px;">
+                <mat-icon>warning</mat-icon>
+                Check Non-ASP
+              </button>
+              <button mat-raised-button 
+                      color="primary" 
+                      (click)="trainingReportDebugService.convertToASPFormat()"
+                      style="margin-right: 10px;">
+                <mat-icon>transform</mat-icon>
+                Convert to ASP
+              </button>
+              <button mat-raised-button 
+                      color="accent" 
+                      (click)="trainingReportDebugService.createASPTestData()">
+                <mat-icon>add_circle</mat-icon>
+                Create ASP Data
+              </button>
+            </div>
           </div>
 
           <div *ngIf="!isLoadingReport && filteredReportData.length > 0" class="table-responsive">

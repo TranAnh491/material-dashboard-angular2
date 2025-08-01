@@ -20,7 +20,7 @@ export class PermissionService {
   async getAllUserPermissions(): Promise<UserPermission[]> {
     try {
       const snapshot = await this.firestore
-        .collection('user-permissions')
+        .collection('local-user-permissions')
         .ref
         .orderBy('employeeId', 'asc')
         .get();
@@ -48,7 +48,7 @@ export class PermissionService {
   async getUserPermission(employeeId: string): Promise<UserPermission | null> {
     try {
       const snapshot = await this.firestore
-        .collection('user-permissions')
+        .collection('local-user-permissions')
         .ref
         .where('employeeId', '==', employeeId)
         .limit(1)
@@ -85,7 +85,7 @@ export class PermissionService {
         updatedAt: permission.updatedAt
       };
 
-      await this.firestore.collection('user-permissions').add(data);
+      await this.firestore.collection('local-user-permissions').add(data);
     } catch (error) {
       console.error('Error saving user permission:', error);
       throw error;
@@ -104,7 +104,7 @@ export class PermissionService {
         updatedAt: permission.updatedAt
       };
 
-      await this.firestore.collection('user-permissions').doc(permission.id).update(data);
+      await this.firestore.collection('local-user-permissions').doc(permission.id).update(data);
     } catch (error) {
       console.error('Error updating user permission:', error);
       throw error;
@@ -114,7 +114,7 @@ export class PermissionService {
   async deleteUserPermission(employeeId: string): Promise<void> {
     try {
       const snapshot = await this.firestore
-        .collection('user-permissions')
+        .collection('local-user-permissions')
         .ref
         .where('employeeId', '==', employeeId)
         .get();

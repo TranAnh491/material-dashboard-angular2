@@ -1,16 +1,17 @@
-import { Component, OnInit, ElementRef } from '@angular/core';
+import { Component, OnInit, ElementRef, OnDestroy } from '@angular/core';
 import { ROUTES } from '../../routes/sidebar-routes';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router } from '@angular/router';
 import { NotificationService } from '../../core/notification.service';
 import { interval, Subscription } from 'rxjs';
+import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 
 @Component({
   selector: 'app-navbar',
   templateUrl: './navbar.component.html',
   styleUrls: ['./navbar.component.css']
 })
-export class NavbarComponent implements OnInit {
+export class NavbarComponent implements OnInit, OnDestroy {
     private listTitles: any[];
     private location: Location;
       mobile_menu_visible: any = 0;
@@ -20,8 +21,16 @@ export class NavbarComponent implements OnInit {
     public notificationCount = 0;
     private lastNotificationCount = 0;
     private notificationSubscription: Subscription;
+    public currentUser: User | null = null;
+    private userSubscription: Subscription;
 
-    constructor(location: Location,  private element: ElementRef, private router: Router, private notificationService: NotificationService) {
+    constructor(
+      location: Location,  
+      private element: ElementRef, 
+      private router: Router, 
+      private notificationService: NotificationService,
+      private authService: FirebaseAuthService
+    ) {
       this.location = location;
           this.sidebarVisible = false;
     }
@@ -46,6 +55,11 @@ export class NavbarComponent implements OnInit {
       // Bắt đầu kiểm tra thông báo định kỳ (ví dụ: mỗi 30 giây)
       this.notificationSubscription = interval(30000).subscribe(() => this.checkForNotifications());
       this.checkForNotifications(); // Kiểm tra ngay lần đầu
+
+      // Subscribe to user changes
+      this.userSubscription = this.authService.currentUser.subscribe(user => {
+        this.currentUser = user;
+      });
     }
 
     checkForNotifications() {
@@ -85,6 +99,9 @@ export class NavbarComponent implements OnInit {
       // Hủy đăng ký để tránh rò rỉ bộ nhớ
       if (this.notificationSubscription) {
         this.notificationSubscription.unsubscribe();
+      }
+      if (this.userSubscription) {
+        this.userSubscription.unsubscribe();
       }
     }
 
@@ -181,7 +198,8 @@ export class NavbarComponent implements OnInit {
               return this.listTitles[item].title;
           }
       }
-      return 'Dashboard';
+      // Không trả về 'Dashboard' khi không ở trang dashboard
+      return '';
     }
 
     isDashboard(): boolean {
@@ -189,6 +207,16 @@ export class NavbarComponent implements OnInit {
       if(currentPath.charAt(0) === '#'){
           currentPath = currentPath.slice( 1 );
       }
-      return currentPath === '/dashboard' || currentPath === '';
+      // Chỉ hiển thị dashboard elements khi thực sự ở trang dashboard
+      return currentPath === '/dashboard';
+    }
+
+    async signOut(): Promise<void> {
+      try {
+        await this.authService.signOut();
+        this.router.navigate(['/login']);
+      } catch (error) {
+        console.error('Đăng xuất thất bại:', error);
+      }
     }
 }
