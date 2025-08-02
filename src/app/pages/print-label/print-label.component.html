@@ -188,6 +188,7 @@
       <!-- Loading/Status Indicators -->
       <div *ngIf="isLoading" style="text-align: center; padding: 12px; background: #e3f2fd; border-radius: 6px; margin-bottom: 12px;">
         <div style="font-size: 14px; color: #1976d2;">🔄 Đang tải dữ liệu từ Firebase...</div>
+        <div style="font-size: 12px; color: #666; margin-top: 5px;">Vui lòng đợi, đặc biệt trên thiết bị di động</div>
       </div>
 
       <div *ngIf="isSaving" style="text-align: center; padding: 12px; background: #fff3e0; border-radius: 6px; margin-bottom: 12px;">
@@ -291,7 +292,27 @@
         </p>
       </div>
 
-        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch;">
+        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch; position: relative;">
+          <!-- Mobile Loading Overlay -->
+          <div *ngIf="isLoading" style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            border-radius: 8px;
+          ">
+            <div style="text-align: center;">
+              <div style="font-size: 24px; margin-bottom: 10px;">⏳</div>
+              <div style="font-size: 14px; color: #1976d2;">Đang tải dữ liệu...</div>
+              <div style="font-size: 12px; color: #666; margin-top: 5px;">Vui lòng đợi</div>
+            </div>
+          </div>
           <table class="mobile-table" style="width: 100%; border-collapse: collapse; font-size: 10px; min-width: 1200px;">
             <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
               <tr>

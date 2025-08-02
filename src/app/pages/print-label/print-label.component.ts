@@ -122,13 +122,21 @@ export class PrintLabelComponent implements OnInit {
   ngOnInit(): void {
     console.log('🚀 PrintLabelComponent initialized');
     
-    // Load data from Firebase on component initialization
-    this.loadDataFromFirebase();
+    // Check if mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    // Load storage information
-    this.refreshStorageInfo();
-    
-
+    if (isMobile) {
+      console.log('📱 Mobile device detected, using optimized loading...');
+      // Delay loading on mobile to prevent UI freezing
+      setTimeout(() => {
+        this.loadDataFromFirebase();
+        this.refreshStorageInfo();
+      }, 1000);
+    } else {
+      // Desktop loading
+      this.loadDataFromFirebase();
+      this.refreshStorageInfo();
+    }
   }
 
   ngOnDestroy(): void {
@@ -318,6 +326,9 @@ export class PrintLabelComponent implements OnInit {
   loadDataFromFirebase(): void {
     console.log('🔥 Loading data from Firebase...');
     this.isLoading = true;
+    
+    // Check if mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
     // Load both printSchedules and labelPhotos
     Promise.all([
@@ -510,6 +521,11 @@ export class PrintLabelComponent implements OnInit {
         this.isLoading = false;
         this.scheduleData = [];
         this.firebaseSaved = false;
+        
+        // Show user-friendly error on mobile
+        if (isMobile) {
+          alert('⚠️ Lỗi tải dữ liệu. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.');
+        }
       });
   }
 
