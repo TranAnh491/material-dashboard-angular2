@@ -23,8 +23,8 @@ export const ROUTES: RouteInfo[] = [
     { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
     { path: '/find', title: 'Find', icon: 'search', class: '' },
     { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
-    { path: '/checklist', title: 'Safety', icon: 'checklist', class: '' },
-    { path: '/equipment', title: 'Instruction and Test', icon: 'integration_instructions', class: '' },
+    { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
+    { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
     { path: '/label', title: 'Label', icon: 'label', class: '' },
     { path: '/task', title: 'Flow Work', icon: 'view_kanban', class: '' },
     { path: '/settings', title: 'Settings', icon: 'settings', class: '' }

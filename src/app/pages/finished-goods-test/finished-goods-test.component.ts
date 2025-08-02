@@ -90,7 +90,7 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
     title: "HƯỚNG DẪN XUẤT NHẬP KHO THÀNH PHẨM",
     issueDate: "17/07/2025",
     totalQuestions: 12,
-    timeLimit: 30,
+    timeLimit: 25,
     passingScore: 90,
     sections: [
       {
@@ -168,12 +168,12 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
         title: "PHẦN II: QUY TRÌNH XUẤT KHO THÀNH PHẨM",
         questions: [
           {
-            question: "Khi xuất kho thành phẩm, cần kiểm tra gì trước?",
+            question: "Khi xuất kho thành phẩm, thông tin nhận từ ai ?",
             options: [
-              "Chỉ kiểm tra số lượng",
-              "Chỉ kiểm tra hạn sử dụng",
-              "Kiểm tra số lượng và hạn sử dụng",
-              "Không cần kiểm tra gì"
+              "Bộ phận chăm sóc khách hàng",
+              "Bộ phận Sản Xuất",
+              "Quản lý Kho, Giám sát Kho và Nhân viên dữ liệu Kho",
+              "Không quan trọng là ai"
             ],
             correctAnswer: "C",
             type: "multiple-choice"
@@ -190,47 +190,47 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
             type: "multiple-choice"
           },
           {
-            question: "Khi xuất kho thành phẩm, cần ghi chép gì?",
+            question: "Khi xuất kho thành phẩm, FIFO quy định theo ?",
             options: [
-              "Chỉ ghi số lượng",
-              "Chỉ ghi ngày xuất",
-              "Ghi đầy đủ thông tin xuất kho",
-              "Không cần ghi gì"
+              "Ngày sản xuất",
+              "Ngày nhập kho",
+              "Ngày hết hạn",
+              "Ngày xuất kho"
             ],
-            correctAnswer: "C",
+            correctAnswer: "A",
             type: "multiple-choice"
           },
           {
-            question: "Nếu phát hiện thành phẩm hết hạn khi xuất kho, cần làm gì?",
+            question: "Nếu phát hiện thành phẩm hư hại khi soạn hàng,cần làm gì",
             options: [
               "Xuất bình thường",
               "Tách riêng và báo cáo quản lý",
               "Vứt đi ngay",
               "Để nguyên vị trí"
             ],
-            correctAnswer: "B",
+            correctAnswer: "D",
             type: "multiple-choice"
           },
           {
-            question: "Quy trình xuất kho thành phẩm có cần phê duyệt không?",
+            question: "Khi xuất hàng, hành động nào là được phép",
             options: [
-              "Không cần",
-              "Có, cần phê duyệt theo quy định",
-              "Chỉ cần khi xuất số lượng lớn",
-              "Tùy theo tâm trạng"
+              "Để hàng ở sân và đi uống nước",
+              "Ký nhận và lưu kho ngay",
+              "Gọi điện báo cáo quản lý",
+              "Kiểm tra số lượng và chất lượng"
             ],
-            correctAnswer: "B",
+            correctAnswer: "D",
             type: "multiple-choice"
           },
           {
-            question: "Sau khi xuất kho thành phẩm, cần cập nhật gì?",
+            question: "Bước cuối cùng khi xuất kho thành phẩm, việc cuối cùng là",
             options: [
+              "Cập nhật sổ sách và hệ thống",
               "Chỉ cập nhật sổ sách",
               "Chỉ cập nhật hệ thống",
-              "Cập nhật cả sổ sách và hệ thống",
               "Không cần cập nhật gì"
             ],
-            correctAnswer: "C",
+            correctAnswer: "A",
             type: "multiple-choice"
           }
         ]
@@ -266,7 +266,45 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
 
   isEmployeeFormValid(): boolean {
     return this.employeeInfo.employeeId.trim() !== '' && 
-           this.employeeInfo.employeeName.trim() !== '';
+           this.employeeInfo.employeeName.trim() !== '' &&
+           this.isValidEmployeeId(this.employeeInfo.employeeId) &&
+           this.isValidEmployeeName(this.employeeInfo.employeeName);
+  }
+
+  private isValidEmployeeId(employeeId: string): boolean {
+    // Employee ID must start with "ASP" followed by exactly 4 digits
+    const employeeIdPattern = /^ASP\d{4}$/;
+    return employeeIdPattern.test(employeeId.trim());
+  }
+
+  private isValidEmployeeName(employeeName: string): boolean {
+    // Employee name must contain at least 2 words (first name and last name)
+    const nameParts = employeeName.trim().split(' ').filter(part => part.length > 0);
+    return nameParts.length >= 2;
+  }
+
+  onEmployeeIdInput(event: any): void {
+    // Convert to uppercase and remove spaces
+    let value = event.target.value.toUpperCase().replace(/\s/g, '');
+    
+    // Ensure it starts with "ASP"
+    if (!value.startsWith('ASP')) {
+      value = 'ASP' + value.replace(/^ASP/, '');
+    }
+    
+    // Limit to ASP + 4 digits
+    if (value.length > 7) {
+      value = value.substring(0, 7);
+    }
+    
+    this.employeeInfo.employeeId = value;
+  }
+
+  onEmployeeNameInput(event: any): void {
+    // Capitalize first letter of each word
+    let value = event.target.value;
+    value = value.toLowerCase().replace(/\b\w/g, (char: string) => char.toUpperCase());
+    this.employeeInfo.employeeName = value;
   }
 
   startPreview(): void {
@@ -383,11 +421,9 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
       testData: this.testData
     };
 
-    // Save to Firebase
-    await this.saveTestResult(this.testResult);
-
-    // Show signature pad
+    // Show signature pad first - don't save to Firebase yet
     this.showSignature = true;
+    this.signatureRequired = true;
     this.currentView = 'result';
 
     // Initialize signature pad after view is updated
@@ -495,15 +531,27 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
       const signatureData = this.signaturePad.toDataURL();
       if (this.testResult) {
         this.testResult.signature = signatureData;
-        // Update in Firebase
-        // You can add signature update logic here if needed
+        
+        // Save to Firebase with signature
+        await this.saveTestResult(this.testResult);
+        
+        // Hide signature pad and show completion message
+        this.showSignature = false;
+        this.signatureRequired = false;
+        
+        console.log('✅ Test result saved with signature');
       }
+    } else {
+      alert('Vui lòng ký tên trước khi lưu!');
     }
   }
 
   async skipSignature(): Promise<void> {
+    if (this.signatureRequired) {
+      alert('Chữ ký là bắt buộc để hoàn thành bài kiểm tra!');
+      return;
+    }
     this.showSignature = false;
-    // Continue without signature
   }
 
   downloadResultFile(): void {
@@ -826,6 +874,113 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
       this.testResult = originalTestResult;
       this.isLoading = false;
     });
+  }
+
+  completeTest(): void {
+    // Navigate back to the main page (Training section)
+    window.location.href = '/equipment';
+  }
+
+  downloadExcel(): void {
+    this.isLoading = true;
+    
+    // Simulate download process
+    setTimeout(() => {
+      this.isLoading = false;
+      this.showNotification = true;
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 3000);
+      
+      // Create and download a mock Excel file
+      this.createMockExcelFile();
+    }, 2000);
+  }
+
+  downloadAnswerKey(): void {
+    this.isLoading = true;
+    
+    // Simulate download process
+    setTimeout(() => {
+      this.isLoading = false;
+      this.showNotification = true;
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 3000);
+      
+      // Create and download a mock answer key file
+      this.createMockAnswerKeyFile();
+    }, 1500);
+  }
+
+  private createMockExcelFile(): void {
+    // Create Excel content
+    const excelContent = this.generateExcelContent();
+    
+    // Create blob and download
+    const blob = new Blob([excelContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Bao_Cao_Kiem_Tra_TP_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private createMockAnswerKeyFile(): void {
+    // Create answer key content
+    const answerKeyContent = this.generateAnswerKeyContent();
+    
+    // Create blob and download
+    const blob = new Blob([answerKeyContent], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Dap_An_Kiem_Tra_TP_${new Date().toISOString().split('T')[0]}.txt`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private generateExcelContent(): string {
+    // Mock Excel content - in a real implementation, you would use a library like xlsx
+    let content = `Báo Cáo Kiểm Tra Thành Phẩm
+Ngày: ${new Date().toLocaleDateString('vi-VN')}
+Tổng số câu hỏi: ${this.testData.totalQuestions}
+Thời gian làm bài: ${this.testData.timeLimit} phút
+Điểm đạt yêu cầu: ${this.testData.passingScore}%
+
+Chi tiết câu trả lời:
+`;
+
+    this.testData.sections.forEach((section, sectionIndex) => {
+      section.questions.forEach((question, questionIndex) => {
+        content += `Câu ${this.getDetailedQuestionNumber(sectionIndex, questionIndex)}: ${question.question}
+Đáp án đúng: ${question.correctAnswer}
+`;
+      });
+    });
+
+    return content;
+  }
+
+  private generateAnswerKeyContent(): string {
+    let content = `ĐÁP ÁN BÀI KIỂM TRA THÀNH PHẨM
+Ngày: ${new Date().toLocaleDateString('vi-VN')}
+
+`;
+
+    this.testData.sections.forEach((section, sectionIndex) => {
+      content += `${section.title}:
+`;
+      section.questions.forEach((question, questionIndex) => {
+        content += `Câu ${this.getDetailedQuestionNumber(sectionIndex, questionIndex)}: ${question.correctAnswer}
+`;
+      });
+      content += `
+`;
+    });
+
+    return content;
   }
 
   getFormattedEmployeeName(): string {

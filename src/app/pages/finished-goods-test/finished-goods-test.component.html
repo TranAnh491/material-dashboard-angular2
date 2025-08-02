@@ -24,13 +24,23 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Mã số nhân viên</mat-label>
           <input matInput [(ngModel)]="employeeInfo.employeeId" name="employeeId" required 
-                 placeholder="Nhập mã số nhân viên" class="uppercase-input">
+                 placeholder="Ví dụ: ASP0106" class="uppercase-input"
+                 (input)="onEmployeeIdInput($event)">
+          <mat-hint>Định dạng: ASP + 4 chữ số (ví dụ: ASP0106)</mat-hint>
+          <mat-error *ngIf="employeeInfo.employeeId && !isValidEmployeeId(employeeInfo.employeeId)">
+            Mã số nhân viên phải có định dạng ASP + 4 chữ số (ví dụ: ASP0106)
+          </mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Họ và tên</mat-label>
           <input matInput [(ngModel)]="employeeInfo.employeeName" name="employeeName" required 
-                 placeholder="Nhập họ và tên đầy đủ" class="uppercase-input">
+                 placeholder="Ví dụ: Trần Tuấn Anh" class="uppercase-input"
+                 (input)="onEmployeeNameInput($event)">
+          <mat-hint>Viết hoa chữ cái đầu của mỗi từ (ví dụ: Trần Tuấn Anh)</mat-hint>
+          <mat-error *ngIf="employeeInfo.employeeName && !isValidEmployeeName(employeeInfo.employeeName)">
+            Họ và tên phải có ít nhất 2 từ (họ và tên)
+          </mat-error>
         </mat-form-field>
 
         <div class="form-actions">
@@ -59,9 +69,8 @@
     <div class="test-info">
       <h3>📋 Thông tin bài kiểm tra:</h3>
       <ul>
-        <li><strong>Tổng số câu hỏi:</strong> {{ testData.totalQuestions }} câu</li>
         <li><strong>Thời gian làm bài:</strong> {{ testData.timeLimit }} phút</li>
-        <li><strong>Điểm đạt:</strong> {{ testData.passingScore }}% ({{ (testData.totalQuestions * testData.passingScore / 100) | number:'1.0-0' }}/{{ testData.totalQuestions }} câu đúng)</li>
+        <li><strong>Điểm đạt:</strong> {{ testData.passingScore }}%</li>
         <li><strong>Dạng câu hỏi:</strong> Trắc nghiệm</li>
       </ul>
     </div>
@@ -190,7 +199,13 @@
 
     <!-- Signature Section -->
     <div class="signature-section" *ngIf="showSignature">
-      <h3>✍️ Chữ ký xác nhận:</h3>
+      <div class="signature-header" [class.required]="signatureRequired">
+        <h3>✍️ Chữ ký xác nhận:</h3>
+        <div class="signature-status" *ngIf="signatureRequired">
+          <mat-icon>warning</mat-icon>
+          <span>Bắt buộc phải ký để hoàn thành bài kiểm tra</span>
+        </div>
+      </div>
       <div class="signature-container">
         <canvas #signatureCanvas class="signature-canvas"></canvas>
         <div class="signature-actions">
@@ -200,9 +215,9 @@
           </button>
           <button mat-raised-button color="primary" (click)="saveSignature()" [disabled]="isSignatureEmpty()">
             <mat-icon>save</mat-icon>
-            Lưu chữ ký
+            Lưu chữ ký và hoàn thành
           </button>
-          <button mat-stroked-button (click)="skipSignature()">
+          <button mat-stroked-button (click)="skipSignature()" [disabled]="signatureRequired">
             <mat-icon>skip_next</mat-icon>
             Bỏ qua
           </button>
@@ -210,6 +225,10 @@
       </div>
       <div class="signature-info">
         <p><small>Vui lòng ký tên để xác nhận kết quả bài kiểm tra</small></p>
+        <p *ngIf="signatureRequired" class="required-notice">
+          <mat-icon>info</mat-icon>
+          <strong>Chữ ký là bắt buộc để lưu kết quả bài kiểm tra!</strong>
+        </p>
       </div>
     </div>
 
@@ -218,9 +237,21 @@
         <mat-icon>download</mat-icon>
         Tải kết quả PDF
       </button>
+      <button mat-raised-button color="accent" (click)="downloadExcel()" [disabled]="isLoading">
+        <mat-icon>table_chart</mat-icon>
+        Tải Excel
+      </button>
+      <button mat-raised-button color="accent" (click)="downloadAnswerKey()" [disabled]="isLoading">
+        <mat-icon>key</mat-icon>
+        Tải đáp án
+      </button>
       <button mat-raised-button color="accent" (click)="downloadSampleForm()" [disabled]="isLoading">
         <mat-icon>description</mat-icon>
         Tải form mẫu
+      </button>
+      <button mat-raised-button color="success" (click)="completeTest()" [disabled]="signatureRequired">
+        <mat-icon>check_circle</mat-icon>
+        Hoàn thành
       </button>
       <button mat-raised-button color="warn" (click)="restartTest()">
         <mat-icon>refresh</mat-icon>

@@ -90,7 +90,7 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
     title: "HƯỚNG DẪN XUẤT NHẬP KHO NGUYÊN VẬT LIỆU",
     issueDate: "17/07/2025",
     totalQuestions: 12,
-    timeLimit: 30,
+    timeLimit: 25,
     passingScore: 90,
     sections: [
       {
@@ -108,14 +108,14 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
             type: "multiple-choice"
           },
           {
-            question: "Trước khi nhập kho, cần kiểm tra những gì?",
+            question: "Nguyên liệu khi nhận để ở đâu",
             options: [
-              "Chỉ kiểm tra số lượng",
-              "Chỉ kiểm tra chất lượng",
-              "Kiểm tra cả số lượng và chất lượng",
-              "Không cần kiểm tra gì"
+              "Inbound Staging/ Khu vực NVL đầu vào",
+              "Khu IQC",
+              "Cuối Kho",
+              "Để đâu cũng được"
             ],
-            correctAnswer: "C",
+            correctAnswer: "A",
             type: "multiple-choice"
           },
           {
@@ -152,11 +152,11 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
             type: "multiple-choice"
           },
           {
-            question: "Khi nhập kho, cần ghi chép thông tin gì?",
+            question: "Khi nhập kho, cần kiểm tra thông tin gì?",
             options: [
-              "Chỉ ghi số lượng",
-              "Chỉ ghi ngày nhập",
-              "Ghi đầy đủ thông tin theo quy định",
+              "Số lượng hàng",
+              "Số PO là đủ",
+              "Đầy đủ ( Số thùng, kiện,Mã hàng,  số lượng từng PO)",
               "Không cần ghi chép"
             ],
             correctAnswer: "C",
@@ -212,25 +212,25 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
             type: "multiple-choice"
           },
           {
-            question: "Quy trình xuất kho có cần phê duyệt không?",
+            question: "Khi xuất Kho trời mưa cần làm gì",
             options: [
-              "Không cần",
-              "Có, cần phê duyệt theo quy định",
-              "Chỉ cần khi xuất số lượng lớn",
-              "Tùy theo tâm trạng"
+              "Xuất bình thường",
+              "Không giao hàng trời mưa",
+              "Phải có biện pháp che chắn và báo quản lý",
+              "Cả B và C"
             ],
-            correctAnswer: "B",
+            correctAnswer: "D",
             type: "multiple-choice"
           },
           {
-            question: "Sau khi xuất kho, cần cập nhật gì?",
+            question: "Khi bị từ chối nhận hàng phải làm gì ?",
             options: [
-              "Chỉ cập nhật sổ sách",
-              "Chỉ cập nhật hệ thống",
-              "Cập nhật cả sổ sách và hệ thống",
-              "Không cần cập nhật gì"
+              "Để hàng ở đó và đi về Kho",
+              "Kéo hàng về",
+              "Báo quản lý",
+              "Cả B và C"
             ],
-            correctAnswer: "C",
+            correctAnswer: "D",
             type: "multiple-choice"
           }
         ]
@@ -266,7 +266,45 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
 
   isEmployeeFormValid(): boolean {
     return this.employeeInfo.employeeId.trim() !== '' && 
-           this.employeeInfo.employeeName.trim() !== '';
+           this.employeeInfo.employeeName.trim() !== '' &&
+           this.isValidEmployeeId(this.employeeInfo.employeeId) &&
+           this.isValidEmployeeName(this.employeeInfo.employeeName);
+  }
+
+  private isValidEmployeeId(employeeId: string): boolean {
+    // Employee ID must start with "ASP" followed by exactly 4 digits
+    const employeeIdPattern = /^ASP\d{4}$/;
+    return employeeIdPattern.test(employeeId.trim());
+  }
+
+  private isValidEmployeeName(employeeName: string): boolean {
+    // Employee name must contain at least 2 words (first name and last name)
+    const nameParts = employeeName.trim().split(' ').filter(part => part.length > 0);
+    return nameParts.length >= 2;
+  }
+
+  onEmployeeIdInput(event: any): void {
+    // Convert to uppercase and remove spaces
+    let value = event.target.value.toUpperCase().replace(/\s/g, '');
+    
+    // Ensure it starts with "ASP"
+    if (!value.startsWith('ASP')) {
+      value = 'ASP' + value.replace(/^ASP/, '');
+    }
+    
+    // Limit to ASP + 4 digits
+    if (value.length > 7) {
+      value = value.substring(0, 7);
+    }
+    
+    this.employeeInfo.employeeId = value;
+  }
+
+  onEmployeeNameInput(event: any): void {
+    // Capitalize first letter of each word
+    let value = event.target.value;
+    value = value.toLowerCase().replace(/\b\w/g, (char: string) => char.toUpperCase());
+    this.employeeInfo.employeeName = value;
   }
 
   startPreview(): void {
@@ -383,11 +421,9 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
       testData: this.testData
     };
 
-    // Save to Firebase
-    await this.saveTestResult(this.testResult);
-
-    // Show signature pad
+    // Show signature pad first - don't save to Firebase yet
     this.showSignature = true;
+    this.signatureRequired = true;
     this.currentView = 'result';
 
     // Initialize signature pad after view is updated
@@ -495,15 +531,27 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
       const signatureData = this.signaturePad.toDataURL();
       if (this.testResult) {
         this.testResult.signature = signatureData;
-        // Update in Firebase
-        // You can add signature update logic here if needed
+        
+        // Save to Firebase with signature
+        await this.saveTestResult(this.testResult);
+        
+        // Hide signature pad and show completion message
+        this.showSignature = false;
+        this.signatureRequired = false;
+        
+        console.log('✅ Test result saved with signature');
       }
+    } else {
+      alert('Vui lòng ký tên trước khi lưu!');
     }
   }
 
   async skipSignature(): Promise<void> {
+    if (this.signatureRequired) {
+      alert('Chữ ký là bắt buộc để hoàn thành bài kiểm tra!');
+      return;
+    }
     this.showSignature = false;
-    // Continue without signature
   }
 
   downloadResultFile(): void {
@@ -838,5 +886,105 @@ export class MaterialsTestComponent implements OnInit, AfterViewInit {
       this.testResult = originalTestResult;
       this.isLoading = false;
     });
+  }
+
+  completeTest(): void {
+    // Navigate back to the main page (Training section)
+    window.location.href = '/equipment';
+  }
+
+  downloadExcel(): void {
+    this.isLoading = true;
+    
+    // Simulate download process
+    setTimeout(() => {
+      this.isLoading = false;
+      this.showNotification = true;
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 3000);
+      
+      // Create and download a mock Excel file
+      this.createMockExcelFile();
+    }, 2000);
+  }
+
+  downloadAnswerKey(): void {
+    this.isLoading = true;
+    
+    // Simulate download process
+    setTimeout(() => {
+      this.isLoading = false;
+      this.showNotification = true;
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 3000);
+      
+      // Create and download a mock answer key file
+      this.createMockAnswerKeyFile();
+    }, 1500);
+  }
+
+  private createMockExcelFile(): void {
+    // Create Excel content
+    const excelContent = this.generateExcelContent();
+    
+    // Create blob and download
+    const blob = new Blob([excelContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Bao_Cao_Kiem_Tra_NVL_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private createMockAnswerKeyFile(): void {
+    // Create answer key content
+    const answerKeyContent = this.generateAnswerKeyContent();
+    
+    // Create blob and download
+    const blob = new Blob([answerKeyContent], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Dap_An_Kiem_Tra_NVL_${new Date().toISOString().split('T')[0]}.txt`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private generateExcelContent(): string {
+    // Mock Excel content - in a real implementation, you would use a library like xlsx
+    let content = `Báo Cáo Kiểm Tra Nguyên Vật Liệu
+Ngày: ${new Date().toLocaleDateString('vi-VN')}
+Tổng số câu hỏi: ${this.testData.totalQuestions}
+Thời gian làm bài: ${this.testData.timeLimit} phút
+Điểm đạt yêu cầu: ${this.testData.passingScore}%
+
+Chi tiết câu trả lời:
+`;
+
+    this.testData.sections.forEach((section, sectionIndex) => {
+      section.questions.forEach((question, questionIndex) => {
+        content += `Câu ${this.getDetailedQuestionNumber(sectionIndex, questionIndex)}: ${question.question}
+Đáp án đúng: ${question.correctAnswer}
+`;
+      });
+    });
+
+    return content;
+  }
+
+  private generateAnswerKeyContent(): string {
+    return `ĐÁP ÁN BÀI KIỂM TRA NGUYÊN VẬT LIỆU
+Ngày: ${new Date().toLocaleDateString('vi-VN')}
+
+${this.testData.sections.map((section, sectionIndex) => 
+  `${section.title}:
+${section.questions.map((question, questionIndex) => 
+  `Câu ${this.getDetailedQuestionNumber(sectionIndex, questionIndex)}: ${question.correctAnswer}`
+).join('\n')}
+`
+).join('\n\n')}`;
   }
 } 

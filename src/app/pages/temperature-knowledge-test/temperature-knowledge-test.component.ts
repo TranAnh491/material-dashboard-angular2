@@ -90,7 +90,7 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
     title: "BÀI KIỂM TRA HƯỚNG DẪN GHI NHẬN NHIỆT ĐỘ, ĐỘ ẨM VÀ LƯU TRỮ SẢN PHẨM",
     issueDate: "17/07/2025",
     totalQuestions: 20, // Will be calculated automatically
-    timeLimit: 30,
+    timeLimit: 25,
     passingScore: 80,
     sections: [
       {
@@ -397,7 +397,45 @@ export class TemperatureKnowledgeTestComponent implements OnInit, AfterViewInit 
   // Employee Form Methods
   isEmployeeFormValid(): boolean {
     return this.employeeInfo.employeeId.trim() !== '' && 
-           this.employeeInfo.employeeName.trim() !== '';
+           this.employeeInfo.employeeName.trim() !== '' &&
+           this.isValidEmployeeId(this.employeeInfo.employeeId) &&
+           this.isValidEmployeeName(this.employeeInfo.employeeName);
+  }
+
+  private isValidEmployeeId(employeeId: string): boolean {
+    // Employee ID must start with "ASP" followed by exactly 4 digits
+    const employeeIdPattern = /^ASP\d{4}$/;
+    return employeeIdPattern.test(employeeId.trim());
+  }
+
+  private isValidEmployeeName(employeeName: string): boolean {
+    // Employee name must contain at least 2 words (first name and last name)
+    const nameParts = employeeName.trim().split(' ').filter(part => part.length > 0);
+    return nameParts.length >= 2;
+  }
+
+  onEmployeeIdInput(event: any): void {
+    // Convert to uppercase and remove spaces
+    let value = event.target.value.toUpperCase().replace(/\s/g, '');
+    
+    // Ensure it starts with "ASP"
+    if (!value.startsWith('ASP')) {
+      value = 'ASP' + value.replace(/^ASP/, '');
+    }
+    
+    // Limit to ASP + 4 digits
+    if (value.length > 7) {
+      value = value.substring(0, 7);
+    }
+    
+    this.employeeInfo.employeeId = value;
+  }
+
+  onEmployeeNameInput(event: any): void {
+    // Capitalize first letter of each word
+    let value = event.target.value;
+    value = value.toLowerCase().replace(/\b\w/g, (char: string) => char.toUpperCase());
+    this.employeeInfo.employeeName = value;
   }
 
   startPreview(): void {

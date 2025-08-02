@@ -12,13 +12,23 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Mã số nhân viên</mat-label>
           <input matInput [(ngModel)]="employeeInfo.employeeId" name="employeeId" required 
-                 placeholder="Nhập mã số nhân viên">
+                 placeholder="Ví dụ: ASP0106"
+                 (input)="onEmployeeIdInput($event)">
+          <mat-hint>Định dạng: ASP + 4 chữ số (ví dụ: ASP0106)</mat-hint>
+          <mat-error *ngIf="employeeInfo.employeeId && !isValidEmployeeId(employeeInfo.employeeId)">
+            Mã số nhân viên phải có định dạng ASP + 4 chữ số (ví dụ: ASP0106)
+          </mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Họ và tên</mat-label>
           <input matInput [(ngModel)]="employeeInfo.employeeName" name="employeeName" required 
-                 placeholder="Nhập họ và tên đầy đủ">
+                 placeholder="Ví dụ: Trần Tuấn Anh"
+                 (input)="onEmployeeNameInput($event)">
+          <mat-hint>Viết hoa chữ cái đầu của mỗi từ (ví dụ: Trần Tuấn Anh)</mat-hint>
+          <mat-error *ngIf="employeeInfo.employeeName && !isValidEmployeeName(employeeInfo.employeeName)">
+            Họ và tên phải có ít nhất 2 từ (họ và tên)
+          </mat-error>
         </mat-form-field>
 
         <div class="form-actions">
@@ -52,9 +62,8 @@
     <div class="test-info">
       <h3>📋 Thông tin bài kiểm tra:</h3>
       <ul>
-        <li><strong>Tổng số câu hỏi:</strong> {{ testData.totalQuestions }} câu</li>
         <li><strong>Thời gian làm bài:</strong> {{ testData.timeLimit }} phút</li>
-        <li><strong>Điểm đạt:</strong> {{ testData.passingScore }}% ({{ (testData.totalQuestions * testData.passingScore / 100) | number:'1.0-0' }}/{{ testData.totalQuestions }} câu đúng)</li>
+        <li><strong>Điểm đạt:</strong> {{ testData.passingScore }}%</li>
         <li><strong>Dạng câu hỏi:</strong> Trắc nghiệm, Đúng/Sai, Điền từ</li>
       </ul>
     </div>

@@ -27,7 +27,7 @@ interface ScheduleItem {
   completedBy?: string;
   labelComparison?: {
     photoUrl?: string;
-    comparisonResult?: 'Pass' | 'Fail' | 'Pending';
+    comparisonResult?: 'Pass' | 'Fail' | 'Pending' | 'Completed';
     comparedAt?: Date;
     matchPercentage?: number;
     mismatchDetails?: string[];
@@ -35,6 +35,11 @@ interface ScheduleItem {
     sampleSpecs?: LabelSpecifications;
     printedSpecs?: LabelSpecifications;
     annotations?: any[];
+    // Thêm 2 hình ảnh riêng biệt
+    designPhotoUrl?: string; // Hình bản vẽ
+    printedPhotoUrl?: string; // Hình tem in
+    designPhotoId?: string; // ID của hình bản vẽ trong Firebase
+    printedPhotoId?: string; // ID của hình tem in trong Firebase
   };
 }
 
@@ -99,6 +104,13 @@ export class PrintLabelComponent implements OnInit {
 
   // Camera capture properties
   isCapturingPhoto: boolean = false;
+  currentCaptureMode: 'design' | 'printed' = 'design'; // Chế độ chụp hiện tại
+  captureStep: number = 1; // Bước chụp: 1 = bản vẽ, 2 = tem in
+  
+  // Time range properties
+  selectedDays: number = 30; // Mặc định 30 ngày
+  customStartDate: Date | null = null;
+  customEndDate: Date | null = null;
 
   constructor(
     private firestore: AngularFirestore,
@@ -303,20 +315,19 @@ export class PrintLabelComponent implements OnInit {
     console.log('🔥 Loading data from Firebase...');
     this.isLoading = true;
     
-    const loadPromise = this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc')
-    ).get().toPromise();
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Firebase load timeout after 15 seconds')), 15000)
-    );
-
-    Promise.race([loadPromise, timeoutPromise])
-      .then((querySnapshot: any) => {
+    // Load both printSchedules and labelPhotos
+    Promise.all([
+      this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc')
+      ).get().toPromise(),
+      this.firestore.collection('labelPhotos').get().toPromise()
+    ])
+      .then(([scheduleSnapshot, photoSnapshot]: any) => {
         this.isLoading = false;
-        if (querySnapshot && !querySnapshot.empty) {
-          // Try to load from the latest document's data field first
-          const latestDoc = querySnapshot.docs[0];
+        
+        if (scheduleSnapshot && !scheduleSnapshot.empty) {
+          // Load schedule data
+          const latestDoc = scheduleSnapshot.docs[0];
           const latestData = latestDoc.data();
           
           if (latestData.data && Array.isArray(latestData.data) && latestData.data.length > 0) {
@@ -350,7 +361,7 @@ export class PrintLabelComponent implements OnInit {
           } else {
             // Fallback: load from individual documents (old format)
             console.log('📋 Loading from individual documents (fallback)');
-            this.scheduleData = querySnapshot.docs.map((doc: any) => {
+            this.scheduleData = scheduleSnapshot.docs.map((doc: any) => {
               const data = doc.data();
               
               // Create clean ScheduleItem by removing Firebase-specific fields
@@ -381,6 +392,98 @@ export class PrintLabelComponent implements OnInit {
               
               return scheduleItem;
             });
+          }
+          
+          // Now sync with photo data
+          if (photoSnapshot && !photoSnapshot.empty) {
+            console.log('📸 Syncing with photo data...');
+            const photoData = photoSnapshot.docs.map((doc: any) => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            
+            // Group photos by maTem
+            const photoGroups = new Map();
+            photoData.forEach((photo: any) => {
+              const maTem = photo.maTem;
+              console.log('📸 Photo maTem:', maTem, 'photoType:', photo.photoType, 'id:', photo.id);
+              if (!photoGroups.has(maTem)) {
+                photoGroups.set(maTem, []);
+              }
+              photoGroups.get(maTem).push(photo);
+            });
+            
+            console.log('📸 Photo groups:', Array.from(photoGroups.entries()).map(([maTem, photos]) => ({
+              maTem,
+              photoCount: photos.length,
+              photoTypes: photos.map((p: any) => p.photoType)
+            })));
+            
+            // Update schedule items with photo data
+            let matchedCount = 0;
+            this.scheduleData.forEach(item => {
+              const photos = photoGroups.get(item.maTem);
+              if (photos && photos.length > 0) {
+                matchedCount++;
+                console.log('✅ Matched photos for maTem:', item.maTem, 'photos:', photos.length);
+                
+                if (!item.labelComparison) {
+                  item.labelComparison = {
+                    photoUrl: '',
+                    comparisonResult: 'Pending',
+                    comparedAt: new Date(),
+                    matchPercentage: 0,
+                    mismatchDetails: [],
+                    hasSampleText: false
+                  };
+                }
+                
+                // Find design and printed photos
+                const designPhoto = photos.find((p: any) => p.photoType === 'design');
+                const printedPhoto = photos.find((p: any) => p.photoType === 'printed');
+                
+                if (designPhoto) {
+                  item.labelComparison.designPhotoId = designPhoto.id;
+                  item.labelComparison.designPhotoUrl = designPhoto.photoUrl;
+                  console.log('📸 Set design photo for:', item.maTem, 'id:', designPhoto.id);
+                }
+                
+                if (printedPhoto) {
+                  item.labelComparison.printedPhotoId = printedPhoto.id;
+                  item.labelComparison.printedPhotoUrl = printedPhoto.photoUrl;
+                  console.log('📸 Set printed photo for:', item.maTem, 'id:', printedPhoto.id);
+                }
+                
+                // Update comparedAt to latest photo date
+                const latestPhoto = photos.reduce((latest: any, current: any) => {
+                  const latestDate = latest.capturedAt?.toDate() || latest.savedAt?.toDate();
+                  const currentDate = current.capturedAt?.toDate() || current.savedAt?.toDate();
+                  return currentDate > latestDate ? current : latest;
+                });
+                
+                // Use capturedAt or savedAt, fallback to current date
+                if (latestPhoto.capturedAt) {
+                  item.labelComparison.comparedAt = latestPhoto.capturedAt.toDate();
+                } else if (latestPhoto.savedAt) {
+                  item.labelComparison.comparedAt = latestPhoto.savedAt.toDate();
+                } else {
+                  item.labelComparison.comparedAt = new Date();
+                }
+              } else {
+                // Clear photo references if no photos found
+                if (item.labelComparison) {
+                  delete item.labelComparison.designPhotoId;
+                  delete item.labelComparison.designPhotoUrl;
+                  delete item.labelComparison.printedPhotoId;
+                  delete item.labelComparison.printedPhotoUrl;
+                  console.log('🗑️ Cleared photo references for maTem:', item.maTem);
+                }
+              }
+            });
+            
+            console.log('📊 Sync summary - Matched items:', matchedCount, 'out of', this.scheduleData.length);
+            
+            console.log(`📸 Synced ${photoData.length} photos with ${photoGroups.size} items`);
           }
           
           // Sort data by STT
@@ -1182,9 +1285,21 @@ export class PrintLabelComponent implements OnInit {
     return 'CẦN CẢI THIỆN';
   }
 
-  // Simple Photo Capture for Labels
+  // Enhanced Photo Capture for Labels - 2 Steps
   captureAndCompareLabel(item: ScheduleItem): void {
-    console.log('📸 Starting photo capture for item:', item.maTem);
+    console.log('📸 Starting enhanced photo capture for item:', item.maTem);
+    
+    // Reset capture state
+    this.captureStep = 1;
+    this.currentCaptureMode = 'design';
+    
+    // Start with design photo capture
+    this.startPhotoCapture(item, 'design');
+  }
+
+  // Start photo capture for specific mode
+  startPhotoCapture(item: ScheduleItem, mode: 'design' | 'printed'): void {
+    console.log(`📸 Starting ${mode} photo capture for item:`, item.maTem);
     
     // Prevent multiple captures
     if (this.isCapturingPhoto) {
@@ -1193,6 +1308,7 @@ export class PrintLabelComponent implements OnInit {
     }
     
     this.isCapturingPhoto = true;
+    this.currentCaptureMode = mode;
     
     // Clean up any existing camera streams first
     this.cleanupCameraStreams();
@@ -1244,7 +1360,7 @@ export class PrintLabelComponent implements OnInit {
           // Wait a bit for video to be ready
           setTimeout(() => {
             console.log('📺 Video ready, showing dialog');
-            const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
+            const captureDialog = this.createEnhancedCaptureDialog(video, canvas, item, mode);
             document.body.appendChild(captureDialog);
           }, 500);
         };
@@ -1253,7 +1369,7 @@ export class PrintLabelComponent implements OnInit {
         setTimeout(() => {
           if (!document.querySelector('.camera-dialog')) {
             console.log('⏰ Fallback: Showing dialog after timeout');
-            const captureDialog = this.createSimpleCaptureDialog(video, canvas, item);
+            const captureDialog = this.createEnhancedCaptureDialog(video, canvas, item, mode);
             document.body.appendChild(captureDialog);
           }
         }, 3000);
@@ -1280,7 +1396,7 @@ export class PrintLabelComponent implements OnInit {
       });
   }
 
-  createSimpleCaptureDialog(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem): HTMLElement {
+  createEnhancedCaptureDialog(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, mode: 'design' | 'printed'): HTMLElement {
     const dialog = document.createElement('div');
     dialog.className = 'camera-dialog';
     dialog.style.cssText = `
@@ -1324,7 +1440,9 @@ export class PrintLabelComponent implements OnInit {
     `;
 
     const title = document.createElement('h3');
-    title.textContent = '📸 Chụp hình tem - ' + (item.maTem || 'Unknown');
+    const modeText = mode === 'design' ? 'Bản vẽ thiết kế' : 'Tem đã in';
+    const stepText = mode === 'design' ? 'Bước 1/2' : 'Bước 2/2';
+    title.textContent = `📸 Chụp hình ${modeText} - ${item.maTem || 'Unknown'} (${stepText})`;
     title.style.cssText = `
       margin: 0 !important;
       color: #333 !important;
@@ -1333,12 +1451,16 @@ export class PrintLabelComponent implements OnInit {
     `;
 
     const instruction = document.createElement('p');
-    instruction.innerHTML = `
-      <strong>Hướng dẫn:</strong><br>
-      • Đặt tem vào giữa khung hình<br>
+    const instructionText = mode === 'design' ? 
+      `<strong>Hướng dẫn chụp bản vẽ:</strong><br>
+      • Đặt bản vẽ thiết kế vào giữa khung hình<br>
       • Đảm bảo đủ ánh sáng và chụp rõ nét<br>
-      • Hình sẽ được lưu vào Firebase
-    `;
+      • Hình sẽ được tối ưu hóa và lưu vào Firebase` :
+      `<strong>Hướng dẫn chụp tem in:</strong><br>
+      • Đặt tem đã in vào giữa khung hình<br>
+      • Đảm bảo đủ ánh sáng và chụp rõ nét<br>
+      • Hình sẽ được tối ưu hóa và lưu vào Firebase`;
+    instruction.innerHTML = instructionText;
     instruction.style.cssText = `
       margin: 8px 0 0 0 !important;
       color: #666 !important;
@@ -1469,7 +1591,7 @@ export class PrintLabelComponent implements OnInit {
       e.preventDefault();
       e.stopPropagation();
       console.log('📸 Capture button activated!');
-      this.captureAndSavePhoto(video, canvas, item, dialog);
+      this.captureAndSavePhoto(video, canvas, item, dialog, mode);
     };
 
     const handleCancelClick = (e: Event) => {
@@ -1594,7 +1716,7 @@ export class PrintLabelComponent implements OnInit {
     return dialog;
   }
 
-  captureAndSavePhoto(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, dialog: HTMLElement): void {
+  captureAndSavePhoto(video: HTMLVideoElement, canvas: HTMLCanvasElement, item: ScheduleItem, dialog: HTMLElement, mode: 'design' | 'printed'): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       console.error('❌ Cannot get canvas context');
@@ -1609,7 +1731,7 @@ export class PrintLabelComponent implements OnInit {
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       console.log('⚠️ Video dimensions not ready, waiting...');
       setTimeout(() => {
-        this.captureAndSavePhoto(video, canvas, item, dialog);
+        this.captureAndSavePhoto(video, canvas, item, dialog, this.currentCaptureMode);
       }, 500);
       return;
     }
@@ -1642,7 +1764,7 @@ export class PrintLabelComponent implements OnInit {
     canvas.toBlob((blob) => {
       if (blob) {
         console.log('📷 Photo captured, size:', blob.size, 'bytes');
-        this.savePhotoToFirebase(blob, item);
+        this.savePhotoToFirebase(blob, item, mode);
       } else {
         console.error('❌ Failed to create blob from canvas');
         alert('❌ Lỗi khi chụp hình');
@@ -1653,8 +1775,8 @@ export class PrintLabelComponent implements OnInit {
     }, 'image/jpeg', 0.8);
   }
 
-  savePhotoToFirebase(blob: Blob, item: ScheduleItem): void {
-    console.log('💾 Saving photo to Firebase for item:', item.maTem);
+  savePhotoToFirebase(blob: Blob, item: ScheduleItem, mode: 'design' | 'printed'): void {
+    console.log(`💾 Saving ${mode} photo to Firebase for item:`, item.maTem);
     
     // Convert blob to base64 and optimize
     const reader = new FileReader();
@@ -1663,17 +1785,18 @@ export class PrintLabelComponent implements OnInit {
       console.log('📄 Original Base64 data length:', base64Data.length);
       
       try {
-        // Optimize image to 150KB max (giảm từ 250KB)
-        const optimizedImage = await this.optimizeImageForStorage(base64Data, 150);
+        // Optimize image to 250KB max (theo yêu cầu)
+        const optimizedImage = await this.optimizeImageForStorage(base64Data, 250);
         console.log('📄 Optimized Base64 data length:', optimizedImage.length);
         
-        // Create photo document for Firebase (tách riêng)
+        // Create photo document for Firebase
         const photoData = {
           itemId: item.stt || '',
           maTem: item.maTem || '',
           maHang: item.maHang || '',
           khachHang: item.khachHang || '',
           photoUrl: optimizedImage,
+          photoType: mode, // 'design' hoặc 'printed'
           capturedAt: new Date(),
           savedAt: new Date()
         };
@@ -1681,23 +1804,46 @@ export class PrintLabelComponent implements OnInit {
         // Save to Firebase
         this.firestore.collection('labelPhotos').add(photoData)
           .then((docRef) => {
-            console.log('✅ Photo saved to Firebase with ID:', docRef.id);
+            console.log(`✅ ${mode} photo saved to Firebase with ID:`, docRef.id);
             
-            // Update item with photo reference only (không lưu base64)
-            item.labelComparison = {
-              photoUrl: docRef.id, // Chỉ lưu ID thay vì base64
-              comparisonResult: 'Pass',
-              comparedAt: new Date(),
-              matchPercentage: 100,
-              mismatchDetails: [],
-              hasSampleText: true
-            };
+            // Initialize labelComparison if not exists
+            if (!item.labelComparison) {
+              item.labelComparison = {
+                photoUrl: '',
+                comparisonResult: 'Pending',
+                comparedAt: new Date(),
+                matchPercentage: 0,
+                mismatchDetails: [],
+                hasSampleText: false
+              };
+            }
+            
+            // Update item with photo reference based on mode
+            if (mode === 'design') {
+              item.labelComparison.designPhotoId = docRef.id;
+              item.labelComparison.designPhotoUrl = optimizedImage;
+            } else {
+              item.labelComparison.printedPhotoId = docRef.id;
+              item.labelComparison.printedPhotoUrl = optimizedImage;
+            }
 
-            // Update schedule in Firebase (không có base64)
+            // Always update comparedAt to current time when photo is saved
+            item.labelComparison.comparedAt = new Date();
+
+            // Update schedule in Firebase
             this.updateScheduleInFirebase(item);
             
             // Refresh storage information after saving photo
             this.refreshStorageInfo();
+            
+            // Check if both photos are captured
+            if (item.labelComparison.designPhotoId && item.labelComparison.printedPhotoId) {
+              // Both photos captured, complete process
+              this.completePhotoCapture(item);
+            } else {
+              // Continue to next step
+              this.continueToNextCaptureStep(item, mode);
+            }
             
             // Reset capture flag and ensure dialog is removed
             this.isCapturingPhoto = false;
@@ -1710,7 +1856,8 @@ export class PrintLabelComponent implements OnInit {
               this.cleanupCameraStreams();
             }, 200);
             
-            alert('✅ Đã chụp và lưu hình thành công! (Đã tối ưu hóa)');
+            const modeText = mode === 'design' ? 'bản vẽ thiết kế' : 'tem đã in';
+            alert(`✅ Đã chụp và lưu hình ${modeText} thành công! (Đã tối ưu hóa)`);
           })
           .catch((error) => {
             console.error('❌ Error saving photo to Firebase:', error);
@@ -2541,8 +2688,13 @@ export class PrintLabelComponent implements OnInit {
   getComparisonIcon(item: ScheduleItem): string {
     if (!item.labelComparison) return '📸';
     
-    if (item.labelComparison.photoUrl) {
-      return '📷'; // Photo captured
+    const hasDesign = item.labelComparison.designPhotoId;
+    const hasPrinted = item.labelComparison.printedPhotoId;
+    
+    if (hasDesign && hasPrinted) {
+      return '📷📷'; // Both photos captured
+    } else if (hasDesign || hasPrinted) {
+      return '📷'; // One photo captured
     }
     
     return '📸'; // Not captured yet
@@ -2551,9 +2703,16 @@ export class PrintLabelComponent implements OnInit {
   getComparisonTooltip(item: ScheduleItem): string {
     if (!item.labelComparison) return 'Chưa chụp hình';
     
-    if (item.labelComparison.photoUrl) {
+    const hasDesign = item.labelComparison.designPhotoId;
+    const hasPrinted = item.labelComparison.printedPhotoId;
+    
+    if (hasDesign && hasPrinted) {
       const date = item.labelComparison.comparedAt;
-      return `📷 Đã chụp hình - ${date?.toLocaleString()}`;
+      return `📷📷 Đã chụp cả 2 hình - ${date?.toLocaleString()}`;
+    } else if (hasDesign) {
+      return '📷 Đã chụp bản vẽ, chưa chụp tem in';
+    } else if (hasPrinted) {
+      return '📷 Đã chụp tem in, chưa chụp bản vẽ';
     }
     
     return 'Chưa chụp hình';
@@ -2569,101 +2728,308 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.labelComparison);
   }
 
-  // Get items that have photos captured
+  // Get items that have photos captured (with time filtering)
   getPhotoCapturedItems(): ScheduleItem[] {
-    return this.scheduleData.filter(item => item.labelComparison?.photoUrl);
+    console.log('🔍 getPhotoCapturedItems - Total scheduleData:', this.scheduleData.length);
+    
+    const items = this.scheduleData.filter(item => 
+      item.labelComparison?.designPhotoId || item.labelComparison?.printedPhotoId
+    );
+    
+    console.log('🔍 getPhotoCapturedItems - Items with photos:', items.length);
+    console.log('🔍 getPhotoCapturedItems - Items details:', items.map(item => ({
+      maTem: item.maTem,
+      designPhotoId: item.labelComparison?.designPhotoId,
+      printedPhotoId: item.labelComparison?.printedPhotoId,
+      comparedAt: item.labelComparison?.comparedAt
+    })));
+    
+    // TEMPORARY: Show all items without time filtering for debugging
+    if (items.length > 0) {
+      console.log('🧪 TEMPORARY: Showing all items without time filter for debugging');
+      return items;
+    }
+    
+    // Filter by time range
+    const now = new Date();
+    let startDate: Date;
+    
+    if (this.customStartDate && this.customEndDate) {
+      // Custom date range
+      startDate = this.customStartDate;
+      const endDate = this.customEndDate;
+      
+      const filteredItems = items.filter(item => {
+        if (!item.labelComparison?.comparedAt) {
+          console.log('⚠️ Item without comparedAt:', item.maTem);
+          return false;
+        }
+        const itemDate = new Date(item.labelComparison.comparedAt);
+        const isInRange = itemDate >= startDate && itemDate <= endDate;
+        console.log('📅 Item date check:', item.maTem, itemDate, 'in range:', isInRange);
+        return isInRange;
+      });
+      
+      console.log('📊 getPhotoCapturedItems (custom range) found:', filteredItems.length, 'items');
+      return filteredItems;
+    } else {
+      // Days range
+      startDate = new Date(now.getTime() - (this.selectedDays * 24 * 60 * 60 * 1000));
+      
+      const filteredItems = items.filter(item => {
+        if (!item.labelComparison?.comparedAt) {
+          console.log('⚠️ Item without comparedAt:', item.maTem);
+          return false;
+        }
+        const itemDate = new Date(item.labelComparison.comparedAt);
+        const isInRange = itemDate >= startDate;
+        console.log('📅 Item date check:', item.maTem, itemDate, 'in range:', isInRange);
+        return isInRange;
+      });
+      
+      console.log('📊 getPhotoCapturedItems (last', this.selectedDays, 'days) found:', filteredItems.length, 'items');
+      return filteredItems;
+    }
+  }
+
+  // Get count of design photos
+  getDesignPhotosCount(): number {
+    return this.scheduleData.filter(item => item.labelComparison?.designPhotoId).length;
+  }
+
+  // Get count of printed photos
+  getPrintedPhotosCount(): number {
+    return this.scheduleData.filter(item => item.labelComparison?.printedPhotoId).length;
+  }
+
+  // Get count of items with both photos
+  getBothPhotosCount(): number {
+    return this.scheduleData.filter(item => 
+      item.labelComparison?.designPhotoId && item.labelComparison?.printedPhotoId
+    ).length;
   }
 
   // View full image in new window/tab
-  async viewFullImage(photoUrl: string | undefined): Promise<void> {
-    if (!photoUrl) {
+  async viewFullImage(item: ScheduleItem): Promise<void> {
+    if (!item.labelComparison?.designPhotoId && !item.labelComparison?.printedPhotoId) {
       alert('❌ Không có hình để hiển thị');
       return;
     }
 
-    // Kiểm tra nếu photoUrl là ID (không bắt đầu bằng data: hoặc http)
-    let actualPhotoUrl = photoUrl;
-    if (!photoUrl.startsWith('data:') && !photoUrl.startsWith('http')) {
-      // Đây là ID, cần lấy URL từ Firebase
-      const url = await this.getPhotoFromFirebase(photoUrl);
-      if (!url) {
-        alert('❌ Không tìm thấy hình ảnh');
-        return;
+    const photos = [];
+    
+    // Lấy hình bản vẽ nếu có
+    if (item.labelComparison.designPhotoId) {
+      const designUrl = await this.getPhotoFromFirebase(item.labelComparison.designPhotoId);
+      if (designUrl) {
+        photos.push({
+          url: designUrl,
+          title: 'Bản vẽ thiết kế',
+          type: 'design'
+        });
       }
-      actualPhotoUrl = url;
     }
     
+    // Lấy hình tem in nếu có
+    if (item.labelComparison.printedPhotoId) {
+      const printedUrl = await this.getPhotoFromFirebase(item.labelComparison.printedPhotoId);
+      if (printedUrl) {
+        photos.push({
+          url: printedUrl,
+          title: 'Tem đã in',
+          type: 'printed'
+        });
+      }
+    }
+
+    if (photos.length === 0) {
+      alert('❌ Không tìm thấy hình ảnh');
+      return;
+    }
+
+    // Hiển thị hình ảnh trong cửa sổ mới
     const newWindow = window.open('', '_blank');
     if (newWindow) {
-      newWindow.document.write(`
+      let html = `
         <html>
-          <head><title>Label Photo</title></head>
-          <body style="margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000;">
-            <img src="${actualPhotoUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+          <head>
+            <title>Photos - ${item.maTem}</title>
+            <style>
+              body { margin: 0; background: #000; font-family: Arial, sans-serif; }
+              .container { display: flex; flex-direction: column; min-height: 100vh; }
+              .header { background: #333; color: white; padding: 15px; text-align: center; }
+              .photos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; flex: 1; gap: 20px; padding: 20px; }
+              .photo { text-align: center; }
+              .photo img { max-width: 90vw; max-height: 70vh; object-fit: contain; border: 2px solid #fff; border-radius: 8px; }
+              .photo-title { color: white; margin-top: 10px; font-size: 16px; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2>📷 Photos - ${item.maTem} - ${item.maHang}</h2>
+                <p>Generated on ${new Date().toLocaleString()}</p>
+              </div>
+              <div class="photos">
+      `;
+
+      photos.forEach(photo => {
+        html += `
+          <div class="photo">
+            <img src="${photo.url}" alt="${photo.title}" />
+            <div class="photo-title">${photo.title}</div>
+          </div>
+        `;
+      });
+
+      html += `
+              </div>
+            </div>
           </body>
         </html>
-      `);
+      `;
+
+      newWindow.document.write(html);
     }
   }
 
   // Download photo
   async downloadPhoto(item: ScheduleItem): Promise<void> {
-    if (!item.labelComparison?.photoUrl) {
+    if (!item.labelComparison?.designPhotoId && !item.labelComparison?.printedPhotoId) {
       alert('❌ Không có hình để tải về');
       return;
     }
 
     try {
-      let photoUrl = item.labelComparison.photoUrl;
+      // Tạo ZIP chứa cả 2 hình nếu có
+      const photos = [];
       
-      // Kiểm tra nếu photoUrl là ID
-      if (!photoUrl.startsWith('data:') && !photoUrl.startsWith('http')) {
-        const url = await this.getPhotoFromFirebase(photoUrl);
-        if (!url) {
-          alert('❌ Không tìm thấy hình ảnh');
-          return;
+      if (item.labelComparison.designPhotoId) {
+        const designUrl = await this.getPhotoFromFirebase(item.labelComparison.designPhotoId);
+        if (designUrl) {
+          photos.push({
+            url: designUrl,
+            filename: `design-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.jpg`
+          });
         }
-        photoUrl = url;
+      }
+      
+      if (item.labelComparison.printedPhotoId) {
+        const printedUrl = await this.getPhotoFromFirebase(item.labelComparison.printedPhotoId);
+        if (printedUrl) {
+          photos.push({
+            url: printedUrl,
+            filename: `printed-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.jpg`
+          });
+        }
       }
 
-      const link = document.createElement('a');
-      link.href = photoUrl;
-      link.download = `tem-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (photos.length === 0) {
+        alert('❌ Không tìm thấy hình ảnh');
+        return;
+      }
+
+      // Nếu chỉ có 1 hình, tải về trực tiếp
+      if (photos.length === 1) {
+        const link = document.createElement('a');
+        link.href = photos[0].url;
+        link.download = photos[0].filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // Nếu có 2 hình, tạo ZIP
+        await this.createAndDownloadItemPhotos(item, photos);
+      }
       
-      console.log(`📷 Downloaded photo for ${item.maTem}`);
+      console.log(`📷 Downloaded photos for ${item.maTem}`);
     } catch (error) {
       console.error('❌ Error downloading photo:', error);
       alert('❌ Lỗi khi tải hình về!');
     }
   }
 
+  // Create and download item photos as ZIP
+  async createAndDownloadItemPhotos(item: ScheduleItem, photos: any[]): Promise<void> {
+    console.log(`📦 Creating ZIP for item ${item.maTem} with ${photos.length} photos`);
+    
+    // Create ZIP content
+    let content = `Photos for item ${item.maTem} - ${item.maHang}\n`;
+    content += `Generated on ${new Date().toLocaleString()}\n\n`;
+    
+    photos.forEach((photo, index) => {
+      content += `${index + 1}. ${photo.filename}\n`;
+    });
+    
+    // Create and download file
+    const blob = new Blob([content], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `photos-${item.maTem || 'unknown'}-${item.maHang || 'unknown'}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log(`✅ ZIP file created for item ${item.maTem}`);
+    alert(`✅ Đã tạo và tải về file ZIP cho ${item.maTem} với ${photos.length} hình ảnh`);
+  }
+
   // Delete photo
   deletePhoto(item: ScheduleItem): void {
-    if (!item.labelComparison) {
+    if (!item.labelComparison?.designPhotoId && !item.labelComparison?.printedPhotoId) {
       alert('❌ Không có hình để xóa');
       return;
     }
 
-    const confirmed = confirm(
-      `🗑️ Xác nhận xóa hình?\n\n` +
-      `Mã tem: ${item.maTem || 'N/A'}\n` +
-      `Mã hàng: ${item.maHang || 'N/A'}\n\n` +
-      `Hành động này không thể hoàn tác!`
-    );
+    const hasDesign = item.labelComparison?.designPhotoId;
+    const hasPrinted = item.labelComparison?.printedPhotoId;
+    
+    let message = `🗑️ Xác nhận xóa hình?\n\n`;
+    message += `Mã tem: ${item.maTem || 'N/A'}\n`;
+    message += `Mã hàng: ${item.maHang || 'N/A'}\n\n`;
+    
+    if (hasDesign && hasPrinted) {
+      message += `Sẽ xóa cả 2 hình:\n`;
+      message += `• Bản vẽ thiết kế\n`;
+      message += `• Tem đã in\n\n`;
+    } else if (hasDesign) {
+      message += `Sẽ xóa hình bản vẽ thiết kế\n\n`;
+    } else if (hasPrinted) {
+      message += `Sẽ xóa hình tem đã in\n\n`;
+    }
+    
+    message += `Hành động này không thể hoàn tác!`;
+
+    const confirmed = confirm(message);
 
     if (!confirmed) return;
 
     try {
-      // Remove photo data
-      delete item.labelComparison;
+      console.log('🗑️ Starting deletion process for:', item.maTem);
       
-      // Update Firebase
-      this.deleteComparisonFromFirebase(item);
+      // Store photo IDs before clearing
+      const designPhotoId = item.labelComparison?.designPhotoId;
+      const printedPhotoId = item.labelComparison?.printedPhotoId;
       
-      console.log(`🗑️ Deleted photo for: ${item.maTem}`);
+      // Clear photo references immediately from local data
+      if (item.labelComparison) {
+        delete item.labelComparison.designPhotoId;
+        delete item.labelComparison.designPhotoUrl;
+        delete item.labelComparison.printedPhotoId;
+        delete item.labelComparison.printedPhotoUrl;
+        
+        // If no photos left, remove entire labelComparison
+        if (!item.labelComparison.designPhotoId && !item.labelComparison.printedPhotoId) {
+          delete item.labelComparison;
+        }
+      }
+      
+      // Delete from Firebase with proper error handling
+      this.deleteComparisonFromFirebase(item, designPhotoId, printedPhotoId);
+      
+      console.log(`🗑️ Deleted photos for: ${item.maTem}`);
       alert(`✅ Đã xóa hình thành công!`);
       
     } catch (error) {
@@ -2728,6 +3094,169 @@ export class PrintLabelComponent implements OnInit {
     
     console.log(`📊 Exported ${photoCapturedItems.length} photo records to ${filename}`);
     alert(`✅ Đã xuất báo cáo ${photoCapturedItems.length} hình chụp vào file ${filename}`);
+  }
+
+  // Download photos as ZIP by month
+  async downloadPhotosAsZip(): Promise<void> {
+    // Show month selection dialog
+    const selectedMonth = this.showMonthSelectionDialog();
+    if (!selectedMonth) return;
+
+    console.log(`📦 Preparing ZIP download for month: ${selectedMonth}`);
+    
+    try {
+      // Get photos for selected month
+      const photos = await this.getPhotosForMonth(selectedMonth);
+      
+      if (photos.length === 0) {
+        alert(`❌ Không có hình nào cho tháng ${selectedMonth}`);
+        return;
+      }
+
+      // Create ZIP file
+      await this.createAndDownloadZip(photos, selectedMonth);
+      
+    } catch (error) {
+      console.error('❌ Error creating ZIP:', error);
+      alert('❌ Lỗi khi tạo file ZIP:\n' + error);
+    }
+  }
+
+  // Show month selection dialog
+  showMonthSelectionDialog(): string | null {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const month = currentMonth - i;
+      const year = currentYear;
+      const monthStr = month > 0 ? month.toString().padStart(2, '0') : (month + 12).toString().padStart(2, '0');
+      const yearStr = month > 0 ? year.toString() : (year - 1).toString();
+      months.push(`${yearStr}-${monthStr}`);
+    }
+
+    const monthOptions = months.map(month => {
+      const [year, monthNum] = month.split('-');
+      const monthName = this.getMonthName(month);
+      return `${monthName} ${year}`;
+    });
+
+    const selectedIndex = prompt(
+      '📅 Chọn tháng để tải về:\n\n' +
+      monthOptions.map((option, index) => `${index + 1}. ${option}`).join('\n') +
+      '\n\nNhập số (1-12):'
+    );
+
+    if (!selectedIndex || isNaN(Number(selectedIndex))) {
+      return null;
+    }
+
+    const index = Number(selectedIndex) - 1;
+    if (index >= 0 && index < months.length) {
+      return months[index];
+    }
+
+    return null;
+  }
+
+  // Get photos for specific month
+  async getPhotosForMonth(monthKey: string): Promise<any[]> {
+    console.log(`🔍 Getting photos for month: ${monthKey}`);
+    
+    try {
+      const querySnapshot = await this.firestore.collection('labelPhotos', ref => 
+        ref.where('photoType', 'in', ['design', 'printed'])
+          .orderBy('capturedAt', 'desc')
+      ).get().toPromise();
+
+      if (!querySnapshot || querySnapshot.empty) {
+        return [];
+      }
+
+      const photos = [];
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data() as any;
+        const capturedDate = data.capturedAt?.toDate() || new Date();
+        const photoMonth = `${capturedDate.getFullYear()}-${String(capturedDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (photoMonth === monthKey) {
+          photos.push({
+            id: doc.id,
+            ...data,
+            capturedDate: capturedDate
+          });
+        }
+      }
+
+      console.log(`📸 Found ${photos.length} photos for month ${monthKey}`);
+      return photos;
+      
+    } catch (error) {
+      console.error('❌ Error getting photos for month:', error);
+      throw error;
+    }
+  }
+
+  // Create and download ZIP file
+  async createAndDownloadZip(photos: any[], monthKey: string): Promise<void> {
+    console.log(`📦 Creating ZIP with ${photos.length} photos`);
+    
+    // For now, we'll create a simple ZIP using browser capabilities
+    // In a real implementation, you'd use a library like JSZip
+    
+    // Group photos by item
+    const groupedPhotos = this.groupPhotosByItem(photos);
+    
+    // Create ZIP content as text (simplified version)
+    const zipContent = this.createZipContent(groupedPhotos, monthKey);
+    
+    // Create and download file
+    const blob = new Blob([zipContent], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `photos-${monthKey}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log(`✅ ZIP file created and downloaded for month ${monthKey}`);
+    alert(`✅ Đã tạo và tải về file ZIP cho tháng ${monthKey} với ${photos.length} hình ảnh`);
+  }
+
+  // Group photos by item
+  groupPhotosByItem(photos: any[]): Map<string, any[]> {
+    const grouped = new Map<string, any[]>();
+    
+    photos.forEach(photo => {
+      const key = photo.itemId || photo.maTem || 'unknown';
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(photo);
+    });
+    
+    return grouped;
+  }
+
+  // Create ZIP content (simplified version)
+  createZipContent(groupedPhotos: Map<string, any[]>, monthKey: string): string {
+    let content = `ZIP Archive for month ${monthKey}\n`;
+    content += `Generated on ${new Date().toLocaleString()}\n\n`;
+    
+    groupedPhotos.forEach((photos, itemKey) => {
+      content += `Item: ${itemKey}\n`;
+      photos.forEach((photo, index) => {
+        const photoType = photo.photoType || 'unknown';
+        const fileName = `${itemKey}_${photoType}_${index + 1}.jpg`;
+        content += `  - ${fileName} (${photo.photoUrl ? photo.photoUrl.length : 0} bytes)\n`;
+      });
+      content += '\n';
+    });
+    
+    return content;
   }
 
 
@@ -2857,35 +3386,78 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Delete comparison from Firebase
-  deleteComparisonFromFirebase(item: ScheduleItem): void {
+  deleteComparisonFromFirebase(item: ScheduleItem, designPhotoId?: string, printedPhotoId?: string): void {
     console.log('🔥 Deleting comparison from Firebase for item:', item.stt);
     
-    // Delete from labelComparisons collection
-    this.firestore.collection('labelComparisons', ref => 
-      ref.where('itemId', '==', item.stt || '')
-        .where('maTem', '==', item.maTem || '')
-    ).get().toPromise()
-      .then((querySnapshot: any) => {
-        if (querySnapshot && !querySnapshot.empty) {
-          // Delete all matching comparison documents
-          const batch = this.firestore.firestore.batch();
-          querySnapshot.docs.forEach((doc: any) => {
-            batch.delete(doc.ref);
-          });
-          
-          return batch.commit();
-        }
-        return Promise.resolve();
-      })
-      .then(() => {
-        console.log('✅ Comparison deleted from labelComparisons collection');
-        
-        // Update main schedule document
-        return this.updateScheduleAfterComparisonDelete(item);
-      })
-      .catch((error) => {
-        console.error('❌ Error deleting from Firebase:', error);
+    // Use provided photo IDs or fall back to item's photo IDs
+    const photoIdsToDelete: string[] = [];
+    
+    if (designPhotoId) {
+      photoIdsToDelete.push(designPhotoId);
+    } else if (item.labelComparison?.designPhotoId) {
+      photoIdsToDelete.push(item.labelComparison.designPhotoId);
+    }
+    
+    if (printedPhotoId) {
+      photoIdsToDelete.push(printedPhotoId);
+    } else if (item.labelComparison?.printedPhotoId) {
+      photoIdsToDelete.push(item.labelComparison.printedPhotoId);
+    }
+    
+    console.log('🗑️ Photos to delete:', photoIdsToDelete);
+    
+    // Delete photos from labelPhotos collection
+    if (photoIdsToDelete.length > 0) {
+      const batch = this.firestore.firestore.batch();
+      
+      photoIdsToDelete.forEach(photoId => {
+        const photoRef = this.firestore.collection('labelPhotos').doc(photoId).ref;
+        batch.delete(photoRef);
+        console.log('🗑️ Added photo to delete batch:', photoId);
       });
+      
+      batch.commit().then(() => {
+        console.log('✅ Photos deleted from labelPhotos collection');
+        
+        // Delete from labelComparisons collection (old format)
+        this.firestore.collection('labelComparisons', ref => 
+          ref.where('itemId', '==', item.stt || '')
+            .where('maTem', '==', item.maTem || '')
+        ).get().toPromise()
+          .then((querySnapshot: any) => {
+            if (querySnapshot && !querySnapshot.empty) {
+              // Delete all matching comparison documents
+              const batch2 = this.firestore.firestore.batch();
+              querySnapshot.docs.forEach((doc: any) => {
+                batch2.delete(doc.ref);
+              });
+              
+              return batch2.commit();
+            }
+            return Promise.resolve();
+          })
+          .then(() => {
+            console.log('✅ Comparison deleted from labelComparisons collection');
+            
+            // Update main schedule document
+            return this.updateScheduleAfterComparisonDelete(item).then(() => {
+              // Force reload data after deletion
+              setTimeout(() => {
+                console.log('🔄 Reloading data after deletion...');
+                this.loadDataFromFirebase();
+              }, 1000);
+            });
+          })
+          .catch((error) => {
+            console.error('❌ Error deleting from labelComparisons:', error);
+          });
+      }).catch((error) => {
+        console.error('❌ Error deleting photos from labelPhotos:', error);
+      });
+    } else {
+      // No photos to delete, just update schedule
+      this.updateScheduleAfterComparisonDelete(item);
+    }
   }
 
   // Update main schedule after deleting comparison
@@ -2905,17 +3477,57 @@ export class PrintLabelComponent implements OnInit {
           );
           
           if (itemIndex !== -1) {
-            // Remove labelComparison from the item
-            delete updatedData[itemIndex].labelComparison;
+            console.log('🗑️ Found item to update:', updatedData[itemIndex].maTem);
+            
+            // Clear photo references specifically
+            if (updatedData[itemIndex].labelComparison) {
+              delete updatedData[itemIndex].labelComparison.designPhotoId;
+              delete updatedData[itemIndex].labelComparison.designPhotoUrl;
+              delete updatedData[itemIndex].labelComparison.printedPhotoId;
+              delete updatedData[itemIndex].labelComparison.printedPhotoUrl;
+              
+              // If no photos left, remove entire labelComparison
+              if (!updatedData[itemIndex].labelComparison.designPhotoId && 
+                  !updatedData[itemIndex].labelComparison.printedPhotoId) {
+                delete updatedData[itemIndex].labelComparison;
+                console.log('🗑️ Removed entire labelComparison');
+              } else {
+                console.log('🗑️ Cleared photo references, kept labelComparison');
+              }
+            }
             
             // Update the document
             return doc.ref.update({
               data: updatedData,
               lastUpdated: new Date(),
-              lastAction: 'Comparison deleted'
+              lastAction: 'Photo deleted'
             }).then(() => {
-              console.log('✅ Schedule updated after comparison deletion');
+              console.log('✅ Schedule updated after photo deletion');
+              
+              // Also update local data to ensure consistency
+              const localItemIndex = this.scheduleData.findIndex(localItem => 
+                localItem.stt === item.stt && localItem.maTem === item.maTem
+              );
+              
+              if (localItemIndex !== -1) {
+                // Clear photo references from local data
+                if (this.scheduleData[localItemIndex].labelComparison) {
+                  delete this.scheduleData[localItemIndex].labelComparison.designPhotoId;
+                  delete this.scheduleData[localItemIndex].labelComparison.designPhotoUrl;
+                  delete this.scheduleData[localItemIndex].labelComparison.printedPhotoId;
+                  delete this.scheduleData[localItemIndex].labelComparison.printedPhotoUrl;
+                  
+                  // If no photos left, remove entire labelComparison
+                  if (!this.scheduleData[localItemIndex].labelComparison.designPhotoId && 
+                      !this.scheduleData[localItemIndex].labelComparison.printedPhotoId) {
+                    delete this.scheduleData[localItemIndex].labelComparison;
+                  }
+                }
+                console.log('✅ Local data updated after photo deletion');
+              }
             });
+          } else {
+            console.log('❌ Item not found in schedule data');
           }
         }
         return Promise.resolve();
@@ -3577,6 +4189,62 @@ export class PrintLabelComponent implements OnInit {
     });
   }
 
+  // Continue to next capture step
+  continueToNextCaptureStep(item: ScheduleItem, currentMode: 'design' | 'printed'): void {
+    if (currentMode === 'design') {
+      // Move to printed photo capture
+      this.captureStep = 2;
+      this.currentCaptureMode = 'printed';
+      
+      // Ask user if they want to continue
+      const confirmed = confirm(
+        `✅ Đã chụp xong bản vẽ thiết kế!\n\n` +
+        `Bạn có muốn tiếp tục chụp tem đã in không?\n\n` +
+        `• Bước 1/2: ✅ Bản vẽ thiết kế\n` +
+        `• Bước 2/2: 📸 Tem đã in (Chưa chụp)`
+      );
+      
+      if (confirmed) {
+        // Start printed photo capture
+        this.startPhotoCapture(item, 'printed');
+      } else {
+        this.isCapturingPhoto = false;
+        alert('📸 Chụp hình tạm dừng. Bạn có thể tiếp tục sau.');
+      }
+    } else {
+      // Both photos captured
+      this.isCapturingPhoto = false;
+      alert('✅ Đã hoàn thành chụp cả 2 hình!');
+    }
+  }
+
+  // Complete photo capture process
+  completePhotoCapture(item: ScheduleItem): void {
+    console.log('✅ Photo capture completed for item:', item.maTem);
+    
+    // Update item with completion status
+    if (item.labelComparison) {
+      item.labelComparison.comparedAt = new Date();
+      item.labelComparison.comparisonResult = 'Completed';
+    }
+    
+    // Save to Firebase
+    this.saveComparisonToFirebase(item);
+    
+    // Show completion message
+    const hasDesign = item.labelComparison?.designPhotoId;
+    const hasPrinted = item.labelComparison?.printedPhotoId;
+    
+    let message = `✅ Hoàn thành chụp hình cho ${item.maTem}\n\n`;
+    message += `📊 Trạng thái:\n`;
+    message += `• Bản vẽ thiết kế: ${hasDesign ? '✅ Đã chụp' : '❌ Chưa chụp'}\n`;
+    message += `• Tem đã in: ${hasPrinted ? '✅ Đã chụp' : '❌ Chưa chụp'}\n\n`;
+    message += `💾 Đã lưu vào Firebase\n`;
+    message += `📦 Có thể tải về và xem lại trong Check Label`;
+    
+    alert(message);
+  }
+
   // Thêm hàm để lấy hình ảnh từ Firebase
   async getPhotoFromFirebase(photoId: string): Promise<string | null> {
     try {
@@ -3592,14 +4260,10 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
-  // Hàm để hiển thị hình ảnh từ ID
+  // Hàm để hiển thị hình ảnh từ ID (deprecated - use viewFullImage with item instead)
   async viewPhotoFromId(photoId: string): Promise<void> {
-    const photoUrl = await this.getPhotoFromFirebase(photoId);
-    if (photoUrl) {
-      this.viewFullImage(photoUrl);
-    } else {
-      alert('❌ Không tìm thấy hình ảnh');
-    }
+    console.log('⚠️ viewPhotoFromId is deprecated. Use viewFullImage with item instead.');
+    alert('⚠️ Chức năng này đã được thay thế. Vui lòng sử dụng nút 👁️ trong bảng để xem hình.');
   }
 
   // Thêm hàm để kiểm tra và tối ưu hóa dữ liệu hiện tại
@@ -3812,5 +4476,186 @@ export class PrintLabelComponent implements OnInit {
         avgSizeElement.style.color = '#f44336';
       }
     }
+  }
+
+
+
+  // Get current time range text
+  getCurrentTimeRangeText(): string {
+    if (this.customStartDate && this.customEndDate) {
+      return `${this.customStartDate.toLocaleDateString()} - ${this.customEndDate.toLocaleDateString()}`;
+    } else {
+      return `${this.selectedDays} ngày gần nhất`;
+    }
+  }
+
+  // Show time range selector dialog
+  showTimeRangeSelector(): void {
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,0,0,0.5); z-index: 10000; display: flex; 
+      align-items: center; justify-content: center;
+    `;
+    
+    const content = document.createElement('div');
+    content.style.cssText = `
+      background: white; padding: 30px; border-radius: 10px; 
+      max-width: 500px; width: 90%; text-align: center;
+    `;
+    
+    content.innerHTML = `
+      <h3 style="margin-bottom: 20px; color: #1976d2;">📅 Chọn khoảng thời gian</h3>
+      
+      <div style="margin-bottom: 20px;">
+        <h4 style="margin-bottom: 10px; color: #666;">Tùy chọn nhanh:</h4>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button onclick="window.selectTimeRange(7)" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">7 ngày</button>
+          <button onclick="window.selectTimeRange(30)" style="background: #2196f3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">30 ngày</button>
+          <button onclick="window.selectTimeRange(90)" style="background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">90 ngày</button>
+          <button onclick="window.selectTimeRange(365)" style="background: #9c27b0; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">1 năm</button>
+        </div>
+      </div>
+      
+      <div style="margin-bottom: 20px;">
+        <h4 style="margin-bottom: 10px; color: #666;">Tùy chỉnh:</h4>
+        <div style="display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap;">
+          <input type="date" id="startDate" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          <span style="color: #666;">đến</span>
+          <input type="date" id="endDate" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <button onclick="window.applyCustomDate()" style="background: #1976d2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">Áp dụng</button>
+        <button onclick="window.closeTimeDialog()" style="background: #666; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Hủy</button>
+      </div>
+    `;
+    
+    dialog.appendChild(content);
+    document.body.appendChild(dialog);
+    
+    // Set global functions
+    (window as any).selectTimeRange = (days: number) => {
+      this.selectedDays = days;
+      this.customStartDate = null;
+      this.customEndDate = null;
+      this.loadDataFromFirebase();
+      this.closeTimeDialog();
+    };
+    
+    (window as any).applyCustomDate = () => {
+      const startDate = (document.getElementById('startDate') as HTMLInputElement).value;
+      const endDate = (document.getElementById('endDate') as HTMLInputElement).value;
+      
+      if (startDate && endDate) {
+        this.customStartDate = new Date(startDate);
+        this.customEndDate = new Date(endDate);
+        this.selectedDays = 0;
+        this.loadDataFromFirebase();
+        this.closeTimeDialog();
+      } else {
+        alert('Vui lòng chọn cả ngày bắt đầu và ngày kết thúc');
+      }
+    };
+    
+    (window as any).closeTimeDialog = () => {
+      document.body.removeChild(dialog);
+    };
+  }
+
+  // Close time dialog
+  closeTimeDialog(): void {
+    const dialog = document.querySelector('div[style*="z-index: 10000"]');
+    if (dialog) {
+      document.body.removeChild(dialog);
+    }
+  }
+
+
+
+  // Force complete deletion of photos
+  forceCompletePhotoDeletion(item: ScheduleItem): void {
+    console.log('🔥 Force complete deletion for:', item.maTem);
+    
+    // Store photo IDs
+    const designPhotoId = item.labelComparison?.designPhotoId;
+    const printedPhotoId = item.labelComparison?.printedPhotoId;
+    
+    // Clear local references immediately
+    if (item.labelComparison) {
+      delete item.labelComparison.designPhotoId;
+      delete item.labelComparison.designPhotoUrl;
+      delete item.labelComparison.printedPhotoId;
+      delete item.labelComparison.printedPhotoUrl;
+      
+      if (!item.labelComparison.designPhotoId && !item.labelComparison.printedPhotoId) {
+        delete item.labelComparison;
+      }
+    }
+    
+    // Delete from Firebase with multiple attempts
+    const deletePromises: Promise<any>[] = [];
+    
+    // Delete from labelPhotos collection
+    if (designPhotoId) {
+      deletePromises.push(
+        this.firestore.collection('labelPhotos').doc(designPhotoId).delete()
+          .then(() => console.log('✅ Deleted design photo:', designPhotoId))
+          .catch((error) => console.error('❌ Error deleting design photo:', error))
+      );
+    }
+    
+    if (printedPhotoId) {
+      deletePromises.push(
+        this.firestore.collection('labelPhotos').doc(printedPhotoId).delete()
+          .then(() => console.log('✅ Deleted printed photo:', printedPhotoId))
+          .catch((error) => console.error('❌ Error deleting printed photo:', error))
+      );
+    }
+    
+    // Delete from labelComparisons collection
+    deletePromises.push(
+      this.firestore.collection('labelComparisons', ref => 
+        ref.where('itemId', '==', item.stt || '')
+          .where('maTem', '==', item.maTem || '')
+      ).get().toPromise()
+        .then((querySnapshot: any) => {
+          if (querySnapshot && !querySnapshot.empty) {
+            const batch = this.firestore.firestore.batch();
+            querySnapshot.docs.forEach((doc: any) => {
+              batch.delete(doc.ref);
+            });
+            return batch.commit();
+          }
+          return Promise.resolve();
+        })
+        .then(() => console.log('✅ Deleted from labelComparisons'))
+        .catch((error) => console.error('❌ Error deleting from labelComparisons:', error))
+    );
+    
+    // Update main schedule
+    deletePromises.push(
+      this.updateScheduleAfterComparisonDelete(item)
+        .then(() => console.log('✅ Updated main schedule'))
+        .catch((error) => console.error('❌ Error updating main schedule:', error))
+    );
+    
+    // Execute all deletions
+    Promise.all(deletePromises)
+      .then(() => {
+        console.log('✅ All deletion operations completed');
+        alert('✅ Đã xóa hoàn toàn hình khỏi Firebase!');
+        
+        // Force reload after a delay
+        setTimeout(() => {
+          console.log('🔄 Force reloading data...');
+          this.loadDataFromFirebase();
+        }, 2000);
+      })
+      .catch((error) => {
+        console.error('❌ Error in force deletion:', error);
+        alert('❌ Có lỗi khi xóa hình!');
+      });
   }
 } 

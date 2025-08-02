@@ -7,13 +7,7 @@ import { TrainingReportDebugService } from '../../services/training-report-debug
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-interface FlowchartStep {
-  vi: string;
-  en: string;
-  icon: string;
-  type: 'material' | 'product';
-  imageUrl?: string;
-}
+
 
 interface MatrixEmployee {
   employeeId: string;
@@ -41,8 +35,6 @@ export class EquipmentComponent implements OnInit {
   Math = Math;
   
   isEnglish = false;
-  selectedStep: FlowchartStep | null = null;
-  showWorkInstruction = false;
   showTest = false;
   showReport = false;
   showMatrixTraining = false;
@@ -143,16 +135,7 @@ export class EquipmentComponent implements OnInit {
     }
   }
 
-  steps: FlowchartStep[] = [
-    { vi: 'Nhận nguyên liệu', en: 'Receive Materials', icon: 'call_received', type: 'material', imageUrl: 'assets/img/instruction_step_1.png' },
-    { vi: 'Kiểm tra nguyên liệu đầu vào', en: 'Inspect Incoming Materials', icon: 'fact_check', type: 'material', imageUrl: 'assets/img/instruction_step_2.png' },
-    { vi: 'Lưu trữ nguyên liệu', en: 'Store Materials', icon: 'inventory_2', type: 'material', imageUrl: 'assets/img/instruction_step_3.png' },
-    { vi: 'Soạn Nguyên liệu', en: 'Prepare Materials', icon: 'build', type: 'material', imageUrl: 'assets/img/instruction_step_4.png' },
-    { vi: 'Kiểm và Giao nguyên liệu', en: 'Check and Deliver Materials', icon: 'local_shipping', type: 'material', imageUrl: 'assets/img/instruction_step_5.png' },
-    { vi: 'Nhận Thành Phẩm', en: 'Receive Finished Goods', icon: 'check_circle_outline', type: 'product', imageUrl: 'assets/img/instruction_step_6.png' },
-    { vi: 'Lưu trữ Thành Phẩm', en: 'Store Finished Goods', icon: 'inventory', type: 'product', imageUrl: 'assets/img/instruction_step_7.png' },
-    { vi: 'Soạn và Giao Thành phẩm', en: 'Prepare and Deliver Finished Goods', icon: 'move_to_inbox', type: 'product', imageUrl: 'assets/img/instruction_step_8.png' }
-  ];
+
 
   constructor(
     private router: Router,
@@ -167,9 +150,6 @@ export class EquipmentComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (this.steps.length > 0) {
-      this.selectedStep = this.steps[0];
-    }
     this.loadReportData();
   }
 
@@ -177,9 +157,7 @@ export class EquipmentComponent implements OnInit {
     this.isEnglish = !this.isEnglish;
   }
 
-  selectStep(step: FlowchartStep) {
-    this.selectedStep = step;
-  }
+
 
   openTemperatureKnowledgeTest() {
     // Navigate to Temperature Knowledge Test component
@@ -204,6 +182,27 @@ export class EquipmentComponent implements OnInit {
     }
   }
 
+  openWHWI0005Ver08Document() {
+    // Open the WH-WI0005 Ver08 document
+    const documentUrl = 'https://docs.google.com/document/d/your-wh-wi0005-ver08-document-id/edit';
+    
+    if (documentUrl && documentUrl !== 'https://docs.google.com/document/d/your-wh-wi0005-ver08-document-id/edit') {
+      window.open(documentUrl, '_blank');
+      console.log('Opening WH-WI0005 Ver08 document');
+    } else {
+      alert(this.isEnglish ? 
+        'WH-WI0005 Ver08 document link not configured yet. Please contact administrator.' :
+        'Liên kết tài liệu WH-WI0005 Ver08 chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
+    }
+  }
+
+  downloadWHWI0005Ver08Document() {
+    // Download the WH-WI0005 Ver08 document
+    const documentUrl = 'https://docs.google.com/document/d/your-wh-wi0005-ver08-document-id/export?format=docx';
+    window.open(documentUrl, '_blank');
+    console.log('Downloading WH-WI0005 Ver08 document');
+  }
+
   openMaterialsTest() {
     // Navigate to Materials Test component
     console.log('Opening Materials Test - WH-WI0005 Part A');
@@ -216,19 +215,11 @@ export class EquipmentComponent implements OnInit {
     this.router.navigate(['/finished-goods-test']);
   }
 
-  toggleWorkInstruction() {
-    this.showWorkInstruction = !this.showWorkInstruction;
-    if (this.showWorkInstruction) {
-      this.showTest = false; // Đóng test box khi mở work instruction
-      this.showReport = false; // Đóng report khi mở work instruction
-      this.showMatrixTraining = false; // Đóng matrix training khi mở work instruction
-    }
-  }
+
 
   toggleTest() {
     this.showTest = !this.showTest;
     if (this.showTest) {
-      this.showWorkInstruction = false; // Đóng work instruction khi mở test
       this.showReport = false; // Đóng report khi mở test
       this.showMatrixTraining = false; // Đóng matrix training khi mở test
     }
@@ -237,7 +228,6 @@ export class EquipmentComponent implements OnInit {
   toggleReport() {
     this.showReport = !this.showReport;
     if (this.showReport) {
-      this.showWorkInstruction = false; // Đóng work instruction khi mở report
       this.showTest = false; // Đóng test khi mở report
       this.showMatrixTraining = false; // Đóng matrix training khi mở report
       
@@ -257,7 +247,6 @@ export class EquipmentComponent implements OnInit {
   toggleMatrixTraining() {
     this.showMatrixTraining = !this.showMatrixTraining;
     if (this.showMatrixTraining) {
-      this.showWorkInstruction = false; // Đóng work instruction khi mở matrix training
       this.showTest = false; // Đóng test khi mở matrix training
       this.showReport = false; // Đóng report khi mở matrix training
       this.cacheMatrixTrainingData(); // Cache data to improve performance
@@ -265,7 +254,6 @@ export class EquipmentComponent implements OnInit {
   }
 
   closeAll() {
-    this.showWorkInstruction = false;
     this.showTest = false;
     this.showReport = false;
     this.showMatrixTraining = false;

@@ -227,7 +227,10 @@
                 <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Tình trạng</th>
                 <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 48px; font-size: 8.4px;">Bản vẽ</th>
                 <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Ghi chú</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 108px; font-size: 8.4px;">Thao tác</th>
+                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">📸</th>
+                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">✅</th>
+                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">🗑️🔥</th>
+                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">🗑️📋</th>
               </tr>
             </thead>
             <tbody>
@@ -300,51 +303,55 @@
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <div class="action-buttons" style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-direction: row;">
-                    <button 
-                      (click)="captureAndCompareLabel(item)"
-                      [title]="getComparisonTooltip(item)"
-                      style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                      [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
-                      [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
-                      {{getComparisonIcon(item)}}
-                    </button>
-                    <button 
-                      *ngIf="!item.isCompleted"
-                      (click)="markAsCompleted(item)"
-                      title="Đánh dấu hoàn thành"
-                      style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                      onmouseenter="this.style.background='#45a049'; this.style.transform='scale(1.05)'"
-                      onmouseleave="this.style.background='#4caf50'; this.style.transform='scale(1)'">
-                      ✅
-                    </button>
-                    <button 
-                      *ngIf="item.isCompleted"
-                      (click)="markAsIncomplete(item)"
-                      title="Bỏ đánh dấu hoàn thành"
-                      style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                      onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
-                      onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
-                      🔄
-                    </button>
-                    <button 
-                      *ngIf="item.labelComparison"
-                      (click)="deleteComparisonImage(item)"
-                      title="Xóa kết quả so sánh"
-                      style="background: #ff9800; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                      onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
-                      onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
-                      🗑️📸
-                    </button>
-                    <button 
-                      (click)="deleteScheduleItem(i)"
-                      title="Xóa toàn bộ dòng"
-                      style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                      onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
-                      onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
-                      🗑️📋
-                    </button>
-                  </div>
+                  <button 
+                    (click)="captureAndCompareLabel(item)"
+                    [title]="getComparisonTooltip(item)"
+                    style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                    [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
+                    [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
+                    {{getComparisonIcon(item)}}
+                  </button>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    *ngIf="!item.isCompleted"
+                    (click)="markAsCompleted(item)"
+                    title="Đánh dấu hoàn thành"
+                    style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                    onmouseenter="this.style.background='#45a049'; this.style.transform='scale(1.05)'"
+                    onmouseleave="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                    ✅
+                  </button>
+                  <button 
+                    *ngIf="item.isCompleted"
+                    (click)="markAsIncomplete(item)"
+                    title="Bỏ đánh dấu hoàn thành"
+                    style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                    onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
+                    onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
+                    🔄
+                  </button>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    *ngIf="item.labelComparison"
+                    (click)="forceCompletePhotoDeletion(item)"
+                    title="Xóa hoàn toàn hình khỏi Firebase"
+                    style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                    onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
+                    onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
+                    🗑️🔥
+                  </button>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    (click)="deleteScheduleItem(i)"
+                    title="Xóa toàn bộ dòng"
+                    style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                    onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
+                    onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
+                    🗑️📋
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -357,98 +364,48 @@
               ({{getCompletedItemsCount()}} đã ẩn)
             </span>
           </p>
-          <div *ngIf="firebaseSaved" style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;">
-            <span style="color: #4caf50; font-size: 16px;">✅</span>
-            <span style="color: #4caf50; font-weight: bold;">Data saved to Firebase</span>
-            <span style="color: #ff9800; font-size: 16px;">🔥</span>
-          </div>
-          <div *ngIf="!firebaseSaved && scheduleData.length > 0" style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;">
-            <span style="color: #ff9800; font-size: 16px;">⏳</span>
-            <span style="color: #ff9800; font-weight: bold;">Saving to Firebase...</span>
-            <span style="color: #ff9800; font-size: 16px;">🔥</span>
-          </div>
+
         </div>
       </div>
     </div>
 
     <!-- Check Label Content -->
     <div *ngIf="selectedFunction === 'check'">
-      <h4 style="color: #c2185b; margin-bottom: 20px;">🔍 Check Label - Báo cáo chụp hình</h4>
 
-      <!-- Status Summary -->
-      <div style="background: #f5f5f5; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-        <h6 style="color: #333; margin-bottom: 10px; text-align: center;">📊 Thống kê chụp hình</h6>
-        <div style="display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap;">
-          <div style="min-width: 80px; margin: 5px;">
-            <div style="font-size: 24px; color: #4caf50;">{{getPhotoCapturedItems().length}}</div>
-            <div style="font-size: 12px; color: #666;">📷 Đã chụp</div>
+
+      <!-- Quick Stats -->
+      <div style="background: #f0f8ff; border-radius: 6px; padding: 8px; margin-bottom: 10px; border-left: 3px solid #2196f3;">
+        <div style="display: flex; justify-content: space-around; text-align: center; font-size: 12px;">
+          <div>
+            <span style="font-weight: bold; color: #2196f3;">{{getPhotoCapturedItems().length}}</span>
+            <div style="color: #666;">Tổng cộng</div>
           </div>
-          <div style="min-width: 80px; margin: 5px;">
-            <div style="font-size: 24px; color: #2196f3;">{{scheduleData.length - getPhotoCapturedItems().length}}</div>
-            <div style="font-size: 12px; color: #666;">📸 Chưa chụp</div>
+          <div>
+            <span style="font-weight: bold; color: #4caf50;">{{getBothPhotosCount()}}</span>
+            <div style="color: #666;">Cả 2 hình</div>
           </div>
-          <div style="min-width: 80px; margin: 5px;">
-            <div style="font-size: 24px; color: #ff9800;">{{scheduleData.length}}</div>
-            <div style="font-size: 12px; color: #666;">📋 Tổng số</div>
+          <div>
+            <span style="font-weight: bold; color: #ff9800;">{{getPrintedPhotosCount() - getBothPhotosCount()}}</span>
+            <div style="color: #666;">Chỉ tem in</div>
+          </div>
+          <div>
+            <span style="font-weight: bold; color: #9c27b0;">{{getDesignPhotosCount() - getBothPhotosCount()}}</span>
+            <div style="color: #666;">Chỉ bản vẽ</div>
           </div>
         </div>
       </div>
 
-      <!-- Storage Information -->
-      <div style="background: #e8f5e8; border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
-        <h6 style="color: #2e7d32; margin-bottom: 10px; text-align: center;">💾 Thông tin dung lượng Firebase</h6>
-        <div style="display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap;">
-          <div style="min-width: 100px; margin: 5px;">
-            <div style="font-size: 20px; color: #2e7d32; font-weight: bold;" id="totalStorageSize">Đang tính...</div>
-            <div style="font-size: 12px; color: #666;">📦 Dung lượng đã dùng</div>
-          </div>
-          <div style="min-width: 100px; margin: 5px;">
-            <div style="font-size: 20px; color: #1976d2; font-weight: bold;" id="photoCount">Đang tính...</div>
-            <div style="font-size: 12px; color: #666;">🖼️ Số hình đã lưu</div>
-          </div>
-          <div style="min-width: 100px; margin: 5px;">
-            <div style="font-size: 20px; color: #ff9800; font-weight: bold;">150 KB</div>
-            <div style="font-size: 12px; color: #666;">📏 Giới hạn mỗi hình</div>
-          </div>
-          <div style="min-width: 100px; margin: 5px;">
-            <div style="font-size: 20px; color: #9c27b0; font-weight: bold;" id="avgSize">Đang tính...</div>
-            <div style="font-size: 12px; color: #666;">📊 Trung bình/hình</div>
-          </div>
-        </div>
-        <div style="text-align: center; margin-top: 10px;">
-          <button (click)="refreshStorageInfo()" 
-                  style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 12px;">
-            🔄 Cập nhật thông tin
-          </button>
-          <button (click)="optimizeCurrentData()" 
-                  style="background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-left: 10px;">
-            ⚡ Tối ưu dữ liệu
-          </button>
-        </div>
-        <div id="storageWarning" style="display: none; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 10px; margin-top: 10px; text-align: center;">
-          <span style="color: #856404; font-size: 12px;">⚠️ Dung lượng đang gần đạt giới hạn. Vui lòng tối ưu hóa dữ liệu hoặc xóa hình cũ.</span>
-        </div>
-      </div>
+
 
       <!-- Photo Report -->
       <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <h5 style="color: #1976d2; margin-bottom: 15px; text-align: center;">📋 Báo cáo hình chụp</h5>
+
         
         <!-- Report Actions -->
         <div style="text-align: center; margin-bottom: 15px;">
-          <button (click)="exportPhotoReport()" 
-                  [disabled]="getPhotoCapturedItems().length === 0"
-                  [style.opacity]="getPhotoCapturedItems().length > 0 ? '1' : '0.5'"
-                  style="background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 14px;">
-            📊 Tải báo cáo Excel
-          </button>
-          <button (click)="loadDataFromFirebase()" 
-                  style="background: #2196f3; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 14px;">
-            🔄 Refresh
-          </button>
-          <button (click)="downloadA5Template()" 
-                  style="background: #9c27b0; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 14px;">
-            📏 A5 Template
+          <button (click)="showTimeRangeSelector()" 
+                  style="background: #1976d2; color: white; border: none; padding: 12px 24px; border-radius: 6px; margin: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            📅 Hiển thị từ: {{getCurrentTimeRangeText()}}
           </button>
         </div>
         
@@ -472,7 +429,8 @@
                 <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Line</th>
                 <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Người in</th>
                 <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Ngày chụp</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Kích thước</th>
+                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Bản vẽ</th>
+                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Tem in</th>
                 <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Thao tác</th>
               </tr>
             </thead>
@@ -508,11 +466,18 @@
                   {{item.labelComparison?.comparedAt | date:'dd/MM/yyyy HH:mm'}}
                 </td>
                 <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
-                  {{getImageSize(item)}}
+                  <span *ngIf="item.labelComparison?.designPhotoId" style="color: #4caf50; font-weight: bold;">✅</span>
+                  <span *ngIf="!item.labelComparison?.designPhotoId" style="color: #ff9800;">⏳</span>
+                </td>
+                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
+                  <span *ngIf="item.labelComparison?.printedPhotoId" style="color: #4caf50; font-weight: bold;">✅</span>
+                  <span *ngIf="!item.labelComparison?.printedPhotoId" style="color: #ff9800;">⏳</span>
+                  <div *ngIf="item.labelComparison?.printedPhotoId && !item.labelComparison?.designPhotoId" 
+                       style="font-size: 10px; color: #2196f3; margin-top: 2px;">(Chỉ tem in)</div>
                 </td>
                 <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center;">
                   <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
-                    <button (click)="viewFullImage(item.labelComparison?.photoUrl)" 
+                    <button (click)="viewFullImage(item)" 
                             title="Xem hình"
                             style="background: #4caf50; color: white; border: none; padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">
                       👁️
@@ -522,10 +487,10 @@
                             style="background: #2196f3; color: white; border: none; padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">
                       💾
                     </button>
-                    <button (click)="deletePhoto(item)" 
-                            title="Xóa"
-                            style="background: #f44336; color: white; border: none; padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                      🗑️
+                    <button (click)="forceCompletePhotoDeletion(item)" 
+                            title="Xóa hoàn toàn khỏi Firebase"
+                            style="background: #d32f2f; color: white; border: none; padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                      🗑️🔥
                     </button>
                   </div>
                 </td>
