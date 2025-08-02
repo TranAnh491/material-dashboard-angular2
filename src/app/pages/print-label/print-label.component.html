@@ -12,14 +12,14 @@
       <p style="margin: 0; opacity: 0.8; font-size: 12px;">Manage label printing schedules</p>
     </div>
     
-    <!-- Check Label Box -->
+    <!-- History Pic Box -->
     <div 
       (click)="selectFunction('check')"
       [style.background]="selectedFunction === 'check' ? '#c2185b' : '#fce4ec'"
       [style.color]="selectedFunction === 'check' ? 'white' : '#c2185b'"
       style="flex: 1; min-width: 140px; padding: 15px; border: 2px solid #e91e63; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.3s ease; touch-action: manipulation;">
-      <h4 style="margin: 0 0 6px 0; font-size: 16px;">🔍 Check Label</h4>
-      <p style="margin: 0; opacity: 0.8; font-size: 12px;">Quality control and comparison</p>
+      <h4 style="margin: 0 0 6px 0; font-size: 16px;">📸 History Pic</h4>
+      <p style="margin: 0; opacity: 0.8; font-size: 12px;">Photo history and download</p>
     </div>
     
   </div>
@@ -205,7 +205,7 @@
         </p>
       </div>
 
-        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 400px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch;">
+        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch;">
           <table style="width: 100%; border-collapse: collapse; font-size: 11px; min-width: 800px;">
             <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
               <tr>
@@ -358,14 +358,7 @@
           </table>
         </div>
         
-        <div style="text-align: center; margin-top: 10px; color: #666;">
-          <p>Hiển thị: {{getDisplayScheduleData().length}} / {{scheduleData.length}} records 
-            <span *ngIf="!showCompletedItems && getCompletedItemsCount() > 0" style="color: #4caf50;">
-              ({{getCompletedItemsCount()}} đã ẩn)
-            </span>
-          </p>
 
-        </div>
       </div>
     </div>
 
@@ -402,10 +395,14 @@
 
         
         <!-- Report Actions -->
-        <div style="text-align: center; margin-bottom: 15px;">
+        <div style="text-align: center; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
           <button (click)="showTimeRangeSelector()" 
-                  style="background: #1976d2; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 5px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
+                  style="background: #1976d2; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
             📅 {{getCurrentTimeRangeText()}}
+          </button>
+          <button (click)="downloadPhotosAsZip()" 
+                  style="background: #4caf50; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
+            📄 Tải báo cáo
           </button>
         </div>
         

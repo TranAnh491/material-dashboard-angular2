@@ -3105,6 +3105,9 @@ export class PrintLabelComponent implements OnInit {
     console.log(`📦 Preparing ZIP download for month: ${selectedMonth}`);
     
     try {
+      // Show loading message
+      alert('⏳ Đang tải dữ liệu từ Firebase...');
+      
       // Get photos for selected month
       const photos = await this.getPhotosForMonth(selectedMonth);
       
@@ -3118,7 +3121,19 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Error creating ZIP:', error);
-      alert('❌ Lỗi khi tạo file ZIP:\n' + error);
+      
+      // Provide more specific error messages
+      let errorMessage = '❌ Lỗi khi tạo file ZIP:\n';
+      
+      if (error.message && error.message.includes('index')) {
+        errorMessage += 'Lỗi Firebase Index. Vui lòng thử lại sau.';
+      } else if (error.message && error.message.includes('permission')) {
+        errorMessage += 'Không có quyền truy cập dữ liệu.';
+      } else {
+        errorMessage += error.message || 'Lỗi không xác định';
+      }
+      
+      alert(errorMessage);
     }
   }
 
@@ -3165,10 +3180,8 @@ export class PrintLabelComponent implements OnInit {
     console.log(`🔍 Getting photos for month: ${monthKey}`);
     
     try {
-      const querySnapshot = await this.firestore.collection('labelPhotos', ref => 
-        ref.where('photoType', 'in', ['design', 'printed'])
-          .orderBy('capturedAt', 'desc')
-      ).get().toPromise();
+      // Get all photos without complex query to avoid index issues
+      const querySnapshot = await this.firestore.collection('labelPhotos').get().toPromise();
 
       if (!querySnapshot || querySnapshot.empty) {
         return [];
@@ -3180,7 +3193,8 @@ export class PrintLabelComponent implements OnInit {
         const capturedDate = data.capturedAt?.toDate() || new Date();
         const photoMonth = `${capturedDate.getFullYear()}-${String(capturedDate.getMonth() + 1).padStart(2, '0')}`;
         
-        if (photoMonth === monthKey) {
+        // Filter by month and valid photo types
+        if (photoMonth === monthKey && data.photoType && ['design', 'printed'].includes(data.photoType)) {
           photos.push({
             id: doc.id,
             ...data,
@@ -3188,6 +3202,13 @@ export class PrintLabelComponent implements OnInit {
           });
         }
       }
+
+      // Sort by capturedAt descending
+      photos.sort((a, b) => {
+        const dateA = a.capturedDate || new Date(0);
+        const dateB = b.capturedDate || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
 
       console.log(`📸 Found ${photos.length} photos for month ${monthKey}`);
       return photos;
@@ -3202,28 +3223,107 @@ export class PrintLabelComponent implements OnInit {
   async createAndDownloadZip(photos: any[], monthKey: string): Promise<void> {
     console.log(`📦 Creating ZIP with ${photos.length} photos`);
     
-    // For now, we'll create a simple ZIP using browser capabilities
-    // In a real implementation, you'd use a library like JSZip
-    
-    // Group photos by item
-    const groupedPhotos = this.groupPhotosByItem(photos);
-    
-    // Create ZIP content as text (simplified version)
-    const zipContent = this.createZipContent(groupedPhotos, monthKey);
-    
-    // Create and download file
-    const blob = new Blob([zipContent], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `photos-${monthKey}.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    console.log(`✅ ZIP file created and downloaded for month ${monthKey}`);
-    alert(`✅ Đã tạo và tải về file ZIP cho tháng ${monthKey} với ${photos.length} hình ảnh`);
+    try {
+      // Create a comprehensive HTML file with embedded images
+      let htmlContent = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Báo cáo hình ảnh tháng ${monthKey}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .header { background: #1976d2; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .item { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .item-title { color: #1976d2; font-size: 18px; font-weight: bold; margin-bottom: 15px; }
+        .photo { margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 6px; }
+        .photo-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+        .photo-info { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .photo-image { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; }
+        .summary { background: #e3f2fd; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .summary-title { font-weight: bold; color: #1976d2; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📸 BÁO CÁO HÌNH ẢNH THÁNG ${monthKey}</h1>
+        <p>Ngày tạo: ${new Date().toLocaleString('vi-VN')}</p>
+        <p>Tổng số hình: ${photos.length}</p>
+      </div>
+`;
+      
+      // Group photos by item
+      const groupedPhotos = this.groupPhotosByItem(photos);
+      
+      groupedPhotos.forEach((photos, itemKey) => {
+        htmlContent += `
+    <div class="item">
+        <div class="item-title">📋 MÃ TEM: ${itemKey}</div>
+`;
+        
+        photos.forEach((photo, index) => {
+          const photoType = photo.photoType === 'design' ? 'Bản vẽ' : 'Tem in';
+          const capturedDate = photo.capturedDate ? 
+            new Date(photo.capturedDate).toLocaleString('vi-VN') : 'Không xác định';
+          const fileSize = photo.photoUrl ? Math.round(photo.photoUrl.length / 1024) : 0;
+          
+          htmlContent += `
+        <div class="photo">
+            <div class="photo-title">${index + 1}. ${photoType}</div>
+            <div class="photo-info">
+                📅 Ngày chụp: ${capturedDate}<br>
+                📏 Kích thước: ${fileSize} KB<br>
+                🔗 ID: ${photo.id}<br>
+                📝 Ghi chú: ${photo.maTem || 'N/A'}
+            </div>
+            <img src="${photo.photoUrl}" alt="${photoType} - ${itemKey}" class="photo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <div style="display:none; color:red; padding:10px; background:#ffe6e6; border-radius:4px;">
+                ⚠️ Không thể hiển thị hình ảnh. Có thể do lỗi kết nối hoặc hình đã bị xóa.
+            </div>
+        </div>
+`;
+        });
+        
+        htmlContent += `
+    </div>
+`;
+      });
+      
+      // Add summary
+      const designCount = photos.filter(p => p.photoType === 'design').length;
+      const printedCount = photos.filter(p => p.photoType === 'printed').length;
+      const totalSize = photos.reduce((sum, p) => sum + (p.photoUrl ? p.photoUrl.length : 0), 0) / 1024;
+      
+      htmlContent += `
+    <div class="summary">
+        <div class="summary-title">📊 TỔNG KẾT</div>
+        <p>• Tổng số mã tem: ${groupedPhotos.size}</p>
+        <p>• Hình bản vẽ: ${designCount}</p>
+        <p>• Hình tem in: ${printedCount}</p>
+        <p>• Tổng dung lượng: ${Math.round(totalSize)} KB</p>
+    </div>
+</body>
+</html>`;
+      
+      // Create and download HTML file
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `bao-cao-hinh-anh-${monthKey}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log(`✅ HTML report created and downloaded for month ${monthKey}`);
+      alert(`✅ Đã tạo và tải về báo cáo HTML cho tháng ${monthKey} với ${photos.length} hình ảnh\n\n📄 File: bao-cao-hinh-anh-${monthKey}.html\n\n💡 Mở file bằng trình duyệt để xem hình ảnh!`);
+      
+    } catch (error) {
+      console.error('❌ Error creating HTML report:', error);
+      alert('❌ Lỗi khi tạo báo cáo HTML: ' + error.message);
+    }
   }
 
   // Group photos by item
