@@ -313,7 +313,7 @@
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Tình trạng</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 50px; font-size: 9px;">Bản vẽ</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Ghi chú</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">📸</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 80px; font-size: 9px;">📸/📁/📄</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">✅</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️🔥</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️📋</th>
@@ -389,55 +389,73 @@
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <button 
-                    (click)="captureAndCompareLabel(item)"
-                    [title]="getComparisonTooltip(item)"
-                    style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                    [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
-                    [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
-                    {{getComparisonIcon(item)}}
-                  </button>
+                    <div style="display: flex; gap: 2px; justify-content: center; flex-wrap: wrap;">
+                      <button 
+                        (click)="captureAndCompareLabel(item)"
+                        [title]="getComparisonTooltip(item)"
+                        style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
+                        [style.background]="item.labelComparison ? '#f0f0f0' : '#e3f2fd'"
+                        [style.color]="item.labelComparison?.comparisonResult === 'Pass' ? '#4caf50' : item.labelComparison?.comparisonResult === 'Fail' ? '#f44336' : '#2196f3'">
+                        {{getComparisonIcon(item)}}
+                      </button>
+                      <button 
+                        (click)="importPhotoFromFile(item, 'design')"
+                        title="Import bản vẽ từ file"
+                        style="background: #9c27b0; color: white; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
+                        onmouseenter="this.style.background='#7b1fa2'; this.style.transform='scale(1.05)'"
+                        onmouseleave="this.style.background='#9c27b0'; this.style.transform='scale(1)'">
+                        📁
+                      </button>
+                      <button 
+                        (click)="importPhotoFromFile(item, 'printed')"
+                        title="Import tem in từ file"
+                        style="background: #ff5722; color: white; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
+                        onmouseenter="this.style.background='#e64a19'; this.style.transform='scale(1.05)'"
+                        onmouseleave="this.style.background='#ff5722'; this.style.transform='scale(1)'">
+                        📄
+                      </button>
+                    </div>
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <button 
-                    *ngIf="!item.isCompleted"
-                    (click)="markAsCompleted(item)"
-                    title="Đánh dấu hoàn thành"
-                    style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                    onmouseenter="this.style.background='#45a049'; this.style.transform='scale(1.05)'"
-                    onmouseleave="this.style.background='#4caf50'; this.style.transform='scale(1)'">
-                    ✅
-                  </button>
-                  <button 
-                    *ngIf="item.isCompleted"
-                    (click)="markAsIncomplete(item)"
-                    title="Bỏ đánh dấu hoàn thành"
-                    style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                    onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
-                    onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
-                    🔄
-                  </button>
+                    <button 
+                      *ngIf="!item.isCompleted"
+                      (click)="markAsCompleted(item)"
+                      title="Đánh dấu hoàn thành"
+                      style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                      onmouseenter="this.style.background='#45a049'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                      ✅
+                    </button>
+                    <button 
+                      *ngIf="item.isCompleted"
+                      (click)="markAsIncomplete(item)"
+                      title="Bỏ đánh dấu hoàn thành"
+                      style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                      onmouseenter="this.style.background='#f57c00'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
+                      🔄
+                    </button>
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <button 
-                    *ngIf="item.labelComparison"
+                    <button 
+                      *ngIf="item.labelComparison"
                     (click)="forceCompletePhotoDeletion(item)"
                     title="Xóa hoàn toàn hình khỏi Firebase"
                     style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                     onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
                     onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
                     🗑️🔥
-                  </button>
+                    </button>
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <button 
-                    (click)="deleteScheduleItem(i)"
-                    title="Xóa toàn bộ dòng"
-                    style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                    onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
-                    onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
-                    🗑️📋
-                  </button>
+                    <button 
+                      (click)="deleteScheduleItem(i)"
+                      title="Xóa toàn bộ dòng"
+                      style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                      onmouseenter="this.style.background='#d32f2f'; this.style.transform='scale(1.05)'"
+                      onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
+                      🗑️📋
+                    </button>
                 </td>
               </tr>
             </tbody>
@@ -489,7 +507,7 @@
                       <button (click)="downloadPhotosAsZip()" 
                     style="background: #4caf50; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
               📄 Tải báo cáo
-            </button>
+          </button>
 
         </div>
         

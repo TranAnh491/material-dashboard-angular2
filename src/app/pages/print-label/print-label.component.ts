@@ -4797,6 +4797,56 @@ Gửi tự động từ hệ thống quản lý tem.
 
 
 
+  importPhotoFromFile(item: ScheduleItem, mode: 'design' | 'printed'): void {
+    // Create file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    
+    // Set up file selection handler
+    fileInput.onchange = async (event: any) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      try {
+        console.log(`📁 Importing ${mode} photo for item:`, item.maTem);
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          alert('❌ Vui lòng chọn file hình ảnh!');
+          return;
+        }
+        
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert('❌ File quá lớn! Vui lòng chọn file nhỏ hơn 5MB.');
+          return;
+        }
+        
+        // Convert file to blob
+        const blob = new Blob([file], { type: file.type });
+        
+        // Save to Firebase
+        await this.savePhotoToFirebase(blob, item, mode);
+        
+        console.log(`✅ Imported ${mode} photo successfully for:`, item.maTem);
+        alert(`✅ Đã import ${mode === 'design' ? 'bản vẽ' : 'tem in'} thành công!`);
+        
+      } catch (error) {
+        console.error('❌ Error importing photo:', error);
+        alert('❌ Lỗi import hình ảnh: ' + error.message);
+      } finally {
+        // Clean up
+        document.body.removeChild(fileInput);
+      }
+    };
+    
+    // Trigger file selection
+    document.body.appendChild(fileInput);
+    fileInput.click();
+  }
+
   showMobileCameraInfo(): void {
     const dialog = document.createElement('div');
     dialog.className = 'mobile-camera-info-dialog';
