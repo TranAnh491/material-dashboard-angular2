@@ -1,4 +1,69 @@
 <div class="label-container" style="padding: 10px; max-width: 100%; overflow-x: hidden;">
+
+  
+  <style>
+    /* Mobile responsive styles */
+    @media (max-width: 768px) {
+      .mobile-hidden { display: none !important; }
+      .mobile-visible { display: block !important; }
+      
+      .mobile-table { 
+        font-size: 7px !important; 
+        min-width: 500px !important;
+      }
+      
+      .mobile-table th,
+      .mobile-table td {
+        padding: 3px !important;
+        font-size: 7px !important;
+        min-width: 25px !important;
+      }
+      
+      .mobile-table th {
+        font-size: 6px !important;
+      }
+      
+      .mobile-button {
+        padding: 6px 4px !important;
+        font-size: 9px !important;
+        min-width: 50px !important;
+        margin: 1px !important;
+      }
+      
+      .mobile-container {
+        padding: 3px !important;
+      }
+      
+      .mobile-function-box {
+        min-width: 100px !important;
+        padding: 8px !important;
+      }
+      
+      .mobile-function-box h4 {
+        font-size: 12px !important;
+      }
+      
+      .mobile-function-box p {
+        font-size: 8px !important;
+      }
+      
+      /* Hide unnecessary buttons on mobile for Print Schedules */
+      .mobile-print-schedules .mobile-hidden {
+        display: none !important;
+      }
+      
+      /* Show only essential buttons */
+      .mobile-print-schedules .mobile-visible {
+        display: inline-block !important;
+      }
+    }
+    
+    /* Desktop styles */
+    @media (min-width: 769px) {
+      .desktop-hidden { display: none !important; }
+      .desktop-visible { display: block !important; }
+    }
+  </style>
     <!-- Two Function Boxes -->
   <div style="display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap;">
     
@@ -7,6 +72,7 @@
       (click)="selectFunction('print')"
       [style.background]="selectedFunction === 'print' ? '#1976d2' : '#e3f2fd'"
       [style.color]="selectedFunction === 'print' ? 'white' : '#1976d2'"
+      class="mobile-function-box"
       style="flex: 1; min-width: 140px; padding: 15px; border: 2px solid #2196f3; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.3s ease; touch-action: manipulation;">
       <h4 style="margin: 0 0 6px 0; font-size: 16px;">📋 Print Schedules</h4>
       <p style="margin: 0; opacity: 0.8; font-size: 12px;">Manage label printing schedules</p>
@@ -17,6 +83,7 @@
       (click)="selectFunction('check')"
       [style.background]="selectedFunction === 'check' ? '#c2185b' : '#fce4ec'"
       [style.color]="selectedFunction === 'check' ? 'white' : '#c2185b'"
+      class="mobile-function-box"
       style="flex: 1; min-width: 140px; padding: 15px; border: 2px solid #e91e63; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.3s ease; touch-action: manipulation;">
       <h4 style="margin: 0 0 6px 0; font-size: 16px;">📸 History Pic</h4>
       <p style="margin: 0; opacity: 0.8; font-size: 12px;">Photo history and download</p>
@@ -33,15 +100,16 @@
     </div>
     
     <!-- Print Schedules Content -->
-    <div *ngIf="selectedFunction === 'print'">
+    <div *ngIf="selectedFunction === 'print'" class="mobile-print-schedules">
       
       <!-- Control Buttons -->
-      <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+      <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;" class="mobile-container">
         <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
           <button 
           type="button"
           (click)="fileInput.click()" 
           [disabled]="isSaving || isLoading"
+          class="mobile-button mobile-hidden"
           style="background: #4caf50; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
           [style.opacity]="isSaving || isLoading ? '0.6' : '1'">
           <span *ngIf="isSaving">⏳ Đang lưu...</span>
@@ -50,6 +118,7 @@
           <button 
           type="button"
             (click)="downloadTemplate()"
+          class="mobile-button mobile-hidden"
           style="background: #ff9800; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
           📄 Template
         </button>
@@ -57,6 +126,7 @@
           type="button"
           (click)="exportExcel()" 
           [disabled]="scheduleData.length === 0"
+          class="mobile-button mobile-hidden"
           style="background: #9c27b0; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           📤 Export
@@ -65,6 +135,7 @@
           type="button"
           (click)="clearScheduleData()" 
           [disabled]="scheduleData.length === 0"
+          class="mobile-button mobile-hidden"
           style="background: #f44336; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
           [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
           🗑️ Xóa
@@ -72,6 +143,7 @@
           <button 
           type="button"
           (click)="startFreshImport()" 
+          class="mobile-button mobile-hidden"
           style="background: #607d8b; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
           🔄 Mới
           </button>
@@ -79,12 +151,14 @@
           type="button"
           (click)="toggleShowCompletedItems()" 
           [style.background]="showCompletedItems ? '#ff9800' : '#2196f3'"
+          class="mobile-button mobile-hidden"
           style="color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
           {{showCompletedItems ? '🙈 Ẩn' : '👁️ Hiện'}}
           </button>
           <button 
           type="button"
           (click)="showImportHistory()" 
+          class="mobile-button mobile-hidden"
           style="background: #795548; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
           📋 Lịch sử
           </button>
@@ -92,11 +166,23 @@
           *ngIf="isAuthenticated"
           type="button"
           (click)="logout()" 
+          class="mobile-button mobile-hidden"
           style="background: #ff5722; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
           🔓 Đăng xuất
           </button>
 
 
+      </div>
+      
+      <!-- Mobile Camera Button - Only visible on mobile -->
+      <div class="mobile-visible" style="text-align: center; margin: 10px 0; display: none;">
+        <button 
+          type="button"
+          (click)="showMobileCameraInfo()"
+          style="background: #e91e63; color: white; padding: 15px 20px; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: bold; touch-action: manipulation; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+          📸 Chụp hình tem
+        </button>
+        <p style="font-size: 12px; color: #666; margin-top: 5px;">Vuốt ngang để xem bảng dữ liệu</p>
       </div>
 
       <!-- Loading/Status Indicators -->
@@ -206,31 +292,31 @@
       </div>
 
         <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; min-width: 800px;">
+          <table class="mobile-table" style="width: 100%; border-collapse: collapse; font-size: 10px; min-width: 1200px;">
             <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
               <tr>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">Năm</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 42px; font-size: 8.4px;">Tháng</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 30px; font-size: 8.4px;">STT</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Size Phôi</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Mã tem</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 72px; font-size: 8.4px;">Số lượng yêu cầu</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 72px; font-size: 8.4px;">Số lượng phôi</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Mã Hàng</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 78px; font-size: 8.4px;">Lệnh sản xuất</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 72px; font-size: 8.4px;">Khách hàng</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 84px; font-size: 8.4px;">Ngày nhận kế hoạch</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 30px; font-size: 8.4px;">YY</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 30px; font-size: 8.4px;">WW</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Line nhãn</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Người in</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Tình trạng</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 48px; font-size: 8.4px;">Bản vẽ</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 8.4px;">Ghi chú</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">📸</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">✅</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">🗑️🔥</th>
-                <th style="padding: 6px; border: 1px solid #ddd; text-align: center; min-width: 36px; font-size: 8.4px;">🗑️📋</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">Năm</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 9px;">Tháng</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">STT</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Size Phôi</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Mã tem</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Số lượng yêu cầu</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Số lượng phôi</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Mã Hàng</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 80px; font-size: 9px;">Lệnh sản xuất</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Khách hàng</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 85px; font-size: 9px;">Ngày nhận kế hoạch</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">YY</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">WW</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Line nhãn</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Người in</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Tình trạng</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 50px; font-size: 9px;">Bản vẽ</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Ghi chú</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">📸</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">✅</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️🔥</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️📋</th>
               </tr>
             </thead>
             <tbody>
@@ -242,7 +328,7 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.stt || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn size</option>
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
@@ -259,7 +345,7 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ww || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lineNhan || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option value="Tuấn">Tuấn</option>
                     <option value="Tình">Tình</option>
@@ -272,7 +358,7 @@
                   </select>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Chờ in">Chờ in</option>
@@ -400,10 +486,11 @@
                   style="background: #1976d2; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
             📅 {{getCurrentTimeRangeText()}}
           </button>
-          <button (click)="downloadPhotosAsZip()" 
-                  style="background: #4caf50; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
-            📄 Tải báo cáo
-          </button>
+                      <button (click)="downloadPhotosAsZip()" 
+                    style="background: #4caf50; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
+              📄 Tải báo cáo
+            </button>
+
         </div>
         
         <!-- Photo Report Table -->

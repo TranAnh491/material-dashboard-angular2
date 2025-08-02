@@ -112,6 +112,8 @@ export class PrintLabelComponent implements OnInit {
   customStartDate: Date | null = null;
   customEndDate: Date | null = null;
 
+
+
   constructor(
     private firestore: AngularFirestore,
     private permissionService: PermissionService
@@ -125,6 +127,8 @@ export class PrintLabelComponent implements OnInit {
     
     // Load storage information
     this.refreshStorageInfo();
+    
+
   }
 
   ngOnDestroy(): void {
@@ -4671,6 +4675,195 @@ export class PrintLabelComponent implements OnInit {
       document.body.removeChild(dialog);
     }
   }
+
+
+
+  createEmailHTMLReport(photos: any[], monthKey: string): string {
+    let htmlContent = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Báo cáo hình ảnh tháng ${monthKey}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .header { background: #1976d2; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .item { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .item-title { color: #1976d2; font-size: 18px; font-weight: bold; margin-bottom: 15px; }
+        .photo { margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 6px; }
+        .photo-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+        .photo-info { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .photo-image { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; }
+        .summary { background: #e3f2fd; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .summary-title { font-weight: bold; color: #1976d2; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📸 BÁO CÁO HÌNH ẢNH THÁNG ${monthKey}</h1>
+        <p>Ngày tạo: ${new Date().toLocaleString('vi-VN')}</p>
+        <p>Tổng số hình: ${photos.length}</p>
+    </div>
+`;
+    
+    // Group photos by item
+    const groupedPhotos = this.groupPhotosByItem(photos);
+    
+    groupedPhotos.forEach((photos, itemKey) => {
+      htmlContent += `
+    <div class="item">
+        <div class="item-title">📋 MÃ TEM: ${itemKey}</div>
+`;
+      
+      photos.forEach((photo, index) => {
+        const photoType = photo.photoType === 'design' ? 'Bản vẽ' : 'Tem in';
+        const capturedDate = photo.capturedDate ? 
+          new Date(photo.capturedDate).toLocaleString('vi-VN') : 'Không xác định';
+        const fileSize = photo.photoUrl ? Math.round(photo.photoUrl.length / 1024) : 0;
+        
+        htmlContent += `
+        <div class="photo">
+            <div class="photo-title">${index + 1}. ${photoType}</div>
+            <div class="photo-info">
+                📅 Ngày chụp: ${capturedDate}<br>
+                📏 Kích thước: ${fileSize} KB<br>
+                🔗 ID: ${photo.id}<br>
+                📝 Ghi chú: ${photo.maTem || 'N/A'}
+            </div>
+            <img src="${photo.photoUrl}" alt="${photoType} - ${itemKey}" class="photo-image">
+        </div>
+`;
+      });
+      
+      htmlContent += `
+    </div>
+`;
+    });
+    
+    // Add summary
+    const designCount = photos.filter(p => p.photoType === 'design').length;
+    const printedCount = photos.filter(p => p.photoType === 'printed').length;
+    const totalSize = photos.reduce((sum, p) => sum + (p.photoUrl ? p.photoUrl.length : 0), 0) / 1024;
+    
+    htmlContent += `
+    <div class="summary">
+        <div class="summary-title">📊 TỔNG KẾT</div>
+        <p>• Tổng số mã tem: ${groupedPhotos.size}</p>
+        <p>• Hình bản vẽ: ${designCount}</p>
+        <p>• Hình tem in: ${printedCount}</p>
+        <p>• Tổng dung lượng: ${Math.round(totalSize)} KB</p>
+    </div>
+</body>
+</html>`;
+    
+    return htmlContent;
+  }
+
+  async sendEmailWithAttachment(htmlContent: string, monthKey: string): Promise<void> {
+    try {
+      // Create email content
+      const subject = `📸 Báo cáo hình ảnh tháng ${monthKey}`;
+      const body = `
+Báo cáo hình ảnh tem tháng ${monthKey}
+
+Tổng số hình: ${htmlContent.match(/Tổng số hình: (\d+)/)?.[1] || '0'}
+
+Xem chi tiết trong file đính kèm hoặc mở file HTML để xem hình ảnh.
+
+---
+Gửi tự động từ hệ thống quản lý tem.
+      `;
+      
+      // Download HTML file directly
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `bao-cao-hinh-anh-${monthKey}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ HTML report downloaded successfully');
+      
+    } catch (error) {
+      console.error('❌ Error sending email:', error);
+      alert('❌ Lỗi tải báo cáo: ' + error.message);
+    }
+  }
+
+
+
+
+
+  showMobileCameraInfo(): void {
+    const dialog = document.createElement('div');
+    dialog.className = 'mobile-camera-info-dialog';
+    dialog.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+    
+    const content = document.createElement('div');
+    content.style.cssText = `
+      background: white;
+      padding: 25px;
+      border-radius: 15px;
+      max-width: 350px;
+      width: 90%;
+      text-align: center;
+    `;
+    
+    content.innerHTML = `
+      <h3 style="margin: 0 0 20px 0; color: #e91e63; font-size: 18px;">📸 Chụp hình tem</h3>
+      
+      <div style="margin-bottom: 20px; text-align: left;">
+        <p style="margin: 8px 0; font-size: 14px; color: #333;">
+          <strong>1.</strong> Chọn item trong bảng dữ liệu
+        </p>
+        <p style="margin: 8px 0; font-size: 14px; color: #333;">
+          <strong>2.</strong> Nhấn nút 📸 để chụp hình
+        </p>
+        <p style="margin: 8px 0; font-size: 14px; color: #333;">
+          <strong>3.</strong> Chụp bản vẽ trước, sau đó chụp tem in
+        </p>
+        <p style="margin: 8px 0; font-size: 14px; color: #333;">
+          <strong>4.</strong> Hình sẽ được lưu vào History Pic
+        </p>
+      </div>
+      
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+        <p style="margin: 0; font-size: 12px; color: #666;">
+          💡 <strong>Lưu ý:</strong> Vuốt ngang để xem đầy đủ bảng dữ liệu trên điện thoại
+        </p>
+      </div>
+      
+      <button id="closeMobileCameraDialog" 
+              style="background: #e91e63; color: white; border: none; padding: 12px 25px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">
+        ✅ Hiểu rồi
+      </button>
+    `;
+    
+    dialog.appendChild(content);
+    document.body.appendChild(dialog);
+    
+    // Event handler
+    const closeBtn = content.querySelector('#closeMobileCameraDialog') as HTMLButtonElement;
+    closeBtn.onclick = () => {
+      document.body.removeChild(dialog);
+    };
+  }
+
+
 
 
 
