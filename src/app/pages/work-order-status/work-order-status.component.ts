@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
@@ -69,6 +70,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   endDate: Date = new Date();
   showHiddenWorkOrders: boolean = false;
   
+  // Delete functionality
+  showDeleteDialog: boolean = false;
+  deleteStartDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  deleteEndDate: Date = new Date();
+  deleteFactoryFilter: string = '';
+  deletePreviewItems: WorkOrder[] = [];
+  isDeleting: boolean = false;
+  currentUserDepartment: string = '';
+  currentUserId: string = '';
+  
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
   availablePersons: string[] = ['Tuấn', 'Tình', 'Vũ', 'Phúc', 'Tú', 'Hưng', 'Toàn', 'Ninh'];
@@ -98,7 +109,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   constructor(
     private materialService: MaterialLifecycleService,
-    private firestore: AngularFirestore
+    private firestore: AngularFirestore,
+    private afAuth: AngularFireAuth
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -114,6 +126,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       month: this.monthFilter,
       status: this.statusFilter
     });
+    
+    // Load user department information
+    this.loadUserDepartment();
     
     // Set default function to view
     this.selectedFunction = 'view';
@@ -407,11 +422,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         wo.customer.toLowerCase().includes(this.searchTerm.toLowerCase());
       
       const matchesStatus = this.statusFilter === 'all' || wo.status === this.statusFilter;
-      const matchesYear = wo.year === this.yearFilter;
-      const matchesMonth = wo.month === this.monthFilter;
       
-      // Filter by selected factory
-      const matchesFactory = !this.selectedFactory || (wo.factory === this.selectedFactory);
+      // Only apply year/month filters if they are explicitly set by user (not default values)
+      // This allows showing all imported data initially
+      const matchesYear = true; // Show all years initially
+      const matchesMonth = true; // Show all months initially
+      
+      // Filter by selected factory - but be more flexible to handle missing factory data
+      const matchesFactory = !this.selectedFactory || 
+                           (wo.factory === this.selectedFactory) || 
+                           (!wo.factory && this.selectedFactory === 'ASM1'); // Default to ASM1 if no factory specified
       
       // Hide completed work orders unless showHiddenWorkOrders is true
       const isNotCompleted = wo.status !== WorkOrderStatus.DONE || this.showHiddenWorkOrders;
@@ -428,6 +448,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     
     console.log(`🔍 Filter applied: ${this.filteredWorkOrders.length}/${this.workOrders.length} work orders match filters`);
     console.log(`📋 Filtered work orders sorted by No:`, this.filteredWorkOrders.map(wo => `${wo.orderNumber}: ${wo.productCode}`));
+    console.log(`🏭 Current factory filter: ${this.selectedFactory}`);
+    console.log(`📊 Work orders by factory:`, this.workOrders.map(wo => `${wo.orderNumber}: factory=${wo.factory || 'undefined'}`));
   }
 
   calculateSummary(): void {
@@ -1572,13 +1594,34 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
       console.log('📋 Processed new work order data:', newWorkOrderData.length, 'items');
 
+      // Check for duplicate LSX (productionOrder) values
+      const existingLSX = this.workOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
+      const duplicates: string[] = [];
+      const validWorkOrders: WorkOrder[] = [];
+
+      for (const workOrder of newWorkOrderData) {
+        if (workOrder.productionOrder && existingLSX.includes(workOrder.productionOrder)) {
+          duplicates.push(workOrder.productionOrder);
+          console.warn(`⚠️ Duplicate LSX found: ${workOrder.productionOrder}`);
+        } else {
+          validWorkOrders.push(workOrder);
+          // Add to existing LSX list to prevent duplicates within the import batch
+          existingLSX.push(workOrder.productionOrder);
+        }
+      }
+
+      if (duplicates.length > 0) {
+        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX trùng lặp:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders không trùng lặp.`;
+        alert(duplicateMessage);
+      }
+
       // Validate data before saving
-      if (newWorkOrderData.length === 0) {
-        throw new Error('No data found in Excel file');
+      if (validWorkOrders.length === 0) {
+        throw new Error('No valid data found in Excel file (all LSX are duplicates)');
       }
 
       // Save each work order individually to ensure proper saving
-      this.saveWorkOrdersIndividually(newWorkOrderData);
+      this.saveWorkOrdersIndividually(validWorkOrders);
       
     } catch (error) {
       console.error('❌ Error processing Excel data:', error);
@@ -1676,6 +1719,116 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
+  }
+
+  // Check if user has delete permission
+  hasDeletePermission(): boolean {
+    // QA department cannot delete
+    return !this.isQADepartment();
+  }
+
+  // Load user department information
+  async loadUserDepartment(): Promise<void> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (user) {
+        // Get user department from user-permissions collection
+        const userPermissionDoc = await this.firestore.collection('user-permissions').doc(user.uid).get().toPromise();
+        if (userPermissionDoc && userPermissionDoc.exists) {
+          const userData = userPermissionDoc.data() as any;
+          this.currentUserDepartment = userData.department || '';
+          console.log('👤 Current user department:', this.currentUserDepartment);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading user department:', error);
+    }
+  }
+
+  // Check if current user is QA department
+  isQADepartment(): boolean {
+    return this.currentUserDepartment === 'QA';
+  }
+
+  // Check if user can edit (QA cannot edit anything in Work Order)
+  canEdit(): boolean {
+    return !this.isQADepartment();
+  }
+
+  // Preview items to be deleted
+  previewDeleteItems(): void {
+    if (!this.deleteStartDate || !this.deleteEndDate) {
+      alert('Vui lòng chọn khoảng thời gian!');
+      return;
+    }
+
+    const startDate = new Date(this.deleteStartDate);
+    const endDate = new Date(this.deleteEndDate);
+    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+
+    this.deletePreviewItems = this.workOrders.filter(wo => {
+      const createdDate = new Date(wo.createdDate);
+      const matchesTimeRange = createdDate >= startDate && createdDate <= endDate;
+      const matchesFactory = !this.deleteFactoryFilter || wo.factory === this.deleteFactoryFilter;
+      
+      return matchesTimeRange && matchesFactory;
+    });
+
+    console.log(`🔍 Preview: Found ${this.deletePreviewItems.length} work orders to delete`);
+  }
+
+  // Delete work orders by time range
+  async deleteWorkOrdersByTimeRange(): Promise<void> {
+    if (!this.hasDeletePermission()) {
+      alert('❌ Bạn không có quyền xóa dữ liệu!');
+      return;
+    }
+
+    if (this.deletePreviewItems.length === 0) {
+      alert('❌ Không có work orders nào để xóa!');
+      return;
+    }
+
+    const confirmMessage = `⚠️ Bạn có chắc chắn muốn xóa ${this.deletePreviewItems.length} work orders?\n\nThao tác này không thể hoàn tác!`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    this.isDeleting = true;
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const workOrder of this.deletePreviewItems) {
+        try {
+          if (workOrder.id) {
+            await this.deleteWorkOrderWithFallback(workOrder.id, workOrder);
+            successCount++;
+            console.log(`✅ Deleted work order: ${workOrder.orderNumber}`);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Failed to delete work order ${workOrder.orderNumber}:`, error);
+        }
+      }
+
+      // Refresh the work orders list
+      await this.loadWorkOrders();
+
+      // Show result
+      const message = `✅ Đã xóa thành công ${successCount} work orders!${errorCount > 0 ? `\n❌ ${errorCount} work orders không thể xóa.` : ''}`;
+      alert(message);
+
+      // Close dialog and reset
+      this.showDeleteDialog = false;
+      this.deletePreviewItems = [];
+
+    } catch (error) {
+      console.error('❌ Error during bulk delete:', error);
+      alert(`❌ Lỗi khi xóa work orders: ${error.message || error}`);
+    } finally {
+      this.isDeleting = false;
+    }
   }
 
   parseStatus(statusStr: any): WorkOrderStatus {

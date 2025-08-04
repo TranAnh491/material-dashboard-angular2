@@ -355,11 +355,15 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.stt || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
+                          [disabled]="!canEditField('sizePhoi')"
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" 
+                          onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn size</option>
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
                   </select>
+                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #666;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maTem || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongYeuCau || ''}}</td>
@@ -372,7 +376,10 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ww || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lineNhan || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
+                          [disabled]="!canEditField('nguoiIn')"
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" 
+                          onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option value="Tuấn">Tuấn</option>
                     <option value="Tình">Tình</option>
@@ -383,6 +390,7 @@
                     <option value="Phúc">Phúc</option>
                     <option value="Tú">Tú</option>
                   </select>
+                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #666;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
@@ -396,17 +404,22 @@
                   </select>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" 
+                          [disabled]="!canEditField('banVe')"
+                          style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" 
+                          onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn bản vẽ</option>
                     <option value="Có">Có</option>
                     <option value="Chưa có">Chưa có</option>
                   </select>
+                  <span *ngIf="!canEditField('banVe')" style="font-size: 10px; color: #666;">{{item.banVe || 'Chưa có'}}</span>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <input 
                     type="text" 
                     [(ngModel)]="item.ghiChu" 
                     placeholder="Ghi chú..."
+                    [disabled]="!canEditField('ghiChu')"
                     (blur)="onNoteBlur(item, $event)"
                     (keypress)="onNoteKeyPress($event, item)"
                     (input)="onNoteChange(item)"
@@ -428,6 +441,7 @@
                         {{getComparisonIcon(item)}}
                       </button>
                       <button 
+                        *ngIf="canDelete()"
                         (click)="importPhotoFromFile(item, 'design')"
                         title="Import bản vẽ từ file"
                         style="background: #9c27b0; color: white; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
@@ -436,6 +450,7 @@
                         📁
                       </button>
                       <button 
+                        *ngIf="canDelete()"
                         (click)="importPhotoFromFile(item, 'printed')"
                         title="Import tem in từ file"
                         style="background: #ff5722; color: white; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
@@ -443,11 +458,12 @@
                         onmouseleave="this.style.background='#ff5722'; this.style.transform='scale(1)'">
                         📄
                       </button>
+                      <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; font-style: italic;">QA chỉ chỉnh sửa trạng thái</span>
                     </div>
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                     <button 
-                      *ngIf="!item.isCompleted"
+                      *ngIf="!item.isCompleted && canDelete()"
                       (click)="markAsCompleted(item)"
                       title="Đánh dấu hoàn thành"
                       style="background: #4caf50; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
@@ -456,7 +472,7 @@
                       ✅
                     </button>
                     <button 
-                      *ngIf="item.isCompleted"
+                      *ngIf="item.isCompleted && canDelete()"
                       (click)="markAsIncomplete(item)"
                       title="Bỏ đánh dấu hoàn thành"
                       style="background: #ff9800; color: white; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
@@ -464,6 +480,9 @@
                       onmouseleave="this.style.background='#ff9800'; this.style.transform='scale(1)'">
                       🔄
                     </button>
+                    <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; text-align: center; display: block;">
+                      {{item.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'}}
+                    </span>
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                     <button 
@@ -478,6 +497,7 @@
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                     <button 
+                      *ngIf="canDelete()"
                       (click)="deleteScheduleItem(i)"
                       title="Xóa toàn bộ dòng"
                       style="background: #f44336; color: white; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
@@ -485,6 +505,7 @@
                       onmouseleave="this.style.background='#f44336'; this.style.transform='scale(1)'">
                       🗑️📋
                     </button>
+                    <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; text-align: center;">Không có quyền xóa</span>
                 </td>
               </tr>
             </tbody>

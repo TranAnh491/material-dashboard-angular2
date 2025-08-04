@@ -330,6 +330,36 @@ export class SettingsComponent implements OnInit {
     }
   }
 
+  async updateUserDepartment(userId: string, department: string): Promise<void> {
+    try {
+      console.log(`🔄 Updating department for user ${userId}: ${department}`);
+      
+      // Tìm user để lấy thông tin
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (user) {
+        // Cập nhật department trong memory
+        user.department = department;
+        
+        // Lưu vào Firestore collection user-permissions
+        const userRef = this.firestore.collection('user-permissions').doc(userId);
+        await userRef.set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          department: department,
+          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        console.log(`✅ Department saved to Firestore for user ${userId}: ${department}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating department:', error);
+      alert('Có lỗi xảy ra khi cập nhật bộ phận!');
+    }
+  }
+
   async saveAllPermissions(): Promise<void> {
     try {
       // Prepare permissions for batch update

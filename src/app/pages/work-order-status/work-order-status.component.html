@@ -139,6 +139,11 @@
                           (click)="selectFunction('view')">
                     <i class="material-icons">list</i> Xem Work Orders
                   </button>
+                  <button class="btn btn-outline-danger" 
+                          (click)="showDeleteDialog = true"
+                          *ngIf="hasDeletePermission()">
+                    <i class="material-icons">delete</i> Xóa theo thời gian
+                  </button>
                 </div>
               </div>
             </div>
@@ -369,10 +374,12 @@
                             <button mat-icon-button color="success"
                                     (click)="completeWorkOrder(wo)"
                                     matTooltip="Hoàn thành Work Order"
-                                    *ngIf="wo.status !== 'done'"
+                                    *ngIf="wo.status !== 'done' && canEdit()"
                                     style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
                               <mat-icon style="font-size: 24px; width: 24px; height: 24px;">check_circle</mat-icon>
                             </button>
+                            <span *ngIf="wo.status !== 'done' && !canEdit()" style="font-size: 10px; color: #999;">Không có quyền</span>
+                            <span *ngIf="wo.status === 'done'" style="font-size: 10px; color: #4caf50;">✅ Đã hoàn thành</span>
                             <span *ngIf="wo.status === 'done'" style="color: #666; font-size: 17.5px; display: block; text-align: center;">✅</span>
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
@@ -406,7 +413,9 @@
                             <span class="badge badge-danger" *ngIf="wo.missingMaterials" style="font-size: 11.67px; color: #666;">{{wo.missingMaterials}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <select [(ngModel)]="wo.createdBy" (change)="updateWorkOrder(wo, 'createdBy', $event.target.value)" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
+                            <select [(ngModel)]="wo.createdBy" (change)="updateWorkOrder(wo, 'createdBy', $event.target.value)" 
+                                    [disabled]="!canEdit()"
+                                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
                               <option value="">Chọn người</option>
                               <option value="Tuấn">Tuấn</option>
                               <option value="Tình">Tình</option>
@@ -417,9 +426,12 @@
                               <option value="Toàn">Toàn</option>
                               <option value="Ninh">Ninh</option>
                             </select>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.createdBy || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <select [(ngModel)]="wo.status" (change)="updateWorkOrderStatus(wo, $event.target.value)" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
+                            <select [(ngModel)]="wo.status" (change)="updateWorkOrderStatus(wo, $event.target.value)" 
+                                    [disabled]="!canEdit()"
+                                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
                               <option value="">Chọn tình trạng</option>
                               <option value="waiting">Waiting</option>
                               <option value="kitting">Kitting</option>
@@ -427,16 +439,20 @@
                               <option value="done">Done</option>
                               <option value="delay">Delay</option>
                             </select>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.status || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <select [(ngModel)]="wo.materialsStatus" (change)="updateWorkOrder(wo, 'materialsStatus', $event.target.value); updateWorkOrder(wo, 'materialsComplete', $event.target.value === 'sufficient')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
+                            <select [(ngModel)]="wo.materialsStatus" (change)="updateWorkOrder(wo, 'materialsStatus', $event.target.value); updateWorkOrder(wo, 'materialsComplete', $event.target.value === 'sufficient')" 
+                                    [disabled]="!canEdit()"
+                                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
                               <option value="">Chọn</option>
                               <option value="sufficient">Đủ</option>
                               <option value="insufficient">Thiếu</option>
                             </select>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <mat-form-field class="date-field compact-date-field flat-field">
+                            <mat-form-field class="date-field compact-date-field flat-field" *ngIf="canEdit()">
                               <input matInput [matDatepicker]="planPicker" 
                                      [(ngModel)]="wo.planReceivedDate" 
                                      (dateChange)="updateWorkOrder(wo, 'planReceivedDate', $event.value)"
@@ -444,26 +460,32 @@
                               <mat-datepicker-toggle matSuffix [for]="planPicker" style="width: 20px; height: 20px;"></mat-datepicker-toggle>
                               <mat-datepicker #planPicker></mat-datepicker>
                             </mat-form-field>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.planReceivedDate | date:'dd/MM/yyyy' || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <mat-form-field class="notes-field compact-notes-field flat-field">
+                            <mat-form-field class="notes-field compact-notes-field flat-field" *ngIf="canEdit()">
                               <input matInput [value]="wo.notes || ''" (blur)="updateWorkOrder(wo, 'notes', $event.target.value)" 
                                      placeholder="Ghi chú..." style="font-size: 11.67px; text-align: center;">
                             </mat-form-field>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.notes || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                               <button mat-icon-button color="primary" (click)="editWorkOrder(wo)" 
+                                    *ngIf="canEdit()"
                                     matTooltip="Edit Work Order" class="compact-btn"
                                     style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
                               <mat-icon style="font-size: 21px; width: 21px; height: 21px;">edit</mat-icon>
                               </button>
+                              <span *ngIf="!canEdit()" style="font-size: 10px; color: #999;">Không có quyền</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                               <button mat-icon-button color="warn" (click)="deleteWorkOrder(wo)" 
+                                    *ngIf="hasDeletePermission()"
                                     matTooltip="Delete Work Order" class="compact-btn"
                                     style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
                               <mat-icon style="font-size: 21px; width: 21px; height: 21px;">delete</mat-icon>
                               </button>
+                              <span *ngIf="!hasDeletePermission()" style="font-size: 10px; color: #999;">Không có quyền</span>
                           </td>
                         </tr>
                       </tbody>
@@ -614,6 +636,68 @@
             <mat-icon>cancel</mat-icon> Hủy
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Time Range Dialog -->
+  <div class="modal-overlay" *ngIf="showDeleteDialog" (click)="showDeleteDialog = false">
+    <div class="modal-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h4><mat-icon>delete</mat-icon> Xóa Work Orders theo thời gian</h4>
+        <button class="close-button" (click)="showDeleteDialog = false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Từ ngày:</label>
+          <mat-form-field class="full-width">
+            <input matInput [matDatepicker]="deleteStartPicker" [(ngModel)]="deleteStartDate" placeholder="Chọn ngày bắt đầu">
+            <mat-datepicker-toggle matSuffix [for]="deleteStartPicker"></mat-datepicker-toggle>
+            <mat-datepicker #deleteStartPicker></mat-datepicker>
+          </mat-form-field>
+        </div>
+        <div class="form-group">
+          <label>Đến ngày:</label>
+          <mat-form-field class="full-width">
+            <input matInput [matDatepicker]="deleteEndPicker" [(ngModel)]="deleteEndDate" placeholder="Chọn ngày kết thúc">
+            <mat-datepicker-toggle matSuffix [for]="deleteEndPicker"></mat-datepicker-toggle>
+            <mat-datepicker #deleteEndPicker></mat-datepicker>
+          </mat-form-field>
+        </div>
+        <div class="form-group">
+          <label>Nhà máy:</label>
+          <select [(ngModel)]="deleteFactoryFilter" class="form-control">
+            <option value="">Tất cả nhà máy</option>
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+          </select>
+        </div>
+        <div class="warning-message">
+          <mat-icon>warning</mat-icon>
+          <p><strong>Cảnh báo:</strong> Thao tác này sẽ xóa vĩnh viễn các Work Orders trong khoảng thời gian đã chọn khỏi Firebase. Không thể hoàn tác!</p>
+        </div>
+        <div class="preview-section" *ngIf="deletePreviewItems.length > 0">
+          <h5>Sẽ xóa {{deletePreviewItems.length}} Work Orders:</h5>
+          <ul class="delete-preview-list">
+            <li *ngFor="let item of deletePreviewItems">
+              {{item.orderNumber}} - {{item.productCode}} - {{item.customer}}
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button mat-raised-button color="primary" (click)="previewDeleteItems()" [disabled]="!deleteStartDate || !deleteEndDate">
+          <mat-icon>preview</mat-icon> Xem trước
+        </button>
+        <button mat-raised-button color="warn" (click)="deleteWorkOrdersByTimeRange()" 
+                [disabled]="deletePreviewItems.length === 0 || isDeleting">
+          <mat-icon>delete</mat-icon> 
+          <span *ngIf="!isDeleting">Xóa {{deletePreviewItems.length}} items</span>
+          <span *ngIf="isDeleting">Đang xóa...</span>
+        </button>
+        <button mat-raised-button (click)="showDeleteDialog = false; deletePreviewItems = []">
+          <mat-icon>cancel</mat-icon> Hủy
+        </button>
       </div>
     </div>
   </div>

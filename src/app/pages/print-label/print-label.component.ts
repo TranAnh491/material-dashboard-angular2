@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { PermissionService } from '../../services/permission.service';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 
 interface ScheduleItem {
@@ -101,6 +102,8 @@ export class PrintLabelComponent implements OnInit {
   currentPassword: string = '';
   loginError: string = '';
   showLoginDialog: boolean = false;
+  currentUserDepartment: string = '';
+  currentUserId: string = '';
 
   // Camera capture properties
   isCapturingPhoto: boolean = false;
@@ -116,11 +119,15 @@ export class PrintLabelComponent implements OnInit {
 
   constructor(
     private firestore: AngularFirestore,
-    private permissionService: PermissionService
+    private permissionService: PermissionService,
+    private afAuth: AngularFireAuth
   ) { }
 
   ngOnInit(): void {
     console.log('🚀 PrintLabelComponent initialized');
+    
+    // Load user department information
+    this.loadUserDepartment();
     
     // Check if mobile device
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -3797,6 +3804,47 @@ export class PrintLabelComponent implements OnInit {
   // Add function to get NG items count
   getNGItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
+  }
+
+  // Load user department information
+  async loadUserDepartment(): Promise<void> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (user) {
+        this.currentUserId = user.uid;
+        
+        // Get user department from user-permissions collection
+        const userPermissionDoc = await this.firestore.collection('user-permissions').doc(user.uid).get().toPromise();
+        if (userPermissionDoc && userPermissionDoc.exists) {
+          const userData = userPermissionDoc.data() as any;
+          this.currentUserDepartment = userData.department || '';
+          console.log('👤 Current user department:', this.currentUserDepartment);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading user department:', error);
+    }
+  }
+
+  // Check if current user is QA department
+  isQADepartment(): boolean {
+    return this.currentUserDepartment === 'QA';
+  }
+
+  // Check if user can edit a specific field
+  canEditField(fieldName: string): boolean {
+    if (this.isQADepartment()) {
+      // QA can only edit status field (tinhTrang)
+      return fieldName === 'tinhTrang';
+    }
+    // Other departments can edit all fields
+    return true;
+  }
+
+  // Check if user can delete
+  canDelete(): boolean {
+    // QA cannot delete
+    return !this.isQADepartment();
   }
 
   // Add function to toggle show/hide completed items

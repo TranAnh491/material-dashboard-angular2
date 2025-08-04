@@ -146,6 +146,30 @@
               </td>
             </ng-container>
 
+                <!-- Department Column -->
+                <ng-container matColumnDef="department">
+                  <th mat-header-cell *matHeaderCellDef>Bộ phận</th>
+                  <td mat-cell *matCellDef="let user">
+                    <div class="department-info">
+                      <mat-icon>business</mat-icon>
+                      <span *ngIf="!isEditingPermissions">{{ user.department || 'Chưa có' }}</span>
+                      <select *ngIf="isEditingPermissions" 
+                              [(ngModel)]="user.department" 
+                              (change)="updateUserDepartment(user.uid, user.department)"
+                              class="department-select">
+                        <option value="">Chọn bộ phận</option>
+                        <option value="WH">WH</option>
+                        <option value="QA">QA</option>
+                        <option value="ENG">ENG</option>
+                        <option value="PLAN">PLAN</option>
+                        <option value="PD">PD</option>
+                        <option value="CS">CS</option>
+                        <option value="ACC">ACC</option>
+                      </select>
+                    </div>
+                  </td>
+                </ng-container>
+
                 <!-- Display Name Column -->
                 <ng-container matColumnDef="displayName">
                   <th mat-header-cell *matHeaderCellDef>Tên hiển thị</th>
@@ -212,8 +236,8 @@
               </td>
             </ng-container>
 
-                <tr mat-header-row *matHeaderRowDef="['email', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions']"></tr>
-                <tr mat-row *matRowDef="let row; columns: ['email', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];"></tr>
+                <tr mat-header-row *matHeaderRowDef="['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];"></tr>
           </table>
         </div>
 
