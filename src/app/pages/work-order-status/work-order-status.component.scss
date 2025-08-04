@@ -300,6 +300,311 @@ html, body {
   }
 }
 
+// Professional Pastel Color Scheme for Work Order Tab
+.main-content {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+// Card styling with pastel colors
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e3f2fd;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+  border-radius: 8px;
+  
+  .card-header {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-bottom: 1px solid #90caf9;
+    border-radius: 8px 8px 0 0;
+    
+    .card-title {
+      color: #1976d2;
+    }
+  }
+}
+
+// Summary cards with solid pastel colors - targeting by column position
+.summary-row {
+  .col-lg-2:nth-child(1) .summary-card {
+    background: #e3f2fd !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.2) !important;
+    
+    .card-header {
+      background: #e3f2fd !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #1976d2 !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #0d47a1 !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(2) .summary-card {
+    background: #e8f5e8 !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(76, 175, 80, 0.2) !important;
+    
+    .card-header {
+      background: #e8f5e8 !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #2e7d32 !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #1b5e20 !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(3) .summary-card {
+    background: #fff3e0 !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(255, 152, 0, 0.2) !important;
+    
+    .card-header {
+      background: #fff3e0 !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #f57c00 !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #e65100 !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(4) .summary-card {
+    background: #e0f2f1 !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(0, 150, 136, 0.2) !important;
+    
+    .card-header {
+      background: #e0f2f1 !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #00796b !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #004d40 !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(5) .summary-card {
+    background: #fce4ec !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(233, 30, 99, 0.2) !important;
+    
+    .card-header {
+      background: #fce4ec !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #c2185b !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #880e4f !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(6) .summary-card {
+    background: #f1f8e9 !important;
+    border: none !important;
+    box-shadow: 0 4px 8px rgba(139, 195, 74, 0.2) !important;
+    
+    .card-header {
+      background: #f1f8e9 !important;
+      border-bottom: none !important;
+      
+      .card-category {
+        color: #558b2f !important;
+        font-weight: 500 !important;
+      }
+      
+      .card-title {
+        color: #33691e !important;
+        font-weight: 600 !important;
+      }
+    }
+  }
+}
+
+// Table styling with pastel colors
+.table-card {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #e3f2fd;
+  
+  .card-header {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-bottom: 1px solid #90caf9;
+  }
+  
+  .table-container {
+    background: rgba(255, 255, 255, 0.95);
+    
+    .table {
+      thead th {
+        background: #ffcc80;
+        color: #e65100;
+        border-bottom: 2px solid #ffb74d;
+      }
+      
+      tbody {
+        tr {
+          &:nth-child(even) {
+            background: rgba(227, 242, 253, 0.3);
+          }
+          
+          &:nth-child(odd) {
+            background: rgba(255, 255, 255, 0.8);
+          }
+          
+          &:hover {
+            background: rgba(187, 222, 251, 0.5);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Import section styling
+.import-section {
+  background: #e8f5e8;
+  border: 1px solid #a5d6a7;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  
+  .section-title {
+    color: #2e7d32;
+  }
+  
+  .import-controls {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 6px;
+    padding: 10px;
+  }
+}
+
+// Button styling with solid pastel colors
+.btn-primary {
+  background: #42a5f5;
+  border: 1px solid #1976d2;
+  
+  &:hover {
+    background: #2196f3;
+  }
+}
+
+.btn-outline-info {
+  background: #81c784;
+  border: 1px solid #4caf50;
+  color: #2e7d32;
+  
+  &:hover {
+    background: #66bb6a;
+    color: white;
+  }
+}
+
+.btn-outline-success {
+  background: #ffb74d;
+  border: 1px solid #f57c00;
+  color: #e65100;
+  
+  &:hover {
+    background: #ff9800;
+    color: white;
+  }
+}
+
+.btn-outline-warning {
+  background: #f48fb1;
+  border: 1px solid #ec407a;
+  color: #c2185b;
+  
+  &:hover {
+    background: #f06292;
+    color: white;
+  }
+}
+
+// Status badges with solid pastel colors
+.badge-info {
+  background: #81c784;
+  color: #2e7d32;
+}
+
+.badge-danger {
+  background: #ef5350;
+  color: #c62828;
+}
+
+.badge-success {
+  background: #66bb6a;
+  color: #2e7d32;
+}
+
+// Form fields with pastel styling
+.mat-form-field {
+  .mat-form-field-wrapper {
+    .mat-form-field-outline {
+      color: #90caf9;
+    }
+  }
+  
+  &.mat-focused {
+    .mat-form-field-outline {
+      color: #42a5f5;
+    }
+  }
+}
+
+// Loading indicators with pastel colors
+.loading-indicator {
+  background: rgba(227, 242, 253, 0.9);
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  
+  .spinner {
+    border: 2px solid #e3f2fd;
+    border-top: 2px solid #42a5f5;
+  }
+}
+
+// Status messages with pastel colors
+.status-success {
+  background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
+  color: #2e7d32;
+  border: 1px solid #81c784;
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
 .card {
   margin-bottom: 15px; /* Further increased margin */
   margin-top: 2px; /* Add downward space */
@@ -414,6 +719,27 @@ html, body {
 
 .priority-normal {
   color: #388e3c !important;
+}
+
+// Urgent row styling with blinking effect
+.urgent-row {
+  animation: blink-red 1.5s infinite;
+  background-color: rgba(255, 87, 34, 0.1) !important;
+  
+  &:hover {
+    background-color: rgba(255, 87, 34, 0.2) !important;
+  }
+}
+
+@keyframes blink-red {
+  0%, 50% { 
+    background-color: rgba(255, 87, 34, 0.1) !important;
+    box-shadow: 0 0 5px rgba(255, 87, 34, 0.3);
+  }
+  51%, 100% { 
+    background-color: rgba(255, 87, 34, 0.05) !important;
+    box-shadow: 0 0 2px rgba(255, 87, 34, 0.1);
+  }
 }
 
 @keyframes blink {
@@ -1321,3 +1647,690 @@ textarea.mat-input-element {
     color: white;
   }
 }
+
+// Clickable field styling
+.clickable-field {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+  }
+  
+  span {
+    font-size: 12px;
+    font-weight: 500;
+  }
+}
+
+// Center align all table cells
+.table {
+  td {
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+  
+  th {
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+  
+  // Ensure all content is centered
+  .badge {
+    display: inline-block;
+    text-align: center;
+  }
+  
+  .action-buttons {
+    justify-content: center;
+  }
+}
+
+// Compact column widths for better fit
+.table-container {
+  .table {
+    // Specific column widths - optimized for content
+    th:nth-child(1), td:nth-child(1) { min-width: 40px !important; } /* Year */
+    th:nth-child(2), td:nth-child(2) { min-width: 40px !important; } /* Month */
+    th:nth-child(3), td:nth-child(3) { min-width: 40px !important; } /* STT */
+    th:nth-child(4), td:nth-child(4) { min-width: 50px !important; } /* Hoàn thành */
+    th:nth-child(5), td:nth-child(5) { min-width: 70px !important; } /* Mã TP VN */
+    th:nth-child(6), td:nth-child(6) { min-width: 90px !important; } /* LSX */
+    th:nth-child(7), td:nth-child(7) { min-width: 50px !important; } /* Lượng sản phẩm */
+    th:nth-child(8), td:nth-child(8) { min-width: 60px !important; } /* Khách hàng */
+    th:nth-child(9), td:nth-child(9) { min-width: 30px !important; } /* Gấp */
+    th:nth-child(10), td:nth-child(10) { min-width: 80px !important; } /* Ngày Giao NVL */
+    th:nth-child(11), td:nth-child(11) { min-width: 50px !important; } /* Line */
+    th:nth-child(12), td:nth-child(12) { min-width: 60px !important; } /* NVL thiếu */
+    th:nth-child(13), td:nth-child(13) { min-width: 30px !important; } /* Người soạn */
+    th:nth-child(14), td:nth-child(14) { min-width: 30px !important; } /* Tình trạng */
+    th:nth-child(15), td:nth-child(15) { min-width: 50px !important; } /* Đủ/Thiếu */
+    th:nth-child(16), td:nth-child(16) { min-width: 80px !important; } /* Ngày nhận thông tin */
+    th:nth-child(17), td:nth-child(17) { min-width: 60px !important; } /* Ghi Chú */
+    th:nth-child(18), td:nth-child(18) { min-width: 80px !important; } /* Thao tác */
+  }
+}
+
+// Date field styling for table cells
+.date-field {
+  width: 100%;
+  min-width: 120px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+    margin: 0;
+  }
+  
+  .mat-form-field-infix {
+    padding: 8px 0;
+    border-top: none;
+    font-size: 12px;
+  }
+  
+  .mat-form-field-outline {
+    border: none;
+    background: transparent;
+  }
+  
+  .mat-form-field-outline-start,
+  .mat-form-field-outline-end,
+  .mat-form-field-outline-gap {
+    border: none;
+  }
+  
+  .mat-datepicker-toggle {
+    color: #666;
+  }
+  
+  input {
+    font-size: 12px;
+    text-align: center;
+    color: #333;
+    
+    &::placeholder {
+      color: #999;
+      font-size: 11px;
+    }
+  }
+  
+  &:hover {
+    .mat-form-field-outline {
+      background: rgba(0, 0, 0, 0.02);
+    }
+  }
+  
+  &.mat-focused {
+    .mat-form-field-outline {
+      background: rgba(25, 118, 210, 0.05);
+    }
+  }
+}
+
+// Compact date picker for table
+.mat-datepicker-content {
+  .mat-calendar {
+    width: 280px;
+    height: 320px;
+  }
+  
+  .mat-calendar-body-cell {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .mat-calendar-body-cell-content {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    font-size: 13px;
+  }
+}
+
+// Compact table styling for better visibility
+.compact-table {
+  font-size: 8px;
+  
+  th, td {
+    padding: 4px 2px !important;
+    font-size: 8px !important;
+    line-height: 1.2;
+  }
+  
+  .badge {
+    font-size: 7px !important;
+    padding: 2px 4px !important;
+  }
+}
+
+// Compact date field styling
+.compact-date-field {
+  width: 100%;
+  min-width: 80px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+    margin: 0;
+  }
+  
+  .mat-form-field-infix {
+    padding: 4px 0;
+    border-top: none;
+    font-size: 8px;
+  }
+  
+  .mat-form-field-outline {
+    border: none;
+    background: transparent;
+  }
+  
+  .mat-form-field-outline-start,
+  .mat-form-field-outline-end,
+  .mat-form-field-outline-gap {
+    border: none;
+  }
+  
+  .mat-datepicker-toggle {
+    color: #666;
+    width: 20px;
+    height: 20px;
+  }
+  
+  input {
+    font-size: 8px;
+    text-align: center;
+    color: #333;
+    
+    &::placeholder {
+      color: #999;
+      font-size: 7px;
+    }
+  }
+}
+
+// Compact notes field styling
+.compact-notes-field {
+  width: 100%;
+  min-width: 60px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+    margin: 0;
+  }
+  
+  .mat-form-field-infix {
+    padding: 4px 0;
+    border-top: none;
+    font-size: 8px;
+  }
+  
+  .mat-form-field-outline {
+    border: none;
+    background: transparent;
+  }
+  
+  .mat-form-field-outline-start,
+  .mat-form-field-outline-end,
+  .mat-form-field-outline-gap {
+    border: none;
+  }
+  
+  input {
+    font-size: 8px;
+    text-align: center;
+    color: #333;
+    
+    &::placeholder {
+      color: #999;
+      font-size: 7px;
+    }
+  }
+}
+
+// Compact clickable field styling
+.compact-field {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+  }
+  
+  span {
+    font-size: 8px;
+    font-weight: 500;
+  }
+}
+
+// Compact action buttons styling
+.compact-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  justify-content: center;
+  align-items: center;
+  
+  .compact-btn {
+    min-width: 24px;
+    height: 24px;
+    padding: 2px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
+}
+
+// Optimize table container for more rows
+.table-container {
+  max-height: calc(100vh - 300px); /* Increased height for more rows */
+  
+  .table {
+    min-width: 1200px !important; /* Reduced from 1500px */
+    
+    th, td {
+      padding: 4px 2px !important;
+      font-size: 8px !important;
+    }
+  }
+}
+
+// Reduce summary cards height for more table space
+.summary-card {
+  height: 40% !important; /* Reduced from 50% */
+  min-height: 50px; /* Reduced from 60px */
+}
+
+// Reduce header spacing
+.card-header {
+  padding: 10px 15px !important; /* Reduced padding */
+  
+  .card-title {
+    font-size: 1.2em !important; /* Smaller title */
+  }
+}
+
+// Reduce controls spacing
+.controls-row {
+  margin-bottom: 8px !important; /* Reduced from 12px */
+}
+
+.compact-controls {
+  margin-bottom: 3px !important; /* Reduced from 5px */
+  
+  .card-body {
+    padding: 8px 12px !important; /* Reduced padding */
+  }
+}
+
+// Time Range Dialog Styling
+.time-range-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.time-range-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f5f5f5;
+    border-radius: 8px 8px 0 0;
+
+    h4 {
+      margin: 0;
+      color: #333;
+      font-weight: 500;
+    }
+  }
+
+  .dialog-content {
+    padding: 20px;
+
+    .form-group {
+      margin-bottom: 20px;
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #333;
+      }
+
+      .full-width {
+        width: 100%;
+      }
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+  }
+}
+
+// Flat field styling - removes borders from editable columns
+.flat-field {
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+    margin: 0;
+  }
+  
+  .mat-form-field-infix {
+    padding: 4px 0;
+    border-top: none;
+    font-size: 13.33px !important;
+  }
+  
+  .mat-form-field-outline {
+    border: none !important;
+    background: transparent;
+  }
+  
+  .mat-form-field-outline-start,
+  .mat-form-field-outline-end,
+  .mat-form-field-outline-gap {
+    border: none !important;
+  }
+  
+  .mat-form-field-underline {
+    display: none !important;
+  }
+  
+  .mat-form-field-subscript-wrapper {
+    display: none !important;
+  }
+  
+  input {
+    font-size: 13.33px !important;
+    text-align: center;
+    color: #333;
+    
+    &::placeholder {
+      color: #999;
+      font-size: 13.33px !important;
+    }
+  }
+  
+  &:hover {
+    .mat-form-field-outline {
+      background: rgba(0, 0, 0, 0.02);
+    }
+  }
+  
+  &.mat-focused {
+    .mat-form-field-outline {
+      background: rgba(25, 118, 210, 0.05);
+    }
+  }
+}
+
+// Compact clickable field styling with flat design
+.compact-field.flat-field {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none !important;
+  background: transparent;
+  
+  &:hover {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+  }
+  
+  span {
+    font-size: 13.33px !important;
+    font-weight: 500;
+  }
+}
+
+// Force ALL table content to have consistent font size - HIGHEST PRIORITY
+.table-container table tbody td,
+.table-container table tbody td *,
+.table-container table tbody td input,
+.table-container table tbody td span,
+.table-container table tbody td .mat-form-field,
+.table-container table tbody td .mat-form-field *,
+.table-container table tbody td .mat-form-field input,
+.table-container table tbody td .mat-form-field .mat-form-field-infix,
+.table-container table tbody td .badge,
+.table-container table tbody td .clickable-field,
+.table-container table tbody td .clickable-field span,
+.table-container table tbody td .date-field,
+.table-container table tbody td .date-field input,
+.table-container table tbody td .notes-field,
+.table-container table tbody td .notes-field input {
+  font-size: 13.33px !important;
+}
+
+// ULTRA HIGH PRIORITY - Override everything
+.table-container table tbody td input[matInput],
+.table-container table tbody td .mat-form-field input,
+.table-container table tbody td .mat-form-field .mat-form-field-infix,
+.table-container table tbody td .mat-form-field .mat-form-field-wrapper,
+.table-container table tbody td .mat-form-field .mat-form-field-outline,
+.table-container table tbody td .mat-form-field .mat-form-field-outline-start,
+.table-container table tbody td .mat-form-field .mat-form-field-outline-end,
+.table-container table tbody td .mat-form-field .mat-form-field-outline-gap {
+  font-size: 13.33px !important;
+}
+
+// Specific overrides for Material Design components
+.table-container table tbody td .mat-form-field {
+  font-size: 13.33px !important;
+  
+  input {
+    font-size: 13.33px !important;
+  }
+  
+  .mat-form-field-infix {
+    font-size: 13.33px !important;
+  }
+  
+  .mat-form-field-wrapper {
+    font-size: 13.33px !important;
+  }
+}
+
+// Ensure badges have consistent font size
+.table-container table tbody td .badge {
+  font-size: 13.33px !important;
+}
+
+// Ensure clickable fields have consistent font size
+.table-container table tbody td .clickable-field {
+  font-size: 13.33px !important;
+  
+  span {
+    font-size: 13.33px !important;
+  }
+}
+
+// Ensure date fields have consistent font size
+.table-container table tbody td .date-field,
+.table-container table tbody td .notes-field {
+  font-size: 13.33px !important;
+  
+  input {
+    font-size: 13.33px !important;
+  }
+  
+  .mat-form-field-infix {
+    font-size: 13.33px !important;
+  }
+}
+
+// Remove bold text and colored text styling
+.table-container table tbody td,
+.table-container table tbody td *,
+.table-container table tbody td input,
+.table-container table tbody td span,
+.table-container table tbody td .badge,
+.table-container table tbody td .clickable-field span {
+  font-weight: normal !important;
+  color: #666 !important;
+  font-size: 11.67px !important; /* Size 10 */
+}
+
+// Ensure headers are size 11
+.table-container table thead th {
+  font-weight: normal !important;
+  font-size: 13.33px !important; /* Size 11 */
+}
+
+// Remove underlines from date picker fields
+.date-field.flat-field .mat-form-field-underline,
+.date-field.flat-field .mat-form-field-underline * {
+  display: none !important;
+}
+
+.date-field.flat-field .mat-form-field-wrapper {
+  padding-bottom: 0 !important;
+}
+
+.date-field.flat-field .mat-form-field-infix {
+  border-top: none !important;
+  padding: 0 !important;
+}
+
+.date-field.flat-field input {
+  border: none !important;
+  background: transparent !important;
+  text-align: center !important;
+}
+
+// Additional rules for date picker styling
+.mat-form-field.mat-form-field-appearance-legacy .mat-form-field-underline {
+  display: none !important;
+}
+
+.mat-form-field.mat-form-field-appearance-legacy .mat-form-field-wrapper {
+  padding-bottom: 0 !important;
+}
+
+.mat-form-field.mat-form-field-appearance-legacy .mat-form-field-infix {
+  border-top: none !important;
+  padding: 0 !important;
+}
+
+// Ensure no placeholder text is visible
+.mat-form-field input::placeholder {
+  color: transparent !important;
+}
+
+// Remove any remaining bold or colored text
+.table-container table tbody td strong,
+.table-container table tbody td b {
+  font-weight: normal !important;
+}
+
+.table-container table tbody td .badge.badge-success,
+.table-container table tbody td .badge.badge-danger,
+.table-container table tbody td .badge.badge-info,
+.table-container table tbody td .badge.badge-warning {
+  color: #666 !important;
+  background-color: transparent !important;
+}
+
+// Ensure status badges don't have colors
+.getStatusBadgeClass {
+  color: #666 !important;
+  background-color: transparent !important;
+}
+
+  // Enhanced dropdown styling for better visibility
+  .dropdown-menu {
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 9999 !important;
+    position: absolute !important;
+    display: block !important;
+    background: white !important;
+    border: 2px solid #ddd !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    min-width: 120px !important;
+    
+    .dropdown-item {
+      transition: background-color 0.2s ease;
+      display: block !important;
+      padding: 10px 15px !important;
+      cursor: pointer !important;
+      border-bottom: 1px solid #eee !important;
+      
+      &:hover {
+        background-color: #e3f2fd !important;
+        color: #1976d2 !important;
+      }
+      
+      &:last-child {
+        border-bottom: none !important;
+      }
+    }
+  }
+
+  // Enhanced clickable field styling for dropdowns
+  .clickable-field {
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 6px 10px !important;
+    border-radius: 4px !important;
+    transition: background-color 0.2s ease !important;
+    border: 1px solid transparent !important;
+    min-height: 32px !important;
+    
+    &:hover {
+      background-color: rgba(33, 150, 243, 0.1) !important;
+      border-color: #90caf9 !important;
+    }
+    
+    mat-icon {
+      margin-left: 4px !important;
+      font-size: 16px !important;
+      color: #666 !important;
+    }
+  }

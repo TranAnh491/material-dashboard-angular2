@@ -3789,6 +3789,16 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
   }
 
+  // Add function to get Pass items count
+  getPassItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'Pass').length;
+  }
+
+  // Add function to get NG items count
+  getNGItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
+  }
+
   // Add function to toggle show/hide completed items
   showCompletedItems: boolean = false;
 

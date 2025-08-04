@@ -72,6 +72,7 @@ export enum TransactionType {
 // Work Order interfaces and enums
 export interface WorkOrder {
   id?: string;
+  factory?: string; // ASM1 or ASM2
   year: number;
   month: number;
   orderNumber: string;
@@ -92,6 +93,7 @@ export interface WorkOrder {
   isUrgent?: boolean;
   missingMaterials?: string;
   materialsComplete?: boolean;
+  materialsStatus?: 'sufficient' | 'insufficient'; // Đủ/Thiếu
 }
 
 export enum FactoryType {

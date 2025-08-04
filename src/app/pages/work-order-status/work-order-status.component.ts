@@ -21,6 +21,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   // Import functionality
   selectedFunction: string | null = null;
+  selectedFactory: string = 'ASM1'; // Default to ASM1
   firebaseSaved: boolean = false;
   isSaving: boolean = false;
   isLoading: boolean = false;
@@ -61,14 +62,23 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   importProgress: number = 0;
   importResults: any = null;
   showImportDialog: boolean = false;
+  showTimeRangeDialog: boolean = false;
+  
+  // Time range for filtering
+  startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  endDate: Date = new Date();
+  showHiddenWorkOrders: boolean = false;
   
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
-  availablePersons: string[] = ['Tuấn', 'Hưng', 'Tú', 'Phúc', 'Tình', 'Vũ', 'Toàn'];
+  availablePersons: string[] = ['Tuấn', 'Tình', 'Vũ', 'Phúc', 'Tú', 'Hưng', 'Toàn', 'Ninh'];
   years: number[] = [];
   
   // Selection functionality for bulk operations
   selectedWorkOrders: WorkOrder[] = [];
+  
+
+  
   months = [
     { value: 1, name: 'January' },
     { value: 2, name: 'February' },
@@ -121,6 +131,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log('🔧 Selected function:', functionName);
   }
 
+  selectFactory(factory: string): void {
+    this.selectedFactory = factory;
+    console.log('🏭 Selected factory:', factory);
+    // Re-apply filters to show only work orders from selected factory
+    this.applyFilters();
+  }
+
   onFileSelected(event: any): void {
     const file = event.target.files[0];
     if (file) {
@@ -162,7 +179,58 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
     console.log(`📊 Loaded ${workOrders.length} work orders from database:`, workOrders);
-    this.workOrders = workOrders;
+    
+    // Process date fields to ensure they are proper Date objects
+    const processedWorkOrders = workOrders.map(wo => {
+      const processedWo = { ...wo };
+      
+      // Handle deliveryDate
+      if (processedWo.deliveryDate) {
+        if (typeof processedWo.deliveryDate === 'object' && processedWo.deliveryDate !== null && 'toDate' in processedWo.deliveryDate) {
+          // Firestore Timestamp
+          processedWo.deliveryDate = (processedWo.deliveryDate as any).toDate();
+          console.log(`📅 Converted deliveryDate from Firestore Timestamp:`, processedWo.deliveryDate);
+        } else if (typeof processedWo.deliveryDate === 'string') {
+          // String date
+          processedWo.deliveryDate = new Date(processedWo.deliveryDate);
+          console.log(`📅 Converted deliveryDate from string:`, processedWo.deliveryDate);
+        } else if (!(processedWo.deliveryDate instanceof Date)) {
+          // Other format, try to convert
+          processedWo.deliveryDate = new Date(processedWo.deliveryDate);
+          console.log(`📅 Converted deliveryDate from other format:`, processedWo.deliveryDate);
+        }
+      }
+      
+      // Handle planReceivedDate
+      if (processedWo.planReceivedDate) {
+        if (typeof processedWo.planReceivedDate === 'object' && processedWo.planReceivedDate !== null && 'toDate' in processedWo.planReceivedDate) {
+          // Firestore Timestamp
+          processedWo.planReceivedDate = (processedWo.planReceivedDate as any).toDate();
+          console.log(`📅 Converted planReceivedDate from Firestore Timestamp:`, processedWo.planReceivedDate);
+        } else if (typeof processedWo.planReceivedDate === 'string') {
+          // String date
+          processedWo.planReceivedDate = new Date(processedWo.planReceivedDate);
+          console.log(`📅 Converted planReceivedDate from string:`, processedWo.planReceivedDate);
+        } else if (!(processedWo.planReceivedDate instanceof Date)) {
+          // Other format, try to convert
+          processedWo.planReceivedDate = new Date(processedWo.planReceivedDate);
+          console.log(`📅 Converted planReceivedDate from other format:`, processedWo.planReceivedDate);
+        }
+      }
+      
+      // Handle createdDate and lastUpdated
+      if (processedWo.createdDate && typeof processedWo.createdDate === 'object' && processedWo.createdDate !== null && 'toDate' in processedWo.createdDate) {
+        processedWo.createdDate = (processedWo.createdDate as any).toDate();
+      }
+      if (processedWo.lastUpdated && typeof processedWo.lastUpdated === 'object' && processedWo.lastUpdated !== null && 'toDate' in processedWo.lastUpdated) {
+        processedWo.lastUpdated = (processedWo.lastUpdated as any).toDate();
+      }
+      
+      return processedWo;
+    });
+    
+    this.workOrders = processedWorkOrders;
+    console.log(`✅ Processed ${processedWorkOrders.length} work orders with proper date handling`);
     
     // Auto-assign sequential numbers based on delivery date within each month
     this.assignSequentialNumbers();
@@ -342,14 +410,20 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const matchesYear = wo.year === this.yearFilter;
       const matchesMonth = wo.month === this.monthFilter;
       
-      return matchesSearch && matchesStatus && matchesYear && matchesMonth;
+      // Filter by selected factory
+      const matchesFactory = !this.selectedFactory || (wo.factory === this.selectedFactory);
+      
+      // Hide completed work orders unless showHiddenWorkOrders is true
+      const isNotCompleted = wo.status !== WorkOrderStatus.DONE || this.showHiddenWorkOrders;
+      
+      return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && isNotCompleted;
     });
     
-    // Sort filtered results by order number (numeric sort)
+    // Sort filtered results by delivery date (earliest first)
     this.filteredWorkOrders.sort((a, b) => {
-      const numA = parseInt(a.orderNumber) || 0;
-      const numB = parseInt(b.orderNumber) || 0;
-      return numA - numB;
+      const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0;
+      const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0;
+      return dateA - dateB;
     });
     
     console.log(`🔍 Filter applied: ${this.filteredWorkOrders.length}/${this.workOrders.length} work orders match filters`);
@@ -390,26 +464,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.calculateSummary();
   }
 
-  // Debug method to show all work orders regardless of filters
-  showAllWorkOrders(): void {
-    console.log('🔍 Showing all work orders (ignoring filters)');
-    this.filteredWorkOrders = [...this.workOrders];
-    this.calculateSummary();
-    console.log(`📊 Displaying all ${this.filteredWorkOrders.length} work orders`);
-    
-    if (this.workOrders.length > 0) {
-      // Show summary of years/months in data
-      const years = [...new Set(this.workOrders.map(wo => wo.year))].sort();
-      const months = [...new Set(this.workOrders.map(wo => wo.month))].sort();
-      
-      alert(`📊 Hiển thị tất cả ${this.workOrders.length} work orders\n\n` +
-        `Dữ liệu có trong các năm: ${years.join(', ')}\n` +
-        `Dữ liệu có trong các tháng: ${months.join(', ')}\n\n` +
-        `Bạn có thể dùng filter để lọc theo năm/tháng cụ thể.`);
-    } else {
-      alert('❌ Không có work order nào trong database.\nDữ liệu có thể chưa được lưu hoặc có lỗi kết nối.');
-    }
-  }
+
 
   addNewWorkOrder(): void {
     if (this.isValidWorkOrder()) {
@@ -499,20 +554,48 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   updateWorkOrder(workOrder: WorkOrder, field: string, value: any): void {
-    const updatedWorkOrder = { ...workOrder, [field]: value, lastUpdated: new Date() };
+    console.log(`🔄 Updating work order ${workOrder.id} - Field: ${field}, Value:`, value);
+    
+    // Handle date fields specifically
+    let processedValue = value;
+    if (field === 'deliveryDate' || field === 'planReceivedDate') {
+      if (value instanceof Date) {
+        processedValue = value;
+        console.log(`📅 Date field ${field} - Original:`, value, 'Type:', typeof value);
+      } else if (value && typeof value === 'string') {
+        processedValue = new Date(value);
+        console.log(`📅 Converting string to Date for ${field}:`, value, '→', processedValue);
+      } else if (value && value.toDate) {
+        // Handle Firestore Timestamp
+        processedValue = value.toDate();
+        console.log(`📅 Converting Firestore Timestamp for ${field}:`, value, '→', processedValue);
+      }
+    }
+    
+    const updatedWorkOrder = { 
+      ...workOrder, 
+      [field]: processedValue, 
+      lastUpdated: new Date() 
+    };
+    
+    console.log(`💾 Saving to Firebase - Updated work order:`, updatedWorkOrder);
     
     this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder)
       .then(() => {
+        console.log(`✅ Successfully updated work order ${workOrder.id} in Firebase`);
+        
         // Update local array
         const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
         if (index !== -1) {
           this.workOrders[index] = { ...this.workOrders[index], ...updatedWorkOrder };
           this.applyFilters();
           this.calculateSummary();
+          console.log(`✅ Updated local work order data`);
         }
       })
       .catch(error => {
-        console.error('Error updating work order:', error);
+        console.error(`❌ Error updating work order ${workOrder.id}:`, error);
+        alert(`❌ Lỗi khi cập nhật work order: ${error.message || error}`);
       });
   }
 
@@ -1233,12 +1316,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   downloadTemplate(): void {
     console.log('📥 Creating Work Order Excel template...');
     
-    // Create template data
+    // Create template data with Factory as first column
     const templateData = [
-      ['Năm', 'Tháng', 'STT', 'Mã TP VN', 'LSX', 'Lượng sản phẩm', 'Khách hàng', 'Gấp', 'Ngày Giao NVL', 'Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu', 'Ngày nhận thông tin', 'Ghi Chú'],
-      [2024, 12, 'WO001', 'P/N001', 'PO2024001', 100, 'Khách hàng A', 'Gấp', '31/12/2024', 'Line 1', 'NVL A, NVL B', 'Hoàng Tuấn', 'Waiting', 'Đủ', '01/12/2024', 'Ghi chú mẫu'],
-      [2024, 12, 'WO002', 'P/N002', 'PO2024002', 50, 'Khách hàng B', '', '15/12/2024', 'Line 2', '', 'Hữu Tình', 'Ready', 'Thiếu', '01/12/2024', ''],
-      [2024, 12, 'WO003', 'P/N003', 'PO2024003', 75, 'Khách hàng C', '', '20/12/2024', 'Line 3', 'NVL C', 'Hoàng Vũ', 'Done', 'Đủ', '01/12/2024', 'Hoàn thành']
+      ['Nhà Máy', 'Năm', 'Tháng', 'STT', 'Mã TP VN', 'LSX', 'Lượng sản phẩm', 'Khách hàng', 'Gấp', 'Ngày Giao NVL', 'Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu', 'Ngày nhận thông tin', 'Ghi Chú'],
+      ['ASM1', 2024, 12, 'WO001', 'P/N001', 'PO2024001', 100, 'Khách hàng A', 'Gấp', '31/12/2024', 'Line 1', 'NVL A, NVL B', 'Hoàng Tuấn', 'Waiting', 'Đủ', '01/12/2024', 'Ghi chú mẫu'],
+      ['ASM2', 2024, 12, 'WO002', 'P/N002', 'PO2024002', 50, 'Khách hàng B', '', '15/12/2024', 'Line 2', '', 'Hữu Tình', 'Ready', 'Thiếu', '01/12/2024', ''],
+      ['ASM1', 2024, 12, 'WO003', 'P/N003', 'PO2024003', 75, 'Khách hàng C', '', '20/12/2024', 'Line 3', 'NVL C', 'Hoàng Vũ', 'Done', 'Đủ', '01/12/2024', 'Hoàn thành']
     ];
     
     // Create workbook
@@ -1247,6 +1330,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     
     // Set column widths
     const columnWidths = [
+      { wch: 10 }, // Nhà Máy
       { wch: 8 },  // Năm
       { wch: 8 },  // Tháng
       { wch: 12 }, // STT
@@ -1465,22 +1549,23 @@ Kiểm tra chi tiết lỗi trong popup import.`);
               // Remove header row and convert to WorkOrder format
         const dataRows = jsonData.slice(1); // Skip header row
         const newWorkOrderData = dataRows.map((row: any, index: number) => ({
-          year: row[0] ? parseInt(row[0].toString()) : new Date().getFullYear(),
-          month: row[1] ? parseInt(row[1].toString()) : new Date().getMonth() + 1,
-          orderNumber: row[2]?.toString() || '',
-          productCode: row[3]?.toString() || '',
-          productionOrder: row[4]?.toString() || '',
-          quantity: row[5] ? parseInt(row[5].toString()) : 0,
-          customer: row[6]?.toString() || '',
-          isUrgent: row[7]?.toString().toLowerCase() === 'gấp' || row[7]?.toString().toLowerCase() === 'urgent',
-          deliveryDate: this.parseExcelDate(row[8]) || new Date(),
-          productionLine: row[9]?.toString() || '',
-          missingMaterials: row[10]?.toString() || '',
-          createdBy: row[11]?.toString() || '',
-          status: this.parseStatus(row[12]) || WorkOrderStatus.WAITING,
-          materialsComplete: row[13]?.toString().toLowerCase() === 'đủ' || row[13]?.toString().toLowerCase() === 'complete',
-          planReceivedDate: this.parseExcelDate(row[14]) || new Date(),
-          notes: row[15]?.toString() || '',
+          factory: row[0]?.toString() || this.selectedFactory, // First column is factory (ASM1/ASM2)
+          year: row[1] ? parseInt(row[1].toString()) : new Date().getFullYear(),
+          month: row[2] ? parseInt(row[2].toString()) : new Date().getMonth() + 1,
+          orderNumber: row[3]?.toString() || '',
+          productCode: row[4]?.toString() || '',
+          productionOrder: row[5]?.toString() || '',
+          quantity: row[6] ? parseInt(row[6].toString()) : 0,
+          customer: row[7]?.toString() || '',
+          isUrgent: row[8]?.toString().toLowerCase() === 'gấp' || row[8]?.toString().toLowerCase() === 'urgent',
+          deliveryDate: this.parseExcelDate(row[9]) || new Date(),
+          productionLine: row[10]?.toString() || '',
+          missingMaterials: row[11]?.toString() || '',
+          createdBy: row[12]?.toString() || '',
+          status: this.parseStatus(row[13]) || WorkOrderStatus.WAITING,
+          materialsComplete: row[14]?.toString().toLowerCase() === 'đủ' || row[14]?.toString().toLowerCase() === 'complete',
+          planReceivedDate: this.parseExcelDate(row[15]) || new Date(),
+          notes: row[16]?.toString() || '',
           createdDate: new Date(),
           lastUpdated: new Date()
         } as WorkOrder));
@@ -1492,26 +1577,48 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         throw new Error('No data found in Excel file');
       }
 
-      // Merge with existing data instead of replacing
-      const existingData = this.workOrders || [];
-      const mergedData = [...existingData, ...newWorkOrderData];
-
-      console.log(`📊 Merging data: ${existingData.length} existing + ${newWorkOrderData.length} new = ${mergedData.length} total`);
-
-      // Update the work orders data with merged data
-      this.workOrders = mergedData;
-      this.filteredWorkOrders = mergedData;
-
-      // Save to Firebase
-      this.saveToFirebase(this.workOrders);
-
-      alert(`✅ Successfully imported ${newWorkOrderData.length} new work orders and merged with ${existingData.length} existing records. Total: ${mergedData.length} records saved to Firebase 🔥`);
+      // Save each work order individually to ensure proper saving
+      this.saveWorkOrdersIndividually(newWorkOrderData);
       
     } catch (error) {
       console.error('❌ Error processing Excel data:', error);
       alert(`❌ Lỗi khi xử lý dữ liệu Excel:\n${error.message || error}`);
-    } finally {
       this.isLoading = false;
+    }
+  }
+
+  private async saveWorkOrdersIndividually(workOrders: WorkOrder[]): Promise<void> {
+    console.log('🔥 Saving work orders individually to Firebase...');
+    this.isSaving = true;
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (let i = 0; i < workOrders.length; i++) {
+      const workOrder = workOrders[i];
+      try {
+        await this.addWorkOrderDirect(workOrder);
+        successCount++;
+        console.log(`✅ Saved work order ${i + 1}/${workOrders.length}:`, workOrder.productCode);
+      } catch (error) {
+        errorCount++;
+        console.error(`❌ Failed to save work order ${i + 1}/${workOrders.length}:`, error);
+      }
+    }
+    
+    this.isSaving = false;
+    
+    if (successCount > 0) {
+      this.firebaseSaved = true;
+      console.log(`✅ Successfully saved ${successCount} work orders to Firebase`);
+      alert(`✅ Đã lưu thành công ${successCount} work orders vào Firebase!${errorCount > 0 ? `\n❌ ${errorCount} work orders không thể lưu.` : ''}`);
+      
+      // Reload data to show the new work orders
+      this.loadWorkOrders();
+    } else {
+      this.firebaseSaved = false;
+      console.error('❌ Failed to save any work orders');
+      alert('❌ Không thể lưu work orders nào vào Firebase!');
     }
   }
 
@@ -1542,7 +1649,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     });
 
     // Add timeout to Firebase save
-    const savePromise = this.firestore.collection('workOrders').add(workOrderDoc);
+    const savePromise = this.firestore.collection('work-orders').add(workOrderDoc);
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
     );
@@ -1642,5 +1749,149 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     console.log('✏️ Editing work order:', workOrder);
     // For now, just log the action. You can implement edit functionality later
     alert(`Chỉnh sửa Work Order: ${workOrder.orderNumber || workOrder.productCode}`);
+  }
+
+  // New methods for the updated UI
+  completeWorkOrder(workOrder: WorkOrder): void {
+    console.log('🔄 Bắt đầu hoàn thành work order:', workOrder.productCode, 'ID:', workOrder.id);
+    
+    workOrder.status = WorkOrderStatus.DONE;
+    // Remove urgent status when completed
+    workOrder.isUrgent = false;
+    this.updateWorkOrderStatus(workOrder, WorkOrderStatus.DONE);
+    this.updateWorkOrder(workOrder, 'isUrgent', false);
+    
+    // Re-apply filters to hide completed work order
+    this.applyFilters();
+    this.calculateSummary();
+    console.log('✅ Hoàn thành work order:', workOrder.productCode, '- Đã ẩn khỏi danh sách');
+  }
+
+  showAllWorkOrders(): void {
+    this.showHiddenWorkOrders = !this.showHiddenWorkOrders;
+    
+    if (this.showHiddenWorkOrders) {
+      // Show all work orders including completed ones
+      this.filteredWorkOrders = this.workOrders;
+      console.log('👁️ Hiển thị tất cả work orders (bao gồm đã hoàn thành)');
+    } else {
+      // Show only non-completed work orders
+      this.filteredWorkOrders = this.workOrders.filter(wo => wo.status !== WorkOrderStatus.DONE);
+      console.log('👁️ Chỉ hiển thị work orders chưa hoàn thành');
+    }
+    
+    this.calculateSummary();
+  }
+
+
+
+  getStatusText(status: WorkOrderStatus): string {
+    const statusMap: { [key: string]: string } = {
+      'waiting': 'Waiting',
+      'kitting': 'Kitting',
+      'ready': 'Ready',
+      'done': 'Done',
+      'delay': 'Delay'
+    };
+    return statusMap[status] || 'Waiting';
+  }
+
+  getStatusBadgeClass(status: WorkOrderStatus): string {
+    const statusClassMap: { [key: string]: string } = {
+      'waiting': 'badge badge-warning',
+      'kitting': 'badge badge-info',
+      'ready': 'badge badge-primary',
+      'done': 'badge badge-success',
+      'delay': 'badge badge-danger'
+    };
+    return statusClassMap[status] || 'badge badge-warning';
+  }
+
+  toggleUrgent(workOrder: WorkOrder): void {
+    workOrder.isUrgent = !workOrder.isUrgent;
+    this.updateWorkOrder(workOrder, 'isUrgent', workOrder.isUrgent);
+    
+    if (workOrder.isUrgent) {
+      console.log('🔥 Đánh dấu gấp cho work order:', workOrder.productCode);
+    } else {
+      console.log('✅ Bỏ đánh dấu gấp cho work order:', workOrder.productCode);
+    }
+  }
+
+  exportWorkOrdersByTimeRange(): void {
+    const startDateStr = this.startDate ? this.startDate.toISOString().split('T')[0] : '';
+    const endDateStr = this.endDate ? this.endDate.toISOString().split('T')[0] : '';
+    
+    if (!startDateStr || !endDateStr) {
+      alert('❌ Vui lòng chọn khoảng thời gian!');
+      return;
+    }
+    
+    // Filter work orders by date range
+    const filteredByDate = this.workOrders.filter(wo => {
+      const deliveryDate = wo.deliveryDate ? new Date(wo.deliveryDate) : null;
+      const planDate = wo.planReceivedDate ? new Date(wo.planReceivedDate) : null;
+      
+      if (!deliveryDate && !planDate) return false;
+      
+      const start = new Date(startDateStr);
+      const end = new Date(endDateStr);
+      
+      return (deliveryDate && deliveryDate >= start && deliveryDate <= end) ||
+             (planDate && planDate >= start && planDate <= end);
+    });
+    
+    if (filteredByDate.length === 0) {
+      alert('❌ Không có work orders nào trong khoảng thời gian đã chọn!');
+      return;
+    }
+    
+    // Export to CSV
+    this.exportToCSVWithData(filteredByDate, `work-orders-${startDateStr}-to-${endDateStr}`);
+    
+    console.log(`📊 Xuất ${filteredByDate.length} work orders từ ${startDateStr} đến ${endDateStr}`);
+  }
+
+  private exportToCSVWithData(data: WorkOrder[], filename: string): void {
+    const headers = [
+      'Năm', 'Tháng', 'STT', 'Mã TP VN', 'LSX', 'Lượng sản phẩm', 'Khách hàng', 'Gấp',
+      'Ngày Giao NVL', 'Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu',
+      'Ngày nhận thông tin', 'Ghi Chú'
+    ];
+    
+    const csvData = data.map((wo, index) => [
+      wo.year,
+      wo.month,
+      index + 1,
+      wo.productCode,
+      wo.productionOrder,
+      wo.quantity,
+      wo.customer,
+      wo.isUrgent ? 'Gấp' : '',
+      wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
+      wo.productionLine,
+      wo.missingMaterials || '',
+      wo.createdBy || '',
+      this.getStatusText(wo.status || WorkOrderStatus.WAITING),
+      wo.materialsComplete ? 'Đủ' : 'Thiếu',
+      wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
+      wo.notes || ''
+    ]);
+    
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`✅ Đã xuất ${data.length} work orders thành file CSV`);
   }
 }
