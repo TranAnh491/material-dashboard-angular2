@@ -14,6 +14,7 @@ export class LoginComponent implements OnInit {
   signupForm: FormGroup;
   isSignup = false;
   loading = false;
+  currentLanguage: 'en' | 'vi' = 'vi'; // Default to Vietnamese
 
   constructor(
     private fb: FormBuilder,
@@ -36,6 +37,12 @@ export class LoginComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Load ngôn ngữ từ localStorage
+    const savedLanguage = localStorage.getItem('preferredLanguage');
+    if (savedLanguage === 'en' || savedLanguage === 'vi') {
+      this.currentLanguage = savedLanguage;
+    }
+
     // Kiểm tra nếu đã đăng nhập thì chuyển về dashboard
     this.authService.isAuthenticated.subscribe(isAuth => {
       if (isAuth) {
@@ -52,7 +59,10 @@ export class LoginComponent implements OnInit {
         // Chuyển đổi mã số nhân viên thành email để đăng nhập
         const email = `${employeeId}@asp.com`;
         await this.authService.signIn(email, password);
-        this.showMessage('Đăng nhập thành công!', 'success');
+        this.showMessage(
+          this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
+          'success'
+        );
         this.router.navigate(['/dashboard']);
       } catch (error: any) {
         this.showMessage(this.getErrorMessage(error), 'error');
@@ -67,7 +77,10 @@ export class LoginComponent implements OnInit {
       const { employeeId, password, confirmPassword, displayName, department } = this.signupForm.value;
       
       if (password !== confirmPassword) {
-        this.showMessage('Mật khẩu xác nhận không khớp!', 'error');
+        this.showMessage(
+          this.currentLanguage === 'en' ? 'Password confirmation does not match!' : 'Mật khẩu xác nhận không khớp!', 
+          'error'
+        );
         return;
       }
 
@@ -76,7 +89,10 @@ export class LoginComponent implements OnInit {
         // Chuyển đổi mã số nhân viên thành email để đăng ký
         const email = `${employeeId}@asp.com`;
         await this.authService.signUp(email, password, displayName, department);
-        this.showMessage('Đăng ký thành công!', 'success');
+        this.showMessage(
+          this.currentLanguage === 'en' ? 'Registration successful!' : 'Đăng ký thành công!', 
+          'success'
+        );
         this.isSignup = false;
         this.loginForm.patchValue({ employeeId });
       } catch (error: any) {
@@ -88,24 +104,39 @@ export class LoginComponent implements OnInit {
   }
 
   private getErrorMessage(error: any): string {
-    switch (error.code) {
-      case 'auth/user-not-found':
-        return 'Mã số nhân viên không tồn tại!';
-      case 'auth/wrong-password':
-        return 'Mật khẩu không đúng!';
-      case 'auth/email-already-in-use':
-        return 'Mã số nhân viên đã được sử dụng!';
-      case 'auth/weak-password':
-        return 'Mật khẩu quá yếu!';
-      case 'auth/invalid-email':
-        return 'Mã số nhân viên không hợp lệ!';
-      default:
-        return 'Có lỗi xảy ra, vui lòng thử lại!';
+    const messages = {
+      'auth/user-not-found': {
+        en: 'Employee ID not found!',
+        vi: 'Mã số nhân viên không tồn tại!'
+      },
+      'auth/wrong-password': {
+        en: 'Wrong password!',
+        vi: 'Mật khẩu không đúng!'
+      },
+      'auth/email-already-in-use': {
+        en: 'Employee ID already in use!',
+        vi: 'Mã số nhân viên đã được sử dụng!'
+      },
+      'auth/weak-password': {
+        en: 'Password too weak!',
+        vi: 'Mật khẩu quá yếu!'
+      },
+      'auth/invalid-email': {
+        en: 'Invalid employee ID!',
+        vi: 'Mã số nhân viên không hợp lệ!'
+      }
+    };
+
+    const errorMessages = messages[error.code as keyof typeof messages];
+    if (errorMessages) {
+      return errorMessages[this.currentLanguage];
     }
+    
+    return this.currentLanguage === 'en' ? 'An error occurred. Please try again!' : 'Có lỗi xảy ra, vui lòng thử lại!';
   }
 
   private showMessage(message: string, type: 'success' | 'error'): void {
-    this.snackBar.open(message, 'Đóng', {
+    this.snackBar.open(message, this.currentLanguage === 'en' ? 'Close' : 'Đóng', {
       duration: 3000,
       panelClass: type === 'success' ? ['success-snackbar'] : ['error-snackbar']
     });
@@ -113,5 +144,11 @@ export class LoginComponent implements OnInit {
 
   toggleMode(): void {
     this.isSignup = !this.isSignup;
+  }
+
+  setLanguage(lang: 'en' | 'vi'): void {
+    this.currentLanguage = lang;
+    // Lưu ngôn ngữ vào localStorage để duy trì khi refresh
+    localStorage.setItem('preferredLanguage', lang);
   }
 } 

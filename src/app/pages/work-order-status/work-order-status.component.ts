@@ -153,6 +153,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log('🏭 Selected factory:', factory);
     // Re-apply filters to show only work orders from selected factory
     this.applyFilters();
+    // Update summary cards based on selected factory
+    this.calculateSummary();
   }
 
   onFileSelected(event: any): void {

@@ -1,10 +1,57 @@
 .login-container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
+}
+
+// Language Selector
+.language-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+
+  .lang-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    min-width: 120px;
+    justify-content: center;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    &.active {
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .flag {
+      font-size: 18px;
+    }
+
+    .lang-text {
+      font-size: 14px;
+      font-weight: 600;
+    }
+  }
 }
 
 .login-card {
@@ -69,5 +116,17 @@
   .login-card {
     padding: 20px;
     margin: 10px;
+  }
+
+  .language-selector {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 300px;
+
+    .lang-btn {
+      min-width: auto;
+      width: 100%;
+    }
   }
 } 
