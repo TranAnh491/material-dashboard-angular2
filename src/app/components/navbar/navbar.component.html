@@ -12,14 +12,24 @@
         <div class="collapse navbar-collapse justify-content-end" id="navigation">
             <!-- ASM1 and ASM2 Icons -->
             <div class="asm-icons" *ngIf="isDashboard()">
-                <button mat-raised-button class="btn btn-white btn-just-icon me-2" (click)="selectFactory('ASM1')" [class.active]="selectedFactory === 'ASM1'">
+                <button mat-raised-button class="btn btn-white btn-just-icon me-2" (click)="selectFactory('ASM1')" [class.active]="selectedFactory === 'ASM1'" style="color: #1976d2; border: none;" [style.background]="selectedFactory === 'ASM1' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i>
                     <span class="asm-label">1</span>
                     <div class="ripple-container"></div>
                 </button>
-                <button mat-raised-button class="btn btn-white btn-just-icon" (click)="selectFactory('ASM2')" [class.active]="selectedFactory === 'ASM2'">
+                <button mat-raised-button class="btn btn-white btn-just-icon me-2" (click)="selectFactory('ASM2')" [class.active]="selectedFactory === 'ASM2'" style="color: #4caf50; border: none;" [style.background]="selectedFactory === 'ASM2' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i>
                     <span class="asm-label">2</span>
+                    <div class="ripple-container"></div>
+                </button>
+                <button mat-raised-button class="btn btn-white btn-just-icon me-2" (click)="selectFactory('Sample 1')" [class.active]="selectedFactory === 'Sample 1'" style="color: #1976d2; border: none;" [style.background]="selectedFactory === 'Sample 1' ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">factory</i>
+                    <span class="asm-label">S1</span>
+                    <div class="ripple-container"></div>
+                </button>
+                <button mat-raised-button class="btn btn-white btn-just-icon" (click)="selectFactory('Sample 2')" [class.active]="selectedFactory === 'Sample 2'" style="color: #4caf50; border: none;" [style.background]="selectedFactory === 'Sample 2' ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">factory</i>
+                    <span class="asm-label">S2</span>
                     <div class="ripple-container"></div>
                 </button>
             </div>

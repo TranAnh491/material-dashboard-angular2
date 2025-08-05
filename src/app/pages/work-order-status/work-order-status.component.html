@@ -121,28 +121,51 @@
                 <div class="function-buttons">
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFactory === 'ASM1'"
-                          (click)="selectFactory('ASM1')">
+                          (click)="selectFactory('ASM1')"
+                          style="color: #1976d2; border: none;"
+                          [style.background]="selectedFactory === 'ASM1' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i> ASM1
                   </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFactory === 'ASM2'"
-                          (click)="selectFactory('ASM2')">
+                          (click)="selectFactory('ASM2')"
+                          style="color: #4caf50; border: none;"
+                          [style.background]="selectedFactory === 'ASM2' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i> ASM2
                   </button>
                   <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFactory === 'Sample 1'"
+                          (click)="selectFactory('Sample 1')"
+                          style="color: #1976d2; border: none;"
+                          [style.background]="selectedFactory === 'Sample 1' ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">factory</i> Sample 1
+                  </button>
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFactory === 'Sample 2'"
+                          (click)="selectFactory('Sample 2')"
+                          style="color: #4caf50; border: none;"
+                          [style.background]="selectedFactory === 'Sample 2' ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">factory</i> Sample 2
+                  </button>
+                  <button class="btn btn-outline-primary" 
                           [class.active]="selectedFunction === 'import'"
-                          (click)="selectFunction('import')">
+                          (click)="selectFunction('import')"
+                          style="color: #000; border: none;"
+                          [style.background]="selectedFunction === 'import' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">upload_file</i> Import Excel
                   </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFunction === 'view'"
-                          (click)="selectFunction('view')">
+                          (click)="selectFunction('view')"
+                          style="color: #000; border: none;"
+                          [style.background]="selectedFunction === 'view' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">list</i> Xem Work Orders
                   </button>
                   <button class="btn btn-outline-danger" 
                           (click)="showDeleteDialog = true"
-                          *ngIf="hasDeletePermission()">
-                    <i class="material-icons">delete</i> Xóa theo thời gian
+                          *ngIf="hasDeletePermission()"
+                          style="color: #f44336; border: none;">
+                    <i class="material-icons">delete</i> XÓA
                   </button>
                 </div>
               </div>
@@ -676,6 +699,8 @@
             <option value="">Tất cả nhà máy</option>
             <option value="ASM1">ASM1</option>
             <option value="ASM2">ASM2</option>
+            <option value="Sample 1">Sample 1</option>
+            <option value="Sample 2">Sample 2</option>
           </select>
         </div>
         <div class="warning-message">
