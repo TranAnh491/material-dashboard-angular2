@@ -530,11 +530,36 @@ export class SettingsComponent implements OnInit {
   // Hiển thị tài khoản (email hoặc mã số nhân viên)
   getAccountDisplay(user: any): string {
     if (user.email.includes('@asp.com')) {
-      // Nếu là email nội bộ (ASP format), hiển thị mã số nhân viên
-      return user.email.replace('@asp.com', '');
+      // Nếu là email nội bộ (ASP format), hiển thị mã số nhân viên viết hoa
+      return user.email.replace('@asp.com', '').toUpperCase();
     } else {
       // Nếu là email thật, hiển thị email
       return user.email;
     }
+  }
+
+  // Sắp xếp users theo bộ phận với WH đứng đầu
+  getSortedFirebaseUsers(): User[] {
+    const departmentOrder = ['WH', 'QA', 'ENG', 'PLAN', 'PD', 'CS', 'ACC'];
+    
+    return this.firebaseUsers.sort((a, b) => {
+      const deptA = a.department || '';
+      const deptB = b.department || '';
+      
+      const indexA = departmentOrder.indexOf(deptA);
+      const indexB = departmentOrder.indexOf(deptB);
+      
+      // Nếu cả hai đều có trong danh sách, sắp xếp theo thứ tự
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      // Nếu chỉ một có trong danh sách, đưa lên đầu
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      
+      // Nếu cả hai không có trong danh sách, sắp xếp theo alphabet
+      return deptA.localeCompare(deptB);
+    });
   }
 } 

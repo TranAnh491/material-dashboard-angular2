@@ -756,39 +756,54 @@ Please check the console for error details.`);
   }
 
   exportToCSV(): void {
+    // Filter by selected factory and current month/year
+    const filteredData = this.workOrders.filter(wo => 
+      wo.factory === this.selectedFactory && 
+      wo.year === this.yearFilter && 
+      wo.month === this.monthFilter
+    );
+
+    if (filteredData.length === 0) {
+      alert(`❌ Không có dữ liệu nào cho nhà máy ${this.selectedFactory} trong tháng ${this.monthFilter}/${this.yearFilter}`);
+      return;
+    }
+
     const headers = [
-      'Year', 'Month', 'Order Number', 'Product Code', 'Production Order', 
-      'Quantity', 'Customer', 'Delivery Date', 'Production Line', 'Status', 
-      'Created By', 'Checked By', 'Plan Received Date', 'Notes'
+      'Năm', 'Tháng', 'STT', 'Mã TP VN LSX', 'Lượng', 'Khách hàng', 'Gấp',
+      'Ngày Giao Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu',
+      'Ngày nhận thông tin', 'Ghi Chú'
     ];
     
-    const csvContent = [
-      headers.join(','),
-      ...this.filteredWorkOrders.map(wo => [
-        wo.year,
-        wo.month,
-        wo.orderNumber,
-        wo.productCode,
-        wo.productionOrder,
-        wo.quantity,
-        wo.customer,
-        new Date(wo.deliveryDate).toLocaleDateString(),
-        wo.productionLine,
-        wo.status,
-        wo.createdBy,
-        wo.checkedBy || '',
-        new Date(wo.planReceivedDate).toLocaleDateString(),
-        wo.notes || ''
-      ].join(','))
-    ].join('\n');
+    const csvData = filteredData.map((wo, index) => [
+      wo.year,
+      wo.month,
+      index + 1,
+      `${wo.productCode || ''} ${wo.productionOrder || ''}`.trim(),
+      wo.quantity,
+      wo.customer,
+      wo.isUrgent ? 'Có' : 'Không',
+      wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
+      wo.missingMaterials || '',
+      wo.createdBy || '',
+      this.getStatusText(wo.status),
+      wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
+      wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
+      wo.notes || ''
+    ]);
+    
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `work-orders-${this.yearFilter}-${this.monthFilter}.csv`;
+    a.download = `work-orders-${this.selectedFactory}-${this.yearFilter}-${this.monthFilter}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+
+    console.log(`📊 Xuất ${filteredData.length} work orders của nhà máy ${this.selectedFactory} tháng ${this.monthFilter}/${this.yearFilter}`);
   }
 
   // Excel Import Functionality
@@ -1935,13 +1950,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     this.showHiddenWorkOrders = !this.showHiddenWorkOrders;
     
     if (this.showHiddenWorkOrders) {
-      // Show all work orders including completed ones
-      this.filteredWorkOrders = this.workOrders;
-      console.log('👁️ Hiển thị tất cả work orders (bao gồm đã hoàn thành)');
+      // Show all work orders including completed ones for selected factory
+      this.filteredWorkOrders = this.workOrders.filter(wo => wo.factory === this.selectedFactory);
+      console.log(`👁️ Hiển thị tất cả work orders của nhà máy ${this.selectedFactory} (bao gồm đã hoàn thành)`);
     } else {
-      // Show only non-completed work orders
-      this.filteredWorkOrders = this.workOrders.filter(wo => wo.status !== WorkOrderStatus.DONE);
-      console.log('👁️ Chỉ hiển thị work orders chưa hoàn thành');
+      // Show only non-completed work orders for selected factory
+      this.filteredWorkOrders = this.workOrders.filter(wo => wo.status !== WorkOrderStatus.DONE && wo.factory === this.selectedFactory);
+      console.log(`👁️ Chỉ hiển thị work orders chưa hoàn thành của nhà máy ${this.selectedFactory}`);
     }
     
     this.calculateSummary();
@@ -1995,8 +2010,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       return;
     }
     
-    // Filter work orders by date range
-    const filteredByDate = this.workOrders.filter(wo => {
+    // Filter work orders by date range and selected factory
+    const filteredByDateAndFactory = this.workOrders.filter(wo => {
       const deliveryDate = wo.deliveryDate ? new Date(wo.deliveryDate) : null;
       const planDate = wo.planReceivedDate ? new Date(wo.planReceivedDate) : null;
       
@@ -2005,25 +2020,29 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const start = new Date(startDateStr);
       const end = new Date(endDateStr);
       
-      return (deliveryDate && deliveryDate >= start && deliveryDate <= end) ||
-             (planDate && planDate >= start && planDate <= end);
+      const isInDateRange = (deliveryDate && deliveryDate >= start && deliveryDate <= end) ||
+                           (planDate && planDate >= start && planDate <= end);
+      
+      const isFromSelectedFactory = wo.factory === this.selectedFactory;
+      
+      return isInDateRange && isFromSelectedFactory;
     });
     
-    if (filteredByDate.length === 0) {
-      alert('❌ Không có work orders nào trong khoảng thời gian đã chọn!');
+    if (filteredByDateAndFactory.length === 0) {
+      alert(`❌ Không có work orders nào của nhà máy ${this.selectedFactory} trong khoảng thời gian đã chọn!`);
       return;
     }
     
-    // Export to CSV
-    this.exportToCSVWithData(filteredByDate, `work-orders-${startDateStr}-to-${endDateStr}`);
+    // Export to CSV with English headers
+    this.exportToCSVWithDataEnglish(filteredByDateAndFactory, `work-orders-${this.selectedFactory}-${startDateStr}-to-${endDateStr}`);
     
-    console.log(`📊 Xuất ${filteredByDate.length} work orders từ ${startDateStr} đến ${endDateStr}`);
+    console.log(`📊 Xuất ${filteredByDateAndFactory.length} work orders của nhà máy ${this.selectedFactory} từ ${startDateStr} đến ${endDateStr}`);
   }
 
   private exportToCSVWithData(data: WorkOrder[], filename: string): void {
     const headers = [
-      'Năm', 'Tháng', 'STT', 'Mã TP VN', 'LSX', 'Lượng sản phẩm', 'Khách hàng', 'Gấp',
-      'Ngày Giao NVL', 'Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu',
+      'Năm', 'Tháng', 'STT', 'Mã TP VN LSX', 'Lượng', 'Khách hàng', 'Gấp',
+      'Ngày Giao Line', 'NVL thiếu', 'Người soạn', 'Tình trạng', 'Đủ/Thiếu',
       'Ngày nhận thông tin', 'Ghi Chú'
     ];
     
@@ -2031,17 +2050,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       wo.year,
       wo.month,
       index + 1,
-      wo.productCode,
-      wo.productionOrder,
+      `${wo.productCode || ''} ${wo.productionOrder || ''}`.trim(),
       wo.quantity,
       wo.customer,
-      wo.isUrgent ? 'Gấp' : '',
+      wo.isUrgent ? 'Có' : 'Không',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
-      wo.productionLine,
       wo.missingMaterials || '',
       wo.createdBy || '',
       this.getStatusText(wo.status || WorkOrderStatus.WAITING),
-      wo.materialsComplete ? 'Đủ' : 'Thiếu',
+      wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
       wo.notes || ''
     ]);
@@ -2051,15 +2068,63 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       .join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
     
     console.log(`✅ Đã xuất ${data.length} work orders thành file CSV`);
+  }
+
+  private exportToCSVWithDataEnglish(data: WorkOrder[], filename: string): void {
+    const headers = [
+      'Year', 'Month', 'Order No', 'Product Code VN LSX', 'Quantity', 'Customer', 'Urgent',
+      'Material Delivery Date', 'Missing Materials', 'Creator', 'Status', 'Sufficient/Insufficient',
+      'Plan Received Date', 'Notes'
+    ];
+    
+    const csvData = data.map((wo, index) => [
+      wo.year,
+      wo.month,
+      index + 1,
+      `${wo.productCode || ''} ${wo.productionOrder || ''}`.trim(),
+      wo.quantity,
+      wo.customer,
+      wo.isUrgent ? 'Yes' : 'No',
+      wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('en-US') : '',
+      wo.missingMaterials || '',
+      wo.createdBy || '',
+      this.getStatusTextEnglish(wo.status || WorkOrderStatus.WAITING),
+      wo.materialsStatus === 'sufficient' ? 'Sufficient' : wo.materialsStatus === 'insufficient' ? 'Insufficient' : '',
+      wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('en-US') : '',
+      wo.notes || ''
+    ]);
+    
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    console.log(`✅ Đã xuất ${data.length} work orders thành file CSV (English)`);
+  }
+
+  private getStatusTextEnglish(status: WorkOrderStatus): string {
+    const statusMap: { [key: string]: string } = {
+      'waiting': 'Waiting',
+      'kitting': 'Kitting',
+      'ready': 'Ready',
+      'done': 'Done',
+      'delay': 'Delay'
+    };
+    return statusMap[status] || 'Waiting';
   }
 }

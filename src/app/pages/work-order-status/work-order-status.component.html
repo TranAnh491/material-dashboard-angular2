@@ -25,16 +25,13 @@
                     <i class="material-icons">schedule</i> Chọn thời gian
                   </button>
                   <button class="btn btn-outline-success" (click)="exportWorkOrdersByTimeRange()">
-                    <i class="material-icons">download</i> Tải về theo thời gian
+                    <i class="material-icons">download</i> Tải về
                   </button>
                   <button class="btn btn-outline-primary" (click)="downloadTemplate()">
                     <i class="material-icons">download</i> Tải Form
                   </button>
                   <button mat-raised-button color="accent" (click)="showAllWorkOrders()" class="btn btn-outline-warning">
                     <mat-icon>visibility</mat-icon> Hiển thị tất cả
-                  </button>
-                  <button mat-raised-button color="primary" (click)="exportToCSV()" class="btn btn-outline-info">
-                    <mat-icon>file_download</mat-icon> Export CSV
                   </button>
                 </div>
                 
@@ -152,14 +149,14 @@
                           (click)="selectFunction('import')"
                           style="color: #000; border: none;"
                           [style.background]="selectedFunction === 'import' ? '#fce4ec' : 'transparent'">
-                    <i class="material-icons">upload_file</i> Import Excel
+                    <i class="material-icons">more_horiz</i> MORE
                   </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFunction === 'view'"
                           (click)="selectFunction('view')"
                           style="color: #000; border: none;"
                           [style.background]="selectedFunction === 'view' ? '#fce4ec' : 'transparent'">
-                    <i class="material-icons">list</i> Xem Work Orders
+                    <i class="material-icons">arrow_back</i> BACK
                   </button>
                   <button class="btn btn-outline-danger" 
                           (click)="showDeleteDialog = true"
@@ -402,8 +399,7 @@
                               <mat-icon style="font-size: 24px; width: 24px; height: 24px;">check_circle</mat-icon>
                             </button>
                             <span *ngIf="wo.status !== 'done' && !canEdit()" style="font-size: 10px; color: #999;">Không có quyền</span>
-                            <span *ngIf="wo.status === 'done'" style="font-size: 10px; color: #4caf50;">✅ Đã hoàn thành</span>
-                            <span *ngIf="wo.status === 'done'" style="color: #666; font-size: 17.5px; display: block; text-align: center;">✅</span>
+                            <span *ngIf="wo.status === 'done'" style="color: #4caf50; font-size: 20px; display: block; text-align: center;">✅</span>
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productionOrder}}</td>
