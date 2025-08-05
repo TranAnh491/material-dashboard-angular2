@@ -34,6 +34,26 @@ export class SettingsComponent implements OnInit {
   // Permission management
   firebaseUserPermissions: { [key: string]: boolean } = {};
   isEditingPermissions = false;
+  
+  // Tab access permissions
+  availableTabs = [
+    { key: 'dashboard', name: 'Dashboard', icon: 'dashboard' },
+    { key: 'work-order', name: 'Work Order', icon: 'assignment' },
+    { key: 'shipment', name: 'Shipment', icon: 'local_shipping' },
+    { key: 'materials', name: 'Materials', icon: 'inventory_2' },
+    { key: 'fg', name: 'Finished Goods', icon: 'check_circle_outline' },
+    { key: 'label', name: 'Label', icon: 'label' },
+    { key: 'bm', name: 'Bonded Materials', icon: 'lock' },
+    { key: 'utilization', name: 'Utilization', icon: 'assessment' },
+    { key: 'find', name: 'Find', icon: 'search' },
+    { key: 'layout', name: 'Layout', icon: 'grid_view' },
+    { key: 'checklist', name: 'Safety & Quality', icon: 'checklist' },
+    { key: 'equipment', name: 'Training', icon: 'integration_instructions' },
+    { key: 'task', name: 'Flow Work', icon: 'view_kanban' }
+  ];
+  
+  // Tab permissions for each user: { userId: { tabKey: boolean } }
+  firebaseUserTabPermissions: { [key: string]: { [key: string]: boolean } } = {};
 
   constructor(
     private permissionService: PermissionService,
@@ -180,6 +200,7 @@ export class SettingsComponent implements OnInit {
             uid: doc.id,
             email: data.email || '',
             displayName: data.displayName || '',
+            department: data.department || '', // Load department từ users collection
             photoURL: data.photoURL || '',
             createdAt: data.createdAt?.toDate() || new Date(),
             lastLoginAt: data.lastLoginAt?.toDate() || new Date()
@@ -188,9 +209,10 @@ export class SettingsComponent implements OnInit {
         
         console.log(`✅ Loaded ${this.firebaseUsers.length} users from Firestore`);
         
-        // Load permissions và departments cho tất cả users
+        // Load permissions, departments và tab permissions cho tất cả users
         await this.loadFirebaseUserPermissions();
         await this.loadFirebaseUserDepartments();
+        await this.loadFirebaseUserTabPermissions();
       } else {
         console.log('❌ No users found in Firestore');
         this.firebaseUsers = [];
@@ -317,12 +339,55 @@ export class SettingsComponent implements OnInit {
           user.department = data.department || '';
           console.log(`✅ Loaded department for ${user.email}: ${data.department}`);
         } else {
-          user.department = ''; // Default to empty
-          console.log(`✅ Default department for ${user.email}: empty`);
+          // Kiểm tra trong users collection
+          const userDoc = await this.firestore.collection('users').doc(user.uid).get().toPromise();
+          if (userDoc?.exists) {
+            const userData = userDoc.data() as any;
+            user.department = userData.department || '';
+            console.log(`✅ Loaded department from users collection for ${user.email}: ${userData.department}`);
+          } else {
+            user.department = ''; // Default to empty
+            console.log(`✅ Default department for ${user.email}: empty`);
+          }
         }
       } catch (error) {
         console.error(`❌ Error loading department for user ${user.uid}:`, error);
         user.department = ''; // Default to empty on error
+      }
+    }
+  }
+
+  async loadFirebaseUserTabPermissions(): Promise<void> {
+    console.log('🔍 Loading Firebase user tab permissions...');
+    
+    // Load current tab permissions for all Firebase users
+    for (const user of this.firebaseUsers) {
+      try {
+        // Đọc từ Firestore collection user-tab-permissions
+        const userRef = this.firestore.collection('user-tab-permissions').doc(user.uid);
+        const doc = await userRef.get().toPromise();
+        
+        if (doc?.exists) {
+          const data = doc.data() as any;
+          this.firebaseUserTabPermissions[user.uid] = data.tabPermissions || {};
+          console.log(`✅ Loaded tab permissions for ${user.email}:`, data.tabPermissions);
+        } else {
+          // Default all tabs to true (accessible)
+          const defaultPermissions: { [key: string]: boolean } = {};
+          this.availableTabs.forEach(tab => {
+            defaultPermissions[tab.key] = true;
+          });
+          this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
+          console.log(`✅ Default tab permissions for ${user.email}: all enabled`);
+        }
+      } catch (error) {
+        console.error(`❌ Error loading tab permissions for user ${user.uid}:`, error);
+        // Default all tabs to true on error
+        const defaultPermissions: { [key: string]: boolean } = {};
+        this.availableTabs.forEach(tab => {
+          defaultPermissions[tab.key] = true;
+        });
+        this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
       }
     }
   }
@@ -379,7 +444,14 @@ export class SettingsComponent implements OnInit {
           updatedAt: new Date()
         }, { merge: true });
         
-        console.log(`✅ Department saved to Firestore for user ${userId}: ${department}`);
+        // Cũng lưu vào users collection để đảm bảo consistency
+        const usersRef = this.firestore.collection('users').doc(userId);
+        await usersRef.update({
+          department: department,
+          updatedAt: new Date()
+        });
+        
+        console.log(`✅ Department saved to both collections for user ${userId}: ${department}`);
         
         // Hiển thị thông báo thành công
         console.log(`✅ Department updated successfully for ${user.email}: ${department}`);
@@ -387,6 +459,41 @@ export class SettingsComponent implements OnInit {
     } catch (error) {
       console.error('❌ Error updating department:', error);
       alert('Có lỗi xảy ra khi cập nhật bộ phận!');
+    }
+  }
+
+  async updateUserTabPermission(userId: string, tabKey: string, hasAccess: boolean): Promise<void> {
+    try {
+      console.log(`🔄 Updating tab permission for user ${userId}, tab ${tabKey}: ${hasAccess}`);
+      
+      // Cập nhật trong memory
+      if (!this.firebaseUserTabPermissions[userId]) {
+        this.firebaseUserTabPermissions[userId] = {};
+      }
+      this.firebaseUserTabPermissions[userId][tabKey] = hasAccess;
+      
+      // Tìm user để lấy thông tin
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (user) {
+        // Lưu vào Firestore collection user-tab-permissions
+        const userRef = this.firestore.collection('user-tab-permissions').doc(userId);
+        await userRef.set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          tabPermissions: this.firebaseUserTabPermissions[userId],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        console.log(`✅ Tab permission saved to Firestore for user ${userId}, tab ${tabKey}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating tab permission:', error);
+      // Revert change nếu có lỗi
+      if (this.firebaseUserTabPermissions[userId]) {
+        this.firebaseUserTabPermissions[userId][tabKey] = !hasAccess;
+      }
     }
   }
 
@@ -411,5 +518,23 @@ export class SettingsComponent implements OnInit {
   cancelPermissionEdit(): void {
     this.isEditingPermissions = false;
     this.firebaseUserPermissions = {};
+  }
+
+  // Tạo danh sách columns cho table
+  getTableColumns(): string[] {
+    const baseColumns = ['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
+    const tabColumns = this.availableTabs.map(tab => 'tab-' + tab.key);
+    return [...baseColumns, ...tabColumns];
+  }
+
+  // Hiển thị tài khoản (email hoặc mã số nhân viên)
+  getAccountDisplay(user: any): string {
+    if (user.email.includes('@asp.com')) {
+      // Nếu là email nội bộ (ASP format), hiển thị mã số nhân viên
+      return user.email.replace('@asp.com', '');
+    } else {
+      // Nếu là email thật, hiển thị email
+      return user.email;
+    }
   }
 } 

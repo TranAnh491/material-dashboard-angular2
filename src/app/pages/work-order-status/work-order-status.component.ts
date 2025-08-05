@@ -441,8 +441,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && isNotCompleted;
     });
     
-    // Sort filtered results by delivery date (earliest first)
+    // Sort filtered results: urgent first, then by delivery date (earliest first)
     this.filteredWorkOrders.sort((a, b) => {
+      // First priority: urgent work orders go to the top
+      if (a.isUrgent && !b.isUrgent) return -1;
+      if (!a.isUrgent && b.isUrgent) return 1;
+      
+      // Second priority: delivery date (earliest first)
       const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0;
       const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0;
       return dateA - dateB;
@@ -1973,6 +1978,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     } else {
       console.log('✅ Bỏ đánh dấu gấp cho work order:', workOrder.productCode);
     }
+    
+    // Re-apply filters to re-sort the list with urgent items at the top
+    this.applyFilters();
+    this.calculateSummary();
   }
 
   exportWorkOrdersByTimeRange(): void {

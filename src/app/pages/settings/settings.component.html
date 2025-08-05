@@ -131,113 +131,100 @@
              <p>Chưa có email nào đăng nhập vào hệ thống.</p>
         </div>
 
-            <!-- Firebase Users Table -->
+                        <!-- Firebase Users Table -->
             <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="firebase-users-table">
-              <table mat-table [dataSource]="firebaseUsers" class="mat-elevation-2">
+              <table mat-table [dataSource]="firebaseUsers" class="simple-table">
             
-                <!-- Email Column -->
+                <!-- Account Column -->
                 <ng-container matColumnDef="email">
-                  <th mat-header-cell *matHeaderCellDef>Email</th>
-              <td mat-cell *matCellDef="let user">
-                    <div class="user-email">
-                      <mat-icon>email</mat-icon>
-                      {{ user.email }}
-                </div>
-              </td>
-            </ng-container>
+                  <th mat-header-cell *matHeaderCellDef>Tài khoản</th>
+                  <td mat-cell *matCellDef="let user">
+                    {{ getAccountDisplay(user) }}
+                  </td>
+                </ng-container>
 
                 <!-- Department Column -->
                 <ng-container matColumnDef="department">
                   <th mat-header-cell *matHeaderCellDef>Bộ phận</th>
                   <td mat-cell *matCellDef="let user">
-                    <div class="department-info">
-                      <mat-icon>business</mat-icon>
-                      <span *ngIf="!isEditingPermissions">{{ user.department || 'Chưa có' }}</span>
-                      <select *ngIf="isEditingPermissions" 
-                              [(ngModel)]="user.department" 
-                              (change)="updateUserDepartment(user.uid, user.department)"
-                              class="department-select">
-                        <option value="">Chọn bộ phận</option>
-                        <option value="WH">WH</option>
-                        <option value="QA">QA</option>
-                        <option value="ENG">ENG</option>
-                        <option value="PLAN">PLAN</option>
-                        <option value="PD">PD</option>
-                        <option value="CS">CS</option>
-                        <option value="ACC">ACC</option>
-                      </select>
-                    </div>
+                    <span *ngIf="!isEditingPermissions">{{ user.department || 'Chưa có' }}</span>
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.department" 
+                            (change)="updateUserDepartment(user.uid, user.department)"
+                            class="simple-select">
+                      <option value="">Chọn bộ phận</option>
+                      <option value="WH">WH</option>
+                      <option value="QA">QA</option>
+                      <option value="ENG">ENG</option>
+                      <option value="PLAN">PLAN</option>
+                      <option value="PD">PD</option>
+                      <option value="CS">CS</option>
+                      <option value="ACC">ACC</option>
+                    </select>
                   </td>
                 </ng-container>
 
                 <!-- Display Name Column -->
                 <ng-container matColumnDef="displayName">
                   <th mat-header-cell *matHeaderCellDef>Tên hiển thị</th>
-              <td mat-cell *matCellDef="let user">
-                    <div class="user-name">
-                      <mat-icon>person</mat-icon>
-                      {{ user.displayName || 'Chưa có tên' }}
-                </div>
-                  </td>
+                  <td mat-cell *matCellDef="let user">{{ user.displayName || 'Chưa có tên' }}</td>
                 </ng-container>
 
                 <!-- Created Date Column -->
                 <ng-container matColumnDef="createdAt">
                   <th mat-header-cell *matHeaderCellDef>Ngày tạo</th>
-                  <td mat-cell *matCellDef="let user">
-                    <div class="date-info">
-                      <mat-icon>schedule</mat-icon>
-                      {{ user.createdAt | date:'dd/MM/yyyy HH:mm' }}
-                </div>
-              </td>
-            </ng-container>
+                  <td mat-cell *matCellDef="let user">{{ user.createdAt | date:'dd/MM/yyyy' }}</td>
+                </ng-container>
 
                 <!-- Permission Column -->
                 <ng-container matColumnDef="permission">
                   <th mat-header-cell *matHeaderCellDef>Quyền chỉnh sửa</th>
-              <td mat-cell *matCellDef="let user">
-                    <div class="permission-toggle">
-                      <mat-slide-toggle
-                        [checked]="firebaseUserPermissions[user.uid] || false"
-                        (change)="updateUserPermission(user.uid, $event.checked)"
-                        [disabled]="!isEditingPermissions"
-                        color="primary">
-                        <span class="permission-label">
-                          {{ firebaseUserPermissions[user.uid] ? 'Có quyền' : 'Không có quyền' }}
-                        </span>
-                      </mat-slide-toggle>
-                </div>
-              </td>
-            </ng-container>
+                  <td mat-cell *matCellDef="let user">
+                    <mat-slide-toggle
+                      [checked]="firebaseUserPermissions[user.uid] || false"
+                      (change)="updateUserPermission(user.uid, $event.checked)"
+                      [disabled]="!isEditingPermissions"
+                      color="primary">
+                    </mat-slide-toggle>
+                  </td>
+                </ng-container>
 
                 <!-- Last Login Column -->
                 <ng-container matColumnDef="lastLoginAt">
                   <th mat-header-cell *matHeaderCellDef>Đăng nhập lần cuối</th>
-              <td mat-cell *matCellDef="let user">
-                <div class="date-info">
-                      <mat-icon>login</mat-icon>
-                      {{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}
-                </div>
-              </td>
-            </ng-container>
+                  <td mat-cell *matCellDef="let user">
+                    {{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy') : 'Chưa đăng nhập' }}
+                  </td>
+                </ng-container>
 
             <!-- Actions Column -->
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef>Thao tác</th>
               <td mat-cell *matCellDef="let user">
-                <div class="action-buttons">
-                    <button mat-icon-button 
-                            color="warn" 
-                              (click)="deleteFirebaseUser(user)"
-                              matTooltip="Xóa user">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                </div>
+                <button mat-icon-button 
+                        color="warn" 
+                        (click)="deleteFirebaseUser(user)"
+                        matTooltip="Xóa user">
+                  <mat-icon>delete</mat-icon>
+                </button>
               </td>
             </ng-container>
 
-                <tr mat-header-row *matHeaderRowDef="['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions']"></tr>
-                <tr mat-row *matRowDef="let row; columns: ['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];"></tr>
+            <!-- Tab Permissions Columns -->
+            <ng-container *ngFor="let tab of availableTabs" [matColumnDef]="'tab-' + tab.key">
+              <th mat-header-cell *matHeaderCellDef>{{ tab.name }}</th>
+              <td mat-cell *matCellDef="let user">
+                <mat-slide-toggle
+                  [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
+                  (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
+                  [disabled]="!isEditingPermissions"
+                  color="primary">
+                </mat-slide-toggle>
+              </td>
+            </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="getTableColumns()"></tr>
+                <tr mat-row *matRowDef="let row; columns: getTableColumns();"></tr>
           </table>
         </div>
 

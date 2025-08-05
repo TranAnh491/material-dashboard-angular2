@@ -82,6 +82,137 @@
   }
 }
 
+// Work Order Style Table
+.simple-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  
+  .mat-header-cell {
+    background: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    font-size: 0.85em;
+    padding: 8px 12px;
+    border-bottom: 1px solid #dee2e6;
+    text-align: left;
+    border-right: 1px solid #dee2e6;
+  }
+  
+  .mat-cell {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f8f9fa;
+    font-size: 0.85em;
+    color: #495057;
+    border-right: 1px solid #f8f9fa;
+  }
+  
+  .mat-row:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .mat-row:nth-child(even) {
+    background-color: #fafbfc;
+  }
+}
+
+.simple-select {
+  padding: 4px 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  background: white;
+  font-size: 0.85em;
+  outline: none;
+  min-width: 100px;
+  color: #495057;
+  
+  &:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+  
+  &:hover {
+    border-color: #007bff;
+  }
+}
+
+// Tab Permissions Styles - Work Order Style
+.tab-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #495057;
+  
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+  
+  span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70px;
+  }
+}
+
+.tab-permission-toggle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  
+  .permission-label {
+    font-size: 0.75em;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  
+  mat-slide-toggle {
+    margin: 0;
+    
+    ::ng-deep .mat-slide-toggle-bar {
+      width: 36px;
+      height: 18px;
+      background-color: #dee2e6;
+    }
+    
+    ::ng-deep .mat-slide-toggle-thumb {
+      width: 14px;
+      height: 14px;
+      background-color: #fff;
+    }
+    
+    ::ng-deep &.mat-checked .mat-slide-toggle-bar {
+      background-color: #007bff;
+    }
+    
+    ::ng-deep &.mat-checked .mat-slide-toggle-thumb {
+      background-color: #fff;
+    }
+  }
+}
+
+// Responsive table for tab permissions
+@media (max-width: 1200px) {
+  .firebase-users-table {
+    overflow-x: auto;
+    
+    table {
+      min-width: 800px;
+    }
+  }
+  
+  .tab-header span {
+    max-width: 60px;
+  }
+}
+
 // Settings Dashboard Styles
 .settings-dashboard {
   .settings-header {
@@ -919,30 +1050,34 @@
   }
 }
 
-// Permission Toggle Styles
+// Permission Toggle Styles - Work Order Style
 .permission-toggle {
   display: flex;
   align-items: center;
   
   .permission-label {
-    margin-left: 8px;
-    font-size: 13px;
+    margin-left: 6px;
+    font-size: 0.8em;
     font-weight: 500;
-    color: #333;
+    color: #495057;
   }
   
   ::ng-deep .mat-slide-toggle {
     .mat-slide-toggle-bar {
-      background-color: #ccc;
+      background-color: #dee2e6;
+      width: 36px;
+      height: 18px;
     }
     
     .mat-slide-toggle-thumb {
       background-color: #fff;
+      width: 14px;
+      height: 14px;
     }
     
     &.mat-checked {
       .mat-slide-toggle-bar {
-        background-color: #3f51b5;
+        background-color: #007bff;
       }
       
       .mat-slide-toggle-thumb {
