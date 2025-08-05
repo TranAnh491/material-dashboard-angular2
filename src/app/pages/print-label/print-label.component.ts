@@ -3806,6 +3806,11 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
   }
 
+  // Add function to get Pending items count
+  getPendingItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'Pending').length;
+  }
+
   // Load user department information
   async loadUserDepartment(): Promise<void> {
     try {

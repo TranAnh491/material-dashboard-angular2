@@ -216,12 +216,6 @@
                       <div style="background: #e3f2fd; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #1976d2; font-size: 12px;">
             📊 Total: {{scheduleData.length}} records
           </div>
-          <div style="background: #e8f5e8; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #4caf50; font-size: 12px;">
-            ✅ Hoàn thành: {{getCompletedItemsCount()}}
-          </div>
-          <div style="background: #fff3e0; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #ff9800; font-size: 12px;">
-            ⏳ Chưa hoàn thành: {{getIncompleteItemsCount()}}
-          </div>
           <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px;">
             🔍 IQC: {{getIQCItemsCount()}}
           </div>
@@ -231,9 +225,9 @@
           <div style="background: #ffebee; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #c62828; font-size: 12px;">
             ❌ NG: {{getNGItemsCount()}}
           </div>
+          <div style="background: #fff8e1; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #f57f17; font-size: 12px;">
+            ⏳ Pending: {{getPendingItemsCount()}}
           </div>
-          <div style="font-size: 11px; color: #666; text-align: right; line-height: 1.3;">
-            📸 So sánh | 🗑️ Xóa so sánh | 🗑️ Xóa dòng | ✅ Hoàn thành | 📝 Ghi chú trực tiếp
           </div>
         </div>
 
@@ -396,6 +390,7 @@
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
+                    <option value="Pending">Pending</option>
                     <option value="Chờ in">Chờ in</option>
                     <option value="Đã in">Đã in</option>
                     <option value="Pass">Pass</option>
