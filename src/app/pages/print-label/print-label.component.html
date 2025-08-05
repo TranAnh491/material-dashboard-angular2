@@ -345,34 +345,34 @@
                   [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f9f9f9' : 'white')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.nam || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.thang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.stt || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.nam || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.thang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.stt || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
-                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" 
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn size</option>
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
                   </select>
-                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #666;">{{item.sizePhoi || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maTem || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongYeuCau || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.soLuongPhoi || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.maHang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lenhSanXuat || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.khachHang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ngayNhanKeHoach || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.yy || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.ww || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{item.lineNhan || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.maTem || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.soLuongYeuCau || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.soLuongPhoi || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.maHang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.lenhSanXuat || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.khachHang || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.ngayNhanKeHoach || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.yy || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.ww || ''}}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.lineNhan || ''}}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
-                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" 
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option value="Tuấn">Tuấn</option>
@@ -384,10 +384,10 @@
                     <option value="Phúc">Phúc</option>
                     <option value="Tú">Tú</option>
                   </select>
-                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #666;">{{item.nguoiIn || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Pending">Pending</option>
@@ -401,13 +401,13 @@
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" 
                           [disabled]="!canEditField('banVe')"
-                          style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease;" 
+                          style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn bản vẽ</option>
                     <option value="Có">Có</option>
                     <option value="Chưa có">Chưa có</option>
                   </select>
-                  <span *ngIf="!canEditField('banVe')" style="font-size: 10px; color: #666;">{{item.banVe || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('banVe')" style="font-size: 10px; color: #000;">{{item.banVe || 'Chưa có'}}</span>
               </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
                   <input 
@@ -418,7 +418,7 @@
                     (blur)="onNoteBlur(item, $event)"
                     (keypress)="onNoteKeyPress($event, item)"
                     (input)="onNoteChange(item)"
-                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 12px; text-align: center; outline: none; transition: all 0.3s ease;"
+                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 12px; text-align: center; outline: none; transition: all 0.3s ease; color: #000;"
                     onmouseover="this.style.background='#f0f8ff'" 
                     onmouseout="this.style.background='transparent'" 
                     onfocus="this.style.background='#e6f3ff'" 
