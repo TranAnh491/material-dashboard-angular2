@@ -22,15 +22,16 @@ export class LoginComponent implements OnInit {
     private router: Router
   ) {
     this.loginForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
+      employeeId: ['', [Validators.required, Validators.pattern(/^ASP\d{4}$/)]],
       password: ['', [Validators.required, Validators.minLength(6)]]
     });
 
     this.signupForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
+      employeeId: ['', [Validators.required, Validators.pattern(/^ASP\d{4}$/)]],
       password: ['', [Validators.required, Validators.minLength(6)]],
       confirmPassword: ['', [Validators.required]],
-      displayName: ['', [Validators.required]]
+      displayName: ['', [Validators.required]],
+      department: ['', [Validators.required]]
     });
   }
 
@@ -47,7 +48,9 @@ export class LoginComponent implements OnInit {
     if (this.loginForm.valid) {
       this.loading = true;
       try {
-        const { email, password } = this.loginForm.value;
+        const { employeeId, password } = this.loginForm.value;
+        // Chuyển đổi mã số nhân viên thành email để đăng nhập
+        const email = `${employeeId}@asp.com`;
         await this.authService.signIn(email, password);
         this.showMessage('Đăng nhập thành công!', 'success');
         this.router.navigate(['/dashboard']);
@@ -61,7 +64,7 @@ export class LoginComponent implements OnInit {
 
   async onSignup(): Promise<void> {
     if (this.signupForm.valid) {
-      const { email, password, confirmPassword, displayName } = this.signupForm.value;
+      const { employeeId, password, confirmPassword, displayName, department } = this.signupForm.value;
       
       if (password !== confirmPassword) {
         this.showMessage('Mật khẩu xác nhận không khớp!', 'error');
@@ -70,10 +73,12 @@ export class LoginComponent implements OnInit {
 
       this.loading = true;
       try {
-        await this.authService.signUp(email, password, displayName);
+        // Chuyển đổi mã số nhân viên thành email để đăng ký
+        const email = `${employeeId}@asp.com`;
+        await this.authService.signUp(email, password, displayName, department);
         this.showMessage('Đăng ký thành công!', 'success');
         this.isSignup = false;
-        this.loginForm.patchValue({ email });
+        this.loginForm.patchValue({ employeeId });
       } catch (error: any) {
         this.showMessage(this.getErrorMessage(error), 'error');
       } finally {
@@ -85,15 +90,15 @@ export class LoginComponent implements OnInit {
   private getErrorMessage(error: any): string {
     switch (error.code) {
       case 'auth/user-not-found':
-        return 'Email không tồn tại!';
+        return 'Mã số nhân viên không tồn tại!';
       case 'auth/wrong-password':
         return 'Mật khẩu không đúng!';
       case 'auth/email-already-in-use':
-        return 'Email đã được sử dụng!';
+        return 'Mã số nhân viên đã được sử dụng!';
       case 'auth/weak-password':
         return 'Mật khẩu quá yếu!';
       case 'auth/invalid-email':
-        return 'Email không hợp lệ!';
+        return 'Mã số nhân viên không hợp lệ!';
       default:
         return 'Có lỗi xảy ra, vui lòng thử lại!';
     }

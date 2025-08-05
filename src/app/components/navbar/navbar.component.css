@@ -1,3 +1,50 @@
 .custom-search-form {
     margin-top: 15px;
 }
+
+.asm-icons {
+    display: flex;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.asm-icons .btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #333;
+    font-weight: 500;
+    min-width: 64px;
+    box-shadow: none;
+}
+
+.asm-icons .btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: none;
+    box-shadow: none;
+}
+
+.asm-icons .btn.active {
+    background: #ff9800;
+    color: white;
+    border-color: #ff9800;
+}
+
+.asm-icons .btn.active:hover {
+    background: #f57c00;
+}
+
+.asm-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 4px;
+}
+
+.asm-icons .material-icons {
+    font-size: 18px;
+}

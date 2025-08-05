@@ -188,8 +188,9 @@ export class SettingsComponent implements OnInit {
         
         console.log(`✅ Loaded ${this.firebaseUsers.length} users from Firestore`);
         
-        // Load permissions cho tất cả users
+        // Load permissions và departments cho tất cả users
         await this.loadFirebaseUserPermissions();
+        await this.loadFirebaseUserDepartments();
       } else {
         console.log('❌ No users found in Firestore');
         this.firebaseUsers = [];
@@ -238,6 +239,7 @@ export class SettingsComponent implements OnInit {
   async refreshFirebaseUsers(): Promise<void> {
     console.log('🔄 Refreshing Firebase users...');
     await this.loadFirebaseUsers();
+    console.log('✅ Firebase users refreshed with departments and permissions');
   }
 
   async deleteFirebaseUser(user: User): Promise<void> {
@@ -300,6 +302,31 @@ export class SettingsComponent implements OnInit {
     }
   }
 
+  async loadFirebaseUserDepartments(): Promise<void> {
+    console.log('🔍 Loading Firebase user departments...');
+    
+    // Load current departments for all Firebase users
+    for (const user of this.firebaseUsers) {
+      try {
+        // Đọc từ Firestore collection user-permissions
+        const userRef = this.firestore.collection('user-permissions').doc(user.uid);
+        const doc = await userRef.get().toPromise();
+        
+        if (doc?.exists) {
+          const data = doc.data() as any;
+          user.department = data.department || '';
+          console.log(`✅ Loaded department for ${user.email}: ${data.department}`);
+        } else {
+          user.department = ''; // Default to empty
+          console.log(`✅ Default department for ${user.email}: empty`);
+        }
+      } catch (error) {
+        console.error(`❌ Error loading department for user ${user.uid}:`, error);
+        user.department = ''; // Default to empty on error
+      }
+    }
+  }
+
   async updateUserPermission(userId: string, hasPermission: boolean): Promise<void> {
     try {
       console.log(`🔄 Updating permission for user ${userId}: ${hasPermission}`);
@@ -353,6 +380,9 @@ export class SettingsComponent implements OnInit {
         }, { merge: true });
         
         console.log(`✅ Department saved to Firestore for user ${userId}: ${department}`);
+        
+        // Hiển thị thông báo thành công
+        console.log(`✅ Department updated successfully for ${user.email}: ${department}`);
       }
     } catch (error) {
       console.error('❌ Error updating department:', error);

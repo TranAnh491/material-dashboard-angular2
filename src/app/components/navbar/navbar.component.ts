@@ -23,6 +23,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
     private notificationSubscription: Subscription;
     public currentUser: User | null = null;
     private userSubscription: Subscription;
+    public selectedFactory: string = 'ASM1'; // Default to ASM1
 
     constructor(
       location: Location,  
@@ -60,6 +61,12 @@ export class NavbarComponent implements OnInit, OnDestroy {
       this.userSubscription = this.authService.currentUser.subscribe(user => {
         this.currentUser = user;
       });
+
+      // Load selected factory from localStorage
+      const savedFactory = localStorage.getItem('selectedFactory');
+      if (savedFactory) {
+        this.selectedFactory = savedFactory;
+      }
     }
 
     checkForNotifications() {
@@ -218,5 +225,13 @@ export class NavbarComponent implements OnInit, OnDestroy {
       } catch (error) {
         console.error('Đăng xuất thất bại:', error);
       }
+    }
+
+    selectFactory(factory: string): void {
+      this.selectedFactory = factory;
+      // Emit event hoặc lưu vào localStorage để các component khác có thể sử dụng
+      localStorage.setItem('selectedFactory', factory);
+      console.log('Selected factory:', factory);
+      // Có thể thêm logic để thông báo cho các component khác biết factory đã thay đổi
     }
 }

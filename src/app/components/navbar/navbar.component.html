@@ -10,15 +10,19 @@
             <span class="navbar-toggler-icon icon-bar"></span>
         </button>
         <div class="collapse navbar-collapse justify-content-end" id="navigation">
-            <form class="navbar-form custom-search-form" *ngIf="isDashboard()">
-                <div class="input-group no-border">
-                    <input type="text" value="" class="form-control" placeholder="Search...">
-                    <button mat-raised-button type="submit" class="btn btn-white btn-round btn-just-icon">
-                        <i class="material-icons">search</i>
-                        <div class="ripple-container"></div>
-                    </button>
-                </div>
-            </form>
+            <!-- ASM1 and ASM2 Icons -->
+            <div class="asm-icons" *ngIf="isDashboard()">
+                <button mat-raised-button class="btn btn-white btn-just-icon me-2" (click)="selectFactory('ASM1')" [class.active]="selectedFactory === 'ASM1'">
+                    <i class="material-icons">factory</i>
+                    <span class="asm-label">1</span>
+                    <div class="ripple-container"></div>
+                </button>
+                <button mat-raised-button class="btn btn-white btn-just-icon" (click)="selectFactory('ASM2')" [class.active]="selectedFactory === 'ASM2'">
+                    <i class="material-icons">factory</i>
+                    <span class="asm-label">2</span>
+                    <div class="ripple-container"></div>
+                </button>
+            </div>
             <ul class="navbar-nav" *ngIf="isDashboard()">
                 <li class="nav-item">
                     <a class="nav-link" href="javascript:void(0)">

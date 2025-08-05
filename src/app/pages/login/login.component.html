@@ -9,13 +9,13 @@
     <form [formGroup]="loginForm" (ngSubmit)="onLogin()" *ngIf="!isSignup">
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Email</mat-label>
-          <input matInput formControlName="email" type="email" placeholder="Nhập email">
-          <mat-error *ngIf="loginForm.get('email')?.hasError('required')">
-            Email là bắt buộc
+          <mat-label>Mã số nhân viên</mat-label>
+          <input matInput formControlName="employeeId" placeholder="Nhập mã số nhân viên (ASP + 4 số)">
+          <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
+            Mã số nhân viên là bắt buộc
           </mat-error>
-          <mat-error *ngIf="loginForm.get('email')?.hasError('email')">
-            Email không hợp lệ
+          <mat-error *ngIf="loginForm.get('employeeId')?.hasError('pattern')">
+            Mã số nhân viên phải có định dạng ASP + 4 số (VD: ASP0001)
           </mat-error>
         </mat-form-field>
       </div>
@@ -54,13 +54,31 @@
 
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Email</mat-label>
-          <input matInput formControlName="email" type="email" placeholder="Nhập email">
-          <mat-error *ngIf="signupForm.get('email')?.hasError('required')">
-            Email là bắt buộc
+          <mat-label>Mã số nhân viên</mat-label>
+          <input matInput formControlName="employeeId" placeholder="Nhập mã số nhân viên (ASP + 4 số)">
+          <mat-error *ngIf="signupForm.get('employeeId')?.hasError('required')">
+            Mã số nhân viên là bắt buộc
           </mat-error>
-          <mat-error *ngIf="signupForm.get('email')?.hasError('email')">
-            Email không hợp lệ
+          <mat-error *ngIf="signupForm.get('employeeId')?.hasError('pattern')">
+            Mã số nhân viên phải có định dạng ASP + 4 số (VD: ASP0001)
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Bộ phận</mat-label>
+          <mat-select formControlName="department" placeholder="Chọn bộ phận">
+            <mat-option value="WH">WH</mat-option>
+            <mat-option value="QA">QA</mat-option>
+            <mat-option value="ENG">ENG</mat-option>
+            <mat-option value="PLAN">PLAN</mat-option>
+            <mat-option value="PD">PD</mat-option>
+            <mat-option value="CS">CS</mat-option>
+            <mat-option value="ACC">ACC</mat-option>
+          </mat-select>
+          <mat-error *ngIf="signupForm.get('department')?.hasError('required')">
+            Bộ phận là bắt buộc
           </mat-error>
         </mat-form-field>
       </div>

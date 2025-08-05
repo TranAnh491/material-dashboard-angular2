@@ -39,12 +39,12 @@ export class FirebaseAuthService {
   }
 
   // Đăng ký user mới
-  async signUp(email: string, password: string, displayName?: string): Promise<any> {
+  async signUp(email: string, password: string, displayName?: string, department?: string): Promise<any> {
     try {
       const credential = await this.afAuth.createUserWithEmailAndPassword(email, password);
       
       // Tạo user profile trong Firestore
-      await this.createUserProfile(credential.user, displayName);
+      await this.createUserProfile(credential.user, displayName, department);
       
       console.log('✅ Đăng ký thành công:', credential.user.uid);
       return credential;
@@ -85,7 +85,7 @@ export class FirebaseAuthService {
   }
 
   // Tạo user profile trong Firestore
-  private async createUserProfile(user: any, displayName?: string): Promise<void> {
+  private async createUserProfile(user: any, displayName?: string, department?: string): Promise<void> {
     const userRef = this.firestore.doc(`users/${user.uid}`);
     
     const userData: User = {
@@ -93,6 +93,7 @@ export class FirebaseAuthService {
       email: user.email,
       displayName: displayName || user.displayName,
       photoURL: user.photoURL,
+      department: department,
       createdAt: new Date(),
       lastLoginAt: new Date()
     };
