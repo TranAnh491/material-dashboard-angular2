@@ -80,6 +80,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   currentUserDepartment: string = '';
   currentUserId: string = '';
   
+
+  
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
   availablePersons: string[] = ['Tuấn', 'Tình', 'Vũ', 'Phúc', 'Tú', 'Hưng', 'Toàn', 'Ninh'];
@@ -1754,6 +1756,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   canEdit(): boolean {
     return !this.isQADepartment();
   }
+
+
 
   // Preview items to be deleted
   previewDeleteItems(): void {

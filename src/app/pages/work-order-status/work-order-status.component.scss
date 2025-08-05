@@ -780,6 +780,18 @@ html, body {
   }
 }
 
+.missing-materials-field {
+  min-width: 150px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+  }
+  
+  input {
+    font-size: 0.9em;
+  }
+}
+
 // Table styling
 .table-responsive {
   .table {
@@ -1893,6 +1905,45 @@ textarea.mat-input-element {
   }
 }
 
+// Compact missing materials field styling
+.compact-missing-materials-field {
+  width: 100%;
+  min-width: 60px;
+  
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+    margin: 0;
+  }
+  
+  .mat-form-field-infix {
+    padding: 4px 0;
+    border-top: none;
+    font-size: 8px;
+  }
+  
+  .mat-form-field-outline {
+    border: none;
+    background: transparent;
+  }
+  
+  .mat-form-field-outline-start,
+  .mat-form-field-outline-end,
+  .mat-form-field-outline-gap {
+    border: none;
+  }
+  
+  input {
+    font-size: 8px;
+    text-align: center;
+    color: #333;
+    
+    &::placeholder {
+      color: #999;
+      font-size: 7px;
+    }
+  }
+}
+
 // Compact clickable field styling
 .compact-field {
   cursor: pointer;
@@ -2141,7 +2192,9 @@ textarea.mat-input-element {
 .table-container table tbody td .date-field,
 .table-container table tbody td .date-field input,
 .table-container table tbody td .notes-field,
-.table-container table tbody td .notes-field input {
+.table-container table tbody td .notes-field input,
+.table-container table tbody td .missing-materials-field,
+.table-container table tbody td .missing-materials-field input {
   font-size: 13.33px !important;
 }
 
@@ -2190,7 +2243,8 @@ textarea.mat-input-element {
 
 // Ensure date fields have consistent font size
 .table-container table tbody td .date-field,
-.table-container table tbody td .notes-field {
+.table-container table tbody td .notes-field,
+.table-container table tbody td .missing-materials-field {
   font-size: 13.33px !important;
   
   input {
@@ -2208,7 +2262,8 @@ textarea.mat-input-element {
 .table-container table tbody td input,
 .table-container table tbody td span,
 .table-container table tbody td .badge,
-.table-container table tbody td .clickable-field span {
+.table-container table tbody td .clickable-field span,
+.table-container table tbody td .missing-materials-field span {
   font-weight: normal !important;
   color: #666 !important;
   font-size: 11.67px !important; /* Size 10 */
@@ -2484,3 +2539,10 @@ textarea.mat-input-element {
       }
     }
   }
+
+// Red text class for missing materials
+.red-text {
+  color: #ff0000 !important;
+}
+
+
