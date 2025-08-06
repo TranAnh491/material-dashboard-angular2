@@ -32,7 +32,8 @@ export class LoginComponent implements OnInit {
       password: ['', [Validators.required, Validators.minLength(6)]],
       confirmPassword: ['', [Validators.required]],
       displayName: ['', [Validators.required]],
-      department: ['', [Validators.required]]
+      department: ['', [Validators.required]],
+      factory: ['', [Validators.required]]
     });
   }
 
@@ -74,7 +75,7 @@ export class LoginComponent implements OnInit {
 
   async onSignup(): Promise<void> {
     if (this.signupForm.valid) {
-      const { employeeId, password, confirmPassword, displayName, department } = this.signupForm.value;
+      const { employeeId, password, confirmPassword, displayName, department, factory } = this.signupForm.value;
       
       if (password !== confirmPassword) {
         this.showMessage(
@@ -88,7 +89,7 @@ export class LoginComponent implements OnInit {
       try {
         // Chuyển đổi mã số nhân viên thành email để đăng ký
         const email = `${employeeId}@asp.com`;
-        await this.authService.signUp(email, password, displayName, department);
+        await this.authService.signUp(email, password, displayName, department, factory);
         this.showMessage(
           this.currentLanguage === 'en' ? 'Registration successful!' : 'Đăng ký thành công!', 
           'success'

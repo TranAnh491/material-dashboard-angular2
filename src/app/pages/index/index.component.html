@@ -1,0 +1,165 @@
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-body">
+            
+            <!-- Header -->
+            <div class="index-header">
+              <h4 class="section-title">
+                <i class="material-icons">analytics</i> Index Report
+              </h4>
+              <p class="section-description">
+                Import và phân tích dữ liệu để tạo báo cáo tổng hợp
+              </p>
+            </div>
+
+            <!-- Function Selection -->
+            <div class="row function-selection-row">
+              <div class="col-md-12">
+                <div class="function-buttons">
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFunction === 'more'"
+                          (click)="toggleMoreOptions()"
+                          style="color: #000; border: none;"
+                          [style.background]="showMoreOptions ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">more_horiz</i> MORE
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- More Options Section -->
+            <div class="more-options-section" *ngIf="showMoreOptions">
+              <div class="card">
+                <div class="card-body">
+                  <h5 class="card-title">
+                    <i class="material-icons">upload_file</i> Import Options
+                  </h5>
+                  
+                  <div class="import-controls">
+                    <div class="file-input-container">
+                      <input type="file" 
+                             id="excelFileInput" 
+                             accept=".xlsx,.xls" 
+                             (change)="onFileSelected($event)" 
+                             style="display: none;">
+                      <label for="excelFileInput" class="btn btn-primary">
+                        <i class="material-icons">file_upload</i> Import Excel
+                      </label>
+                    </div>
+                    
+                    <div class="import-info">
+                      <p>💡 Hướng dẫn:</p>
+                      <ul>
+                        <li>File Excel phải có header row ở dòng đầu tiên</li>
+                        <li>Dữ liệu sẽ được xử lý và phân tích tự động</li>
+                        <li>File tối đa 10MB</li>
+                      </ul>
+                    </div>
+                    
+                    <div class="import-status" *ngIf="importResults">
+                      <div class="alert" [class]="importResults.error ? 'alert-danger' : 'alert-success'">
+                        <i class="material-icons">{{ importResults.error ? 'error' : 'check_circle' }}</i>
+                        {{ importResults.error || importResults.message }}
+                      </div>
+                    </div>
+                    
+                    <div class="loading-indicator" *ngIf="isImporting">
+                      <div class="progress">
+                        <div class="progress-bar" [style.width.%]="importProgress"></div>
+                      </div>
+                      <span>Đang xử lý file Excel... {{ importProgress }}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row summary-row" *ngIf="summaryData.totalRecords">
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Total Records</p>
+                    <h3 class="card-title">{{ summaryData.totalRecords }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Total Columns</p>
+                    <h3 class="card-title">{{ summaryData.totalColumns }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Processed At</p>
+                    <h3 class="card-title">{{ summaryData.processedAt | date:'HH:mm' }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-3 col-md-6 col-sm-6">
+                <div class="card card-stats compact-stats summary-card">
+                  <div class="card-header">
+                    <p class="card-category">Status</p>
+                    <h3 class="card-title">
+                      <i class="material-icons" style="color: #4caf50;">check_circle</i>
+                    </h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="row data-table-row" *ngIf="processedData.length > 0">
+              <div class="col-md-12">
+                <div class="card">
+                  <div class="card-body">
+                    <h5 class="card-title">
+                      <i class="material-icons">table_chart</i> Processed Data
+                    </h5>
+                    
+                    <div class="table-responsive">
+                      <table class="table table-striped">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th *ngFor="let header of getTableHeaders()">{{ header }}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let row of processedData; let i = index">
+                            <td>{{ i + 1 }}</td>
+                            <td *ngFor="let header of getTableHeaders()">{{ row[header] || '-' }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" *ngIf="!processedData.length && !isImporting">
+              <div class="text-center">
+                <i class="material-icons" style="font-size: 64px; color: #ccc;">analytics</i>
+                <h4>Chưa có dữ liệu</h4>
+                <p>Vui lòng import file Excel để bắt đầu phân tích</p>
+                <button class="btn btn-primary" (click)="toggleMoreOptions()">
+                  <i class="material-icons">upload_file</i> Import Data
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

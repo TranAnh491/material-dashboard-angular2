@@ -17,6 +17,7 @@ export const ROUTES: RouteInfo[] = [
     ]},
     { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
     { path: '/label', title: 'Label', icon: 'label', class: '' },
+    { path: '/index', title: 'Index', icon: 'analytics', class: '' },
     { path: '/bm', title: 'Bonded Materials', icon: 'lock', class: ''},
 
     { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },

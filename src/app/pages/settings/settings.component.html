@@ -169,6 +169,24 @@
                   </td>
                 </ng-container>
 
+                <!-- Factory Column -->
+                <ng-container matColumnDef="factory">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Nhà máy</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                    <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.factory" 
+                            (change)="updateUserFactory(user.uid, user.factory)"
+                            class="simple-select"
+                            style="font-size: 11px; padding: 2px 4px; text-align: center;">
+                      <option value="">Chọn</option>
+                      <option value="ASM1">ASM1</option>
+                      <option value="ASM2">ASM2</option>
+                      <option value="ASM3">ASM3</option>
+                    </select>
+                  </td>
+                </ng-container>
+
                 <!-- Display Name Column -->
                 <ng-container matColumnDef="displayName">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Tên</th>

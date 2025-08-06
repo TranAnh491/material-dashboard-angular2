@@ -28,6 +28,7 @@ import { MaterialsTestComponent } from '../../pages/materials-test/materials-tes
 import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
+import { IndexComponent } from '../../pages/index/index.component';
 import { AuthGuard } from '../../guards/auth.guard';
 
 export const AdminLayoutRoutes: Routes = [
@@ -46,6 +47,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
   { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard] },
   { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard] },
+  { path: 'index',                component: IndexComponent, canActivate: [AuthGuard] },
   { path: 'user-profile',         component: UserProfileComponent, canActivate: [AuthGuard] },
   { path: 'table-list',           component: TableListComponent, canActivate: [AuthGuard] },
   { path: 'typography',           component: TypographyComponent, canActivate: [AuthGuard] },

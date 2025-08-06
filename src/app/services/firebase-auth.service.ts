@@ -10,6 +10,7 @@ export interface User {
   displayName?: string;
   photoURL?: string;
   department?: string;
+  factory?: string;
   createdAt?: Date;
   lastLoginAt?: Date;
 }
@@ -39,12 +40,12 @@ export class FirebaseAuthService {
   }
 
   // Đăng ký user mới
-  async signUp(email: string, password: string, displayName?: string, department?: string): Promise<any> {
+  async signUp(email: string, password: string, displayName?: string, department?: string, factory?: string): Promise<any> {
     try {
       const credential = await this.afAuth.createUserWithEmailAndPassword(email, password);
       
       // Tạo user profile trong Firestore
-      await this.createUserProfile(credential.user, displayName, department);
+      await this.createUserProfile(credential.user, displayName, department, factory);
       
       console.log('✅ Đăng ký thành công:', credential.user.uid);
       return credential;
@@ -85,7 +86,7 @@ export class FirebaseAuthService {
   }
 
   // Tạo user profile trong Firestore
-  private async createUserProfile(user: any, displayName?: string, department?: string): Promise<void> {
+  private async createUserProfile(user: any, displayName?: string, department?: string, factory?: string): Promise<void> {
     const userRef = this.firestore.doc(`users/${user.uid}`);
     
     const userData: User = {
@@ -94,6 +95,7 @@ export class FirebaseAuthService {
       displayName: displayName || user.displayName,
       photoURL: user.photoURL,
       department: department,
+      factory: factory,
       createdAt: new Date(),
       lastLoginAt: new Date()
     };

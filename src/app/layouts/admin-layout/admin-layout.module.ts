@@ -62,6 +62,7 @@ import { MaterialsTestComponent } from '../../pages/materials-test/materials-tes
 import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
+import { IndexComponent } from '../../pages/index/index.component';
 
 @NgModule({
   imports: [
@@ -119,7 +120,8 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
     MaterialsTestComponent,
     FinishedGoodsTestComponent,
     SettingsComponent,
-    PrintLabelComponent
+    PrintLabelComponent,
+    IndexComponent
   ],
   providers: [
     GoogleSheetService

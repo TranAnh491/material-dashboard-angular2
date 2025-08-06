@@ -201,6 +201,7 @@ export class SettingsComponent implements OnInit {
             email: data.email || '',
             displayName: data.displayName || '',
             department: data.department || '', // Load department từ users collection
+            factory: data.factory || '', // Load factory từ users collection
             photoURL: data.photoURL || '',
             createdAt: data.createdAt?.toDate() || new Date(),
             lastLoginAt: data.lastLoginAt?.toDate() || new Date()
@@ -241,6 +242,7 @@ export class SettingsComponent implements OnInit {
             email: currentUser.email,
             displayName: currentUser.displayName || '',
             photoURL: currentUser.photoURL || '',
+            factory: '',
             createdAt: new Date(),
             lastLoginAt: new Date()
           });
@@ -325,9 +327,9 @@ export class SettingsComponent implements OnInit {
   }
 
   async loadFirebaseUserDepartments(): Promise<void> {
-    console.log('🔍 Loading Firebase user departments...');
+    console.log('🔍 Loading Firebase user departments and factories...');
     
-    // Load current departments for all Firebase users
+    // Load current departments and factories for all Firebase users
     for (const user of this.firebaseUsers) {
       try {
         // Đọc từ Firestore collection user-permissions
@@ -337,22 +339,26 @@ export class SettingsComponent implements OnInit {
         if (doc?.exists) {
           const data = doc.data() as any;
           user.department = data.department || '';
-          console.log(`✅ Loaded department for ${user.email}: ${data.department}`);
+          user.factory = data.factory || '';
+          console.log(`✅ Loaded department and factory for ${user.email}: ${data.department}, ${data.factory}`);
         } else {
           // Kiểm tra trong users collection
           const userDoc = await this.firestore.collection('users').doc(user.uid).get().toPromise();
           if (userDoc?.exists) {
             const userData = userDoc.data() as any;
             user.department = userData.department || '';
-            console.log(`✅ Loaded department from users collection for ${user.email}: ${userData.department}`);
+            user.factory = userData.factory || '';
+            console.log(`✅ Loaded department and factory from users collection for ${user.email}: ${userData.department}, ${userData.factory}`);
           } else {
             user.department = ''; // Default to empty
-            console.log(`✅ Default department for ${user.email}: empty`);
+            user.factory = ''; // Default to empty
+            console.log(`✅ Default department and factory for ${user.email}: empty`);
           }
         }
       } catch (error) {
-        console.error(`❌ Error loading department for user ${user.uid}:`, error);
+        console.error(`❌ Error loading department and factory for user ${user.uid}:`, error);
         user.department = ''; // Default to empty on error
+        user.factory = ''; // Default to empty on error
       }
     }
   }
@@ -439,6 +445,7 @@ export class SettingsComponent implements OnInit {
           email: user.email,
           displayName: user.displayName || '',
           department: department,
+          factory: user.factory || '',
           hasEditPermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -448,6 +455,7 @@ export class SettingsComponent implements OnInit {
         const usersRef = this.firestore.collection('users').doc(userId);
         await usersRef.update({
           department: department,
+          factory: user.factory || '',
           updatedAt: new Date()
         });
         
@@ -459,6 +467,48 @@ export class SettingsComponent implements OnInit {
     } catch (error) {
       console.error('❌ Error updating department:', error);
       alert('Có lỗi xảy ra khi cập nhật bộ phận!');
+    }
+  }
+
+  async updateUserFactory(userId: string, factory: string): Promise<void> {
+    try {
+      console.log(`🔄 Updating factory for user ${userId}: ${factory}`);
+      
+      // Tìm user để lấy thông tin
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (user) {
+        // Cập nhật factory trong memory
+        user.factory = factory;
+        
+        // Lưu vào Firestore collection user-permissions
+        const userRef = this.firestore.collection('user-permissions').doc(userId);
+        await userRef.set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          department: user.department || '',
+          factory: factory,
+          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        // Cũng lưu vào users collection để đảm bảo consistency
+        const usersRef = this.firestore.collection('users').doc(userId);
+        await usersRef.update({
+          department: user.department || '',
+          factory: factory,
+          updatedAt: new Date()
+        });
+        
+        console.log(`✅ Factory saved to both collections for user ${userId}: ${factory}`);
+        
+        // Hiển thị thông báo thành công
+        console.log(`✅ Factory updated successfully for ${user.email}: ${factory}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating factory:', error);
+      alert('Có lỗi xảy ra khi cập nhật nhà máy!');
     }
   }
 
@@ -522,7 +572,7 @@ export class SettingsComponent implements OnInit {
 
   // Tạo danh sách columns cho table
   getTableColumns(): string[] {
-    const baseColumns = ['email', 'department', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
+    const baseColumns = ['email', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
     const tabColumns = this.availableTabs.map(tab => 'tab-' + tab.key);
     return [...baseColumns, ...tabColumns];
   }

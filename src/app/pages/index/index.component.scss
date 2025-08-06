@@ -1,0 +1,459 @@
+.main-content {
+  padding: 20px;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.container-fluid {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+// Index Header
+.index-header {
+  margin-bottom: 30px;
+  
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 8px 0;
+    color: #333;
+    font-size: 24px;
+    font-weight: 600;
+    
+    mat-icon, .material-icons {
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+      color: #3f51b5;
+    }
+  }
+  
+  .section-description {
+    margin: 0;
+    color: #666;
+    font-size: 16px;
+  }
+}
+
+// Function Selection
+.function-selection-row {
+  margin-bottom: 25px;
+  
+  .function-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      font-weight: 500;
+      min-width: 100px;
+      
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      &.active {
+        background-color: #fce4ec !important;
+        color: #e91e63 !important;
+      }
+      
+      .material-icons {
+        font-size: 18px;
+      }
+    }
+  }
+}
+
+// More Options Section
+.more-options-section {
+  margin-bottom: 30px;
+  
+  .card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    
+    .card-body {
+      padding: 25px;
+    }
+    
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 20px 0;
+      color: #333;
+      font-size: 18px;
+      font-weight: 600;
+      
+      .material-icons {
+        color: #3f51b5;
+        font-size: 20px;
+      }
+    }
+  }
+  
+  .import-controls {
+    .file-input-container {
+      margin-bottom: 20px;
+      
+      label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        background: #3f51b5;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 500;
+        
+        &:hover {
+          background: #303f9f;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(63, 81, 181, 0.3);
+        }
+        
+        .material-icons {
+          font-size: 18px;
+        }
+      }
+    }
+    
+    .import-info {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      
+      p {
+        margin: 0 0 10px 0;
+        font-weight: 600;
+        color: #1976d2;
+      }
+      
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #424242;
+        
+        li {
+          margin-bottom: 5px;
+        }
+      }
+    }
+    
+    .import-status {
+      margin-bottom: 20px;
+      
+      .alert {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-radius: 6px;
+        border: none;
+        
+        &.alert-success {
+          background: #e8f5e8;
+          color: #2e7d32;
+        }
+        
+        &.alert-danger {
+          background: #ffebee;
+          color: #c62828;
+        }
+        
+        .material-icons {
+          font-size: 20px;
+        }
+      }
+    }
+    
+    .loading-indicator {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      
+      .progress {
+        width: 100%;
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+        
+        .progress-bar {
+          height: 100%;
+          background: linear-gradient(90deg, #3f51b5, #2196f3);
+          transition: width 0.3s ease;
+        }
+      }
+      
+      span {
+        color: #666;
+        font-size: 14px;
+      }
+    }
+  }
+}
+
+// Summary Cards
+.summary-row {
+  margin-bottom: 30px;
+  
+  .summary-card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+    
+    .card-header {
+      padding: 20px;
+      text-align: center;
+      border: none;
+      background: transparent;
+      
+      .card-category {
+        margin: 0 0 8px 0;
+        color: #666;
+        font-size: 14px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .card-title {
+        margin: 0;
+        color: #333;
+        font-size: 28px;
+        font-weight: 700;
+        
+        .material-icons {
+          font-size: 32px;
+        }
+      }
+    }
+  }
+}
+
+// Data Table
+.data-table-row {
+  .card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    
+    .card-body {
+      padding: 25px;
+    }
+    
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 20px 0;
+      color: #333;
+      font-size: 18px;
+      font-weight: 600;
+      
+      .material-icons {
+        color: #3f51b5;
+        font-size: 20px;
+      }
+    }
+  }
+  
+  .table-responsive {
+    border-radius: 6px;
+    overflow: hidden;
+    
+    .table {
+      margin: 0;
+      
+      thead {
+        background: #f8f9fa;
+        
+        th {
+          border: none;
+          padding: 12px 16px;
+          font-weight: 600;
+          color: #333;
+          font-size: 14px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+      }
+      
+      tbody {
+        tr {
+          &:hover {
+            background: #f8f9fa;
+          }
+          
+          td {
+            border: none;
+            padding: 12px 16px;
+            color: #424242;
+            font-size: 14px;
+            vertical-align: middle;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Empty State
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  
+  .material-icons {
+    margin-bottom: 20px;
+  }
+  
+  h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  
+  p {
+    margin: 0 0 25px 0;
+    color: #666;
+    font-size: 16px;
+  }
+  
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    font-weight: 500;
+    
+    .material-icons {
+      font-size: 18px;
+    }
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .main-content {
+    padding: 10px;
+  }
+  
+  .index-header {
+    .section-title {
+      font-size: 20px;
+      
+      .material-icons {
+        font-size: 24px;
+      }
+    }
+    
+    .section-description {
+      font-size: 14px;
+    }
+  }
+  
+  .function-selection-row {
+    .function-buttons {
+      justify-content: center;
+      
+      .btn {
+        min-width: 80px;
+        padding: 6px 12px;
+        font-size: 14px;
+        
+        .material-icons {
+          font-size: 16px;
+        }
+      }
+    }
+  }
+  
+  .more-options-section {
+    .card .card-body {
+      padding: 20px;
+    }
+    
+    .import-controls {
+      .file-input-container label {
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+      
+      .import-info {
+        padding: 12px;
+        font-size: 14px;
+      }
+    }
+  }
+  
+  .summary-row {
+    .summary-card .card-header {
+      padding: 15px;
+      
+      .card-category {
+        font-size: 12px;
+      }
+      
+      .card-title {
+        font-size: 24px;
+      }
+    }
+  }
+  
+  .data-table-row {
+    .card .card-body {
+      padding: 20px;
+    }
+    
+    .table-responsive .table {
+      font-size: 12px;
+      
+      thead th {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+      
+      tbody td {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+    }
+  }
+  
+  .empty-state {
+    padding: 40px 15px;
+    
+    h4 {
+      font-size: 18px;
+    }
+    
+    p {
+      font-size: 14px;
+    }
+  }
+} 
