@@ -44,7 +44,7 @@ export class SettingsComponent implements OnInit {
     { key: 'materials', name: 'Materials', icon: 'inventory_2' },
     { key: 'fg', name: 'Finished Goods', icon: 'check_circle_outline' },
     { key: 'label', name: 'Label', icon: 'label' },
-    { key: 'bm', name: 'Bonded Materials', icon: 'lock' },
+
     { key: 'utilization', name: 'Utilization', icon: 'assessment' },
     { key: 'find', name: 'Find', icon: 'search' },
     { key: 'layout', name: 'Layout', icon: 'grid_view' },

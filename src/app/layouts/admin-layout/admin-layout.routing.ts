@@ -42,7 +42,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard] },
   { path: 'materials',            component: MaterialsInventoryComponent, canActivate: [AuthGuard] },
   { path: 'fg',                   component: TableListComponent, canActivate: [AuthGuard] },
-  { path: 'bm',                   component: TypographyComponent, canActivate: [AuthGuard] },
+
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },
   { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
