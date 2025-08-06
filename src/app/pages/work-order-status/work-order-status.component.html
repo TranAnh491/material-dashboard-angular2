@@ -160,7 +160,7 @@
                   </button>
                   <button class="btn btn-outline-danger" 
                           (click)="showDeleteDialog = true"
-                          *ngIf="hasDeletePermission()"
+                          *ngIf="hasDeletePermissionValue"
                           style="color: #f44336; border: none;">
                     <i class="material-icons">delete</i> XÓA
                   </button>
@@ -505,12 +505,12 @@
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                               <button mat-icon-button color="warn" (click)="deleteWorkOrder(wo)" 
-                                    *ngIf="hasDeletePermission()"
+                                    *ngIf="hasDeletePermissionValue"
                                     matTooltip="Delete Work Order" class="compact-btn"
                                     style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
                               <mat-icon style="font-size: 21px; width: 21px; height: 21px;">delete</mat-icon>
                               </button>
-                              <span *ngIf="!hasDeletePermission()" style="font-size: 10px; color: #999;">Không có quyền</span>
+                              <span *ngIf="!hasDeletePermissionValue" style="font-size: 10px; color: #999;">Không có quyền</span>
                           </td>
                         </tr>
                       </tbody>

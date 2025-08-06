@@ -9,6 +9,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
+import { PermissionService } from '../../services/permission.service';
 
 @Component({
   selector: 'app-work-order-status',
@@ -79,6 +80,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isDeleting: boolean = false;
   currentUserDepartment: string = '';
   currentUserId: string = '';
+  hasDeletePermissionValue: boolean = false;
   
 
   
@@ -112,7 +114,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   constructor(
     private materialService: MaterialLifecycleService,
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private permissionService: PermissionService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -129,8 +132,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       status: this.statusFilter
     });
     
-    // Load user department information
+    // Load user department information and permissions
     this.loadUserDepartment();
+    this.loadDeletePermission();
     
     // Set default function to view
     this.selectedFunction = 'view';
@@ -630,7 +634,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       });
   }
 
-  deleteWorkOrder(workOrder: WorkOrder): void {
+  async deleteWorkOrder(workOrder: WorkOrder): Promise<void> {
+    // Check delete permission first
+    const hasPermission = await this.hasDeletePermission();
+    if (!hasPermission) {
+      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      return;
+    }
+
     // Enhanced confirmation dialog with more details
     const confirmMessage = `⚠️ DELETE WORK ORDER CONFIRMATION ⚠️
 
@@ -685,7 +696,14 @@ Error details: ${error.message || 'Unknown error occurred'}`);
   }
 
   // Add bulk delete functionality for multiple work orders
-  deleteMultipleWorkOrders(workOrders: WorkOrder[]): void {
+  async deleteMultipleWorkOrders(workOrders: WorkOrder[]): Promise<void> {
+    // Check delete permission first
+    const hasPermission = await this.hasDeletePermission();
+    if (!hasPermission) {
+      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      return;
+    }
+
     if (workOrders.length === 0) {
       alert('⚠️ No work orders selected for deletion.');
       return;
@@ -1444,13 +1462,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
-  deleteSelectedWorkOrders(): void {
+  async deleteSelectedWorkOrders(): Promise<void> {
     if (this.selectedWorkOrders.length === 0) {
       alert('⚠️ No work orders selected for deletion.');
       return;
     }
 
-    this.deleteMultipleWorkOrders(this.selectedWorkOrders);
+    await this.deleteMultipleWorkOrders(this.selectedWorkOrders);
     
     // Clear selection after deletion attempt
     this.selectedWorkOrders = [];
@@ -1746,9 +1764,55 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   // Check if user has delete permission
-  hasDeletePermission(): boolean {
-    // QA department cannot delete
-    return !this.isQADepartment();
+  async loadDeletePermission(): Promise<void> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (!user) {
+        console.log('❌ No authenticated user found');
+        this.hasDeletePermissionValue = false;
+        return;
+      }
+
+      // Get user permission from Firebase
+      const userPermission = await this.permissionService.getUserPermission(user.uid);
+      if (!userPermission) {
+        console.log('❌ No user permission found for user:', user.uid);
+        this.hasDeletePermissionValue = false;
+        return;
+      }
+
+      // Check if user has delete permission
+      this.hasDeletePermissionValue = userPermission.hasDeletePermission;
+      console.log('🔐 User delete permission:', this.hasDeletePermissionValue);
+    } catch (error) {
+      console.error('❌ Error loading delete permission:', error);
+      this.hasDeletePermissionValue = false;
+    }
+  }
+
+  async hasDeletePermission(): Promise<boolean> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (!user) {
+        console.log('❌ No authenticated user found');
+        return false;
+      }
+
+      // Get user permission from Firebase
+      const userPermission = await this.permissionService.getUserPermission(user.uid);
+      if (!userPermission) {
+        console.log('❌ No user permission found for user:', user.uid);
+        return false;
+      }
+
+      // Check if user has delete permission
+      const hasPermission = userPermission.hasDeletePermission;
+      console.log('🔐 User delete permission:', hasPermission);
+      return hasPermission;
+    } catch (error) {
+      console.error('❌ Error checking delete permission:', error);
+      return false;
+    }
   }
 
   // Load user department information
@@ -1805,8 +1869,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   // Delete work orders by time range
   async deleteWorkOrdersByTimeRange(): Promise<void> {
-    if (!this.hasDeletePermission()) {
-      alert('❌ Bạn không có quyền xóa dữ liệu!');
+    const hasPermission = await this.hasDeletePermission();
+    if (!hasPermission) {
+      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
       return;
     }
 
