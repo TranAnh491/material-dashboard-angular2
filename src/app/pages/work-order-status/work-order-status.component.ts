@@ -162,6 +162,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.calculateSummary();
   }
 
+  // Helper method to normalize factory names for comparison
+  private normalizeFactoryName(factory: string): string {
+    if (!factory) return '';
+    return factory.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  // Helper method to reset all loading states
+  resetLoadingStates(): void {
+    this.isLoading = false;
+    this.isSaving = false;
+    this.isImporting = false;
+    this.importProgress = 0;
+    console.log('🔄 Reset all loading states');
+  }
+
   onFileSelected(event: any): void {
     const file = event.target.files[0];
     if (file) {
@@ -439,8 +454,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       
       // Filter by selected factory - but be more flexible to handle missing factory data
       const matchesFactory = !this.selectedFactory || 
-                           (wo.factory === this.selectedFactory) || 
+                           (wo.factory && this.normalizeFactoryName(wo.factory) === this.normalizeFactoryName(this.selectedFactory)) || 
                            (!wo.factory && this.selectedFactory === 'ASM1'); // Default to ASM1 if no factory specified
+      
+      // Debug factory matching
+      if (this.selectedFactory && wo.factory) {
+        const normalizedData = this.normalizeFactoryName(wo.factory);
+        const normalizedSelected = this.normalizeFactoryName(this.selectedFactory);
+        console.log(`🔍 Factory comparison: "${wo.factory}" (normalized: "${normalizedData}") === "${this.selectedFactory}" (normalized: "${normalizedSelected}") = ${normalizedData === normalizedSelected}`);
+      }
       
       // Hide completed work orders unless showHiddenWorkOrders is true
       const isNotCompleted = wo.status !== WorkOrderStatus.DONE || this.showHiddenWorkOrders;
@@ -464,6 +486,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log(`📋 Filtered work orders sorted by No:`, this.filteredWorkOrders.map(wo => `${wo.orderNumber}: ${wo.productCode}`));
     console.log(`🏭 Current factory filter: ${this.selectedFactory}`);
     console.log(`📊 Work orders by factory:`, this.workOrders.map(wo => `${wo.orderNumber}: factory=${wo.factory || 'undefined'}`));
+    
+    // Debug: Show all unique factory values in data
+    const uniqueFactories = [...new Set(this.workOrders.map(wo => wo.factory).filter(f => f))];
+    console.log(`🏭 Unique factories in data:`, uniqueFactories);
+    console.log(`🔍 Selected factory: "${this.selectedFactory}"`);
+    console.log(`🔍 Looking for matches with case-insensitive comparison...`);
   }
 
   calculateSummary(): void {
@@ -872,13 +900,55 @@ Please check the console for error details.`);
         throw new Error('No valid work orders found in the Excel file');
       }
       
-      // Step 3: Bulk insert
-      console.log('Step 3: Starting bulk insert...');
+      // Step 3: Check for duplicate LSX (productionOrder) values in Firebase
+      console.log('Step 3: Checking for duplicate LSX in Firebase...');
       this.importProgress = 30;
-      const results = await this.bulkInsertWorkOrders(workOrders);
       
-      // Step 4: Complete
-      console.log('Step 4: Import completed');
+      // Extract all LSX values from the imported data
+      const importedLSX = workOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
+      console.log('📋 LSX values to check:', importedLSX);
+      
+      // Check against Firebase for existing LSX
+      const lsxCheck = await this.checkExistingLSXInFirebase(importedLSX);
+      
+      console.log('📊 Firebase LSX Check Results:');
+      console.log('  - Existing in Firebase:', lsxCheck.existing);
+      console.log('  - New (not in Firebase):', lsxCheck.new);
+      console.log('  - Total imported LSX:', importedLSX.length);
+      console.log('  - Already exist:', lsxCheck.existing.length);
+      console.log('  - New:', lsxCheck.new.length);
+      
+      // Filter work orders based on Firebase check
+      const validWorkOrders: Partial<WorkOrder>[] = [];
+      const duplicates: string[] = [];
+      
+      for (const workOrder of workOrders) {
+        if (workOrder.productionOrder && lsxCheck.existing.includes(workOrder.productionOrder)) {
+          duplicates.push(workOrder.productionOrder);
+          console.warn(`⚠️ LSX already exists in Firebase: ${workOrder.productionOrder}`);
+        } else {
+          validWorkOrders.push(workOrder);
+        }
+      }
+
+      if (duplicates.length > 0) {
+        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
+        console.warn(duplicateMessage);
+        // Don't show alert here, let the bulk insert handle it
+      }
+
+      // Validate data before saving
+      if (validWorkOrders.length === 0) {
+        throw new Error('No valid data found in Excel file (all LSX already exist in Firebase)');
+      }
+
+      // Step 4: Bulk insert
+      console.log('Step 4: Starting bulk insert...');
+      this.importProgress = 40;
+      const results = await this.bulkInsertWorkOrders(validWorkOrders);
+      
+      // Step 5: Complete
+      console.log('Step 5: Import completed');
       this.importResults = results;
       // Progress will be set to 100% by bulkInsertWorkOrders
       
@@ -899,6 +969,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         // Complete success - log to console only
         console.log(`🎉 Import hoàn thành thành công!
 ✅ Đã import thành công: ${results.success} work orders`);
+      }
+
+      // Show duplicate LSX warning if any
+      if (duplicates.length > 0) {
+        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
+        alert(duplicateMessage);
       }
       
       // Always reload data to show any successful imports
@@ -1008,43 +1084,60 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       try {
         console.log(`Processing row ${i}:`, row);
 
-        // Validate required fields with more lenient checking (updated indices since No column removed)
-        if (!row[0] || row[0].toString().trim() === '') { // P/N is required
+        // Validate required fields with updated indices (Factory is now first column)
+        if (!row[4] || row[4].toString().trim() === '') { // P/N is required (now at index 4)
           errors.push(`Row ${i + 1}: Product Code (P/N) is required`);
           continue;
         }
-        if (!row[1] || row[1].toString().trim() === '') { // Work Order is required
+        if (!row[5] || row[5].toString().trim() === '') { // Work Order is required (now at index 5)
           errors.push(`Row ${i + 1}: Work Order is required`);
           continue;
         }
         
         // More lenient quantity check
-        const quantityValue = row[2];
+        const quantityValue = row[6];
         const quantity = parseInt(quantityValue);
         if (!quantityValue || isNaN(quantity) || quantity <= 0) { // Quantity is required and must be positive number
           errors.push(`Row ${i + 1}: Valid positive quantity is required (got: ${quantityValue})`);
           continue;
         }
         
-        if (!row[3] || row[3].toString().trim() === '') { // Customer is required
+        if (!row[7] || row[7].toString().trim() === '') { // Customer is required (now at index 7)
           errors.push(`Row ${i + 1}: Customer is required`);
           continue;
         }
-        if (!row[5] || row[5].toString().trim() === '') { // Line is required
+        if (!row[10] || row[10].toString().trim() === '') { // Line is required (now at index 10)
           errors.push(`Row ${i + 1}: Production Line is required`);
           continue;
+        }
+
+        // Parse factory from Excel (first column in template)
+        let factory = this.selectedFactory; // Default to selected factory
+        if (row[0] && row[0].toString().trim()) { // Factory is in first column (index 0)
+          const factoryValue = row[0].toString().trim();
+          // Validate factory value
+          const validFactories = ['ASM1', 'ASM2', 'Sample 1', 'Sample 2'];
+          if (validFactories.includes(factoryValue)) {
+            factory = factoryValue;
+            console.log(`Row ${i + 1}: Factory set to ${factory}`);
+          } else {
+            console.warn(`Row ${i + 1}: Invalid factory value "${factoryValue}", using default ${this.selectedFactory}`);
+          }
+        } else {
+          console.log(`Row ${i + 1}: No factory specified, using default ${this.selectedFactory}`);
         }
 
         const workOrder: Partial<WorkOrder> = {
           year: new Date().getFullYear(),
           month: new Date().getMonth() + 1,
+          factory: factory, // Use parsed factory value
           orderNumber: '', // Will be auto-assigned based on delivery date sequence
-          productCode: row[0].toString().trim(), // P/N
-          productionOrder: row[1].toString().trim(), // Work Order
-          quantity: quantity, // Use the validated quantity
-          customer: row[3].toString().trim(), // Customer
+          productCode: row[4].toString().trim(), // P/N (now at index 4)
+          productionOrder: row[5].toString().trim(), // Work Order (now at index 5)
+          quantity: quantity, // Use the validated quantity (from index 6)
+          customer: row[7].toString().trim(), // Customer (now at index 7)
           deliveryDate: undefined, // Sẽ gán bên dưới
-          productionLine: row[5].toString().trim(), // Line
+          productionLine: row[10].toString().trim(), // Line (now at index 10)
           status: WorkOrderStatus.WAITING,
           createdBy: 'Excel Import', // Set import source
           checkedBy: '', // Will be set on web
@@ -1055,7 +1148,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         };
 
         // Parse and log Delivery Date
-        const deliveryRaw = row[4];
+        const deliveryRaw = row[9]; // Delivery Date is now at index 9
         const deliveryParsed = this.parseExcelDate(deliveryRaw);
         if (!deliveryParsed || isNaN(deliveryParsed.getTime())) {
           console.warn(`Row ${i + 1}: Delivery Date parse failed! Raw value:`, deliveryRaw, 'Parsed:', deliveryParsed);
@@ -1065,7 +1158,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         workOrder.deliveryDate = deliveryParsed;
 
         // Parse and log Plan Received Date
-        const planRaw = row[6];
+        const planRaw = row[15]; // Plan Received Date is now at index 15
         const planParsed = this.parseExcelDate(planRaw);
         if (!planParsed || isNaN(planParsed.getTime())) {
           console.warn(`Row ${i + 1}: Plan Received Date parse failed! Raw value:`, planRaw, 'Parsed:', planParsed);
@@ -1670,6 +1763,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.error('❌ Error processing Excel data:', error);
       alert(`❌ Lỗi khi xử lý dữ liệu Excel:\n${error.message || error}`);
       this.isLoading = false;
+    } finally {
+      // Always reset isLoading to false, regardless of success or error
+      this.isLoading = false;
     }
   }
 
@@ -1693,6 +1789,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
     
     this.isSaving = false;
+    this.isLoading = false; // Reset isLoading after saving is complete
     
     if (successCount > 0) {
       this.firebaseSaved = true;
@@ -2228,5 +2325,64 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'delay': 'Delay'
     };
     return statusMap[status] || 'Waiting';
+  }
+
+  private async checkExistingLSXInFirebase(lsxValues: string[]): Promise<{ existing: string[], new: string[] }> {
+    console.log('🔍 Checking existing LSX in Firebase for:', lsxValues);
+    
+    try {
+      // Get all existing work orders from Firebase
+      const existingWorkOrders = await this.loadAllWorkOrdersFromFirebase();
+      const existingLSX = existingWorkOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
+      
+      console.log('📊 Found existing LSX in Firebase:', existingLSX);
+      
+      const existing: string[] = [];
+      const newLSX: string[] = [];
+      
+      for (const lsx of lsxValues) {
+        if (existingLSX.includes(lsx)) {
+          existing.push(lsx);
+          console.warn(`⚠️ LSX already exists in Firebase: ${lsx}`);
+        } else {
+          newLSX.push(lsx);
+          console.log(`✅ LSX is new: ${lsx}`);
+        }
+      }
+      
+      console.log(`📊 LSX Check Results:
+        - Total checked: ${lsxValues.length}
+        - Already exist: ${existing.length}
+        - New: ${newLSX.length}`);
+      
+      return { existing, new: newLSX };
+    } catch (error) {
+      console.error('❌ Error checking existing LSX in Firebase:', error);
+      // If we can't check Firebase, assume all are new to be safe
+      return { existing: [], new: lsxValues };
+    }
+  }
+
+  private async loadAllWorkOrdersFromFirebase(): Promise<WorkOrder[]> {
+    console.log('🔄 Loading all work orders from Firebase for LSX check...');
+    
+    try {
+      // Try Firebase v9 SDK first
+      const app = initializeApp(environment.firebase);
+      const db = getFirestore(app);
+      const querySnapshot = await getDocs(collection(db, 'work-orders'));
+      
+      const workOrders: WorkOrder[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as WorkOrder;
+        workOrders.push({ id: doc.id, ...data });
+      });
+      
+      console.log(`✅ Loaded ${workOrders.length} work orders from Firebase for LSX check`);
+      return workOrders;
+    } catch (error) {
+      console.error('❌ Error loading work orders from Firebase for LSX check:', error);
+      throw error;
+    }
   }
 }

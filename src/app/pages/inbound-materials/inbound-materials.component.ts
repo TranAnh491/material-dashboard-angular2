@@ -1,8 +1,29 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
-import { MaterialLifecycle, MaterialStatus, MaterialTransaction, TransactionType } from '../../models/material-lifecycle.model';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import * as XLSX from 'xlsx';
+
+export interface InboundMaterial {
+  id?: string;
+  importDate: Date;
+  batchNumber: string;
+  materialCode: string;
+  poNumber: string;
+  quantity: number;
+  unit: string;
+  location: string;
+  type: string;
+  expiryDate: Date;
+  qualityCheck: string;
+  isReceived: boolean;
+  notes: string;
+  rollsOrBags: string;
+  supplier: string;
+  remarks: string;
+  isCompleted: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 @Component({
   selector: 'app-inbound-materials',
@@ -10,44 +31,14 @@ import { takeUntil } from 'rxjs/operators';
   styleUrls: ['./inbound-materials.component.scss']
 })
 export class InboundMaterialsComponent implements OnInit, OnDestroy {
-  Object = Object;
-  materials: MaterialLifecycle[] = [];
-  filteredMaterials: MaterialLifecycle[] = [];
-  recentTransactions: MaterialTransaction[] = [];
-  
-  // Filters
-  searchTerm: string = '';
-  statusFilter: MaterialStatus | 'all' = 'all';
-  locationFilter: string = 'all';
-  
-  // Summary data
-  todayInbound: number = 0;
-  pendingItems: number = 0;
-  totalQuantity: number = 0;
-  activeLocations: number = 0;
-  
-  // Form data for new inbound
-  newMaterial: Partial<MaterialLifecycle> = {
-    materialCode: '',
-    materialName: '',
-    quantity: 0,
-    location: '',
-    batchNumber: '',
-    supplier: '',
-    status: MaterialStatus.ACTIVE
-  };
-  
-  isAddingMaterial: boolean = false;
-  availableLocations: string[] = [];
+  materials: InboundMaterial[] = [];
   
   private destroy$ = new Subject<void>();
 
-  constructor(private materialService: MaterialLifecycleService) {}
+  constructor() {}
 
   ngOnInit(): void {
-    this.loadMaterials();
-    this.loadRecentTransactions();
-    this.loadAvailableLocations();
+    this.loadMockData();
   }
 
   ngOnDestroy(): void {
@@ -55,235 +46,154 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  loadMaterials(): void {
-    this.materialService.getMaterials()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(materials => {
-        this.materials = materials;
-        this.applyFilters();
-        this.calculateSummary();
-      });
-  }
-
-  loadRecentTransactions(): void {
-    this.materialService.getTransactions()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(transactions => {
-        this.recentTransactions = transactions
-          .filter(t => t.transactionType === TransactionType.INBOUND)
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .slice(0, 10);
-      });
-  }
-
-  loadAvailableLocations(): void {
-    // Define warehouse locations from the SVG layout
-    this.availableLocations = [
-      'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A12',
-      'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9',
-      'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9',
-      'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9',
-      'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9',
-      'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9',
-      'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9',
-      'Inbound Stage', 'IQC', 'WO', 'Quality', 'Secured WH'
+  loadMockData(): void {
+    // Mock data for demonstration
+    this.materials = [
+      {
+        importDate: new Date('2024-01-15'),
+        batchNumber: 'BATCH001',
+        materialCode: 'MAT001',
+        poNumber: 'PO2024001',
+        quantity: 100,
+        unit: 'kg',
+        location: 'A1',
+        type: 'Raw Material',
+        expiryDate: new Date('2025-01-15'),
+        qualityCheck: 'Passed',
+        isReceived: true,
+        notes: 'All items received in good condition',
+        rollsOrBags: '10 rolls',
+        supplier: 'Supplier A',
+        remarks: 'Standard delivery',
+        isCompleted: true
+      },
+      {
+        importDate: new Date('2024-01-16'),
+        batchNumber: 'BATCH002',
+        materialCode: 'MAT002',
+        poNumber: 'PO2024002',
+        quantity: 50,
+        unit: 'pcs',
+        location: 'B2',
+        type: 'Component',
+        expiryDate: new Date('2024-12-31'),
+        qualityCheck: 'Pending',
+        isReceived: false,
+        notes: 'Missing 2 items',
+        rollsOrBags: '25 bags',
+        supplier: 'Supplier B',
+        remarks: 'Check quality before acceptance',
+        isCompleted: false
+      },
+      {
+        importDate: new Date('2024-01-17'),
+        batchNumber: 'BATCH003',
+        materialCode: 'MAT003',
+        poNumber: 'PO2024003',
+        quantity: 200,
+        unit: 'm',
+        location: 'C3',
+        type: 'Fabric',
+        expiryDate: new Date('2026-01-17'),
+        qualityCheck: 'Passed',
+        isReceived: true,
+        notes: 'Quality check completed',
+        rollsOrBags: '5 rolls',
+        supplier: 'Supplier C',
+        remarks: 'Premium quality material',
+        isCompleted: true
+      }
     ];
   }
 
-  applyFilters(): void {
-    this.filteredMaterials = this.materials.filter(material => {
-      const matchesSearch = !this.searchTerm || 
-        material.materialCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        material.materialName.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        material.location.toLowerCase().includes(this.searchTerm.toLowerCase());
-      
-      const matchesStatus = this.statusFilter === 'all' || material.status === this.statusFilter;
-      const matchesLocation = this.locationFilter === 'all' || material.location === this.locationFilter;
-      
-      return matchesSearch && matchesStatus && matchesLocation;
+  importFile(): void {
+    console.log('Import file functionality');
+    alert('Import file functionality will be implemented');
+  }
+
+  downloadTemplate(): void {
+    console.log('Download template');
+    
+    // Create template data
+    const templateData = [
+      {
+        'Ngày nhập': '15/01/2024',
+        'Lô Hàng/ DNNK': 'BATCH001',
+        'Mã hàng': 'MAT001',
+        'Số P.O': 'PO2024001',
+        'Lượng Nhập': 100,
+        'Đơn vị': 'kg',
+        'Vị trí': 'A1',
+        'Loại hình': 'Raw Material',
+        'HSD': '15/01/2025',
+        'KK': 'Passed',
+        'Đã nhận': 'Yes',
+        'Ghi chú': 'All items received',
+        'Số cuộn/ bịch': '10 rolls',
+        'Nhà cung cấp': 'Supplier A',
+        'Lưu ý': 'Standard delivery',
+        'Rồi/Chưa': 'Rồi'
+      }
+    ];
+
+    // Create workbook and worksheet
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+
+    // Generate file and download
+    XLSX.writeFile(wb, 'Inbound_Materials_Template.xlsx');
+  }
+
+  downloadReport(): void {
+    console.log('Download report');
+    
+    // Create report data from current materials
+    const reportData = this.materials.map(material => ({
+      'Ngày nhập': this.formatDate(material.importDate),
+      'Lô Hàng/ DNNK': material.batchNumber,
+      'Mã hàng': material.materialCode,
+      'Số P.O': material.poNumber,
+      'Lượng Nhập': material.quantity,
+      'Đơn vị': material.unit,
+      'Vị trí': material.location,
+      'Loại hình': material.type,
+      'HSD': this.formatDate(material.expiryDate),
+      'KK': material.qualityCheck,
+      'Đã nhận': material.isReceived ? 'Yes' : 'No',
+      'Ghi chú': material.notes,
+      'Số cuộn/ bịch': material.rollsOrBags,
+      'Nhà cung cấp': material.supplier,
+      'Lưu ý': material.remarks,
+      'Rồi/Chưa': material.isCompleted ? 'Rồi' : 'Chưa'
+    }));
+
+    // Create workbook and worksheet
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(reportData);
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Inbound Materials Report');
+
+    // Generate file and download
+    XLSX.writeFile(wb, `Inbound_Materials_Report_${this.formatDate(new Date())}.xlsx`);
+  }
+
+  updateReceivedStatus(material: InboundMaterial, isReceived: boolean): void {
+    material.isReceived = isReceived;
+    console.log(`Updated received status for ${material.materialCode}: ${isReceived}`);
+    
+    // Here you would typically save to Firebase
+    // this.materialService.updateMaterial(material);
+  }
+
+  private formatDate(date: Date): string {
+    return date.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
-  }
-
-  calculateSummary(): void {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    this.todayInbound = this.materials.filter(m => {
-      const lastUpdated = new Date(m.lastUpdated);
-      lastUpdated.setHours(0, 0, 0, 0);
-      return lastUpdated.getTime() === today.getTime() && m.status === MaterialStatus.ACTIVE;
-    }).length;
-    
-    this.pendingItems = this.materials.filter(m => 
-      m.status === MaterialStatus.QUARANTINE
-    ).length;
-    
-    this.totalQuantity = this.materials.reduce((sum, m) => sum + m.quantity, 0);
-    
-    const locations = new Set(this.materials.map(m => m.location));
-    this.activeLocations = locations.size;
-  }
-
-  onSearchChange(): void {
-    this.applyFilters();
-  }
-
-  onStatusFilterChange(): void {
-    this.applyFilters();
-  }
-
-  onLocationFilterChange(): void {
-    this.applyFilters();
-  }
-
-  addNewMaterial(): void {
-    if (this.isValidMaterial()) {
-      const material: Partial<MaterialLifecycle> = {
-        ...this.newMaterial,
-        manufacturingDate: new Date(),
-        lastUpdated: new Date(),
-        expiryDate: this.calculateExpiryDate(),
-        status: MaterialStatus.ACTIVE,
-        costCenter: 'INBOUND',
-        unitOfMeasure: 'PC'
-      };
-
-      this.materialService.addMaterial(material as MaterialLifecycle)
-        .then(() => {
-          this.resetForm();
-          this.isAddingMaterial = false;
-        })
-        .catch(error => {
-          console.error('Error adding material:', error);
-        });
-    }
-  }
-
-  private isValidMaterial(): boolean {
-    return !!(
-      this.newMaterial.materialCode &&
-      this.newMaterial.materialName &&
-      this.newMaterial.quantity && this.newMaterial.quantity > 0 &&
-      this.newMaterial.location &&
-      this.newMaterial.batchNumber &&
-      this.newMaterial.supplier
-    );
-  }
-
-  private calculateExpiryDate(): Date {
-    // Default 1 year expiry from today
-    const expiryDate = new Date();
-    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-    return expiryDate;
-  }
-
-  resetForm(): void {
-    this.newMaterial = {
-      materialCode: '',
-      materialName: '',
-      quantity: 0,
-      location: '',
-      batchNumber: '',
-      supplier: '',
-      status: MaterialStatus.ACTIVE
-    };
-  }
-
-  updateMaterialStatus(material: MaterialLifecycle, newStatus: MaterialStatus): void {
-    const updatedMaterial = { ...material, status: newStatus, lastUpdated: new Date() };
-    
-    this.materialService.updateMaterial(material.id!, updatedMaterial)
-      .then(() => {
-        // Create transaction record for status change
-        const transaction: Partial<MaterialTransaction> = {
-          materialId: material.id!,
-          transactionType: TransactionType.ADJUSTMENT,
-          quantity: material.quantity,
-          location: material.location,
-          timestamp: new Date(),
-          performedBy: 'System',
-          notes: `Status changed from ${material.status} to ${newStatus}`
-        };
-        
-        return this.materialService.addTransaction(transaction as MaterialTransaction);
-      })
-      .catch(error => {
-        console.error('Error updating material status:', error);
-      });
-  }
-
-  deleteMaterial(material: MaterialLifecycle): void {
-    if (confirm(`Are you sure you want to delete ${material.materialCode}?`)) {
-      this.materialService.deleteMaterial(material.id!)
-        .then(() => {
-          // Record deletion transaction
-          const transaction: Partial<MaterialTransaction> = {
-            materialId: material.id!,
-            transactionType: TransactionType.OUTBOUND,
-            quantity: material.quantity,
-            location: material.location,
-            timestamp: new Date(),
-            performedBy: 'System',
-            notes: `Material ${material.materialCode} deleted from inbound`
-          };
-          
-          return this.materialService.addTransaction(transaction as MaterialTransaction);
-        })
-        .catch(error => {
-          console.error('Error deleting material:', error);
-        });
-    }
-  }
-
-  getStatusClass(status: MaterialStatus): string {
-    switch (status) {
-      case MaterialStatus.ACTIVE: return 'status-active';
-      case MaterialStatus.EXPIRING_SOON: return 'status-expiring';
-      case MaterialStatus.EXPIRED: return 'status-expired';
-      case MaterialStatus.CONSUMED: return 'status-consumed';
-      case MaterialStatus.QUARANTINE: return 'status-quarantine';
-      default: return '';
-    }
-  }
-
-  getLocationKeys(): string[] {
-    return Object.keys(this.getLocationSummary());
-  }
-
-  getLocationSummary(): { [key: string]: number } {
-    const summary: { [key: string]: number } = {};
-    this.filteredMaterials.forEach(material => {
-      summary[material.location] = (summary[material.location] || 0) + 1;
-    });
-    return summary;
-  }
-
-  getLocationCount(location: string): number {
-    return this.getLocationSummary()[location] || 0;
-  }
-
-  exportToCSV(): void {
-    const headers = ['Material Code', 'Material Name', 'Quantity', 'Location', 'Batch Number', 'Supplier', 'Status', 'Last Updated'];
-    const csvContent = [
-      headers.join(','),
-      ...this.filteredMaterials.map(material => [
-        material.materialCode,
-        material.materialName,
-        material.quantity,
-        material.location,
-        material.batchNumber,
-        material.supplier,
-        material.status,
-        new Date(material.lastUpdated).toLocaleDateString()
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inbound-materials-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
   }
 }

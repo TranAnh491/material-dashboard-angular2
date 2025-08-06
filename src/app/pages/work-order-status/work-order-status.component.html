@@ -38,7 +38,9 @@
                 <div class="import-info">
                   <p>💡 Hướng dẫn:</p>
                   <ul>
-                    <li>File Excel phải có header: Năm, Tháng, Số thứ tự, Mã sản phẩm, Lệnh sản xuất, Số lượng, Khách hàng, Ngày giao hàng, Line sản xuất, Trạng thái, Người tạo, Ngày nhận kế hoạch, Ghi chú</li>
+                    <li>File Excel phải có header: Nhà Máy, Năm, Tháng, STT, Mã TP VN, LSX, Lượng sản phẩm, Khách hàng, Gấp, Ngày Giao NVL, Line, NVL thiếu, Người soạn, Tình trạng, Đủ/Thiếu, Ngày nhận thông tin, Ghi Chú</li>
+                    <li>Nhà Máy phải là một trong: ASM1, ASM2, Sample 1, Sample 2</li>
+                    <li>Nếu không có Nhà Máy, sẽ sử dụng nhà máy đang chọn ({{selectedFactory}})</li>
                     <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
                     <li>File tối đa 10MB</li>
                   </ul>
@@ -56,6 +58,9 @@
                 <div class="loading-indicator" *ngIf="isLoading">
                   <div class="spinner"></div>
                   <span>Đang xử lý file Excel...</span>
+                  <button class="btn btn-sm btn-outline-warning ms-2" (click)="resetLoadingStates()">
+                    <i class="material-icons">refresh</i> Reset
+                  </button>
                 </div>
               </div>
             </div>
