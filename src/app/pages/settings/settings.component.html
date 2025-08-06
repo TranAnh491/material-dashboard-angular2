@@ -66,6 +66,32 @@
         </button>
       </div>
 
+      <!-- New User Notifications Section -->
+      <div class="new-user-notifications-section" *ngIf="newUserNotifications.length > 0">
+        <div class="section-header">
+          <h3 style="margin: 0; font-size: 18px; color: #f44336;">
+            <mat-icon style="font-size: 20px; margin-right: 8px; color: #f44336;">notifications_active</mat-icon>
+            Tài khoản mới đăng ký ({{ newUserNotifications.length }})
+          </h3>
+        </div>
+        
+        <div class="notifications-list">
+          <div class="notification-item" *ngFor="let notification of newUserNotifications">
+            <div class="notification-content">
+              <div class="user-info">
+                <strong>{{ notification.displayName || notification.userEmail }}</strong>
+                <span class="user-details">
+                  {{ notification.department }} • {{ notification.factory }} • {{ notification.role }}
+                </span>
+              </div>
+              <div class="notification-time">
+                {{ notification.createdAt | date:'dd/MM/yyyy HH:mm' }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
 
 
         <!-- Firebase Users Section -->
@@ -143,7 +169,27 @@
                 <ng-container matColumnDef="email">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Tài khoản</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
-                    {{ getAccountDisplay(user) }}
+                    <span [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : 'inherit'" 
+                          [style.fontWeight]="user.uid === 'special-steve-uid' ? 'bold' : 'normal'">
+                      {{ getAccountDisplay(user) }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <!-- Role Column -->
+                <ng-container matColumnDef="role">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Vai trò</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                    <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.role" 
+                            (change)="updateUserRole(user.uid, user.role)"
+                            class="simple-select"
+                            style="font-size: 11px; padding: 2px 4px; text-align: center;">
+                      <option value="User">User</option>
+                      <option value="Quản lý">Quản lý</option>
+                      <option value="Admin">Admin</option>
+                    </select>
                   </td>
                 </ng-container>
 
@@ -206,7 +252,7 @@
                     <mat-slide-toggle
                       [checked]="firebaseUserPermissions[user.uid] || false"
                       (change)="updateUserPermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions"
+                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                       color="primary"
                       style="transform: scale(0.8);">
                     </mat-slide-toggle>
@@ -228,6 +274,7 @@
                 <button mat-icon-button 
                         color="warn" 
                         (click)="deleteFirebaseUser(user)"
+                        [disabled]="user.uid === 'special-steve-uid'"
                         matTooltip="Xóa user"
                         style="transform: scale(0.8);">
                   <mat-icon style="font-size: 16px;">delete</mat-icon>
@@ -242,7 +289,7 @@
                 <mat-slide-toggle
                   [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                   (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
-                  [disabled]="!isEditingPermissions"
+                  [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                   color="primary"
                   style="transform: scale(0.8);">
                 </mat-slide-toggle>

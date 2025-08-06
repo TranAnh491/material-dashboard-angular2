@@ -33,7 +33,8 @@ export class LoginComponent implements OnInit {
       confirmPassword: ['', [Validators.required]],
       displayName: ['', [Validators.required]],
       department: ['', [Validators.required]],
-      factory: ['', [Validators.required]]
+      factory: ['', [Validators.required]],
+      role: ['User', [Validators.required]]
     });
   }
 
@@ -57,6 +58,20 @@ export class LoginComponent implements OnInit {
       this.loading = true;
       try {
         const { employeeId, password } = this.loginForm.value;
+        
+        // Xử lý tài khoản đặc biệt Steve
+        if (employeeId === 'Steve' && password === '999') {
+          await this.authService.signInSpecialUser('Steve', 'steve@asp.com');
+          this.showMessage(
+            this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
+            'success'
+          );
+          this.router.navigate(['/dashboard']);
+          return;
+        }
+
+
+        
         // Chuyển đổi mã số nhân viên thành email để đăng nhập
         const email = `${employeeId}@asp.com`;
         await this.authService.signIn(email, password);
@@ -75,7 +90,7 @@ export class LoginComponent implements OnInit {
 
   async onSignup(): Promise<void> {
     if (this.signupForm.valid) {
-      const { employeeId, password, confirmPassword, displayName, department, factory } = this.signupForm.value;
+      const { employeeId, password, confirmPassword, displayName, department, factory, role } = this.signupForm.value;
       
       if (password !== confirmPassword) {
         this.showMessage(
@@ -89,7 +104,7 @@ export class LoginComponent implements OnInit {
       try {
         // Chuyển đổi mã số nhân viên thành email để đăng ký
         const email = `${employeeId}@asp.com`;
-        await this.authService.signUp(email, password, displayName, department, factory);
+        await this.authService.signUp(email, password, displayName, department, factory, role);
         this.showMessage(
           this.currentLanguage === 'en' ? 'Registration successful!' : 'Đăng ký thành công!', 
           'success'

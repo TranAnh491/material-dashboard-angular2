@@ -5,155 +5,442 @@
         <div class="card">
           <div class="card-body">
             
-            <!-- Header -->
-            <div class="index-header">
+            <!-- Import Section -->
+            <div class="import-section" *ngIf="selectedFunction === 'import'">
               <h4 class="section-title">
-                <i class="material-icons">analytics</i> Index Report
+                <i class="material-icons">upload_file</i> Import Dữ liệu NVL
               </h4>
-              <p class="section-description">
-                Import và phân tích dữ liệu để tạo báo cáo tổng hợp
-              </p>
+              
+              <div class="import-controls">
+                <div class="file-types-container">
+                  <h5 class="file-types-title">Chọn loại file để import:</h5>
+                  
+                  <div class="file-types-grid">
+                    <!-- File Tồn đầu SXXK -->
+                    <div class="file-type-card" (click)="selectFileType('ton-dau-sxxk')" [class.selected]="selectedFileType === 'ton-dau-sxxk'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">inventory</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Tồn đầu SXXK</h6>
+                        <p>Dữ liệu tồn đầu theo SXXK</p>
+                      </div>
+                    </div>
+
+                    <!-- File Bảng Kê Xuất -->
+                    <div class="file-type-card" (click)="selectFileType('bang-ke-xuat')" [class.selected]="selectedFileType === 'bang-ke-xuat'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">exit_to_app</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Bảng Kê Xuất</h6>
+                        <p>Bảng kê xuất kho</p>
+                      </div>
+                    </div>
+
+                    <!-- File Bảng Kê Nhập -->
+                    <div class="file-type-card" (click)="selectFileType('bang-ke-nhap')" [class.selected]="selectedFileType === 'bang-ke-nhap'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">input</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Bảng Kê Nhập</h6>
+                        <p>Bảng kê nhập kho</p>
+                      </div>
+                    </div>
+
+                    <!-- File Báo Cáo Tồn Kho Hiện Tại -->
+                    <div class="file-type-card" (click)="selectFileType('bao-cao-ton-hien-tai')" [class.selected]="selectedFileType === 'bao-cao-ton-hien-tai'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">assessment</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Báo Cáo Tồn Kho Hiện Tại</h6>
+                        <p>Báo cáo tồn kho hiện tại</p>
+                      </div>
+                    </div>
+
+                    <!-- File Báo Cáo Tồn Kho 2024 -->
+                    <div class="file-type-card" (click)="selectFileType('bao-cao-ton-2024')" [class.selected]="selectedFileType === 'bao-cao-ton-2024'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">analytics</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Báo Cáo Tồn Kho 2024</h6>
+                        <p>Báo cáo tồn kho năm 2024</p>
+                      </div>
+                    </div>
+
+                    <!-- File Tiêu Hủy -->
+                    <div class="file-type-card" (click)="selectFileType('tieu-huy')" [class.selected]="selectedFileType === 'tieu-huy'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">delete_forever</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File Tiêu Hủy</h6>
+                        <p>Dữ liệu tiêu hủy</p>
+                      </div>
+                    </div>
+
+                    <!-- File CNVN -->
+                    <div class="file-type-card" (click)="selectFileType('cnvn')" [class.selected]="selectedFileType === 'cnvn'">
+                      <div class="file-type-icon">
+                        <i class="material-icons">person</i>
+                      </div>
+                      <div class="file-type-info">
+                        <h6>File CNVN</h6>
+                        <p>Dữ liệu CNVN</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="file-input-container" *ngIf="selectedFileType">
+                  <input type="file" 
+                         id="excelFileInput" 
+                         accept=".xlsx,.xls" 
+                         (change)="onFileSelected($event)" 
+                         style="display: none;">
+                  <label for="excelFileInput" class="btn btn-primary">
+                    <i class="material-icons">file_upload</i> Chọn file Excel
+                  </label>
+                  <button class="btn btn-outline-info" (click)="showTimeRangeDialog = true">
+                    <i class="material-icons">schedule</i> Chọn thời gian
+                  </button>
+                  <button class="btn btn-outline-success" (click)="exportIndexDataByTimeRange()">
+                    <i class="material-icons">download</i> Tải về
+                  </button>
+                  <button class="btn btn-outline-primary" (click)="downloadTemplate()">
+                    <i class="material-icons">download</i> Tải Form
+                  </button>
+                  <button mat-raised-button color="accent" (click)="showAllIndexData()" class="btn btn-outline-warning">
+                    <mat-icon>visibility</mat-icon> Hiển thị tất cả
+                  </button>
+                </div>
+
+                <!-- Imported Files List -->
+                <div class="imported-files-section" *ngIf="selectedFileType">
+                  <div class="section-header">
+                    <h5 class="section-title">
+                      <i class="material-icons">folder</i> 
+                      Files đã import cho {{getFileTypeName(selectedFileType)}}
+                    </h5>
+                    <span class="file-count">{{importedFiles.length}} files</span>
+                  </div>
+
+                  <div class="loading-files" *ngIf="isLoadingFiles">
+                    <div class="spinner"></div>
+                    <span>Đang tải danh sách files...</span>
+                  </div>
+
+                  <div class="imported-files-list" *ngIf="!isLoadingFiles">
+                    <div class="no-files" *ngIf="importedFiles.length === 0">
+                      <i class="material-icons">folder_open</i>
+                      <p>Chưa có file nào được import cho loại này</p>
+                    </div>
+
+                    <div class="file-item" *ngFor="let file of importedFiles" [class.error]="file.status === 'error'">
+                      <div class="file-info">
+                        <div class="file-header">
+                          <div class="file-name">
+                            <i class="material-icons">description</i>
+                            <span>{{file.fileName}}</span>
+                          </div>
+                          <div class="file-status">
+                            <i class="material-icons" [style.color]="getStatusColor(file.status)">
+                              {{getStatusIcon(file.status)}}
+                            </i>
+                            <span class="status-text" [style.color]="getStatusColor(file.status)">
+                              {{file.status === 'success' ? 'Thành công' : 
+                                file.status === 'error' ? 'Lỗi' : 'Đang xử lý'}}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div class="file-details">
+                          <div class="detail-item">
+                            <i class="material-icons">storage</i>
+                            <span>{{getFileSizeDisplay(file.fileSize)}}</span>
+                          </div>
+                          <div class="detail-item">
+                            <i class="material-icons">person</i>
+                            <span>{{file.importedBy}}</span>
+                          </div>
+                          <div class="detail-item">
+                            <i class="material-icons">schedule</i>
+                            <span>{{file.importDate | date:'dd/MM/yyyy HH:mm'}}</span>
+                          </div>
+                          <div class="detail-item">
+                            <i class="material-icons">list</i>
+                            <span>{{file.recordCount}} records</span>
+                          </div>
+                        </div>
+
+                        <div class="error-message" *ngIf="file.status === 'error' && file.errorMessage">
+                          <i class="material-icons">error_outline</i>
+                          <span>{{file.errorMessage}}</span>
+                        </div>
+                      </div>
+
+                      <div class="file-actions">
+                        <button class="btn btn-sm btn-outline-danger" 
+                                (click)="deleteImportedFile(file.id)"
+                                matTooltip="Xóa file">
+                          <i class="material-icons">delete</i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="import-info" *ngIf="selectedFileType">
+                  <p>💡 Hướng dẫn cho <strong>{{getFileTypeName(selectedFileType)}}</strong>:</p>
+                  <ul>
+                    <li>File Excel phải có định dạng phù hợp với loại file đã chọn</li>
+                    <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
+                    <li>File tối đa 10MB</li>
+                    <li>Format chi tiết sẽ được cập nhật sau</li>
+                  </ul>
+                </div>
+                
+                <div class="firebase-status" *ngIf="firebaseSaved">
+                  <span class="status-success">✅ Đã lưu vào Firebase</span>
+                </div>
+                
+                <div class="loading-indicator" *ngIf="isSaving">
+                  <div class="spinner"></div>
+                  <span>Đang lưu vào Firebase...</span>
+                </div>
+                
+                <div class="loading-indicator" *ngIf="isLoading">
+                  <div class="spinner"></div>
+                  <span>Đang xử lý file Excel...</span>
+                </div>
+              </div>
             </div>
 
-            <!-- Function Selection -->
-            <div class="row function-selection-row">
+            <!-- Action Buttons -->
+            <div class="row action-buttons-row">
               <div class="col-md-12">
-                <div class="function-buttons">
-                  <button class="btn btn-outline-primary" 
-                          [class.active]="selectedFunction === 'more'"
-                          (click)="toggleMoreOptions()"
-                          style="color: #000; border: none;"
-                          [style.background]="showMoreOptions ? '#fce4ec' : 'transparent'">
-                    <i class="material-icons">more_horiz</i> MORE
+                <div class="action-buttons">
+                  <!-- More Button - Dropdown -->
+                  <div class="dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle" 
+                            type="button" 
+                            id="moreDropdown" 
+                            data-toggle="dropdown" 
+                            aria-haspopup="true" 
+                            aria-expanded="false">
+                      <i class="material-icons">more_horiz</i>
+                      <span>MORE</span>
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="moreDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" (click)="selectFunction('import'); $event.preventDefault()">
+                        <i class="material-icons">file_upload</i> Import File
+                      </a>
+                      <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
+                        <i class="material-icons">download</i> Tải Template
+                      </a>
+                      <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); $event.preventDefault()">
+                        <i class="material-icons">assessment</i> Tải Report
+                      </a>
+                    </div>
+                  </div>
+
+                  <!-- Back Button -->
+                  <button class="btn btn-outline-secondary" (click)="goBack()">
+                    <i class="material-icons">arrow_back</i>
+                    <span>BACK</span>
+                  </button>
+
+                  <!-- Delete Button -->
+                  <button class="btn btn-outline-danger" (click)="showDeleteDialog = true" *ngIf="hasDeletePermission()">
+                    <i class="material-icons">delete</i>
+                    <span>DELETE</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            <!-- More Options Section -->
-            <div class="more-options-section" *ngIf="showMoreOptions">
-              <div class="card">
-                <div class="card-body">
-                  <h5 class="card-title">
-                    <i class="material-icons">upload_file</i> Import Options
-                  </h5>
-                  
-                  <div class="import-controls">
-                    <div class="file-input-container">
-                      <input type="file" 
-                             id="excelFileInput" 
-                             accept=".xlsx,.xls" 
-                             (change)="onFileSelected($event)" 
-                             style="display: none;">
-                      <label for="excelFileInput" class="btn btn-primary">
-                        <i class="material-icons">file_upload</i> Import Excel
-                      </label>
-                    </div>
-                    
-                    <div class="import-info">
-                      <p>💡 Hướng dẫn:</p>
-                      <ul>
-                        <li>File Excel phải có header row ở dòng đầu tiên</li>
-                        <li>Dữ liệu sẽ được xử lý và phân tích tự động</li>
-                        <li>File tối đa 10MB</li>
-                      </ul>
-                    </div>
-                    
-                    <div class="import-status" *ngIf="importResults">
-                      <div class="alert" [class]="importResults.error ? 'alert-danger' : 'alert-success'">
-                        <i class="material-icons">{{ importResults.error ? 'error' : 'check_circle' }}</i>
-                        {{ importResults.error || importResults.message }}
-                      </div>
-                    </div>
-                    
-                    <div class="loading-indicator" *ngIf="isImporting">
-                      <div class="progress">
-                        <div class="progress-bar" [style.width.%]="importProgress"></div>
-                      </div>
-                      <span>Đang xử lý file Excel... {{ importProgress }}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Summary Cards -->
-            <div class="row summary-row" *ngIf="summaryData.totalRecords">
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats compact-stats summary-card">
-                  <div class="card-header">
-                    <p class="card-category">Total Records</p>
-                    <h3 class="card-title">{{ summaryData.totalRecords }}</h3>
-                  </div>
-                </div>
-              </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats compact-stats summary-card">
-                  <div class="card-header">
-                    <p class="card-category">Total Columns</p>
-                    <h3 class="card-title">{{ summaryData.totalColumns }}</h3>
-                  </div>
-                </div>
-              </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats compact-stats summary-card">
-                  <div class="card-header">
-                    <p class="card-category">Processed At</p>
-                    <h3 class="card-title">{{ summaryData.processedAt | date:'HH:mm' }}</h3>
-                  </div>
-                </div>
-              </div>
-              <div class="col-lg-3 col-md-6 col-sm-6">
-                <div class="card card-stats compact-stats summary-card">
-                  <div class="card-header">
-                    <p class="card-category">Status</p>
-                    <h3 class="card-title">
-                      <i class="material-icons" style="color: #4caf50;">check_circle</i>
-                    </h3>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Data Table -->
-            <div class="row data-table-row" *ngIf="processedData.length > 0">
+            <!-- Add NVL Data Form -->
+            <div class="row" *ngIf="isAddingIndexData">
               <div class="col-md-12">
-                <div class="card">
+                <div class="card compact-form">
+                  <div class="card-header card-header-success">
+                    <h4 class="card-title">Thêm Dữ liệu NVL</h4>
+                  </div>
                   <div class="card-body">
-                    <h5 class="card-title">
-                      <i class="material-icons">table_chart</i> Processed Data
-                    </h5>
-                    
-                    <div class="table-responsive">
-                      <table class="table table-striped">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th *ngFor="let header of getTableHeaders()">{{ header }}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr *ngFor="let row of processedData; let i = index">
-                            <td>{{ i + 1 }}</td>
-                            <td *ngFor="let header of getTableHeaders()">{{ row[header] || '-' }}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                    <form>
+                      <div class="row">
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Mã NVL</mat-label>
+                            <input matInput [(ngModel)]="newIndexData.materialCode" name="materialCode" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Tồn đầu E31</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.openingStockE31" name="openingStockE31" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Tồn đầu ND</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.openingStockND" name="openingStockND" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>NK E31</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.importE31" name="importE31" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>NK ND</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.importND" name="importND" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>PN E31</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.receiptE31" name="receiptE31" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>PN ND</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.receiptND" name="receiptND" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>PX E31</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.issueE31" name="issueE31" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>PX ND</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.issueND" name="issueND" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Tồn cuối E31</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.closingStockE31" name="closingStockE31" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Tồn cuối ND</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.closingStockND" name="closingStockND" required>
+                          </mat-form-field>
+                        </div>
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>Tồn BCTK</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.reportStock" name="reportStock" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-3">
+                          <mat-form-field class="full-width">
+                            <mat-label>SS BCTK</mat-label>
+                            <input matInput type="number" [(ngModel)]="newIndexData.reportDifference" name="reportDifference" required>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-12">
+                          <button mat-raised-button color="primary" (click)="addNewIndexData()" [disabled]="!isValidIndexData()">
+                            <mat-icon>save</mat-icon> Lưu Dữ liệu NVL
+                          </button>
+                          <button mat-raised-button (click)="isAddingIndexData = false; resetForm()" class="ml-2">
+                            <mat-icon>cancel</mat-icon> Hủy
+                          </button>
+                        </div>
+                      </div>
+                    </form>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Empty State -->
-            <div class="empty-state" *ngIf="!processedData.length && !isImporting">
-              <div class="text-center">
-                <i class="material-icons" style="font-size: 64px; color: #ccc;">analytics</i>
-                <h4>Chưa có dữ liệu</h4>
-                <p>Vui lòng import file Excel để bắt đầu phân tích</p>
-                <button class="btn btn-primary" (click)="toggleMoreOptions()">
-                  <i class="material-icons">upload_file</i> Import Data
-                </button>
+            <!-- NVL Data Table -->
+            <div class="row table-row">
+              <div class="col-md-12">
+                <div class="card table-card">
+                  <div class="card-body table-responsive table-container">
+                    <table class="table table-hover compact-table">
+                      <thead class="text-primary">
+                        <tr>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 80px; font-size: 13.33px; font-weight: normal;">Mã NVL</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 70px; font-size: 13.33px; font-weight: normal;">Tồn đầu E31</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 70px; font-size: 13.33px; font-weight: normal;">Tồn đầu ND</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">NK E31</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">NK ND</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">PN E31</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">PN ND</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">PX E31</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">PX ND</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 70px; font-size: 13.33px; font-weight: normal;">Tồn cuối E31</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 70px; font-size: 13.33px; font-weight: normal;">Tồn cuối ND</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 70px; font-size: 13.33px; font-weight: normal;">Tồn BCTK</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 60px; font-size: 13.33px; font-weight: normal;">SS BCTK</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 13.33px; font-weight: normal;">Sửa</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 13.33px; font-weight: normal;">Xóa</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let data of filteredIndexData; let i = index" 
+                            [class]="getStatusClass(data.status || 'active') + (isSelected(data) ? ' selected-row' : '')">
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.materialCode}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.openingStockE31 | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.openingStockND | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.importE31 | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.importND | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.receiptE31 | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.receiptND | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.issueE31 | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.issueND | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.closingStockE31 | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.closingStockND | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.reportStock | number}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{data.reportDifference | number}}</td>
+                          <td style="text-align: center; vertical-align: middle;">
+                              <button mat-icon-button color="primary" (click)="editIndexData(data)" 
+                                    *ngIf="canEdit()"
+                                    matTooltip="Edit NVL Data" class="compact-btn"
+                                    style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                              <mat-icon style="font-size: 21px; width: 21px; height: 21px;">edit</mat-icon>
+                              </button>
+                              <span *ngIf="!canEdit()" style="font-size: 10px; color: #999;">Không có quyền</span>
+                          </td>
+                          <td style="text-align: center; vertical-align: middle;">
+                              <button mat-icon-button color="warn" (click)="deleteIndexData(data)" 
+                                    *ngIf="hasDeletePermission()"
+                                    matTooltip="Delete NVL Data" class="compact-btn"
+                                    style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                              <mat-icon style="font-size: 21px; width: 21px; height: 21px;">delete</mat-icon>
+                              </button>
+                              <span *ngIf="!hasDeletePermission()" style="font-size: 10px; color: #999;">Không có quyền</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    
+                    <div *ngIf="filteredIndexData.length === 0" class="no-data">
+                      <p>Không tìm thấy dữ liệu NVL nào.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -123,6 +123,21 @@
 
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ currentLanguage === 'en' ? 'Role' : 'Vai trò' }}</mat-label>
+          <mat-select formControlName="role" 
+                     [placeholder]="currentLanguage === 'en' ? 'Select role' : 'Chọn vai trò'">
+            <mat-option value="User">User</mat-option>
+            <mat-option value="Quản lý">Quản lý</mat-option>
+            <mat-option value="Admin">Admin</mat-option>
+          </mat-select>
+          <mat-error *ngIf="signupForm.get('role')?.hasError('required')">
+            {{ currentLanguage === 'en' ? 'Role is required' : 'Vai trò là bắt buộc' }}
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
           <mat-label>{{ currentLanguage === 'en' ? 'Password' : 'Mật khẩu' }}</mat-label>
           <input matInput formControlName="password" type="password" 
                  [placeholder]="currentLanguage === 'en' ? 'Enter password' : 'Nhập mật khẩu'">

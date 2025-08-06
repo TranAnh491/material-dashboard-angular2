@@ -48,3 +48,101 @@
 .asm-icons .material-icons {
     font-size: 18px;
 }
+
+/* Giảm khoảng cách giữa các icon trong navbar */
+.navbar-nav {
+    gap: 0px;
+}
+
+.navbar-nav .nav-item {
+    margin-right: 0;
+}
+
+.navbar-nav .nav-link {
+    padding: 6px 8px;
+    margin: 0;
+}
+
+/* Giảm margin của ASM icons */
+.asm-icons {
+    margin-right: 4px;
+}
+
+/* Đồng đều kích cỡ các icon */
+.navbar-nav .nav-link i,
+.asm-icons i,
+.notification-dropdown .notification-icon i {
+    font-size: 19px !important;
+    width: 19px;
+    height: 19px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Đồng đều kích cỡ ASM labels */
+.asm-label {
+    font-size: 10px !important;
+    font-weight: bold;
+}
+
+/* User profile layout - icon và tên nằm cạnh nhau */
+.user-profile-link {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-profile-link i {
+    margin-right: 0 !important;
+}
+
+.user-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+/* Điều chỉnh khoảng cách cho dropdown menu */
+.dropdown-menu {
+    margin-top: 5px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .navbar-nav {
+        gap: 0px;
+    }
+    
+    .navbar-nav .nav-link {
+        padding: 4px 6px;
+        margin: 0;
+    }
+    
+    .asm-icons {
+        margin-right: 2px;
+    }
+    
+    /* Đồng đều kích cỡ các icon trên mobile */
+    .navbar-nav .nav-link i,
+    .asm-icons i,
+    .notification-dropdown .notification-icon i {
+        font-size: 16px !important;
+        width: 16px;
+        height: 16px;
+    }
+    
+    /* User profile layout trên mobile */
+    .user-profile-link {
+        gap: 4px;
+    }
+    
+    .user-name {
+        max-width: 80px;
+        font-size: 10px;
+    }
+}

@@ -2,9 +2,10 @@ import { Component, OnInit, ElementRef, OnDestroy } from '@angular/core';
 import { ROUTES } from '../../routes/sidebar-routes';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router } from '@angular/router';
-import { NotificationService } from '../../core/notification.service';
+import { NotificationService } from '../../services/notification.service';
 import { interval, Subscription } from 'rxjs';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
+import { NotificationDropdownComponent } from '../notification-dropdown/notification-dropdown.component';
 
 @Component({
   selector: 'app-navbar',
@@ -188,24 +189,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
     };
 
     getTitle(){
-      var titlee = this.location.prepareExternalUrl(this.location.path());
-      if(titlee.charAt(0) === '#'){
-          titlee = titlee.slice( 1 );
-      }
-      if(titlee.includes('/layout')){
-        return '';
-      }
-
-      for(var item = 0; item < this.listTitles.length; item++){
-          if(this.listTitles[item].path === titlee){
-              // Hide "Label" title in navbar
-              if(this.listTitles[item].title === 'Label'){
-                  return '';
-              }
-              return this.listTitles[item].title;
-          }
-      }
-      // Không trả về 'Dashboard' khi không ở trang dashboard
+      // Luôn trả về chuỗi rỗng để ẩn tiêu đề trong navbar
       return '';
     }
 
@@ -234,4 +218,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       console.log('Selected factory:', factory);
       // Có thể thêm logic để thông báo cho các component khác biết factory đã thay đổi
     }
+
+
+
 }

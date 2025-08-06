@@ -3,6 +3,7 @@ import { Observable, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ROUTES, RouteInfo } from '../routes/sidebar-routes';
 import { TabPermissionService } from './tab-permission.service';
+import { RolePermissionService } from './role-permission.service';
 
 @Injectable({
   providedIn: 'root'
@@ -10,27 +11,31 @@ import { TabPermissionService } from './tab-permission.service';
 export class FilteredRoutesService {
   
   constructor(
-    private tabPermissionService: TabPermissionService
+    private tabPermissionService: TabPermissionService,
+    private rolePermissionService: RolePermissionService
   ) { }
 
   // Lấy routes đã được lọc theo quyền truy cập
   getFilteredRoutes(): Observable<RouteInfo[]> {
-    return this.tabPermissionService.getCurrentUserTabPermissions().pipe(
-      map(permissions => {
-        return this.filterRoutesByPermissions(ROUTES, permissions);
+    return combineLatest([
+      this.tabPermissionService.getCurrentUserTabPermissions(),
+      this.rolePermissionService.getCurrentUserRole()
+    ]).pipe(
+      map(([permissions, userRole]) => {
+        return this.filterRoutesByPermissions(ROUTES, permissions, userRole);
       })
     );
   }
 
-  // Lọc routes dựa trên permissions
-  private filterRoutesByPermissions(routes: RouteInfo[], permissions: { [key: string]: boolean }): RouteInfo[] {
+  // Lọc routes dựa trên permissions và vai trò
+  private filterRoutesByPermissions(routes: RouteInfo[], permissions: { [key: string]: boolean }, userRole: string | null): RouteInfo[] {
     return routes.filter(route => {
       // Kiểm tra quyền truy cập cho route chính
-      const hasAccess = this.hasAccessToRoute(route, permissions);
+      const hasAccess = this.hasAccessToRoute(route, permissions, userRole);
       
       if (hasAccess && route.children) {
         // Nếu có quyền truy cập và có children, lọc children
-        const filteredChildren = this.filterRoutesByPermissions(route.children, permissions);
+        const filteredChildren = this.filterRoutesByPermissions(route.children, permissions, userRole);
         if (filteredChildren.length > 0) {
           // Tạo route mới với children đã được lọc
           return {
@@ -48,12 +53,17 @@ export class FilteredRoutesService {
   }
 
   // Kiểm tra quyền truy cập cho một route
-  private hasAccessToRoute(route: RouteInfo, permissions: { [key: string]: boolean }): boolean {
+  private hasAccessToRoute(route: RouteInfo, permissions: { [key: string]: boolean }, userRole: string | null): boolean {
     const tabKey = this.getTabKeyFromRoute(route.path);
     
     if (!tabKey) {
       // Nếu không xác định được tab key, cho phép truy cập
       return true;
+    }
+
+    // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
+    if (tabKey === 'settings') {
+      return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
     // Kiểm tra permission, mặc định là true nếu không có setting

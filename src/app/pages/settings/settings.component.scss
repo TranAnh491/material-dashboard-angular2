@@ -1120,4 +1120,71 @@
       box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
     }
   }
+}
+
+/* New User Notifications Section */
+.new-user-notifications-section {
+  background: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(255, 152, 0, 0.1);
+}
+
+.notifications-list {
+  margin-top: 12px;
+}
+
+.notification-item {
+  background: white;
+  border: 1px solid #ffcc80;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.notification-item:hover {
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+}
+
+.notification-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-info strong {
+  color: #e65100;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.user-details {
+  color: #666;
+  font-size: 12px;
+}
+
+.notification-time {
+  color: #999;
+  font-size: 11px;
+  text-align: right;
+}
+
+/* Responsive adjustments for notifications */
+@media (max-width: 768px) {
+  .notification-content {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .notification-time {
+    text-align: left;
+  }
 } 

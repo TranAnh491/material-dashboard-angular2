@@ -10,15 +10,27 @@
     }
 
     .navbar-nav{
+        gap: 0px;
+        
         .nav-item .nav-link{
             position: relative;
             color: inherit;
-            padding: $padding-general-x;
+            padding: 6px 8px;
             font-weight: $font-weight-default;
             font-size: $mdb-btn-font-size-base;
             text-transform: uppercase;
             border-radius: $border-radius-base;
             line-height: 20px;
+            margin: 0;
+            
+            i {
+                font-size: 19px !important;
+                width: 19px;
+                height: 19px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
 
             &:not(.btn-just-icon) .fa{
                 position: relative;

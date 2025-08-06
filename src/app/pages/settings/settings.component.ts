@@ -4,6 +4,7 @@ import { FirebaseAuthService, User } from '../../services/firebase-auth.service'
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { UserPermissionService, UserPermission as FirebaseUserPermission } from '../../services/user-permission.service';
+import { NotificationService } from '../../services/notification.service';
 
 @Component({
   selector: 'app-settings',
@@ -55,17 +56,25 @@ export class SettingsComponent implements OnInit {
   // Tab permissions for each user: { userId: { tabKey: boolean } }
   firebaseUserTabPermissions: { [key: string]: { [key: string]: boolean } } = {};
 
+  // New user notifications
+  newUserNotifications: any[] = [];
+
   constructor(
     private permissionService: PermissionService,
     private firebaseAuthService: FirebaseAuthService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private userPermissionService: UserPermissionService
+    private userPermissionService: UserPermissionService,
+    private notificationService: NotificationService
   ) { }
 
   ngOnInit(): void {
     this.loadUserPermissions();
     this.loadFirebaseUsers();
+    this.loadNewUserNotifications();
+    
+    // Đánh dấu tất cả thông báo đã đọc khi vào Settings
+    this.markAllNotificationsAsRead();
   }
 
   async adminLogin(): Promise<void> {
@@ -202,6 +211,7 @@ export class SettingsComponent implements OnInit {
             displayName: data.displayName || '',
             department: data.department || '', // Load department từ users collection
             factory: data.factory || '', // Load factory từ users collection
+            role: data.role || 'User', // Load role từ users collection
             photoURL: data.photoURL || '',
             createdAt: data.createdAt?.toDate() || new Date(),
             lastLoginAt: data.lastLoginAt?.toDate() || new Date()
@@ -209,6 +219,25 @@ export class SettingsComponent implements OnInit {
         });
         
         console.log(`✅ Loaded ${this.firebaseUsers.length} users from Firestore`);
+        
+        // Kiểm tra và thêm tài khoản đặc biệt Steve nếu chưa có
+        const steveExists = this.firebaseUsers.some(user => user.uid === 'special-steve-uid');
+        if (!steveExists) {
+          const steveUser: User = {
+            uid: 'special-steve-uid',
+            email: 'steve@asp.com',
+            displayName: 'Steve',
+            department: 'ADMIN',
+            factory: 'ALL',
+            role: 'Quản lý',
+            createdAt: new Date(),
+            lastLoginAt: new Date()
+          };
+          this.firebaseUsers.push(steveUser);
+          console.log('✅ Added special user Steve to the list');
+        }
+
+
         
         // Load permissions, departments và tab permissions cho tất cả users
         await this.loadFirebaseUserPermissions();
@@ -243,6 +272,7 @@ export class SettingsComponent implements OnInit {
             displayName: currentUser.displayName || '',
             photoURL: currentUser.photoURL || '',
             factory: '',
+            role: 'User',
             createdAt: new Date(),
             lastLoginAt: new Date()
           });
@@ -267,6 +297,14 @@ export class SettingsComponent implements OnInit {
   }
 
   async deleteFirebaseUser(user: User): Promise<void> {
+    // Ngăn chặn xóa tài khoản đặc biệt Steve và Admin
+    if (user.uid === 'special-steve-uid') {
+      alert('Không thể xóa tài khoản đặc biệt Steve!');
+      return;
+    }
+    
+
+
     if (confirm(`Bạn có chắc chắn muốn xóa user ${user.email}?`)) {
       try {
         // Delete from Firestore
@@ -316,8 +354,14 @@ export class SettingsComponent implements OnInit {
           this.firebaseUserPermissions[user.uid] = data.hasEditPermission || false;
           console.log(`✅ Loaded permission for ${user.email}: ${data.hasEditPermission}`);
         } else {
-          this.firebaseUserPermissions[user.uid] = false; // Default to false
-          console.log(`✅ Default permission for ${user.email}: false`);
+          // Đặc biệt cho Steve và Admin - luôn có quyền
+          if (user.uid === 'special-steve-uid') {
+            this.firebaseUserPermissions[user.uid] = true;
+            console.log(`✅ Special permission for Steve: true`);
+          } else {
+            this.firebaseUserPermissions[user.uid] = false; // Default to false
+            console.log(`✅ Default permission for ${user.email}: false`);
+          }
         }
       } catch (error) {
         console.error(`❌ Error loading permission for user ${user.uid}:`, error);
@@ -327,9 +371,9 @@ export class SettingsComponent implements OnInit {
   }
 
   async loadFirebaseUserDepartments(): Promise<void> {
-    console.log('🔍 Loading Firebase user departments and factories...');
+    console.log('🔍 Loading Firebase user departments, factories and roles...');
     
-    // Load current departments and factories for all Firebase users
+    // Load current departments, factories and roles for all Firebase users
     for (const user of this.firebaseUsers) {
       try {
         // Đọc từ Firestore collection user-permissions
@@ -340,7 +384,8 @@ export class SettingsComponent implements OnInit {
           const data = doc.data() as any;
           user.department = data.department || '';
           user.factory = data.factory || '';
-          console.log(`✅ Loaded department and factory for ${user.email}: ${data.department}, ${data.factory}`);
+          user.role = data.role || 'User';
+          console.log(`✅ Loaded department, factory and role for ${user.email}: ${data.department}, ${data.factory}, ${data.role}`);
         } else {
           // Kiểm tra trong users collection
           const userDoc = await this.firestore.collection('users').doc(user.uid).get().toPromise();
@@ -348,17 +393,20 @@ export class SettingsComponent implements OnInit {
             const userData = userDoc.data() as any;
             user.department = userData.department || '';
             user.factory = userData.factory || '';
-            console.log(`✅ Loaded department and factory from users collection for ${user.email}: ${userData.department}, ${userData.factory}`);
+            user.role = userData.role || 'User';
+            console.log(`✅ Loaded department, factory and role from users collection for ${user.email}: ${userData.department}, ${userData.factory}, ${userData.role}`);
           } else {
             user.department = ''; // Default to empty
             user.factory = ''; // Default to empty
-            console.log(`✅ Default department and factory for ${user.email}: empty`);
+            user.role = 'User'; // Default to User
+            console.log(`✅ Default department, factory and role for ${user.email}: empty, empty, User`);
           }
         }
       } catch (error) {
-        console.error(`❌ Error loading department and factory for user ${user.uid}:`, error);
+        console.error(`❌ Error loading department, factory and role for user ${user.uid}:`, error);
         user.department = ''; // Default to empty on error
         user.factory = ''; // Default to empty on error
+        user.role = 'User'; // Default to User on error
       }
     }
   }
@@ -378,13 +426,23 @@ export class SettingsComponent implements OnInit {
           this.firebaseUserTabPermissions[user.uid] = data.tabPermissions || {};
           console.log(`✅ Loaded tab permissions for ${user.email}:`, data.tabPermissions);
         } else {
-          // Default all tabs to true (accessible)
-          const defaultPermissions: { [key: string]: boolean } = {};
-          this.availableTabs.forEach(tab => {
-            defaultPermissions[tab.key] = true;
-          });
-          this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
-          console.log(`✅ Default tab permissions for ${user.email}: all enabled`);
+          // Đặc biệt cho Steve và Admin - luôn có tất cả quyền
+          if (user.uid === 'special-steve-uid') {
+            const allPermissions: { [key: string]: boolean } = {};
+            this.availableTabs.forEach(tab => {
+              allPermissions[tab.key] = true;
+            });
+            this.firebaseUserTabPermissions[user.uid] = allPermissions;
+            console.log(`✅ Special tab permissions for Steve: all enabled`);
+          } else {
+            // Default all tabs to true (accessible)
+            const defaultPermissions: { [key: string]: boolean } = {};
+            this.availableTabs.forEach(tab => {
+              defaultPermissions[tab.key] = true;
+            });
+            this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
+            console.log(`✅ Default tab permissions for ${user.email}: all enabled`);
+          }
         }
       } catch (error) {
         console.error(`❌ Error loading tab permissions for user ${user.uid}:`, error);
@@ -446,6 +504,7 @@ export class SettingsComponent implements OnInit {
           displayName: user.displayName || '',
           department: department,
           factory: user.factory || '',
+          role: user.role || 'User',
           hasEditPermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -456,6 +515,7 @@ export class SettingsComponent implements OnInit {
         await usersRef.update({
           department: department,
           factory: user.factory || '',
+          role: user.role || 'User',
           updatedAt: new Date()
         });
         
@@ -488,6 +548,7 @@ export class SettingsComponent implements OnInit {
           displayName: user.displayName || '',
           department: user.department || '',
           factory: factory,
+          role: user.role || 'User',
           hasEditPermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -498,6 +559,7 @@ export class SettingsComponent implements OnInit {
         await usersRef.update({
           department: user.department || '',
           factory: factory,
+          role: user.role || 'User',
           updatedAt: new Date()
         });
         
@@ -509,6 +571,50 @@ export class SettingsComponent implements OnInit {
     } catch (error) {
       console.error('❌ Error updating factory:', error);
       alert('Có lỗi xảy ra khi cập nhật nhà máy!');
+    }
+  }
+
+  async updateUserRole(userId: string, role: string): Promise<void> {
+    try {
+      console.log(`🔄 Updating role for user ${userId}: ${role}`);
+      
+      // Tìm user để lấy thông tin
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (user) {
+        // Cập nhật role trong memory
+        user.role = role;
+        
+        // Lưu vào Firestore collection user-permissions
+        const userRef = this.firestore.collection('user-permissions').doc(userId);
+        await userRef.set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          department: user.department || '',
+          factory: user.factory || '',
+          role: role,
+          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        // Cũng lưu vào users collection để đảm bảo consistency
+        const usersRef = this.firestore.collection('users').doc(userId);
+        await usersRef.update({
+          department: user.department || '',
+          factory: user.factory || '',
+          role: role,
+          updatedAt: new Date()
+        });
+        
+        console.log(`✅ Role saved to both collections for user ${userId}: ${role}`);
+        
+        // Hiển thị thông báo thành công
+        console.log(`✅ Role updated successfully for ${user.email}: ${role}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating role:', error);
+      alert('Có lỗi xảy ra khi cập nhật vai trò!');
     }
   }
 
@@ -572,13 +678,20 @@ export class SettingsComponent implements OnInit {
 
   // Tạo danh sách columns cho table
   getTableColumns(): string[] {
-    const baseColumns = ['email', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
+    const baseColumns = ['email', 'role', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
     const tabColumns = this.availableTabs.map(tab => 'tab-' + tab.key);
     return [...baseColumns, ...tabColumns];
   }
 
   // Hiển thị tài khoản (email hoặc mã số nhân viên)
   getAccountDisplay(user: any): string {
+    // Kiểm tra tài khoản đặc biệt Steve
+    if (user.uid === 'special-steve-uid' || user.displayName === 'Steve') {
+      return 'STEVE (QUẢN LÝ)';
+    }
+    
+
+    
     if (user.email.includes('@asp.com')) {
       // Nếu là email nội bộ (ASP format), hiển thị mã số nhân viên viết hoa
       return user.email.replace('@asp.com', '').toUpperCase();
@@ -611,5 +724,29 @@ export class SettingsComponent implements OnInit {
       // Nếu cả hai không có trong danh sách, sắp xếp theo alphabet
       return deptA.localeCompare(deptB);
     });
+  }
+
+  // Load thông báo tài khoản mới
+  private async loadNewUserNotifications(): Promise<void> {
+    try {
+      this.notificationService.getNewUserNotifications().subscribe(notifications => {
+        this.newUserNotifications = notifications.filter(n => !n.isRead);
+      });
+    } catch (error) {
+      console.error('❌ Error loading new user notifications:', error);
+    }
+  }
+
+  // Đánh dấu tất cả thông báo đã đọc
+  private async markAllNotificationsAsRead(): Promise<void> {
+    try {
+      const currentUser = this.getCurrentUser();
+      if (currentUser) {
+        await this.notificationService.markAllNotificationsAsRead(currentUser.uid);
+        console.log('✅ All notifications marked as read');
+      }
+    } catch (error) {
+      console.error('❌ Error marking notifications as read:', error);
+    }
   }
 } 

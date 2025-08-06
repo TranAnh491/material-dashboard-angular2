@@ -3,6 +3,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Observable, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
+import { NotificationService } from './notification.service';
 
 export interface User {
   uid: string;
@@ -11,6 +12,7 @@ export interface User {
   photoURL?: string;
   department?: string;
   factory?: string;
+  role?: string;
   createdAt?: Date;
   lastLoginAt?: Date;
 }
@@ -23,7 +25,8 @@ export class FirebaseAuthService {
 
   constructor(
     private afAuth: AngularFireAuth,
-    private firestore: AngularFirestore
+    private firestore: AngularFirestore,
+    private notificationService: NotificationService
   ) {
     // Lắng nghe trạng thái đăng nhập
     this.user$ = this.afAuth.authState.pipe(
@@ -40,12 +43,12 @@ export class FirebaseAuthService {
   }
 
   // Đăng ký user mới
-  async signUp(email: string, password: string, displayName?: string, department?: string, factory?: string): Promise<any> {
+  async signUp(email: string, password: string, displayName?: string, department?: string, factory?: string, role?: string): Promise<any> {
     try {
       const credential = await this.afAuth.createUserWithEmailAndPassword(email, password);
       
       // Tạo user profile trong Firestore
-      await this.createUserProfile(credential.user, displayName, department, factory);
+      await this.createUserProfile(credential.user, displayName, department, factory, role);
       
       console.log('✅ Đăng ký thành công:', credential.user.uid);
       return credential;
@@ -85,8 +88,81 @@ export class FirebaseAuthService {
     }
   }
 
+  // Đăng nhập tài khoản đặc biệt
+  async signInSpecialUser(displayName: string, email: string): Promise<void> {
+    try {
+      console.log('🔐 Đăng nhập tài khoản đặc biệt:', displayName);
+      
+      // Tạo user data cho tài khoản đặc biệt
+      const specialUserData: User = {
+        uid: 'special-steve-uid',
+        email: email,
+        displayName: displayName,
+        department: 'ADMIN',
+        factory: 'ALL',
+        role: 'Quản lý',
+        createdAt: new Date(),
+        lastLoginAt: new Date()
+      };
+
+      // Lưu vào Firestore
+      const userRef = this.firestore.doc(`users/${specialUserData.uid}`);
+      await userRef.set(specialUserData);
+
+      // Lưu permissions đặc biệt
+      const permissionRef = this.firestore.collection('user-permissions').doc(specialUserData.uid);
+      await permissionRef.set({
+        uid: specialUserData.uid,
+        email: email,
+        displayName: displayName,
+        department: 'ADMIN',
+        factory: 'ALL',
+        role: 'Quản lý',
+        hasEditPermission: true,
+        isSpecialUser: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Lưu tab permissions cho tất cả tabs
+      const tabPermissionRef = this.firestore.collection('user-tab-permissions').doc(specialUserData.uid);
+      const allTabPermissions = {
+        dashboard: true,
+        'work-order': true,
+        shipment: true,
+        materials: true,
+        fg: true,
+        label: true,
+        bm: true,
+        utilization: true,
+        find: true,
+        layout: true,
+        checklist: true,
+        equipment: true,
+        task: true
+      };
+      
+      await tabPermissionRef.set({
+        uid: specialUserData.uid,
+        email: email,
+        displayName: displayName,
+        tabPermissions: allTabPermissions,
+        isSpecialUser: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      console.log('✅ Tài khoản đặc biệt đã được tạo và đăng nhập thành công');
+    } catch (error) {
+      console.error('❌ Lỗi đăng nhập tài khoản đặc biệt:', error);
+      throw error;
+    }
+  }
+
+
+
   // Tạo user profile trong Firestore
-  private async createUserProfile(user: any, displayName?: string, department?: string, factory?: string): Promise<void> {
+  private async createUserProfile(user: any, displayName?: string, department?: string, factory?: string, role?: string): Promise<void> {
     const userRef = this.firestore.doc(`users/${user.uid}`);
     
     const userData: User = {
@@ -96,11 +172,17 @@ export class FirebaseAuthService {
       photoURL: user.photoURL,
       department: department,
       factory: factory,
+      role: role || 'User',
       createdAt: new Date(),
       lastLoginAt: new Date()
     };
 
     await userRef.set(userData);
+
+    // Tạo thông báo cho tài khoản mới (trừ tài khoản đặc biệt)
+    if (user.uid !== 'special-steve-uid') {
+      await this.notificationService.createNewUserNotification(userData);
+    }
   }
 
   // Cập nhật thông tin đăng nhập của user

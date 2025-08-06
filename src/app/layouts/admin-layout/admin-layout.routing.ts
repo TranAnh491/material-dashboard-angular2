@@ -30,6 +30,7 @@ import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { AuthGuard } from '../../guards/auth.guard';
+import { SettingsGuard } from '../../guards/settings.guard';
 
 export const AdminLayoutRoutes: Routes = [
   { 
@@ -71,5 +72,5 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'materials-test',       component: MaterialsTestComponent, canActivate: [AuthGuard] },
   { path: 'finished-goods-test',  component: FinishedGoodsTestComponent, canActivate: [AuthGuard] },
   { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule), canActivate: [AuthGuard] },
-  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard] }
+  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard] }
 ];

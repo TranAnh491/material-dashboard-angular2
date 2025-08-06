@@ -63,6 +63,7 @@ import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/fini
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
+import { SettingsGuard } from '../../guards/settings.guard';
 
 @NgModule({
   imports: [
@@ -124,7 +125,8 @@ import { IndexComponent } from '../../pages/index/index.component';
     IndexComponent
   ],
   providers: [
-    GoogleSheetService
+    GoogleSheetService,
+    SettingsGuard
   ]
 })
 export class AdminLayoutModule {}

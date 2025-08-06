@@ -302,3 +302,24 @@
 .sidebar-wrapper .nav {
   padding-bottom: 20px !important;
 }
+
+/* Settings notification styling */
+.nav > li > a.settings-notification {
+  color: #f44336 !important; /* Red color for notification */
+  background: rgba(244, 67, 54, 0.1) !important;
+  box-shadow: 0 1px 6px rgba(244, 67, 54, 0.3) !important;
+}
+
+.nav > li > a.settings-notification .material-icons {
+  color: #f44336 !important;
+}
+
+.nav > li > a.settings-notification:hover {
+  background: rgba(244, 67, 54, 0.15) !important;
+  color: #f44336 !important;
+  box-shadow: 0 1px 6px rgba(244, 67, 54, 0.4) !important;
+}
+
+.nav > li > a.settings-notification:hover .material-icons {
+  color: #f44336 !important;
+}

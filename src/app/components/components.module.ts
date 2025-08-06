@@ -13,6 +13,7 @@ import { FooterComponent } from './footer/footer.component';
 import { NavbarComponent } from './navbar/navbar.component';
 import { SidebarComponent } from './sidebar/sidebar.component';
 import { DeleteConfirmationDialogComponent } from './delete-confirmation-dialog/delete-confirmation-dialog.component';
+import { NotificationDropdownComponent } from './notification-dropdown/notification-dropdown.component';
 
 @NgModule({
   imports: [
@@ -30,13 +31,15 @@ import { DeleteConfirmationDialogComponent } from './delete-confirmation-dialog/
     FooterComponent,
     NavbarComponent,
     SidebarComponent,
-    DeleteConfirmationDialogComponent
+    DeleteConfirmationDialogComponent,
+    NotificationDropdownComponent
   ],
   exports: [
     FooterComponent,
     NavbarComponent,
     SidebarComponent,
-    DeleteConfirmationDialogComponent
+    DeleteConfirmationDialogComponent,
+    NotificationDropdownComponent
   ]
 })
 export class ComponentsModule { }

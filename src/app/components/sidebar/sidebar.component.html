@@ -10,7 +10,10 @@
 <div class="sidebar-wrapper">
   <ul class="nav">
     <li routerLinkActive="active" *ngFor="let menuItem of menuItems" class="{{menuItem.class}} nav-item">
-      <a class="nav-link" [routerLink]="menuItem.children ? null : [menuItem.path]" (click)="menuItem.children && toggleSubMenu(menuItem)">
+      <a class="nav-link" 
+         [routerLink]="menuItem.children ? null : [menuItem.path]" 
+         (click)="menuItem.children && toggleSubMenu(menuItem)"
+         [class.settings-notification]="menuItem.path === '/settings' && hasNewUsers">
         <i class="material-icons">{{menuItem.icon}}</i>
         <p>{{menuItem.title}}</p>
         <i class="material-icons expand-icon" *ngIf="menuItem.children" [class.rotated]="menuItem.expanded">keyboard_arrow_down</i>
