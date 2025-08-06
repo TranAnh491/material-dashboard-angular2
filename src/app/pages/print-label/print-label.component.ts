@@ -3133,7 +3133,7 @@ export class PrintLabelComponent implements OnInit {
     
     try {
       // Show loading message
-      alert('⏳ Đang tải dữ liệu từ Firebase...');
+      alert('Loading');
       
       // Get photos for selected month
       const photos = await this.getPhotosForMonth(selectedMonth);
