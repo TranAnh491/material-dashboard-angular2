@@ -7,7 +7,8 @@ export interface UserPermission {
   uid: string;
   email: string;
   displayName?: string;
-  hasEditPermission: boolean;
+  hasDeletePermission: boolean;
+  hasCompletePermission: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,12 +54,13 @@ export class UserPermissionService {
   }
 
   // Create or update user permission
-  async setUserPermission(uid: string, email: string, displayName: string, hasEditPermission: boolean): Promise<void> {
+  async setUserPermission(uid: string, email: string, displayName: string, hasDeletePermission: boolean, hasCompletePermission: boolean = false): Promise<void> {
     const permission: UserPermission = {
       uid,
       email,
       displayName,
-      hasEditPermission,
+      hasDeletePermission,
+      hasCompletePermission,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -70,12 +72,13 @@ export class UserPermissionService {
   }
 
   // Update permission only
-  async updatePermission(uid: string, hasEditPermission: boolean): Promise<void> {
+  async updatePermission(uid: string, hasDeletePermission: boolean, hasCompletePermission: boolean = false): Promise<void> {
     await this.firestore
       .collection('user-permissions')
       .doc(uid)
       .update({
-        hasEditPermission,
+        hasDeletePermission,
+        hasCompletePermission,
         updatedAt: new Date()
       });
   }
@@ -89,13 +92,14 @@ export class UserPermissionService {
   }
 
   // Batch update multiple permissions
-  async batchUpdatePermissions(permissions: { uid: string; hasEditPermission: boolean }[]): Promise<void> {
+  async batchUpdatePermissions(permissions: { uid: string; hasDeletePermission: boolean; hasCompletePermission: boolean }[]): Promise<void> {
     const batch = this.firestore.firestore.batch();
     
-    permissions.forEach(({ uid, hasEditPermission }) => {
+    permissions.forEach(({ uid, hasDeletePermission, hasCompletePermission }) => {
       const docRef = this.firestore.collection('user-permissions').doc(uid).ref;
       batch.update(docRef, {
-        hasEditPermission,
+        hasDeletePermission,
+        hasCompletePermission,
         updatedAt: new Date()
       });
     });
@@ -103,8 +107,8 @@ export class UserPermissionService {
     await batch.commit();
   }
 
-  // Check if user has edit permission
-  async hasEditPermission(uid: string): Promise<boolean> {
+  // Check if user has delete permission
+  async hasDeletePermission(uid: string): Promise<boolean> {
     try {
       const doc = await this.firestore
         .collection('user-permissions')
@@ -114,11 +118,31 @@ export class UserPermissionService {
       
       if (doc.exists) {
         const data = doc.data() as any;
-        return data?.hasEditPermission || false;
+        return data?.hasDeletePermission || false;
       }
       return false;
     } catch (error) {
-      console.error('Error checking permission:', error);
+      console.error('Error checking delete permission:', error);
+      return false;
+    }
+  }
+
+  // Check if user has complete permission
+  async hasCompletePermission(uid: string): Promise<boolean> {
+    try {
+      const doc = await this.firestore
+        .collection('user-permissions')
+        .doc(uid)
+        .ref
+        .get();
+      
+      if (doc.exists) {
+        const data = doc.data() as any;
+        return data?.hasCompletePermission || false;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking complete permission:', error);
       return false;
     }
   }

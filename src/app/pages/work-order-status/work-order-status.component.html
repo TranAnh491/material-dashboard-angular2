@@ -394,11 +394,11 @@
                             <button mat-icon-button color="success"
                                     (click)="completeWorkOrder(wo)"
                                     matTooltip="Hoàn thành Work Order"
-                                    *ngIf="wo.status !== 'done' && canEdit()"
+                                    *ngIf="wo.status !== 'done' && hasCompletePermissionValue"
                                     style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
                               <mat-icon style="font-size: 24px; width: 24px; height: 24px;">check_circle</mat-icon>
                             </button>
-                            <span *ngIf="wo.status !== 'done' && !canEdit()" style="font-size: 10px; color: #999;">Không có quyền</span>
+                            <span *ngIf="wo.status !== 'done' && !hasCompletePermissionValue" style="font-size: 10px; color: #999;">Không có quyền</span>
                             <span *ngIf="wo.status === 'done'" style="color: #4caf50; font-size: 20px; display: block; text-align: center;">✅</span>
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>

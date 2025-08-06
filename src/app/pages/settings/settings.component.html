@@ -58,7 +58,7 @@
             <mat-icon>settings</mat-icon>
             Settings Management
           </h1>
-          <p>Quản lý quyền xóa cho nhân viên</p>
+          <p>Quản lý quyền xóa và truy cập tab cho nhân viên</p>
         </div>
         <button mat-stroked-button (click)="logout()" class="logout-btn">
           <mat-icon>logout</mat-icon>
@@ -247,13 +247,29 @@
 
                 <!-- Permission Column -->
                 <ng-container matColumnDef="permission">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Quyền</th>
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;" matTooltip="Quyền xóa dữ liệu">Xóa</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
                     <mat-slide-toggle
                       [checked]="firebaseUserPermissions[user.uid] || false"
                       (change)="updateUserPermission(user.uid, $event.checked)"
                       [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                       color="primary"
+                      matTooltip="Bật/tắt quyền xóa dữ liệu"
+                      style="transform: scale(0.8);">
+                    </mat-slide-toggle>
+                  </td>
+                </ng-container>
+
+                <!-- Complete Permission Column -->
+                <ng-container matColumnDef="completePermission">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;" matTooltip="Quyền hoàn thành Work Order">Hoàn thành</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                    <mat-slide-toggle
+                      [checked]="firebaseUserCompletePermissions[user.uid] || false"
+                      (change)="updateUserCompletePermission(user.uid, $event.checked)"
+                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
+                      color="primary"
+                      matTooltip="Bật/tắt quyền hoàn thành Work Order"
                       style="transform: scale(0.8);">
                     </mat-slide-toggle>
                   </td>
@@ -284,13 +300,14 @@
 
             <!-- Tab Permissions Columns -->
             <ng-container *ngFor="let tab of availableTabs" [matColumnDef]="'tab-' + tab.key">
-              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 10px; text-align: center;">{{ tab.name }}</th>
+              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 10px; text-align: center;" matTooltip="Quyền xem và chỉnh sửa tab {{ tab.name }}">{{ tab.name }}</th>
               <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
                 <mat-slide-toggle
                   [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                   (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
                   [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                   color="primary"
+                  [matTooltip]="'Bật/tắt quyền xem và chỉnh sửa tab ' + tab.name"
                   style="transform: scale(0.8);">
                 </mat-slide-toggle>
               </td>

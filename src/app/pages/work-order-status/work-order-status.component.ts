@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
 import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -9,7 +9,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
-import { PermissionService } from '../../services/permission.service';
+import { UserPermissionService } from '../../services/user-permission.service';
 
 @Component({
   selector: 'app-work-order-status',
@@ -81,6 +81,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   currentUserDepartment: string = '';
   currentUserId: string = '';
   hasDeletePermissionValue: boolean = false;
+  hasCompletePermissionValue: boolean = false;
   
 
   
@@ -115,7 +116,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private materialService: MaterialLifecycleService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private permissionService: PermissionService
+    private userPermissionService: UserPermissionService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -1770,23 +1771,27 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (!user) {
         console.log('❌ No authenticated user found');
         this.hasDeletePermissionValue = false;
+        this.hasCompletePermissionValue = false;
         return;
       }
 
       // Get user permission from Firebase
-      const userPermission = await this.permissionService.getUserPermission(user.uid);
+      const userPermission = await firstValueFrom(this.userPermissionService.getUserPermission(user.uid));
       if (!userPermission) {
         console.log('❌ No user permission found for user:', user.uid);
         this.hasDeletePermissionValue = false;
+        this.hasCompletePermissionValue = false;
         return;
       }
 
-      // Check if user has delete permission
+      // Check if user has delete and complete permissions
       this.hasDeletePermissionValue = userPermission.hasDeletePermission;
-      console.log('🔐 User delete permission:', this.hasDeletePermissionValue);
+      this.hasCompletePermissionValue = userPermission.hasCompletePermission;
+      console.log('🔐 User permissions - delete:', this.hasDeletePermissionValue, 'complete:', this.hasCompletePermissionValue);
     } catch (error) {
-      console.error('❌ Error loading delete permission:', error);
+      console.error('❌ Error loading permissions:', error);
       this.hasDeletePermissionValue = false;
+      this.hasCompletePermissionValue = false;
     }
   }
 
@@ -1799,7 +1804,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
 
       // Get user permission from Firebase
-      const userPermission = await this.permissionService.getUserPermission(user.uid);
+      const userPermission = await firstValueFrom(this.userPermissionService.getUserPermission(user.uid));
       if (!userPermission) {
         console.log('❌ No user permission found for user:', user.uid);
         return false;
@@ -1811,6 +1816,31 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       return hasPermission;
     } catch (error) {
       console.error('❌ Error checking delete permission:', error);
+      return false;
+    }
+  }
+
+  async hasCompletePermission(): Promise<boolean> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (!user) {
+        console.log('❌ No authenticated user found');
+        return false;
+      }
+
+      // Get user permission from Firebase
+      const userPermission = await firstValueFrom(this.userPermissionService.getUserPermission(user.uid));
+      if (!userPermission) {
+        console.log('❌ No user permission found for user:', user.uid);
+        return false;
+      }
+
+      // Check if user has complete permission
+      const hasPermission = userPermission.hasCompletePermission;
+      console.log('🔐 User complete permission:', hasPermission);
+      return hasPermission;
+    } catch (error) {
+      console.error('❌ Error checking complete permission:', error);
       return false;
     }
   }
@@ -1996,8 +2026,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   // New methods for the updated UI
-  completeWorkOrder(workOrder: WorkOrder): void {
+  async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
     console.log('🔄 Bắt đầu hoàn thành work order:', workOrder.productCode, 'ID:', workOrder.id);
+    
+    // Kiểm tra quyền hoàn thành
+    const hasPermission = await this.hasCompletePermission();
+    if (!hasPermission) {
+      alert('❌ Bạn không có quyền hoàn thành Work Order! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      return;
+    }
     
     workOrder.status = WorkOrderStatus.DONE;
     // Remove urgent status when completed

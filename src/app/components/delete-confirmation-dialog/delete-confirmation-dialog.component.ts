@@ -211,7 +211,7 @@ export class DeleteConfirmationDialogComponent implements OnInit {
       console.log(`👤 User đăng nhập: ${currentUser.email}`);
       
       // 2. Kiểm tra quyền xóa từ Settings (user-permissions collection)
-      this.hasDeletePermission = await this.userPermissionService.hasEditPermission(currentUser.uid);
+      this.hasDeletePermission = await this.userPermissionService.hasDeletePermission(currentUser.uid);
       
       console.log(`🔍 Kiểm tra quyền xóa cho ${currentUser.email}: ${this.hasDeletePermission ? 'Có quyền' : 'Không có quyền'}`);
       

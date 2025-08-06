@@ -34,6 +34,7 @@ export class SettingsComponent implements OnInit {
   
   // Permission management
   firebaseUserPermissions: { [key: string]: boolean } = {};
+  firebaseUserCompletePermissions: { [key: string]: boolean } = {};
   isEditingPermissions = false;
   
   // Tab access permissions
@@ -342,7 +343,7 @@ export class SettingsComponent implements OnInit {
   async loadFirebaseUserPermissions(): Promise<void> {
     console.log('🔍 Loading Firebase user permissions...');
     
-    // Load current permissions for all Firebase users
+    // Load current delete and complete permissions for all Firebase users
     for (const user of this.firebaseUsers) {
       try {
         // Đọc từ Firestore collection user-permissions
@@ -351,21 +352,25 @@ export class SettingsComponent implements OnInit {
         
         if (doc?.exists) {
           const data = doc.data() as any;
-          this.firebaseUserPermissions[user.uid] = data.hasEditPermission || false;
-          console.log(`✅ Loaded permission for ${user.email}: ${data.hasEditPermission}`);
+          this.firebaseUserPermissions[user.uid] = data.hasDeletePermission || false;
+          this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
+          console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}`);
         } else {
           // Đặc biệt cho Steve và Admin - luôn có quyền
           if (user.uid === 'special-steve-uid') {
             this.firebaseUserPermissions[user.uid] = true;
-            console.log(`✅ Special permission for Steve: true`);
+            this.firebaseUserCompletePermissions[user.uid] = true;
+            console.log(`✅ Special permissions for Steve: delete=true, complete=true`);
           } else {
             this.firebaseUserPermissions[user.uid] = false; // Default to false
-            console.log(`✅ Default permission for ${user.email}: false`);
+            this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
+            console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false`);
           }
         }
       } catch (error) {
-        console.error(`❌ Error loading permission for user ${user.uid}:`, error);
+        console.error(`❌ Error loading permissions for user ${user.uid}:`, error);
         this.firebaseUserPermissions[user.uid] = false; // Default to false on error
+        this.firebaseUserCompletePermissions[user.uid] = false; // Default to false on error
       }
     }
   }
@@ -458,7 +463,7 @@ export class SettingsComponent implements OnInit {
 
   async updateUserPermission(userId: string, hasPermission: boolean): Promise<void> {
     try {
-      console.log(`🔄 Updating permission for user ${userId}: ${hasPermission}`);
+      console.log(`🔄 Updating delete permission for user ${userId}: ${hasPermission}`);
       
       // Cập nhật trong memory
       this.firebaseUserPermissions[userId] = hasPermission;
@@ -472,17 +477,47 @@ export class SettingsComponent implements OnInit {
           uid: userId,
           email: user.email,
           displayName: user.displayName || '',
-          hasEditPermission: hasPermission,
+          hasDeletePermission: hasPermission,  // Thay đổi từ hasEditPermission thành hasDeletePermission
           createdAt: new Date(),
           updatedAt: new Date()
         }, { merge: true });
         
-        console.log(`✅ Permission saved to Firestore for user ${userId}`);
+        console.log(`✅ Delete permission saved to Firestore for user ${userId}`);
       }
     } catch (error) {
-      console.error('❌ Error updating permission:', error);
+      console.error('❌ Error updating delete permission:', error);
       // Revert change nếu có lỗi
       this.firebaseUserPermissions[userId] = !hasPermission;
+    }
+  }
+
+  async updateUserCompletePermission(userId: string, hasPermission: boolean): Promise<void> {
+    try {
+      console.log(`🔄 Updating complete permission for user ${userId}: ${hasPermission}`);
+      
+      // Cập nhật trong memory
+      this.firebaseUserCompletePermissions[userId] = hasPermission;
+      
+      // Tìm user để lấy email và displayName
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (user) {
+        // Lưu vào Firestore collection user-permissions
+        const userRef = this.firestore.collection('user-permissions').doc(userId);
+        await userRef.set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          hasCompletePermission: hasPermission,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        
+        console.log(`✅ Complete permission saved to Firestore for user ${userId}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating complete permission:', error);
+      // Revert change nếu có lỗi
+      this.firebaseUserCompletePermissions[userId] = !hasPermission;
     }
   }
 
@@ -505,7 +540,7 @@ export class SettingsComponent implements OnInit {
           department: department,
           factory: user.factory || '',
           role: user.role || 'User',
-          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
         }, { merge: true });
@@ -549,7 +584,7 @@ export class SettingsComponent implements OnInit {
           department: user.department || '',
           factory: factory,
           role: user.role || 'User',
-          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
         }, { merge: true });
@@ -593,7 +628,7 @@ export class SettingsComponent implements OnInit {
           department: user.department || '',
           factory: user.factory || '',
           role: role,
-          hasEditPermission: this.firebaseUserPermissions[userId] || false,
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
           createdAt: new Date(),
           updatedAt: new Date()
         }, { merge: true });
@@ -655,16 +690,33 @@ export class SettingsComponent implements OnInit {
 
   async saveAllPermissions(): Promise<void> {
     try {
-      // Prepare permissions for batch update
+      // Save delete and complete permissions
       const permissions = Object.keys(this.firebaseUserPermissions).map(uid => ({
         uid,
-        hasEditPermission: this.firebaseUserPermissions[uid]
+        hasDeletePermission: this.firebaseUserPermissions[uid],
+        hasCompletePermission: this.firebaseUserCompletePermissions[uid] || false
       }));
 
       await this.userPermissionService.batchUpdatePermissions(permissions);
       
+      // Save tab permissions
+      for (const [userId, tabPermissions] of Object.entries(this.firebaseUserTabPermissions)) {
+        const user = this.firebaseUsers.find(u => u.uid === userId);
+        if (user) {
+          const userRef = this.firestore.collection('user-tab-permissions').doc(userId);
+          await userRef.set({
+            uid: userId,
+            email: user.email,
+            displayName: user.displayName || '',
+            tabPermissions: tabPermissions,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }, { merge: true });
+        }
+      }
+      
       this.isEditingPermissions = false;
-      alert('Đã lưu tất cả quyền!');
+      alert('Đã lưu tất cả quyền xóa và quyền truy cập tab!');
     } catch (error) {
       console.error('Error saving permissions:', error);
       alert('Có lỗi xảy ra khi lưu quyền!');
@@ -678,7 +730,7 @@ export class SettingsComponent implements OnInit {
 
   // Tạo danh sách columns cho table
   getTableColumns(): string[] {
-    const baseColumns = ['email', 'role', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'lastLoginAt', 'actions'];
+    const baseColumns = ['email', 'role', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'completePermission', 'lastLoginAt', 'actions'];
     const tabColumns = this.availableTabs.map(tab => 'tab-' + tab.key);
     return [...baseColumns, ...tabColumns];
   }
