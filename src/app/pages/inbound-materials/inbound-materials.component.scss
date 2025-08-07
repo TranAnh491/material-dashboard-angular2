@@ -405,8 +405,9 @@ iframe {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: all 0.2s ease;
+    transition: none;
     max-width: 80px;
+    background: transparent;
   }
   
   th {
@@ -444,7 +445,7 @@ iframe {
   }
   
   tbody tr {
-    transition: all 0.3s ease;
+    transition: none;
     
     &:nth-child(even) {
       background-color: #f8fafc;
@@ -455,7 +456,7 @@ iframe {
     }
     
     &:hover {
-      background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+      background: #f8fafc;
     }
   }
   
@@ -699,6 +700,12 @@ iframe {
   }
 }
 
+// Material code color when QR is generated
+.material-code-printed {
+  color: #4caf50 !important;
+  font-weight: 600;
+}
+
 // Excel-like checkbox
 mat-checkbox {
   ::ng-deep .mat-checkbox-frame {
@@ -727,6 +734,7 @@ mat-checkbox {
 
 // Editable cells
 .editable-cell {
+  position: relative;
   cursor: pointer;
   padding: 4px 6px;
   border: none;
@@ -735,22 +743,28 @@ mat-checkbox {
   font-family: Arial, sans-serif;
   font-size: 9px;
   color: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
   &:hover {
     background: #f8f9fa;
-  }
-  
-  &:empty::before {
-    content: 'Click to edit...';
-    color: #6c757d;
-    font-style: italic;
-    font-size: 9px;
   }
   
   &:focus {
     outline: none;
     background: #ffffff;
     border: 1px solid #dee2e6;
+  }
+  
+  .edit-icon {
+    font-size: 16px;
+    color: #6c757d;
+    opacity: 0.7;
+  }
+  
+  &:hover .edit-icon {
+    opacity: 1;
   }
 }
 
@@ -783,6 +797,46 @@ mat-checkbox {
     outline: none;
     background: #ffffff;
     border: 1px solid #dee2e6;
+  }
+}
+
+// PO cell styling
+.po-cell {
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  color: #000000;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+// Date display styling
+.date-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  
+  i {
+    font-size: 16px;
+    color: #6c757d;
+  }
+}
+
+// Editable input without border
+.editable-input-no-border {
+  border: none;
+  background: transparent;
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  color: #000000;
+  text-align: center;
+  width: 100%;
+  padding: 4px 6px;
+  
+  &:focus {
+    outline: none;
+    background: #f8f9fa;
   }
 }
 

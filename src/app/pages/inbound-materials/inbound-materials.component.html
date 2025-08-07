@@ -82,8 +82,8 @@
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
             <td>{{material.batchNumber}}</td>
-            <td class="code-cell">{{material.materialCode}}</td>
-            <td>{{material.poNumber}}</td>
+            <td class="code-cell" [class.material-code-printed]="material.hasQRGenerated">{{material.materialCode}}</td>
+            <td class="po-cell">{{material.poNumber}}</td>
             <td class="number-cell">{{material.quantity}} {{material.unit}}</td>
                                   <td>
                         <div class="editable-location" (click)="editLocation(material)">
@@ -92,7 +92,9 @@
                       </td>
             <td>{{material.type}}</td>
                                   <td class="date-cell">
-                        <input type="date" class="date-input" [(ngModel)]="material.expiryDate" (change)="updateExpiryDate(material)">
+                        <div class="date-display">
+                          <i class="material-icons">calendar_today</i>
+                        </div>
                       </td>
             <td class="status-cell">
               <mat-checkbox [checked]="material.qualityCheck" (change)="updateQualityCheck(material, $event.checked)">
@@ -104,17 +106,17 @@
             </td>
             <td>
               <div class="editable-cell" (click)="editNotes(material)">
-                {{material.notes || 'Click to edit...'}}
+                <i class="material-icons edit-icon">edit</i>
               </div>
             </td>
             <td class="number-cell">
-              <input type="number" class="editable-input" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)" min="0">
+              <input type="number" class="editable-input-no-border" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)" min="0">
             </td>
             <td class="number-cell">{{calculateQuantityPerUnit(material)}} {{material.unit}}</td>
             <td>{{material.supplier}}</td>
             <td>
               <div class="editable-cell" (click)="editRemarks(material)">
-                {{material.remarks || 'Click to edit...'}}
+                <i class="material-icons edit-icon">edit</i>
               </div>
             </td>
             <td class="status-cell">

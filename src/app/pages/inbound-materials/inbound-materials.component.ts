@@ -23,6 +23,7 @@ export interface InboundMaterial {
   supplier: string;
   remarks: string;
   isCompleted: boolean;
+  hasQRGenerated?: boolean; // Track if QR code has been generated
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -719,6 +720,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
 
     console.log('Generated QR codes:', qrCodes);
     
+    // Mark material as having QR generated
+    material.hasQRGenerated = true;
+    this.updateMaterialInFirebase(material);
+    
     // Show QR code dialog
     this.showQRCodeDialog(qrCodes, material);
   }
@@ -746,19 +751,21 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         })
       );
 
-      // Create print window with real QR codes
-      const newWindow = window.open('', '_blank');
-      if (newWindow) {
-        newWindow.document.write(`
-          <html>
-            <head>
-              <title>QR Codes - ${material.materialCode}</title>
-              <style>
-                body { 
-                  font-family: Arial, sans-serif; 
-                  margin: 20px; 
-                  background: white;
-                }
+             // Create print window with real QR codes
+       const newWindow = window.open('', '_blank');
+       if (newWindow) {
+         newWindow.document.write(`
+           <html>
+             <head>
+               <title>QR Codes - ${material.materialCode}</title>
+               <style>
+                 body { 
+                   font-family: Arial, sans-serif; 
+                   margin: 0; 
+                   padding: 0;
+                   background: white;
+                   overflow: hidden;
+                 }
                                  .qr-container { 
                    display: flex; 
                    margin: 2mm; 
@@ -803,12 +810,29 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
                    gap: 2mm;
                  }
                                  @media print {
-                   body { margin: 0; }
+                   body { 
+                     margin: 0 !important; 
+                     padding: 0 !important;
+                     overflow: hidden !important;
+                   }
+                   /* Hide browser elements when printing */
+                   @page {
+                     margin: 0 !important;
+                     size: A4 !important;
+                   }
+                   /* Hide browser UI elements */
+                   @media screen {
+                     body::before,
+                     body::after {
+                       display: none !important;
+                     }
+                   }
                    .qr-container { 
-                     margin: 1mm; 
-                     padding: 1mm;
+                     margin: 0 !important; 
+                     padding: 1mm !important;
                      width: 57mm !important;
                      height: 32mm !important;
+                     page-break-inside: avoid !important;
                    }
                    .qr-section {
                      width: 30mm !important;
@@ -820,6 +844,9 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
                    }
                    .info-section {
                      font-size: 9px !important;
+                   }
+                   .qr-grid {
+                     gap: 0 !important;
                    }
                  }
               </style>
@@ -840,13 +867,21 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
                    </div>
                  `).join('')}
                </div>
-              <script>
-                window.onload = function() {
-                  setTimeout(() => {
-                    window.print();
-                  }, 500);
-                }
-              </script>
+                             <script>
+                 window.onload = function() {
+                   // Hide browser elements
+                   document.title = '';
+                   
+                   // Remove any browser UI elements
+                   const style = document.createElement('style');
+                   style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; } @page { margin: 0 !important; } }';
+                   document.head.appendChild(style);
+                   
+                   setTimeout(() => {
+                     window.print();
+                   }, 500);
+                 }
+               </script>
             </body>
           </html>
         `);
