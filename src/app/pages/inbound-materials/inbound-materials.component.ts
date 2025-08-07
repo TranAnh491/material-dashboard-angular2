@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
+import * as QRCode from 'qrcode';
 
 export interface InboundMaterial {
   id?: string;
@@ -14,10 +16,10 @@ export interface InboundMaterial {
   location: string;
   type: string;
   expiryDate: Date;
-  qualityCheck: string;
+  qualityCheck: boolean; // Changed to boolean for Tick/No
   isReceived: boolean;
   notes: string;
-  rollsOrBags: string;
+  rollsOrBags: number;
   supplier: string;
   remarks: string;
   isCompleted: boolean;
@@ -32,13 +34,31 @@ export interface InboundMaterial {
 })
 export class InboundMaterialsComponent implements OnInit, OnDestroy {
   materials: InboundMaterial[] = [];
+  filteredMaterials: InboundMaterial[] = [];
+  
+  // Time range filter
+  showTimeRangeDialog: boolean = false;
+  startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  endDate: Date = new Date();
+  
+  // Display options
+  showCompleted: boolean = true;
+  
+  // Permissions
+  hasDeletePermission: boolean = false;
+  hasCompletePermission: boolean = false;
   
   private destroy$ = new Subject<void>();
 
-  constructor() {}
+  constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
-    this.loadMockData();
+    this.loadMaterialsFromFirebase();
+    // Set default date range to include all data
+    this.startDate = new Date(2020, 0, 1);
+    this.endDate = new Date(2030, 11, 31);
+    this.applyFilters();
+    this.loadPermissions();
   }
 
   ngOnDestroy(): void {
@@ -59,10 +79,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         location: 'A1',
         type: 'Raw Material',
         expiryDate: new Date('2025-01-15'),
-        qualityCheck: 'Passed',
+        qualityCheck: true,
         isReceived: true,
         notes: 'All items received in good condition',
-        rollsOrBags: '10 rolls',
+        rollsOrBags: 10,
         supplier: 'Supplier A',
         remarks: 'Standard delivery',
         isCompleted: true
@@ -77,10 +97,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         location: 'B2',
         type: 'Component',
         expiryDate: new Date('2024-12-31'),
-        qualityCheck: 'Pending',
+        qualityCheck: false,
         isReceived: false,
         notes: 'Missing 2 items',
-        rollsOrBags: '25 bags',
+        rollsOrBags: 25,
         supplier: 'Supplier B',
         remarks: 'Check quality before acceptance',
         isCompleted: false
@@ -95,12 +115,48 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         location: 'C3',
         type: 'Fabric',
         expiryDate: new Date('2026-01-17'),
-        qualityCheck: 'Passed',
+        qualityCheck: true,
         isReceived: true,
         notes: 'Quality check completed',
-        rollsOrBags: '5 rolls',
+        rollsOrBags: 5,
         supplier: 'Supplier C',
         remarks: 'Premium quality material',
+        isCompleted: true
+      },
+      {
+        importDate: new Date('2024-01-18'),
+        batchNumber: 'BATCH004',
+        materialCode: 'MAT004',
+        poNumber: 'PO2024004',
+        quantity: 150,
+        unit: 'm',
+        location: 'D4',
+        type: 'Fabric',
+        expiryDate: new Date('2025-06-18'),
+        qualityCheck: false,
+        isReceived: false,
+        notes: 'Pending quality inspection',
+        rollsOrBags: 15,
+        supplier: 'Supplier D',
+        remarks: 'New supplier - need verification',
+        isCompleted: false
+      },
+      {
+        importDate: new Date('2024-01-19'),
+        batchNumber: 'BATCH005',
+        materialCode: 'MAT005',
+        poNumber: 'PO2024005',
+        quantity: 75,
+        unit: 'pcs',
+        location: 'E5',
+        type: 'Component',
+        expiryDate: new Date('2024-08-19'),
+        qualityCheck: true,
+        isReceived: true,
+        notes: 'All items received and checked',
+        rollsOrBags: 30,
+        supplier: 'Supplier E',
+        remarks: 'Standard delivery - good quality',
         isCompleted: true
       }
     ];
@@ -108,13 +164,128 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
 
   importFile(): void {
     console.log('Import file functionality');
-    alert('Import file functionality will be implemented');
+    
+    // Create file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.processExcelFile(file);
+      }
+    };
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+  }
+
+  private async processExcelFile(file: File): Promise<void> {
+    console.log('Processing Excel file:', file.name);
+    
+    try {
+      // Read Excel file
+      const data = await this.readExcelFile(file);
+      console.log('Excel data:', data);
+      
+      // Parse data to InboundMaterial objects
+      const materials = this.parseExcelData(data);
+      console.log('Parsed materials:', materials);
+      
+      // Save to Firebase (placeholder)
+      await this.saveToFirebase(materials);
+      
+      // Save to Firebase
+      this.saveMaterialsToFirebase(materials);
+      
+      console.log('Import completed:', {
+        importedCount: materials.length,
+        totalMaterials: this.materials.length,
+        filteredMaterials: this.filteredMaterials.length
+      });
+      
+      alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
+      
+    } catch (error) {
+      console.error('Error processing Excel file:', error);
+      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+    }
+  }
+
+  private async readExcelFile(file: File): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          resolve(jsonData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private parseExcelData(data: any[]): InboundMaterial[] {
+    return data.map((row: any, index: number) => ({
+      importDate: this.parseDate(row['Ngày nhập']),
+      batchNumber: row['Lô Hàng/ DNNK'] || '',
+      materialCode: row['Mã hàng'] || '',
+      poNumber: row['Số P.O'] || '',
+      quantity: parseInt(row['Lượng Nhập']) || 0,
+      unit: row['Đơn vị'] || '',
+      location: row['Vị trí'] || '',
+      type: row['Loại hình'] || '',
+      expiryDate: this.parseDate(row['HSD']),
+      qualityCheck: row['KK'] === 'Yes' || row['KK'] === true,
+      isReceived: row['Đã nhận'] === 'Yes' || row['Đã nhận'] === true,
+      notes: row['Ghi chú'] || '',
+      rollsOrBags: row['Số cuộn/ bịch'] || '',
+      supplier: row['Nhà cung cấp'] || '',
+      remarks: row['Lưu ý'] || '',
+      isCompleted: row['Trạng thái'] === 'Rồi',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }));
+  }
+
+  private parseDate(dateStr: string): Date {
+    if (!dateStr) return new Date();
+    
+    // Handle DD/MM/YYYY format
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+      }
+    }
+    
+    return new Date(dateStr);
+  }
+
+  private async saveToFirebase(materials: InboundMaterial[]): Promise<void> {
+    console.log('Saving materials to Firebase:', materials.length);
+    
+    // TODO: Implement Firebase save
+    // For now, just simulate saving
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('✅ Materials saved to Firebase');
   }
 
   downloadTemplate(): void {
     console.log('Download template');
     
-    // Create template data
+    // Create template data with proper headers
     const templateData = [
       {
         'Ngày nhập': '15/01/2024',
@@ -126,13 +297,31 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         'Vị trí': 'A1',
         'Loại hình': 'Raw Material',
         'HSD': '15/01/2025',
-        'KK': 'Passed',
+        'KK': 'Yes', // Changed to Yes/No for checkbox
         'Đã nhận': 'Yes',
-        'Ghi chú': 'All items received',
+        'Ghi chú': 'All items received in good condition',
         'Số cuộn/ bịch': '10 rolls',
         'Nhà cung cấp': 'Supplier A',
-        'Lưu ý': 'Standard delivery',
-        'Rồi/Chưa': 'Rồi'
+        'Lưu ý': 'Standard delivery - check quality before acceptance',
+        'Trạng thái': 'Rồi'
+      },
+      {
+        'Ngày nhập': '16/01/2024',
+        'Lô Hàng/ DNNK': 'BATCH002',
+        'Mã hàng': 'MAT002',
+        'Số P.O': 'PO2024002',
+        'Lượng Nhập': 50,
+        'Đơn vị': 'pcs',
+        'Vị trí': 'B2',
+        'Loại hình': 'Component',
+        'HSD': '31/12/2024',
+        'KK': 'No', // Example of No
+        'Đã nhận': 'No',
+        'Ghi chú': 'Missing 2 items - need replacement',
+        'Số cuộn/ bịch': '25 bags',
+        'Nhà cung cấp': 'Supplier B',
+        'Lưu ý': 'Check quality before acceptance - some items damaged',
+        'Trạng thái': 'Chưa'
       }
     ];
 
@@ -181,12 +370,258 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, `Inbound_Materials_Report_${this.formatDate(new Date())}.xlsx`);
   }
 
-  updateReceivedStatus(material: InboundMaterial, isReceived: boolean): void {
-    material.isReceived = isReceived;
-    console.log(`Updated received status for ${material.materialCode}: ${isReceived}`);
+  // Old updateReceivedStatus method - replaced by new one below
+
+  // Old updateQualityCheck method - replaced by new one below
+
+  editNotes(material: InboundMaterial): void {
+    const newNotes = prompt('Nhập ghi chú:', material.notes || '');
+    if (newNotes !== null) {
+      material.notes = newNotes;
+      material.updatedAt = new Date();
+      console.log(`Updated notes for ${material.materialCode}: ${newNotes}`);
+      
+      // Save to Firebase
+      this.updateMaterialInFirebase(material);
+    }
+  }
+
+  editRemarks(material: InboundMaterial): void {
+    const newRemarks = prompt('Nhập lưu ý:', material.remarks || '');
+    if (newRemarks !== null) {
+      material.remarks = newRemarks;
+      material.updatedAt = new Date();
+      console.log(`Updated remarks for ${material.materialCode}: ${newRemarks}`);
+      
+      // Save to Firebase
+      this.updateMaterialInFirebase(material);
+    }
+  }
+
+  // Filter and display methods
+  applyFilters(): void {
+    this.filteredMaterials = this.materials.filter(material => {
+      const importDate = new Date(material.importDate);
+      const isInDateRange = importDate >= this.startDate && importDate <= this.endDate;
+      // Hide completed items by default
+      const isCompletedVisible = !material.isCompleted;
+      
+      console.log('Filtering material:', {
+        materialCode: material.materialCode,
+        importDate: importDate,
+        startDate: this.startDate,
+        endDate: this.endDate,
+        isInDateRange: isInDateRange,
+        isCompleted: material.isCompleted,
+        isCompletedVisible: isCompletedVisible
+      });
+      
+      return isInDateRange && isCompletedVisible;
+    });
     
-    // Here you would typically save to Firebase
-    // this.materialService.updateMaterial(material);
+    console.log('Applied filters:', {
+      totalMaterials: this.materials.length,
+      filteredMaterials: this.filteredMaterials.length,
+      startDate: this.startDate,
+      endDate: this.endDate,
+      showCompleted: this.showCompleted
+    });
+  }
+
+  viewAllMaterials(): void {
+    this.startDate = new Date(2020, 0, 1); // From 2020
+    this.endDate = new Date(2030, 11, 31); // To 2030
+    this.showCompleted = true;
+    this.applyFilters();
+    this.showTimeRangeDialog = false;
+    
+    console.log('View all materials:', {
+      totalMaterials: this.materials.length,
+      filteredMaterials: this.filteredMaterials.length,
+      materials: this.materials
+    });
+  }
+
+  applyTimeRangeFilter(): void {
+    this.applyFilters();
+    this.showTimeRangeDialog = false;
+  }
+
+  // Old completeMaterial method - replaced by new one below
+
+  // Old delete method - replaced by new one below
+
+  // Debug method to force refresh display
+  refreshDisplay(): void {
+    console.log('Refreshing display...');
+    console.log('Current materials:', this.materials);
+    console.log('Current filtered materials:', this.filteredMaterials);
+    this.applyFilters();
+  }
+
+  // Load user permissions
+  loadPermissions(): void {
+    // TODO: Load from UserPermissionService
+    // For now, set default permissions
+    this.hasDeletePermission = true;
+    this.hasCompletePermission = true;
+  }
+
+  // Load materials from Firebase
+  loadMaterialsFromFirebase(): void {
+    this.firestore.collection('inbound-materials')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((actions) => {
+        this.materials = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          const id = action.payload.doc.id;
+          return {
+            id: id,
+            ...data,
+            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
+            expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date()
+          };
+        });
+        this.applyFilters();
+        console.log('Loaded materials from Firebase:', this.materials.length);
+      });
+  }
+
+  // Update quality check (KK) - Updated version
+  updateQualityCheck(material: InboundMaterial, checked: boolean): void {
+    material.qualityCheck = checked;
+    material.updatedAt = new Date();
+    console.log(`Updated quality check for ${material.materialCode}: ${checked}`);
+    
+    // Save to Firebase
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Update received status (Đã nhận) - Only allow ticking, not unticking
+  updateReceivedStatus(material: InboundMaterial, checked: boolean): void {
+    // Only allow ticking (true), not unticking (false)
+    if (!checked) {
+      console.log(`Cannot untick received status for ${material.materialCode}`);
+      return;
+    }
+    
+    material.isReceived = checked;
+    material.updatedAt = new Date();
+    console.log(`Updated received status for ${material.materialCode}: ${checked}`);
+    
+    // Save to Firebase
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Edit location with uppercase
+  editLocation(material: InboundMaterial): void {
+    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa):', material.location || '');
+    if (newLocation !== null) {
+      material.location = newLocation.toUpperCase();
+      material.updatedAt = new Date();
+      console.log(`Updated location for ${material.materialCode}: ${material.location}`);
+      
+      // Save to Firebase
+      this.updateMaterialInFirebase(material);
+    }
+  }
+
+  // Update expiry date
+  updateExpiryDate(material: InboundMaterial): void {
+    material.updatedAt = new Date();
+    console.log(`Updated expiry date for ${material.materialCode}: ${material.expiryDate}`);
+    
+    // Save to Firebase
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Save materials to Firebase
+  saveMaterialsToFirebase(materials: InboundMaterial[]): void {
+    materials.forEach(material => {
+      const materialData = {
+        ...material,
+        importDate: material.importDate,
+        expiryDate: material.expiryDate,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      // Remove id field before saving to Firebase
+      delete materialData.id;
+      
+      this.firestore.collection('inbound-materials').add(materialData)
+        .then((docRef) => {
+          console.log('Material saved to Firebase successfully with ID:', docRef.id);
+        })
+        .catch(error => {
+          console.error('Error saving material to Firebase:', error);
+        });
+    });
+  }
+
+  // Update material in Firebase
+  updateMaterialInFirebase(material: InboundMaterial): void {
+    if (material.id) {
+      const updateData = {
+        ...material,
+        importDate: material.importDate,
+        expiryDate: material.expiryDate,
+        updatedAt: new Date()
+      };
+      
+      // Remove id field before updating Firebase
+      delete updateData.id;
+      
+      this.firestore.collection('inbound-materials').doc(material.id).update(updateData)
+        .then(() => {
+          console.log('Material updated in Firebase successfully');
+        })
+        .catch(error => {
+          console.error('Error updating material in Firebase:', error);
+        });
+    }
+  }
+
+  // Delete material from Firebase
+  deleteMaterialFromFirebase(materialId: string): void {
+    this.firestore.collection('inbound-materials').doc(materialId).delete()
+      .then(() => {
+        console.log('Material deleted from Firebase successfully');
+      }).catch(error => {
+        console.error('Error deleting material from Firebase:', error);
+      });
+  }
+
+  // Delete material (updated to use Firebase)
+  deleteMaterial(material: InboundMaterial): void {
+    if (confirm(`Xác nhận xóa material ${material.materialCode}?`)) {
+      if (material.id) {
+        this.deleteMaterialFromFirebase(material.id);
+      }
+      // Remove from local array immediately
+      const index = this.materials.indexOf(material);
+      if (index > -1) {
+        this.materials.splice(index, 1);
+        console.log(`Deleted material: ${material.materialCode}`);
+        this.applyFilters();
+      }
+    }
+  }
+
+  // Complete material (updated to hide completed items)
+  completeMaterial(material: InboundMaterial): void {
+    if (confirm(`Xác nhận hoàn thành material ${material.materialCode}?`)) {
+      material.isCompleted = true;
+      material.updatedAt = new Date();
+      console.log(`Completed material: ${material.materialCode}`);
+      
+      // Save to Firebase
+      this.updateMaterialInFirebase(material);
+      
+      // Apply filters to hide completed items
+      this.applyFilters();
+    }
   }
 
   private formatDate(date: Date): string {
@@ -195,5 +630,231 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
       month: '2-digit',
       year: 'numeric'
     });
+  }
+
+  // Debug method to check Firebase data
+  debugFirebaseData(): void {
+    console.log('=== DEBUG FIREBASE DATA ===');
+    console.log('Current materials array:', this.materials);
+    console.log('Filtered materials:', this.filteredMaterials);
+    console.log('Start date:', this.startDate);
+    console.log('End date:', this.endDate);
+    console.log('Show completed:', this.showCompleted);
+    
+    // Check Firebase directly
+    this.firestore.collection('inbound-materials').get().subscribe(snapshot => {
+      console.log('Raw Firebase data:', snapshot.docs.map(doc => ({
+        id: doc.id,
+        data: doc.data()
+      })));
+    });
+  }
+
+  // Calculate quantity per unit
+  calculateQuantityPerUnit(material: InboundMaterial): number {
+    if (!material.rollsOrBags || material.rollsOrBags <= 0) {
+      return 0;
+    }
+    return Math.round((material.quantity / material.rollsOrBags) * 100) / 100;
+  }
+
+  // Update rolls or bags
+  updateRollsOrBags(material: InboundMaterial): void {
+    console.log('Updating rolls/bags for material:', material.materialCode, 'to:', material.rollsOrBags);
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Generate QR Code
+  generateQRCode(material: InboundMaterial): void {
+    console.log('Generating QR code for material:', material.materialCode);
+    
+    // Get quantity per unit (Lượng Hàng)
+    const quantityPerUnit = this.calculateQuantityPerUnit(material);
+    
+    if (quantityPerUnit <= 0) {
+      alert('Vui lòng nhập số đơn vị trước khi tạo QR code!');
+      return;
+    }
+
+    console.log('QR Code breakdown:');
+    console.log('- Material code:', material.materialCode);
+    console.log('- PO Number:', material.poNumber);
+    console.log('- Quantity per unit:', quantityPerUnit);
+    console.log('- Number of QR codes to generate:', quantityPerUnit);
+
+    // Generate QR codes based on quantity per unit
+    const qrCodes = [];
+    const totalQuantity = material.quantity;
+    const unitSize = material.rollsOrBags;
+    
+    // Calculate how many full units we can make
+    const fullUnits = Math.floor(totalQuantity / unitSize);
+    const remainingQuantity = totalQuantity % unitSize;
+    
+    console.log('QR Code calculation:');
+    console.log('- Total quantity:', totalQuantity);
+    console.log('- Unit size:', unitSize);
+    console.log('- Full units:', fullUnits);
+    console.log('- Remaining:', remainingQuantity);
+    
+    // Add full units
+    for (let i = 0; i < fullUnits; i++) {
+      qrCodes.push({
+        materialCode: material.materialCode,
+        poNumber: material.poNumber,
+        unitNumber: unitSize,
+        qrData: `${material.materialCode}|${material.poNumber}|${unitSize}`
+      });
+    }
+    
+    // Add remaining quantity if any
+    if (remainingQuantity > 0) {
+      qrCodes.push({
+        materialCode: material.materialCode,
+        poNumber: material.poNumber,
+        unitNumber: remainingQuantity,
+        qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
+      });
+    }
+
+    console.log('Generated QR codes:', qrCodes);
+    
+    // Show QR code dialog
+    this.showQRCodeDialog(qrCodes, material);
+  }
+
+  // Show QR code dialog with real QR codes
+  async showQRCodeDialog(qrCodes: any[], material: InboundMaterial): Promise<void> {
+    try {
+      // Generate QR code images
+      const qrImages = await Promise.all(
+        qrCodes.map(async (qr, index) => {
+          const qrData = qr.qrData;
+          const qrImage = await QRCode.toDataURL(qrData, {
+            width: 240, // 30mm = 240px (8px/mm)
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          return {
+            ...qr,
+            qrImage,
+            index: index + 1
+          };
+        })
+      );
+
+      // Create print window with real QR codes
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title>QR Codes - ${material.materialCode}</title>
+              <style>
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 20px; 
+                  background: white;
+                }
+                                 .qr-container { 
+                   display: flex; 
+                   margin: 2mm; 
+                   padding: 1mm; 
+                   border: 1px solid #000; 
+                   width: 57mm; 
+                   height: 32mm; 
+                   page-break-inside: avoid;
+                   background: white;
+                 }
+                 .qr-section {
+                   width: 30mm;
+                   height: 30mm;
+                   display: flex;
+                   align-items: center;
+                   justify-content: center;
+                   border-right: 1px solid #ccc;
+                 }
+                 .qr-image {
+                   width: 28mm;
+                   height: 28mm;
+                   display: block;
+                 }
+                 .info-section {
+                   flex: 1;
+                   padding: 1mm;
+                   display: flex;
+                   flex-direction: column;
+                   justify-content: center;
+                   font-size: 10px;
+                   line-height: 1.2;
+                 }
+                                  .info-row {
+                   margin: 0.5mm 0;
+                   font-weight: bold;
+                 }
+                                 .qr-grid {
+                   text-align: center;
+                   display: flex;
+                   flex-direction: column;
+                   align-items: center;
+                   gap: 2mm;
+                 }
+                                 @media print {
+                   body { margin: 0; }
+                   .qr-container { 
+                     margin: 1mm; 
+                     padding: 1mm;
+                     width: 57mm !important;
+                     height: 32mm !important;
+                   }
+                   .qr-section {
+                     width: 30mm !important;
+                     height: 30mm !important;
+                   }
+                   .qr-image {
+                     width: 28mm !important;
+                     height: 28mm !important;
+                   }
+                   .info-section {
+                     font-size: 9px !important;
+                   }
+                 }
+              </style>
+            </head>
+            <body>
+
+                             <div class="qr-grid">
+                 ${qrImages.map((qr) => `
+                   <div class="qr-container">
+                     <div class="qr-section">
+                       <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                     </div>
+                     <div class="info-section">
+                       <div class="info-row">Mã: ${qr.materialCode}</div>
+                       <div class="info-row">PO: ${qr.poNumber}</div>
+                       <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                     </div>
+                   </div>
+                 `).join('')}
+               </div>
+              <script>
+                window.onload = function() {
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error generating QR codes:', error);
+      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+    }
   }
 }

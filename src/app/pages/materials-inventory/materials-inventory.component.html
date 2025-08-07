@@ -1,165 +1,119 @@
-<div class="materials-lifecycle">
-  <!-- Page Header -->
-  <div class="page-header">
-    <h1 class="header-title">
-      <i class="material-icons">inventory</i>
-      Materials Lifecycle Management
-    </h1>
-    <p class="header-subtitle">Import and manage materials lifecycle data from Excel files</p>
-  </div>
-
-  <!-- Statistics Cards -->
-  <div class="stats-cards">
-    <div class="stat-card total">
-      <div class="stat-icon">
-        <i class="material-icons">inventory</i>
-      </div>
-      <div class="stat-content">
-        <div class="stat-number">{{ totalMaterials | number }}</div>
-        <div class="stat-label">Total Materials</div>
-      </div>
-    </div>
-    
-    <div class="stat-card stock">
-      <div class="stat-icon">
-        <i class="material-icons">archive</i>
-      </div>
-      <div class="stat-content">
-        <div class="stat-number">{{ totalStock | number }}</div>
-        <div class="stat-label">Total Stock</div>
-      </div>
-    </div>
-    
-    <div class="stat-card shelf-life">
-      <div class="stat-icon">
-        <i class="material-icons">schedule</i>
-      </div>
-      <div class="stat-content">
-        <div class="stat-number">{{ avgShelfLife | number:'1.1-1' }}</div>
-        <div class="stat-label">Avg Shelf Life</div>
-      </div>
-    </div>
-    
-    <div class="stat-card aging">
-      <div class="stat-icon">
-        <i class="material-icons">event</i>
-      </div>
-      <div class="stat-content">
-        <div class="stat-number">{{ avgAging | number:'1.1-1' }}</div>
-        <div class="stat-label">Avg Aging</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Controls Section -->
-  <div class="controls-section">
-    <div class="controls-left">
-      <!-- File Import -->
-      <input #fileInput 
-             type="file" 
-             accept=".xlsx,.xls,.csv" 
-             (change)="onFileSelect($event)" 
-             style="display: none;">
-      
-      <button class="import-btn" 
-              (click)="triggerFileInput()" 
-              [disabled]="isLoading">
-        <i class="material-icons">upload_file</i>
-        Import Excel File
-      </button>
-      
-      <!-- Search -->
-      <div class="search-container">
-        <mat-form-field appearance="outline" class="search-field">
-          <mat-label>Search materials...</mat-label>
-          <input matInput 
-                 [(ngModel)]="searchTerm" 
-                 (input)="applyFilter()" 
-                 placeholder="Material code, name, PO...">
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
+<div class="main-content">
+  <!-- Excel-like Container -->
+  <div class="excel-container">
+    <!-- Excel Actions -->
+    <div class="excel-actions">
+      <div class="action-buttons">
+        <div class="dropdown">
+          <button class="btn btn-primary dropdown-toggle" type="button" (click)="toggleDropdown($event)">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" [class.show]="isDropdownOpen">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importCatalog()">
+              <i class="material-icons">upload_file</i>
+              Import File Danh mục
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
+              <i class="material-icons">download</i>
+              Tải Template Danh mục
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importCurrentStock()">
+              <i class="material-icons">upload_file</i>
+              Import Tồn kho hiện tại
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadStockTemplate()">
+              <i class="material-icons">download</i>
+              Tải Template Tồn kho
+            </a>
+          </div>
+        </div>
+        <button class="btn btn-outline-success" (click)="refreshInventory()">
+          <i class="material-icons">refresh</i>
+          Refresh
+        </button>
+        <button class="btn btn-outline-warning" (click)="completeInventory()">
+          <i class="material-icons">check_circle</i>
+          Hoàn thành
+        </button>
       </div>
     </div>
 
-    <div class="controls-right">
-      <!-- Action Buttons -->
-      <button class="action-btn export" 
-              (click)="exportToExcel()" 
-              [disabled]="materialsData.length === 0">
-        <i class="material-icons">download</i>
-        Export Excel
-      </button>
-      
-      <button class="action-btn clear" 
-              (click)="clearData()" 
-              [disabled]="materialsData.length === 0">
-        <i class="material-icons">clear_all</i>
-        Clear Data
-      </button>
-    </div>
-  </div>
-
-  <!-- Data Table Section -->
-  <div class="table-section">
-    <div class="table-header">
-      <h4 class="table-title">Materials Data ({{ filteredMaterials.length }})</h4>
-    </div>
-    
-    <!-- Loading State -->
-    <div class="loading-state" *ngIf="isLoading">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Processing Excel file...</div>
-    </div>
-    
-    <!-- Empty State -->
-    <div class="empty-state" *ngIf="!isLoading && materialsData.length === 0">
-      <i class="material-icons">inventory</i>
-      <h5>No Data Available</h5>
-      <p>Click "Import Excel File" to load materials lifecycle data</p>
-      <button class="import-btn-large" (click)="triggerFileInput()">
-        <i class="material-icons">upload_file</i>
-        Import Excel File
-      </button>
-    </div>
-    
-    <!-- Materials Table -->
-    <div class="table-responsive" *ngIf="!isLoading && materialsData.length > 0">
-      <table class="materials-table">
+    <!-- Excel-like Body -->
+    <div class="excel-body">
+      <table class="excel-table">
         <thead>
           <tr>
-            <th *ngFor="let column of displayedColumns" 
-                class="sortable-header" 
-                (click)="sortData(column)">
-              {{ columnLabels[column] }}
-              <i class="material-icons sort-icon" 
-                 *ngIf="sortBy === column">
-                {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-              </i>
-            </th>
+            <th class="row-header">#</th>
+            <th>Mã hàng</th>
+            <th>Tên hàng</th>
+            <th>Đơn vị</th>
+            <th>Số P.O</th>
+            <th>Lượng Nhập</th>
+            <th>Xuất</th>
+            <th>Tồn kho</th>
+            <th>Vị trí</th>
+            <th>Loại hình</th>
+            <th>HSD</th>
+            <th>KK</th>
+            <th>Ghi chú</th>
+            <th>Số cuộn/ bịch</th>
+            <th>Lưu ý</th>
+            <th>Trạng thái</th>
+            <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; trackBy: trackByMaterialCode" 
-              class="table-row">
-            <td>{{ material.no }}</td>
-            <td class="material-code">{{ material.materialCode }}</td>
-            <td class="material-name">{{ material.materialName }}</td>
-            <td>{{ material.unit }}</td>
-            <td class="po-number">{{ material.poNumber }}</td>
-            <td class="date">{{ material.expiryDate }}</td>
-            <td class="shelf-life">{{ material.shelfLife }}</td>
-            <td class="warehouse-code">{{ material.warehouseCode }}</td>
-            <td class="date">{{ material.importDate }}</td>
-            <td class="aging" [class.aging-high]="material.aging > 12">
-              {{ material.aging }}
+          <tr *ngFor="let material of filteredInventory; let i = index" 
+              [class.duplicate-row]="material.isDuplicate">
+            <td class="row-header">{{i + 1}}</td>
+            <td class="code-cell" [class.duplicate-cell]="material.isDuplicate">{{material.materialCode}}</td>
+            <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 
+                [title]="material.materialName || 'N/A'">{{material.materialName || 'N/A'}}</td>
+            <td [class.duplicate-cell]="material.isDuplicate">{{material.unit}}</td>
+            <td [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{material.quantity | number}} {{material.unit}}</td>
+            <td class="number-cell">
+              <input type="number" class="editable-cell" [(ngModel)]="material.exported" (change)="updateExported(material)" min="0">
             </td>
-            <td class="stock" [class.stock-low]="material.remainingStock < 10">
-              {{ material.remainingStock | number }}
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{material.stock || material.quantity | number}} {{material.unit}}</td>
+            <td>
+              <input type="text" class="editable-cell" [(ngModel)]="material.location" (change)="updateLocation(material)">
             </td>
-            <td class="date">{{ material.dateRemain }}</td>
+            <td>
+              <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
+            </td>
+            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">{{material.expiryDate | date:'dd/MM/yyyy'}}</td>
+            <td class="status-cell">
+              <mat-checkbox [checked]="material.qualityCheck" disabled>
+              </mat-checkbox>
+            </td>
+            <td>
+              <input type="text" class="editable-cell" [(ngModel)]="material.notes" (change)="updateNotes(material)">
+            </td>
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{material.rollsOrBags}}</td>
+            <td>
+              <input type="text" class="editable-cell" [(ngModel)]="material.remarks" (change)="updateRemarks(material)">
+            </td>
+            <td class="status-cell">
+              <span class="badge badge-success">In Stock</span>
+            </td>
+            <td class="status-cell">
+              <button mat-icon-button color="warn" (click)="deleteInventoryItem(material)" 
+                      matTooltip="Xóa item này khỏi Inventory">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
+
+      <!-- No Data Message -->
+      <div class="no-data" *ngIf="filteredInventory.length === 0">
+        <i class="material-icons">inventory</i>
+        <h5>No Inventory Items</h5>
+        <p>No materials have been marked as received in Inbound Materials tab</p>
+      </div>
     </div>
   </div>
 </div>
