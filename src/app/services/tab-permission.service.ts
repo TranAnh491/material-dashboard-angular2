@@ -51,7 +51,9 @@ export class TabPermissionService {
                     'layout': true,
                     'checklist': true,
                     'equipment': true,
-                    'task': true
+                    'task': true,
+                    'inventory-export': true,  // Quyền chỉnh sửa cột Xuất
+                    'inventory-delete': true   // Quyền xóa item
                   };
                 }
               })

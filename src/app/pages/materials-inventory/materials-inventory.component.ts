@@ -6,6 +6,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
+import { TabPermissionService } from '../../services/tab-permission.service';
 
 export interface InventoryMaterial {
   id?: string;
@@ -30,6 +31,7 @@ export interface InventoryMaterial {
   remarks: string;
   isCompleted: boolean;
   isDuplicate?: boolean; // Added for duplicate marking
+  importStatus?: string; // "Import" for items imported from stock file
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -42,8 +44,10 @@ export interface CatalogItem {
 
 export interface StockItem {
   materialCode: string;
-  currentStock: number;
-  unit: string;
+  poNumber: string;
+  quantity: number;
+  type: string;
+  location: string;
 }
 
 @Component({
@@ -75,15 +79,21 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
 
+  // Permission properties
+  canExport = false;
+  canDelete = false;
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private tabPermissionService: TabPermissionService
   ) {}
 
   ngOnInit(): void {
     this.loadInventoryFromFirebase();
     this.loadCatalogFromFirebase();
+    this.loadPermissions();
     // Disable auto-sync to prevent deleted items from reappearing
     // Use manual sync button instead
   }
@@ -116,8 +126,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
           });
         
         console.log('Raw inventory data before sorting:', this.inventoryMaterials.map(m => m.materialCode));
+        // Apply filters and sorting initially
         this.applyFilters();
-        console.log('Sorted inventory data:', this.filteredInventory.map(m => m.materialCode));
         console.log('Loaded inventory from Firebase:', this.inventoryMaterials.length);
         this.isLoading = false;
       });
@@ -207,44 +217,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Apply search filters
-  applyFilters(): void {
-    this.filteredInventory = this.inventoryMaterials.filter(material => {
-      // Filter by search term
-      if (this.searchTerm) {
-        const searchLower = this.searchTerm.toLowerCase();
-        const matchesSearch = (
-          material.materialCode.toLowerCase().includes(searchLower) ||
-          material.batchNumber.toLowerCase().includes(searchLower) ||
-          material.poNumber.toLowerCase().includes(searchLower) ||
-          material.supplier.toLowerCase().includes(searchLower) ||
-          material.location.toLowerCase().includes(searchLower)
-        );
-        if (!matchesSearch) return false;
-      }
-      
-      // Filter by completion status
-      if (!this.showCompleted) {
-        const stock = material.stock || material.quantity || 0;
-        if (stock === 0) return false;
-      }
-      
-      return true;
-    });
 
-    // Sort by material code (alphabetical and numerical order) then by PO number
-    this.filteredInventory.sort((a, b) => {
-      // First sort by material code using natural sort (alphabetical + numerical)
-      const codeComparison = this.compareMaterialCodes(a.materialCode, b.materialCode);
-      if (codeComparison !== 0) return codeComparison;
-      
-      // Then sort by PO number
-      return this.comparePONumbers(a.poNumber, b.poNumber);
-    });
-
-    // Check for duplicates and mark them
-    this.markDuplicates();
-  }
 
   // Compare material codes using natural sort (alphabetical + numerical)
   private compareMaterialCodes(codeA: string, codeB: string): number {
@@ -469,11 +442,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Search method
-  onSearchChange(event: any): void {
-    this.searchTerm = event.target.value;
-    this.applyFilters();
-  }
+
 
   // Toggle dropdown
   toggleDropdown(event: Event): void {
@@ -783,8 +752,10 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
             if (row[0] && row[1] && row[2]) {
               stockItems.push({
                 materialCode: row[0].toString(),
-                currentStock: Number(row[1]) || 0,
-                unit: row[2].toString()
+                poNumber: row[1].toString(),
+                quantity: Number(row[2]) || 0,
+                type: row[3]?.toString() || '',
+                location: row[4]?.toString()?.toUpperCase() || 'DEFAULT'
               });
             }
           }
@@ -799,23 +770,58 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
 
   // Update inventory with stock data
   private updateInventoryWithStock(stockItems: StockItem[]): void {
-    const stockMap = new Map<string, StockItem>();
-    stockItems.forEach(item => {
-      stockMap.set(item.materialCode, item);
-    });
+    // Add new inventory items from stock import
+    stockItems.forEach(stockItem => {
+      // Check if item already exists
+      const existing = this.inventoryMaterials.find(material => 
+        material.materialCode === stockItem.materialCode && 
+        material.poNumber === stockItem.poNumber
+      );
 
-    this.inventoryMaterials.forEach(material => {
-      const stockItem = stockMap.get(material.materialCode);
-      if (stockItem) {
-        material.stock = stockItem.currentStock;
-        material.exported = (material.quantity || 0) - stockItem.currentStock;
-        if (material.exported < 0) material.exported = 0;
-        this.updateInventoryInFirebase(material);
+      if (!existing) {
+        // Create new inventory item with "Import" status
+        const newInventoryItem: InventoryMaterial = {
+          importDate: new Date(),
+          receivedDate: new Date(),
+          batchNumber: `IMPORT-${Date.now()}`,
+          materialCode: stockItem.materialCode,
+          materialName: stockItem.materialCode, // Use material code as name for now
+          poNumber: stockItem.poNumber,
+          quantity: stockItem.quantity,
+          unit: 'PCS', // Default unit
+          exported: 0,
+          stock: stockItem.quantity,
+          location: stockItem.location,
+          type: stockItem.type,
+          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+          qualityCheck: false,
+          isReceived: true,
+          notes: '',
+          rollsOrBags: '0',
+          supplier: 'Import',
+          remarks: '',
+          isCompleted: false,
+          isDuplicate: false,
+          importStatus: 'Import', // Mark as Import status
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        // Add to Firebase
+        this.firestore.collection('inventory-materials').add(newInventoryItem)
+          .then((docRef) => {
+            console.log('Added import item to inventory with ID:', docRef.id);
+            // Add to local array
+            this.inventoryMaterials.push(newInventoryItem);
+            this.applyFilters();
+          })
+          .catch(error => {
+            console.error('Error adding import item to inventory:', error);
+          });
       }
     });
 
-    this.applyFilters();
-    console.log('Inventory updated with stock data');
+    console.log('Stock data imported successfully');
   }
 
   // Update inventory item in Firebase
@@ -844,12 +850,11 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   // Download stock template
   downloadStockTemplate(): void {
     const templateData = [
-      ['Mã hàng', 'Tồn kho hiện tại', 'Đơn vị'],
-      ['MAT001', 100, 'm'],
-      ['MAT002', 50, 'cuộn'],
-      ['MAT003', 200, 'cái'],
-      ['MAT004', 150, 'cái'],
-      ['MAT005', 75, 'm']
+      ['Mã hàng', 'Số P.O', 'Lượng nhập', 'Loại hình', 'Vị trí'],
+      ['B001801', 'KZPO0725/0104', 300, 'Wire', 'D22'],
+      ['B001802', 'KZPO0725/0117', 700, 'Cable', 'IQC'],
+      ['A001803', 'KZPO0725/0118', 500, 'Component', 'E31'],
+      ['R001804', 'KZPO0725/0119', 200, 'Raw Material', 'F12']
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -1157,6 +1162,392 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Error checking camera availability:', error);
       return false;
+    }
+  }
+
+  // Search functionality
+  onSearchChange(event: any): void {
+    this.searchTerm = event.target.value.toLowerCase();
+    this.applyFilters();
+  }
+
+  // Apply search filters
+  applyFilters(): void {
+    this.filteredInventory = this.inventoryMaterials.filter(material => {
+      // Filter by search term
+      if (this.searchTerm) {
+        const searchableText = [
+          material.materialCode,
+          material.materialName,
+          material.location,
+          material.quantity?.toString(),
+          material.stock?.toString(),
+          material.poNumber
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        if (!searchableText.includes(this.searchTerm)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+
+    // Sort IQC items to bottom
+    this.filteredInventory.sort((a, b) => {
+      const aIsIQC = this.isIQCLocation(a.location);
+      const bIsIQC = this.isIQCLocation(b.location);
+      
+      if (aIsIQC && !bIsIQC) return 1;
+      if (!aIsIQC && bIsIQC) return -1;
+      return 0;
+    });
+  }
+
+  // Format numbers with thousand separators and decimal places
+  formatNumber(value: any): string {
+    if (value === null || value === undefined || value === '') {
+      return '0';
+    }
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) {
+      return '0';
+    }
+    
+    // If it's a whole number, show without decimals
+    if (num % 1 === 0) {
+      return num.toLocaleString('vi-VN');
+    } else {
+      // If it has decimals, show with up to 2 decimal places
+      return num.toLocaleString('vi-VN', { 
+        minimumFractionDigits: 0, 
+        maximumFractionDigits: 2 
+      });
+    }
+  }
+
+  // Check if location is IQC
+  isIQCLocation(location: string): boolean {
+    return location && location.toUpperCase() === 'IQC';
+  }
+
+  // Check if material has duplicate PO
+  isDuplicatePO(material: InventoryMaterial): boolean {
+    const duplicates = this.inventoryMaterials.filter(item => 
+      item.materialCode === material.materialCode && 
+      item.poNumber === material.poNumber
+    );
+    return duplicates.length > 1;
+  }
+
+  // Get count of IQC items
+  getIQCCount(): number {
+    return this.filteredInventory.filter(material => 
+      this.isIQCLocation(material.location)
+    ).length;
+  }
+
+  // Load user permissions for inventory
+  loadPermissions(): void {
+    this.tabPermissionService.getCurrentUserTabPermissions()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(permissions => {
+        this.canExport = permissions['inventory-export'] !== false;
+        this.canDelete = permissions['inventory-delete'] !== false;
+        console.log('Inventory permissions loaded:', { canExport: this.canExport, canDelete: this.canDelete });
+      });
+  }
+
+  // Handle location change to uppercase
+  onLocationChange(material: InventoryMaterial): void {
+    if (material.location) {
+      material.location = material.location.toUpperCase();
+      this.updateLocation(material);
+      this.applyFilters(); // Re-sort after location change
+    }
+  }
+
+  // Update rolls or bags
+  updateRollsOrBags(material: InventoryMaterial): void {
+    this.updateInventoryInFirebase(material);
+  }
+
+  // Print QR Code for import items - Updated to match Inbound style
+  async printQRCode(material: InventoryMaterial): Promise<void> {
+    if (!material.importStatus || material.importStatus !== 'Import') {
+      alert('Chỉ có thể in QR code cho các item có trạng thái Import');
+      return;
+    }
+
+    try {
+      // Calculate quantity per roll/bag
+      const rollsOrBags = parseFloat(material.rollsOrBags) || 1;
+      const totalQuantity = material.stock || material.quantity;
+      
+      // Calculate how many full units we can make
+      const fullUnits = Math.floor(totalQuantity / rollsOrBags);
+      const remainingQuantity = totalQuantity % rollsOrBags;
+      
+      // Generate QR codes based on quantity per unit
+      const qrCodes = [];
+      
+      // Add full units
+      for (let i = 0; i < fullUnits; i++) {
+        qrCodes.push({
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          unitNumber: rollsOrBags,
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}`
+        });
+      }
+      
+      // Add remaining quantity if any
+      if (remainingQuantity > 0) {
+        qrCodes.push({
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          unitNumber: remainingQuantity,
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
+        });
+      }
+
+      if (qrCodes.length === 0) {
+        alert('Vui lòng nhập số đơn vị trước khi tạo QR code!');
+        return;
+      }
+
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+      const totalPages = qrCodes.length;
+      
+      // Generate QR code images
+      const qrImages = await Promise.all(
+        qrCodes.map(async (qr, index) => {
+          const qrData = qr.qrData;
+          const qrImage = await QRCode.toDataURL(qrData, {
+            width: 240, // 30mm = 240px (8px/mm)
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          return {
+            ...qr,
+            qrImage,
+            index: index + 1,
+            pageNumber: index + 1,
+            totalPages: totalPages,
+            printDate: printDate,
+            printedBy: currentUser
+          };
+        })
+      );
+
+      // Create print window with real QR codes
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title></title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 1mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 8px !important;
+                  line-height: 1.1 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .info-row {
+                  margin: 0.3mm 0 !important;
+                  font-weight: bold !important;
+                }
+                
+                .info-row.small {
+                  font-size: 7px !important;
+                  color: #666 !important;
+                }
+                
+                .qr-grid {
+                  text-align: center !important;
+                  display: flex !important;
+                  flex-direction: row !important;
+                  flex-wrap: wrap !important;
+                  align-items: flex-start !important;
+                  justify-content: flex-start !important;
+                  gap: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 8px !important;
+                    padding: 1mm !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 7px !important;
+                  }
+                  
+                  .qr-grid {
+                    gap: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  /* Hide all browser elements */
+                  @media screen {
+                    body::before,
+                    body::after,
+                    header,
+                    footer,
+                    nav,
+                    .browser-ui {
+                      display: none !important;
+                    }
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-grid">
+                ${qrImages.map(qr => `
+                  <div class="qr-container">
+                    <div class="qr-section">
+                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                    </div>
+                    <div class="info-section">
+                      <div>
+                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row">PO: ${qr.poNumber}</div>
+                        <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                      </div>
+                      <div>
+                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">NV: ${qr.printedBy}</div>
+                        <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <script>
+                window.onload = function() {
+                  // Remove all browser UI elements
+                  document.title = '';
+                  
+                  // Hide browser elements
+                  const style = document.createElement('style');
+                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                  document.head.appendChild(style);
+                  
+                  // Remove any browser elements
+                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                  elementsToRemove.forEach(el => el.remove());
+                  
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error generating QR codes:', error);
+      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
 }

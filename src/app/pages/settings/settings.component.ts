@@ -45,13 +45,14 @@ export class SettingsComponent implements OnInit {
     { key: 'materials', name: 'Materials', icon: 'inventory_2' },
     { key: 'fg', name: 'Finished Goods', icon: 'check_circle_outline' },
     { key: 'label', name: 'Label', icon: 'label' },
-
     { key: 'utilization', name: 'Utilization', icon: 'assessment' },
     { key: 'find', name: 'Find', icon: 'search' },
     { key: 'layout', name: 'Layout', icon: 'grid_view' },
     { key: 'checklist', name: 'Safety & Quality', icon: 'checklist' },
     { key: 'equipment', name: 'Training', icon: 'integration_instructions' },
-    { key: 'task', name: 'Flow Work', icon: 'view_kanban' }
+    { key: 'task', name: 'Flow Work', icon: 'view_kanban' },
+    { key: 'inventory-export', name: 'Inventory Xuất', icon: 'edit' },
+    { key: 'inventory-delete', name: 'Inventory Xóa', icon: 'delete' }
   ];
   
   // Tab permissions for each user: { userId: { tabKey: boolean } }

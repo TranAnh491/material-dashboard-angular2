@@ -12,7 +12,6 @@ export interface OutboundMaterial {
   exportQuantity: number;
   exportDate: Date;
   location: string;
-  notes: string;
   exportedBy: string;
   scanMethod?: string; // 'QR_SCAN' or 'MANUAL'
   createdAt?: Date;
@@ -43,6 +42,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadOutboundMaterialsFromFirebase();
+    this.cleanupOldRecords(); // Clean up records older than 6 months
   }
 
   ngOnDestroy(): void {
@@ -133,5 +133,35 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
           });
       }
     }
+  }
+
+  // Clean up old records (older than 6 months)
+  cleanupOldRecords(): void {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    console.log('Cleaning up outbound records older than:', sixMonthsAgo);
+    
+    this.firestore.collection('outbound-materials', ref => 
+      ref.where('exportDate', '<', sixMonthsAgo)
+    ).get().subscribe(snapshot => {
+      const batch = this.firestore.firestore.batch();
+      let deletedCount = 0;
+      
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        deletedCount++;
+      });
+      
+      if (deletedCount > 0) {
+        batch.commit().then(() => {
+          console.log(`Deleted ${deletedCount} old outbound records`);
+        }).catch(error => {
+          console.error('Error cleaning up old records:', error);
+        });
+      } else {
+        console.log('No old records to clean up');
+      }
+    });
   }
 }

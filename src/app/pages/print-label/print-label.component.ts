@@ -138,11 +138,13 @@ export class PrintLabelComponent implements OnInit {
       setTimeout(() => {
         this.loadDataFromFirebase();
         this.refreshStorageInfo();
+        this.autoHandleDocumentSizeLimit();
       }, 1000);
     } else {
       // Desktop loading
       this.loadDataFromFirebase();
       this.refreshStorageInfo();
+      this.autoHandleDocumentSizeLimit();
     }
   }
 
@@ -291,21 +293,33 @@ export class PrintLabelComponent implements OnInit {
     
     this.isSaving = true;
     
-    // Save each record individually to avoid document size limit
-    const savePromises = data.map((item, index) => {
-      const recordDoc = {
-        ...item,
+    // Check if we need to split data into smaller chunks
+    const maxRecordsPerChunk = 50; // Limit to 50 records per chunk to stay under 1MB
+    const chunks = [];
+    
+    for (let i = 0; i < data.length; i += maxRecordsPerChunk) {
+      chunks.push(data.slice(i, i + maxRecordsPerChunk));
+    }
+    
+    console.log(`📦 Splitting ${data.length} records into ${chunks.length} chunks of max ${maxRecordsPerChunk} records each`);
+    
+    // Save each chunk as a separate document
+    const savePromises = chunks.map((chunk, chunkIndex) => {
+      const chunkDoc = {
+        data: chunk,
         importedAt: new Date(),
         month: this.getCurrentMonth(),
-        recordIndex: index,
+        chunkIndex: chunkIndex,
+        totalChunks: chunks.length,
+        recordCount: chunk.length,
         totalRecords: data.length,
         lastUpdated: new Date()
       };
       
-      return this.firestore.collection('printSchedules').add(recordDoc);
+      return this.firestore.collection('printSchedules').add(chunkDoc);
     });
 
-    console.log(`📤 Attempting to save ${data.length} individual records to Firebase`);
+    console.log(`📤 Attempting to save ${chunks.length} chunks to Firebase`);
 
     // Add timeout to Firebase save
     const savePromise = Promise.all(savePromises);
@@ -319,7 +333,7 @@ export class PrintLabelComponent implements OnInit {
         this.firebaseSaved = true;
         this.isSaving = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert(`✅ Đã lưu thành công ${data.length} records vào Firebase!`);
+        alert(`✅ Đã lưu thành công ${data.length} records vào Firebase!\n\n📦 Chia thành ${chunks.length} chunks để tránh vượt quá giới hạn 1MB`);
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
@@ -5212,6 +5226,46 @@ Gửi tự động từ hệ thống quản lý tem.
         } catch (error) {
       console.error('❌ Error checking document sizes:', error);
       alert(`❌ Lỗi khi kiểm tra kích thước documents:\n${error.message || error}`);
+    }
+  }
+
+  // Auto handle document size limit
+  async autoHandleDocumentSizeLimit(): Promise<void> {
+    console.log('🔧 Auto-handling document size limits...');
+    
+    try {
+      // Check for large documents
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(5)
+      ).get().toPromise();
+
+      if (!querySnapshot || querySnapshot.empty) {
+        return; // No documents to check
+      }
+
+      let hasLargeDocument = false;
+      
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data() as any;
+        const jsonString = JSON.stringify(data);
+        const sizeInBytes = new Blob([jsonString]).size;
+        
+        // If document is larger than 800KB, it needs to be split
+        if (sizeInBytes > 800000) {
+          hasLargeDocument = true;
+          console.log(`⚠️ Found large document: ${doc.id} (${Math.round(sizeInBytes / 1024)} KB)`);
+          break;
+        }
+      }
+
+      if (hasLargeDocument) {
+        console.log('🔄 Auto-splitting large document...');
+        await this.splitLargeDocument();
+      }
+
+    } catch (error) {
+      console.error('❌ Error in auto-handling document size limit:', error);
+      // Don't show alert to user, just log the error
     }
   }
 } 

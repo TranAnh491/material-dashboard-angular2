@@ -214,28 +214,36 @@
   border: 1px solid #ddd;
   
   th {
-    background: #e3f2fd;
+    background: #ff9800;
     color: #000000;
     font-family: Arial, sans-serif;
     font-size: 10px;
     letter-spacing: 0.5px;
     padding: 8px 6px;
-    border-bottom: 2px solid #bbdefb;
-    border-right: 1px solid #bbdefb;
+    border-bottom: 2px solid #000000;
+    border-right: 1px solid #000000;
     text-align: center;
     font-weight: 600;
     position: sticky;
     top: 0;
     z-index: 10;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     
     &.row-header {
-      background: #bbdefb;
+      background: #f57c00;
       color: #000000;
       font-family: Arial, sans-serif;
       font-size: 9px;
       width: 40px;
       min-width: 40px;
+      border-bottom: 2px solid #000000;
+      border-right: 1px solid #000000;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   }
   
@@ -246,8 +254,8 @@
     color: #000000;
     text-align: center;
     font-family: Arial, sans-serif;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #000000;
+    border-right: 1px solid #000000;
     
     &.row-header {
       font-size: 9px;
@@ -754,5 +762,224 @@ mat-checkbox {
       font-size: 11px;
       padding: 4px 8px;
     }
+  }
+}
+
+// Search and stats section
+.search-and-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  .search-input {
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+    width: 300px;
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    
+    &::placeholder {
+      color: #6c757d;
+    }
+  }
+}
+
+.iqc-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: Arial, sans-serif;
+  
+  .iqc-label {
+    color: #856404;
+    font-weight: 600;
+  }
+  
+  .iqc-count {
+    background: #ffc107;
+    color: #212529;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    min-width: 20px;
+    text-align: center;
+  }
+}
+
+// Header colors - Orange for header with fixed positioning
+.excel-table {
+  th {
+    background: #ff9800 !important; // Orange
+    color: #000000 !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    
+    &.row-header {
+      background: #f57c00 !important; // Slightly darker orange
+      color: #000000 !important;
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 101 !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+  }
+}
+
+// PO column width
+.po-column,
+.po-cell {
+  min-width: 120px;
+  max-width: 120px;
+  width: 120px;
+}
+
+// Date column width (for reference)
+.date-cell {
+  min-width: 80px;
+  max-width: 80px;
+  width: 80px;
+}
+
+// Material code, location, type columns - same width as date column
+.code-cell,
+.location-cell,
+.type-cell {
+  min-width: 80px;
+  max-width: 80px;
+  width: 80px;
+}
+
+// Material code styling
+.material-code-cell {
+  &.normal-code {
+    background-color: #f8f9fa !important; // Light gray
+  }
+  
+  &.duplicate-code {
+    background-color: #4fc3f7 !important; // Light blue (coban)
+  }
+}
+
+// IQC location styling - bright yellow
+.iqc-location {
+  background-color: #ffff00 !important; // Bright yellow
+  color: #000000 !important;
+  font-weight: bold !important;
+}
+
+.location-input {
+  text-transform: uppercase;
+}
+
+// Number formatting
+.number-cell {
+  font-family: 'Courier New', monospace;
+  text-align: right;
+  min-width: 104px; // Tăng 30% từ 80px lên 104px
+  max-width: 104px;
+  width: 104px;
+}
+
+// QR Code cell styling
+.qr-cell {
+  text-align: center;
+  
+  .qr-print-button {
+    width: 20px;
+    height: 18px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 2px;
+    font-size: 8px;
+    font-weight: bold;
+    font-family: Arial, sans-serif;
+    cursor: pointer;
+    display: inline-block;
+    text-align: center;
+    line-height: 18px;
+    transition: background 0.2s ease;
+    
+    &:hover {
+      background: #218838;
+    }
+    
+    &:active {
+      background: #1e7e34;
+    }
+  }
+  
+  .no-qr {
+    color: #6c757d;
+    font-size: 12px;
+  }
+}
+
+// Import status badge
+.badge-import {
+  background: #17a2b8 !important;
+  color: white !important;
+  font-size: 9px;
+  padding: 4px 8px;
+  border-radius: 0;
+  letter-spacing: 0.2px;
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+}
+
+// Disabled input styling
+.editable-cell:disabled {
+  background-color: #f5f5f5 !important;
+  color: #999 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
+
+// Disabled button styling
+.mat-icon-button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.mat-icon-button:disabled .mat-icon {
+  color: #ccc !important;
+}
+
+// Responsive adjustments for search
+@media (max-width: 768px) {
+  .search-and-stats {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .search-box .search-input {
+    width: 100%;
+  }
+  
+  .iqc-counter {
+    justify-content: center;
   }
 }
