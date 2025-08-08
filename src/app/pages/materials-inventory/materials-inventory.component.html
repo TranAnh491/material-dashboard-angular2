@@ -72,10 +72,10 @@
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">{{material.receivedDate | date:'dd/MM/yyyy'}}</td>
             <td class="code-cell" [class.duplicate-cell]="material.isDuplicate">{{material.materialCode}}</td>
             <td class="scan-cell">
-              <button mat-icon-button color="primary" 
+              <button class="qr-button" 
                       (click)="scanQRCode(material)"
                       matTooltip="Quét QR code để xuất hàng">
-                <mat-icon>qr_code_scanner</mat-icon>
+                QR
               </button>
             </td>
             <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 

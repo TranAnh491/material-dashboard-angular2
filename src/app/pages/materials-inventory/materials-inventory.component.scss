@@ -295,28 +295,34 @@
      
                        &.scan-cell {
          text-align: center;
-         display: flex;
-         justify-content: center;
-         align-items: center;
+         vertical-align: middle;
+         padding: 6px 4px;
+         width: 40px;
+         min-width: 40px;
+         max-width: 40px;
          
-         .mat-icon-button {
-           width: 32px;
-           height: 32px;
-           line-height: 32px;
+         .qr-button {
+           width: 20px;
+           height: 18px;
+           background: #007bff;
+           color: white;
+           border: none;
+           border-radius: 2px;
+           font-size: 8px;
+           font-weight: bold;
+           font-family: Arial, sans-serif;
+           cursor: pointer;
+           display: inline-block;
+           text-align: center;
+           line-height: 18px;
+           transition: background 0.2s ease;
            
-           &[color="primary"] {
-             background: #007bff;
-             color: white;
-             border-radius: 50%;
-             
-             &:hover {
-               background: #0056b3;
-               transform: scale(1.1);
-             }
+           &:hover {
+             background: #0056b3;
            }
            
-           mat-icon {
-             font-size: 18px;
+           &:active {
+             background: #004085;
            }
          }
        }

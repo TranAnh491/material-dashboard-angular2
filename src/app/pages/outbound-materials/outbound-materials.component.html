@@ -4,105 +4,7 @@
     <!-- Excel-like Header -->
     <div class="excel-header">
       <h4>📤 Outbound Materials</h4>
-      <p>Quét QR code để xuất hàng từ kho</p>
-    </div>
-    
-    <!-- QR Code Scanning Section -->
-    <div class="qr-scanning-section" *ngIf="!scannedMaterial">
-      <div class="scanning-card">
-        <div class="scanning-header">
-          <h5>
-            <i class="material-icons">qr_code_scanner</i>
-            Quét QR Code
-          </h5>
-        </div>
-        
-        <div class="scanning-content">
-          <div class="scanning-area" [class.scanning]="isScanning">
-            <i class="material-icons">qr_code</i>
-            <p>Nhấn nút "Quét QR Code" để bắt đầu</p>
-          </div>
-          
-          <div class="scanning-actions">
-            <button class="btn btn-primary" (click)="startQRScanning()" [disabled]="isScanning">
-              <i class="material-icons">qr_code_scanner</i>
-              Quét QR Code
-            </button>
-            
-            <button class="btn btn-secondary" (click)="manualQRInput()">
-              <i class="material-icons">input</i>
-              Nhập thủ công
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Export Form Section -->
-    <div class="export-form-section" *ngIf="scannedMaterial">
-      <div class="export-card">
-        <div class="export-header">
-          <h5>
-            <i class="material-icons">inventory</i>
-            Thông tin hàng đã quét
-          </h5>
-        </div>
-        
-        <div class="export-content">
-          <div class="material-info">
-            <div class="info-row">
-              <span class="label">Mã hàng:</span>
-              <span class="value">{{scannedMaterial.materialCode}}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Số PO:</span>
-              <span class="value">{{scannedMaterial.poNumber}}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Số lượng gốc:</span>
-              <span class="value">{{scannedMaterial.quantity}}</span>
-            </div>
-          </div>
-          
-          <div class="export-form">
-            <div class="form-group">
-              <label>Số lượng xuất:</label>
-              <input type="number" 
-                     [(ngModel)]="exportQuantity" 
-                     min="1" 
-                     max="{{scannedMaterial.quantity}}"
-                     class="form-control">
-            </div>
-            
-            <div class="form-group">
-              <label>Vị trí:</label>
-              <input type="text" 
-                     [(ngModel)]="exportLocation" 
-                     class="form-control"
-                     placeholder="Nhập vị trí xuất">
-            </div>
-            
-            <div class="form-group">
-              <label>Ghi chú:</label>
-              <textarea [(ngModel)]="exportNotes" 
-                        class="form-control"
-                        placeholder="Ghi chú xuất hàng"></textarea>
-            </div>
-            
-            <div class="export-actions">
-              <button class="btn btn-success" (click)="exportMaterial()">
-                <i class="material-icons">check</i>
-                Xuất hàng
-              </button>
-              
-              <button class="btn btn-secondary" (click)="resetExportForm()">
-                <i class="material-icons">cancel</i>
-                Hủy
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <p>Lịch sử xuất hàng từ kho</p>
     </div>
 
     <!-- Excel-like Actions -->
@@ -165,6 +67,7 @@
             <td>{{material.exportedBy}}</td>
             <td class="status-cell">
               <button mat-icon-button color="warn" 
+                      (click)="deleteOutboundRecord(material)"
                       matTooltip="Xóa record này">
                 <mat-icon>delete</mat-icon>
               </button>
@@ -177,7 +80,7 @@
       <div class="no-data" *ngIf="filteredOutbound.length === 0">
         <i class="material-icons">inventory_2</i>
         <h5>Chưa có record xuất hàng</h5>
-        <p>Quét QR code để bắt đầu xuất hàng</p>
+        <p>Lịch sử xuất hàng sẽ hiển thị ở đây khi có hoạt động quét QR từ tab Inventory</p>
       </div>
     </div>
   </div>
