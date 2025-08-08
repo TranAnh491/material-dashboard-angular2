@@ -5080,4 +5080,138 @@ Gửi tự động từ hệ thống quản lý tem.
         alert('❌ Có lỗi khi xóa hình!');
       });
   }
+
+  // Add function to split large documents
+  async splitLargeDocument(): Promise<void> {
+    console.log('🔧 Splitting large document to avoid size limit...');
+    
+    try {
+      // Find the large document
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(1)
+      ).get().toPromise();
+
+      if (!querySnapshot || querySnapshot.empty) {
+        alert('❌ Không tìm thấy document để tách');
+        return;
+      }
+
+      const largeDoc = querySnapshot.docs[0];
+      const docData = largeDoc.data() as any;
+      const scheduleData = docData.data || [];
+
+      if (scheduleData.length === 0) {
+        alert('❌ Document không có dữ liệu để tách');
+        return;
+      }
+
+      // Split data into chunks of 50 items each
+      const chunkSize = 50;
+      const chunks = [];
+      
+      for (let i = 0; i < scheduleData.length; i += chunkSize) {
+        chunks.push(scheduleData.slice(i, i + chunkSize));
+      }
+
+      console.log(`📦 Splitting ${scheduleData.length} items into ${chunks.length} chunks`);
+
+      // Delete the large document first
+      await largeDoc.ref.delete();
+      console.log('🗑️ Deleted large document');
+
+      // Create new smaller documents
+      const batch = this.firestore.firestore.batch();
+      const newDocRefs = [];
+
+      chunks.forEach((chunk, index) => {
+        const newDocRef = this.firestore.collection('printSchedules').doc();
+        const newDocData = {
+          data: chunk,
+          importedAt: docData.importedAt || new Date(),
+          month: docData.month || this.getCurrentMonth(),
+          chunkIndex: index,
+          totalChunks: chunks.length,
+          recordCount: chunk.length,
+          lastUpdated: new Date(),
+          splitFrom: largeDoc.id
+        };
+        
+        batch.set(newDocRef.ref, newDocData);
+        newDocRefs.push(newDocRef);
+      });
+
+      await batch.commit();
+      console.log('✅ Successfully split large document');
+
+      // Reload data
+      this.loadDataFromFirebase();
+      
+      alert(`✅ Đã tách document lớn thành ${chunks.length} document nhỏ hơn!\n\n` +
+            `📊 Tổng số items: ${scheduleData.length}\n` +
+            `📦 Số chunks: ${chunks.length}\n` +
+            `📏 Items per chunk: ${chunkSize}`);
+
+    } catch (error) {
+      console.error('❌ Error splitting large document:', error);
+      alert(`❌ Lỗi khi tách document lớn:\n${error.message || error}`);
+    }
+  }
+
+  // Add function to check document sizes
+  async checkDocumentSizes(): Promise<void> {
+    console.log('📏 Checking document sizes...');
+    
+    try {
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc')
+      ).get().toPromise();
+
+      if (!querySnapshot || querySnapshot.empty) {
+        alert('❌ Không có documents để kiểm tra');
+        return;
+      }
+
+      let report = '📏 Document Size Report:\n\n';
+      let totalSize = 0;
+      let largeDocs = 0;
+
+      querySnapshot.docs.forEach((doc, index) => {
+        const data = doc.data() as any;
+        const jsonString = JSON.stringify(data);
+        const sizeInBytes = new Blob([jsonString]).size;
+        const sizeInKB = Math.round(sizeInBytes / 1024);
+        const sizeInMB = Math.round(sizeInBytes / (1024 * 1024) * 100) / 100;
+        
+        totalSize += sizeInBytes;
+        
+        report += `📄 Document ${index + 1} (${doc.id}):\n`;
+        report += `   📏 Size: ${sizeInKB} KB (${sizeInMB} MB)\n`;
+        report += `   📊 Items: ${data.data?.length || 0}\n`;
+        report += `   📅 Created: ${data.importedAt?.toDate().toLocaleString('vi-VN') || 'N/A'}\n`;
+        
+        if (sizeInBytes > 800000) { // Warning at 800KB
+          report += `   ⚠️ WARNING: Document is large!\n`;
+          largeDocs++;
+        }
+        
+        report += '\n';
+      });
+
+      const totalSizeInMB = Math.round(totalSize / (1024 * 1024) * 100) / 100;
+      report += `📈 Summary:\n`;
+      report += `   📊 Total documents: ${querySnapshot.size}\n`;
+      report += `   📏 Total size: ${totalSizeInMB} MB\n`;
+      report += `   ⚠️ Large documents: ${largeDocs}\n`;
+
+      if (largeDocs > 0) {
+        report += `\n💡 Recommendation: Use "Split Large Document" to fix size issues.`;
+      }
+
+      alert(report);
+
+        } catch (error) {
+      console.error('❌ Error checking document sizes:', error);
+      alert(`❌ Lỗi khi kiểm tra kích thước documents:\n${error.message || error}`);
+    }
+  }
 } 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -77,7 +77,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -974,35 +975,66 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   // Scan QR Code for inventory item
   async scanQRCode(material: InventoryMaterial): Promise<void> {
     try {
+      // Check camera availability first
+      const hasCamera = await this.checkCameraAvailability();
+      if (!hasCamera) {
+        alert('Không tìm thấy camera. Vui lòng sử dụng nút "Nhập thủ công" để nhập QR code.');
+        return;
+      }
+      
       this.currentScanningMaterial = material;
       this.isScanning = true;
       
-      // Initialize scanner
-      this.scanner = new Html5Qrcode("qr-reader");
-      
-      // Start scanning
-      await this.scanner.start(
-        { facingMode: "environment" }, // Use back camera
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0
-        },
-        (decodedText, decodedResult) => {
-          this.onQRCodeScanned(decodedText, material);
-        },
-        (errorMessage) => {
-          // Handle scan error
-          console.log('QR scan error:', errorMessage);
+      // Wait for DOM to update and element to be created
+      setTimeout(async () => {
+        try {
+          // Check if element exists
+          const qrReaderElement = document.getElementById('qr-reader');
+          if (!qrReaderElement) {
+            console.error('QR reader element not found');
+            alert('Lỗi: Không tìm thấy element camera. Vui lòng thử lại.');
+            this.stopScanning();
+            return;
+          }
+          
+          // Initialize scanner
+          this.scanner = new Html5Qrcode("qr-reader");
+          
+          // Start scanning
+          await this.scanner.start(
+            { facingMode: "environment" }, // Use back camera
+            {
+              fps: 15,
+              qrbox: { width: 400, height: 400 },
+              aspectRatio: 1.0
+            },
+            (decodedText, decodedResult) => {
+              console.log('QR Code detected:', decodedText);
+              this.onQRCodeScanned(decodedText, material);
+            },
+            (errorMessage) => {
+              // Handle scan error
+              console.log('QR scan error:', errorMessage);
+            }
+          ).catch(err => {
+            console.error('Unable to start scanner:', err);
+            if (err.message && err.message.includes('Permission')) {
+              alert('Không có quyền truy cập camera. Vui lòng cho phép truy cập camera và thử lại.');
+            } else {
+              alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+            }
+            this.stopScanning();
+          });
+          
+        } catch (error) {
+          console.error('Error starting QR scanner:', error);
+          alert('Có lỗi khi khởi động camera!');
+          this.stopScanning();
         }
-      ).catch(err => {
-        console.error('Unable to start scanner:', err);
-        alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
-        this.stopScanning();
-      });
+      }, 100); // Wait 100ms for DOM to update
       
     } catch (error) {
-      console.error('Error starting QR scanner:', error);
+      console.error('Error in scanQRCode:', error);
       alert('Có lỗi khi khởi động camera!');
       this.stopScanning();
     }
@@ -1093,21 +1125,38 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   private stopScanning(): void {
     if (this.scanner && this.isScanning) {
       this.scanner.stop().then(() => {
-        console.log('Scanner stopped');
+        console.log('Scanner stopped successfully');
       }).catch(err => {
         console.error('Error stopping scanner:', err);
+      }).finally(() => {
+        this.cleanupScanner();
       });
+    } else {
+      this.cleanupScanner();
     }
+  }
+
+  // Cleanup scanner resources
+  private cleanupScanner(): void {
     this.isScanning = false;
     this.currentScanningMaterial = null;
     this.scanner = null;
+    
+    // Force change detection
+    this.cdr.detectChanges();
   }
 
-  // Manual QR input (fallback)
-  manualQRInput(material: InventoryMaterial): void {
-    const qrData = prompt('Nhập QR code data (format: MaterialCode|PONumber|Quantity):');
-    if (qrData) {
-      this.onQRCodeScanned(qrData, material);
+
+
+  // Check camera availability
+  private async checkCameraAvailability(): Promise<boolean> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      return videoDevices.length > 0;
+    } catch (error) {
+      console.error('Error checking camera availability:', error);
+      return false;
     }
   }
 }

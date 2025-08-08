@@ -77,11 +77,6 @@
                       matTooltip="Quét QR code để xuất hàng">
                 <mat-icon>qr_code_scanner</mat-icon>
               </button>
-              <button mat-icon-button color="secondary" 
-                      (click)="manualQRInput(material)"
-                      matTooltip="Nhập thủ công QR code">
-                <mat-icon>input</mat-icon>
-              </button>
             </td>
             <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [title]="material.materialName || 'N/A'">{{material.materialName || 'N/A'}}</td>
@@ -166,10 +161,6 @@
         <button class="btn btn-secondary" (click)="stopScanning()">
           <i class="material-icons">cancel</i>
           Hủy
-        </button>
-        <button class="btn btn-primary" (click)="manualQRInput(currentScanningMaterial!)">
-          <i class="material-icons">input</i>
-          Nhập thủ công
         </button>
       </div>
     </div>
