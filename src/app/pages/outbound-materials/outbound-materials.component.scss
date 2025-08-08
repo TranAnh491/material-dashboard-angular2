@@ -1,0 +1,487 @@
+// Excel-like Interface for Outbound Materials
+.main-content {
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.excel-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid #dee2e6;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.excel-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 16px 24px;
+  flex-shrink: 0;
+  
+  h4 {
+    color: #000000;
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    i {
+      font-size: 20px;
+      color: #ff6b35;
+    }
+  }
+  
+  p {
+    color: #6c757d;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    margin: 4px 0 0 0;
+  }
+}
+
+// QR Code Scanning Section
+.qr-scanning-section {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #dee2e6;
+  
+  .scanning-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    
+    .scanning-header {
+      margin-bottom: 20px;
+      
+      h5 {
+        color: #333;
+        font-size: 16px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        i {
+          color: #007bff;
+        }
+      }
+    }
+    
+    .scanning-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      
+      .scanning-area {
+        width: 200px;
+        height: 200px;
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        transition: all 0.3s ease;
+        
+        &.scanning {
+          border-color: #007bff;
+          background: #e3f2fd;
+          animation: pulse 2s infinite;
+        }
+        
+        i {
+          font-size: 48px;
+          color: #6c757d;
+          margin-bottom: 10px;
+        }
+        
+        p {
+          color: #6c757d;
+          font-size: 12px;
+          text-align: center;
+          margin: 0;
+        }
+      }
+      
+      .scanning-actions {
+        display: flex;
+        gap: 10px;
+        
+        .btn {
+          padding: 8px 16px;
+          font-size: 14px;
+          border-radius: 4px;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          
+          &.btn-primary {
+            background: #007bff;
+            color: white;
+            
+            &:hover {
+              background: #0056b3;
+            }
+            
+            &:disabled {
+              background: #6c757d;
+              cursor: not-allowed;
+            }
+          }
+          
+          &.btn-secondary {
+            background: #6c757d;
+            color: white;
+            
+            &:hover {
+              background: #545b62;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Export Form Section
+.export-form-section {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #dee2e6;
+  
+  .export-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    
+    .export-header {
+      margin-bottom: 20px;
+      
+      h5 {
+        color: #333;
+        font-size: 16px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        i {
+          color: #28a745;
+        }
+      }
+    }
+    
+    .export-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      
+      .material-info {
+        .info-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 10px;
+          padding: 8px;
+          background: white;
+          border-radius: 4px;
+          
+          .label {
+            font-weight: 600;
+            color: #333;
+          }
+          
+          .value {
+            color: #007bff;
+            font-weight: 500;
+          }
+        }
+      }
+      
+      .export-form {
+        .form-group {
+          margin-bottom: 15px;
+          
+          label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+          }
+          
+          .form-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 14px;
+            
+            &:focus {
+              outline: none;
+              border-color: #007bff;
+              box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+            }
+          }
+          
+          textarea.form-control {
+            resize: vertical;
+            min-height: 60px;
+          }
+        }
+        
+        .export-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 20px;
+          
+          .btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            
+            &.btn-success {
+              background: #28a745;
+              color: white;
+              
+              &:hover {
+                background: #218838;
+              }
+            }
+            
+            &.btn-secondary {
+              background: #6c757d;
+              color: white;
+              
+              &:hover {
+                background: #545b62;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Excel Actions
+.excel-actions {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  
+  .search-box {
+    .search-input {
+      padding: 6px 12px;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 250px;
+      
+      &:focus {
+        outline: none;
+        border-color: #007bff;
+      }
+    }
+  }
+  
+  .date-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    .date-input {
+      padding: 6px 12px;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      font-size: 14px;
+      
+      &:focus {
+        outline: none;
+        border-color: #007bff;
+      }
+    }
+    
+    span {
+      color: #6c757d;
+      font-size: 14px;
+    }
+  }
+}
+
+// Excel Body
+.excel-body {
+  flex: 1;
+  overflow: auto;
+  background: white;
+  
+  .excel-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    
+    th {
+      background: #f8f9fa;
+      color: #333;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 8px 12px;
+      border: 1px solid #dee2e6;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      
+      &.row-header {
+        width: 50px;
+        text-align: center;
+      }
+    }
+    
+    td {
+      padding: 8px 12px;
+      border: 1px solid #f8f9fa;
+      font-size: 11px;
+      color: #333;
+      
+      &.row-header {
+        background: #f8f9fa;
+        font-weight: 600;
+        text-align: center;
+        width: 50px;
+      }
+      
+      &.date-cell {
+        font-family: Arial, sans-serif;
+        color: #666;
+      }
+      
+      &.code-cell {
+        font-weight: 600;
+        color: #007bff;
+      }
+      
+      &.number-cell {
+        text-align: right;
+        font-family: Arial, sans-serif;
+        font-weight: 500;
+      }
+      
+             &.status-cell {
+         text-align: center;
+         
+         .mat-icon-button {
+           width: 28px;
+           height: 28px;
+           line-height: 28px;
+         }
+       }
+       
+       &.method-cell {
+         text-align: center;
+         
+         .badge {
+           font-size: 9px;
+           padding: 4px 8px;
+           border-radius: 4px;
+           font-weight: 600;
+           
+           &.badge-success {
+             background: #28a745;
+             color: white;
+           }
+           
+           &.badge-info {
+             background: #17a2b8;
+             color: white;
+           }
+         }
+       }
+    }
+    
+    tr:hover {
+      background-color: #f8f9fa;
+    }
+  }
+}
+
+// No Data Message
+.no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: #6c757d;
+  
+  i {
+    font-size: 48px;
+    color: #dee2e6;
+    margin-bottom: 16px;
+  }
+  
+  h5 {
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    margin: 0 0 8px 0;
+    color: #6c757d;
+  }
+  
+  p {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    margin: 0;
+    color: #6c757d;
+  }
+}
+
+// Animation
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .export-content {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .excel-actions {
+    flex-direction: column;
+    gap: 10px;
+    
+    .search-box .search-input {
+      width: 100%;
+    }
+  }
+}

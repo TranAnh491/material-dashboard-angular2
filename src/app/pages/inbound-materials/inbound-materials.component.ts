@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
 
 export interface InboundMaterial {
@@ -51,7 +52,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
 
-  constructor(private firestore: AngularFirestore) {}
+  constructor(
+    private firestore: AngularFirestore,
+    private afAuth: AngularFireAuth
+  ) {}
 
   ngOnInit(): void {
     this.loadMaterialsFromFirebase();
@@ -513,6 +517,101 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     
     // Save to Firebase
     this.updateMaterialInFirebase(material);
+    
+    // Auto-add to Inventory when marked as received
+    this.addToInventory(material);
+  }
+
+  // Add material to Inventory when received
+  private addToInventory(material: InboundMaterial): void {
+    console.log(`Adding ${material.materialCode} to Inventory...`);
+    
+    // Create inventory material from inbound material
+    const inventoryMaterial = {
+      importDate: material.importDate,
+      receivedDate: new Date(), // Ngày nhập vào inventory (khi tick đã nhận)
+      batchNumber: material.batchNumber,
+      materialCode: material.materialCode,
+      poNumber: material.poNumber,
+      quantity: material.quantity,
+      unit: material.unit,
+      exported: 0, // Start with 0 exported
+      stock: material.quantity, // Start with full stock
+      location: material.location || '',
+      type: material.type,
+      expiryDate: material.expiryDate,
+      qualityCheck: material.qualityCheck,
+      isReceived: true,
+      notes: material.notes || '',
+      rollsOrBags: material.rollsOrBags?.toString() || '',
+      supplier: material.supplier || '',
+      remarks: material.remarks || '',
+      isCompleted: false,
+      isDuplicate: false, // Will be checked later
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Always add new entry to inventory (no merging)
+    console.log(`Adding new material ${material.materialCode} to inventory with received date: ${inventoryMaterial.receivedDate}`);
+    
+    this.firestore.collection('inventory-materials').add(inventoryMaterial)
+      .then((docRef) => {
+        console.log(`Successfully added ${material.materialCode} to inventory with ID: ${docRef.id}`);
+        
+        // Check for duplicates after adding
+        this.checkAndMarkDuplicates();
+      })
+      .catch(error => {
+        console.error(`Error adding ${material.materialCode} to inventory:`, error);
+      });
+  }
+
+  // Check and mark duplicates in inventory
+  private checkAndMarkDuplicates(): void {
+    this.firestore.collection('inventory-materials').get().toPromise().then(snapshot => {
+      if (snapshot) {
+        const materials = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            id: doc.id,
+            ...data
+          };
+        });
+        
+        // Group by materialCode + poNumber + quantity
+        const groups = new Map<string, any[]>();
+        
+        materials.forEach(material => {
+          const key = `${material.materialCode}|${material.poNumber}|${material.quantity}`;
+          if (!groups.has(key)) {
+            groups.set(key, []);
+          }
+          groups.get(key)!.push(material);
+        });
+        
+        // Mark duplicates
+        groups.forEach((group, key) => {
+          if (group.length > 1) {
+            console.log(`Found ${group.length} duplicates for key: ${key}`);
+            
+            // Mark all items in group as duplicates
+            group.forEach(material => {
+              this.firestore.collection('inventory-materials').doc(material.id).update({
+                isDuplicate: true,
+                updatedAt: new Date()
+              }).then(() => {
+                console.log(`Marked ${material.materialCode} as duplicate`);
+              }).catch(error => {
+                console.error(`Error marking ${material.materialCode} as duplicate:`, error);
+              });
+            });
+          }
+        });
+      }
+    }).catch(error => {
+      console.error('Error checking duplicates:', error);
+    });
   }
 
   // Edit location with uppercase
@@ -731,6 +830,12 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   // Show QR code dialog with real QR codes
   async showQRCodeDialog(qrCodes: any[], material: InboundMaterial): Promise<void> {
     try {
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+      const totalPages = qrCodes.length;
+      
       // Generate QR code images
       const qrImages = await Promise.all(
         qrCodes.map(async (qr, index) => {
@@ -746,193 +851,213 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
           return {
             ...qr,
             qrImage,
-            index: index + 1
+            index: index + 1,
+            pageNumber: index + 1,
+            totalPages: totalPages,
+            printDate: printDate,
+            printedBy: currentUser
           };
         })
       );
 
-             // Create print window with real QR codes
-       const newWindow = window.open('', '_blank');
-       if (newWindow) {
-         newWindow.document.write(`
-           <html>
-             <head>
-               <title></title>
-               <style>
-                 * {
-                   margin: 0 !important;
-                   padding: 0 !important;
-                   box-sizing: border-box !important;
-                 }
-                 
-                 body { 
-                   font-family: Arial, sans-serif; 
-                   margin: 0 !important; 
-                   padding: 0 !important;
-                   background: white !important;
-                   overflow: hidden !important;
-                   width: 57mm !important;
-                   height: 32mm !important;
-                 }
-                 
-                 .qr-container { 
-                   display: flex !important; 
-                   margin: 0 !important; 
-                   padding: 0 !important; 
-                   border: 1px solid #000 !important; 
-                   width: 57mm !important; 
-                   height: 32mm !important; 
-                   page-break-inside: avoid !important;
-                   background: white !important;
-                   box-sizing: border-box !important;
-                 }
-                 
-                 .qr-section {
-                   width: 30mm !important;
-                   height: 30mm !important;
-                   display: flex !important;
-                   align-items: center !important;
-                   justify-content: center !important;
-                   border-right: 1px solid #ccc !important;
-                   box-sizing: border-box !important;
-                 }
-                 
-                 .qr-image {
-                   width: 28mm !important;
-                   height: 28mm !important;
-                   display: block !important;
-                 }
-                 
-                 .info-section {
-                   flex: 1 !important;
-                   padding: 1mm !important;
-                   display: flex !important;
-                   flex-direction: column !important;
-                   justify-content: center !important;
-                   font-size: 9px !important;
-                   line-height: 1.2 !important;
-                   box-sizing: border-box !important;
-                 }
-                 
-                 .info-row {
-                   margin: 0.5mm 0 !important;
-                   font-weight: bold !important;
-                 }
-                 
-                 .qr-grid {
-                   text-align: center !important;
-                   display: flex !important;
-                   flex-direction: row !important;
-                   flex-wrap: wrap !important;
-                   align-items: flex-start !important;
-                   justify-content: flex-start !important;
-                   gap: 0 !important;
-                   padding: 0 !important;
-                   margin: 0 !important;
-                   width: 57mm !important;
-                   height: 32mm !important;
-                 }
-                 
-                 @media print {
-                   body { 
-                     margin: 0 !important; 
-                     padding: 0 !important;
-                     overflow: hidden !important;
-                     width: 57mm !important;
-                     height: 32mm !important;
-                   }
-                   
-                   @page {
-                     margin: 0 !important;
-                     size: 57mm 32mm !important;
-                     padding: 0 !important;
-                   }
-                   
-                   .qr-container { 
-                     margin: 0 !important; 
-                     padding: 0 !important;
-                     width: 57mm !important;
-                     height: 32mm !important;
-                     page-break-inside: avoid !important;
-                     border: 1px solid #000 !important;
-                   }
-                   
-                   .qr-section {
-                     width: 30mm !important;
-                     height: 30mm !important;
-                   }
-                   
-                   .qr-image {
-                     width: 28mm !important;
-                     height: 28mm !important;
-                   }
-                   
-                   .info-section {
-                     font-size: 9px !important;
-                     padding: 1mm !important;
-                   }
-                   
-                   .qr-grid {
-                     gap: 0 !important;
-                     padding: 0 !important;
-                     margin: 0 !important;
-                     width: 57mm !important;
-                     height: 32mm !important;
-                   }
-                   
-                   /* Hide all browser elements */
-                   @media screen {
-                     body::before,
-                     body::after,
-                     header,
-                     footer,
-                     nav,
-                     .browser-ui {
-                       display: none !important;
-                     }
-                   }
-                 }
-               </style>
-             </head>
-             <body>
-               <div class="qr-grid">
-                 ${qrImages.map(qr => `
-                   <div class="qr-container">
-                     <div class="qr-section">
-                       <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
-                     </div>
-                     <div class="info-section">
-                       <div class="info-row">Mã: ${qr.materialCode}</div>
-                       <div class="info-row">PO: ${qr.poNumber}</div>
-                       <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
-                     </div>
-                   </div>
-                 `).join('')}
-               </div>
-               <script>
-                 window.onload = function() {
-                   // Remove all browser UI elements
-                   document.title = '';
-                   
-                   // Hide browser elements
-                   const style = document.createElement('style');
-                   style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
-                   document.head.appendChild(style);
-                   
-                   // Remove any browser elements
-                   const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
-                   elementsToRemove.forEach(el => el.remove());
-                   
-                   setTimeout(() => {
-                     window.print();
-                   }, 500);
-                 }
-               </script>
-             </body>
-           </html>
-         `);
-         newWindow.document.close();
-       }
+      // Create print window with real QR codes
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title></title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 1mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 8px !important;
+                  line-height: 1.1 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .info-row {
+                  margin: 0.3mm 0 !important;
+                  font-weight: bold !important;
+                }
+                
+                .info-row.small {
+                  font-size: 7px !important;
+                  color: #666 !important;
+                }
+                
+                .qr-grid {
+                  text-align: center !important;
+                  display: flex !important;
+                  flex-direction: row !important;
+                  flex-wrap: wrap !important;
+                  align-items: flex-start !important;
+                  justify-content: flex-start !important;
+                  gap: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 8px !important;
+                    padding: 1mm !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 7px !important;
+                  }
+                  
+                  .qr-grid {
+                    gap: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  /* Hide all browser elements */
+                  @media screen {
+                    body::before,
+                    body::after,
+                    header,
+                    footer,
+                    nav,
+                    .browser-ui {
+                      display: none !important;
+                    }
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-grid">
+                ${qrImages.map(qr => `
+                  <div class="qr-container">
+                    <div class="qr-section">
+                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                    </div>
+                    <div class="info-section">
+                      <div>
+                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row">PO: ${qr.poNumber}</div>
+                        <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                      </div>
+                      <div>
+                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">NV: ${qr.printedBy}</div>
+                        <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <script>
+                window.onload = function() {
+                  // Remove all browser UI elements
+                  document.title = '';
+                  
+                  // Hide browser elements
+                  const style = document.createElement('style');
+                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                  document.head.appendChild(style);
+                  
+                  // Remove any browser elements
+                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                  elementsToRemove.forEach(el => el.remove());
+                  
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
     } catch (error) {
       console.error('Error generating QR codes:', error);
       alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');

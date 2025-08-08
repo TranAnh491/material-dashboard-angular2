@@ -706,6 +706,21 @@ iframe {
   font-weight: 600;
 }
 
+// Material code color when received and moved to inventory
+.material-received {
+  color: #2196f3 !important;
+  font-weight: 600;
+}
+
+// Row styling for received materials
+.received-row {
+  background-color: #e3f2fd !important;
+  
+  &:hover {
+    background-color: #bbdefb !important;
+  }
+}
+
 // Excel-like checkbox
 mat-checkbox {
   ::ng-deep .mat-checkbox-frame {
@@ -729,6 +744,16 @@ mat-checkbox {
   
   ::ng-deep .mat-checkbox-ripple .mat-ripple-element {
     background-color: rgba(76, 175, 80, 0.3);
+  }
+  
+  // Disabled checkbox styling
+  ::ng-deep .mat-checkbox-disabled .mat-checkbox-frame {
+    border-color: #4caf50 !important;
+    background-color: #e8f5e8 !important;
+  }
+  
+  ::ng-deep .mat-checkbox-disabled .mat-checkbox-checkmark-path {
+    stroke: #4caf50 !important;
   }
 }
 

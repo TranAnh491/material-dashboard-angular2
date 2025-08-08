@@ -78,11 +78,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; let i = index">
+          <tr *ngFor="let material of filteredMaterials; let i = index" 
+              [class.received-row]="material.isReceived">
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
             <td>{{material.batchNumber}}</td>
-            <td class="code-cell" [class.material-code-printed]="material.hasQRGenerated">{{material.materialCode}}</td>
+            <td class="code-cell" 
+                [class.material-code-printed]="material.hasQRGenerated"
+                [class.material-received]="material.isReceived">{{material.materialCode}}</td>
             <td class="po-cell">{{material.poNumber}}</td>
             <td class="number-cell">{{material.quantity}} {{material.unit}}</td>
                                   <td>
@@ -101,7 +104,10 @@
               </mat-checkbox>
             </td>
             <td class="status-cell">
-              <mat-checkbox [checked]="material.isReceived" (change)="updateReceivedStatus(material, $event.checked)" [disabled]="material.isReceived">
+              <mat-checkbox [checked]="material.isReceived" 
+                           (change)="updateReceivedStatus(material, $event.checked)" 
+                           [disabled]="material.isReceived"
+                           [matTooltip]="material.isReceived ? 'Không thể bỏ tick - Đã chuyển vào Inventory' : 'Tick để chuyển vào Inventory'">
               </mat-checkbox>
             </td>
             <td>

@@ -2,11 +2,15 @@ import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export interface InventoryMaterial {
   id?: string;
   importDate: Date;
+  receivedDate?: Date; // Ngày nhập vào inventory (khi tick đã nhận)
   batchNumber: string;
   materialCode: string;
   materialName?: string; // Added for catalog mapping
@@ -64,9 +68,17 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   // Show completed items
   showCompleted = true;
   
+  // QR Scanner properties
+  isScanning = false;
+  scanner: Html5Qrcode | null = null;
+  currentScanningMaterial: InventoryMaterial | null = null;
+  
   private destroy$ = new Subject<void>();
 
-  constructor(private firestore: AngularFirestore) {}
+  constructor(
+    private firestore: AngularFirestore,
+    private afAuth: AngularFireAuth
+  ) {}
 
   ngOnInit(): void {
     this.loadInventoryFromFirebase();
@@ -76,6 +88,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopScanning();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -96,6 +109,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
               id: id,
               ...data,
               importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
+              receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date()
             };
           });
@@ -954,6 +968,146 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
         console.log(`Deleted inventory item: ${material.materialCode}`);
         this.applyFilters();
       }
+    }
+  }
+
+  // Scan QR Code for inventory item
+  async scanQRCode(material: InventoryMaterial): Promise<void> {
+    try {
+      this.currentScanningMaterial = material;
+      this.isScanning = true;
+      
+      // Initialize scanner
+      this.scanner = new Html5Qrcode("qr-reader");
+      
+      // Start scanning
+      await this.scanner.start(
+        { facingMode: "environment" }, // Use back camera
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
+        (decodedText, decodedResult) => {
+          this.onQRCodeScanned(decodedText, material);
+        },
+        (errorMessage) => {
+          // Handle scan error
+          console.log('QR scan error:', errorMessage);
+        }
+      ).catch(err => {
+        console.error('Unable to start scanner:', err);
+        alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+        this.stopScanning();
+      });
+      
+    } catch (error) {
+      console.error('Error starting QR scanner:', error);
+      alert('Có lỗi khi khởi động camera!');
+      this.stopScanning();
+    }
+  }
+
+  // Handle QR code scan result
+  private async onQRCodeScanned(qrData: string, material: InventoryMaterial): Promise<void> {
+    try {
+      // Stop scanning
+      this.stopScanning();
+      
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      
+      console.log('Scanned QR data:', qrData);
+      
+      // Parse QR data: MaterialCode|PONumber|Quantity
+      const parts = qrData.split('|');
+      if (parts.length >= 3) {
+        const scannedMaterialCode = parts[0];
+        const scannedPONumber = parts[1];
+        const scannedQuantity = parseInt(parts[2]);
+        
+        // Verify QR code matches the inventory item
+        if (scannedMaterialCode !== material.materialCode || scannedPONumber !== material.poNumber) {
+          alert('QR code không khớp với hàng trong kho!\n\nQR: ' + scannedMaterialCode + ' | ' + scannedPONumber + '\nKho: ' + material.materialCode + ' | ' + material.poNumber);
+          return;
+        }
+        
+        // Check if quantity is valid
+        const currentStock = material.stock || material.quantity || 0;
+        if (scannedQuantity > currentStock) {
+          alert(`Số lượng quét (${scannedQuantity}) lớn hơn tồn kho (${currentStock})!`);
+          return;
+        }
+        
+        // Calculate new stock
+        const newStock = Math.max(0, currentStock - scannedQuantity);
+        const newExported = (material.exported || 0) + scannedQuantity;
+        
+        // Update inventory
+        material.stock = newStock;
+        material.exported = newExported;
+        material.updatedAt = new Date();
+        
+        // Save to Firebase
+        this.updateInventoryInFirebase(material);
+        
+        // Create outbound record
+        const outboundRecord = {
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          quantity: material.quantity,
+          unit: material.unit,
+          exportQuantity: scannedQuantity,
+          exportDate: new Date(),
+          location: material.location,
+          notes: `Quét QR từ Inventory - ${material.materialName || 'N/A'}`,
+          exportedBy: currentUser,
+          scanMethod: 'QR_SCAN',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Save to outbound-materials collection
+        this.firestore.collection('outbound-materials').add(outboundRecord)
+          .then((docRef) => {
+            console.log('Outbound record saved with ID:', docRef.id);
+            alert(`✅ Xuất hàng thành công!\n\nMã: ${material.materialCode}\nSố lượng xuất: ${scannedQuantity}\nTồn kho mới: ${newStock}`);
+          })
+          .catch(error => {
+            console.error('Error saving outbound record:', error);
+            alert('Lỗi khi lưu record xuất hàng!');
+          });
+        
+      } else {
+        alert('QR code không hợp lệ! Vui lòng quét lại.');
+      }
+      
+    } catch (error) {
+      console.error('Error processing QR code:', error);
+      alert('Có lỗi khi xử lý QR code!');
+    }
+  }
+
+  // Stop scanning
+  private stopScanning(): void {
+    if (this.scanner && this.isScanning) {
+      this.scanner.stop().then(() => {
+        console.log('Scanner stopped');
+      }).catch(err => {
+        console.error('Error stopping scanner:', err);
+      });
+    }
+    this.isScanning = false;
+    this.currentScanningMaterial = null;
+    this.scanner = null;
+  }
+
+  // Manual QR input (fallback)
+  manualQRInput(material: InventoryMaterial): void {
+    const qrData = prompt('Nhập QR code data (format: MaterialCode|PONumber|Quantity):');
+    if (qrData) {
+      this.onQRCodeScanned(qrData, material);
     }
   }
 }
