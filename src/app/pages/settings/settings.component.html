@@ -73,6 +73,13 @@
             <mat-icon style="font-size: 20px; margin-right: 8px; color: #f44336;">notifications_active</mat-icon>
             Tài khoản mới đăng ký ({{ newUserNotifications.length }})
           </h3>
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="markAllNotificationsAsReadPublic(); console.log('Button clicked!')"
+                  style="font-size: 12px; padding: 4px 8px; min-width: auto;">
+            <mat-icon style="font-size: 16px;">check</mat-icon>
+            Đã đọc
+          </button>
         </div>
         
         <div class="notifications-list">
@@ -84,8 +91,17 @@
                   {{ notification.department }} • {{ notification.factory }} • {{ notification.role }}
                 </span>
               </div>
-              <div class="notification-time">
-                {{ notification.createdAt | date:'dd/MM/yyyy HH:mm' }}
+              <div class="notification-actions">
+                <div class="notification-time">
+                  {{ notification.createdAt | date:'dd/MM/yyyy HH:mm' }}
+                </div>
+                <button mat-icon-button 
+                        color="primary" 
+                        (click)="markNotificationAsRead(notification.id)"
+                        matTooltip="Đánh dấu đã đọc"
+                        style="transform: scale(0.8);">
+                  <mat-icon style="font-size: 16px;">check</mat-icon>
+                </button>
               </div>
             </div>
           </div>
@@ -163,12 +179,12 @@
 
                         <!-- Optimized Firebase Users Table -->
             <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="firebase-users-table">
-                            <table mat-table [dataSource]="getSortedFirebaseUsers()" class="simple-table" style="font-size: 12px; border-collapse: collapse;">
+                            <table mat-table [dataSource]="getSortedFirebaseUsers()" class="excel-table" style="font-size: 12px; border-collapse: collapse; width: 100%;">
                 
                 <!-- Account Column -->
                 <ng-container matColumnDef="email">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Tài khoản</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Tài khoản</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     <span [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : 'inherit'" 
                           [style.fontWeight]="user.uid === 'special-steve-uid' ? 'bold' : 'normal'">
                       {{ getAccountDisplay(user) }}
@@ -178,14 +194,14 @@
 
                 <!-- Role Column -->
                 <ng-container matColumnDef="role">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Vai trò</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Vai trò</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.role" 
                             (change)="updateUserRole(user.uid, user.role)"
-                            class="simple-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center;">
+                            class="excel-select"
+                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
                       <option value="User">User</option>
                       <option value="Quản lý">Quản lý</option>
                       <option value="Admin">Admin</option>
@@ -195,14 +211,14 @@
 
                 <!-- Department Column -->
                 <ng-container matColumnDef="department">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Bộ phận</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Bộ phận</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.department" 
                             (change)="updateUserDepartment(user.uid, user.department)"
-                            class="simple-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center;">
+                            class="excel-select"
+                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
                       <option value="">Chọn</option>
                       <option value="WH">WH</option>
                       <option value="QA">QA</option>
@@ -217,14 +233,14 @@
 
                 <!-- Factory Column -->
                 <ng-container matColumnDef="factory">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Nhà máy</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Nhà máy</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.factory" 
                             (change)="updateUserFactory(user.uid, user.factory)"
-                            class="simple-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center;">
+                            class="excel-select"
+                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
                       <option value="">Chọn</option>
                       <option value="ASM1">ASM1</option>
                       <option value="ASM2">ASM2</option>
@@ -235,58 +251,58 @@
 
                 <!-- Display Name Column -->
                 <ng-container matColumnDef="displayName">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Tên</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">{{ user.displayName || '-' }}</td>
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Tên</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">{{ user.displayName || '-' }}</td>
                 </ng-container>
 
                 <!-- Created Date Column -->
                 <ng-container matColumnDef="createdAt">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Ngày tạo</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">{{ user.createdAt | date:'dd/MM' }}</td>
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Ngày tạo</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">{{ user.createdAt | date:'dd/MM' }}</td>
                 </ng-container>
 
                 <!-- Permission Column -->
                 <ng-container matColumnDef="permission">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;" matTooltip="Quyền xóa dữ liệu">Xóa</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
-                    <mat-slide-toggle
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;" matTooltip="Quyền xóa dữ liệu">Xóa</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
+                    <mat-checkbox
                       [checked]="firebaseUserPermissions[user.uid] || false"
                       (change)="updateUserPermission(user.uid, $event.checked)"
                       [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                       color="primary"
                       matTooltip="Bật/tắt quyền xóa dữ liệu"
                       style="transform: scale(0.8);">
-                    </mat-slide-toggle>
+                    </mat-checkbox>
                   </td>
                 </ng-container>
 
                 <!-- Complete Permission Column -->
                 <ng-container matColumnDef="completePermission">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;" matTooltip="Quyền hoàn thành Work Order">Hoàn thành</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
-                    <mat-slide-toggle
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;" matTooltip="Quyền hoàn thành Work Order">Hoàn thành</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
+                    <mat-checkbox
                       [checked]="firebaseUserCompletePermissions[user.uid] || false"
                       (change)="updateUserCompletePermission(user.uid, $event.checked)"
                       [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                       color="primary"
                       matTooltip="Bật/tắt quyền hoàn thành Work Order"
                       style="transform: scale(0.8);">
-                    </mat-slide-toggle>
+                    </mat-checkbox>
                   </td>
                 </ng-container>
 
                 <!-- Last Login Column -->
                 <ng-container matColumnDef="lastLoginAt">
-                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Đăng nhập</th>
-                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Đăng nhập</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     {{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM') : '-' }}
                   </td>
                 </ng-container>
 
             <!-- Actions Column -->
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center;">Thao tác</th>
-              <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
+              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Thao tác</th>
+              <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                 <button mat-icon-button 
                         color="warn" 
                         (click)="deleteFirebaseUser(user)"
@@ -300,16 +316,16 @@
 
             <!-- Tab Permissions Columns -->
             <ng-container *ngFor="let tab of availableTabs" [matColumnDef]="'tab-' + tab.key">
-              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 10px; text-align: center;" matTooltip="Quyền xem và chỉnh sửa tab {{ tab.name }}">{{ tab.name }}</th>
-              <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center;">
-                <mat-slide-toggle
+              <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 10px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;" matTooltip="Quyền xem và chỉnh sửa tab {{ tab.name }}">{{ tab.name }}</th>
+              <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
+                <mat-checkbox
                   [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                   (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
                   [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
                   color="primary"
                   [matTooltip]="'Bật/tắt quyền xem và chỉnh sửa tab ' + tab.name"
                   style="transform: scale(0.8);">
-                </mat-slide-toggle>
+                </mat-checkbox>
               </td>
             </ng-container>
 

@@ -1171,10 +1171,107 @@
   font-size: 12px;
 }
 
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .notification-time {
   color: #999;
   font-size: 11px;
   text-align: right;
+}
+
+/* Excel Style Table */
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  
+  .mat-header-row {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f0f0f0;
+  }
+  
+  .mat-header-cell {
+    background: #f0f0f0;
+    color: #333;
+    font-weight: bold;
+    font-size: 11px;
+    padding: 8px 4px;
+    border: 1px solid #d0d0d0;
+    text-align: center;
+    white-space: nowrap;
+  }
+  
+  .mat-cell {
+    padding: 8px 4px;
+    border: 1px solid #e0e0e0;
+    font-size: 11px;
+    color: #333;
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  .mat-row:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .mat-row:nth-child(even) {
+    background-color: #fafbfc;
+  }
+  
+  .mat-row:nth-child(odd) {
+    background-color: #ffffff;
+  }
+}
+
+.excel-select {
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  background: white;
+  font-size: 11px;
+  outline: none;
+  min-width: 80px;
+  color: #333;
+  text-align: center;
+  
+  &:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+  
+  &:hover {
+    border-color: #007bff;
+  }
+}
+
+/* Checkbox styling for Excel look */
+::ng-deep .mat-checkbox {
+  .mat-checkbox-frame {
+    border-color: #ccc;
+    border-width: 1px;
+  }
+  
+  .mat-checkbox-checkmark-path {
+    stroke: #007bff;
+    stroke-width: 2px;
+  }
+  
+  &.mat-checkbox-checked .mat-checkbox-background {
+    background-color: #007bff;
+  }
+  
+  &.mat-checkbox-checked .mat-checkbox-frame {
+    border-color: #007bff;
+  }
 }
 
 /* Responsive adjustments for notifications */
@@ -1184,7 +1281,22 @@
     gap: 8px;
   }
   
+  .notification-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+  
   .notification-time {
     text-align: left;
+  }
+  
+  .excel-table {
+    font-size: 10px;
+    
+    .mat-header-cell,
+    .mat-cell {
+      padding: 6px 2px;
+      font-size: 10px;
+    }
   }
 } 

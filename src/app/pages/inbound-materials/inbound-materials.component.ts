@@ -757,104 +757,146 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
          newWindow.document.write(`
            <html>
              <head>
-               <title>QR Codes - ${material.materialCode}</title>
+               <title></title>
                <style>
+                 * {
+                   margin: 0 !important;
+                   padding: 0 !important;
+                   box-sizing: border-box !important;
+                 }
+                 
                  body { 
                    font-family: Arial, sans-serif; 
-                   margin: 0; 
-                   padding: 0;
-                   background: white;
-                   overflow: hidden;
+                   margin: 0 !important; 
+                   padding: 0 !important;
+                   background: white !important;
+                   overflow: hidden !important;
+                   width: 57mm !important;
+                   height: 32mm !important;
                  }
-                                 .qr-container { 
-                   display: flex; 
-                   margin: 2mm; 
-                   padding: 1mm; 
-                   border: 1px solid #000; 
-                   width: 57mm; 
-                   height: 32mm; 
-                   page-break-inside: avoid;
-                   background: white;
+                 
+                 .qr-container { 
+                   display: flex !important; 
+                   margin: 0 !important; 
+                   padding: 0 !important; 
+                   border: 1px solid #000 !important; 
+                   width: 57mm !important; 
+                   height: 32mm !important; 
+                   page-break-inside: avoid !important;
+                   background: white !important;
+                   box-sizing: border-box !important;
                  }
+                 
                  .qr-section {
-                   width: 30mm;
-                   height: 30mm;
-                   display: flex;
-                   align-items: center;
-                   justify-content: center;
-                   border-right: 1px solid #ccc;
+                   width: 30mm !important;
+                   height: 30mm !important;
+                   display: flex !important;
+                   align-items: center !important;
+                   justify-content: center !important;
+                   border-right: 1px solid #ccc !important;
+                   box-sizing: border-box !important;
                  }
+                 
                  .qr-image {
-                   width: 28mm;
-                   height: 28mm;
-                   display: block;
+                   width: 28mm !important;
+                   height: 28mm !important;
+                   display: block !important;
                  }
+                 
                  .info-section {
-                   flex: 1;
-                   padding: 1mm;
-                   display: flex;
-                   flex-direction: column;
-                   justify-content: center;
-                   font-size: 10px;
-                   line-height: 1.2;
+                   flex: 1 !important;
+                   padding: 1mm !important;
+                   display: flex !important;
+                   flex-direction: column !important;
+                   justify-content: center !important;
+                   font-size: 9px !important;
+                   line-height: 1.2 !important;
+                   box-sizing: border-box !important;
                  }
-                                  .info-row {
-                   margin: 0.5mm 0;
-                   font-weight: bold;
+                 
+                 .info-row {
+                   margin: 0.5mm 0 !important;
+                   font-weight: bold !important;
                  }
-                                 .qr-grid {
-                   text-align: center;
-                   display: flex;
-                   flex-direction: column;
-                   align-items: center;
-                   gap: 2mm;
+                 
+                 .qr-grid {
+                   text-align: center !important;
+                   display: flex !important;
+                   flex-direction: row !important;
+                   flex-wrap: wrap !important;
+                   align-items: flex-start !important;
+                   justify-content: flex-start !important;
+                   gap: 0 !important;
+                   padding: 0 !important;
+                   margin: 0 !important;
+                   width: 57mm !important;
+                   height: 32mm !important;
                  }
-                                 @media print {
+                 
+                 @media print {
                    body { 
                      margin: 0 !important; 
                      padding: 0 !important;
                      overflow: hidden !important;
+                     width: 57mm !important;
+                     height: 32mm !important;
                    }
-                   /* Hide browser elements when printing */
+                   
                    @page {
                      margin: 0 !important;
-                     size: A4 !important;
+                     size: 57mm 32mm !important;
+                     padding: 0 !important;
                    }
-                   /* Hide browser UI elements */
-                   @media screen {
-                     body::before,
-                     body::after {
-                       display: none !important;
-                     }
-                   }
+                   
                    .qr-container { 
                      margin: 0 !important; 
-                     padding: 1mm !important;
+                     padding: 0 !important;
                      width: 57mm !important;
                      height: 32mm !important;
                      page-break-inside: avoid !important;
+                     border: 1px solid #000 !important;
                    }
+                   
                    .qr-section {
                      width: 30mm !important;
                      height: 30mm !important;
                    }
+                   
                    .qr-image {
                      width: 28mm !important;
                      height: 28mm !important;
                    }
+                   
                    .info-section {
                      font-size: 9px !important;
+                     padding: 1mm !important;
                    }
+                   
                    .qr-grid {
                      gap: 0 !important;
+                     padding: 0 !important;
+                     margin: 0 !important;
+                     width: 57mm !important;
+                     height: 32mm !important;
+                   }
+                   
+                   /* Hide all browser elements */
+                   @media screen {
+                     body::before,
+                     body::after,
+                     header,
+                     footer,
+                     nav,
+                     .browser-ui {
+                       display: none !important;
+                     }
                    }
                  }
-              </style>
-            </head>
-            <body>
-
-                             <div class="qr-grid">
-                 ${qrImages.map((qr) => `
+               </style>
+             </head>
+             <body>
+               <div class="qr-grid">
+                 ${qrImages.map(qr => `
                    <div class="qr-container">
                      <div class="qr-section">
                        <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
@@ -867,26 +909,30 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
                    </div>
                  `).join('')}
                </div>
-                             <script>
+               <script>
                  window.onload = function() {
-                   // Hide browser elements
+                   // Remove all browser UI elements
                    document.title = '';
                    
-                   // Remove any browser UI elements
+                   // Hide browser elements
                    const style = document.createElement('style');
-                   style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; } @page { margin: 0 !important; } }';
+                   style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
                    document.head.appendChild(style);
+                   
+                   // Remove any browser elements
+                   const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                   elementsToRemove.forEach(el => el.remove());
                    
                    setTimeout(() => {
                      window.print();
                    }, 500);
                  }
                </script>
-            </body>
-          </html>
-        `);
-        newWindow.document.close();
-      }
+             </body>
+           </html>
+         `);
+         newWindow.document.close();
+       }
     } catch (error) {
       console.error('Error generating QR codes:', error);
       alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');

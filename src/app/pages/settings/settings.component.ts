@@ -792,13 +792,73 @@ export class SettingsComponent implements OnInit {
   // Đánh dấu tất cả thông báo đã đọc
   private async markAllNotificationsAsRead(): Promise<void> {
     try {
-      const currentUser = this.getCurrentUser();
+      console.log('🔄 Marking all notifications as read (private)...');
+      
+      // Lấy current user từ Firebase Auth
+      const currentUser = await this.afAuth.currentUser;
       if (currentUser) {
+        console.log('✅ Current user found:', currentUser.email);
         await this.notificationService.markAllNotificationsAsRead(currentUser.uid);
         console.log('✅ All notifications marked as read');
+      } else {
+        console.log('❌ No current user found');
       }
     } catch (error) {
       console.error('❌ Error marking notifications as read:', error);
+    }
+  }
+
+  // Đánh dấu thông báo đã đọc
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    try {
+      console.log('🔄 Marking notification as read:', notificationId);
+      
+      // Lấy current user từ Firebase Auth
+      const currentUser = await this.afAuth.currentUser;
+      if (currentUser) {
+        console.log('✅ Current user found:', currentUser.email);
+        await this.notificationService.markNotificationAsRead(notificationId, currentUser.uid);
+        console.log('✅ Notification marked as read:', notificationId);
+        
+        // Refresh notifications list
+        this.loadNewUserNotifications();
+        
+        // Hiển thị thông báo thành công
+        alert('Đã đánh dấu thông báo đã đọc!');
+      } else {
+        console.log('❌ No current user found');
+        alert('Không tìm thấy người dùng hiện tại!');
+      }
+    } catch (error) {
+      console.error('❌ Error marking notification as read:', error);
+      alert('Có lỗi xảy ra khi đánh dấu thông báo đã đọc!');
+    }
+  }
+
+  // Đánh dấu tất cả thông báo đã đọc (public method)
+  async markAllNotificationsAsReadPublic(): Promise<void> {
+    try {
+      console.log('🔄 Marking all notifications as read...');
+      
+      // Lấy current user từ Firebase Auth
+      const currentUser = await this.afAuth.currentUser;
+      if (currentUser) {
+        console.log('✅ Current user found:', currentUser.email);
+        await this.notificationService.markAllNotificationsAsRead(currentUser.uid);
+        console.log('✅ All notifications marked as read');
+        
+        // Refresh notifications list
+        this.loadNewUserNotifications();
+        
+        // Hiển thị thông báo thành công
+        alert('Đã đánh dấu tất cả thông báo đã đọc!');
+      } else {
+        console.log('❌ No current user found');
+        alert('Không tìm thấy người dùng hiện tại!');
+      }
+    } catch (error) {
+      console.error('❌ Error marking notifications as read:', error);
+      alert('Có lỗi xảy ra khi đánh dấu thông báo đã đọc!');
     }
   }
 } 
