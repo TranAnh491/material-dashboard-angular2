@@ -38,6 +38,9 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   materials: InboundMaterial[] = [];
   filteredMaterials: InboundMaterial[] = [];
   
+  // Search and filter
+  searchTerm: string = '';
+  
   // Time range filter
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -403,33 +406,50 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Filter and display methods
+  // Search functionality (copied from inventory)
+  onSearchChange(event: any): void {
+    // Convert to uppercase for consistent search
+    this.searchTerm = event.target.value.toUpperCase();
+    // Update the input field to show uppercase
+    event.target.value = this.searchTerm;
+    this.applyFilters();
+  }
+
+  // Apply search filters (simplified like inventory)
   applyFilters(): void {
     this.filteredMaterials = this.materials.filter(material => {
+      // Filter by search term
+      if (this.searchTerm) {
+        const searchableText = [
+          material.materialCode,
+          material.poNumber,
+          material.batchNumber,
+          material.location,
+          material.supplier,
+          material.quantity?.toString(),
+          material.notes,
+          material.remarks
+        ].filter(Boolean).join(' ').toUpperCase();
+        
+        if (!searchableText.includes(this.searchTerm)) {
+          return false;
+        }
+      }
+      
+      // Filter by date range
       const importDate = new Date(material.importDate);
       const isInDateRange = importDate >= this.startDate && importDate <= this.endDate;
-      // Hide completed items by default
-      const isCompletedVisible = !material.isCompleted;
       
-      console.log('Filtering material:', {
-        materialCode: material.materialCode,
-        importDate: importDate,
-        startDate: this.startDate,
-        endDate: this.endDate,
-        isInDateRange: isInDateRange,
-        isCompleted: material.isCompleted,
-        isCompletedVisible: isCompletedVisible
-      });
+      // Filter by completed status
+      const isCompletedVisible = this.showCompleted || !material.isCompleted;
       
       return isInDateRange && isCompletedVisible;
     });
     
-    console.log('Applied filters:', {
+    console.log('Search results:', {
+      searchTerm: this.searchTerm,
       totalMaterials: this.materials.length,
-      filteredMaterials: this.filteredMaterials.length,
-      startDate: this.startDate,
-      endDate: this.endDate,
-      showCompleted: this.showCompleted
+      filteredMaterials: this.filteredMaterials.length
     });
   }
 
@@ -758,9 +778,54 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     return Math.round((material.quantity / material.rollsOrBags) * 100) / 100;
   }
 
+  // Get CSS class for batch number based on duplicate logic
+  getBatchNumberClass(material: InboundMaterial, index: number): string {
+    const batchNumber = material.batchNumber;
+    
+    // Find all materials with the same batch number
+    const duplicateMaterials = this.filteredMaterials.filter(m => m.batchNumber === batchNumber);
+    
+    // If not duplicate, return default class
+    if (duplicateMaterials.length === 1) {
+      return '';
+    }
+    
+    // Find the index of this material among duplicates
+    const currentMaterialIndex = duplicateMaterials.findIndex(m => 
+      m.materialCode === material.materialCode && 
+      m.poNumber === material.poNumber && 
+      m.importDate === material.importDate
+    );
+    
+    // Check if this material and previous one in the list have the same batch number
+    const previousMaterial = index > 0 ? this.filteredMaterials[index - 1] : null;
+    const isPreviousSameBatch = previousMaterial && previousMaterial.batchNumber === batchNumber;
+    
+    // Logic for alternating colors when duplicates are adjacent
+    if (isPreviousSameBatch) {
+      // If previous is same batch, alternate color
+      return 'batch-duplicate-blue'; // Only use blue for all duplicates
+    } else {
+      // First occurrence or not adjacent, use blue
+      return 'batch-duplicate-blue';
+    }
+  }
+
   // Update rolls or bags
   updateRollsOrBags(material: InboundMaterial): void {
     console.log('Updating rolls/bags for material:', material.materialCode, 'to:', material.rollsOrBags);
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Update notes
+  updateNotes(material: InboundMaterial): void {
+    console.log('Updating notes for material:', material.materialCode, 'to:', material.notes);
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Update remarks
+  updateRemarks(material: InboundMaterial): void {
+    console.log('Updating remarks for material:', material.materialCode, 'to:', material.remarks);
     this.updateMaterialInFirebase(material);
   }
 

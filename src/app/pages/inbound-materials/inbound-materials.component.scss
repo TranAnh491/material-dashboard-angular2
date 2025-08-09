@@ -9,11 +9,25 @@ iframe {
   border: none; /* Xóa đường viền mặc định */
 }
 
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 .main-content {
   padding: 0;
+  margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #ffffff;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
 }
 
 .card {
@@ -92,6 +106,104 @@ iframe {
   
   &:hover {
     background-color: #fff0f0;
+  }
+}
+
+.status-quarantine {
+  background-color: #f8f8ff;
+}
+
+// GLOBAL OVERRIDE - Kill all pink/purple Material colors
+:host {
+  ::ng-deep .mat-checkbox-checked.mat-accent .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-indeterminate.mat-accent .mat-checkbox-background {
+    background-color: #2196f3 !important;
+  }
+  
+  ::ng-deep .mat-checkbox-checked.mat-primary .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-indeterminate.mat-primary .mat-checkbox-background {
+    background-color: #2196f3 !important;
+  }
+}
+
+// FORCE OVERRIDE ALL MATERIAL THEME COLORS - NO PINK/PURPLE
+mat-checkbox {
+  // UNCHECKED - gray background
+  ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
+    background-color: #f5f5f5 !important; // Gray when unchecked
+    border-color: #ccc !important;
+  }
+  
+  // FORCE BLUE for ALL checked checkboxes - kill Material theme
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+    background: #2196f3 !important;
+    background-color: #2196f3 !important;
+    border: none !important;
+  }
+  
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-checkmark-path {
+    stroke: #ffffff !important;
+  }
+  
+  // Kill Material Design accent/primary colors completely
+  &.mat-accent ::ng-deep .mat-checkbox-checked .mat-checkbox-background,
+  &.mat-primary ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+    background: #2196f3 !important;
+    background-color: #2196f3 !important;
+  }
+  
+  // Override specific classes
+  &.quality-checked ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+    background: #2196f3 !important;
+    background-color: #2196f3 !important;
+  }
+  
+  &.received-checked ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+    background: #4caf50 !important;
+    background-color: #4caf50 !important;
+  }
+}
+
+// Date input styling
+.date-input {
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  font-family: Arial, sans-serif;
+  color: #000000;
+  text-align: center;
+  width: 100%;
+  padding: 4px;
+  
+  &:focus {
+    outline: none;
+    background: #ffffff;
+    border: 1px solid #007bff;
+  }
+}
+
+// Search box styling
+.search-box {
+  display: inline-block;
+  margin-right: 8px;
+  
+  .search-input {
+    padding: 6px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+    width: 200px;
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    
+    &::placeholder {
+      color: #6c757d;
+    }
   }
 }
 
@@ -396,9 +508,18 @@ iframe {
   font-family: Arial, sans-serif;
   font-size: 11px;
   min-width: 1200px;
+  position: relative; // Ensure relative positioning for sticky headers
+  
+  // Ensure thead is properly stickied
+  thead {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important;
+    background: #ff9800 !important;
+  }
   
   th, td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #000000; // Black borders
     padding: 8px 6px;
     text-align: left;
     vertical-align: middle;
@@ -411,20 +532,22 @@ iframe {
   }
   
   th {
-    background: #e3f2fd;
-    color: #000000;
+    background: #ff9800 !important; // Orange background for header
+    color: #000000 !important; // Black text
     font-weight: 600;
     font-size: 8px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    border-bottom: 2px solid #bbdefb;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important; // High z-index to ensure header stays on top
+    border-bottom: 2px solid #f57c00;
     padding: 6px 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: center; // Center align all header text
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important; // Stronger shadow to make header stand out when scrolling
     
     &:first-child {
       border-top-left-radius: 8px;
@@ -435,8 +558,8 @@ iframe {
     }
     
     &.row-header {
-      background: #bbdefb;
-      color: #000000;
+      background: #f57c00; // Darker orange for row header
+      color: #000000; // Black text
       font-size: 9px;
       text-align: center;
       width: 40px;
@@ -446,29 +569,31 @@ iframe {
   
   tbody tr {
     transition: none;
+    background-color: #f8f8f8; // Light gray background for all rows
     
     &:nth-child(even) {
-      background-color: #f8fafc;
+      background-color: #f8f8f8; // Same light gray for even rows
     }
     
     &:nth-child(odd) {
-      background-color: #ffffff;
+      background-color: #f8f8f8; // Same light gray for odd rows
     }
     
     &:hover {
-      background: #f8fafc;
+      background: #eeeeee; // Slightly darker gray on hover
     }
   }
   
   td {
     font-size: 10px;
     color: #000000;
-    border-color: #e2e8f0;
+    border-color: #000000; // Black border for td as well
     text-align: center;
     font-family: Arial, sans-serif;
+    background-color: #f8f8f8; // Light gray background for all cells
     
     &.row-header {
-      background: #f8f9fa;
+      background: #f8f8f8; // Consistent light gray background
       color: #000000;
       font-size: 9px;
       text-align: center;
@@ -501,6 +626,8 @@ iframe {
     
     &.status-cell {
       text-align: center;
+      width: 60px; // Increase width to match Đã nhận column
+      min-width: 60px;
       
           .mat-icon-button {
       width: 28px;
@@ -513,9 +640,7 @@ iframe {
         background: #f8f9fa;
       }
       
-      &[color="primary"]:hover {
-        background: #f8f9fa;
-      }
+      // Removed primary color styling
       
       &[color="warn"]:hover {
         background: #f8f9fa;
@@ -540,10 +665,10 @@ iframe {
   border: 1px solid #dee2e6;
   border-radius: 0;
   overflow: hidden;
-  height: calc(100vh - 100px);
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  margin: 10px;
+  margin: 0;
   
   .excel-header {
     background: #f8f9fa;
@@ -563,6 +688,7 @@ iframe {
   .excel-body {
     overflow: auto;
     flex: 1;
+    position: relative; // Required for sticky header to work
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: #cbd5e0 #f7fafc;
@@ -587,85 +713,145 @@ iframe {
   }
 }
 
-// Excel-like action buttons
+// Excel-like action buttons - Uniform styling
 .excel-actions {
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
-  padding: 12px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
   
-  .dropdown {
-    .btn {
-      font-size: 13px;
-      padding: 8px 16px;
-      margin-right: 8px;
-      border-radius: 6px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-      
-      &.btn-primary {
-        background: linear-gradient(135deg, #ff8a65 0%, #ff7043 100%);
-        border: none;
-        
-        &:hover {
-          background: linear-gradient(135deg, #ff7043 0%, #ff5722 100%);
-        }
-      }
+  .action-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    flex-wrap: wrap;
+  }
+  
+  // Custom button styling - uniform design
+  .custom-btn {
+    height: 40px !important;
+    padding: 8px 16px !important;
+    border: 2px solid #ff9800 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-weight: 500 !important;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    transition: all 0.3s ease !important;
+    white-space: nowrap !important;
+    min-width: auto !important;
+    
+    .material-icons {
+      font-size: 18px !important;
+      color: #000000 !important;
     }
     
-    .dropdown-menu {
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      padding: 8px;
-      margin-top: 8px;
+    &:hover {
+      background: #fff3e0 !important;
+      border-color: #f57c00 !important;
+      color: #000000 !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    &:focus, &:active {
+      background: #ffffff !important;
+      border-color: #ff9800 !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+    }
+  }
+  
+  // Custom input styling - matching design
+  .custom-input {
+    height: 40px !important;
+    padding: 8px 12px !important;
+    border: 2px solid #ff9800 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+    min-width: 200px !important;
+    transition: all 0.3s ease !important;
+    
+    &::placeholder {
+      color: #666666 !important;
+    }
+    
+    &:focus {
+      outline: none !important;
+      border-color: #f57c00 !important;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+      background: #ffffff !important;
+    }
+    
+    // Uppercase search input styling
+    &.search-input-uppercase {
+      text-transform: uppercase !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.5px !important;
       
-      .dropdown-item {
-        border-radius: 6px;
-        padding: 10px 16px;
-        margin-bottom: 2px;
-        transition: all 0.2s ease;
-        
-        &:hover {
-          background: linear-gradient(135deg, #ff8a65 0%, #ff7043 100%);
-          color: white;
-        }
+      &::placeholder {
+        text-transform: uppercase !important;
+        font-weight: 500 !important;
+        color: #999999 !important;
       }
     }
   }
   
-  .time-filter {
-    display: flex;
-    gap: 12px;
+  // Dropdown specific styling
+  .dropdown-toggle::after {
+    margin-left: 6px !important;
+    color: #000000 !important;
+  }
+
+  // Print column styling
+  .print-column-header {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    text-align: center !important;
+  }
+
+  .print-cell {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    text-align: center !important;
+    padding: 4px !important;
     
-    .btn {
-      font-size: 12px;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-weight: 500;
-      transition: all 0.3s ease;
+    .print-qr-btn {
+      background: #ffffff !important;
+      border: 2px solid #4caf50 !important; // Green border for print action
+      color: #000000 !important;
+      font-size: 12px !important;
+      padding: 4px 8px !important;
+      border-radius: 4px !important;
+      cursor: pointer !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      transition: all 0.3s ease !important;
+      width: 100% !important;
+      justify-content: center !important;
       
-      &.btn-outline-info {
-        border: 2px solid #ff8a65;
-        color: #ff8a65;
-        
-        &:hover {
-          background: #ff8a65;
-          color: white;
-        }
+      .material-icons {
+        font-size: 16px !important;
+        color: #000000 !important;
       }
       
-      &.btn-outline-success {
-        border: 2px solid #ff7043;
-        color: #ff7043;
-        
-        &:hover {
-          background: #ff7043;
-          color: white;
-        }
+      &:hover {
+        background: #f1f8e9 !important;
+        border-color: #388e3c !important;
+        color: #000000 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+      }
+      
+      &:focus, &:active {
+        background: #ffffff !important;
+        color: #000000 !important;
+        box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
       }
     }
   }
@@ -721,29 +907,56 @@ iframe {
   }
 }
 
-// Excel-like checkbox
+// Excel-like checkbox - Proper unchecked/checked styling
 mat-checkbox {
   ::ng-deep .mat-checkbox-frame {
-    border-color: #dee2e6;
-    border-width: 1px;
-    border-radius: 0;
+    border-color: #dee2e6 !important;
+    border-width: 1px !important;
+    border-radius: 0 !important;
+    background-color: #f5f5f5 !important; // Gray background when unchecked
   }
   
-  ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
-    background: #4caf50 !important;
-    border: none;
+  // UNCHECKED state - gray background
+  ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
+    background-color: #f5f5f5 !important; // Gray background when unchecked
+    border-color: #ccc !important;
   }
   
-  ::ng-deep .mat-checkbox-checked .mat-checkbox-checkmark-path {
+  // CHECKED state - blue background
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-indeterminate .mat-checkbox-background {
+    background: #2196f3 !important;
+    background-color: #2196f3 !important;
+    border: none !important;
+  }
+  
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-checkmark-path,
+  ::ng-deep .mat-checkbox-checkmark-path {
     stroke: #ffffff !important;
   }
   
   ::ng-deep .mat-checkbox:not(.mat-checkbox-disabled):hover .mat-checkbox-frame {
-    border-color: #4caf50;
+    border-color: #2196f3 !important;
   }
   
   ::ng-deep .mat-checkbox-ripple .mat-ripple-element {
-    background-color: rgba(76, 175, 80, 0.3);
+    background-color: rgba(33, 150, 243, 0.3) !important;
+  }
+  
+  // Override Material theme animations and states
+  ::ng-deep .mat-checkbox-anim-checked-indeterminate .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-anim-checked-unchecked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-anim-indeterminate-checked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-anim-indeterminate-unchecked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-anim-unchecked-checked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-anim-unchecked-indeterminate .mat-checkbox-background {
+    background-color: #2196f3 !important;
+  }
+  
+  // Kill any accent or primary theme colors
+  &.mat-accent ::ng-deep .mat-checkbox-checked .mat-checkbox-background,
+  &.mat-primary ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+    background-color: #2196f3 !important;
   }
   
   // Disabled checkbox styling
@@ -825,14 +1038,17 @@ mat-checkbox {
   }
 }
 
-// PO cell styling
+// PO cell styling - wider to show full PO numbers
 .po-cell {
   font-family: Arial, sans-serif;
   font-size: 9px;
   color: #000000;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: visible !important; // Override table default
+  text-overflow: clip !important; // Override table default
+  width: 120px !important; // Increase width to show full PO content
+  min-width: 120px !important;
+  max-width: 150px !important; // Override table max-width: 80px
 }
 
 // Date display styling
@@ -848,38 +1064,154 @@ mat-checkbox {
   }
 }
 
-// Editable input without border
+// Editable input without border - flat design
 .editable-input-no-border {
   border: none;
-  background: transparent;
+  background: #f8f8f8; // Flat gray background
   font-family: Arial, sans-serif;
   font-size: 9px;
   color: #000000;
   text-align: center;
   width: 100%;
   padding: 4px 6px;
+  border-radius: 0; // Flat corners
   
   &:focus {
     outline: none;
-    background: #f8f9fa;
+    background: #e8e8e8; // Slightly darker on focus
+    border: none;
   }
 }
 
-// Date input styling
-.date-input {
-  border: none;
-  padding: 2px 4px;
-  font-size: 9px;
+// Editable input - flat design without border
+.editable-input {
+  border: none; // Remove border for flat design
+  background: #f8f8f8; // Flat gray background
   font-family: Arial, sans-serif;
-  background: transparent;
-  text-align: center;
-  width: 100%;
+  font-size: 9px;
   color: #000000;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 0; // Flat corners
   
   &:focus {
     outline: none;
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    border: none; // No border on focus
+    background: #e8e8e8; // Slightly darker on focus
+  }
+  
+  &::placeholder {
+    color: #666666;
+    font-style: italic;
+  }
+}
+
+// Batch number duplicate styling
+.batch-duplicate-blue {
+  background-color: #e3f2fd !important; // Light blue background
+  color: #1976d2 !important;
+  font-weight: bold !important;
+}
+
+// Removed pink styling - only use blue for duplicates
+
+// Date input styling - flat design without border  
+.date-input {
+  border: none; // Remove border for flat design
+  padding: 4px;
+  font-size: 12px;
+  font-family: Arial, sans-serif;
+  background: #f8f8f8; // Flat gray background
+  text-align: center;
+  width: 100%;
+  border-radius: 0; // Flat corners
+  position: relative;
+  
+  &:focus {
+    outline: none;
+    background: #e8e8e8; // Slightly darker on focus
+    border: none; // No border even on focus
+  }
+  
+  // Hide the default date placeholder text completely
+  &::-webkit-input-placeholder {
+    color: transparent;
+    opacity: 0;
+  }
+  
+  &::-moz-placeholder {
+    color: transparent;
+    opacity: 0;
+  }
+  
+  &:-ms-input-placeholder {
+    color: transparent;
+    opacity: 0;
+  }
+  
+  // Hide only the date text, not the calendar icon
+  &:invalid {
+    color: transparent;
+  }
+  
+  // Hide date field text but keep calendar icon visible
+  &::-webkit-datetime-edit {
+    color: transparent;
+  }
+  
+  // Force hide dd/mm/yyyy text completely
+  &:not(:focus):invalid {
+    color: transparent !important;
+  }
+  
+  // Hide text content when no date is selected
+  &[value=""] {
+    color: transparent !important;
+  }
+  
+  // Additional webkit specific hiding
+  &::-webkit-datetime-edit-text {
+    color: transparent !important;
+    -webkit-appearance: none;
+  }
+  
+  &::-webkit-datetime-edit-month-field {
+    color: transparent !important;
+  }
+  
+  &::-webkit-datetime-edit-day-field {
+    color: transparent !important;
+  }
+  
+  &::-webkit-datetime-edit-year-field {
+    color: transparent !important;
+  }
+  
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button {
+    display: none !important;
+    -webkit-appearance: none !important;
+  }
+  
+  // Force calendar icon to be visible and centered
+  &::-webkit-calendar-picker-indicator {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3e%3cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: 20px 20px !important;
+    width: 24px !important;
+    height: 24px !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    display: block !important;
+    margin: 0 auto !important;
+    border: none !important;
+    
+    &:hover {
+      opacity: 0.7 !important;
+    }
   }
 }
 

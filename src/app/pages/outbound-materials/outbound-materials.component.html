@@ -1,4 +1,4 @@
-<div class="main-content">
+<div class="main-content" (click)="focusScannerInput()">
   <!-- Excel-like Container -->
   <div class="excel-container">
     <!-- Excel-like Header -->
@@ -9,6 +9,37 @@
 
     <!-- Excel-like Actions -->
     <div class="excel-actions">
+      <div class="action-buttons">
+        <button class="btn btn-primary" (click)="startScannerMode()" [disabled]="isScannerActive">
+          <i class="material-icons">qr_code_scanner</i>
+          Bật Scanner
+        </button>
+        <button class="btn btn-secondary" (click)="stopScannerMode()" [disabled]="!isScannerActive">
+          <i class="material-icons">stop</i>
+          Dừng Scanner
+        </button>
+        <button class="btn btn-info" (click)="showScannerStatus()" [disabled]="!isScannerActive">
+          <i class="material-icons">info</i>
+          Trạng thái
+        </button>
+        <div class="scanner-test" *ngIf="isScannerActive">
+          <input type="text" 
+                 placeholder="Test QR data (format: MaterialCode|PO|Quantity)" 
+                 class="test-input"
+                 (keyup.enter)="testScannerInput($event)">
+          <small>Nhập dữ liệu test và nhấn Enter</small>
+        </div>
+        
+        <!-- Hidden scanner input for real scanner -->
+        <input type="text" 
+               #scannerInput
+               class="hidden-scanner-input"
+               *ngIf="isScannerActive"
+               (keyup.enter)="handleRealScannerInput($event)"
+               autocomplete="off"
+               style="position: absolute; left: -9999px; opacity: 0;">
+      </div>
+      
       <div class="search-box">
         <input type="text" 
                placeholder="Tìm kiếm..." 
@@ -79,6 +110,58 @@
         <i class="material-icons">inventory_2</i>
         <h5>Chưa có record xuất hàng</h5>
         <p>Lịch sử xuất hàng sẽ hiển thị ở đây khi có hoạt động quét QR từ tab Inventory</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner Status Modal -->
+<div class="scanner-modal" [class.show]="showScannerModal">
+  <div class="modal-overlay" (click)="closeScannerModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5>📊 Trạng thái Scanner</h5>
+      <button class="close-btn" (click)="closeScannerModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="scanner-status">
+        <div class="status-item">
+          <span class="label">Trạng thái:</span>
+          <span class="value" [class.active]="isScannerActive">
+            {{isScannerActive ? '🟢 Đang hoạt động' : '🔴 Đã dừng'}}
+          </span>
+        </div>
+        <div class="status-item">
+          <span class="label">Số lần quét:</span>
+          <span class="value">{{scanCount}}</span>
+        </div>
+        <div class="status-item">
+          <span class="label">Thành công:</span>
+          <span class="value success">{{successfulScans}}</span>
+        </div>
+        <div class="status-item">
+          <span class="label">Lỗi:</span>
+          <span class="value error">{{errorScans}}</span>
+        </div>
+        <div class="status-item">
+          <span class="label">Tốc độ:</span>
+          <span class="value">{{scanRate}} quét/phút</span>
+        </div>
+      </div>
+      
+      <div class="recent-scans">
+        <h6>Quét gần đây:</h6>
+        <div class="scan-list">
+          <div class="scan-item" *ngFor="let scan of recentScans">
+            <span class="scan-time">{{scan.timestamp | date:'HH:mm:ss'}}</span>
+            <span class="scan-data">{{scan.data}}</span>
+            <span class="scan-result" [class.success]="scan.success" [class.error]="!scan.success">
+              {{scan.success ? '✅' : '❌'}}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   </div>

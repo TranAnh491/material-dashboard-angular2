@@ -1,9 +1,23 @@
+// Fix for gray space and scroll issues
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
 // Excel-like Interface for Inventory
 .main-content {
   padding: 0;
+  margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #ffffff;
+  position: relative;
+  width: 100%;
 }
 
 .excel-container {
@@ -17,96 +31,406 @@
 }
 
 .excel-header {
-  background: #f8f9fa;
+  background: #ff9800;
+  color: #000000;
+  text-align: center;
+  padding: 12px;
   border-bottom: 1px solid #dee2e6;
-  padding: 16px 24px;
-  flex-shrink: 0;
   
   h4 {
-    color: #000000;
-    font-family: Arial, sans-serif;
-    font-size: 18px;
     margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    
-    i {
-      font-size: 20px;
-      color: #ff8a65;
-    }
-  }
-  
-  p {
-    color: #6c757d;
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    margin: 4px 0 0 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #000000;
   }
 }
 
+
+
 .excel-actions {
   background: #f8fafc;
-  padding: 8px 16px;
-  flex-shrink: 0;
   border-bottom: 1px solid #dee2e6;
+  position: relative !important;
+  z-index: 10000 !important;
+  pointer-events: auto !important;
   
-  .action-buttons {
+  .action-controls {
     display: flex;
-    gap: 8px;
     align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    flex-wrap: wrap;
+    position: relative !important;
+    z-index: 10001 !important;
+    pointer-events: auto !important;
   }
   
-  .btn {
+  // Custom button styling - uniform design
+  .custom-btn {
+    height: 40px !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    transition: all 0.3s ease !important;
+    white-space: nowrap !important;
+    min-width: auto !important;
+    font-weight: 500 !important;
+    font-size: 14px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 10002 !important;
+    
+    .material-icons {
+      font-size: 18px !important;
+      color: #000000 !important;
+    }
+    
+    // Refresh button - green border to match original green color
+    &.btn-success {
+      border: 2px solid #28a745 !important;
+      
+      &:hover {
+        background: #f8fff9 !important;
+        border-color: #1e7e34 !important;
+        color: #000000 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+      }
+    }
+    
+    // Complete button - orange border to match original warning color  
+    &.btn-warning {
+      border: 2px solid #ffc107 !important;
+      
+      &:hover {
+        background: #fffef0 !important;
+        border-color: #e0a800 !important;
+        color: #000000 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+      }
+    }
+    
+    // Default More button
+    &:not(.btn-success):not(.btn-warning) {
+      border: 2px solid #ff9800 !important;
+      
+      &:hover {
+        background: #fff3e0 !important;
+        border-color: #f57c00 !important;
+        color: #000000 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+      }
+    }
+    
+    &:focus, &:active {
+      background: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+    }
+  }
+  
+  // Custom input styling - matching design
+  .custom-input {
+    height: 40px !important;
+    padding: 8px 12px !important;
+    border: 2px solid #ff9800 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+    min-width: 300px !important;
+    transition: all 0.3s ease !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 10002 !important;
+    
+    &::placeholder {
+      color: #666666 !important;
+    }
+    
+    &:focus {
+      outline: none !important;
+      border-color: #f57c00 !important;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+      background: #ffffff !important;
+    }
+  }
+  
+  // Dropdown specific styling
+  .dropdown-toggle::after {
+    margin-left: 6px !important;
+    color: #000000 !important;
+  }
+}
+
+// Force override any potential blocking elements
+* {
+  &:not(.qr-scanner-modal):not(.modal-overlay) {
+    pointer-events: auto !important;
+  }
+}
+
+// Debug: Add temporary border to see button boundaries
+.custom-btn {
+  border: 2px solid red !important;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5) !important;
+}
+
+// Force main content to not block interactions
+.main-content {
+  pointer-events: auto !important;
+  
+  * {
+    pointer-events: auto !important;
+  }
+}
+
+// Change location button styling
+.change-cell {
+  text-align: center;
+  padding: 4px !important;
+  
+  .scan-change-btn {
+    background: #ffffff !important;
+    border: 2px solid #2196f3 !important; // Blue border for location scanning
+    color: #000000 !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    justify-content: center !important;
+    
+    .material-icons {
+      font-size: 16px !important;
+      color: #000000 !important;
+    }
+    
+    &:hover {
+      background: #e3f2fd !important;
+      border-color: #1976d2 !important;
+      color: #000000 !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    &:focus, &:active {
+      background: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2) !important;
+    }
+  }
+}
+
+// QR scan button styling - matching Change button style
+.scan-cell {
+  text-align: center;
+  padding: 4px !important;
+  width: 120px !important; // Tăng kích thước cột Quét thêm 90%
+  min-width: 120px !important;
+  max-width: 150px !important;
+  
+  .scan-qr-btn {
+    background: #ffffff !important;
+    border: 2px solid #ff9800 !important; // Orange border for QR scanning
+    color: #000000 !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    justify-content: center !important;
+    
+    .material-icons {
+      font-size: 16px !important;
+      color: #000000 !important;
+    }
+    
+    &:hover {
+      background: #fff3e0 !important;
+      border-color: #f57c00 !important;
+      color: #000000 !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    &:focus, &:active {
+      background: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+    }
+  }
+}
+
+// HSD date input styling
+.editable-date-input {
+  border: none !important;
+  background: transparent !important;
+  color: #000000 !important;
+  font-size: 10px !important;
+  font-family: Arial, sans-serif !important;
+  text-align: center !important;
+  width: 100% !important;
+  padding: 2px !important;
+  border-radius: 0 !important;
+  
+  &:focus {
+    outline: none !important;
+    background: #f0f8ff !important;
+    border: 1px solid #2196f3 !important;
+  }
+  
+  // Hide date picker icon for cleaner look
+  &::-webkit-calendar-picker-indicator {
+    opacity: 0.6;
     font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 4px;
-    border: none;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    transition: none;
     
-    &.btn-primary {
-      background: linear-gradient(135deg, #ff8a65 0%, #ff7043 100%);
-      color: white;
-      box-shadow: none;
-      
-      &:hover {
-        background: linear-gradient(135deg, #ff7043 0%, #ff5722 100%);
-        transform: none;
-      }
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+// KK checkbox styling
+.status-cell {
+  text-align: center;
+  padding: 4px !important;
+  
+  mat-checkbox {
+    // Unchecked state - gray background
+    ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
+      background-color: #f5f5f5 !important;
+      border-color: #ccc !important;
     }
     
-    &.btn-outline-success {
-      border: 2px solid #28a745;
-      color: #28a745;
-      background: transparent;
-      
-      &:hover {
-        background: #28a745;
-        color: white;
-        box-shadow: none;
-        transform: none;
-      }
+    // Checked state - blue background for KK  
+    ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+      background-color: #2196f3 !important; // Blue for KK
+      border: none !important;
     }
     
-    &.btn-outline-info {
-      border: 2px solid #ff8a65;
-      color: #ff8a65;
-      background: transparent;
-      
-      &:hover {
-        background: #ff8a65;
-        color: white;
-        box-shadow: none;
-        transform: none;
-      }
+    ::ng-deep .mat-checkbox-checked .mat-checkbox-checkmark-path {
+      stroke: #ffffff !important; // White checkmark
     }
     
-    i {
-      font-size: 16px;
+    // Override Material Design themes
+    &.mat-accent ::ng-deep .mat-checkbox-checked .mat-checkbox-background,
+    &.mat-primary ::ng-deep .mat-checkbox-checked .mat-checkbox-background {
+      background-color: #2196f3 !important;
+    }
+  }
+}
+
+// Auto-expanding notes column
+.editable-cell {
+  &[ng-reflect-model] {
+    // Base styles for editable cells
+    border: none !important;
+    background: transparent !important;
+    color: #000000 !important;
+    font-size: 10px !important;
+    font-family: Arial, sans-serif !important;
+    text-align: center !important;
+    padding: 4px !important;
+    
+    &:focus {
+      outline: none !important;
+      background: #f0f8ff !important;
+      border: 1px solid #2196f3 !important;
+    }
+  }
+}
+
+// Special styling for notes column - auto width expansion
+td:has(.editable-cell[ng-model="material.notes"]),
+td:nth-child(14) { // Cột Ghi chú (cột thứ 14)
+  min-width: 100px !important;
+  max-width: none !important; // Remove max-width restriction
+  width: auto !important;
+  white-space: nowrap !important;
+  
+  .editable-cell {
+    width: 100% !important;
+    min-width: 100px !important;
+    max-width: none !important;
+    white-space: nowrap !important;
+    text-overflow: visible !important;
+    overflow: visible !important;
+    
+    // Auto-expand based on content
+    &:not(:placeholder-shown) {
+      width: auto !important;
+      min-width: max-content !important;
+    }
+  }
+}
+
+// Print QR button styling
+.qr-cell {
+  text-align: center;
+  padding: 4px !important;
+  
+  .print-qr-btn {
+    background: #ffffff !important;
+    border: 2px solid #4caf50 !important; // Green border for print action
+    color: #000000 !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    justify-content: center !important;
+    
+    .material-icons {
+      font-size: 16px !important;
+      color: #000000 !important;
+    }
+    
+    &:hover:not(.disabled) {
+      background: #f1f8e9 !important;
+      border-color: #388e3c !important;
+      color: #000000 !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    &:focus:not(.disabled), &:active:not(.disabled) {
+      background: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
+    }
+    
+    // Disabled state for non-import items
+    &.disabled {
+      background: #f5f5f5 !important;
+      border-color: #ccc !important;
+      color: #999 !important;
+      cursor: not-allowed !important;
+      
+      .material-icons {
+        color: #999 !important;
+      }
+      
+      &:hover {
+        background: #f5f5f5 !important;
+        border-color: #ccc !important;
+        color: #999 !important;
+        box-shadow: none !important;
+      }
+    }
     }
   }
 
@@ -172,7 +496,6 @@
         i {
           font-size: 16px;
           color: #ff8a65;
-        }
       }
     }
   }
@@ -181,6 +504,7 @@
 .excel-body {
   flex: 1;
   overflow: auto;
+  position: relative;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 #f7fafc;
@@ -228,6 +552,14 @@
     top: 0;
     z-index: 10;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    
+    // Cột "Quét" (cột thứ 4) - tăng width thêm 90%
+    &:nth-child(4) {
+      width: 120px !important;
+      min-width: 120px !important;
+      max-width: 150px !important;
+    }
+    
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -263,6 +595,13 @@
       min-width: 40px;
       background: #f8f9fa;
       font-weight: 600;
+    }
+    
+    // Cột "Quét" (cột thứ 4) - tăng width thêm 90%
+    &:nth-child(4) {
+      width: 120px !important;
+      min-width: 120px !important;
+      max-width: 150px !important;
     }
     
     &.date-cell {
@@ -798,25 +1137,54 @@ mat-checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
+  background: #ffffff !important; // Nền trắng
+  border: 2px solid #ffeb3b !important; // Viền vàng chóe
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
   font-family: Arial, sans-serif;
+  height: 40px; // Cùng chiều cao với buttons
   
   .iqc-label {
-    color: #856404;
+    color: #000000 !important; // Chữ đen
     font-weight: 600;
   }
   
   .iqc-count {
-    background: #ffc107;
-    color: #212529;
-    padding: 2px 8px;
-    border-radius: 3px;
+    background: #ffeb3b !important; // Background vàng chóe
+    color: #000000 !important; // Chữ đen
+    padding: 4px 8px;
+    border-radius: 4px;
     font-weight: bold;
-    min-width: 20px;
+    min-width: 24px;
+    text-align: center;
+  }
+}
+
+.negative-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff !important; // Nền trắng
+  border: 2px solid #ff1744 !important; // Viền đỏ
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+  height: 40px; // Cùng chiều cao với buttons
+  
+  .negative-label {
+    color: #000000 !important; // Chữ đen
+    font-weight: 600;
+  }
+  
+  .negative-count {
+    background: #ff1744 !important; // Background đỏ
+    color: #ffffff !important; // Chữ trắng cho contrast tốt trên nền đỏ
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    min-width: 24px;
     text-align: center;
   }
 }
@@ -880,6 +1248,21 @@ mat-checkbox {
   &.duplicate-code {
     background-color: #4fc3f7 !important; // Light blue (coban)
   }
+  
+  &.negative-stock {
+    background-color: #f8d7da !important; // Light red background
+    color: #721c24 !important; // Dark red text
+    font-weight: bold !important;
+    border: 2px solid #dc3545 !important; // Red border
+  }
+}
+
+// Negative stock cell styling
+.negative-stock-cell {
+  background-color: #f8d7da !important; // Light red background
+  color: #721c24 !important; // Dark red text
+  font-weight: bold !important;
+  border: 2px solid #dc3545 !important; // Red border
 }
 
 // IQC location styling - bright yellow

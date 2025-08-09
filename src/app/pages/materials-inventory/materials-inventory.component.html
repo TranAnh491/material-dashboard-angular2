@@ -1,11 +1,15 @@
 <div class="main-content">
   <!-- Excel-like Container -->
   <div class="excel-container">
+    <!-- Report Title -->
+    <div class="excel-header">
+      <h4>📦 INVENTORY</h4>
+    </div>
     <!-- Excel Actions -->
     <div class="excel-actions">
-      <div class="action-buttons">
+      <div class="action-controls">
         <div class="dropdown">
-          <button class="btn btn-primary dropdown-toggle" type="button" (click)="toggleDropdown($event)">
+          <button class="custom-btn dropdown-toggle" type="button" (click)="toggleDropdown($event)">
             <i class="material-icons">more_vert</i>
             More
           </button>
@@ -26,28 +30,38 @@
               <i class="material-icons">download</i>
               Tải Template Tồn kho
             </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReport()">
+              <i class="material-icons">warning</i>
+              Tải báo cáo FIFO
+            </a>
           </div>
         </div>
-        <button class="btn btn-outline-success" (click)="refreshInventory()">
+        
+        <button class="custom-btn btn-success" (click)="refreshInventory()">
           <i class="material-icons">refresh</i>
           Refresh
         </button>
-        <button class="btn btn-outline-warning" (click)="completeInventory()">
+        
+        <button class="custom-btn btn-warning" (click)="completeInventory()">
           <i class="material-icons">check_circle</i>
           Hoàn thành
         </button>
-      </div>
-      <div class="search-and-stats">
+        
         <div class="search-box">
           <input type="text" 
                  placeholder="Tìm kiếm theo mã, vị trí, tên, số lượng..." 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 class="search-input">
+                 class="custom-input">
         </div>
         <div class="iqc-counter">
           <span class="iqc-label">IQC:</span>
           <span class="iqc-count">{{getIQCCount()}}</span>
+        </div>
+        <div class="negative-counter">
+          <span class="negative-label">Âm:</span>
+          <span class="negative-count">{{getNegativeStockCount()}}</span>
         </div>
       </div>
     </div>
@@ -68,6 +82,7 @@
             <th>Xuất</th>
             <th>Tồn kho</th>
             <th>Vị trí</th>
+            <th>Change</th>
             <th>Loại hình</th>
             <th>HSD</th>
             <th>KK</th>
@@ -88,12 +103,14 @@
             <td class="code-cell material-code-cell" 
                 [class.duplicate-cell]="material.isDuplicate"
                 [class.duplicate-code]="isDuplicatePO(material)"
-                [class.normal-code]="!isDuplicatePO(material)">{{material.materialCode}}</td>
+                [class.normal-code]="!isDuplicatePO(material)"
+                [class.negative-stock]="hasNegativeStock(material)">{{material.materialCode}}</td>
             <td class="scan-cell">
-              <button class="qr-button" 
+              <button class="scan-qr-btn" 
                       (click)="scanQRCode(material)"
-                      matTooltip="Quét QR code để xuất hàng">
-                QR
+                      title="Quét QR code để xuất hàng">
+                <i class="material-icons">qr_code</i>
+                Scan
               </button>
             </td>
             <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 
@@ -110,7 +127,11 @@
                      step="0.1"
                      [disabled]="!canExport">
             </td>
-            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.stock || material.quantity)}}</td>
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
+                [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
+                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' = ' + calculateCurrentStock(material)">
+              {{formatNumber(calculateCurrentStock(material))}}
+            </td>
             <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
               <input type="text" 
                      class="editable-cell location-input" 
@@ -118,12 +139,35 @@
                      (change)="updateLocation(material)"
                      (blur)="onLocationChange(material)">
             </td>
+            <td class="change-cell">
+              <button class="scan-change-btn" 
+                      (click)="scanLocationChange(material)"
+                      title="Scan QR để thay đổi vị trí">
+                <i class="material-icons">qr_code_scanner</i>
+                Scan
+              </button>
+            </td>
             <td>
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
-            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">{{material.expiryDate | date:'dd/MM/yyyy'}}</td>
+            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
+              <div *ngIf="canEditHSD; else readOnlyHSD">
+                <input type="date" 
+                       class="editable-date-input" 
+                       [value]="material.expiryDate | date:'yyyy-MM-dd'"
+                       (change)="onHSDChange($event, material)"
+                       title="Chỉnh sửa HSD">
+              </div>
+              <ng-template #readOnlyHSD>
+                <span [title]="canEditHSD ? '' : 'Bạn không có quyền chỉnh sửa HSD'">
+                  {{material.expiryDate ? (material.expiryDate | date:'dd/MM/yyyy') : ''}}
+                </span>
+              </ng-template>
+            </td>
             <td class="status-cell">
-              <mat-checkbox [checked]="material.qualityCheck" disabled>
+              <mat-checkbox [checked]="material.qualityCheck" 
+                           (change)="updateQualityCheck(material, $event)"
+                           title="Chỉnh sửa trạng thái KK">
               </mat-checkbox>
             </td>
             <td>
@@ -144,7 +188,7 @@
               <span class="badge" 
                     [class.badge-import]="material.importStatus === 'Import'"
                     [class.badge-success]="!material.importStatus || material.importStatus !== 'Import'">
-                {{material.importStatus === 'Import' ? 'Import' : 'In Stock'}}
+                {{material.importStatus === 'Import' ? 'Import' : 'Inbound'}}
               </span>
             </td>
             <td class="status-cell">
@@ -156,14 +200,19 @@
               </button>
             </td>
             <td class="qr-cell" *ngIf="material.importStatus === 'Import'">
-              <button class="qr-print-button" 
+              <button class="print-qr-btn" 
                       (click)="printQRCode(material)"
-                      matTooltip="In tem QR code">
-                QR
+                      title="In tem QR code">
+                <i class="material-icons">print</i>
+                Print
               </button>
             </td>
             <td class="qr-cell" *ngIf="!material.importStatus || material.importStatus !== 'Import'">
-              <span class="no-qr">-</span>
+              <button class="print-qr-btn disabled" 
+                      title="Chỉ có thể in QR cho mã hàng Import">
+                <i class="material-icons">print</i>
+                Print
+              </button>
             </td>
           </tr>
         </tbody>
@@ -210,6 +259,45 @@
       
       <div class="modal-footer">
         <button class="btn btn-secondary" (click)="stopScanning()">
+          <i class="material-icons">cancel</i>
+          Hủy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Location Change Scanner Modal -->
+  <div class="qr-scanner-modal" *ngIf="isScanningLocationChange">
+    <div class="modal-overlay" (click)="stopLocationScanning()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5>
+          <i class="material-icons">location_on</i>
+          Quét QR Vị Trí Mới
+        </h5>
+        <button class="close-btn" (click)="stopLocationScanning()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="scanner-container">
+          <div id="qr-reader-location"></div>
+          <div class="scanner-overlay">
+            <div class="scanner-frame"></div>
+            <p class="scanner-hint">Quét QR code vị trí mới</p>
+          </div>
+        </div>
+        
+        <div class="scanner-info" *ngIf="currentLocationChangeMaterial">
+          <p><strong>Mã hàng:</strong> {{currentLocationChangeMaterial.materialCode}}</p>
+          <p><strong>Vị trí hiện tại:</strong> {{currentLocationChangeMaterial.location}}</p>
+          <p><strong>PO:</strong> {{currentLocationChangeMaterial.poNumber}}</p>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="stopLocationScanning()">
           <i class="material-icons">cancel</i>
           Hủy
         </button>

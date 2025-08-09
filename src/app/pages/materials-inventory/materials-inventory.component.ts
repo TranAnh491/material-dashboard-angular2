@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -50,12 +50,26 @@ export interface StockItem {
   location: string;
 }
 
+export interface FIFOViolationReport {
+  id?: string;
+  materialCode: string;
+  actualPO: string; // PO that was actually scanned
+  correctFIFOPO: string; // PO that should have been scanned (FIFO)
+  exportQuantity: number;
+  exportDate: Date;
+  exportedBy: string;
+  location: string;
+  materialName?: string;
+  notes?: string;
+  createdAt: Date;
+}
+
 @Component({
   selector: 'app-materials-inventory',
   templateUrl: './materials-inventory.component.html',
   styleUrls: ['./materials-inventory.component.scss']
 })
-export class MaterialsInventoryComponent implements OnInit, OnDestroy {
+export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterViewInit {
   // Data properties
   inventoryMaterials: InventoryMaterial[] = [];
   filteredInventory: InventoryMaterial[] = [];
@@ -77,11 +91,19 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   scanner: Html5Qrcode | null = null;
   currentScanningMaterial: InventoryMaterial | null = null;
   
+  // Location change scanning
+  isScanningLocationChange = false;
+  currentLocationChangeMaterial: InventoryMaterial | null = null;
+  
+  // FIFO checking
+  fifoCheckResult: {isValid: boolean, firstRowPO?: string} | null = null;
+  
   private destroy$ = new Subject<void>();
 
   // Permission properties
   canExport = false;
   canDelete = false;
+  canEditHSD = false;
 
   constructor(
     private firestore: AngularFirestore,
@@ -96,6 +118,13 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     this.loadPermissions();
     // Disable auto-sync to prevent deleted items from reappearing
     // Use manual sync button instead
+  }
+
+  ngAfterViewInit(): void {
+    // Auto-resize notes column for existing data after view initialization
+    setTimeout(() => {
+      this.autoResizeNotesColumn();
+    }, 1000);
   }
 
   ngOnDestroy(): void {
@@ -148,7 +177,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
               id: doc.id,
               ...data,
               importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
-              expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date()
+              expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : null // Để trống nếu inbound không có HSD
             };
           })
           .filter(material => material.isReceived === true);
@@ -402,6 +431,23 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     console.log('Inventory materials:', this.inventoryMaterials);
     console.log('Filtered inventory:', this.filteredInventory);
     
+    // Check stock calculations
+    console.log('=== DEBUG STOCK CALCULATIONS ===');
+    this.filteredInventory.forEach((material, index) => {
+      const calculatedStock = this.calculateCurrentStock(material);
+      
+      console.log(`Item ${index + 1}:`, {
+        materialCode: material.materialCode,
+        poNumber: material.poNumber,
+        quantity: material.quantity,
+        exported: material.exported,
+        stockField: material.stock,
+        calculatedStock: calculatedStock,
+        isNegative: calculatedStock < 0,
+        formula: `${material.quantity || 0} - ${material.exported || 0} = ${calculatedStock}`
+      });
+    });
+    
     // Check Firebase directly for received materials
     this.firestore.collection('inbound-materials', ref => ref.where('isReceived', '==', true))
       .get()
@@ -411,6 +457,24 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
           data: doc.data()
         })));
       });
+
+    // Debug specific material code B024075
+    console.log('=== B024075 DEBUG ===');
+    const b024075Items = this.filteredInventory.filter(item => item.materialCode === 'B024075');
+    console.log('B024075 items found:', b024075Items.length);
+    b024075Items.forEach((item, index) => {
+      console.log(`B024075 item ${index + 1}:`, {
+        materialCode: item.materialCode,
+        poNumber: item.poNumber,
+        quantity: item.quantity,
+        exported: item.exported,
+        stock: item.stock,
+        calculatedStock: this.calculateCurrentStock(item),
+        hasNegativeStock: this.hasNegativeStock(item),
+        location: item.location,
+        formula: `${item.quantity} - ${item.exported} = ${this.calculateCurrentStock(item)}`
+      });
+    });
 
     // Check catalog data
     this.firestore.collection('inventory-catalog').doc('metadata').get()
@@ -865,10 +929,92 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     console.log('Stock template downloaded');
   }
 
+  // Download FIFO violation report
+  downloadFIFOReport(): void {
+    this.firestore.collection('fifo-violations', ref => 
+      ref.orderBy('createdAt', 'desc')
+    ).get().subscribe(snapshot => {
+        if (snapshot.empty) {
+          alert('📊 Không có báo cáo vi phạm FIFO nào.');
+          return;
+        }
+
+        const fifoData: any[] = [];
+        // Headers
+        fifoData.push([
+          'STT',
+          'Ngày vi phạm',
+          'Mã hàng',
+          'Tên hàng',
+          'PO đã xuất (Sai)',
+          'PO đúng (FIFO)',
+          'Số lượng xuất',
+          'Vị trí',
+          'Người xuất',
+          'Ghi chú'
+        ]);
+
+        // Data rows
+        snapshot.docs.forEach((doc, index) => {
+          const data = doc.data() as FIFOViolationReport;
+          fifoData.push([
+            index + 1,
+            data.exportDate ? (data.exportDate as any).seconds ? new Date((data.exportDate as any).seconds * 1000).toLocaleDateString('vi-VN') : new Date(data.exportDate).toLocaleDateString('vi-VN') : '',
+            data.materialCode || '',
+            data.materialName || 'N/A',
+            data.actualPO || '',
+            data.correctFIFOPO || '',
+            data.exportQuantity || 0,
+            data.location || '',
+            data.exportedBy || '',
+            data.notes || ''
+          ]);
+        });
+
+        // Create and download Excel file
+        const ws = XLSX.utils.aoa_to_sheet(fifoData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'FIFO Violations');
+        
+        // Auto-size columns
+        const colWidths = [
+          { wch: 5 },  // STT
+          { wch: 15 }, // Ngày
+          { wch: 15 }, // Mã hàng
+          { wch: 25 }, // Tên hàng
+          { wch: 15 }, // PO sai
+          { wch: 15 }, // PO đúng
+          { wch: 12 }, // Số lượng
+          { wch: 15 }, // Vị trí
+          { wch: 20 }, // Người xuất
+          { wch: 40 }  // Ghi chú
+        ];
+        ws['!cols'] = colWidths;
+
+        const fileName = `FIFO_Violations_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+        
+        console.log(`📊 Downloaded FIFO report: ${fileName} (${snapshot.docs.length} violations)`);
+      }, error => {
+        console.error('❌ Error downloading FIFO report:', error);
+        alert('❌ Lỗi khi tải báo cáo FIFO!');
+      });
+  }
+
   // Update methods for editable fields
   updateExported(material: InventoryMaterial): void {
-    material.stock = (material.quantity || 0) - (material.exported || 0);
-    if (material.stock < 0) material.stock = 0;
+    // Calculate stock properly: quantity - exported
+    const calculatedStock = (material.quantity || 0) - (material.exported || 0);
+    material.stock = calculatedStock; // Allow negative stock to be visible
+    
+    console.log('📊 Manual export update:', {
+      materialCode: material.materialCode,
+      quantity: material.quantity,
+      exported: material.exported,
+      calculatedStock: calculatedStock,
+      finalStock: material.stock
+    });
+    
     this.updateInventoryInFirebase(material);
     this.applyFilters();
   }
@@ -886,10 +1032,72 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
   updateNotes(material: InventoryMaterial): void {
     console.log('Updated notes for', material.materialCode, 'to', material.notes);
     this.updateInventoryInFirebase(material);
+    
+    // Auto-resize notes column width based on content
+    setTimeout(() => {
+      this.autoResizeNotesColumn();
+    }, 100);
+  }
+
+  // Auto-resize notes column to fit content
+  private autoResizeNotesColumn(): void {
+    try {
+      const notesInputs = document.querySelectorAll('input[ng-reflect-model*="notes"]') as NodeListOf<HTMLInputElement>;
+      notesInputs.forEach(input => {
+        const content = input.value;
+        if (content && content.length > 0) {
+          // Calculate width based on content length
+          const charWidth = 8; // Approximate character width in pixels
+          const padding = 16; // Padding
+          const minWidth = 100; // Minimum width
+          const calculatedWidth = Math.max(minWidth, content.length * charWidth + padding);
+          
+          // Apply width to the input and its parent cell
+          input.style.width = `${calculatedWidth}px`;
+          if (input.parentElement) {
+            input.parentElement.style.width = `${calculatedWidth}px`;
+            input.parentElement.style.minWidth = `${calculatedWidth}px`;
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error auto-resizing notes column:', error);
+    }
   }
 
   updateRemarks(material: InventoryMaterial): void {
     console.log('Updated remarks for', material.materialCode, 'to', material.remarks);
+    this.updateInventoryInFirebase(material);
+  }
+
+  updateHSD(material: InventoryMaterial): void {
+    if (!this.canEditHSD) {
+      alert('Bạn không có quyền chỉnh sửa HSD. Vui lòng liên hệ quản trị viên.');
+      return;
+    }
+    console.log('Updated HSD for', material.materialCode, 'to', material.expiryDate);
+    this.updateInventoryInFirebase(material);
+  }
+
+  onHSDChange(event: any, material: InventoryMaterial): void {
+    if (!this.canEditHSD) {
+      alert('Bạn không có quyền chỉnh sửa HSD. Vui lòng liên hệ quản trị viên.');
+      return;
+    }
+    
+    const newDate = event.target.value;
+    if (newDate) {
+      material.expiryDate = new Date(newDate);
+    } else {
+      material.expiryDate = null as any; // Allow empty HSD
+    }
+    
+    this.updateHSD(material);
+  }
+
+  updateQualityCheck(material: InventoryMaterial, event: any): void {
+    material.qualityCheck = event.checked;
+    console.log('Updated qualityCheck for', material.materialCode, 'to', material.qualityCheck);
     this.updateInventoryInFirebase(material);
   }
 
@@ -1045,6 +1253,238 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Scan QR Code for location change
+  async scanLocationChange(material: InventoryMaterial): Promise<void> {
+    try {
+      // Check camera availability first
+      const hasCamera = await this.checkCameraAvailability();
+      if (!hasCamera) {
+        alert('Không tìm thấy camera. Vui lòng sử dụng nút "Nhập thủ công" để nhập QR code.');
+        return;
+      }
+      
+      this.currentLocationChangeMaterial = material;
+      this.isScanningLocationChange = true;
+      
+      // Wait for DOM to update and element to be created
+      setTimeout(async () => {
+        try {
+          // Check if element exists
+          const qrReaderElement = document.getElementById('qr-reader-location');
+          if (!qrReaderElement) {
+            console.error('QR reader location element not found');
+            alert('Lỗi: Không tìm thấy element camera. Vui lòng thử lại.');
+            this.stopLocationScanning();
+            return;
+          }
+          
+          // Initialize scanner
+          this.scanner = new Html5Qrcode("qr-reader-location");
+          
+          // Start scanning
+          await this.scanner.start(
+            { facingMode: "environment" }, // Use back camera
+            {
+              fps: 15,
+              qrbox: { width: 400, height: 400 },
+              aspectRatio: 1.0
+            },
+            (decodedText, decodedResult) => {
+              console.log('Location QR Code detected:', decodedText);
+              this.onLocationQRCodeScanned(decodedText, material);
+            },
+            (errorMessage) => {
+              // Handle scan error
+              console.log('Location QR scan error:', errorMessage);
+            }
+          ).catch(err => {
+            console.error('Unable to start location scanner:', err);
+            if (err.message && err.message.includes('Permission')) {
+              alert('Không có quyền truy cập camera. Vui lòng cho phép truy cập camera và thử lại.');
+            } else {
+              alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+            }
+            this.stopLocationScanning();
+          });
+          
+        } catch (error) {
+          console.error('Error starting location QR scanner:', error);
+          alert('Có lỗi khi khởi động camera!');
+          this.stopLocationScanning();
+        }
+      }, 100); // Wait 100ms for DOM to update
+      
+    } catch (error) {
+      console.error('Error in scanLocationChange:', error);
+      alert('Có lỗi khi khởi động camera!');
+      this.stopLocationScanning();
+    }
+  }
+
+  // Handle location QR code scan result
+  private async onLocationQRCodeScanned(qrData: string, material: InventoryMaterial): Promise<void> {
+    try {
+      // Stop scanning
+      this.stopLocationScanning();
+      
+      console.log('Scanned location QR data:', qrData);
+      
+      // Extract location from QR data
+      // Assuming QR data contains location info or is the location itself
+      let newLocation = qrData.trim();
+      
+      // If QR contains structured data, extract location
+      if (qrData.includes('|')) {
+        const parts = qrData.split('|');
+        // Assume location is in a specific position, adjust as needed
+        newLocation = parts[parts.length - 1] || qrData; // Use last part or full data
+      }
+      
+      if (newLocation) {
+        // Update material location
+        const previousLocation = material.location;
+        material.location = newLocation;
+        
+        // Save to Firebase
+        await this.updateLocation(material);
+        
+        alert(`Vị trí đã được cập nhật từ "${previousLocation}" thành "${newLocation}"`);
+        
+        // Force UI update
+        this.cdr.detectChanges();
+        
+      } else {
+        alert('Không tìm thấy thông tin vị trí trong QR code!');
+      }
+      
+    } catch (error) {
+      console.error('Error processing location QR code:', error);
+      alert('Có lỗi khi xử lý QR code vị trí!');
+    }
+  }
+
+  // Stop location scanning
+  private stopLocationScanning(): void {
+    try {
+      if (this.scanner) {
+        this.scanner.stop().then(() => {
+          console.log('Location scanner stopped');
+          if (this.scanner) {
+            this.scanner.clear();
+            this.scanner = null;
+          }
+        }).catch(err => {
+          console.error('Error stopping location scanner:', err);
+          if (this.scanner) {
+            this.scanner.clear();
+            this.scanner = null;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error in stopLocationScanning:', error);
+    }
+    
+    this.isScanningLocationChange = false;
+    this.currentLocationChangeMaterial = null;
+    this.cdr.detectChanges();
+  }
+
+  // Parse PO number to extract month, year, and sequence
+  private parsePONumber(poNumber: string): {month: number, year: number, sequence: number, isValid: boolean} {
+    try {
+      // Expected format: PO + MMYY + / + NNNN (e.g., PO0222/0011, PO0323/0001)
+      const regex = /^PO(\d{2})(\d{2})\/(\d{4})$/;
+      const match = poNumber.match(regex);
+      
+      if (!match) {
+        console.warn('⚠️ Invalid PO format:', poNumber);
+        return { month: 0, year: 0, sequence: 0, isValid: false };
+      }
+      
+      const month = parseInt(match[1]);
+      const year = parseInt(match[2]) + 2000; // Convert YY to YYYY (22 -> 2022)
+      const sequence = parseInt(match[3]);
+      
+      return { month, year, sequence, isValid: true };
+    } catch (error) {
+      console.error('❌ Error parsing PO number:', poNumber, error);
+      return { month: 0, year: 0, sequence: 0, isValid: false };
+    }
+  }
+
+  // Check FIFO rule - ensure scanning the first row for the material code based on PO sorting
+  private async checkFIFORule(material: InventoryMaterial): Promise<{isValid: boolean, firstRowPO?: string}> {
+    try {
+      // Find all items with the same material code
+      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', material.materialCode)
+           .where('importStatus', '==', 'Import') // Only consider imported items
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('🔍 FIFO Check: No items found for material code:', material.materialCode);
+        return { isValid: true }; // If no items found, allow the operation
+      }
+      
+      // Convert to array and sort by FIFO logic
+      const items = snapshot.docs.map(doc => {
+        const data = doc.data() as InventoryMaterial;
+        return {
+          doc: doc,
+          data: data,
+          poInfo: this.parsePONumber(data.poNumber)
+        };
+      }).filter(item => item.poInfo.isValid); // Only valid PO formats
+      
+      if (items.length === 0) {
+        console.log('🔍 FIFO Check: No valid PO formats found for material code:', material.materialCode);
+        return { isValid: true };
+      }
+      
+      // Sort by FIFO priority: Year ASC, Month ASC, Sequence ASC, then by document position
+      items.sort((a, b) => {
+        if (a.poInfo.year !== b.poInfo.year) {
+          return a.poInfo.year - b.poInfo.year; // Earlier year first
+        }
+        if (a.poInfo.month !== b.poInfo.month) {
+          return a.poInfo.month - b.poInfo.month; // Earlier month first
+        }
+        if (a.poInfo.sequence !== b.poInfo.sequence) {
+          return a.poInfo.sequence - b.poInfo.sequence; // Lower sequence first
+        }
+        // If all are equal, use document ID for consistency (top row)
+        return a.doc.id.localeCompare(b.doc.id);
+      });
+      
+      // Get the first (FIFO) item after sorting
+      const firstItem = items[0];
+      
+      console.log('🔍 FIFO Check:', {
+        materialCode: material.materialCode,
+        currentPO: material.poNumber,
+        currentPOInfo: this.parsePONumber(material.poNumber),
+        firstRowPO: firstItem.data.poNumber,
+        firstPOInfo: firstItem.poInfo,
+        totalItems: items.length,
+        isValid: firstItem.data.poNumber === material.poNumber
+      });
+      
+      // Check if the scanned item is the first (FIFO) item
+      const isValid = firstItem.data.poNumber === material.poNumber;
+      
+      return {
+        isValid: isValid,
+        firstRowPO: firstItem.data.poNumber
+      };
+      
+    } catch (error) {
+      console.error('❌ Error checking FIFO rule:', error);
+      // If error occurs, assume FIFO is valid to not block operations
+      return { isValid: true };
+    }
+  }
+
   // Handle QR code scan result
   private async onQRCodeScanned(qrData: string, material: InventoryMaterial): Promise<void> {
     try {
@@ -1070,15 +1510,49 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
           return;
         }
         
-        // Check if quantity is valid
-        const currentStock = material.stock || material.quantity || 0;
+        // Check FIFO rule - must scan the first (top) row for this material code
+        const fifoCheckResult = await this.checkFIFORule(material);
+        if (!fifoCheckResult.isValid) {
+          const userConfirmed = confirm(`⚠️ CẢNH BÁO: VI PHẠM FIFO!\n\n` +
+            `Mã hàng: ${material.materialCode}\n` +
+            `PO hiện tại: ${material.poNumber}\n` +
+            `PO đầu tiên (FIFO): ${fifoCheckResult.firstRowPO}\n\n` +
+            `Bạn có muốn tiếp tục xuất hàng không?\n\n` +
+            `⚠️ Lưu ý: Hành động này sẽ được ghi vào báo cáo vi phạm FIFO.`);
+          
+          if (!userConfirmed) {
+            console.log('❌ User cancelled FIFO violation export');
+            return;
+          }
+          
+          // User confirmed FIFO violation - will log to FIFO report later
+          console.log('⚠️ User confirmed FIFO violation export');
+        }
+        
+        // Check if quantity is valid - use proper stock calculation
+        const currentStock = this.calculateCurrentStock(material);
+        
+        console.log('📊 Inventory scan - Current stock details:', {
+          stock: material.stock,
+          quantity: material.quantity,
+          exported: material.exported,
+          calculatedStock: currentStock,
+          requestedQuantity: scannedQuantity,
+          formula: `${material.quantity || 0} - ${material.exported || 0} = ${currentStock}`
+        });
+        
         if (scannedQuantity > currentStock) {
-          alert(`Số lượng quét (${scannedQuantity}) lớn hơn tồn kho (${currentStock})!`);
+          alert(`❌ Số lượng quét (${scannedQuantity}) lớn hơn tồn kho (${currentStock})!\nMã: ${material.materialCode}\nPO: ${material.poNumber}\nCông thức: ${material.quantity || 0} - ${material.exported || 0} = ${currentStock}`);
           return;
         }
         
-        // Calculate new stock
-        const newStock = Math.max(0, currentStock - scannedQuantity);
+        // Check if stock will be negative after export
+        const newStock = currentStock - scannedQuantity;
+        if (newStock < 0) {
+          alert(`❌ Không thể xuất! Tồn kho sẽ âm sau khi xuất!\nTồn hiện tại: ${currentStock}\nXuất: ${scannedQuantity}\nSẽ còn: ${newStock}\nMã: ${material.materialCode}\nPO: ${material.poNumber}`);
+          return;
+        }
+        
         const newExported = (material.exported || 0) + scannedQuantity;
         
         // Update inventory
@@ -1099,8 +1573,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
           exportDate: new Date(),
           location: material.location,
           notes: `Quét QR từ Inventory - ${material.materialName || 'N/A'}`,
-          exportedBy: currentUser,
-          scanMethod: 'QR_SCAN',
+          exportedBy: currentUser, // Always logged-in user account
+          scanMethod: 'Tablet', // Changed from 'QR_SCAN' to 'Tablet' for inventory scans
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -1109,6 +1583,12 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
         this.firestore.collection('outbound-materials').add(outboundRecord)
           .then((docRef) => {
             console.log('Outbound record saved with ID:', docRef.id);
+            
+            // If FIFO was violated, save to FIFO report
+            if (!fifoCheckResult.isValid) {
+              this.saveFIFOViolationReport(material, scannedQuantity, fifoCheckResult.firstRowPO!, currentUser);
+            }
+            
             alert(`✅ Xuất hàng thành công!\n\nMã: ${material.materialCode}\nSố lượng xuất: ${scannedQuantity}\nTồn kho mới: ${newStock}`);
           })
           .catch(error => {
@@ -1124,6 +1604,38 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
       console.error('Error processing QR code:', error);
       alert('Có lỗi khi xử lý QR code!');
     }
+  }
+
+  // Save FIFO violation report
+  private saveFIFOViolationReport(material: InventoryMaterial, exportQuantity: number, correctFIFOPO: string, exportedBy: string): void {
+    const fifoReport: FIFOViolationReport = {
+      materialCode: material.materialCode,
+      actualPO: material.poNumber,
+      correctFIFOPO: correctFIFOPO,
+      exportQuantity: exportQuantity,
+      exportDate: new Date(),
+      exportedBy: exportedBy,
+      location: material.location,
+      materialName: material.materialName,
+      notes: `Vi phạm FIFO: Đã xuất PO ${material.poNumber} thay vì PO ${correctFIFOPO} (FIFO đúng)`,
+      createdAt: new Date()
+    };
+    
+    // Save to Firebase
+    this.firestore.collection('fifo-violations').add(fifoReport)
+      .then((docRef) => {
+        console.log('✅ FIFO violation report saved with ID:', docRef.id);
+        console.log('📋 FIFO Violation Details:', {
+          materialCode: material.materialCode,
+          actualPO: material.poNumber,
+          correctFIFOPO: correctFIFOPO,
+          exportQuantity: exportQuantity,
+          exportedBy: exportedBy
+        });
+      })
+      .catch(error => {
+        console.error('❌ Error saving FIFO violation report:', error);
+      });
   }
 
   // Stop scanning
@@ -1227,6 +1739,13 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Calculate current stock for display
+  calculateCurrentStock(material: InventoryMaterial): number {
+    // Always calculate from quantity - exported for accurate stock display
+    const stock = (material.quantity || 0) - (material.exported || 0);
+    return stock;
+  }
+
   // Check if location is IQC
   isIQCLocation(location: string): boolean {
     return location && location.toUpperCase() === 'IQC';
@@ -1241,11 +1760,25 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
     return duplicates.length > 1;
   }
 
+  // Check if material has negative stock
+  hasNegativeStock(material: InventoryMaterial): boolean {
+    const stock = this.calculateCurrentStock(material);
+    return stock < 0;
+  }
+
   // Get count of IQC items
   getIQCCount(): number {
     return this.filteredInventory.filter(material => 
       this.isIQCLocation(material.location)
     ).length;
+  }
+
+  // Get count of negative stock items
+  getNegativeStockCount(): number {
+    return this.filteredInventory.filter(material => {
+      const stock = this.calculateCurrentStock(material);
+      return stock < 0;
+    }).length;
   }
 
   // Load user permissions for inventory
@@ -1255,7 +1788,12 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy {
       .subscribe(permissions => {
         this.canExport = permissions['inventory-export'] !== false;
         this.canDelete = permissions['inventory-delete'] !== false;
-        console.log('Inventory permissions loaded:', { canExport: this.canExport, canDelete: this.canDelete });
+        this.canEditHSD = permissions['inventory-edit-hsd'] !== false;
+        console.log('Inventory permissions loaded:', { 
+          canExport: this.canExport, 
+          canDelete: this.canDelete,
+          canEditHSD: this.canEditHSD 
+        });
       });
   }
 

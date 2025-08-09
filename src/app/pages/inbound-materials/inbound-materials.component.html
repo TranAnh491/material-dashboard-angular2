@@ -3,49 +3,54 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📊 Inbound Materials Report</h4>
+      <h4>📦 INBOUND STATUS</h4>
     </div>
     
     <!-- Excel-like Actions -->
     <div class="excel-actions">
-      <div class="dropdown">
-        <button class="btn btn-primary dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-          <i class="material-icons">more_vert</i>
-          More
-        </button>
-        <div class="dropdown-menu" aria-labelledby="moreDropdown">
-          <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
-            <i class="material-icons">file_upload</i>
-            Import
-          </a>
-          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-            <i class="material-icons">download</i>
-            Tải Template
-          </a>
-          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); $event.preventDefault()">
-            <i class="material-icons">assessment</i>
-            Tải Report
-          </a>
+      <div class="action-controls">
+        <div class="dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" aria-labelledby="moreDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
+              <i class="material-icons">file_upload</i>
+              Import
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
+              <i class="material-icons">download</i>
+              Tải Template
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); $event.preventDefault()">
+              <i class="material-icons">assessment</i>
+              Tải Report
+            </a>
+          </div>
         </div>
-      </div>
-      
-      <!-- Time Range Filter -->
-      <div class="time-filter">
-        <button class="btn btn-outline-info" (click)="showTimeRangeDialog = true">
+        
+        <div class="search-box">
+          <input type="text" 
+                 placeholder="TÌM KIẾM..." 
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="custom-input search-input-uppercase">
+        </div>
+        
+        <button class="custom-btn" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
           Chọn thời gian
         </button>
-        <button class="btn btn-outline-success" (click)="viewAllMaterials()">
+        
+        <button class="custom-btn" (click)="viewAllMaterials()">
           <i class="material-icons">visibility</i>
           Xem tất cả
         </button>
-        <button class="btn btn-outline-warning" (click)="refreshDisplay()" style="margin-left: 8px;">
+        
+        <button class="custom-btn" (click)="refreshDisplay()">
           <i class="material-icons">refresh</i>
           Refresh
-        </button>
-        <button class="btn btn-outline-info" (click)="debugFirebaseData()" style="margin-left: 8px;">
-          <i class="material-icons">bug_report</i>
-          Debug
         </button>
       </div>
     </div>
@@ -74,7 +79,7 @@
             <th>Trạng thái</th>
             <th>Hoàn thành</th>
             <th>Xóa</th>
-            <th>QR</th>
+            <th class="print-column-header">Print</th>
           </tr>
         </thead>
         <tbody>
@@ -82,7 +87,7 @@
               [class.received-row]="material.isReceived">
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
-            <td>{{material.batchNumber}}</td>
+            <td [class]="getBatchNumberClass(material, i)">{{material.batchNumber}}</td>
             <td class="code-cell" 
                 [class.material-code-printed]="material.hasQRGenerated"
                 [class.material-received]="material.isReceived">{{material.materialCode}}</td>
@@ -94,26 +99,35 @@
                         </div>
                       </td>
             <td>{{material.type}}</td>
-                                  <td class="date-cell">
-                        <div class="date-display">
-                          <i class="material-icons">calendar_today</i>
-                        </div>
-                      </td>
+                                              <td class="date-cell">
+              <input type="date" 
+                     class="date-input" 
+                     [(ngModel)]="material.expiryDate" 
+                     (change)="updateExpiryDate(material)"
+                     [value]="material.expiryDate ? (material.expiryDate | date:'yyyy-MM-dd') : ''"
+                     placeholder=""
+                     title=" ">
+            </td>
             <td class="status-cell">
-              <mat-checkbox [checked]="material.qualityCheck" (change)="updateQualityCheck(material, $event.checked)">
+              <mat-checkbox [checked]="material.qualityCheck" 
+                           (change)="updateQualityCheck(material, $event.checked)"
+                           [class.quality-checked]="material.qualityCheck">
               </mat-checkbox>
             </td>
             <td class="status-cell">
               <mat-checkbox [checked]="material.isReceived" 
                            (change)="updateReceivedStatus(material, $event.checked)" 
-                           [disabled]="material.isReceived"
-                           [matTooltip]="material.isReceived ? 'Không thể bỏ tick - Đã chuyển vào Inventory' : 'Tick để chuyển vào Inventory'">
+                           [disabled]="material.isReceived || !material.rollsOrBags || material.rollsOrBags <= 0"
+                           [matTooltip]="!material.rollsOrBags || material.rollsOrBags <= 0 ? 'Vui lòng nhập số đơn vị trước' : (material.isReceived ? 'Không thể bỏ tick - Đã chuyển vào Inventory' : 'Tick để chuyển vào Inventory')"
+                           [class.received-checked]="material.isReceived">
               </mat-checkbox>
             </td>
             <td>
-              <div class="editable-cell" (click)="editNotes(material)">
-                <i class="material-icons edit-icon">edit</i>
-              </div>
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.notes" 
+                     (change)="updateNotes(material)"
+                     placeholder="Nhập ghi chú...">
             </td>
             <td class="number-cell">
               <input type="number" class="editable-input-no-border" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)" min="0">
@@ -121,15 +135,17 @@
             <td class="number-cell">{{calculateQuantityPerUnit(material)}} {{material.unit}}</td>
             <td>{{material.supplier}}</td>
             <td>
-              <div class="editable-cell" (click)="editRemarks(material)">
-                <i class="material-icons edit-icon">edit</i>
-              </div>
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.remarks" 
+                     (change)="updateRemarks(material)"
+                     placeholder="Nhập lưu ý...">
             </td>
             <td class="status-cell">
               <!-- Tạm thời để trống -->
             </td>
             <td class="status-cell">
-              <button mat-icon-button color="primary" (click)="completeMaterial(material)" 
+              <button mat-icon-button (click)="completeMaterial(material)" 
                       [disabled]="material.isCompleted || !hasCompletePermission"
                       matTooltip="Hoàn thành"
                       *ngIf="hasCompletePermission">
@@ -143,10 +159,12 @@
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
-            <td class="status-cell">
-              <button mat-icon-button color="accent" (click)="generateQRCode(material)" 
-                      matTooltip="Tạo QR Code">
-                <mat-icon>qr_code</mat-icon>
+            <td class="print-cell">
+              <button class="print-qr-btn" 
+                      (click)="generateQRCode(material)" 
+                      title="In QR Code">
+                <i class="material-icons">print</i>
+                Print
               </button>
             </td>
           </tr>
