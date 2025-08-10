@@ -4,7 +4,13 @@
     <!-- Report Title -->
     <div class="excel-header">
       <h4>📦 INVENTORY</h4>
+      <!-- Catalog Loading Indicator -->
+      <div class="catalog-status" *ngIf="isCatalogLoading">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải danh mục hàng hóa...</span>
+      </div>
     </div>
+    
     <!-- Excel Actions -->
     <div class="excel-actions">
       <div class="action-controls">
@@ -31,73 +37,113 @@
               Tải Template Tồn kho
             </a>
             <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReport()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM1()">
               <i class="material-icons">warning</i>
-              Tải báo cáo FIFO
+              FIFO Report ASM1
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM2()">
+              <i class="material-icons">warning</i>
+              FIFO Report ASM2
             </a>
           </div>
         </div>
         
-        <button class="custom-btn btn-success" (click)="refreshInventory()">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
+        <!-- Factory Filter -->
+        <div class="factory-filter">
+          <button class="custom-btn" 
+                  [class.active]="selectedFactory === ''" 
+                  (click)="filterByAll()">
+            All
+          </button>
+          <button class="custom-btn" 
+                  [class.active]="selectedFactory === 'ASM1'" 
+                  (click)="filterByASM1()">
+            ASM1
+          </button>
+          <button class="custom-btn" 
+                  [class.active]="selectedFactory === 'ASM2'" 
+                  (click)="filterByASM2()">
+            ASM2
+          </button>
+        </div>
         
-        <button class="custom-btn btn-warning" (click)="completeInventory()">
-          <i class="material-icons">check_circle</i>
-          Hoàn thành
-        </button>
-        
+        <!-- Search Box -->
         <div class="search-box">
           <input type="text" 
-                 placeholder="Tìm kiếm theo mã, vị trí, tên, số lượng..." 
-                 [(ngModel)]="searchTerm"
+                 placeholder="Tìm kiếm mã hàng, tên hàng, vị trí..." 
+                 [(ngModel)]="searchTerm" 
                  (input)="onSearchChange($event)"
-                 class="custom-input">
+                 class="search-input">
+          <i class="material-icons search-icon">search</i>
         </div>
-        <div class="iqc-counter">
-          <span class="iqc-label">IQC:</span>
-          <span class="iqc-count">{{getIQCCount()}}</span>
-        </div>
-        <div class="negative-counter">
-          <span class="negative-label">Âm:</span>
-          <span class="negative-count">{{getNegativeStockCount()}}</span>
+        
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="custom-btn" (click)="refreshInventory()" title="Làm mới dữ liệu">
+            <i class="material-icons">refresh</i>
+            Refresh
+          </button>
+          <button class="custom-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound">
+            <i class="material-icons">sync</i>
+            Sync
+          </button>
+          <button class="custom-btn" (click)="completeInventory()" title="Ẩn hàng đã hoàn thành">
+            <i class="material-icons">{{showCompleted ? 'visibility_off' : 'visibility'}}</i>
+            {{showCompleted ? 'Ẩn hoàn thành' : 'Hiện hoàn thành'}}
+          </button>
+          <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
+            <i class="material-icons">check_circle</i>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Excel-like Body -->
-    <div class="excel-body">
-      <table class="excel-table">
+    <!-- Excel Table -->
+    <div class="excel-table-container">
+      <!-- Loading Spinner -->
+      <div class="loading-spinner" *ngIf="isLoading">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải dữ liệu...</span>
+      </div>
+
+      <!-- Table -->
+      <table class="excel-table" *ngIf="!isLoading">
         <thead>
           <tr>
-            <th class="row-header">#</th>
-            <th>Ngày nhập</th>
+            <th>Factory</th>
+            <th>STT</th>
+            <th>Ngày nhận</th>
             <th>Mã hàng</th>
-            <th>Quét</th>
+            <th>Scan</th>
             <th>Tên hàng</th>
             <th>Đơn vị</th>
-            <th class="po-column">Số P.O</th>
-            <th>Lượng Nhập</th>
-            <th>Xuất</th>
+            <th>PO</th>
+            <th>Số lượng</th>
+            <th>Đã xuất</th>
             <th>Tồn kho</th>
             <th>Vị trí</th>
-            <th>Change</th>
-            <th>Loại hình</th>
+            <th>Thay đổi vị trí</th>
+            <th>Loại</th>
             <th>HSD</th>
-            <th>KK</th>
+            <th>QC</th>
             <th>Ghi chú</th>
-            <th>Số đơn vị</th>
-            <th>Lưu ý</th>
+            <th>Rolls/Bags</th>
+            <th>Nhà cung cấp</th>
+            <th>Ghi chú</th>
             <th>Trạng thái</th>
             <th>Xóa</th>
-            <th>QR Code</th>
+            <th>QR</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredInventory; let i = index" 
               [class.duplicate-row]="material.isDuplicate"
               [class.iqc-row]="isIQCLocation(material.location)">
+            <td class="factory-cell" 
+                [class.factory-asm1]="(material.factory || 'ASM1') === 'ASM1'"
+                [class.factory-asm2]="(material.factory || 'ASM1') === 'ASM2'">
+              {{material.factory || 'ASM1'}}
+            </td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">{{material.receivedDate | date:'dd/MM/yyyy'}}</td>
             <td class="code-cell material-code-cell" 
@@ -114,8 +160,26 @@
               </button>
             </td>
             <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 
-                [title]="material.materialName || 'N/A'">{{material.materialName || 'N/A'}}</td>
-            <td [class.duplicate-cell]="material.isDuplicate">{{material.unit}}</td>
+                [title]="material.materialName || getMaterialName(material.materialCode)">
+              <!-- Show cached name instantly if available -->
+              <span *ngIf="material.materialName">{{material.materialName}}</span>
+              <span *ngIf="!material.materialName && catalogLoaded" class="catalog-name">
+                {{getMaterialName(material.materialCode)}}
+              </span>
+              <span *ngIf="!material.materialName && !catalogLoaded" class="loading-name">
+                <i class="material-icons rotating">sync</i>
+              </span>
+            </td>
+            <td [class.duplicate-cell]="material.isDuplicate">
+              <!-- Show cached unit instantly if available -->
+              <span *ngIf="material.unit && material.unit !== 'PCS'">{{material.unit}}</span>
+              <span *ngIf="(!material.unit || material.unit === 'PCS') && catalogLoaded" class="catalog-unit">
+                {{getMaterialUnit(material.materialCode)}}
+              </span>
+              <span *ngIf="(!material.unit || material.unit === 'PCS') && !catalogLoaded" class="loading-unit">
+                <i class="material-icons rotating">sync</i>
+              </span>
+            </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
             <td class="number-cell">
@@ -150,36 +214,31 @@
             <td>
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
-            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
-              <div *ngIf="canEditHSD; else readOnlyHSD">
-                <input type="date" 
-                       class="editable-date-input" 
-                       [value]="material.expiryDate | date:'yyyy-MM-dd'"
-                       (change)="onHSDChange($event, material)"
-                       title="Chỉnh sửa HSD">
-              </div>
-              <ng-template #readOnlyHSD>
-                <span [title]="canEditHSD ? '' : 'Bạn không có quyền chỉnh sửa HSD'">
-                  {{material.expiryDate ? (material.expiryDate | date:'dd/MM/yyyy') : ''}}
-                </span>
-              </ng-template>
+            <td class="date-cell">
+              <input type="date" 
+                     class="editable-cell" 
+                     [value]="material.expiryDate ? (material.expiryDate | date:'yyyy-MM-dd') : ''"
+                     (change)="onHSDChange($event, material)"
+                     [disabled]="!canEditHSD">
             </td>
-            <td class="status-cell">
-              <mat-checkbox [checked]="material.qualityCheck" 
-                           (change)="updateQualityCheck(material, $event)"
-                           title="Chỉnh sửa trạng thái KK">
-              </mat-checkbox>
+            <td class="checkbox-cell">
+              <input type="checkbox" 
+                     [checked]="material.qualityCheck" 
+                     (change)="updateQualityCheck(material, $event)"
+                     class="quality-checkbox">
+            </td>
+            <td class="notes-cell">
+              <textarea class="editable-cell notes-textarea" 
+                        [(ngModel)]="material.notes" 
+                        (change)="updateNotes(material)"
+                        placeholder="Ghi chú..."
+                        rows="2"></textarea>
+            </td>
+            <td class="number-cell">
+              <input type="text" class="editable-cell" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)">
             </td>
             <td>
-              <input type="text" class="editable-cell" [(ngModel)]="material.notes" (change)="updateNotes(material)">
-            </td>
-            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
-              <input type="number" 
-                     class="editable-cell" 
-                     [(ngModel)]="material.rollsOrBags" 
-                     (change)="updateRollsOrBags(material)" 
-                     min="0"
-                     step="1">
+              <input type="text" class="editable-cell" [(ngModel)]="material.supplier" (change)="updateRemarks(material)">
             </td>
             <td>
               <input type="text" class="editable-cell" [(ngModel)]="material.remarks" (change)="updateRemarks(material)">
@@ -219,7 +278,7 @@
       </table>
 
       <!-- No Data Message -->
-      <div class="no-data" *ngIf="filteredInventory.length === 0">
+      <div class="no-data" *ngIf="filteredInventory.length === 0 && !isLoading">
         <i class="material-icons">inventory</i>
         <h5>No Inventory Items</h5>
         <p>No materials have been marked as received in Inbound Materials tab</p>

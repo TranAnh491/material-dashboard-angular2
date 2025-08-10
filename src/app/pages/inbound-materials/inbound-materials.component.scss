@@ -164,21 +164,73 @@ mat-checkbox {
   }
 }
 
+// Global date input override for this component
+:host ::ng-deep input[type="date"] {
+  color: #000000 !important;
+  font-weight: 600 !important;
+  
+  &::-webkit-datetime-edit-text,
+  &::-webkit-datetime-edit-month-field,
+  &::-webkit-datetime-edit-day-field,
+  &::-webkit-datetime-edit-year-field {
+    color: #000000 !important;
+    font-weight: 600 !important;
+  }
+}
+
 // Date input styling
 .date-input {
   border: none;
   background: transparent;
-  font-size: 10px;
+  font-size: 10px !important; // Unified font size for date inputs
   font-family: Arial, sans-serif;
-  color: #000000;
+  color: #000000 !important;
   text-align: center;
-  width: 100%;
+  width: 115px !important;              // ← Tăng width để vừa với cột HSD rộng hơn
   padding: 4px;
+  cursor: pointer;
+  pointer-events: auto !important;
+  z-index: 1;
+  position: relative;
+  font-weight: 600 !important;
   
   &:focus {
     outline: none;
     background: #ffffff;
     border: 1px solid #007bff;
+    color: #000000 !important;
+  }
+  
+  &:hover {
+    background: #f8f9fa;
+  }
+  
+  // Force black text color for date values
+  &:not(:placeholder-shown) {
+    color: #000000 !important;
+    font-weight: 600 !important;
+  }
+  
+  // Ensure date picker icon is visible and clickable
+  &::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 1;
+    display: block;
+    background: transparent;
+    bottom: 0;
+    color: #666;
+    height: auto;
+    left: auto;
+    position: relative;
+    right: auto;
+    top: auto;
+    width: auto;
+    filter: none;
+  }
+  
+  // Firefox specific styles
+  &::-moz-focus-inner {
+    border: 0;
   }
 }
 
@@ -191,7 +243,7 @@ mat-checkbox {
     padding: 6px 12px;
     border: 1px solid #dee2e6;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 10px !important; // Unified font size for search input
     font-family: Arial, sans-serif;
     width: 200px;
     
@@ -413,6 +465,9 @@ mat-checkbox {
     gap: 10px;
     
     .dropdown {
+      position: relative;
+      z-index: 2000 !important; // Ensure dropdown is above table headers
+      
       .btn {
         display: flex;
         align-items: center;
@@ -437,6 +492,8 @@ mat-checkbox {
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         border: none;
         padding: 8px 0;
+        z-index: 2000 !important; // Higher than table header (1000)
+        position: relative !important;
         
         .dropdown-item {
           display: flex;
@@ -506,7 +563,7 @@ mat-checkbox {
   border-spacing: 0;
   width: 100%;
   font-family: Arial, sans-serif;
-  font-size: 11px;
+  font-size: 10px !important; // Unified font size for excel table
   min-width: 1200px;
   position: relative; // Ensure relative positioning for sticky headers
   
@@ -535,7 +592,7 @@ mat-checkbox {
     background: #ff9800 !important; // Orange background for header
     color: #000000 !important; // Black text
     font-weight: 600;
-    font-size: 8px;
+    font-size: 10px !important; // Unified font size for all headers
     text-transform: uppercase;
     letter-spacing: 0.3px;
     position: sticky !important;
@@ -560,10 +617,31 @@ mat-checkbox {
     &.row-header {
       background: #f57c00; // Darker orange for row header
       color: #000000; // Black text
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for row header
       text-align: center;
       width: 40px;
       min-width: 40px;
+    }
+  }
+  
+  // Factory column styling
+  .factory-cell {
+    text-align: center !important;
+    font-weight: 600 !important;
+    min-width: 80px !important;
+    width: 80px !important;
+    font-size: 10px !important;
+    
+    // Blue styling for ASM1
+    &.factory-asm1 {
+      background-color: #e3f2fd !important;
+      color: #1976d2 !important;
+    }
+    
+    // Orange styling for ASM2
+    &.factory-asm2 {
+      background-color: #fff3e0 !important;
+      color: #f57c00 !important;
     }
   }
   
@@ -585,7 +663,7 @@ mat-checkbox {
   }
   
   td {
-    font-size: 10px;
+    font-size: 10px !important; // Unified font size for all table cells
     color: #000000;
     border-color: #000000; // Black border for td as well
     text-align: center;
@@ -595,33 +673,65 @@ mat-checkbox {
     &.row-header {
       background: #f8f8f8; // Consistent light gray background
       color: #000000;
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for row header
       text-align: center;
       font-family: Arial, sans-serif;
-      font-weight: 600;
+      font-weight: normal !important;   // ← Loại bỏ in đậm cho row header
       width: 40px;
       min-width: 40px;
     }
     
     &.date-cell {
       font-family: Arial, sans-serif;
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for date cells
       color: #000000;
+      position: relative;
+      z-index: 1;
+      pointer-events: auto !important;
+      width: 120px !important;          // ← Tăng width cho cột HSD
+      min-width: 120px !important;      // ← Đảm bảo min-width
+      max-width: 120px !important;      // ← Đảm bảo max-width
+      
+      .date-input {
+        pointer-events: auto !important;
+        z-index: 2;
+        position: relative;
+        color: #000000 !important;
+        font-weight: 600 !important;
+        width: 110px !important;        // ← Width cho input bên trong
+        
+        // Specific color override for date values
+        &[type="date"]:not(:placeholder-shown) {
+          color: #000000 !important;
+          font-weight: 600 !important;
+        }
+        
+        // Webkit specific date input text color
+        &::-webkit-datetime-edit-text,
+        &::-webkit-datetime-edit-month-field,
+        &::-webkit-datetime-edit-day-field,
+        &::-webkit-datetime-edit-year-field {
+          color: #000000 !important;
+          font-weight: 600 !important;
+        }
+      }
     }
     
     &.number-cell {
       text-align: center;
       font-family: Arial, sans-serif;
-      font-weight: 500;
+      font-weight: normal !important;   // ← Loại bỏ in đậm cho tất cả number-cell
       color: #000000;
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for number cells
     }
     
     &.code-cell {
-      font-weight: 600;
+      font-weight: 600 !important;     // ← Giữ in đậm cho cột Mã hàng
       color: #000000;
       font-family: Arial, sans-serif;
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for code cells
+      width: 120px !important;         // ← Tăng 20% (từ ~100px lên 120px)
+      min-width: 120px !important;
     }
     
     &.status-cell {
@@ -719,11 +829,13 @@ mat-checkbox {
   border-bottom: 1px solid #e2e8f0;
   
   .action-controls {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
     gap: 12px;
     padding: 12px 20px;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 1500 !important; // High z-index for action controls
   }
   
   // Custom button styling - uniform design
@@ -747,8 +859,8 @@ mat-checkbox {
       font-size: 18px !important;
       color: #000000 !important;
     }
-    
-    &:hover {
+        
+        &:hover {
       background: #fff3e0 !important;
       border-color: #f57c00 !important;
       color: #000000 !important;
@@ -760,6 +872,22 @@ mat-checkbox {
       border-color: #ff9800 !important;
       color: #000000 !important;
       box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2) !important;
+    }
+    
+    // Active state for selected filter buttons
+    &.active {
+      background: #2196f3 !important;  // Blue background
+      border-color: #1976d2 !important;  // Darker blue border
+      color: #ffffff !important;  // White text
+      
+      .material-icons {
+        color: #ffffff !important;  // White icon
+      }
+        
+        &:hover {
+        background: #1976d2 !important;  // Darker blue on hover
+        border-color: #1565c0 !important;
+      }
     }
   }
   
@@ -840,8 +968,8 @@ mat-checkbox {
         font-size: 16px !important;
         color: #000000 !important;
       }
-      
-      &:hover {
+        
+        &:hover {
         background: #f1f8e9 !important;
         border-color: #388e3c !important;
         color: #000000 !important;
@@ -859,7 +987,7 @@ mat-checkbox {
 
 // Excel-like badges
 .badge {
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for badges
   padding: 4px 8px;
   border-radius: 0;
   font-weight: 500;
@@ -979,7 +1107,7 @@ mat-checkbox {
   background: transparent;
   min-height: 16px;
   font-family: Arial, sans-serif;
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for editable cells
   color: #000000;
   display: flex;
   align-items: center;
@@ -1016,7 +1144,7 @@ mat-checkbox {
   text-transform: uppercase;
   font-weight: 500;
   font-family: Arial, sans-serif;
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for editable location
   color: #000000;
   
   &:hover {
@@ -1027,7 +1155,7 @@ mat-checkbox {
     content: 'Click to edit...';
     color: #6c757d;
     font-style: italic;
-    font-size: 9px;
+    font-size: 10px !important; // Unified font size for placeholder
     text-transform: none;
   }
   
@@ -1041,7 +1169,7 @@ mat-checkbox {
 // PO cell styling - wider to show full PO numbers
 .po-cell {
   font-family: Arial, sans-serif;
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for PO cells
   color: #000000;
   white-space: nowrap;
   overflow: visible !important; // Override table default
@@ -1069,7 +1197,7 @@ mat-checkbox {
   border: none;
   background: #f8f8f8; // Flat gray background
   font-family: Arial, sans-serif;
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for editable inputs
   color: #000000;
   text-align: center;
   width: 100%;
@@ -1088,7 +1216,7 @@ mat-checkbox {
   border: none; // Remove border for flat design
   background: #f8f8f8; // Flat gray background
   font-family: Arial, sans-serif;
-  font-size: 9px;
+  font-size: 10px !important; // Unified font size for editable inputs
   color: #000000;
   width: 100%;
   padding: 4px 6px;
@@ -1106,6 +1234,37 @@ mat-checkbox {
   }
 }
 
+// Notes column specific styling (Ghi chú) - giảm xuống 50% (150px)
+td:nth-child(13) { // Cột Ghi chú (thứ 13)
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+  
+  .editable-input {
+    width: 140px !important;
+    min-width: 140px !important;
+  }
+}
+
+// Header for Notes column
+th:nth-child(13) { // Header của cột Ghi chú
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+}
+
+// Global td styling - remove all font-weight except specified columns
+td {
+  font-weight: normal !important;  // ← Loại bỏ in đậm cho tất cả cells
+}
+
+// Lượng nhập column (cột thứ 7) - chỉ cột này in đậm
+td:nth-child(7) { // Cột Lượng nhập
+  font-weight: 600 !important;
+}
+
+// Mã hàng column already has font-weight in .code-cell styling above
+
 // Batch number duplicate styling
 .batch-duplicate-blue {
   background-color: #e3f2fd !important; // Light blue background
@@ -1119,7 +1278,7 @@ mat-checkbox {
 .date-input {
   border: none; // Remove border for flat design
   padding: 4px;
-  font-size: 12px;
+  font-size: 10px !important; // Unified font size for date inputs
   font-family: Arial, sans-serif;
   background: #f8f8f8; // Flat gray background
   text-align: center;
@@ -1248,7 +1407,7 @@ mat-checkbox {
     gap: 8px;
     
     .dropdown .btn {
-      font-size: 12px;
+      font-size: 10px !important; // Unified font size for mobile dropdown buttons
       padding: 6px 12px;
     }
     
@@ -1256,14 +1415,14 @@ mat-checkbox {
       justify-content: center;
       
       .btn {
-        font-size: 11px;
+        font-size: 10px !important; // Unified font size for mobile time filter buttons
         padding: 6px 12px;
       }
     }
   }
   
   .excel-table {
-    font-size: 10px;
+    font-size: 10px !important; // Unified font size for mobile
     min-width: 1000px;
     
     th, td {
@@ -1271,11 +1430,11 @@ mat-checkbox {
     }
     
     th {
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for mobile headers
     }
     
     td {
-      font-size: 9px;
+      font-size: 10px !important; // Unified font size for mobile cells
       
       &.row-header {
         width: 35px;
@@ -1289,19 +1448,19 @@ mat-checkbox {
       line-height: 24px !important;
       
       .mat-icon {
-        font-size: 14px;
+        font-size: 10px !important; // Unified font size for mobile icons
       }
     }
   }
   
   .badge {
-    font-size: 9px;
+    font-size: 10px !important; // Unified font size for mobile badges
     padding: 4px 8px;
   }
   
   .editable-cell {
     padding: 6px 8px;
-    font-size: 10px;
+    font-size: 10px !important; // Unified font size for mobile editable cells
   }
 }
 
@@ -1316,7 +1475,7 @@ mat-checkbox {
     padding: 8px 12px;
     
     h4 {
-      font-size: 14px;
+      font-size: 10px !important; // Unified font size for small mobile header
     }
   }
   
@@ -1324,18 +1483,18 @@ mat-checkbox {
     padding: 6px 12px;
     
     .dropdown .btn {
-      font-size: 11px;
+      font-size: 10px !important; // Unified font size for small mobile dropdown buttons
       padding: 5px 10px;
     }
     
     .time-filter .btn {
-      font-size: 10px;
+      font-size: 10px !important; // Unified font size for small mobile time filter buttons
       padding: 5px 10px;
     }
   }
   
   .excel-table {
-    font-size: 9px;
+    font-size: 10px !important; // Unified font size for small mobile
     min-width: 800px;
     
     th, td {
@@ -1348,7 +1507,7 @@ mat-checkbox {
       line-height: 20px !important;
       
       .mat-icon {
-        font-size: 12px;
+        font-size: 10px !important; // Unified font size for small mobile icons
       }
     }
   }

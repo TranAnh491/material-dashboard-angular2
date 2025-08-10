@@ -3,9 +3,11 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import * as XLSX from 'xlsx'; // Added for Excel download
 
 export interface OutboundMaterial {
   id?: string;
+  factory?: string; // Factory identifier (ASM1, ASM2, etc.)
   materialCode: string;
   poNumber: string;
   quantity: number;
@@ -30,6 +32,10 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   // Data properties
   outboundMaterials: OutboundMaterial[] = [];
   filteredOutbound: OutboundMaterial[] = [];
+  
+  // Factory selection
+  selectedFactory: string = '';
+  availableFactories: string[] = ['ASM1', 'ASM2'];
   
   // Search and filter
   searchTerm = '';
@@ -93,9 +99,235 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Apply filters
+  // Factory selection
+  selectFactory(factory: string): void {
+    this.selectedFactory = factory;
+    console.log('🏭 Selected factory:', factory);
+    this.applyFilters();
+    this.showFactoryStockSummary();
+  }
+
+  // Show factory stock summary
+  private showFactoryStockSummary(): void {
+    if (!this.selectedFactory) return;
+
+    this.firestore.collection('inventory-materials', ref => 
+      ref.where('factory', '==', this.selectedFactory)
+    ).get().subscribe(snapshot => {
+      if (!snapshot.empty) {
+        let totalItems = 0;
+        let totalStock = 0;
+        let lowStockItems = 0;
+
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          totalItems++;
+          
+          // Calculate current stock
+          let currentStock = 0;
+          if (data.stock !== undefined && data.stock !== null) {
+            currentStock = data.stock;
+          } else {
+            currentStock = (data.quantity || 0) - (data.exported || 0);
+          }
+          
+          totalStock += currentStock;
+          if (currentStock <= 0) {
+            lowStockItems++;
+          }
+        });
+
+        console.log(`📊 ${this.selectedFactory} Stock Summary:`, {
+          totalItems,
+          totalStock,
+          lowStockItems,
+          averageStock: totalItems > 0 ? Math.round(totalStock / totalItems) : 0
+        });
+
+        // Show summary in console for now (can be enhanced to show in UI)
+        if (lowStockItems > 0) {
+          console.log(`⚠️ ${lowStockItems} items in ${this.selectedFactory} have low or no stock`);
+        }
+      } else {
+        console.log(`📊 ${this.selectedFactory} has no inventory items`);
+      }
+    }, error => {
+      console.error('Error getting factory stock summary:', error);
+    });
+  }
+
+  // Download FIFO violation report by factory
+  downloadFIFOReportByFactory(factory: string): void {
+    if (!factory) {
+      alert('⚠️ Vui lòng chọn nhà máy!');
+      return;
+    }
+
+    this.firestore.collection('fifo-violations', ref => 
+      ref.where('factory', '==', factory)
+         .orderBy('scanDate', 'desc')
+    ).get().subscribe(snapshot => {
+      if (snapshot.empty) {
+        alert(`📊 Không có báo cáo vi phạm FIFO nào cho ${factory}`);
+        return;
+      }
+
+      const violations = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          'Nhà máy': data.factory,
+          'Mã hàng': data.materialCode,
+          'PO': data.poNumber,
+          'Số lượng yêu cầu': data.requestedQuantity,
+          'Loại vi phạm': data.violationType,
+          'Ngày scan': data.scanDate ? new Date(data.scanDate.seconds * 1000).toLocaleDateString('vi-VN') : 'N/A',
+          'Người xuất': data.exportedBy,
+          'Ngày tạo': data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString('vi-VN') : 'N/A'
+        };
+      });
+
+      // Create Excel file
+      const worksheet = XLSX.utils.json_to_sheet(violations);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'FIFO Violations');
+      
+      // Download file
+      const fileName = `FIFO_Violations_${factory}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log(`✅ Downloaded FIFO violation report for ${factory}:`, violations.length, 'violations');
+    }, error => {
+      console.error('Error downloading FIFO report:', error);
+      alert('❌ Lỗi khi tải báo cáo FIFO!');
+    });
+  }
+
+  // Download FIFO report for ASM1
+  downloadFIFOReportASM1(): void {
+    this.downloadFIFOReportByFactory('ASM1');
+  }
+
+  // Download FIFO report for ASM2
+  downloadFIFOReportASM2(): void {
+    this.downloadFIFOReportByFactory('ASM2');
+  }
+
+  // Save FIFO violation report to Firebase
+  private saveFIFOViolationReport(materialCode: string, poNumber: string, quantity: number, violationType: string): void {
+    if (!this.selectedFactory) return;
+
+    const violationReport = {
+      factory: this.selectedFactory,
+      materialCode: materialCode,
+      poNumber: poNumber,
+      requestedQuantity: quantity,
+      violationType: violationType,
+      scanDate: new Date(),
+      exportedBy: 'Unknown', // Will be updated when user info is available
+      createdAt: new Date()
+    };
+
+    this.firestore.collection('fifo-violations').add(violationReport)
+      .then(() => {
+        console.log('✅ FIFO violation report saved:', violationReport);
+      })
+      .catch(error => {
+        console.error('❌ Error saving FIFO violation report:', error);
+      });
+  }
+
+  // Check FIFO compliance for outbound scanning
+  private checkFIFOCompliance(materialCode: string, poNumber: string, quantity: number): Promise<{isCompliant: boolean, message: string}> {
+    return new Promise((resolve) => {
+      if (!this.selectedFactory) {
+        resolve({isCompliant: false, message: 'Chưa chọn nhà máy'});
+        return;
+      }
+
+      // Query inventory for the same material and PO in the selected factory
+      this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', materialCode)
+           .where('poNumber', '==', poNumber)
+           .where('factory', '==', this.selectedFactory)
+           .orderBy('__name__')
+      ).get().subscribe(snapshot => {
+        if (snapshot.docs.length <= 1) {
+          // Only one item or no items, always compliant
+          resolve({isCompliant: true, message: 'OK'});
+          return;
+        }
+
+        // Check if we're taking from the first (top) row
+        const firstDoc = snapshot.docs[0];
+        const firstData = firstDoc.data() as any;
+        
+        // Calculate current stock for first item
+        let firstItemStock = 0;
+        if (firstData.stock !== undefined && firstData.stock !== null) {
+          firstItemStock = firstData.stock;
+        } else {
+          firstItemStock = (firstData.quantity || 0) - (firstData.exported || 0);
+        }
+
+        if (firstItemStock >= quantity) {
+          // Taking from first row with sufficient stock - FIFO compliant
+          resolve({isCompliant: true, message: 'OK - FIFO compliant'});
+        } else {
+          // Taking from other rows - FIFO violation
+          const violationMessage = `⚠️ FIFO Violation: Insufficient stock in first row (${firstItemStock}), but scanning from other rows. This may violate FIFO principle.`;
+          
+          // Log violation to Firebase
+          this.saveFIFOViolationReport(materialCode, poNumber, quantity, 'Insufficient stock in first row');
+          
+          resolve({
+            isCompliant: false, 
+            message: violationMessage
+          });
+        }
+      }, error => {
+        console.error('Error checking FIFO compliance:', error);
+        resolve({isCompliant: false, message: 'Error checking FIFO compliance'});
+      });
+    });
+  }
+
+  // Validate factory has sufficient stock before starting scanner
+  private validateFactoryStock(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.selectedFactory) {
+        resolve(false);
+        return;
+      }
+
+      // Check if there are any items in the selected factory
+      this.firestore.collection('inventory-materials', ref => 
+        ref.where('factory', '==', this.selectedFactory)
+           .limit(1)
+      ).get().subscribe(snapshot => {
+        if (snapshot.empty) {
+          alert(`⚠️ Nhà máy ${this.selectedFactory} chưa có dữ liệu tồn kho!\nVui lòng nhập hàng vào ${this.selectedFactory} trước khi xuất kho.`);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      }, error => {
+        console.error('Error validating factory stock:', error);
+        resolve(false);
+      });
+    });
+  }
+
+  // Apply filters based on search, date range, and factory
   applyFilters(): void {
     this.filteredOutbound = this.outboundMaterials.filter(material => {
+      // Filter by factory
+      if (this.selectedFactory) {
+        const materialFactory = material.factory || 'ASM1';
+        if (materialFactory !== this.selectedFactory) {
+          return false;
+        }
+      }
+
       // Filter by search term
       if (this.searchTerm) {
         const searchLower = this.searchTerm.toLowerCase();
@@ -185,8 +417,20 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   }
 
   // Scanner Mode Methods
-  startScannerMode(): void {
-    console.log('🚀 Starting scanner mode...');
+  async startScannerMode(): Promise<void> {
+    // Validate factory selection first
+    if (!this.selectedFactory) {
+      alert('⚠️ Vui lòng chọn nhà máy (ASM1 hoặc ASM2) trước khi bật Scanner!');
+      return;
+    }
+
+    // Validate stock availability for the selected factory
+    const hasStock = await this.validateFactoryStock();
+    if (!hasStock) {
+      return;
+    }
+
+    console.log(`🚀 Starting scanner mode for factory: ${this.selectedFactory}...`);
     this.isScannerActive = true;
     this.scanCount = 0;
     this.successfulScans = 0;
@@ -208,7 +452,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     }, 1000);
     
     // Log to console instead of showing alert
-    console.log('🟢 Scanner đã được bật!\n\n📋 Hướng dẫn:\n• Máy scan sẽ tự động gửi dữ liệu\n• Hệ thống sẽ xử lý liên tục\n• Kiểm tra trạng thái để theo dõi\n\n💡 Tip: Click vào bất kỳ đâu trên trang để focus scanner input');
+    console.log(`🟢 Scanner đã được bật cho ${this.selectedFactory}!\n\n📋 Hướng dẫn:\n• Máy scan sẽ tự động gửi dữ liệu\n• Hệ thống sẽ xử lý liên tục\n• Kiểm tra trạng thái để theo dõi\n\n💡 Tip: Click vào bất kỳ đâu trên trang để focus scanner input`);
   }
 
   stopScannerMode(): void {
@@ -266,7 +510,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private processScannedData(scannedData: string): void {
+  private async processScannedData(scannedData: string): Promise<void> {
     console.log('📱 Processing scanned data:', scannedData);
     this.scanCount++;
     
@@ -279,49 +523,66 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         const quantity = parseInt(parts[2]);
         
         if (isNaN(quantity) || quantity <= 0) {
-          throw new Error('Invalid quantity');
+          console.error('❌ Invalid quantity in scanned data:', scannedData);
+          alert('❌ Dữ liệu scan không hợp lệ: Số lượng phải là số dương!');
+          this.errorScans++;
+          this.recordScan(scannedData, false);
+          return;
         }
         
         console.log('🔍 Looking for inventory item:', { materialCode, poNumber, quantity });
         
+        // Check FIFO compliance
+        const fifoResult = await this.checkFIFOCompliance(materialCode, poNumber, quantity);
+        if (!fifoResult.isCompliant) {
+          alert(fifoResult.message);
+          this.errorScans++;
+          this.recordScan(scannedData, false);
+          return;
+        }
+
         // Find matching inventory item with scanner mode flag
         this.findAndUpdateInventory(materialCode, poNumber, quantity, this.isScannerActive);
         
         // Record successful scan
-        this.successfulScans++;
         this.recordScan(scannedData, true);
+        this.successfulScans++;
+        
+        // Update scan rate calculation
+        const now = Date.now();
+        this.scanTimes.push(now);
+        this.lastScanTime = now;
         
       } else {
-        throw new Error('Invalid QR code format - expected: MaterialCode|PO|Quantity');
+        console.error('❌ Invalid QR code format:', scannedData);
+        alert('❌ Định dạng QR code không hợp lệ! Cần: Mã hàng|PO|Số lượng');
+        this.errorScans++;
+        this.recordScan(scannedData, false);
       }
     } catch (error) {
       console.error('❌ Error processing scanned data:', error);
+      alert('❌ Lỗi xử lý dữ liệu scan!');
       this.errorScans++;
       this.recordScan(scannedData, false);
-      if (this.isScannerActive) {
-        console.log('❌ Lỗi xử lý dữ liệu: ' + error.message);
-      } else {
-        alert('❌ Lỗi xử lý dữ liệu: ' + error.message);
-      }
     }
-    
-    // Update scan time for rate calculation
-    const now = Date.now();
-    this.scanTimes.push(now);
-    this.lastScanTime = now;
-    
-    // Keep only last 60 seconds for rate calculation
-    this.scanTimes = this.scanTimes.filter(time => now - time <= 60000);
   }
 
   private findAndUpdateInventory(materialCode: string, poNumber: string, quantity: number, isScannerMode: boolean = false): void {
-    console.log('🔍 Querying inventory for:', { materialCode, poNumber });
+    console.log('🔍 Querying inventory for:', { materialCode, poNumber, factory: this.selectedFactory });
     
-    // Query inventory collection with real-time data
+    // Validate factory selection
+    if (!this.selectedFactory) {
+      alert('⚠️ Vui lòng chọn nhà máy (ASM1 hoặc ASM2) trước khi scan xuất kho!');
+      this.errorScans++;
+      return;
+    }
+    
+    // Query inventory collection with real-time data, filtered by selected factory
     // Order by document ID to ensure consistent ordering and always get the first (top) row
     this.firestore.collection('inventory-materials', ref => 
       ref.where('materialCode', '==', materialCode)
          .where('poNumber', '==', poNumber)
+         .where('factory', '==', this.selectedFactory) // Filter by selected factory
          .orderBy('__name__') // Order by document ID to ensure first document is always the same
     ).get().subscribe(snapshot => {
       if (!snapshot.empty) {
@@ -329,14 +590,15 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         const inventoryDoc = snapshot.docs[0];
         const inventoryData = inventoryDoc.data() as any;
         
-        console.log(`📋 Found ${snapshot.docs.length} matching items. Using first item (top row):`, inventoryData);
+        console.log(`📋 Found ${snapshot.docs.length} matching items in ${this.selectedFactory}. Using first item (top row):`, inventoryData);
         
         console.log('📦 Found inventory item:', inventoryData);
         console.log('📊 Current stock details:', {
           stock: inventoryData.stock,
           quantity: inventoryData.quantity,
           exported: inventoryData.exported,
-          requestedQuantity: quantity
+          requestedQuantity: quantity,
+          factory: inventoryData.factory
         });
         
         // Calculate current available stock (stock field takes priority, fallback to quantity - exported)
@@ -352,8 +614,8 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         // Check if we have enough stock
         if (currentStock < quantity) {
           // Always show popup for insufficient stock - this is a critical error
-          alert(`❌ Không đủ tồn kho!\nCần: ${quantity}\nCó: ${currentStock}\nMã: ${materialCode}\nPO: ${poNumber}`);
-          console.log(`❌ Không đủ tồn kho! Cần: ${quantity}, Có: ${currentStock}, Mã: ${materialCode}, PO: ${poNumber}`);
+          alert(`❌ Không đủ tồn kho tại ${this.selectedFactory}!\nCần: ${quantity}\nCó: ${currentStock}\nMã: ${materialCode}\nPO: ${poNumber}\nNhà máy: ${this.selectedFactory}`);
+          console.log(`❌ Không đủ tồn kho tại ${this.selectedFactory}! Cần: ${quantity}, Có: ${currentStock}, Mã: ${materialCode}, PO: ${poNumber}`);
           this.errorScans++;
           return;
         }
@@ -362,7 +624,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         const newStock = currentStock - quantity;
         if (newStock < 0) {
           // Always show alert for negative stock - this is the critical error
-          alert(`❌ Không thể xuất! Tồn kho sẽ âm sau khi xuất!\nTồn hiện tại: ${currentStock}\nXuất: ${quantity}\nSẽ còn: ${newStock}\nMã: ${materialCode}\nPO: ${poNumber}`);
+          alert(`❌ Không thể xuất! Tồn kho sẽ âm sau khi xuất tại ${this.selectedFactory}!\nTồn hiện tại: ${currentStock}\nXuất: ${quantity}\nSẽ còn: ${newStock}\nMã: ${materialCode}\nPO: ${poNumber}\nNhà máy: ${this.selectedFactory}`);
           this.errorScans++;
           return;
         }
@@ -375,7 +637,8 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
           oldStock: currentStock,
           newStock: newStock,
           oldExported: currentExported,
-          newExported: newExported
+          newExported: newExported,
+          factory: this.selectedFactory
         });
         
         // Update inventory with transaction to prevent race conditions
@@ -397,11 +660,12 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
             newExported,
             newStock,
             inventoryDocId: inventoryDoc.id,
-            note: 'Deducted from first matching row'
+            factory: this.selectedFactory,
+            note: 'Deducted from first matching row in selected factory'
           });
           
           // No success alert when scanner is active - just log to console
-          console.log(`✅ Xuất hàng thành công! Mã: ${materialCode}, PO: ${poNumber}, Số lượng: ${quantity}, Tồn kho mới: ${newStock} (từ dòng đầu tiên)`);
+          console.log(`✅ Xuất hàng thành công tại ${this.selectedFactory}! Mã: ${materialCode}, PO: ${poNumber}, Số lượng: ${quantity}, Tồn kho mới: ${newStock} (từ dòng đầu tiên)`);
           
         }).catch(error => {
           console.error('❌ Error updating inventory:', error);
@@ -414,10 +678,10 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         });
         
       } else {
-        console.error('❌ No matching inventory item found:', { materialCode, poNumber });
+        console.error('❌ No matching inventory item found:', { materialCode, poNumber, factory: this.selectedFactory });
         // Always show popup for missing inventory - this is a critical error
-        alert(`❌ Không tìm thấy hàng hóa!\nMã: ${materialCode}\nPO: ${poNumber}`);
-        console.log(`❌ Không tìm thấy hàng hóa! Mã: ${materialCode}, PO: ${poNumber}`);
+        alert(`❌ Không tìm thấy hàng hóa tại ${this.selectedFactory}!\nMã: ${materialCode}\nPO: ${poNumber}\nNhà máy: ${this.selectedFactory}\n\n💡 Kiểm tra:\n• Hàng đã được nhập vào ${this.selectedFactory} chưa?\n• Mã hàng và PO có đúng không?`);
+        console.log(`❌ Không tìm thấy hàng hóa tại ${this.selectedFactory}! Mã: ${materialCode}, PO: ${poNumber}`);
         this.errorScans++;
       }
     }, error => {
@@ -438,6 +702,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
       const scanMethod = scanSource === 'inventory' ? 'Tablet' : 'Scanner';
     
       const outboundRecord: OutboundMaterial = {
+        factory: this.selectedFactory || 'ASM1', // Include selected factory
         materialCode: inventoryData.materialCode,
         poNumber: inventoryData.poNumber,
         quantity: inventoryData.quantity,

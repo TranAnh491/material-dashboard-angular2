@@ -4,6 +4,7 @@ import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.mode
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -39,6 +40,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   waitingOrders: number = 0;
   kittingOrders: number = 0;
   readyOrders: number = 0;
+  transferOrders: number = 0;
   doneOrders: number = 0;
   delayOrders: number = 0;
   
@@ -83,7 +85,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   hasDeletePermissionValue: boolean = false;
   hasCompletePermissionValue: boolean = false;
   
-
+  // Scan functionality
+  showScanDialog: boolean = false;
+  scannedQRData: string = '';
+  scanResult: string = '';
+  isScanning: boolean = false;
   
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
@@ -500,6 +506,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.waitingOrders = filtered.filter(wo => wo.status === WorkOrderStatus.WAITING).length;
     this.kittingOrders = filtered.filter(wo => wo.status === WorkOrderStatus.KITTING).length;
     this.readyOrders = filtered.filter(wo => wo.status === WorkOrderStatus.READY).length;
+    this.transferOrders = filtered.filter(wo => wo.status === WorkOrderStatus.TRANSFER).length;
     this.doneOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DONE).length;
     this.delayOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DELAY).length;
   }
@@ -785,6 +792,7 @@ Please check the console for error details.`);
       case WorkOrderStatus.WAITING: return 'status-waiting';
       case WorkOrderStatus.KITTING: return 'status-kitting';
       case WorkOrderStatus.READY: return 'status-ready';
+      case WorkOrderStatus.TRANSFER: return 'status-transfer';
       case WorkOrderStatus.DONE: return 'status-done';
       case WorkOrderStatus.DELAY: return 'status-delay';
       default: return '';
@@ -2063,6 +2071,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       case 'ready':
       case 'sẵn sàng':
         return WorkOrderStatus.READY;
+      case 'transfer':
+      case 'chuyển':
+        return WorkOrderStatus.TRANSFER;
       case 'done':
       case 'hoàn thành':
         return WorkOrderStatus.DONE;
@@ -2168,6 +2179,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'waiting': 'Waiting',
       'kitting': 'Kitting',
       'ready': 'Ready',
+      'transfer': 'Transfer',
       'done': 'Done',
       'delay': 'Delay'
     };
@@ -2179,6 +2191,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'waiting': 'badge badge-warning',
       'kitting': 'badge badge-info',
       'ready': 'badge badge-primary',
+      'transfer': 'badge badge-secondary',
       'done': 'badge badge-success',
       'delay': 'badge badge-danger'
     };
@@ -2321,6 +2334,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'waiting': 'Waiting',
       'kitting': 'Kitting',
       'ready': 'Ready',
+      'transfer': 'Transfer',
       'done': 'Done',
       'delay': 'Delay'
     };
@@ -2383,6 +2397,368 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     } catch (error) {
       console.error('❌ Error loading work orders from Firebase for LSX check:', error);
       throw error;
+    }
+  }
+
+  // Generate QR Code for Work Order
+  generateQRCode(workOrder: WorkOrder): void {
+    console.log('Generating QR code for work order:', workOrder.productionOrder);
+    
+    // Create QR code data with LSX information
+    const qrData = `${workOrder.productionOrder}|${workOrder.productCode}|${workOrder.quantity}|${workOrder.customer}`;
+    
+    console.log('QR Code data:', qrData);
+    
+    // Generate QR code image
+    QRCode.toDataURL(qrData, {
+      width: 240, // 30mm = 240px (8px/mm)
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    }).then(qrImage => {
+      // Show QR code dialog
+      this.showQRCodeDialog(qrImage, workOrder, qrData);
+    }).catch(error => {
+      console.error('Error generating QR code:', error);
+      alert('Lỗi khi tạo QR code!');
+    });
+  }
+
+  // Show QR code dialog
+  async showQRCodeDialog(qrImage: string, workOrder: WorkOrder, qrData: string): Promise<void> {
+    try {
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+      
+      // Create print window with professional label layout
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title>QR Code LSX - ${workOrder.productionOrder}</title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 0.5mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 6px !important;
+                  line-height: 1.0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .info-row {
+                  margin: 0.2mm 0 !important;
+                  font-weight: bold !important;
+                  white-space: nowrap !important;
+                  overflow: hidden !important;
+                  text-overflow: ellipsis !important;
+                }
+                
+                .info-row.small {
+                  font-size: 5px !important;
+                  color: #666 !important;
+                  margin: 0.1mm 0 !important;
+                }
+                
+                .qr-grid {
+                  text-align: center !important;
+                  display: flex !important;
+                  flex-direction: row !important;
+                  flex-wrap: wrap !important;
+                  align-items: flex-start !important;
+                  justify-content: flex-start !important;
+                  gap: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 6px !important;
+                    padding: 0.5mm !important;
+                  }
+                  
+                  .info-row {
+                    margin: 0.2mm 0 !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 5px !important;
+                    margin: 0.1mm 0 !important;
+                  }
+                  
+                  .qr-grid {
+                    gap: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  /* Hide all browser elements */
+                  @media screen {
+                    body::before,
+                    body::after,
+                    header,
+                    footer,
+                    nav,
+                    .browser-ui {
+                      display: none !important;
+                    }
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-grid">
+                <div class="qr-container">
+                  <div class="qr-section">
+                    <img src="${qrImage}" class="qr-image" alt="QR Code LSX">
+                  </div>
+                  <div class="info-section">
+                    <div>
+                      <div class="info-row">LSX: ${workOrder.productionOrder}</div>
+                      <div class="info-row">Mã TP: ${workOrder.productCode}</div>
+                      <div class="info-row">Lượng: ${workOrder.quantity}</div>
+                      <div class="info-row">KH: ${workOrder.customer}</div>
+                    </div>
+                    <div>
+                      <div class="info-row small">Ngày in: ${printDate}</div>
+                      <div class="info-row small">NV: ${currentUser}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <script>
+                window.onload = function() {
+                  // Remove all browser UI elements
+                  document.title = '';
+                  
+                  // Hide browser elements
+                  const style = document.createElement('style');
+                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                  document.head.appendChild(style);
+                  
+                  // Remove any browser elements
+                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                  elementsToRemove.forEach(el => el.remove());
+                  
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error showing QR code dialog:', error);
+      alert('Lỗi khi hiển thị QR code!');
+    }
+  }
+
+  // Scan functionality methods
+  openScanDialog(): void {
+    this.showScanDialog = true;
+    this.scannedQRData = '';
+    this.scanResult = '';
+    this.isScanning = false;
+  }
+
+  closeScanDialog(): void {
+    this.showScanDialog = false;
+    this.scannedQRData = '';
+    this.scanResult = '';
+    this.isScanning = false;
+  }
+
+  async processScannedQRCode(qrData: string): Promise<void> {
+    try {
+      this.isScanning = true;
+      this.scanResult = 'Đang xử lý...';
+      
+      // Parse QR data to find LSX (Production Order)
+      const lsxMatch = qrData.match(/LSX:\s*([^\s]+)/);
+      if (!lsxMatch) {
+        this.scanResult = '❌ QR code không hợp lệ. Không tìm thấy LSX.';
+        return;
+      }
+
+      const lsx = lsxMatch[1];
+      console.log('🔍 Tìm thấy LSX:', lsx);
+
+      // Find work order by LSX
+      const workOrder = this.workOrders.find(wo => wo.productionOrder === lsx);
+      if (!workOrder) {
+        this.scanResult = `❌ Không tìm thấy Work Order với LSX: ${lsx}`;
+        return;
+      }
+
+      console.log('📋 Tìm thấy Work Order:', workOrder);
+
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const scanTime = new Date();
+
+      // Determine next status based on current status
+      let newStatus: WorkOrderStatus;
+      let statusDescription: string;
+
+      switch (workOrder.status) {
+        case WorkOrderStatus.WAITING:
+          newStatus = WorkOrderStatus.KITTING;
+          statusDescription = 'Kitting';
+          break;
+        case WorkOrderStatus.KITTING:
+          newStatus = WorkOrderStatus.READY;
+          statusDescription = 'Ready';
+          break;
+        case WorkOrderStatus.READY:
+          newStatus = WorkOrderStatus.TRANSFER;
+          statusDescription = 'Transfer';
+          break;
+        case WorkOrderStatus.TRANSFER:
+          newStatus = WorkOrderStatus.DONE;
+          statusDescription = 'Done';
+          break;
+        case WorkOrderStatus.DONE:
+          this.scanResult = `✅ Work Order đã hoàn thành (Done). Không thể scan thêm.`;
+          return;
+        case WorkOrderStatus.DELAY:
+          newStatus = WorkOrderStatus.KITTING;
+          statusDescription = 'Kitting (từ Delay)';
+          break;
+        default:
+          newStatus = WorkOrderStatus.KITTING;
+          statusDescription = 'Kitting';
+      }
+
+      // Update work order status
+      await this.updateWorkOrderStatus(workOrder, newStatus);
+
+      // Log scan activity
+      await this.logScanActivity(lsx, currentUser, scanTime, workOrder.status, newStatus);
+
+      this.scanResult = `✅ Scan thành công!\nLSX: ${lsx}\nTrạng thái: ${workOrder.status} → ${statusDescription}\nNhân viên: ${currentUser}\nThời gian: ${scanTime.toLocaleString('vi-VN')}`;
+
+      // Refresh work orders to show updated status
+      this.loadWorkOrders();
+
+    } catch (error) {
+      console.error('❌ Lỗi khi xử lý QR code:', error);
+      this.scanResult = `❌ Lỗi: ${error.message || error}`;
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  private async logScanActivity(lsx: string, userId: string, scanTime: Date, oldStatus: WorkOrderStatus, newStatus: WorkOrderStatus): Promise<void> {
+    try {
+      const scanLog = {
+        lsx: lsx,
+        userId: userId,
+        scanTime: scanTime,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        timestamp: new Date()
+      };
+
+      // Save to Firestore
+      const db = getFirestore();
+      await addDoc(collection(db, 'scan_logs'), scanLog);
+      
+      console.log('📝 Đã lưu log scan:', scanLog);
+    } catch (error) {
+      console.error('❌ Lỗi khi lưu log scan:', error);
     }
   }
 }

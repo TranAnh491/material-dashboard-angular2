@@ -10,7 +10,22 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-buttons">
-        <button class="btn btn-primary" (click)="startScannerMode()" [disabled]="isScannerActive">
+        <!-- Factory Selection Buttons -->
+        <button class="custom-btn" 
+                [class.active]="selectedFactory === 'ASM1'"
+                (click)="selectFactory('ASM1')">
+          <i class="material-icons">filter_1</i>
+          ASM1
+        </button>
+        <button class="custom-btn" 
+                [class.active]="selectedFactory === 'ASM2'"
+                (click)="selectFactory('ASM2')">
+          <i class="material-icons">filter_2</i>
+          ASM2
+        </button>
+        
+        <!-- Scanner Controls -->
+        <button class="btn btn-primary" (click)="startScannerMode()" [disabled]="isScannerActive || !selectedFactory">
           <i class="material-icons">qr_code_scanner</i>
           Bật Scanner
         </button>
@@ -22,6 +37,32 @@
           <i class="material-icons">info</i>
           Trạng thái
         </button>
+        
+        <!-- More Options Dropdown -->
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <ul class="dropdown-menu">
+            <li><h6 class="dropdown-header">📊 Báo cáo FIFO</h6></li>
+            <li><a class="dropdown-item" href="#" (click)="downloadFIFOReportASM1()">
+              <i class="material-icons">download</i>
+              FIFO Report ASM1
+            </a></li>
+            <li><a class="dropdown-item" href="#" (click)="downloadFIFOReportASM2()">
+              <i class="material-icons">download</i>
+              FIFO Report ASM2
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header">🔄 Quản lý dữ liệu</h6></li>
+            <li><a class="dropdown-item" href="#" (click)="loadOutboundMaterialsFromFirebase()">
+              <i class="material-icons">refresh</i>
+              Làm mới dữ liệu
+            </a></li>
+          </ul>
+        </div>
+        
         <div class="scanner-test" *ngIf="isScannerActive">
           <input type="text" 
                  placeholder="Test QR data (format: MaterialCode|PO|Quantity)" 
@@ -66,6 +107,7 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th>Factory</th>
             <th class="row-header">#</th>
             <th>Ngày xuất</th>
             <th>Mã hàng</th>
@@ -80,6 +122,11 @@
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredOutbound; let i = index">
+            <td class="factory-cell" 
+                [class.factory-asm1]="(material.factory || 'ASM1') === 'ASM1'" 
+                [class.factory-asm2]="(material.factory || 'ASM1') === 'ASM2'">
+              {{material.factory || 'ASM1'}}
+            </td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
             <td class="code-cell">{{material.materialCode}}</td>

@@ -10,6 +10,7 @@ import { TabPermissionService } from '../../services/tab-permission.service';
 
 export interface InventoryMaterial {
   id?: string;
+  factory?: string; // Factory identifier (ASM1, ASM2, etc.)
   importDate: Date;
   receivedDate?: Date; // Ngày nhập vào inventory (khi tick đã nhận)
   batchNumber: string;
@@ -43,6 +44,7 @@ export interface CatalogItem {
 }
 
 export interface StockItem {
+  factory?: string;
   materialCode: string;
   poNumber: string;
   quantity: number;
@@ -52,6 +54,7 @@ export interface StockItem {
 
 export interface FIFOViolationReport {
   id?: string;
+  factory?: string; // Factory identifier (ASM1, ASM2, etc.)
   materialCode: string;
   actualPO: string; // PO that was actually scanned
   correctFIFOPO: string; // PO that should have been scanned (FIFO)
@@ -76,9 +79,18 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   
   // Loading state
   isLoading = false;
+  isCatalogLoading = false; // Separate loading state for catalog
+  
+  // Catalog cache for faster access
+  private catalogCache = new Map<string, CatalogItem>();
+  public catalogLoaded = false;
   
   // Search and filter
   searchTerm = '';
+  
+  // Factory filter
+  selectedFactory: string = '';
+  availableFactories: string[] = ['ASM1', 'ASM2'];
   
   // Dropdown state
   isDropdownOpen = false;
@@ -113,8 +125,10 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   ) {}
 
   ngOnInit(): void {
-    this.loadInventoryFromFirebase();
-    this.loadCatalogFromFirebase();
+    // Load catalog first, then inventory to ensure names are available
+    this.loadCatalogFromFirebase().then(() => {
+      this.loadInventoryFromFirebase();
+    });
     this.loadPermissions();
     // Disable auto-sync to prevent deleted items from reappearing
     // Use manual sync button instead
@@ -133,8 +147,9 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     this.destroy$.complete();
   }
 
-  // Load inventory data from Firebase
+  // Load inventory data from Firebase with catalog integration
   loadInventoryFromFirebase(): void {
+    console.log('📦 Loading inventory from Firebase...');
     this.isLoading = true;
     
     this.firestore.collection('inventory-materials')
@@ -145,29 +160,49 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
           .map(action => {
             const data = action.payload.doc.data() as any;
             const id = action.payload.doc.id;
-            return {
+            const material = {
               id: id,
               ...data,
               importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date()
             };
+            
+            // Apply catalog data instantly if available
+            if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
+              const catalogItem = this.catalogCache.get(material.materialCode)!;
+              material.materialName = catalogItem.materialName;
+              material.unit = catalogItem.unit;
+            }
+            
+            return material;
           });
         
-        console.log('Raw inventory data before sorting:', this.inventoryMaterials.map(m => m.materialCode));
+        console.log('📊 Raw inventory data loaded:', this.inventoryMaterials.length, 'items');
+        
         // Apply filters and sorting initially
         this.applyFilters();
-        console.log('Loaded inventory from Firebase:', this.inventoryMaterials.length);
+        console.log('✅ Inventory loaded and processed from Firebase');
         this.isLoading = false;
+        this.cdr.detectChanges();
       });
   }
 
   // Sync received materials from inbound to inventory (one-time only)
   private syncFromInboundMaterials(): void {
-    console.log('Starting one-time sync from inbound to inventory...');
+    console.log('Starting one-time sync from inbound to inventory for factory:', this.selectedFactory || 'All');
     
-    this.firestore.collection('inbound-materials')
-      .get()
+    // Build query based on selected factory
+    let query: any;
+    
+    // If a factory is selected, filter by it
+    if (this.selectedFactory) {
+      query = this.firestore.collection('inbound-materials', ref => ref.where('factory', '==', this.selectedFactory));
+    } else {
+      query = this.firestore.collection('inbound-materials');
+    }
+    
+    query.get()
       .pipe(takeUntil(this.destroy$))
       .subscribe((snapshot) => {
         const receivedMaterials = snapshot.docs
@@ -182,12 +217,16 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
           })
           .filter(material => material.isReceived === true);
 
-        console.log('Found received materials:', receivedMaterials.length);
+        console.log(`Found ${receivedMaterials.length} received materials for factory: ${this.selectedFactory || 'All'}`);
 
-        // Get current inventory items and deleted items
+        // Get current inventory items and deleted items for the selected factory
         Promise.all([
-          this.firestore.collection('inventory-materials').get().toPromise(),
-          this.firestore.collection('inventory-deleted-items').get().toPromise()
+          this.firestore.collection('inventory-materials', ref => 
+            this.selectedFactory ? ref.where('factory', '==', this.selectedFactory) : ref
+          ).get().toPromise(),
+          this.firestore.collection('inventory-deleted-items', ref => 
+            this.selectedFactory ? ref.where('factory', '==', this.selectedFactory) : ref
+          ).get().toPromise()
         ]).then(([inventorySnapshot, deletedSnapshot]) => {
           const existingInventoryCodes = new Set<string>();
           const deletedItemCodes = new Set<string>();
@@ -206,8 +245,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
             deletedItemCodes.add(key);
           });
 
-          console.log('Existing inventory items:', existingInventoryCodes.size);
-          console.log('Deleted items:', deletedItemCodes.size);
+          console.log(`Existing inventory items for factory ${this.selectedFactory || 'All'}:`, existingInventoryCodes.size);
+          console.log(`Deleted items for factory ${this.selectedFactory || 'All'}:`, deletedItemCodes.size);
 
           // Allow duplicates but check if item was previously deleted
           let addedCount = 0;
@@ -232,7 +271,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
 
               this.firestore.collection('inventory-materials').add(inventoryData)
                 .then((docRef) => {
-                  console.log(`Added ${inboundMaterial.materialCode} to inventory with ID: ${docRef.id}`);
+                  console.log(`Added ${inboundMaterial.materialCode} to inventory with ID: ${docRef.id} for factory: ${inboundMaterial.factory || 'ASM1'}`);
                   addedCount++;
                 })
                 .catch(error => {
@@ -241,7 +280,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
             }
           });
 
-          console.log(`Sync completed. Added: ${addedCount}, Skipped (existing): ${skippedCount}, Skipped (deleted): ${deletedCount}`);
+          console.log(`Sync completed for factory ${this.selectedFactory || 'All'}. Added: ${addedCount}, Skipped (existing): ${skippedCount}, Skipped (deleted): ${deletedCount}`);
         });
       });
   }
@@ -409,17 +448,19 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   private markDuplicates(): void {
     const duplicateMap = new Map<string, number>();
     
-    // Count occurrences of each material code + PO combination
+    // Count occurrences of each material code + PO combination within the selected factory
     this.filteredInventory.forEach(material => {
       const key = `${material.materialCode}_${material.poNumber}`;
       duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
     });
 
-    // Mark items as duplicate if they appear more than once
+    // Mark items as duplicate if they appear more than once within the same factory
     this.filteredInventory.forEach(material => {
       const key = `${material.materialCode}_${material.poNumber}`;
       material.isDuplicate = duplicateMap.get(key) > 1;
     });
+    
+    console.log('🔍 Duplicate marking completed for factory:', this.selectedFactory || 'All');
   }
 
   // Debug method to check inventory data
@@ -604,71 +645,91 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       });
   }
 
-  // Load catalog from Firebase (load all chunks)
-  private loadCatalogFromFirebase(): void {
-    console.log('Loading catalog from Firebase...');
+  // Load catalog from Firebase with optimized loading
+  private async loadCatalogFromFirebase(): Promise<void> {
+    console.log('🚀 Loading catalog from Firebase with optimization...');
+    this.isCatalogLoading = true;
     
-    // First check metadata
-    this.firestore.collection('inventory-catalog').doc('metadata').get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((metadataDoc) => {
-        if (metadataDoc.exists) {
-          const metadata = metadataDoc.data() as any;
-          console.log('Catalog metadata from Firebase:', metadata);
-          
-          // Load all chunks sequentially to ensure proper loading
-          let loadedChunks = 0;
-          const allCatalogItems: CatalogItem[] = [];
-          
-          const loadChunk = (index: number) => {
-            if (index >= metadata.totalChunks) {
-              console.log(`Total catalog items loaded: ${allCatalogItems.length}`);
-              if (allCatalogItems.length > 0) {
-                this.updateInventoryWithCatalog(allCatalogItems);
-                console.log('Catalog loaded from Firebase:', allCatalogItems.length, 'items');
-              } else {
-                console.log('No catalog items found in Firebase');
+    try {
+      // First check metadata
+      const metadataDoc = await this.firestore.collection('inventory-catalog').doc('metadata').get().toPromise();
+      
+      if (metadataDoc?.exists) {
+        const metadata = metadataDoc.data() as any;
+        console.log('📋 Catalog metadata found:', metadata);
+        
+        // Load all chunks in parallel for faster loading
+        const chunkPromises: Promise<CatalogItem[]>[] = [];
+        
+        for (let i = 0; i < metadata.totalChunks; i++) {
+          const chunkPromise = this.firestore.collection('inventory-catalog').doc(`chunk_${i}`).get().toPromise()
+            .then(chunkDoc => {
+              if (chunkDoc?.exists) {
+                const chunkData = chunkDoc.data() as any;
+                return chunkData.items || [];
               }
-              return;
-            }
-            
-            console.log(`Loading chunk ${index}...`);
-            this.firestore.collection('inventory-catalog').doc(`chunk_${index}`).get()
-              .subscribe((chunkDoc) => {
-                console.log(`Checking chunk ${index}:`, chunkDoc.exists ? 'exists' : 'not found');
-                if (chunkDoc.exists) {
-                  const chunkData = chunkDoc.data() as any;
-                  console.log(`Chunk ${index} data:`, chunkData);
-                  if (chunkData.items && chunkData.items.length > 0) {
-                    allCatalogItems.push(...chunkData.items);
-                    console.log(`Loaded chunk ${index} with ${chunkData.items.length} items`);
-                  } else {
-                    console.log(`Chunk ${index} has no items`);
-                  }
-                } else {
-                  console.log(`Chunk ${index} document does not exist`);
-                }
-                
-                loadedChunks++;
-                console.log(`Loaded ${loadedChunks}/${metadata.totalChunks} chunks`);
-                
-                // Load next chunk
-                loadChunk(index + 1);
-              }, error => {
-                console.error(`Error loading chunk ${index}:`, error);
-                loadedChunks++;
-                loadChunk(index + 1);
-              });
-          };
+              return [];
+            })
+            .catch(error => {
+              console.error(`❌ Error loading chunk ${i}:`, error);
+              return [];
+            });
           
-          // Start loading chunks
-          loadChunk(0);
-        } else {
-          console.log('No catalog metadata found in Firebase');
+          chunkPromises.push(chunkPromise);
         }
-      }, error => {
-        console.error('Error loading catalog metadata from Firebase:', error);
-      });
+        
+        // Wait for all chunks to load in parallel
+        const chunkResults = await Promise.all(chunkPromises);
+        
+        // Combine all chunks
+        const allCatalogItems: CatalogItem[] = [];
+        chunkResults.forEach((chunk, index) => {
+          allCatalogItems.push(...chunk);
+          console.log(`✅ Chunk ${index} loaded: ${chunk.length} items`);
+        });
+        
+        // Build catalog cache for instant lookup
+        this.buildCatalogCache(allCatalogItems);
+        
+        console.log(`🎯 Total catalog items loaded: ${allCatalogItems.length}`);
+        this.catalogLoaded = true;
+        
+      } else {
+        console.log('⚠️ No catalog metadata found in Firebase');
+        this.catalogLoaded = true; // Mark as loaded to prevent infinite waiting
+      }
+      
+    } catch (error) {
+      console.error('❌ Error loading catalog:', error);
+      this.catalogLoaded = true; // Mark as loaded to prevent infinite waiting
+    } finally {
+      this.isCatalogLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Build catalog cache for instant material name/unit lookup
+  private buildCatalogCache(catalogItems: CatalogItem[]): void {
+    console.log('🔧 Building catalog cache for fast lookup...');
+    this.catalogCache.clear();
+    
+    catalogItems.forEach(item => {
+      this.catalogCache.set(item.materialCode, item);
+    });
+    
+    console.log(`💾 Catalog cache built with ${this.catalogCache.size} items`);
+  }
+
+  // Get material name from cache instantly
+  getMaterialName(materialCode: string): string {
+    const catalogItem = this.catalogCache.get(materialCode);
+    return catalogItem?.materialName || 'N/A';
+  }
+
+  // Get material unit from cache instantly
+  getMaterialUnit(materialCode: string): string {
+    const catalogItem = this.catalogCache.get(materialCode);
+    return catalogItem?.unit || 'PCS';
   }
 
   // Process catalog file
@@ -716,41 +777,27 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     });
   }
 
-  // Update inventory with catalog data
+  // Update inventory with catalog data (optimized version)
   private updateInventoryWithCatalog(catalogItems: CatalogItem[]): void {
-    console.log('Updating inventory with catalog data:', catalogItems.length, 'items');
-    console.log('Catalog items:', catalogItems);
+    console.log('🔄 Updating inventory with catalog data:', catalogItems.length, 'items');
     
-    const catalogMap = new Map<string, CatalogItem>();
-    catalogItems.forEach(item => {
-      catalogMap.set(item.materialCode, item);
-      console.log(`Added to catalog map: ${item.materialCode} -> ${item.materialName}`);
-    });
-
-    console.log('Current inventory materials:', this.inventoryMaterials.map(m => m.materialCode));
+    // Rebuild cache first
+    this.buildCatalogCache(catalogItems);
     
+    // Update inventory materials with catalog data
     let updatedCount = 0;
     this.inventoryMaterials.forEach(material => {
-      console.log(`Checking material: ${material.materialCode}`);
-      const catalogItem = catalogMap.get(material.materialCode);
+      const catalogItem = this.catalogCache.get(material.materialCode);
       if (catalogItem) {
-        const oldName = material.materialName;
-        const oldUnit = material.unit;
-        
         material.materialName = catalogItem.materialName;
         material.unit = catalogItem.unit;
-        
         updatedCount++;
-        console.log(`Updated material ${material.materialCode}:`);
-        console.log(`  Old name: ${oldName} -> New name: ${catalogItem.materialName}`);
-        console.log(`  Old unit: ${oldUnit} -> New unit: ${catalogItem.unit}`);
-      } else {
-        console.log(`No catalog item found for material: ${material.materialCode}`);
       }
     });
 
     this.applyFilters();
-    console.log(`Inventory updated with catalog data. Updated ${updatedCount} materials.`);
+    console.log(`✅ Inventory updated with catalog data. Updated ${updatedCount} materials.`);
+    this.cdr.detectChanges();
   }
 
   // Download catalog template
@@ -813,13 +860,14 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
           // Skip header row
           for (let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i] as any[];
-            if (row[0] && row[1] && row[2]) {
+            if (row[1] && row[2] && row[3]) { // Factory, MaterialCode, PO required
               stockItems.push({
-                materialCode: row[0].toString(),
-                poNumber: row[1].toString(),
-                quantity: Number(row[2]) || 0,
-                type: row[3]?.toString() || '',
-                location: row[4]?.toString()?.toUpperCase() || 'DEFAULT'
+                factory: row[0]?.toString() || 'ASM1', // Factory column (new)
+                materialCode: row[1].toString(),
+                poNumber: row[2].toString(),
+                quantity: Number(row[3]) || 0,
+                type: row[4]?.toString() || '',
+                location: row[5]?.toString()?.toUpperCase() || 'DEFAULT'
               });
             }
           }
@@ -845,6 +893,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       if (!existing) {
         // Create new inventory item with "Import" status
         const newInventoryItem: InventoryMaterial = {
+          factory: stockItem.factory || 'ASM1', // Include factory from stock item
           importDate: new Date(),
           receivedDate: new Date(),
           batchNumber: `IMPORT-${Date.now()}`,
@@ -914,28 +963,49 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   // Download stock template
   downloadStockTemplate(): void {
     const templateData = [
-      ['Mã hàng', 'Số P.O', 'Lượng nhập', 'Loại hình', 'Vị trí'],
-      ['B001801', 'KZPO0725/0104', 300, 'Wire', 'D22'],
-      ['B001802', 'KZPO0725/0117', 700, 'Cable', 'IQC'],
-      ['A001803', 'KZPO0725/0118', 500, 'Component', 'E31'],
-      ['R001804', 'KZPO0725/0119', 200, 'Raw Material', 'F12']
+      ['Factory', 'Mã hàng', 'Số P.O', 'Lượng nhập', 'Loại hình', 'Vị trí'],
+      ['ASM1', 'B001801', 'KZPO0725/0104', 300, 'Wire', 'D22'],
+      ['ASM2', 'B001802', 'KZPO0725/0117', 700, 'Cable', 'IQC'],
+      ['ASM1', 'A001803', 'KZPO0725/0118', 500, 'Component', 'E31'],
+      ['ASM2', 'R001804', 'KZPO0725/0119', 200, 'Raw Material', 'F12']
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Tồn kho');
     
-    XLSX.writeFile(workbook, 'Template_Ton_kho.xlsx');
-    console.log('Stock template downloaded');
+    XLSX.writeFile(workbook, 'Template_Ton_kho_Factory.xlsx');
+    console.log('Stock template with Factory downloaded');
   }
 
-  // Download FIFO violation report
-  downloadFIFOReport(): void {
+  // Download FIFO Report for ASM1
+  downloadFIFOReportASM1(): void {
+    this.downloadFIFOReportByFactory('ASM1');
+  }
+
+  // Download FIFO Report for ASM2
+  downloadFIFOReportASM2(): void {
+    this.downloadFIFOReportByFactory('ASM2');
+  }
+
+  // Generic method to download FIFO report by factory
+  private downloadFIFOReportByFactory(factory: string): void {
     this.firestore.collection('fifo-violations', ref => 
       ref.orderBy('createdAt', 'desc')
     ).get().subscribe(snapshot => {
         if (snapshot.empty) {
-          alert('📊 Không có báo cáo vi phạm FIFO nào.');
+          alert(`📊 Không có báo cáo vi phạm FIFO nào cho ${factory}.`);
+          return;
+        }
+
+        // Filter by factory
+        const filteredDocs = snapshot.docs.filter(doc => {
+          const data = doc.data() as FIFOViolationReport;
+          return (data as any).factory === factory || (!data.factory && factory === 'ASM1'); // Default to ASM1 if no factory
+        });
+
+        if (filteredDocs.length === 0) {
+          alert(`📊 Không có báo cáo vi phạm FIFO nào cho ${factory}.`);
           return;
         }
 
@@ -943,6 +1013,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         // Headers
         fifoData.push([
           'STT',
+          'Factory',
           'Ngày vi phạm',
           'Mã hàng',
           'Tên hàng',
@@ -955,10 +1026,11 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         ]);
 
         // Data rows
-        snapshot.docs.forEach((doc, index) => {
+        filteredDocs.forEach((doc, index) => {
           const data = doc.data() as FIFOViolationReport;
           fifoData.push([
             index + 1,
+            (data as any).factory || 'ASM1',
             data.exportDate ? (data.exportDate as any).seconds ? new Date((data.exportDate as any).seconds * 1000).toLocaleDateString('vi-VN') : new Date(data.exportDate).toLocaleDateString('vi-VN') : '',
             data.materialCode || '',
             data.materialName || 'N/A',
@@ -976,9 +1048,10 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'FIFO Violations');
         
-        // Auto-size columns
+        // Auto-size columns (updated for Factory column)
         const colWidths = [
           { wch: 5 },  // STT
+          { wch: 8 },  // Factory
           { wch: 15 }, // Ngày
           { wch: 15 }, // Mã hàng
           { wch: 25 }, // Tên hàng
@@ -991,10 +1064,10 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         ];
         ws['!cols'] = colWidths;
 
-        const fileName = `FIFO_Violations_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const fileName = `FIFO_Violations_${factory}_${new Date().toISOString().split('T')[0]}.xlsx`;
         XLSX.writeFile(wb, fileName);
         
-        console.log(`📊 Downloaded FIFO report: ${fileName} (${snapshot.docs.length} violations)`);
+        console.log(`📊 Downloaded FIFO report for ${factory}: ${fileName} (${filteredDocs.length} violations)`);
       }, error => {
         console.error('❌ Error downloading FIFO report:', error);
         alert('❌ Lỗi khi tải báo cáo FIFO!');
@@ -1416,14 +1489,15 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   // Check FIFO rule - ensure scanning the first row for the material code based on PO sorting
   private async checkFIFORule(material: InventoryMaterial): Promise<{isValid: boolean, firstRowPO?: string}> {
     try {
-      // Find all items with the same material code
+      // Find all items with the same material code AND factory
       const snapshot = await this.firestore.collection('inventory-materials', ref => 
         ref.where('materialCode', '==', material.materialCode)
+           .where('factory', '==', this.selectedFactory || material.factory || 'ASM1') // Filter by selected factory
            .where('importStatus', '==', 'Import') // Only consider imported items
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
-        console.log('🔍 FIFO Check: No items found for material code:', material.materialCode);
+        console.log('🔍 FIFO Check: No items found for material code:', material.materialCode, 'in factory:', this.selectedFactory || material.factory || 'ASM1');
         return { isValid: true }; // If no items found, allow the operation
       }
       
@@ -1438,7 +1512,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       }).filter(item => item.poInfo.isValid); // Only valid PO formats
       
       if (items.length === 0) {
-        console.log('🔍 FIFO Check: No valid PO formats found for material code:', material.materialCode);
+        console.log('🔍 FIFO Check: No valid PO formats found for material code:', material.materialCode, 'in factory:', this.selectedFactory || material.factory || 'ASM1');
         return { isValid: true };
       }
       
@@ -1462,6 +1536,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       
       console.log('🔍 FIFO Check:', {
         materialCode: material.materialCode,
+        factory: this.selectedFactory || material.factory || 'ASM1',
         currentPO: material.poNumber,
         currentPOInfo: this.parsePONumber(material.poNumber),
         firstRowPO: firstItem.data.poNumber,
@@ -1609,6 +1684,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   // Save FIFO violation report
   private saveFIFOViolationReport(material: InventoryMaterial, exportQuantity: number, correctFIFOPO: string, exportedBy: string): void {
     const fifoReport: FIFOViolationReport = {
+      factory: material.factory || 'ASM1', // Include factory information
       materialCode: material.materialCode,
       actualPO: material.poNumber,
       correctFIFOPO: correctFIFOPO,
@@ -1702,6 +1778,14 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         }
       }
       
+      // Filter by factory
+      if (this.selectedFactory) {
+        const materialFactory = material.factory || 'ASM1'; // Default to ASM1 if not set
+        if (materialFactory !== this.selectedFactory) {
+          return false;
+        }
+      }
+      
       return true;
     });
 
@@ -1714,6 +1798,31 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       if (!aIsIQC && bIsIQC) return -1;
       return 0;
     });
+    
+    // Mark duplicates within the selected factory
+    this.markDuplicates();
+    
+    console.log('🔍 Filters applied for factory:', this.selectedFactory || 'All', 'Items found:', this.filteredInventory.length);
+  }
+
+  // Filter by ASM1
+  filterByASM1(): void {
+    console.log('Filtering by ASM1...');
+    this.selectedFactory = 'ASM1';
+    this.applyFilters(); // This will call markDuplicates for ASM1
+  }
+
+  // Filter by ASM2
+  filterByASM2(): void {
+    this.selectedFactory = 'ASM2';
+    this.applyFilters();
+    console.log('🔍 Filtered by ASM2');
+  }
+
+  filterByAll(): void {
+    this.selectedFactory = '';
+    this.applyFilters();
+    console.log('🔍 Filtered by All factories');
   }
 
   // Format numbers with thousand separators and decimal places
@@ -1751,16 +1860,17 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     return location && location.toUpperCase() === 'IQC';
   }
 
-  // Check if material has duplicate PO
+  // Check if material has duplicate PO within the same factory
   isDuplicatePO(material: InventoryMaterial): boolean {
     const duplicates = this.inventoryMaterials.filter(item => 
       item.materialCode === material.materialCode && 
-      item.poNumber === material.poNumber
+      item.poNumber === material.poNumber &&
+      (item.factory || 'ASM1') === (material.factory || 'ASM1') // Only check within same factory
     );
     return duplicates.length > 1;
   }
 
-  // Check if material has negative stock
+  // Check if material has negative stock within the same factory
   hasNegativeStock(material: InventoryMaterial): boolean {
     const stock = this.calculateCurrentStock(material);
     return stock < 0;
@@ -1802,7 +1912,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     if (material.location) {
       material.location = material.location.toUpperCase();
       this.updateLocation(material);
-      this.applyFilters(); // Re-sort after location change
+      this.applyFilters(); // Re-sort and re-mark duplicates after location change
     }
   }
 

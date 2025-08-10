@@ -49,24 +49,26 @@
     </div>
 
     <!-- Settings Dashboard -->
-    <div *ngIf="isAdminLoggedIn" class="settings-dashboard">
-      
-      <!-- Header -->
+    <div *ngIf="isAdminLoggedIn" class="settings-container">
+      <!-- Settings Header -->
       <div class="settings-header">
-        <div class="header-content">
-          <h1>
-            <mat-icon>settings</mat-icon>
-            Settings Management
-          </h1>
-          <p>Quản lý quyền xóa và truy cập tab cho nhân viên</p>
+        <h4>⚙️ SETTINGS MANAGEMENT</h4>
+      </div>
+      
+      <!-- Settings Actions -->
+      <div class="settings-actions">
+        <div class="action-controls">
+          <span class="subtitle">Quản lý quyền xóa và truy cập tab cho nhân viên</span>
+          <button mat-stroked-button (click)="logout()" class="logout-btn">
+            <mat-icon>logout</mat-icon>
+            Đăng xuất
+          </button>
         </div>
-        <button mat-stroked-button (click)="logout()" class="logout-btn">
-          <mat-icon>logout</mat-icon>
-          Đăng xuất
-        </button>
       </div>
 
-      <!-- New User Notifications Section -->
+      <!-- Settings Body -->
+      <div class="settings-body">
+        <!-- New User Notifications Section -->
       <div class="new-user-notifications-section" *ngIf="newUserNotifications.length > 0">
         <div class="section-header">
           <h3 style="margin: 0; font-size: 18px; color: #f44336;">
@@ -113,27 +115,23 @@
         <!-- Firebase Users Section -->
         <div class="firebase-users-section">
             
-            <!-- Simplified Header -->
-            <div class="section-header">
-              <h3 style="margin: 0; font-size: 18px;">
-                <mat-icon style="font-size: 20px; margin-right: 8px;">account_circle</mat-icon>
+            <!-- Unified Header -->
+            <div class="section-header-unified">
+              <div class="header-title">
+                <mat-icon>account_circle</mat-icon>
                 Danh sách Email đã đăng nhập
-              </h3>
-              <div class="header-actions" style="display: flex; gap: 8px;">
-                <button mat-raised-button 
-                        [color]="isEditingPermissions ? 'accent' : 'primary'"
+              </div>
+              <div class="header-actions">
+                <button class="custom-btn edit-btn" 
                         (click)="togglePermissionMode()"
-                        [disabled]="isLoadingFirebaseUsers"
-                        style="font-size: 12px; padding: 4px 8px; min-width: auto;">
-                  <mat-icon style="font-size: 16px;">{{ isEditingPermissions ? 'save' : 'edit' }}</mat-icon>
-                  {{ isEditingPermissions ? 'Xem' : 'Sửa' }}
+                        [disabled]="isLoadingFirebaseUsers">
+                  <mat-icon>{{ isEditingPermissions ? 'save' : 'edit' }}</mat-icon>
+                  {{ isEditingPermissions ? 'Lưu' : 'Sửa' }}
                 </button>
-                <button mat-raised-button 
-                        color="primary" 
+                <button class="custom-btn refresh-btn" 
                         (click)="refreshFirebaseUsers()"
-                        [disabled]="isLoadingFirebaseUsers"
-                        style="font-size: 12px; padding: 4px 8px; min-width: auto;">
-                  <mat-icon style="font-size: 16px;">refresh</mat-icon>
+                        [disabled]="isLoadingFirebaseUsers">
+                  <mat-icon>refresh</mat-icon>
                   Làm mới
                 </button>
               </div>
@@ -178,8 +176,9 @@
         </div>
 
                         <!-- Optimized Firebase Users Table -->
-            <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="firebase-users-table">
-                            <table mat-table [dataSource]="getSortedFirebaseUsers()" class="excel-table" style="font-size: 12px; border-collapse: collapse; width: 100%;">
+            <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="firebase-users-container">
+              <div class="table-scroll-container">
+                <table mat-table [dataSource]="getSortedFirebaseUsers()" class="excel-table" style="font-size: 12px; border-collapse: collapse; width: 100%;">
                 
                 <!-- Account Column -->
                 <ng-container matColumnDef="email">
@@ -331,9 +330,11 @@
 
                 <tr mat-header-row *matHeaderRowDef="getTableColumns()"></tr>
                 <tr mat-row *matRowDef="let row; columns: getTableColumns();"></tr>
-          </table>
-        </div>
+                </table>
+              </div>
+            </div>
 
+        </div>
       </div>
 
     </div>

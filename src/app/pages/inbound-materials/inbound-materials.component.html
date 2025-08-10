@@ -27,6 +27,15 @@
               <i class="material-icons">assessment</i>
               Tải Report
             </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="clearMockData(); $event.preventDefault()">
+              <i class="material-icons">cleaning_services</i>
+              Xóa dữ liệu mẫu
+            </a>
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="clearAllData(); $event.preventDefault()">
+              <i class="material-icons">delete_sweep</i>
+              Xóa tất cả
+            </a>
           </div>
         </div>
         
@@ -52,6 +61,20 @@
           <i class="material-icons">refresh</i>
           Refresh
         </button>
+        
+        <button class="custom-btn" 
+                [class.active]="selectedFactory === 'ASM1'"
+                (click)="filterByASM1()">
+          <i class="material-icons">filter_1</i>
+          ASM1
+        </button>
+        
+        <button class="custom-btn" 
+                [class.active]="selectedFactory === 'ASM2'"
+                (click)="filterByASM2()">
+          <i class="material-icons">filter_2</i>
+          ASM2
+        </button>
       </div>
     </div>
     
@@ -60,6 +83,7 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th>Factory</th>
             <th class="row-header">#</th>
             <th>Ngày nhập</th>
             <th>Lô Hàng/ DNNK</th>
@@ -85,6 +109,11 @@
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index" 
               [class.received-row]="material.isReceived">
+            <td class="factory-cell" 
+                [class.factory-asm1]="(material.factory || 'ASM1') === 'ASM1'"
+                [class.factory-asm2]="(material.factory || 'ASM1') === 'ASM2'">
+              {{material.factory || 'ASM1'}}
+            </td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
             <td [class]="getBatchNumberClass(material, i)">{{material.batchNumber}}</td>
@@ -99,14 +128,13 @@
                         </div>
                       </td>
             <td>{{material.type}}</td>
-                                              <td class="date-cell">
+            <td class="date-cell">
               <input type="date" 
                      class="date-input" 
-                     [(ngModel)]="material.expiryDate" 
-                     (change)="updateExpiryDate(material)"
                      [value]="material.expiryDate ? (material.expiryDate | date:'yyyy-MM-dd') : ''"
+                     (change)="onExpiryDateChange(material, $event)"
                      placeholder=""
-                     title=" ">
+                     title="">
             </td>
             <td class="status-cell">
               <mat-checkbox [checked]="material.qualityCheck" 

@@ -106,6 +106,7 @@ export enum WorkOrderStatus {
   WAITING = 'waiting',
   KITTING = 'kitting',
   READY = 'ready',
+  TRANSFER = 'transfer',
   DONE = 'done',
   DELAY = 'delay'
 } 

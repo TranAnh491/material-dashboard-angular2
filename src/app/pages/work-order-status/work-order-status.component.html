@@ -99,6 +99,7 @@
                   </div>
                 </div>
               </div>
+
               <div class="col-lg-2 col-md-4 col-sm-6">
                 <div class="card card-stats compact-stats summary-card">
                   <div class="card-header">
@@ -169,6 +170,11 @@
                           style="color: #f44336; border: none;">
                     <i class="material-icons">delete</i> XÓA
                   </button>
+                  <button class="btn btn-outline-primary" 
+                          (click)="openScanDialog()"
+                          style="color: #2196f3; border: none; margin-left: 10px;">
+                    <i class="material-icons">qr_code_scanner</i> SCAN
+                  </button>
                 </div>
               </div>
             </div>
@@ -218,6 +224,7 @@
                             <mat-option value="waiting">Waiting</mat-option>
                             <mat-option value="kitting">Kitting</mat-option>
                             <mat-option value="ready">Ready</mat-option>
+                            <mat-option value="transfer">Transfer</mat-option>
                             <mat-option value="done">Done</mat-option>
                             <mat-option value="delay">Delay</mat-option>
                           </mat-select>
@@ -373,7 +380,8 @@
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 13.33px; font-weight: normal;">Hoàn thành</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 13.33px; font-weight: normal;">Mã TP VN</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 85px; font-size: 13.33px; font-weight: normal;">LSX</th>
-                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 13.33px; font-weight: normal;">Lượng sản phẩm</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 13.33px; font-weight: normal;">Print</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">Lượng sản phẩm</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">Khách hàng</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 25px; font-size: 13.33px; font-weight: normal;">Gấp</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">Ngày Giao NVL</th>
@@ -408,6 +416,14 @@
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productionOrder}}</td>
+                          <td style="text-align: center; vertical-align: middle;">
+                            <button class="print-qr-btn" 
+                                    (click)="generateQRCode(wo)" 
+                                    title="In QR Code">
+                              <i class="material-icons">print</i>
+                              Print
+                            </button>
+                          </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.quantity | number}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.customer}}</td>
                                                     <td style="text-align: center; vertical-align: middle;">
@@ -465,6 +481,7 @@
                               <option value="waiting">Waiting</option>
                               <option value="kitting">Kitting</option>
                               <option value="ready">Ready</option>
+                              <option value="transfer">Transfer</option>
                               <option value="done">Done</option>
                               <option value="delay">Delay</option>
                             </select>
@@ -734,5 +751,62 @@
     </div>
   </div>
 
+  <!-- Scan QR Code Dialog -->
+  <div class="modal-overlay" *ngIf="showScanDialog" (click)="closeScanDialog()">
+    <div class="modal-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h4><mat-icon>qr_code_scanner</mat-icon> Scan QR Code LSX</h4>
+        <button class="close-button" (click)="closeScanDialog()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>QR Code Data:</label>
+          <textarea 
+            [(ngModel)]="scannedQRData" 
+            placeholder="Nhập hoặc paste QR code data từ tem LSX..."
+            rows="3" 
+            class="form-control"
+            style="width: 100%; font-family: monospace;"
+          ></textarea>
+        </div>
+        
+        <div class="form-group">
+          <button 
+            mat-raised-button 
+            color="primary" 
+            (click)="processScannedQRCode(scannedQRData)"
+            [disabled]="!scannedQRData.trim() || isScanning"
+            style="width: 100%;"
+          >
+            <mat-icon>qr_code_scanner</mat-icon>
+            <span *ngIf="!isScanning">Scan QR Code</span>
+            <span *ngIf="isScanning">Đang xử lý...</span>
+          </button>
+        </div>
+
+        <div class="scan-result" *ngIf="scanResult" style="margin-top: 15px;">
+          <div class="alert" [class]="scanResult.includes('❌') ? 'alert-danger' : 'alert-success'">
+            <pre style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{scanResult}}</pre>
+          </div>
+        </div>
+
+        <div class="scan-info" style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+          <h6><mat-icon>info</mat-icon> Hướng dẫn Scan:</h6>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li><strong>Scan lần 1:</strong> Waiting → Kitting</li>
+            <li><strong>Scan lần 2:</strong> Kitting → Ready</li>
+            <li><strong>Scan lần 3:</strong> Ready → Transfer</li>
+            <li><strong>Scan lần 4:</strong> Transfer → Done</li>
+            <li><strong>Scan lần 5:</strong> Không thể scan (đã Done)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button mat-raised-button (click)="closeScanDialog()">
+          <mat-icon>close</mat-icon> Đóng
+        </button>
+      </div>
+    </div>
+  </div>
 
 </div>

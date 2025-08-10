@@ -8,6 +8,7 @@ import * as QRCode from 'qrcode';
 
 export interface InboundMaterial {
   id?: string;
+  factory?: string; // Factory identifier (ASM1, ASM2, etc.)
   importDate: Date;
   batchNumber: string;
   materialCode: string;
@@ -16,7 +17,7 @@ export interface InboundMaterial {
   unit: string;
   location: string;
   type: string;
-  expiryDate: Date;
+  expiryDate: Date | null;
   qualityCheck: boolean; // Changed to boolean for Tick/No
   isReceived: boolean;
   notes: string;
@@ -41,6 +42,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   
+  // Factory filter
+  selectedFactory: string = '';
+  availableFactories: string[] = ['ASM1', 'ASM2'];
+  
   // Time range filter
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -61,6 +66,9 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // Comment out mock data loading - user can import real data instead
+    // this.loadMockData();
+    // Enable Firebase loading to sync with imported data
     this.loadMaterialsFromFirebase();
     // Set default date range to include all data
     this.startDate = new Date(2020, 0, 1);
@@ -78,6 +86,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     // Mock data for demonstration
     this.materials = [
       {
+        factory: 'ASM1',
         importDate: new Date('2024-01-15'),
         batchNumber: 'BATCH001',
         materialCode: 'MAT001',
@@ -96,6 +105,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         isCompleted: true
       },
       {
+        factory: 'ASM2',
         importDate: new Date('2024-01-16'),
         batchNumber: 'BATCH002',
         materialCode: 'MAT002',
@@ -114,6 +124,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         isCompleted: false
       },
       {
+        factory: 'ASM1',
         importDate: new Date('2024-01-17'),
         batchNumber: 'BATCH003',
         materialCode: 'MAT003',
@@ -132,6 +143,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         isCompleted: true
       },
       {
+        factory: 'ASM2',
         importDate: new Date('2024-01-18'),
         batchNumber: 'BATCH004',
         materialCode: 'MAT004',
@@ -150,6 +162,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         isCompleted: false
       },
       {
+        factory: 'ASM1',
         importDate: new Date('2024-01-19'),
         batchNumber: 'BATCH005',
         materialCode: 'MAT005',
@@ -203,6 +216,13 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
       const materials = this.parseExcelData(data);
       console.log('Parsed materials:', materials);
       
+      // Add to local materials array immediately for UI update
+      this.materials = [...this.materials, ...materials];
+      console.log('Updated local materials:', this.materials.length);
+      
+      // Apply filters to refresh UI
+      this.applyFilters();
+      
       // Save to Firebase (placeholder)
       await this.saveToFirebase(materials);
       
@@ -245,6 +265,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
 
   private parseExcelData(data: any[]): InboundMaterial[] {
     return data.map((row: any, index: number) => ({
+      factory: row['Factory'] || 'ASM1', // Default to ASM1 if not specified
       importDate: this.parseDate(row['Ngày nhập']),
       batchNumber: row['Lô Hàng/ DNNK'] || '',
       materialCode: row['Mã hàng'] || '',
@@ -266,8 +287,8 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     }));
   }
 
-  private parseDate(dateStr: string): Date {
-    if (!dateStr) return new Date();
+  private parseDate(dateStr: string): Date | null {
+    if (!dateStr || dateStr.trim() === '') return null;
     
     // Handle DD/MM/YYYY format
     if (typeof dateStr === 'string' && dateStr.includes('/')) {
@@ -293,9 +314,10 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
   downloadTemplate(): void {
     console.log('Download template');
     
-    // Create template data with proper headers
+    // Create template data with proper headers (including Factory)
     const templateData = [
       {
+        'Factory': 'ASM1',
         'Ngày nhập': '15/01/2024',
         'Lô Hàng/ DNNK': 'BATCH001',
         'Mã hàng': 'MAT001',
@@ -314,6 +336,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         'Trạng thái': 'Rồi'
       },
       {
+        'Factory': 'ASM2',
         'Ngày nhập': '16/01/2024',
         'Lô Hàng/ DNNK': 'BATCH002',
         'Mã hàng': 'MAT002',
@@ -322,13 +345,32 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         'Đơn vị': 'pcs',
         'Vị trí': 'B2',
         'Loại hình': 'Component',
-        'HSD': '31/12/2024',
+        'HSD': '', // Có thể để trống
         'KK': 'No', // Example of No
         'Đã nhận': 'No',
         'Ghi chú': 'Missing 2 items - need replacement',
         'Số cuộn/ bịch': '25 bags',
         'Nhà cung cấp': 'Supplier B',
         'Lưu ý': 'Check quality before acceptance - some items damaged',
+        'Trạng thái': 'Chưa'
+      },
+      {
+        'Factory': 'ASM1',
+        'Ngày nhập': '17/01/2024',
+        'Lô Hàng/ DNNK': 'BATCH003',
+        'Mã hàng': 'MAT003',
+        'Số P.O': 'PO2024003',
+        'Lượng Nhập': 75,
+        'Đơn vị': 'kg',
+        'Vị trí': 'C3',
+        'Loại hình': 'Raw Material',
+        'HSD': '', // HSD để trống - không có hạn sử dụng
+        'KK': 'Yes',
+        'Đã nhận': 'No',
+        'Ghi chú': 'Material không có HSD',
+        'Số cuộn/ bịch': '15',
+        'Nhà cung cấp': 'Supplier C',
+        'Lưu ý': 'Material không có hạn sử dụng',
         'Trạng thái': 'Chưa'
       }
     ];
@@ -436,6 +478,14 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
         }
       }
       
+      // Filter by factory
+      if (this.selectedFactory) {
+        const materialFactory = material.factory || 'ASM1'; // Default to ASM1 if not set
+        if (materialFactory !== this.selectedFactory) {
+          return false;
+        }
+      }
+      
       // Filter by date range
       const importDate = new Date(material.importDate);
       const isInDateRange = importDate >= this.startDate && importDate <= this.endDate;
@@ -457,6 +507,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     this.startDate = new Date(2020, 0, 1); // From 2020
     this.endDate = new Date(2030, 11, 31); // To 2030
     this.showCompleted = true;
+    this.selectedFactory = ''; // Reset factory filter to show all
     this.applyFilters();
     this.showTimeRangeDialog = false;
     
@@ -484,6 +535,50 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     this.applyFilters();
   }
 
+  // Filter by ASM1
+  filterByASM1(): void {
+    console.log('Filtering by ASM1...');
+    this.selectedFactory = 'ASM1';
+    this.applyFilters();
+  }
+
+  // Filter by ASM2
+  filterByASM2(): void {
+    console.log('Filtering by ASM2...');
+    this.selectedFactory = 'ASM2';
+    this.applyFilters();
+  }
+
+  // Clear all data
+  clearAllData(): void {
+    if (confirm('⚠️ Bạn có chắc chắn muốn xóa tất cả dữ liệu? Hành động này không thể hoàn tác!')) {
+      this.materials = [];
+      this.filteredMaterials = [];
+      console.log('All data cleared');
+      alert('✅ Đã xóa tất cả dữ liệu thành công!');
+    }
+  }
+
+  // Clear only mock data (keep Firebase/imported data)
+  clearMockData(): void {
+    const mockMaterialCodes = ['MAT001', 'MAT002', 'MAT003', 'MAT004', 'MAT005'];
+    const beforeCount = this.materials.length;
+    
+    this.materials = this.materials.filter(material => 
+      !mockMaterialCodes.includes(material.materialCode)
+    );
+    
+    this.applyFilters();
+    const removedCount = beforeCount - this.materials.length;
+    
+    if (removedCount > 0) {
+      console.log(`Removed ${removedCount} mock materials`);
+      alert(`✅ Đã xóa ${removedCount} mẫu dữ liệu thành công!`);
+    } else {
+      alert('ℹ️ Không tìm thấy dữ liệu mẫu để xóa.');
+    }
+  }
+
   // Load user permissions
   loadPermissions(): void {
     // TODO: Load from UserPermissionService
@@ -498,16 +593,35 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
-        this.materials = actions.map(action => {
+        const firebaseMaterials = actions.map(action => {
           const data = action.payload.doc.data() as any;
           const id = action.payload.doc.id;
           return {
             id: id,
             ...data,
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
-            expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date()
+            expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : null
           };
         });
+        
+        // Merge Firebase data with existing materials (don't replace mock data)
+        if (firebaseMaterials.length > 0) {
+          // Filter out duplicates based on materialCode and poNumber
+          const existingKeys = new Set(this.materials.map(m => `${m.materialCode}-${m.poNumber}`));
+          const newMaterials = firebaseMaterials.filter(fm => 
+            !existingKeys.has(`${fm.materialCode}-${fm.poNumber}`)
+          );
+          
+          this.materials = [...this.materials, ...newMaterials];
+          console.log('Firebase data merged:', {
+            existing: this.materials.length - newMaterials.length,
+            new: newMaterials.length,
+            total: this.materials.length
+          });
+        } else {
+          console.log('No Firebase data, keeping existing materials');
+        }
+        
         this.applyFilters();
         console.log('Loaded materials from Firebase:', this.materials.length);
       });
@@ -548,6 +662,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     
     // Create inventory material from inbound material
     const inventoryMaterial = {
+      factory: material.factory || 'ASM1', // Include factory from inbound material
       importDate: material.importDate,
       receivedDate: new Date(), // Ngày nhập vào inventory (khi tick đã nhận)
       batchNumber: material.batchNumber,
@@ -647,6 +762,20 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Handle expiry date change event
+  onExpiryDateChange(material: InboundMaterial, event: any): void {
+    const selectedDate = event.target.value;
+    console.log(`Date input changed for ${material.materialCode}: ${selectedDate}`);
+    
+    if (selectedDate) {
+      material.expiryDate = new Date(selectedDate);
+    } else {
+      material.expiryDate = null;
+    }
+    
+    this.updateExpiryDate(material);
+  }
+
   // Update expiry date
   updateExpiryDate(material: InboundMaterial): void {
     material.updatedAt = new Date();
@@ -744,7 +873,8 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private formatDate(date: Date): string {
+  private formatDate(date: Date | null): string {
+    if (!date) return '';
     return date.toLocaleDateString('vi-VN', {
       day: '2-digit',
       month: '2-digit',

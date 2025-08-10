@@ -685,6 +685,14 @@ html, body {
   }
 }
 
+.status-transfer {
+  background-color: #fff3e0;
+  
+  &:hover {
+    background-color: #ffe0b2;
+  }
+}
+
 .status-done {
   background-color: #e8f5e8;
   
@@ -2543,6 +2551,97 @@ textarea.mat-input-element {
 // Red text class for missing materials
 .red-text {
   color: #ff0000 !important;
+}
+
+// Print QR button styles
+.print-qr-btn {
+  background: #ffffff !important;
+  border: 2px solid #4caf50 !important; // Green border for print action
+  color: #000000 !important;
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.3s ease !important;
+  width: 100% !important;
+  justify-content: center !important;
+  
+  .material-icons {
+    font-size: 16px !important;
+    color: #000000 !important;
+  }
+    
+  &:hover {
+    background: #f1f8e9 !important;
+    border-color: #388e3c !important;
+    color: #000000 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+  }
+  
+  &:focus, &:active {
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
+  }
+}
+
+// Scan Dialog Styles
+.scan-result {
+  .alert {
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid;
+    
+    &.alert-success {
+      background-color: #d4edda;
+      border-color: #c3e6cb;
+      color: #155724;
+    }
+    
+    &.alert-danger {
+      background-color: #f8d7da;
+      border-color: #f5c6cb;
+      color: #721c24;
+    }
+    
+    pre {
+      font-family: inherit;
+      margin: 0;
+      white-space: pre-wrap;
+    }
+  }
+}
+
+.scan-info {
+  h6 {
+    margin: 0 0 8px 0;
+    color: #495057;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    mat-icon {
+      color: #2196f3;
+      font-size: 18px;
+    }
+  }
+  
+  ul {
+    li {
+      margin-bottom: 4px;
+      font-size: 13px;
+      color: #6c757d;
+      
+      strong {
+        color: #495057;
+      }
+    }
+  }
 }
 
 
