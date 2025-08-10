@@ -218,12 +218,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
-  loadWorkOrders(): void {
+  async loadWorkOrders(): Promise<void> {
     console.log('🔄 Loading work orders from database...');
     
     // Always try fallback first for better reliability in production
     console.log('📄 Using direct Firestore methods for better reliability');
-    this.loadWorkOrdersDirect();
+    await this.loadWorkOrdersDirect();
   }
   
   private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
@@ -610,22 +610,32 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     };
   }
 
-  updateWorkOrderStatus(workOrder: WorkOrder, newStatus: WorkOrderStatus): void {
-    const updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: new Date() };
-    
-    this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder)
-      .then(() => {
-        // Update local array
-        const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
-        if (index !== -1) {
-          this.workOrders[index] = { ...this.workOrders[index], ...updatedWorkOrder };
-          this.applyFilters();
-          this.calculateSummary();
-        }
-      })
-      .catch(error => {
-        console.error('Error updating work order status:', error);
+  async updateWorkOrderStatus(workOrder: WorkOrder, newStatus: WorkOrderStatus): Promise<void> {
+    try {
+      const updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: new Date() };
+      
+      console.log('🔄 Updating work order status:', {
+        id: workOrder.id,
+        oldStatus: workOrder.status,
+        newStatus: newStatus
       });
+      
+      await this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder);
+      
+      // Update local array
+      const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
+      if (index !== -1) {
+        this.workOrders[index] = { ...this.workOrders[index], ...updatedWorkOrder };
+        this.applyFilters();
+        this.calculateSummary();
+        console.log('✅ Local work order status updated successfully');
+      }
+      
+      console.log('✅ Work order status updated in Firebase successfully');
+    } catch (error) {
+      console.error('❌ Error updating work order status:', error);
+      throw error; // Re-throw to handle in calling method
+    }
   }
 
   updateWorkOrder(workOrder: WorkOrder, field: string, value: any): void {
@@ -2744,6 +2754,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           console.log('✅ QR Code detected:', decodedText);
           this.scannedQRData = decodedText;
           this.scanResult = '✅ QR Code quét thành công! Nhấn "Scan QR Code" để xử lý.';
+          console.log('📱 QR Code data captured, stopping camera scanner...');
           this.stopCameraScanner();
         },
         (errorMessage: string) => {
@@ -2789,12 +2800,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   async processScannedQRCode(qrData: string): Promise<void> {
+    console.log('🔍 Starting to process scanned QR code:', qrData);
+    
     // Stop camera if in camera mode
     if (this.scanMode === 'camera') {
+      console.log('📷 Stopping camera scanner...');
       this.stopCameraScanner();
     }
 
     if (!qrData || !qrData.trim()) {
+      console.log('❌ QR data is empty or invalid');
       if (this.scanMode === 'camera') {
         this.scanResult = '❌ Vui lòng quét QR code bằng camera trước.';
       } else {
@@ -2808,30 +2823,47 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       this.scanResult = 'Đang xử lý...';
       
       // Parse QR data to find LSX (Production Order)
+      console.log('🔍 Parsing QR data for LSX pattern...');
       const lsxMatch = qrData.match(/LSX:\s*([^\s]+)/);
       if (!lsxMatch) {
+        console.log('❌ No LSX pattern found in QR data:', qrData);
         this.scanResult = '❌ QR code không hợp lệ. Không tìm thấy LSX.';
         return;
       }
 
       const lsx = lsxMatch[1];
-      console.log('🔍 Tìm thấy LSX:', lsx);
+      console.log('✅ LSX extracted successfully:', lsx);
 
       // Find work order by LSX
+      console.log('🔍 Searching for work order with LSX:', lsx);
+      console.log('🔍 Available work orders:', this.workOrders.map(wo => ({ id: wo.id, lsx: wo.productionOrder, status: wo.status })));
+      
       const workOrder = this.workOrders.find(wo => wo.productionOrder === lsx);
       if (!workOrder) {
+        console.log('❌ No work order found with LSX:', lsx);
         this.scanResult = `❌ Không tìm thấy Work Order với LSX: ${lsx}`;
         return;
       }
 
-      console.log('📋 Tìm thấy Work Order:', workOrder);
+      console.log('✅ Work order found:', {
+        id: workOrder.id,
+        orderNumber: workOrder.orderNumber,
+        productionOrder: workOrder.productionOrder,
+        status: workOrder.status,
+        productCode: workOrder.productCode
+      });
 
       // Get current user info
       const user = await this.afAuth.currentUser;
       const currentUser = user ? user.email || user.uid : 'UNKNOWN';
       const scanTime = new Date();
+      
+      console.log('👤 Current user:', currentUser);
+      console.log('⏰ Scan time:', scanTime);
 
       // Determine next status based on current status
+      console.log('🔄 Current work order status:', workOrder.status);
+      
       let newStatus: WorkOrderStatus;
       let statusDescription: string;
 
@@ -2853,6 +2885,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           statusDescription = 'Done';
           break;
         case WorkOrderStatus.DONE:
+          console.log('✅ Work order already completed, cannot scan further');
           this.scanResult = `✅ Work Order đã hoàn thành (Done). Không thể scan thêm.`;
           return;
         case WorkOrderStatus.DELAY:
@@ -2863,17 +2896,42 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           newStatus = WorkOrderStatus.KITTING;
           statusDescription = 'Kitting';
       }
+      
+      console.log('🔄 Status transition:', workOrder.status, '→', newStatus, '(', statusDescription, ')');
 
+      console.log('🔄 Updating work order status from', workOrder.status, 'to', newStatus);
+      
       // Update work order status
-      await this.updateWorkOrderStatus(workOrder, newStatus);
+      try {
+        await this.updateWorkOrderStatus(workOrder, newStatus);
+        console.log('✅ Work order status updated successfully');
+      } catch (error) {
+        console.error('❌ Failed to update work order status:', error);
+        this.scanResult = `❌ Lỗi khi cập nhật trạng thái: ${error.message || error}`;
+        return;
+      }
 
       // Log scan activity
-      await this.logScanActivity(lsx, currentUser, scanTime, workOrder.status, newStatus);
+      try {
+        await this.logScanActivity(lsx, currentUser, scanTime, workOrder.status, newStatus);
+        console.log('✅ Scan activity logged successfully');
+      } catch (error) {
+        console.error('❌ Failed to log scan activity:', error);
+        // Don't fail the scan if logging fails
+      }
 
       this.scanResult = `✅ Scan thành công!\nLSX: ${lsx}\nTrạng thái: ${workOrder.status} → ${statusDescription}\nNhân viên: ${currentUser}\nThời gian: ${scanTime.toLocaleString('vi-VN')}`;
 
+      console.log('✅ Scan completed successfully. Refreshing work orders...');
+      
       // Refresh work orders to show updated status
-      this.loadWorkOrders();
+      try {
+        await this.loadWorkOrders();
+        console.log('✅ Work orders refreshed after scan');
+      } catch (error) {
+        console.error('❌ Failed to refresh work orders:', error);
+        // Don't fail the scan if refresh fails
+      }
 
     } catch (error) {
       console.error('❌ Lỗi khi xử lý QR code:', error);
@@ -2894,13 +2952,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         timestamp: new Date()
       };
 
-      // Save to Firestore
-      const db = getFirestore();
-      await addDoc(collection(db, 'scan_logs'), scanLog);
+      console.log('📝 Saving scan log to Firestore:', scanLog);
+
+      // Save to Firestore using AngularFirestore (compat version)
+      await this.firestore.collection('scan_logs').add(scanLog);
       
-      console.log('📝 Đã lưu log scan:', scanLog);
+      console.log('✅ Scan log saved successfully to Firestore');
     } catch (error) {
       console.error('❌ Lỗi khi lưu log scan:', error);
+      throw error; // Re-throw to handle in calling method
     }
   }
 }
