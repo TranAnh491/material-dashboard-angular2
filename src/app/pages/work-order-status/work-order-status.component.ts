@@ -5,6 +5,7 @@ import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -90,6 +91,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   scannedQRData: string = '';
   scanResult: string = '';
   isScanning: boolean = false;
+  scanMode: 'text' | 'camera' = 'text';
+  qrScanner: any = null;
   
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
@@ -152,6 +155,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.stopCameraScanner();
   }
 
   selectFunction(functionName: string): void {
@@ -2647,10 +2651,28 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   // Scan functionality methods
   openScanDialog(): void {
+    console.log('🔍 Opening scan dialog...');
     this.showScanDialog = true;
+    this.scanMode = 'camera'; // Default to camera mode
     this.scannedQRData = '';
     this.scanResult = '';
     this.isScanning = false;
+    
+    console.log('📷 Scan mode set to camera, waiting for DOM...');
+    
+    // Start camera after a short delay to ensure DOM is ready
+    setTimeout(() => {
+      console.log('📷 DOM ready, checking camera availability...');
+      this.checkCameraAvailability().then(hasCamera => {
+        if (hasCamera) {
+          console.log('✅ Camera available, starting scanner...');
+          this.startCameraScanner();
+        } else {
+          console.log('❌ Camera not available');
+          this.scanResult = '❌ Không tìm thấy camera. Vui lòng kiểm tra quyền truy cập camera.';
+        }
+      });
+    }, 200);
   }
 
   closeScanDialog(): void {
@@ -2658,9 +2680,129 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     this.scannedQRData = '';
     this.scanResult = '';
     this.isScanning = false;
+    this.stopCameraScanner();
+  }
+
+  setScanMode(mode: 'text' | 'camera'): void {
+    // Stop current camera if switching modes
+    if (this.scanMode === 'camera') {
+      this.stopCameraScanner();
+    }
+    
+    this.scanMode = mode;
+    this.scannedQRData = '';
+    this.scanResult = '';
+    
+    if (mode === 'camera') {
+      // Check camera availability first
+      this.checkCameraAvailability().then(hasCamera => {
+        if (hasCamera) {
+          // Small delay to ensure previous camera is stopped
+          setTimeout(() => {
+            this.startCameraScanner();
+          }, 100);
+        } else {
+          this.scanResult = '❌ Không tìm thấy camera. Vui lòng kiểm tra quyền truy cập camera.';
+        }
+      });
+    }
+  }
+
+  private async startCameraScanner(): Promise<void> {
+    try {
+      console.log('🔍 Starting camera scanner...');
+      
+      if (this.qrScanner) {
+        this.stopCameraScanner();
+      }
+
+      // Check if element exists
+      const qrReaderElement = document.getElementById('qr-reader');
+      if (!qrReaderElement) {
+        console.error('❌ QR reader element not found');
+        this.scanResult = '❌ Lỗi: Không tìm thấy element camera. Vui lòng thử lại.';
+        return;
+      }
+
+      console.log('✅ QR reader element found, initializing scanner...');
+      this.qrScanner = new Html5Qrcode("qr-reader");
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      this.scanResult = '📷 Đang khởi động camera...';
+      console.log('📷 Starting camera with config:', config);
+
+      await this.qrScanner.start(
+        { facingMode: "environment" }, // Use back camera
+        config,
+        (decodedText: string) => {
+          // Success callback
+          console.log('✅ QR Code detected:', decodedText);
+          this.scannedQRData = decodedText;
+          this.scanResult = '✅ QR Code quét thành công! Nhấn "Scan QR Code" để xử lý.';
+          this.stopCameraScanner();
+        },
+        (errorMessage: string) => {
+          // Error callback - ignore errors during scanning
+          console.log('📷 Camera scan error (ignored):', errorMessage);
+        }
+      );
+
+      console.log('✅ Camera started successfully');
+      this.scanResult = '📷 Camera đã sẵn sàng! Đặt QR code vào khung hình để quét.';
+    } catch (error) {
+      console.error('❌ Error starting camera scanner:', error);
+      this.scanResult = '❌ Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera và đảm bảo trình duyệt hỗ trợ.';
+    }
+  }
+
+  private stopCameraScanner(): void {
+    if (this.qrScanner) {
+      try {
+        this.qrScanner.stop().then(() => {
+          this.qrScanner = null;
+        }).catch((error: any) => {
+          console.error('❌ Error stopping camera scanner:', error);
+        });
+      } catch (error) {
+        console.error('❌ Error stopping camera scanner:', error);
+      }
+    }
+  }
+
+  private async checkCameraAvailability(): Promise<boolean> {
+    try {
+      console.log('🔍 Checking camera availability...');
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      console.log('📷 Found video devices:', videoDevices.length);
+      console.log('📷 Video devices:', videoDevices);
+      return videoDevices.length > 0;
+    } catch (error) {
+      console.error('❌ Error checking camera availability:', error);
+      return false;
+    }
   }
 
   async processScannedQRCode(qrData: string): Promise<void> {
+    // Stop camera if in camera mode
+    if (this.scanMode === 'camera') {
+      this.stopCameraScanner();
+    }
+
+    if (!qrData || !qrData.trim()) {
+      if (this.scanMode === 'camera') {
+        this.scanResult = '❌ Vui lòng quét QR code bằng camera trước.';
+      } else {
+        this.scanResult = '❌ Vui lòng nhập hoặc quét QR code data.';
+      }
+      return;
+    }
+
     try {
       this.isScanning = true;
       this.scanResult = 'Đang xử lý...';

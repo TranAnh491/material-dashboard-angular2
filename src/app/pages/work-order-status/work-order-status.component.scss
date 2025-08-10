@@ -2589,6 +2589,55 @@ textarea.mat-input-element {
 }
 
 // Scan Dialog Styles
+.scan-mode-toggle {
+  .btn-group {
+    .btn {
+      border: 1px solid #2196f3;
+      color: #2196f3;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        background-color: #e3f2fd;
+      }
+      
+      &.active {
+        background-color: #2196f3;
+        color: white;
+        border-color: #2196f3;
+      }
+      
+      &:first-child {
+        border-right: none;
+      }
+      
+      &:last-child {
+        border-left: none;
+      }
+    }
+  }
+}
+
+#qr-reader {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f8f9fa;
+  
+  video {
+    width: 100%;
+    height: auto;
+  }
+  
+  // Custom styling for html5-qrcode elements
+  .html5-qrcode-element {
+    border: none !important;
+  }
+  
+  .html5-qrcode-element video {
+    border-radius: 6px;
+  }
+}
+
 .scan-result {
   .alert {
     padding: 12px;

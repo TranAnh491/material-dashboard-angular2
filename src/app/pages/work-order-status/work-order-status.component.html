@@ -758,31 +758,67 @@
         <h4><mat-icon>qr_code_scanner</mat-icon> Scan QR Code LSX</h4>
         <button class="close-button" (click)="closeScanDialog()">×</button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>QR Code Data:</label>
-          <textarea 
-            [(ngModel)]="scannedQRData" 
-            placeholder="Nhập hoặc paste QR code data từ tem LSX..."
-            rows="3" 
-            class="form-control"
-            style="width: 100%; font-family: monospace;"
-          ></textarea>
-        </div>
-        
-        <div class="form-group">
-          <button 
-            mat-raised-button 
-            color="primary" 
-            (click)="processScannedQRCode(scannedQRData)"
-            [disabled]="!scannedQRData.trim() || isScanning"
-            style="width: 100%;"
-          >
-            <mat-icon>qr_code_scanner</mat-icon>
-            <span *ngIf="!isScanning">Scan QR Code</span>
-            <span *ngIf="isScanning">Đang xử lý...</span>
-          </button>
-        </div>
+                        <div class="modal-body">
+                    <!-- Scan Mode Toggle -->
+                    <div class="form-group text-center mb-3 scan-mode-toggle">
+                      <div class="btn-group" role="group">
+                        <button 
+                          type="button" 
+                          class="btn btn-outline-primary" 
+                          [class.active]="scanMode === 'text'"
+                          (click)="setScanMode('text')"
+                          style="border-radius: 20px 0 0 20px;"
+                        >
+                          <mat-icon>keyboard</mat-icon> Nhập Text
+                        </button>
+                        <button 
+                          type="button" 
+                          class="btn btn-outline-primary" 
+                          [class.active]="scanMode === 'camera'"
+                          (click)="setScanMode('camera')"
+                          style="border-radius: 0 20px 20px 0;"
+                        >
+                          <mat-icon>camera_alt</mat-icon> Quét Camera
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Text Input Mode -->
+                    <div class="form-group" *ngIf="scanMode === 'text'">
+                      <label>QR Code Data:</label>
+                      <textarea 
+                        [(ngModel)]="scannedQRData" 
+                        placeholder="Nhập hoặc paste QR code data từ tem LSX..."
+                        rows="3" 
+                        class="form-control"
+                        style="width: 100%; font-family: monospace;"
+                      ></textarea>
+                    </div>
+
+                    <!-- Camera Scan Mode -->
+                    <div class="form-group" *ngIf="scanMode === 'camera'">
+                      <div id="qr-reader" style="width: 100%; min-height: 350px; margin-top: 10px;"></div>
+                      <div class="text-center mt-2">
+                        <small class="text-muted">
+                          <mat-icon>info</mat-icon>
+                          Đặt QR code vào khung hình để quét tự động
+                        </small>
+                      </div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <button 
+                        mat-raised-button 
+                        color="primary" 
+                        (click)="processScannedQRCode(scannedQRData)"
+                        [disabled]="isScanning"
+                        style="width: 100%;"
+                      >
+                        <mat-icon>qr_code_scanner</mat-icon>
+                        <span *ngIf="!isScanning">Scan QR Code</span>
+                        <span *ngIf="isScanning">Đang xử lý...</span>
+                      </button>
+                    </div>
 
         <div class="scan-result" *ngIf="scanResult" style="margin-top: 15px;">
           <div class="alert" [class]="scanResult.includes('❌') ? 'alert-danger' : 'alert-success'">
