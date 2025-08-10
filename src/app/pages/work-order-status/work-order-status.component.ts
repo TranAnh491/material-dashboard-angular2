@@ -2920,7 +2920,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         // Don't fail the scan if logging fails
       }
 
-      this.scanResult = `✅ Scan thành công!\nLSX: ${lsx}\nTrạng thái: ${workOrder.status} → ${statusDescription}\nNhân viên: ${currentUser}\nThời gian: ${scanTime.toLocaleString('vi-VN')}`;
+      this.scanResult = `✅ Scan thành công!\nLSX: ${lsx}\nTrạng thái: ${workOrder.status} → ${newStatus}\nNhân viên: ${currentUser}\nThời gian: ${scanTime.toLocaleString('vi-VN')}`;
 
       console.log('✅ Scan completed successfully. Refreshing work orders...');
       
