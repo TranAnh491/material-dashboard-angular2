@@ -49,16 +49,17 @@
     </div>
 
     <!-- Settings Dashboard -->
-    <div *ngIf="isAdminLoggedIn" class="settings-container">
-      <!-- Settings Header -->
-      <div class="settings-header">
+    <div *ngIf="isAdminLoggedIn" class="excel-container">
+      <!-- Excel Header -->
+      <div class="excel-header">
         <h4>⚙️ SETTINGS MANAGEMENT</h4>
       </div>
       
-      <!-- Settings Actions -->
-      <div class="settings-actions">
+      <!-- Excel Actions -->
+      <div class="excel-actions">
         <div class="action-controls">
           <span class="subtitle">Quản lý quyền xóa và truy cập tab cho nhân viên</span>
+          
           <button mat-stroked-button (click)="logout()" class="logout-btn">
             <mat-icon>logout</mat-icon>
             Đăng xuất
@@ -114,12 +115,14 @@
 
         <!-- Firebase Users Section -->
         <div class="firebase-users-section">
-            
             <!-- Unified Header -->
             <div class="section-header-unified">
               <div class="header-title">
                 <mat-icon>account_circle</mat-icon>
                 Danh sách Email đã đăng nhập
+                <span class="user-count" *ngIf="!isLoadingFirebaseUsers">
+                  ({{ firebaseUsers.length }} users)
+                </span>
               </div>
               <div class="header-actions">
                 <button class="custom-btn edit-btn" 
@@ -133,6 +136,14 @@
                         [disabled]="isLoadingFirebaseUsers">
                   <mat-icon>refresh</mat-icon>
                   Làm mới
+                </button>
+                <button class="custom-btn status-btn" (click)="checkFirestoreStatus()">
+                  <i class="material-icons">info</i>
+                  Trạng thái
+                </button>
+                <button class="custom-btn refresh-tabs-btn" (click)="refreshTabPermissions()">
+                  <i class="material-icons">tab</i>
+                  Làm mới Tab Permissions
                 </button>
               </div>
             </div>
@@ -184,9 +195,28 @@
                 <ng-container matColumnDef="email">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Tài khoản</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
-                    <span [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : 'inherit'" 
-                          [style.fontWeight]="user.uid === 'special-steve-uid' ? 'bold' : 'normal'">
-                      {{ getAccountDisplay(user) }}
+                    <div class="account-info" 
+                         [matTooltip]="getAccountTypeLabel(user)"
+                         matTooltipPosition="above">
+                      <span class="account-icon">{{ getAccountTypeIcon(user) }}</span>
+                      <span class="account-text" 
+                            [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : 'inherit'" 
+                            [style.fontWeight]="user.uid === 'special-steve-uid' ? 'bold' : 'normal'">
+                        {{ getAccountDisplay(user) }}
+                      </span>
+                    </div>
+                  </td>
+                </ng-container>
+
+                <!-- Account Type Column -->
+                <ng-container matColumnDef="accountType">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Loại TK</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
+                    <span class="account-type-badge" 
+                          [class.special-account]="user.uid === 'special-steve-uid'"
+                          [class.asp-employee]="user.employeeId"
+                          [class.email-account]="!user.employeeId && user.uid !== 'special-steve-uid'">
+                      {{ getAccountTypeLabel(user) }}
                     </span>
                   </td>
                 </ng-container>

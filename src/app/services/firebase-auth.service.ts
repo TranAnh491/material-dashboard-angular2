@@ -10,6 +10,7 @@ export interface User {
   email: string;
   displayName?: string;
   photoURL?: string;
+  employeeId?: string; // Mã nhân viên ASP
   department?: string;
   factory?: string;
   role?: string;
@@ -84,6 +85,42 @@ export class FirebaseAuthService {
       console.log('✅ Đăng xuất thành công');
     } catch (error) {
       console.error('❌ Đăng xuất thất bại:', error);
+      throw error;
+    }
+  }
+
+  // Xóa tài khoản hoàn toàn (cần quyền admin)
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      console.log(`🗑️ Starting complete deletion of user: ${userId}`);
+      
+      // 1. Xóa từ Firestore collections
+      const batch = this.firestore.firestore.batch();
+      
+      // Xóa từ users collection
+      const userRef = this.firestore.collection('users').doc(userId).ref;
+      batch.delete(userRef);
+      
+      // Xóa từ user-permissions collection
+      const permissionsRef = this.firestore.collection('user-permissions').doc(userId).ref;
+      batch.delete(permissionsRef);
+      
+      // Xóa từ user-tab-permissions collection
+      const tabPermissionsRef = this.firestore.collection('user-tab-permissions').doc(userId).ref;
+      batch.delete(tabPermissionsRef);
+      
+      // Commit Firestore deletions
+      await batch.commit();
+      console.log(`✅ Firestore data deleted for user: ${userId}`);
+      
+      // 2. Xóa từ Firebase Auth (cần admin SDK hoặc user tự xóa)
+      // Note: Để xóa user khỏi Firebase Auth, cần sử dụng Admin SDK
+      // Hoặc user phải tự xóa tài khoản của mình
+      console.log(`⚠️ Note: To completely delete from Firebase Auth, use Admin SDK or user must delete their own account`);
+      
+      console.log(`✅ User deletion completed: ${userId}`);
+    } catch (error) {
+      console.error('❌ Error deleting user:', error);
       throw error;
     }
   }

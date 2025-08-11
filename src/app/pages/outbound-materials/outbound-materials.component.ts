@@ -4,6 +4,7 @@ import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx'; // Added for Excel download
+import { FactoryAccessService } from '../../services/factory-access.service';
 
 export interface OutboundMaterial {
   id?: string;
@@ -61,12 +62,16 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private factoryAccessService: FactoryAccessService
   ) {}
 
   ngOnInit(): void {
     this.loadOutboundMaterialsFromFirebase();
     this.cleanupOldRecords(); // Clean up records older than 6 months
+    
+    // Load factory access and set default factory
+    this.loadFactoryAccess();
   }
 
   ngOnDestroy(): void {
@@ -105,6 +110,28 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     console.log('🏭 Selected factory:', factory);
     this.applyFilters();
     this.showFactoryStockSummary();
+  }
+
+  // Load factory access permissions and set default factory
+  private loadFactoryAccess(): void {
+    this.factoryAccessService.getCurrentUserFactoryAccess()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((access) => {
+        // Update available factories based on user permissions
+        this.availableFactories = access.availableFactories;
+        
+        // Set default factory if user has access
+        if (access.defaultFactory && access.availableFactories.includes(access.defaultFactory)) {
+          this.selectedFactory = access.defaultFactory;
+        } else if (access.availableFactories.length > 0) {
+          this.selectedFactory = access.availableFactories[0];
+        }
+        
+        console.log('🏭 Factory access loaded for Outbound Materials:', {
+          selectedFactory: this.selectedFactory,
+          availableFactories: this.availableFactories
+        });
+      });
   }
 
   // Show factory stock summary

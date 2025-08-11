@@ -12,6 +12,7 @@ import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteD
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
+import { FactoryAccessService } from '../../services/factory-access.service';
 
 @Component({
   selector: 'app-work-order-status',
@@ -86,13 +87,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   hasDeletePermissionValue: boolean = false;
   hasCompletePermissionValue: boolean = false;
   
-  // Scan functionality
-  showScanDialog: boolean = false;
-  scannedQRData: string = '';
-  scanResult: string = '';
-  isScanning: boolean = false;
-  scanMode: 'text' | 'camera' = 'text';
-  qrScanner: any = null;
+  
+
   
   isAddingWorkOrder: boolean = false;
   availableLines: string[] = ['Line 1', 'Line 2', 'Line 3', 'Line 4', 'Line 5'];
@@ -125,7 +121,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private materialService: MaterialLifecycleService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private userPermissionService: UserPermissionService
+    private userPermissionService: UserPermissionService,
+    private factoryAccessService: FactoryAccessService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -146,6 +143,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.loadUserDepartment();
     this.loadDeletePermission();
     
+    // Factory access disabled for work order tab - only applies to materials inventory
+    // this.loadFactoryAccess();
+    
     // Set default function to view
     this.selectedFunction = 'view';
     
@@ -155,7 +155,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this.stopCameraScanner();
   }
 
   selectFunction(functionName: string): void {
@@ -164,6 +163,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   selectFactory(factory: string): void {
+    // Factory access check disabled for work order tab - only applies to materials inventory
+    // Direct factory selection without permission check
     this.selectedFactory = factory;
     console.log('🏭 Selected factory:', factory);
     // Re-apply filters to show only work orders from selected factory
@@ -1992,6 +1993,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return !this.isQADepartment();
   }
 
+  // Load factory access based on user permissions
+  private loadFactoryAccess(): void {
+    // Factory access disabled for work order tab - only applies to materials inventory
+    // This method is kept for compatibility but does nothing
+    console.log('🏭 Factory access disabled for work order tab');
+  }
+
 
 
   // Preview items to be deleted
@@ -2659,308 +2667,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
-  // Scan functionality methods
-  openScanDialog(): void {
-    console.log('🔍 Opening scan dialog...');
-    this.showScanDialog = true;
-    this.scanMode = 'camera'; // Default to camera mode
-    this.scannedQRData = '';
-    this.scanResult = '';
-    this.isScanning = false;
-    
-    console.log('📷 Scan mode set to camera, waiting for DOM...');
-    
-    // Start camera after a short delay to ensure DOM is ready
-    setTimeout(() => {
-      console.log('📷 DOM ready, checking camera availability...');
-      this.checkCameraAvailability().then(hasCamera => {
-        if (hasCamera) {
-          console.log('✅ Camera available, starting scanner...');
-          this.startCameraScanner();
-        } else {
-          console.log('❌ Camera not available');
-          this.scanResult = '❌ Không tìm thấy camera. Vui lòng kiểm tra quyền truy cập camera.';
-        }
-      });
-    }, 200);
-  }
 
-  closeScanDialog(): void {
-    this.showScanDialog = false;
-    this.scannedQRData = '';
-    this.scanResult = '';
-    this.isScanning = false;
-    this.stopCameraScanner();
-  }
 
-  setScanMode(mode: 'text' | 'camera'): void {
-    // Stop current camera if switching modes
-    if (this.scanMode === 'camera') {
-      this.stopCameraScanner();
-    }
-    
-    this.scanMode = mode;
-    this.scannedQRData = '';
-    this.scanResult = '';
-    
-    if (mode === 'camera') {
-      // Check camera availability first
-      this.checkCameraAvailability().then(hasCamera => {
-        if (hasCamera) {
-          // Small delay to ensure previous camera is stopped
-          setTimeout(() => {
-            this.startCameraScanner();
-          }, 100);
-        } else {
-          this.scanResult = '❌ Không tìm thấy camera. Vui lòng kiểm tra quyền truy cập camera.';
-        }
-      });
-    }
-  }
 
-  private async startCameraScanner(): Promise<void> {
-    try {
-      console.log('🔍 Starting camera scanner...');
-      
-      if (this.qrScanner) {
-        this.stopCameraScanner();
-      }
 
-      // Check if element exists
-      const qrReaderElement = document.getElementById('qr-reader');
-      if (!qrReaderElement) {
-        console.error('❌ QR reader element not found');
-        this.scanResult = '❌ Lỗi: Không tìm thấy element camera. Vui lòng thử lại.';
-        return;
-      }
 
-      console.log('✅ QR reader element found, initializing scanner...');
-      this.qrScanner = new Html5Qrcode("qr-reader");
-      
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      };
 
-      this.scanResult = '📷 Đang khởi động camera...';
-      console.log('📷 Starting camera with config:', config);
 
-      await this.qrScanner.start(
-        { facingMode: "environment" }, // Use back camera
-        config,
-        (decodedText: string) => {
-          // Success callback
-          console.log('✅ QR Code detected:', decodedText);
-          this.scannedQRData = decodedText;
-          this.scanResult = '✅ QR Code quét thành công! Nhấn "Scan QR Code" để xử lý.';
-          console.log('📱 QR Code data captured, stopping camera scanner...');
-          this.stopCameraScanner();
-        },
-        (errorMessage: string) => {
-          // Error callback - ignore errors during scanning
-          console.log('📷 Camera scan error (ignored):', errorMessage);
-        }
-      );
 
-      console.log('✅ Camera started successfully');
-      this.scanResult = '📷 Camera đã sẵn sàng! Đặt QR code vào khung hình để quét.';
-    } catch (error) {
-      console.error('❌ Error starting camera scanner:', error);
-      this.scanResult = '❌ Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera và đảm bảo trình duyệt hỗ trợ.';
-    }
-  }
 
-  private stopCameraScanner(): void {
-    if (this.qrScanner) {
-      try {
-        this.qrScanner.stop().then(() => {
-          this.qrScanner = null;
-        }).catch((error: any) => {
-          console.error('❌ Error stopping camera scanner:', error);
-        });
-      } catch (error) {
-        console.error('❌ Error stopping camera scanner:', error);
-      }
-    }
-  }
-
-  private async checkCameraAvailability(): Promise<boolean> {
-    try {
-      console.log('🔍 Checking camera availability...');
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      console.log('📷 Found video devices:', videoDevices.length);
-      console.log('📷 Video devices:', videoDevices);
-      return videoDevices.length > 0;
-    } catch (error) {
-      console.error('❌ Error checking camera availability:', error);
-      return false;
-    }
-  }
-
-  async processScannedQRCode(qrData: string): Promise<void> {
-    console.log('🔍 Starting to process scanned QR code:', qrData);
-    
-    // Stop camera if in camera mode
-    if (this.scanMode === 'camera') {
-      console.log('📷 Stopping camera scanner...');
-      this.stopCameraScanner();
-    }
-
-    if (!qrData || !qrData.trim()) {
-      console.log('❌ QR data is empty or invalid');
-      if (this.scanMode === 'camera') {
-        this.scanResult = '❌ Vui lòng quét QR code bằng camera trước.';
-      } else {
-        this.scanResult = '❌ Vui lòng nhập hoặc quét QR code data.';
-      }
-      return;
-    }
-
-    try {
-      this.isScanning = true;
-      this.scanResult = 'Đang xử lý...';
-      
-      // Parse QR data to find LSX (Production Order)
-      console.log('🔍 Parsing QR data for LSX pattern...');
-      const lsxMatch = qrData.match(/LSX:\s*([^\s]+)/);
-      if (!lsxMatch) {
-        console.log('❌ No LSX pattern found in QR data:', qrData);
-        this.scanResult = '❌ QR code không hợp lệ. Không tìm thấy LSX.';
-        return;
-      }
-
-      const lsx = lsxMatch[1];
-      console.log('✅ LSX extracted successfully:', lsx);
-
-      // Find work order by LSX
-      console.log('🔍 Searching for work order with LSX:', lsx);
-      console.log('🔍 Available work orders:', this.workOrders.map(wo => ({ id: wo.id, lsx: wo.productionOrder, status: wo.status })));
-      
-      const workOrder = this.workOrders.find(wo => wo.productionOrder === lsx);
-      if (!workOrder) {
-        console.log('❌ No work order found with LSX:', lsx);
-        this.scanResult = `❌ Không tìm thấy Work Order với LSX: ${lsx}`;
-        return;
-      }
-
-      console.log('✅ Work order found:', {
-        id: workOrder.id,
-        orderNumber: workOrder.orderNumber,
-        productionOrder: workOrder.productionOrder,
-        status: workOrder.status,
-        productCode: workOrder.productCode
-      });
-
-      // Get current user info
-      const user = await this.afAuth.currentUser;
-      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
-      const scanTime = new Date();
-      
-      console.log('👤 Current user:', currentUser);
-      console.log('⏰ Scan time:', scanTime);
-
-      // Determine next status based on current status
-      console.log('🔄 Current work order status:', workOrder.status);
-      
-      let newStatus: WorkOrderStatus;
-      let statusDescription: string;
-
-      switch (workOrder.status) {
-        case WorkOrderStatus.WAITING:
-          newStatus = WorkOrderStatus.KITTING;
-          statusDescription = 'Kitting';
-          break;
-        case WorkOrderStatus.KITTING:
-          newStatus = WorkOrderStatus.READY;
-          statusDescription = 'Ready';
-          break;
-        case WorkOrderStatus.READY:
-          newStatus = WorkOrderStatus.TRANSFER;
-          statusDescription = 'Transfer';
-          break;
-        case WorkOrderStatus.TRANSFER:
-          newStatus = WorkOrderStatus.DONE;
-          statusDescription = 'Done';
-          break;
-        case WorkOrderStatus.DONE:
-          console.log('✅ Work order already completed, cannot scan further');
-          this.scanResult = `✅ Work Order đã hoàn thành (Done). Không thể scan thêm.`;
-          return;
-        case WorkOrderStatus.DELAY:
-          newStatus = WorkOrderStatus.KITTING;
-          statusDescription = 'Kitting (từ Delay)';
-          break;
-        default:
-          newStatus = WorkOrderStatus.KITTING;
-          statusDescription = 'Kitting';
-      }
-      
-      console.log('🔄 Status transition:', workOrder.status, '→', newStatus, '(', statusDescription, ')');
-
-      console.log('🔄 Updating work order status from', workOrder.status, 'to', newStatus);
-      
-      // Update work order status
-      try {
-        await this.updateWorkOrderStatus(workOrder, newStatus);
-        console.log('✅ Work order status updated successfully');
-      } catch (error) {
-        console.error('❌ Failed to update work order status:', error);
-        this.scanResult = `❌ Lỗi khi cập nhật trạng thái: ${error.message || error}`;
-        return;
-      }
-
-      // Log scan activity
-      try {
-        await this.logScanActivity(lsx, currentUser, scanTime, workOrder.status, newStatus);
-        console.log('✅ Scan activity logged successfully');
-      } catch (error) {
-        console.error('❌ Failed to log scan activity:', error);
-        // Don't fail the scan if logging fails
-      }
-
-      this.scanResult = `✅ Scan thành công!\nLSX: ${lsx}\nTrạng thái: ${workOrder.status} → ${newStatus}\nNhân viên: ${currentUser}\nThời gian: ${scanTime.toLocaleString('vi-VN')}`;
-
-      console.log('✅ Scan completed successfully. Refreshing work orders...');
-      
-      // Refresh work orders to show updated status
-      try {
-        await this.loadWorkOrders();
-        console.log('✅ Work orders refreshed after scan');
-      } catch (error) {
-        console.error('❌ Failed to refresh work orders:', error);
-        // Don't fail the scan if refresh fails
-      }
-
-    } catch (error) {
-      console.error('❌ Lỗi khi xử lý QR code:', error);
-      this.scanResult = `❌ Lỗi: ${error.message || error}`;
-    } finally {
-      this.isScanning = false;
-    }
-  }
-
-  private async logScanActivity(lsx: string, userId: string, scanTime: Date, oldStatus: WorkOrderStatus, newStatus: WorkOrderStatus): Promise<void> {
-    try {
-      const scanLog = {
-        lsx: lsx,
-        userId: userId,
-        scanTime: scanTime,
-        oldStatus: oldStatus,
-        newStatus: newStatus,
-        timestamp: new Date()
-      };
-
-      console.log('📝 Saving scan log to Firestore:', scanLog);
-
-      // Save to Firestore using AngularFirestore (compat version)
-      await this.firestore.collection('scan_logs').add(scanLog);
-      
-      console.log('✅ Scan log saved successfully to Firestore');
-    } catch (error) {
-      console.error('❌ Lỗi khi lưu log scan:', error);
-      throw error; // Re-throw to handle in calling method
-    }
-  }
 }

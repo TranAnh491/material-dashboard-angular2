@@ -6,6 +6,8 @@
   background: #ffffff;
   position: relative;
   width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .container-fluid {
@@ -15,6 +17,7 @@
   margin: 0;
   max-width: none;
   width: 100%;
+  overflow: hidden;
 }
 
 // Admin Login Styles
@@ -326,8 +329,8 @@
   }
 }
 
-// Settings Container Styles (like excel-container)
-.settings-container {
+// Excel-like Interface for Settings (similar to Inventory)
+.excel-container {
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -335,14 +338,19 @@
   border: 1px solid #dee2e6;
   border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
 }
 
-.settings-header {
+.excel-header {
   background: #ff9800;
   color: #000000;
   text-align: center;
   padding: 12px;
   border-bottom: 1px solid #dee2e6;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  flex-shrink: 0;
   
   h4 {
     margin: 0;
@@ -352,15 +360,20 @@
   }
 }
 
-.settings-actions {
+.excel-actions {
   background: #f8fafc;
   border-bottom: 1px solid #dee2e6;
-  padding: 8px 20px;
+  position: sticky;
+  top: 60px;
+  z-index: 999;
+  pointer-events: auto !important;
+  flex-shrink: 0;
   
   .action-controls {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 12px 20px;
     
     .subtitle {
       color: #666;
@@ -383,35 +396,48 @@
   overflow: auto;
   flex: 1;
   padding: 20px;
-  background: #f5f5f5;
+  background: #ffffff;
+  position: relative;
 }
 
 // Unified Section Header
-.section-header-unified {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #ffffff;
-  padding: 12px 20px;
-  margin-bottom: 0;
-  border: 2px solid #ff9800;
-  border-bottom: none;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  .section-header-unified {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    padding: 12px 20px;
+    margin-bottom: 0;
+    border: 2px solid #ff9800;
+    border-bottom: none;
+    position: sticky;
+    top: 0;
+    z-index: 998;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    transition: all 0.3s ease;
   
   .header-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    color: #000000;
+    color: #333;
     
     mat-icon {
-      font-size: 18px;
-      color: #000000;
+      color: #ff9800;
+      font-size: 24px;
+      width: 24px;
+      height: 24px;
+    }
+    
+    .user-count {
+      font-size: 14px;
+      color: #666;
+      font-weight: normal;
+      margin-left: 8px;
     }
   }
   
@@ -419,6 +445,10 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding: 8px 0;
+    margin: 8px 0;
   }
 }
 
@@ -434,23 +464,64 @@
   border-radius: 4px !important;
   display: flex !important;
   align-items: center !important;
+  justify-content: center !important;
   gap: 6px !important;
   transition: all 0.3s ease !important;
   min-width: auto !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  margin: 2px !important;
   
   mat-icon {
     font-size: 16px !important;
     color: #000000 !important;
+    flex-shrink: 0 !important;
   }
   
   &:hover:not(:disabled) {
     background: #fff3e0 !important;
     border-color: #f57c00 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;
   }
   
   &:disabled {
     opacity: 0.6 !important;
     cursor: not-allowed !important;
+  }
+  
+
+  
+  // Status button specific styling
+  &.status-btn {
+    border-color: #9c27b0 !important;
+    
+    &:hover:not(:disabled) {
+      background: #f3e5f5 !important;
+      border-color: #7b1fa2 !important;
+    }
+  }
+}
+
+.custom-btn.status-btn {
+  border: 2px solid #ff9800;
+  color: #ff9800;
+  
+  &:hover {
+    background-color: #ff9800;
+    color: white;
+  }
+}
+
+
+
+.custom-btn.refresh-tabs-btn {
+  border: 2px solid #ff9800;
+  color: #ff9800;
+  
+  &:hover {
+    background-color: #ff9800;
+    color: white;
   }
 }
 
@@ -673,12 +744,14 @@
           color: #333;
           font-weight: 600;
           font-size: 14px;
-          padding: 16px;
+          padding: 8px 12px;
           border-bottom: 2px solid #e0e0e0;
+          height: auto;
+          min-height: 40px;
         }
         
         .mat-cell {
-          padding: 16px;
+          padding: 8px 12px;
           border-bottom: 1px solid #f0f0f0;
           
           .employee-id {
@@ -795,6 +868,7 @@
   // Firebase Users Section
   .firebase-users-section {
     padding: 25px;
+    position: relative;
     
     .section-header {
       display: flex;
@@ -922,12 +996,14 @@
           color: #333;
           font-weight: 600;
           font-size: 14px;
-          padding: 16px;
+          padding: 8px 12px;
           border-bottom: 2px solid #e0e0e0;
+          height: auto;
+          min-height: 40px;
         }
         
         .mat-cell {
-          padding: 16px;
+          padding: 8px 12px;
           border-bottom: 1px solid #f0f0f0;
           
           .user-email {
@@ -1589,5 +1665,156 @@
       padding: 6px 2px;
       font-size: 10px;
     }
+  }
+} 
+
+.account-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.account-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.account-text {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+// Special styling for different account types
+.account-info .account-icon:has(+ .account-text:contains('👑')) {
+  color: #ff6b35;
+}
+
+.account-info .account-icon:has(+ .account-text:contains('👤')) {
+  color: #2196f3;
+}
+
+.account-info .account-icon:has(+ .account-text:contains('📧')) {
+  color: #4caf50;
+} 
+
+.account-type-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  min-width: 60px;
+  border: 1px solid;
+}
+
+.special-account {
+  background-color: #fff3e0;
+  color: #ff6b35;
+  border-color: #ff6b35;
+}
+
+.asp-employee {
+  background-color: #e3f2fd;
+  color: #2196f3;
+  border-color: #2196f3;
+}
+
+.email-account {
+  background-color: #e8f5e8;
+  color: #4caf50;
+  border-color: #4caf50;
+} 
+
+.delete-asp2101-btn {
+  background-color: #f44336 !important;
+  color: white !important;
+  border: none !important;
+  
+  &:hover {
+    background-color: #d32f2f !important;
+  }
+  
+  mat-icon {
+    margin-right: 5px;
+  }
+} 
+
+// CSS để mở rộng cột tên và đảm bảo không bị xuống dòng
+::ng-deep .mat-table {
+  .mat-column-displayName {
+    min-width: 200px !important;
+    max-width: 300px !important;
+    width: auto !important;
+    
+    .mat-cell {
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      max-width: 280px !important;
+      
+      // Hiển thị tooltip khi hover để xem tên đầy đủ
+      &:hover {
+        overflow: visible !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        background-color: #f8f9fa !important;
+        border-radius: 4px !important;
+        padding: 4px !important;
+        z-index: 1000 !important;
+        position: relative !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+      }
+    }
+  }
+  
+  // Đảm bảo các cột khác có kích thước phù hợp
+  .mat-column-email {
+    min-width: 180px !important;
+    max-width: 220px !important;
+  }
+  
+  .mat-column-accountType {
+    min-width: 120px !important;
+    max-width: 140px !important;
+  }
+  
+  .mat-column-role {
+    min-width: 100px !important;
+    max-width: 120px !important;
+  }
+  
+  .mat-column-department {
+    min-width: 80px !important;
+    max-width: 100px !important;
+  }
+  
+  .mat-column-factory {
+    min-width: 80px !important;
+    max-width: 100px !important;
+  }
+  
+  .mat-column-createdAt {
+    min-width: 80px !important;
+    max-width: 100px !important;
+  }
+  
+  .mat-column-permission,
+  .mat-column-completePermission {
+    min-width: 60px !important;
+    max-width: 80px !important;
+  }
+  
+  .mat-column-lastLoginAt {
+    min-width: 80px !important;
+    max-width: 100px !important;
+  }
+  
+  .mat-column-actions {
+    min-width: 60px !important;
+    max-width: 80px !important;
   }
 } 

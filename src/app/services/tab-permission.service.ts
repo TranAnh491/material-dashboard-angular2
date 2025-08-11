@@ -37,23 +37,22 @@ export class TabPermissionService {
                 if (data && data.tabPermissions) {
                   return data.tabPermissions;
                 } else {
-                  // Default: tất cả tab đều accessible
+                  // Default: tất cả tab mẹ đều accessible (chỉ hiện tab mẹ)
                   return {
                     'dashboard': true,
-                    'work-order': true,
+                    'work-order-status': true,
                     'shipment': true,
                     'materials': true,
                     'fg': true,
                     'label': true,
-                    'bm': true,
+                    'index': true,
                     'utilization': true,
                     'find': true,
                     'layout': true,
                     'checklist': true,
                     'equipment': true,
                     'task': true,
-                    'inventory-export': true,  // Quyền chỉnh sửa cột Xuất
-                    'inventory-delete': true   // Quyền xóa item
+                    'settings': true
                   };
                 }
               })

@@ -47,23 +47,27 @@ export class TabPermissionGuard implements CanActivate {
   }
 
   private getTabKeyFromRoute(url: string): string | null {
-    // Map URL paths to tab keys
+    // Map URL paths to tab keys (chỉ tab mẹ)
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
-      '/work-order-status': 'work-order',
+      '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
-      '/inbound-materials': 'materials',
-      '/outbound-materials': 'materials',
-      '/materials-inventory': 'materials',
+      '/inbound-materials': 'materials', // Tab con -> tab mẹ
+      '/outbound-materials': 'materials', // Tab con -> tab mẹ
+      '/materials-inventory': 'materials', // Tab con -> tab mẹ
+      '/inbound-fgs': 'fg', // Tab con -> tab mẹ
+      '/outbound-fgs': 'fg', // Tab con -> tab mẹ
       '/fg': 'fg',
       '/label': 'label',
-      '/bm': 'bm',
+      '/index': 'index',
       '/utilization': 'utilization',
       '/find': 'find',
       '/layout': 'layout',
+      '/layout-3d': 'layout',
       '/checklist': 'checklist',
       '/equipment': 'equipment',
-      '/task': 'task'
+      '/task': 'task',
+      '/settings': 'settings'
     };
 
     return tabKeyMap[url] || null;

@@ -390,29 +390,7 @@
   }
 }
 
-// Special styling for notes column - auto width expansion
-td:has(.editable-cell[ng-model="material.notes"]),
-td:nth-child(14) { // Cột Ghi chú (cột thứ 14)
-  min-width: 100px !important;
-  max-width: none !important; // Remove max-width restriction
-  width: auto !important;
-  white-space: nowrap !important;
-  
-  .editable-cell {
-    width: 100% !important;
-    min-width: 100px !important;
-    max-width: none !important;
-    white-space: nowrap !important;
-    text-overflow: visible !important;
-    overflow: visible !important;
-    
-    // Auto-expand based on content
-    &:not(:placeholder-shown) {
-      width: auto !important;
-      min-width: max-content !important;
-    }
-  }
-}
+
 
 // Print QR button styling
 .qr-cell {
@@ -599,6 +577,13 @@ td:nth-child(14) { // Cột Ghi chú (cột thứ 14)
       max-width: 150px !important;
     }
     
+    // Cột "Loại Hình" (cột thứ 14) - width 120px
+    &:nth-child(14) {
+      width: 120px !important;
+      min-width: 120px !important;
+      max-width: 120px !important;
+    }
+    
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -641,6 +626,13 @@ td:nth-child(14) { // Cột Ghi chú (cột thứ 14)
       width: 120px !important;
       min-width: 120px !important;
       max-width: 150px !important;
+    }
+    
+    // Cột "Loại Hình" (cột thứ 14) - width 120px
+    &:nth-child(14) {
+      width: 120px !important;
+      min-width: 120px !important;
+      max-width: 120px !important;
     }
     
     &.date-cell {
@@ -1271,11 +1263,24 @@ mat-checkbox {
 
 // Material code, location, type columns - same width as date column
 .code-cell,
-.location-cell,
-.type-cell {
+.location-cell {
   min-width: 80px;
   max-width: 80px;
   width: 80px;
+}
+
+// Type column - adjusted width to 120px
+.type-cell {
+  min-width: 120px;
+  max-width: 120px;
+  width: 120px;
+  
+  // Ensure input inside type column has proper width
+  input.editable-cell {
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
+  }
 }
 
 // Material code styling
@@ -1614,22 +1619,28 @@ mat-checkbox {
   }
 }
 
-/* Notes Textarea */
-.notes-cell {
-  .notes-textarea {
-    width: 100%;
-    min-width: 120px;
-    resize: vertical;
-    font-family: inherit;
-    font-size: 12px;
-    padding: 4px;
-    border: 1px solid transparent;
-    background: transparent;
+/* Type Column (Loại Hình) - Column 14 - Width 120px */
+.excel-table {
+  // Header for Type column
+  th:nth-child(14) {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+  }
+  
+  // Data cells for Type column
+  td:nth-child(14) {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
     
-    &:focus {
-      outline: none;
-      border-color: #1976d2;
-      background: white;
+    // Input inside type column
+    input.editable-cell {
+      width: 110px !important;
+      min-width: 110px !important;
+      max-width: 110px !important;
     }
   }
 }
+
+

@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
+import { FactoryAccessService } from '../../services/factory-access.service';
 
 export interface InventoryMaterial {
   id?: string;
@@ -121,7 +122,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private cdr: ChangeDetectorRef,
-    private tabPermissionService: TabPermissionService
+    private tabPermissionService: TabPermissionService,
+    private factoryAccessService: FactoryAccessService
   ) {}
 
   ngOnInit(): void {
@@ -130,8 +132,34 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       this.loadInventoryFromFirebase();
     });
     this.loadPermissions();
+    
+    // Load factory access and set default factory
+    this.loadFactoryAccess();
+    
     // Disable auto-sync to prevent deleted items from reappearing
     // Use manual sync button instead
+  }
+
+  // Load factory access permissions and set default factory
+  private loadFactoryAccess(): void {
+    this.factoryAccessService.getCurrentUserFactoryAccess()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((access) => {
+        // Update available factories based on user permissions
+        this.availableFactories = access.availableFactories;
+        
+        // Set default factory if user has access
+        if (access.defaultFactory && access.availableFactories.includes(access.defaultFactory)) {
+          this.selectedFactory = access.defaultFactory;
+        } else if (access.availableFactories.length > 0) {
+          this.selectedFactory = access.availableFactories[0];
+        }
+        
+        console.log('🏭 Factory access loaded:', {
+          selectedFactory: this.selectedFactory,
+          availableFactories: this.availableFactories
+        });
+      });
   }
 
   ngAfterViewInit(): void {

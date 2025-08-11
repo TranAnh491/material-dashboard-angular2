@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
+import { FactoryAccessService } from '../../services/factory-access.service';
 
 export interface InboundMaterial {
   id?: string;
@@ -62,7 +63,8 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private factoryAccessService: FactoryAccessService
   ) {}
 
   ngOnInit(): void {
@@ -75,6 +77,9 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     this.endDate = new Date(2030, 11, 31);
     this.applyFilters();
     this.loadPermissions();
+    
+    // Load factory access and set default factory
+    this.loadFactoryAccess();
   }
 
   ngOnDestroy(): void {
@@ -585,6 +590,28 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
     // For now, set default permissions
     this.hasDeletePermission = true;
     this.hasCompletePermission = true;
+  }
+
+  // Load factory access permissions and set default factory
+  private loadFactoryAccess(): void {
+    this.factoryAccessService.getCurrentUserFactoryAccess()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((access) => {
+        // Update available factories based on user permissions
+        this.availableFactories = access.availableFactories;
+        
+        // Set default factory if user has access
+        if (access.defaultFactory && access.availableFactories.includes(access.defaultFactory)) {
+          this.selectedFactory = access.defaultFactory;
+        } else if (access.availableFactories.length > 0) {
+          this.selectedFactory = access.availableFactories[0];
+        }
+        
+        console.log('🏭 Factory access loaded for Inbound Materials:', {
+          selectedFactory: this.selectedFactory,
+          availableFactories: this.availableFactories
+        });
+      });
   }
 
   // Load materials from Firebase

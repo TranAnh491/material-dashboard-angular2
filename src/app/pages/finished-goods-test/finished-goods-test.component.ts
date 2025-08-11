@@ -287,8 +287,13 @@ export class FinishedGoodsTestComponent implements OnInit, AfterViewInit {
     // Convert to uppercase and remove spaces
     let value = event.target.value.toUpperCase().replace(/\s/g, '');
     
-    // Ensure it starts with "ASP"
-    if (!value.startsWith('ASP')) {
+    // Handle ASPt case: if starts with "ASPT", convert to "ASP" + 4 digits
+    if (value.startsWith('ASPT')) {
+      const digits = value.substring(4).replace(/\D/g, '').substring(0, 4);
+      value = 'ASP' + digits;
+    }
+    // Ensure it starts with "ASP" for other cases
+    else if (!value.startsWith('ASP')) {
       value = 'ASP' + value.replace(/^ASP/, '');
     }
     

@@ -123,10 +123,9 @@
             <th>Tồn kho</th>
             <th>Vị trí</th>
             <th>Thay đổi vị trí</th>
-            <th>Loại</th>
+            <th>Loại Hình</th>
             <th>HSD</th>
-            <th>QC</th>
-            <th>Ghi chú</th>
+            <th>KK</th>
             <th>Rolls/Bags</th>
             <th>Nhà cung cấp</th>
             <th>Ghi chú</th>
@@ -227,13 +226,7 @@
                      (change)="updateQualityCheck(material, $event)"
                      class="quality-checkbox">
             </td>
-            <td class="notes-cell">
-              <textarea class="editable-cell notes-textarea" 
-                        [(ngModel)]="material.notes" 
-                        (change)="updateNotes(material)"
-                        placeholder="Ghi chú..."
-                        rows="2"></textarea>
-            </td>
+
             <td class="number-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)">
             </td>
