@@ -162,6 +162,18 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       });
   }
 
+  // Kiểm tra user có thể chỉnh sửa inventory material của nhà máy cụ thể không
+  canEditMaterial(material: InventoryMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
+  // Kiểm tra user có thể xem inventory material của nhà máy cụ thể không
+  canViewMaterial(material: InventoryMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
   ngAfterViewInit(): void {
     // Auto-resize notes column for existing data after view initialization
     setTimeout(() => {

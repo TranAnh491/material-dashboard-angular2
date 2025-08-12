@@ -134,6 +134,18 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Kiểm tra user có thể chỉnh sửa outbound material của nhà máy cụ thể không
+  canEditMaterial(material: OutboundMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
+  // Kiểm tra user có thể xem outbound material của nhà máy cụ thể không
+  canViewMaterial(material: OutboundMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
   // Show factory stock summary
   private showFactoryStockSummary(): void {
     if (!this.selectedFactory) return;

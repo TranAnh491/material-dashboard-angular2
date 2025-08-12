@@ -32,10 +32,10 @@ export class FactoryAccessService {
             .valueChanges()
             .pipe(
               map((data: any) => {
-                if (data && data.factory) {
-                  return this.calculateFactoryAccess(data.factory);
+                if (data && data.factory && data.factory.trim() !== '') {
+                  return this.calculateFactoryAccess(data.factory, data.role);
                 } else {
-                  // Nếu không có factory setting, cho phép truy cập cả 2 nhà máy
+                  // Nếu không có factory setting hoặc factory rỗng, cho phép truy cập tất cả nhà máy
                   return {
                     canAccessASM1: true,
                     canAccessASM2: true,
@@ -58,8 +58,21 @@ export class FactoryAccessService {
   }
 
   // Tính toán quyền truy cập nhà máy dựa trên factory setting
-  private calculateFactoryAccess(factory: string): FactoryAccess {
-    switch (factory.toUpperCase()) {
+  private calculateFactoryAccess(factory: string, role?: string): FactoryAccess {
+    // Admin và Quản lý có thể truy cập tất cả nhà máy
+    if (role === 'Admin' || role === 'Quản lý') {
+      return {
+        canAccessASM1: true,
+        canAccessASM2: true,
+        defaultFactory: 'ASM1',
+        availableFactories: ['ASM1', 'ASM2']
+      };
+    }
+
+    // Users thường chỉ có thể truy cập nhà máy được chỉ định
+    const factoryUpper = factory ? factory.toUpperCase().trim() : '';
+    
+    switch (factoryUpper) {
       case 'ASM1':
         return {
           canAccessASM1: true,
@@ -81,8 +94,11 @@ export class FactoryAccessService {
           defaultFactory: 'ASM1',
           availableFactories: ['ASM1', 'ASM2']
         };
+      case '':
+      case null:
+      case undefined:
       default:
-        // Nếu không có factory setting hoặc factory rỗng, cho phép truy cập cả 2
+        // Nếu không có factory setting hoặc factory rỗng, cho phép truy cập tất cả nhà máy
         return {
           canAccessASM1: true,
           canAccessASM2: true,
@@ -125,6 +141,47 @@ export class FactoryAccessService {
   hasMultipleFactoryAccess(): Observable<boolean> {
     return this.getAvailableFactories().pipe(
       map(factories => factories.length > 1)
+    );
+  }
+
+  // Kiểm tra user có thể chỉnh sửa dữ liệu của nhà máy cụ thể không
+  canEditFactoryData(factory: string): Observable<boolean> {
+    return this.getCurrentUserFactoryAccess().pipe(
+      map(access => {
+        const factoryUpper = factory.toUpperCase();
+        
+        // Admin và Quản lý có thể chỉnh sửa tất cả nhà máy
+        if (access.availableFactories.length > 1) {
+          return true;
+        }
+        
+        // Users thường chỉ có thể chỉnh sửa nhà máy của họ
+        return access.availableFactories.includes(factoryUpper);
+      })
+    );
+  }
+
+  // Kiểm tra user có thể xem dữ liệu của nhà máy cụ thể không
+  canViewFactoryData(factory: string): Observable<boolean> {
+    return this.getCurrentUserFactoryAccess().pipe(
+      map(access => {
+        const factoryUpper = factory.toUpperCase();
+        return access.availableFactories.includes(factoryUpper);
+      })
+    );
+  }
+
+  // Lấy danh sách nhà máy mà user có thể chỉnh sửa
+  getEditableFactories(): Observable<string[]> {
+    return this.getCurrentUserFactoryAccess().pipe(
+      map(access => access.availableFactories)
+    );
+  }
+
+  // Lấy danh sách nhà máy mà user có thể xem
+  getViewableFactories(): Observable<string[]> {
+    return this.getCurrentUserFactoryAccess().pipe(
+      map(access => access.availableFactories)
     );
   }
 }

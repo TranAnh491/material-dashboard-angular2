@@ -125,6 +125,13 @@
                 </span>
               </div>
               <div class="header-actions">
+                <button class="custom-btn create-admin-btn" 
+                        (click)="createSpecialAccount()"
+                        style="background-color: #4CAF50; color: white; margin-right: 8px;"
+                        matTooltip="Tạo tài khoản quản lý đặc biệt ASP0001">
+                  <mat-icon>admin_panel_settings</mat-icon>
+                  Tạo TK ASP0001
+                </button>
                 <button class="custom-btn edit-btn" 
                         (click)="togglePermissionMode()"
                         [disabled]="isLoadingFirebaseUsers">
@@ -200,8 +207,8 @@
                          matTooltipPosition="above">
                       <span class="account-icon">{{ getAccountTypeIcon(user) }}</span>
                       <span class="account-text" 
-                            [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : 'inherit'" 
-                            [style.fontWeight]="user.uid === 'special-steve-uid' ? 'bold' : 'normal'">
+                            [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : user.uid === 'special-asp0001-uid' ? '#4CAF50' : 'inherit'" 
+                            [style.fontWeight]="user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid' ? 'bold' : 'normal'">
                         {{ getAccountDisplay(user) }}
                       </span>
                     </div>
@@ -214,8 +221,9 @@
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
                     <span class="account-type-badge" 
                           [class.special-account]="user.uid === 'special-steve-uid'"
+                          [class.admin-account]="user.uid === 'special-asp0001-uid'"
                           [class.asp-employee]="user.employeeId"
-                          [class.email-account]="!user.employeeId && user.uid !== 'special-steve-uid'">
+                          [class.email-account]="!user.employeeId && user.uid !== 'special-steve-uid' && user.uid !== 'special-asp0001-uid'">
                       {{ getAccountTypeLabel(user) }}
                     </span>
                   </td>
@@ -264,13 +272,13 @@
                 <ng-container matColumnDef="factory">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Nhà máy</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
-                    <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
+                    <span *ngIf="!isEditingPermissions">{{ user.factory || 'Tất cả' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.factory" 
                             (change)="updateUserFactory(user.uid, user.factory)"
                             class="excel-select"
                             style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="">Chọn</option>
+                      <option value="">Tất cả</option>
                       <option value="ASM1">ASM1</option>
                       <option value="ASM2">ASM2</option>
                       <option value="ASM3">ASM3</option>
@@ -297,7 +305,7 @@
                     <mat-checkbox
                       [checked]="firebaseUserPermissions[user.uid] || false"
                       (change)="updateUserPermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
+                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
                       color="primary"
                       matTooltip="Bật/tắt quyền xóa dữ liệu"
                       style="transform: scale(0.8);">
@@ -312,7 +320,7 @@
                     <mat-checkbox
                       [checked]="firebaseUserCompletePermissions[user.uid] || false"
                       (change)="updateUserCompletePermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
+                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
                       color="primary"
                       matTooltip="Bật/tắt quyền hoàn thành Work Order"
                       style="transform: scale(0.8);">
@@ -335,7 +343,7 @@
                 <button mat-icon-button 
                         color="warn" 
                         (click)="deleteFirebaseUser(user)"
-                        [disabled]="user.uid === 'special-steve-uid'"
+                        [disabled]="user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
                         matTooltip="Xóa user"
                         style="transform: scale(0.8);">
                   <mat-icon style="font-size: 16px;">delete</mat-icon>
@@ -350,7 +358,7 @@
                 <mat-checkbox
                   [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                   (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
-                  [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid'"
+                  [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
                   color="primary"
                   [matTooltip]="'Bật/tắt quyền xem và chỉnh sửa tab ' + tab.name"
                   style="transform: scale(0.8);">

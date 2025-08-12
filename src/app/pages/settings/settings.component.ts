@@ -993,6 +993,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (user.uid === 'special-steve-uid') {
       return 'Tài khoản đặc biệt';
     }
+
+    if (user.uid === 'special-asp0001-uid') {
+      return 'Quản lý đặc biệt';
+    }
     
     if (user.employeeId) {
       return 'Mã nhân viên ASP';
@@ -1013,6 +1017,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
   getAccountTypeIcon(user: any): string {
     if (user.uid === 'special-steve-uid') {
       return '👑';
+    }
+
+    if (user.uid === 'special-asp0001-uid') {
+      return '🛡️';
     }
     
     if (user.employeeId) {
@@ -1036,7 +1044,90 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return this.firebaseUsers.sort((a, b) => {
       if (a.uid === 'special-steve-uid') return -1;
       if (b.uid === 'special-steve-uid') return 1;
+      if (a.uid === 'special-asp0001-uid') return -1;
+      if (b.uid === 'special-asp0001-uid') return 1;
       return (a.email || '').localeCompare(b.email || '');
     });
+  }
+
+  // Tạo tài khoản đặc biệt ASP0001
+  async createSpecialAccount(): Promise<void> {
+    try {
+      console.log('🔐 Tạo tài khoản đặc biệt ASP0001...');
+      
+      // Kiểm tra xem tài khoản đã tồn tại chưa
+      const existingUser = this.firebaseUsers.find(user => 
+        user.uid === 'special-asp0001-uid' || 
+        user.displayName === 'ASP0001' ||
+        user.email === 'ASP0001@asp.com'
+      );
+      
+      if (existingUser) {
+        alert('Tài khoản ASP0001 đã tồn tại!');
+        return;
+      }
+
+      // Tạo tài khoản đặc biệt ASP0001
+      const specialUserData: User = {
+        uid: 'special-asp0001-uid',
+        email: 'ASP0001@asp.com',
+        displayName: 'ASP0001',
+        department: 'ADMIN',
+        factory: 'ALL',
+        role: 'Quản lý',
+        createdAt: new Date(),
+        lastLoginAt: new Date()
+      };
+
+      // Lưu vào Firestore users collection
+      const userRef = this.firestore.doc(`users/${specialUserData.uid}`);
+      await userRef.set(specialUserData);
+
+      // Lưu permissions đặc biệt - có quyền xóa và hoàn thành
+      const permissionRef = this.firestore.collection('user-permissions').doc(specialUserData.uid);
+      await permissionRef.set({
+        uid: specialUserData.uid,
+        email: specialUserData.email,
+        displayName: specialUserData.displayName,
+        department: 'ADMIN',
+        factory: 'ALL',
+        role: 'Quản lý',
+        hasDeletePermission: true,
+        hasCompletePermission: true,
+        hasEditPermission: true,
+        isSpecialUser: true,
+        isProtected: true, // Không được xóa
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Lưu tab permissions cho tất cả tabs
+      const tabPermissionRef = this.firestore.collection('user-tab-permissions').doc(specialUserData.uid);
+      const allTabPermissions: { [key: string]: boolean } = {};
+      this.availableTabs.forEach(tab => {
+        allTabPermissions[tab.key] = true;
+      });
+      
+      await tabPermissionRef.set({
+        uid: specialUserData.uid,
+        email: specialUserData.email,
+        displayName: specialUserData.displayName,
+        tabPermissions: allTabPermissions,
+        isSpecialUser: true,
+        isProtected: true, // Không được xóa
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      console.log('✅ Tài khoản ASP0001 đã được tạo thành công');
+      alert('✅ Tài khoản quản lý đặc biệt ASP0001 đã được tạo thành công!\n\nThông tin đăng nhập:\n- Tài khoản: ASP0001\n- Mật khẩu: 112233\n- Quyền hạn: Quản lý đặc biệt (xem tất cả, không được xóa)');
+      
+      // Refresh danh sách users
+      await this.refreshFirebaseUsers();
+      
+    } catch (error) {
+      console.error('❌ Lỗi tạo tài khoản ASP0001:', error);
+      alert('❌ Có lỗi xảy ra khi tạo tài khoản ASP0001!');
+    }
   }
 }

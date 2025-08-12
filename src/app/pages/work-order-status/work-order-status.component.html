@@ -1,9 +1,12 @@
 <div class="main-content">
   <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-body">
+    
+    <!-- Main Work Order View -->
+    <div *ngIf="currentView === 'main'">
+      <div class="row">
+        <div class="col-md-12">
+          <div class="card">
+            <div class="card-body">
             
             <!-- Import Section -->
             <div class="import-section" *ngIf="selectedFunction === 'import'">
@@ -164,6 +167,11 @@
                           [style.background]="selectedFunction === 'view' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">arrow_back</i> BACK
                   </button>
+                  <button class="btn btn-outline-primary" 
+                          (click)="openScanPage()"
+                          style="color: #2196f3; border: none;">
+                    <i class="material-icons">qr_code_scanner</i> Scan QR
+                  </button>
                   <button class="btn btn-outline-danger" 
                           (click)="showDeleteDialog = true"
                           *ngIf="hasDeletePermissionValue"
@@ -212,17 +220,27 @@
                       </div>
                       
                       <!-- Status Filter -->
-                      <div class="col-md-5">
+                      <div class="col-md-3">
                         <mat-form-field class="full-width compact-field">
-                          <mat-label>Filter by Status</mat-label>
+                          <mat-label>Status</mat-label>
                           <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
-                            <mat-option value="all">All Status</mat-option>
+                            <mat-option value="all">All</mat-option>
                             <mat-option value="waiting">Waiting</mat-option>
                             <mat-option value="kitting">Kitting</mat-option>
                             <mat-option value="ready">Ready</mat-option>
                             <mat-option value="transfer">Transfer</mat-option>
-                            <mat-option value="done">Done</mat-option>
                             <mat-option value="delay">Delay</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                      
+                      <!-- Done Filter -->
+                      <div class="col-md-2">
+                        <mat-form-field class="full-width compact-field">
+                          <mat-label>Filter Done</mat-label>
+                          <mat-select [(value)]="doneFilter" (selectionChange)="onDoneFilterChange()">
+                            <mat-option value="notCompleted">Chưa hoàn thành</mat-option>
+                            <mat-option value="completed">Hoàn thành</mat-option>
                           </mat-select>
                         </mat-form-field>
                       </div>
@@ -747,6 +765,141 @@
     </div>
   </div>
 
+  <!-- Scan QR Dialog -->
+  <div class="scan-dialog-overlay" *ngIf="showScanDialog" (click)="closeScanDialog()">
+    <div class="scan-dialog" (click)="$event.stopPropagation()">
+      <div class="scan-dialog-header">
+        <h4><mat-icon>qr_code_scanner</mat-icon> Scan QR Codes</h4>
+        <button mat-icon-button (click)="closeScanDialog()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      
+      <div class="scan-dialog-content">
+        <!-- Scanner Options -->
+        <div class="scanner-section">
 
 
+          <!-- Camera Scanner -->
+          <div class="camera-scanner" *ngIf="!isPhysicalScannerMode">
+            <div id="qr-scanner" class="qr-scanner-container" *ngIf="isScannerActive"></div>
+            <div class="scanner-controls">
+              <button mat-raised-button color="primary" (click)="startScanner()" *ngIf="!isScannerActive">
+                <mat-icon>videocam</mat-icon> Camera Scanner
+              </button>
+              <button mat-raised-button color="warn" (click)="stopScanner()" *ngIf="isScannerActive">
+                <mat-icon>videocam_off</mat-icon> Stop Camera
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Scanned Items List -->
+        <div class="scanned-items-section">
+          <h5>Scanned Items ({{scannedItems.length}})</h5>
+          <div class="scanned-items-list" *ngIf="scannedItems.length > 0">
+            <div class="scanned-item" *ngFor="let item of scannedItems; let i = index">
+              <div class="item-info">
+                <strong>LSX:</strong> {{item.lsx}}<br>
+                <strong>Quantity:</strong> {{item.quantity}}<br>
+                <strong>Time:</strong> {{item.scannedAt | date:'dd/MM/yyyy HH:mm:ss'}}
+              </div>
+              <button mat-icon-button color="warn" (click)="removeScannedItem(i)" matTooltip="Remove">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          </div>
+          <div class="no-scanned-items" *ngIf="scannedItems.length === 0">
+            <p>No items scanned yet</p>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="scan-actions">
+          <button mat-raised-button color="primary" (click)="processScanResults()" 
+                  [disabled]="scannedItems.length === 0 || isProcessingScan">
+            <mat-icon>check</mat-icon> 
+            <span *ngIf="!isProcessingScan">OK - Process Scans</span>
+            <span *ngIf="isProcessingScan">Processing...</span>
+          </button>
+          <button mat-raised-button (click)="closeScanDialog()">
+            <mat-icon>cancel</mat-icon> Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Scan QR Page View -->
+    <div *ngIf="currentView === 'scan'" class="scan-page-view">
+      <div class="scan-page-header">
+        <div class="header-left">
+          <button mat-icon-button (click)="backToMainView()" class="back-button">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+          <h2>🔍 Scan QR Codes</h2>
+        </div>
+        <div class="header-right">
+          <!-- Scanner Mode Toggle moved here -->
+          <div class="scanner-mode-toggle-header">
+            <button mat-stroked-button 
+                    (click)="setCameraMode()"
+                    class="toggle-mode-btn"
+                    [class.active]="!isPhysicalScannerMode">
+              <mat-icon>videocam</mat-icon>
+              Camera
+            </button>
+            <button mat-stroked-button 
+                    (click)="setScanMode()"
+                    class="toggle-mode-btn"
+                    [class.active]="isPhysicalScannerMode">
+              <mat-icon>qr_code_scanner</mat-icon>
+              Scan
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-page-content">
+        <!-- Scanned Items Table -->
+        <div class="scanned-items-section">
+          <div class="scanned-items-table" *ngIf="scannedItems.length > 0">
+            <table class="excel-table">
+
+              <tbody>
+                <tr *ngFor="let item of scannedItems; let i = index" class="table-row">
+                  <td class="lsx-cell">{{item.lsx}}</td>
+                  <td class="status-cell">{{item.currentStatus}}</td>
+                  <td class="status-cell">{{item.newStatus}}</td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <!-- Done Button -->
+            <div class="done-section">
+              <button mat-raised-button 
+                      color="primary" 
+                      (click)="completeScanAndReturn()"
+                      class="done-btn">
+                <mat-icon>check_circle</mat-icon>
+                Done
+              </button>
+            </div>
+          </div>
+          
+          <div class="no-scanned-items" *ngIf="scannedItems.length === 0">
+            <div class="empty-state">
+              <mat-icon>qr_code_2</mat-icon>
+              <h4>Chưa có items nào được scan</h4>
+              <p>Hãy bắt đầu scan QR codes bằng máy scan của bạn</p>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+  </div>
 </div>

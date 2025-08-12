@@ -14,6 +14,24 @@ import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 
+// Interface for scanned items
+interface ScannedItem {
+  lsx: string;
+  currentStatus: string;
+  newStatus: string;
+  workOrderId?: string;
+}
+
+// Interface for scan data storage
+interface ScanData {
+  lsx: string;
+  quantity: number;
+  scannedAt: Date;
+  scannedBy: string;
+  factory: string;
+  workOrderId: string;
+}
+
 @Component({
   selector: 'app-work-order-status',
   templateUrl: './work-order-status.component.html',
@@ -34,6 +52,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   // Filters
   searchTerm: string = '';
   statusFilter: WorkOrderStatus | 'all' = 'all';
+  doneFilter: 'notCompleted' | 'completed' = 'notCompleted'; // Default: show not completed
   yearFilter: number = new Date().getFullYear();
   monthFilter: number = new Date().getMonth() + 1;
   
@@ -86,6 +105,23 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   currentUserId: string = '';
   hasDeletePermissionValue: boolean = false;
   hasCompletePermissionValue: boolean = false;
+
+  // Page navigation
+  currentView: 'main' | 'scan' = 'main';
+
+  // Scan QR functionality
+  showScanDialog: boolean = false;
+  isScannerActive: boolean = false;
+  isProcessingScan: boolean = false;
+  html5QrCode: Html5Qrcode | null = null;
+  scannedItems: ScannedItem[] = [];
+  allWorkOrdersForScan: WorkOrder[] = []; // Store all work orders across factories for scan lookup
+
+  // Physical scanner support
+  isPhysicalScannerMode: boolean = true; // Default to physical scanner
+  scannerBuffer: string = '';
+  scannerTimeoutId: any = null;
+  keyboardListener: any = null;
   
   
 
@@ -155,6 +191,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    
+    // Clean up physical scanner
+    this.stopPhysicalScanner();
   }
 
   selectFunction(functionName: string): void {
@@ -282,6 +321,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.workOrders = processedWorkOrders;
     console.log(`✅ Processed ${processedWorkOrders.length} work orders with proper date handling`);
     
+    // Auto-mark old completed work orders as completed
+    this.markOldCompletedWorkOrders();
+    
     // Auto-assign sequential numbers based on delivery date within each month
     this.assignSequentialNumbers();
     
@@ -366,6 +408,27 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('❌ Firebase v9 SDK load failed!', error);
       throw error;
+    }
+  }
+
+  // Auto-mark old completed work orders as completed
+  private markOldCompletedWorkOrders(): void {
+    console.log('🏷️ Marking old completed work orders...');
+    
+    let markedCount = 0;
+    this.workOrders.forEach(wo => {
+      // If work order has status DONE but no isCompleted flag, mark it as completed
+      if (wo.status === WorkOrderStatus.DONE && !wo.isCompleted) {
+        wo.isCompleted = true;
+        markedCount++;
+        console.log(`✅ Marked old completed work order: ${wo.productionOrder} (${wo.productCode})`);
+      }
+    });
+    
+    if (markedCount > 0) {
+      console.log(`✅ Marked ${markedCount} old completed work orders as completed`);
+    } else {
+      console.log('ℹ️ No old completed work orders found');
     }
   }
 
@@ -475,10 +538,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         console.log(`🔍 Factory comparison: "${wo.factory}" (normalized: "${normalizedData}") === "${this.selectedFactory}" (normalized: "${normalizedSelected}") = ${normalizedData === normalizedSelected}`);
       }
       
-      // Hide completed work orders unless showHiddenWorkOrders is true
-      const isNotCompleted = wo.status !== WorkOrderStatus.DONE || this.showHiddenWorkOrders;
+      // Apply done filter
+      let matchesDoneFilter = true;
+      if (this.doneFilter === 'notCompleted') {
+        matchesDoneFilter = !wo.isCompleted;
+      } else if (this.doneFilter === 'completed') {
+        matchesDoneFilter = wo.isCompleted;
+      }
       
-      return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && isNotCompleted;
+      return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && matchesDoneFilter;
     });
     
     // Sort filtered results: urgent first, then by delivery date (earliest first)
@@ -523,6 +591,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   onStatusFilterChange(): void {
+    this.clearSelection();
+    this.applyFilters();
+    this.calculateSummary();
+  }
+
+  onDoneFilterChange(): void {
     this.clearSelection();
     this.applyFilters();
     this.calculateSummary();
@@ -613,12 +687,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   async updateWorkOrderStatus(workOrder: WorkOrder, newStatus: WorkOrderStatus): Promise<void> {
     try {
-      const updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: new Date() };
+      // If changing from DONE to other status, remove completed flag
+      let updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: new Date() };
+      
+      if (workOrder.status === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
+        updatedWorkOrder.isCompleted = false;
+        console.log('🔄 Removing completed flag - status changed from DONE to', newStatus);
+      }
       
       console.log('🔄 Updating work order status:', {
         id: workOrder.id,
         oldStatus: workOrder.status,
-        newStatus: newStatus
+        newStatus: newStatus,
+        isCompleted: updatedWorkOrder.isCompleted
       });
       
       await this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder);
@@ -658,11 +739,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
     }
     
-    const updatedWorkOrder = { 
+    let updatedWorkOrder = { 
       ...workOrder, 
       [field]: processedValue, 
       lastUpdated: new Date() 
     };
+    
+    // If updating status field and changing from DONE to other status, remove completed flag
+    if (field === 'status' && workOrder.status === WorkOrderStatus.DONE && processedValue !== WorkOrderStatus.DONE) {
+      updatedWorkOrder.isCompleted = false;
+      console.log('🔄 Removing completed flag - status changed from DONE to', processedValue);
+    }
     
     console.log(`💾 Saving to Firebase - Updated work order:`, updatedWorkOrder);
     
@@ -2107,6 +2194,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  convertStringToStatus(statusStr: string): WorkOrderStatus {
+    const status = statusStr.toLowerCase();
+    switch (status) {
+      case 'kitting':
+        return WorkOrderStatus.KITTING;
+      case 'ready':
+        return WorkOrderStatus.READY;
+      case 'transfer':
+        return WorkOrderStatus.TRANSFER;
+      case 'done':
+        return WorkOrderStatus.DONE;
+      case 'waiting':
+        return WorkOrderStatus.WAITING;
+      case 'delay':
+        return WorkOrderStatus.DELAY;
+      default:
+        return WorkOrderStatus.WAITING;
+    }
+  }
+
   private handleEmptyFilterResults(): void {
     console.log('🔧 Analyzing filter mismatch...');
     
@@ -2166,11 +2273,20 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       return;
     }
     
+    // Mark as completed and hide from list
     workOrder.status = WorkOrderStatus.DONE;
-    // Remove urgent status when completed
+    workOrder.isCompleted = true; // Add completed flag
     workOrder.isUrgent = false;
-    this.updateWorkOrderStatus(workOrder, WorkOrderStatus.DONE);
-    this.updateWorkOrder(workOrder, 'isUrgent', false);
+    
+    // Update all fields at once
+    const updatedWorkOrder = { ...workOrder, isCompleted: true, isUrgent: false };
+    await this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder);
+    
+    // Update local array
+    const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
+    if (index !== -1) {
+      this.workOrders[index] = updatedWorkOrder;
+    }
     
     // Re-apply filters to hide completed work order
     this.applyFilters();
@@ -2182,15 +2298,18 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     this.showHiddenWorkOrders = !this.showHiddenWorkOrders;
     
     if (this.showHiddenWorkOrders) {
-      // Show all work orders including completed ones for selected factory
+      // Show all work orders including manually completed ones
+      this.doneFilter = 'completed';
       this.filteredWorkOrders = this.workOrders.filter(wo => wo.factory === this.selectedFactory);
       console.log(`👁️ Hiển thị tất cả work orders của nhà máy ${this.selectedFactory} (bao gồm đã hoàn thành)`);
     } else {
-      // Show only non-completed work orders for selected factory
-      this.filteredWorkOrders = this.workOrders.filter(wo => wo.status !== WorkOrderStatus.DONE && wo.factory === this.selectedFactory);
+      // Show only non-completed work orders
+      this.doneFilter = 'notCompleted';
+      this.filteredWorkOrders = this.workOrders.filter(wo => wo.factory === this.selectedFactory && !wo.isCompleted);
       console.log(`👁️ Chỉ hiển thị work orders chưa hoàn thành của nhà máy ${this.selectedFactory}`);
     }
     
+    this.applyFilters();
     this.calculateSummary();
   }
 
@@ -2426,8 +2545,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   generateQRCode(workOrder: WorkOrder): void {
     console.log('Generating QR code for work order:', workOrder.productionOrder);
     
-    // Create QR code data with LSX information
-    const qrData = `${workOrder.productionOrder}|${workOrder.productCode}|${workOrder.quantity}|${workOrder.customer}`;
+    // Create QR code data with LSX only (simplified for scanning)
+    const qrData = workOrder.productionOrder;
     
     console.log('QR Code data:', qrData);
     
@@ -2676,4 +2795,547 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
 
 
-}
+  // Page Navigation
+  async openScanPage(): Promise<void> {
+    console.log('🚀 Opening scan page...');
+    this.currentView = 'scan';
+    this.scannedItems = [];
+    
+    // Load all work orders first, then start scanner
+    await this.loadAllWorkOrdersForScan();
+    
+    // Auto-start physical scanner mode after data is loaded
+    setTimeout(() => {
+      this.startPhysicalScanner();
+    }, 500);
+  }
+
+  backToMainView(): void {
+    console.log('🔙 Returning to main view...');
+    this.currentView = 'main';
+    this.stopScanner();
+    this.stopPhysicalScanner();
+    this.scannedItems = [];
+    this.isProcessingScan = false;
+  }
+
+  // Legacy methods for compatibility (can be removed later)
+  openScanDialog(): void {
+    this.openScanPage();
+  }
+
+  closeScanDialog(): void {
+    this.backToMainView();
+  }
+
+  async loadAllWorkOrdersForScan(): Promise<void> {
+    try {
+      console.log('🔍 Loading all work orders for scan lookup...');
+      
+      // Use AngularFirestore instead of native Firestore
+      const querySnapshot = await this.firestore.collection('work-orders', ref => 
+        ref.orderBy('createdDate', 'desc')
+      ).get().toPromise();
+      
+      if (querySnapshot) {
+        console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
+        
+        this.allWorkOrdersForScan = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data() as WorkOrder;
+          this.allWorkOrdersForScan.push({
+            id: doc.id,
+            ...data
+          } as WorkOrder);
+        });
+
+        console.log(`✅ Loaded ${this.allWorkOrdersForScan.length} work orders for scan lookup`);
+        
+        // Debug: show first few work orders
+        console.log('🔍 Sample work orders:', this.allWorkOrdersForScan.slice(0, 3).map(wo => ({
+          lsx: wo.productionOrder,
+          factory: wo.factory,
+          id: wo.id
+        })));
+      } else {
+        console.log('❌ QuerySnapshot is null');
+      }
+    } catch (error) {
+      console.error('❌ Error loading all work orders for scan:', error);
+    }
+  }
+
+  private async loadWorkOrdersByFactory(factory: string): Promise<WorkOrder[]> {
+    try {
+      console.log(`🔍 Loading work orders for factory: ${factory}`);
+      const db = getFirestore();
+      const workOrdersCollection = collection(db, 'workOrders');
+      const q = query(workOrdersCollection, orderBy('createdDate', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
+      
+      const workOrders: WorkOrder[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as WorkOrder;
+        // Load ALL work orders for scan (don't filter by factory)
+        workOrders.push({
+          id: doc.id,
+          ...data
+        } as WorkOrder);
+      });
+      
+      console.log(`✅ Loaded ${workOrders.length} work orders from ${factory}`);
+      return workOrders;
+    } catch (error) {
+      console.error(`❌ Error loading work orders for factory ${factory}:`, error);
+      return [];
+    }
+  }
+
+  async startScanner(): Promise<void> {
+    try {
+      console.log('📷 Starting QR scanner...');
+      this.isScannerActive = true;
+      
+      if (!this.html5QrCode) {
+        this.html5QrCode = new Html5Qrcode("qr-scanner");
+      }
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      await this.html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText, decodedResult) => {
+          this.onScanSuccess(decodedText);
+        },
+        (errorMessage) => {
+          // Handle scan errors silently
+        }
+      );
+
+      console.log('✅ QR scanner started successfully');
+    } catch (error) {
+      console.error('❌ Error starting scanner:', error);
+      this.isScannerActive = false;
+      alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+    }
+  }
+
+  async stopScanner(): Promise<void> {
+    try {
+      if (this.html5QrCode && this.isScannerActive) {
+        await this.html5QrCode.stop();
+        console.log('🛑 QR scanner stopped');
+      }
+      this.isScannerActive = false;
+    } catch (error) {
+      console.error('❌ Error stopping scanner:', error);
+      this.isScannerActive = false;
+    }
+  }
+
+  onScanSuccess(decodedText: string): void {
+    console.log('📱 QR Code scanned:', decodedText);
+    
+    try {
+      // Xử lý QR code chỉ chứa LSX
+      const lsxValue = decodedText.trim();
+      this.processLSXQRCode(lsxValue);
+    } catch (error) {
+      console.error('❌ Error processing scan:', error);
+      alert(`❌ Lỗi xử lý QR code: ${error}`);
+    }
+  }
+
+  async processLSXQRCode(lsxValue: string): Promise<void> {
+    console.log('🔍 Looking for Work Order with LSX:', lsxValue);
+    
+    // Extract base LSX (remove everything after / if exists)
+    const baseLsx = lsxValue.split('/')[0];
+    console.log('🔍 Base LSX:', baseLsx);
+    
+    // Find work order by LSX
+    let workOrder = this.allWorkOrdersForScan.find(wo => 
+      wo.productionOrder === lsxValue
+    );
+    
+    if (!workOrder) {
+      // Try with base LSX
+      workOrder = this.allWorkOrdersForScan.find(wo => 
+        wo.productionOrder === baseLsx
+      );
+    }
+
+    if (!workOrder) {
+      console.log('❌ Available work orders count:', this.allWorkOrdersForScan.length);
+      console.log('❌ Available work orders:', this.allWorkOrdersForScan.map(wo => ({
+        lsx: wo.productionOrder,
+        factory: wo.factory
+      })));
+      console.log('❌ Looking for LSX:', lsxValue, 'Base LSX:', baseLsx);
+      alert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}.\n\nCó ${this.allWorkOrdersForScan.length} work orders trong hệ thống.`);
+      return;
+    }
+    
+    console.log('✅ Found work order:', workOrder);
+
+    // Check work order status - only allow scan if not delay or done
+    if (workOrder.status === 'delay') {
+      console.log(`⚠️ Work Order ${lsxValue} đang delay - không thể scan`);
+      alert('⚠️ Work Order này đang Delay - không thể scan!');
+      return;
+    }
+
+    if (workOrder.status === 'done') {
+      console.log(`⚠️ Work Order ${lsxValue} đã hoàn thành - không thể scan`);
+      alert('⚠️ Work Order này đã hoàn thành - không thể scan!');
+      return;
+    }
+
+    // Allow scan for: waiting, kitting, ready, transfer
+    if (!['waiting', 'kitting', 'ready', 'transfer'].includes(workOrder.status)) {
+      console.log(`⚠️ Work Order ${lsxValue} có trạng thái không hợp lệ: ${workOrder.status}`);
+      alert(`⚠️ Trạng thái Work Order không hợp lệ: ${workOrder.status}`);
+      return;
+    }
+
+    // Check if already scanned in current session
+    const alreadyScanned = this.scannedItems.find(item => item.lsx === lsxValue);
+    if (alreadyScanned) {
+      console.log(`⚠️ LSX ${lsxValue} đã được scan trong session này rồi!`);
+      return;
+    }
+
+    // Get current scan count from database
+    const currentScanCount = await this.getScanCountForWorkOrder(workOrder.id!);
+    const newScanCount = currentScanCount + 1;
+    
+    // Determine next status based on current status
+    let status = '';
+    switch (workOrder.status) {
+      case 'waiting':
+        status = 'Kitting';
+        break;
+      case 'kitting':
+        status = 'Ready';
+        break;
+      case 'ready':
+        status = 'Transfer';
+        break;
+      case 'transfer':
+        status = 'Done';
+        break;
+      default:
+        status = 'Kitting';
+    }
+
+    // Create scanned item with current and new status
+    const scannedItem: ScannedItem = {
+      lsx: lsxValue,
+      currentStatus: workOrder.status,
+      newStatus: status,
+      workOrderId: workOrder.id
+    };
+
+    this.scannedItems.push(scannedItem);
+    console.log('✅ Added scanned item:', scannedItem);
+    // Removed alert - data goes directly to table
+  }
+
+
+
+  removeScannedItem(index: number): void {
+    this.scannedItems.splice(index, 1);
+  }
+
+  // Physical Scanner Methods
+  startPhysicalScanner(): void {
+    console.log('📱 Starting physical scanner mode...');
+    this.isPhysicalScannerMode = true;
+    this.scannerBuffer = '';
+    
+    // Add keyboard event listener
+    this.keyboardListener = this.handlePhysicalScannerInput.bind(this);
+    document.addEventListener('keydown', this.keyboardListener);
+    
+    console.log('✅ Physical scanner mode enabled. Ready to scan...');
+  }
+
+  stopPhysicalScanner(): void {
+    console.log('🛑 Stopping physical scanner mode...');
+    this.isPhysicalScannerMode = false;
+    this.scannerBuffer = '';
+    
+    // Remove keyboard event listener
+    if (this.keyboardListener) {
+      document.removeEventListener('keydown', this.keyboardListener);
+      this.keyboardListener = null;
+    }
+    
+    // Clear any pending timeout
+    if (this.scannerTimeoutId) {
+      clearTimeout(this.scannerTimeoutId);
+      this.scannerTimeoutId = null;
+    }
+    
+    console.log('✅ Physical scanner mode disabled');
+  }
+
+  // Set camera mode
+  setCameraMode(): void {
+    if (this.isPhysicalScannerMode) {
+      this.stopPhysicalScanner();
+      this.isPhysicalScannerMode = false;
+    }
+  }
+
+  // Set scanner mode
+  setScanMode(): void {
+    if (!this.isPhysicalScannerMode) {
+      this.startPhysicalScanner();
+    }
+  }
+
+  // Complete scan and return to main view
+  async completeScanAndReturn(): Promise<void> {
+    if (this.scannedItems.length === 0) {
+      this.backToMainView();
+      return;
+    }
+
+    try {
+      this.isProcessingScan = true;
+      
+      const user = await this.afAuth.currentUser;
+      const currentUser = user?.displayName || 'Unknown';
+
+      // Process each scanned item
+      for (const scannedItem of this.scannedItems) {
+        try {
+          const workOrder = this.allWorkOrdersForScan.find(wo => wo.productionOrder === scannedItem.lsx || wo.productionOrder === scannedItem.lsx.split('/')[0]);
+          
+          if (!workOrder) {
+            console.error(`❌ Work order not found for LSX: ${scannedItem.lsx}`);
+            continue;
+          }
+
+          // Save scan data
+          await this.saveScanData({
+            lsx: scannedItem.lsx,
+            quantity: workOrder.quantity,
+            scannedAt: new Date(),
+            scannedBy: currentUser,
+            factory: workOrder.factory || 'Unknown',
+            workOrderId: workOrder.id!
+          });
+
+          // Update work order status to new status (but don't auto-complete)
+          const newStatusEnum = this.convertStringToStatus(scannedItem.newStatus);
+          workOrder.status = newStatusEnum;
+          await this.updateWorkOrderInFirebase(workOrder);
+          
+          // Note: Work Order is now Done but not completed yet
+          // Employee needs to manually click "Hoàn thành" button to complete it
+
+        } catch (error) {
+          console.error(`❌ Error processing scan for ${scannedItem.lsx}:`, error);
+        }
+      }
+
+      // Reload work orders to reflect changes
+      await this.loadWorkOrders();
+      
+      // Clear scanned items and return to main view
+      this.scannedItems = [];
+      this.backToMainView();
+
+    } catch (error) {
+      console.error('❌ Error completing scan:', error);
+      alert('❌ Lỗi khi hoàn thành scan!');
+    } finally {
+      this.isProcessingScan = false;
+    }
+  }
+
+  private handlePhysicalScannerInput(event: KeyboardEvent): void {
+    // Only process if scanner mode is active and scan page is open
+    if (!this.isPhysicalScannerMode || this.currentView !== 'scan') {
+      return;
+    }
+
+    // Prevent default behavior for scanner input
+    if (event.key === 'Enter' || (event.key.length === 1 && /[a-zA-Z0-9|\/]/.test(event.key))) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    // Clear existing timeout
+    if (this.scannerTimeoutId) {
+      clearTimeout(this.scannerTimeoutId);
+    }
+
+    if (event.key === 'Enter') {
+      // Process the complete scan
+      if (this.scannerBuffer.trim()) {
+        console.log('📱 Physical scanner input:', this.scannerBuffer);
+        this.onScanSuccess(this.scannerBuffer.trim());
+        this.scannerBuffer = '';
+      }
+    } else if (event.key.length === 1) {
+      // Add character to buffer
+      this.scannerBuffer += event.key;
+      
+      // Set timeout to auto-process if no more input (in case Enter is not sent)
+      this.scannerTimeoutId = setTimeout(() => {
+        if (this.scannerBuffer.trim()) {
+          console.log('📱 Physical scanner input (timeout):', this.scannerBuffer);
+          this.onScanSuccess(this.scannerBuffer.trim());
+          this.scannerBuffer = '';
+        }
+      }, 100); // 100ms timeout for scan completion
+    }
+  }
+
+  async processScanResults(): Promise<void> {
+    if (this.scannedItems.length === 0) {
+      alert('❌ Chưa có item nào được scan!');
+      return;
+    }
+
+    this.isProcessingScan = true;
+
+    try {
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+
+      for (const scannedItem of this.scannedItems) {
+        try {
+          const workOrder = this.allWorkOrdersForScan.find(wo => wo.id === scannedItem.workOrderId);
+          if (!workOrder) {
+            console.error(`❌ Work order not found for LSX: ${scannedItem.lsx}`);
+            continue;
+          }
+
+          await this.saveScanData({
+            lsx: scannedItem.lsx,
+            quantity: workOrder.quantity,
+            scannedAt: new Date(),
+            scannedBy: currentUser,
+            factory: workOrder.factory || 'Unknown',
+            workOrderId: workOrder.id!
+          });
+
+          // Note: updateWorkOrderStatusAfterScan is removed - status is already updated in processLSXQRCode
+
+        } catch (error) {
+          console.error(`❌ Error processing scan for ${scannedItem.lsx}:`, error);
+        }
+      }
+
+      await this.loadWorkOrders();
+      alert(`✅ Đã xử lý thành công ${this.scannedItems.length} scans!`);
+      this.backToMainView();
+
+    } catch (error) {
+      console.error('❌ Error processing scan results:', error);
+      alert('❌ Lỗi khi xử lý scan results!');
+    } finally {
+      this.isProcessingScan = false;
+    }
+  }
+
+  private async saveScanData(scanData: ScanData): Promise<void> {
+    try {
+      const db = getFirestore();
+      const scansCollection = collection(db, 'workOrderScans');
+      await addDoc(scansCollection, {
+        ...scanData,
+        createdAt: new Date()
+      });
+      console.log('✅ Scan data saved to Firebase:', scanData.lsx);
+    } catch (error) {
+      console.error('❌ Error saving scan data:', error);
+      throw error;
+    }
+  }
+
+  private async updateWorkOrderStatusAfterScan(workOrder: WorkOrder): Promise<void> {
+    try {
+      const scanCount = await this.getScanCountForWorkOrder(workOrder.id!);
+      
+      let newStatus: WorkOrderStatus;
+      switch (scanCount) {
+        case 1:
+          newStatus = WorkOrderStatus.KITTING;
+          break;
+        case 2:
+          newStatus = WorkOrderStatus.READY;
+          break;
+        case 3:
+          newStatus = WorkOrderStatus.TRANSFER;
+          break;
+        case 4:
+        default:
+          newStatus = WorkOrderStatus.DONE;
+          break;
+      }
+
+      workOrder.status = newStatus;
+      await this.updateWorkOrderInFirebase(workOrder);
+      
+      console.log(`✅ Updated work order ${workOrder.productionOrder} status to ${newStatus} (scan count: ${scanCount})`);
+    } catch (error) {
+      console.error('❌ Error updating work order status after scan:', error);
+      throw error;
+    }
+  }
+
+  private async getScanCountForWorkOrder(workOrderId: string): Promise<number> {
+    try {
+      const db = getFirestore();
+      const scansCollection = collection(db, 'workOrderScans');
+      const q = query(scansCollection, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      let count = 0;
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as ScanData;
+        if (data.workOrderId === workOrderId) {
+          count++;
+        }
+      });
+
+      return count;
+    } catch (error) {
+      console.error('❌ Error getting scan count:', error);
+      return 0;
+    }
+  }
+
+  private async updateWorkOrderInFirebase(workOrder: WorkOrder): Promise<void> {
+    try {
+      if (this.materialService && typeof this.materialService.updateWorkOrder === 'function') {
+        await this.materialService.updateWorkOrder(workOrder.id!, workOrder);
+        return;
+      }
+
+      const db = getFirestore();
+      const workOrderRef = doc(db, 'workOrders', workOrder.id!);
+      await updateDoc(workOrderRef, {
+        status: workOrder.status,
+        lastModified: new Date()
+      });
+
+    } catch (error) {
+      console.error('❌ Error updating work order in Firebase:', error);
+      throw error;
+    }
+  }
+
+} 

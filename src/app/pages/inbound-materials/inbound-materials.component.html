@@ -139,7 +139,8 @@
             <td class="status-cell">
               <mat-checkbox [checked]="material.qualityCheck" 
                            (change)="updateQualityCheck(material, $event.checked)"
-                           [class.quality-checked]="material.qualityCheck">
+                           [class.quality-checked]="material.qualityCheck"
+                           [disabled]="!canEditMaterial(material)">
               </mat-checkbox>
             </td>
             <td class="status-cell">
@@ -155,10 +156,11 @@
                      class="editable-input" 
                      [(ngModel)]="material.notes" 
                      (change)="updateNotes(material)"
-                     placeholder="Nhập ghi chú...">
+                     placeholder="Nhập ghi chú..."
+                     [disabled]="!canEditMaterial(material)">
             </td>
             <td class="number-cell">
-              <input type="number" class="editable-input-no-border" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)" min="0">
+              <input type="number" class="editable-input-no-border" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)" min="0" [disabled]="!canEditMaterial(material)">
             </td>
             <td class="number-cell">{{calculateQuantityPerUnit(material)}} {{material.unit}}</td>
             <td>{{material.supplier}}</td>
@@ -167,7 +169,8 @@
                      class="editable-input" 
                      [(ngModel)]="material.remarks" 
                      (change)="updateRemarks(material)"
-                     placeholder="Nhập lưu ý...">
+                     placeholder="Nhập lưu ý..."
+                     [disabled]="!canEditMaterial(material)">
             </td>
             <td class="status-cell">
               <!-- Tạm thời để trống -->

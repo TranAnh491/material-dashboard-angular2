@@ -614,6 +614,18 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Kiểm tra user có thể chỉnh sửa material của nhà máy cụ thể không
+  canEditMaterial(material: InboundMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
+  // Kiểm tra user có thể xem material của nhà máy cụ thể không
+  canViewMaterial(material: InboundMaterial): boolean {
+    const materialFactory = material.factory || 'ASM1';
+    return this.availableFactories.includes(materialFactory);
+  }
+
   // Load materials from Firebase
   loadMaterialsFromFirebase(): void {
     this.firestore.collection('inbound-materials')

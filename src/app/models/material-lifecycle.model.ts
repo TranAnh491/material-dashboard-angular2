@@ -94,6 +94,7 @@ export interface WorkOrder {
   missingMaterials?: string;
   materialsComplete?: boolean;
   materialsStatus?: 'sufficient' | 'insufficient'; // Đủ/Thiếu
+  isCompleted?: boolean; // Flag to mark if manually completed
 }
 
 export enum FactoryType {
