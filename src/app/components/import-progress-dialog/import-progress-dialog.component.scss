@@ -1,0 +1,169 @@
+.import-progress-dialog {
+  min-width: 400px;
+  max-width: 500px;
+  
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    
+    h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #333;
+      font-size: 20px;
+      
+      i {
+        font-size: 24px;
+        color: #2196F3;
+      }
+    }
+    
+    .close-button {
+      color: #666;
+      
+      &:hover {
+        color: #333;
+        background-color: #f5f5f5;
+      }
+    }
+  }
+  
+  .progress-container {
+    text-align: center;
+    padding: 20px 0;
+    
+    .status-icon {
+      margin-bottom: 20px;
+      
+      i {
+        font-size: 48px;
+        animation: pulse 2s infinite;
+      }
+    }
+    
+    .progress-message {
+      margin-bottom: 25px;
+      
+      p {
+        margin: 0;
+        font-size: 16px;
+        color: #555;
+        line-height: 1.5;
+      }
+    }
+    
+    .progress-bar-container {
+      margin-bottom: 20px;
+      
+      .progress-text {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #666;
+        
+        span {
+          margin: 0 2px;
+          
+          &.percentage {
+            color: #2196F3;
+            font-weight: 500;
+          }
+        }
+      }
+    }
+    
+    .status-details {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      
+      .success-message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #4CAF50;
+        font-weight: 500;
+        
+        i {
+          font-size: 20px;
+        }
+      }
+      
+      .error-message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #F44336;
+        font-weight: 500;
+        
+        i {
+          font-size: 20px;
+        }
+      }
+    }
+  }
+  
+  mat-dialog-actions {
+    margin-top: 20px;
+    padding: 0;
+    
+    button {
+      min-width: 100px;
+      
+      &[mat-raised-button] {
+        background-color: #2196F3;
+        color: white;
+        
+        &:hover {
+          background-color: #1976D2;
+        }
+      }
+    }
+  }
+}
+
+// Animations
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+// Responsive design
+@media (max-width: 600px) {
+  .import-progress-dialog {
+    min-width: 300px;
+    max-width: 90vw;
+    
+    .dialog-header h2 {
+      font-size: 18px;
+      
+      i {
+        font-size: 20px;
+      }
+    }
+    
+    .progress-container {
+      padding: 15px 0;
+      
+      .status-icon i {
+        font-size: 36px;
+      }
+      
+      .progress-message p {
+        font-size: 14px;
+      }
+    }
+  }
+}

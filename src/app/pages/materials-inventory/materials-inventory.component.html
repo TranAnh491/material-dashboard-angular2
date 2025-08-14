@@ -70,11 +70,17 @@
         <!-- Search Box -->
         <div class="search-box">
           <input type="text" 
-                 placeholder="Tìm kiếm mã hàng, tên hàng, vị trí..." 
+                 placeholder="🔍 Tìm kiếm Mã hàng, PO, Vị trí, Factory..." 
                  [(ngModel)]="searchTerm" 
-                 (input)="onSearchChange($event)"
-                 class="search-input">
+                 (input)="onSearchInput($event)"
+                 class="search-input"
+                 autocomplete="off">
           <i class="material-icons search-icon">search</i>
+          
+          <!-- Search results counter -->
+          <div class="search-results-counter" *ngIf="searchTerm && filteredInventory.length > 0">
+            {{ filteredInventory.length }} kết quả
+          </div>
         </div>
         
         <!-- Action Buttons -->
@@ -112,11 +118,7 @@
           <tr>
             <th>Factory</th>
             <th>STT</th>
-            <th>Ngày nhận</th>
             <th>Mã hàng</th>
-            <th>Scan</th>
-            <th>Tên hàng</th>
-            <th>Đơn vị</th>
             <th>PO</th>
             <th>Số lượng</th>
             <th>Đã xuất</th>
@@ -125,17 +127,14 @@
             <th>Thay đổi vị trí</th>
             <th>Loại Hình</th>
             <th>HSD</th>
-            <th>KK</th>
             <th>Rolls/Bags</th>
-            <th>Nhà cung cấp</th>
-            <th>Ghi chú</th>
             <th>Trạng thái</th>
             <th>Xóa</th>
             <th>QR</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredInventory; let i = index" 
+          <tr *ngFor="let material of filteredInventory; trackBy: trackByFn; let i = index" 
               [class.duplicate-row]="material.isDuplicate"
               [class.iqc-row]="isIQCLocation(material.location)">
             <td class="factory-cell" 
@@ -144,41 +143,11 @@
               {{material.factory || 'ASM1'}}
             </td>
             <td class="row-header">{{i + 1}}</td>
-            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">{{material.receivedDate | date:'dd/MM/yyyy'}}</td>
             <td class="code-cell material-code-cell" 
                 [class.duplicate-cell]="material.isDuplicate"
                 [class.duplicate-code]="isDuplicatePO(material)"
                 [class.normal-code]="!isDuplicatePO(material)"
                 [class.negative-stock]="hasNegativeStock(material)">{{material.materialCode}}</td>
-            <td class="scan-cell">
-              <button class="scan-qr-btn" 
-                      (click)="scanQRCode(material)"
-                      title="Quét QR code để xuất hàng">
-                <i class="material-icons">qr_code</i>
-                Scan
-              </button>
-            </td>
-            <td class="material-name-cell" [class.duplicate-cell]="material.isDuplicate" 
-                [title]="material.materialName || getMaterialName(material.materialCode)">
-              <!-- Show cached name instantly if available -->
-              <span *ngIf="material.materialName">{{material.materialName}}</span>
-              <span *ngIf="!material.materialName && catalogLoaded" class="catalog-name">
-                {{getMaterialName(material.materialCode)}}
-              </span>
-              <span *ngIf="!material.materialName && !catalogLoaded" class="loading-name">
-                <i class="material-icons rotating">sync</i>
-              </span>
-            </td>
-            <td [class.duplicate-cell]="material.isDuplicate">
-              <!-- Show cached unit instantly if available -->
-              <span *ngIf="material.unit && material.unit !== 'PCS'">{{material.unit}}</span>
-              <span *ngIf="(!material.unit || material.unit === 'PCS') && catalogLoaded" class="catalog-unit">
-                {{getMaterialUnit(material.materialCode)}}
-              </span>
-              <span *ngIf="(!material.unit || material.unit === 'PCS') && !catalogLoaded" class="loading-unit">
-                <i class="material-icons rotating">sync</i>
-              </span>
-            </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
             <td class="number-cell">
@@ -220,21 +189,9 @@
                      (change)="onHSDChange($event, material)"
                      [disabled]="!canEditHSD">
             </td>
-            <td class="checkbox-cell">
-              <input type="checkbox" 
-                     [checked]="material.qualityCheck" 
-                     (change)="updateQualityCheck(material, $event)"
-                     class="quality-checkbox">
-            </td>
 
             <td class="number-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)">
-            </td>
-            <td>
-              <input type="text" class="editable-cell" [(ngModel)]="material.supplier" (change)="updateRemarks(material)">
-            </td>
-            <td>
-              <input type="text" class="editable-cell" [(ngModel)]="material.remarks" (change)="updateRemarks(material)">
             </td>
             <td class="status-cell">
               <span class="badge" 

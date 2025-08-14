@@ -1,0 +1,101 @@
+<div class="qr-scanner-modal">
+  <!-- Modal Header -->
+  <div class="modal-header">
+    <h2 mat-dialog-title>
+      <i class="material-icons">qr_code_scanner</i>
+      {{ data.title }}
+    </h2>
+    <button mat-icon-button (click)="closeModal()" class="close-btn">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+
+  <!-- Modal Content -->
+  <div mat-dialog-content class="modal-content">
+    
+    <!-- Material Info -->
+    <div class="material-info" *ngIf="data.materialCode">
+      <div class="info-row">
+        <span class="label">Mã hàng:</span>
+        <span class="value">{{ data.materialCode }}</span>
+      </div>
+    </div>
+
+    <!-- Message -->
+    <div class="message">
+      Đang mở camera để quét barcode vị trí...
+    </div>
+
+    <!-- Starting State -->
+    <div class="scanner-state starting-state" *ngIf="scannerState === 'starting'">
+      <div class="state-icon">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+      <h3>Đang khởi động camera...</h3>
+      <p>Vui lòng cho phép truy cập camera</p>
+    </div>
+
+    <!-- Scanning State -->
+    <div class="scanner-state scanning-state" *ngIf="scannerState === 'scanning'">
+      <div class="video-container">
+        <div id="video-preview-container" class="video-preview">
+          <!-- Video element will be inserted here -->
+        </div>
+        <div class="scan-overlay">
+          <div class="scan-box">
+            <div class="corner top-left"></div>
+            <div class="corner top-right"></div>
+            <div class="corner bottom-left"></div>
+            <div class="corner bottom-right"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="scan-instructions">
+        <h3>Quét barcode vị trí</h3>
+        <p>Hướng camera vào barcode để đọc thông tin vị trí</p>
+        
+        <div class="scan-actions">
+          <button mat-button (click)="closeModal()" class="stop-btn">
+            <i class="material-icons">close</i>
+            Đóng
+          </button>
+          <button mat-button (click)="openManualInput()" class="manual-btn">
+            <i class="material-icons">keyboard</i>
+            Nhập thủ công
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div class="scanner-state error-state" *ngIf="scannerState === 'error'">
+      <div class="state-icon error-icon">
+        <i class="material-icons">error</i>
+      </div>
+      <h3>Lỗi camera</h3>
+      <p class="error-message">{{ errorMessage }}</p>
+      
+      <div class="error-actions">
+        <button mat-raised-button color="primary" (click)="retryScanning()" class="retry-btn">
+          <i class="material-icons">refresh</i>
+          Thử lại
+        </button>
+        <button mat-button (click)="openManualInput()" class="manual-btn">
+          <i class="material-icons">keyboard</i>
+          Nhập thủ công
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal Footer -->
+  <div mat-dialog-actions class="modal-footer">
+    <button mat-button (click)="closeModal()" class="cancel-btn">
+      <i class="material-icons">cancel</i>
+      Hủy
+    </button>
+  </div>
+
+</div>

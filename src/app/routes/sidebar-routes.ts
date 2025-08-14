@@ -10,11 +10,12 @@ export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { path: '#materials', title: 'Materials', icon: 'inventory_2', class: '', children: [
-    { path: '/inbound-materials', title: 'Inbound', icon: 'arrow_downward', class: 'ml-4' },
-    { path: '/outbound-materials', title: 'Outbound', icon: 'arrow_upward', class: 'ml-4' },
-    { path: '/materials-inventory', title: 'Inventory', icon: 'inventory', class: 'ml-4' }
-  ]},
+  { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'inventory_2', class: '' },
+  { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'inventory_2', class: '' },
+  { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'inventory_2', class: '' },
+  { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'inventory_2', class: '' },
+  { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', class: '' },
+  { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', class: '' },
   { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
   { path: '/label', title: 'Label', icon: 'label', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },

@@ -1,0 +1,156 @@
+<div class="main-content">
+  <div class="excel-container">
+    <div class="excel-header">
+      <h4>📤 OUTBOUND ASM1</h4>
+    </div>
+    <!-- Excel-like Actions -->
+    <div class="excel-actions">
+      <div class="action-controls-horizontal">
+        <!-- Physical Scanner Input -->
+        <div class="scanner-input-group">
+          <input type="text" 
+                 #scannerInput
+                 [(ngModel)]="scannerBuffer"
+                 (keydown)="onScannerKeydown($event)"
+                 (blur)="onScannerInputBlur()"
+                 placeholder="Quét barcode/QR code hoặc nhập thủ công..."
+                 class="scanner-input"
+                 [class.active]="isScannerInputActive">
+          <div class="scanner-buttons">
+            <button class="scanner-btn camera" 
+                    (click)="startCameraScanning()" 
+                    [disabled]="isScannerLoading || isCameraScanning"
+                    title="Quét bằng camera">
+              <i class="material-icons" *ngIf="!isScannerLoading && !isCameraScanning">qr_code_scanner</i>
+              <i class="material-icons spinning" *ngIf="isScannerLoading">hourglass_empty</i>
+              <i class="material-icons" *ngIf="isCameraScanning">videocam</i>
+            </button>
+            <button class="scanner-btn physical" 
+                    (click)="activatePhysicalScanner()" 
+                    [class.active]="isScannerInputActive"
+                    title="Kích hoạt máy scan USB/Bluetooth">
+              <i class="material-icons">scanner</i>
+            </button>
+          </div>
+        </div>
+        
+        <!-- More Dropdown -->
+        <div class="dropdown" #dropdown>
+          <button class="more-btn" type="button" (click)="toggleDropdown()">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" [class.show]="isDropdownOpen">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
+              <i class="material-icons">download</i>
+              Export Excel
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
+              <i class="material-icons">add</i>
+              Thêm Material
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); closeDropdown()">
+              <i class="material-icons">description</i>
+              Tải báo cáo
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
+              <i class="material-icons">cleaning_services</i>
+              Làm sạch dữ liệu
+            </a>
+          </div>
+        </div>
+        
+                <!-- Refresh Button -->
+        <button class="refresh-btn" (click)="loadMaterials()">
+          <i class="material-icons">refresh</i>
+          Refresh
+        </button>
+
+        <!-- Date Range Selector -->
+        <div class="date-range-selector">
+          <input type="date" 
+                 [(ngModel)]="startDate" 
+                 (change)="onDateRangeChange()"
+                 class="date-input"
+                 title="Từ ngày">
+          <span class="date-separator">→</span>
+          <input type="date" 
+                 [(ngModel)]="endDate" 
+                 (change)="onDateRangeChange()"
+                 class="date-input"
+                 title="Đến ngày">
+        </div>
+
+        <!-- Factory Badge -->
+        <span class="factory-badge asm1-badge">ASM1</span>
+      </div>
+    </div>
+    <div class="loading-container" *ngIf="isLoading">
+      <div class="loading-spinner">
+        <i class="material-icons spinning">refresh</i>
+        <span>Đang tải dữ liệu ASM1...</span>
+      </div>
+    </div>
+    <div class="error-message" *ngIf="errorMessage">
+      <i class="material-icons">error</i>
+      {{errorMessage}}
+    </div>
+    <div class="excel-body" *ngIf="!isLoading">
+      <table class="excel-table">
+        <thead>
+          <tr>
+            <th>Factory</th>
+            <th>#</th>
+            <th>Mã hàng</th>
+            <th>Số PO</th>
+            <th>Xuất</th>
+            <th>Ngày xuất</th>
+            <th>Người xuất</th>
+            <th>Xóa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+            <td class="factory-cell factory-asm1">ASM1</td>
+            <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
+            <td class="code-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.materialCode" (change)="updateMaterial(material)">
+            </td>
+            <td class="po-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.poNumber" (change)="updateMaterial(material)">
+            </td>
+            <td class="number-cell">
+              <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
+            </td>
+            <td class="date-cell">
+              <input type="date" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().split('T')[0] : ''" (change)="onExportDateChange($event, material)">
+            </td>
+            <td class="exporter-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.exportedBy" (change)="updateMaterial(material)">
+            </td>
+            <td class="action-cell">
+              <button class="action-btn delete-btn" (click)="deleteMaterial(material)">
+                <i class="material-icons">delete</i>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-container" *ngIf="totalPages > 1">
+      <div class="pagination-info">Trang {{currentPage}} / {{totalPages}} - Tổng: {{filteredMaterials.length}} materials</div>
+      <div class="pagination-controls">
+        <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+          <i class="material-icons">chevron_left</i>
+        </button>
+        <button class="page-btn" *ngFor="let page of [].constructor(totalPages); let i = index" [class.active]="currentPage === i + 1" (click)="goToPage(i + 1)">{{i + 1}}</button>
+        <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Scanner Modal - Removed since we auto-export now -->
+  <!-- <div class="qr-scanner-modal" *ngIf="isCameraScanning || lastScannedData"> -->
+</div>

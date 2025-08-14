@@ -1144,6 +1144,8 @@ mat-checkbox {
 }
 
 .search-box {
+  position: relative;
+  
   .search-input {
     padding: 8px 12px;
     border: 1px solid #dee2e6;
@@ -1161,6 +1163,21 @@ mat-checkbox {
     &::placeholder {
       color: #6c757d;
     }
+  }
+  
+  .search-results-counter {
+    position: absolute;
+    right: -120px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #2196F3;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 10;
   }
 }
 

@@ -48,6 +48,12 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
+import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
+import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
+import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.component';
+import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
+import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
 import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
@@ -113,6 +119,12 @@ import { SettingsGuard } from '../../guards/settings.guard';
     InboundMaterialsComponent,
     OutboundMaterialsComponent,
     MaterialsInventoryComponent,
+    MaterialsASM1Component,
+    MaterialsASM2Component,
+    InboundASM1Component,
+    InboundASM2Component,
+    OutboundASM1Component,
+    OutboundASM2Component,
     DocumentsComponent,
     Layout3dComponent,
     ShelfLifeComponent,

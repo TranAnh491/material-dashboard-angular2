@@ -1,13 +1,16 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
+import { MatDialog } from '@angular/material/dialog';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { ExcelImportService } from '../../services/excel-import.service';
+import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 
 export interface InventoryMaterial {
   id?: string;
@@ -88,6 +91,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   
   // Search and filter
   searchTerm = '';
+  private searchSubject = new Subject<string>();
   
   // Factory filter
   selectedFactory: string = '';
@@ -123,7 +127,9 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     private afAuth: AngularFireAuth,
     private cdr: ChangeDetectorRef,
     private tabPermissionService: TabPermissionService,
-    private factoryAccessService: FactoryAccessService
+    private factoryAccessService: FactoryAccessService,
+    private excelImportService: ExcelImportService,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -138,6 +144,9 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     
     // Disable auto-sync to prevent deleted items from reappearing
     // Use manual sync button instead
+    
+    // Setup debounced search for better performance
+    this.setupDebouncedSearch();
   }
 
   // Load factory access permissions and set default factory
@@ -152,6 +161,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
         if (access.defaultFactory && access.availableFactories.includes(access.defaultFactory)) {
           this.selectedFactory = access.defaultFactory;
         } else if (access.availableFactories.length > 0) {
+          this.selectedFactory = access.defaultFactory;
+        } else if (access.availableFactories.length > 0) {
           this.selectedFactory = access.availableFactories[0];
         }
         
@@ -160,6 +171,17 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
           availableFactories: this.availableFactories
         });
       });
+  }
+
+  // Setup debounced search for better performance
+  private setupDebouncedSearch(): void {
+    this.searchSubject.pipe(
+      debounceTime(300), // Đợi 300ms sau khi user ngừng gõ
+      distinctUntilChanged(), // Chỉ search khi search term thay đổi
+      takeUntil(this.destroy$)
+    ).subscribe(searchTerm => {
+      this.performSearch(searchTerm);
+    });
   }
 
   // Kiểm tra user có thể chỉnh sửa inventory material của nhà máy cụ thể không
@@ -859,122 +881,68 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     console.log('Catalog template downloaded');
   }
 
-  // Import current stock
-  importCurrentStock(): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (event: any) => {
-      const file = event.target.files[0];
-      if (file) {
-        this.processStockFile(file);
-      }
-    };
-    input.click();
-  }
-
-  // Process stock file
-  private async processStockFile(file: File): Promise<void> {
+  // Import current stock with optimized service
+  async importCurrentStock(): Promise<void> {
     try {
-      const stockData = await this.readStockFile(file);
-      this.updateInventoryWithStock(stockData);
-      console.log('Stock data imported successfully');
-    } catch (error) {
-      console.error('Error processing stock file:', error);
-    }
-  }
+      // Create file input
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.xlsx,.xls,.csv';
+      
+      input.onchange = async (event: any) => {
+        const file = event.target.files[0];
+        if (!file) return;
 
-  // Read stock file
-  private async readStockFile(file: File): Promise<StockItem[]> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e: any) => {
+        // Validate file
+        const validation = this.excelImportService.validateFile(file);
+        if (!validation.valid) {
+          alert(validation.message);
+          return;
+        }
+
         try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          // Show progress dialog
+          const dialogRef = this.dialog.open(ImportProgressDialogComponent, {
+            width: '500px',
+            disableClose: true,
+            data: { progress$: this.excelImportService.progress$ }
+          });
+
+          // Start import process
+          const result = await this.excelImportService.importStockFile(file, 50);
           
-          const stockItems: StockItem[] = [];
-          // Skip header row
-          for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i] as any[];
-            if (row[1] && row[2] && row[3]) { // Factory, MaterialCode, PO required
-              stockItems.push({
-                factory: row[0]?.toString() || 'ASM1', // Factory column (new)
-                materialCode: row[1].toString(),
-                poNumber: row[2].toString(),
-                quantity: Number(row[3]) || 0,
-                type: row[4]?.toString() || '',
-                location: row[5]?.toString()?.toUpperCase() || 'DEFAULT'
-              });
+          // Wait for dialog to close
+          const dialogResult = await dialogRef.afterClosed().toPromise();
+          
+          // Show result
+          if (result.success > 0) {
+            alert(`✅ Import thành công ${result.success} items!`);
+            
+            // Refresh inventory data
+            this.loadInventoryFromFirebase();
+          }
+          
+          if (result.errors.length > 0) {
+            console.warn('Import errors:', result.errors);
+            if (result.errors.length <= 10) {
+              alert(`⚠️ Có ${result.errors.length} lỗi:\n${result.errors.slice(0, 10).join('\n')}`);
+            } else {
+              alert(`⚠️ Có ${result.errors.length} lỗi. Xem console để biết chi tiết.`);
             }
           }
-          resolve(stockItems);
+          
         } catch (error) {
-          reject(error);
+          console.error('Import error:', error);
+          alert(`❌ Lỗi import: ${error}`);
         }
       };
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  // Update inventory with stock data
-  private updateInventoryWithStock(stockItems: StockItem[]): void {
-    // Add new inventory items from stock import
-    stockItems.forEach(stockItem => {
-      // Check if item already exists
-      const existing = this.inventoryMaterials.find(material => 
-        material.materialCode === stockItem.materialCode && 
-        material.poNumber === stockItem.poNumber
-      );
-
-      if (!existing) {
-        // Create new inventory item with "Import" status
-        const newInventoryItem: InventoryMaterial = {
-          factory: stockItem.factory || 'ASM1', // Include factory from stock item
-          importDate: new Date(),
-          receivedDate: new Date(),
-          batchNumber: `IMPORT-${Date.now()}`,
-          materialCode: stockItem.materialCode,
-          materialName: stockItem.materialCode, // Use material code as name for now
-          poNumber: stockItem.poNumber,
-          quantity: stockItem.quantity,
-          unit: 'PCS', // Default unit
-          exported: 0,
-          stock: stockItem.quantity,
-          location: stockItem.location,
-          type: stockItem.type,
-          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
-          qualityCheck: false,
-          isReceived: true,
-          notes: '',
-          rollsOrBags: '0',
-          supplier: 'Import',
-          remarks: '',
-          isCompleted: false,
-          isDuplicate: false,
-          importStatus: 'Import', // Mark as Import status
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-
-        // Add to Firebase
-        this.firestore.collection('inventory-materials').add(newInventoryItem)
-          .then((docRef) => {
-            console.log('Added import item to inventory with ID:', docRef.id);
-            // Add to local array
-            this.inventoryMaterials.push(newInventoryItem);
-            this.applyFilters();
-          })
-          .catch(error => {
-            console.error('Error adding import item to inventory:', error);
-          });
-      }
-    });
-
-    console.log('Stock data imported successfully');
+      
+      input.click();
+      
+    } catch (error) {
+      console.error('Error setting up file input:', error);
+      alert('Có lỗi xảy ra khi mở file picker');
+    }
   }
 
   // Update inventory item in Firebase
@@ -1845,6 +1813,43 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     console.log('🔍 Filters applied for factory:', this.selectedFactory || 'All', 'Items found:', this.filteredInventory.length);
   }
 
+  // New optimized search method
+  onSearchInput(event: any): void {
+    const searchTerm = event.target.value;
+    this.searchSubject.next(searchTerm);
+  }
+
+  // Perform search with performance optimization
+  private performSearch(searchTerm: string): void {
+    if (searchTerm.length === 0) {
+      this.filteredInventory = [];
+      this.searchTerm = '';
+      return;
+    }
+    
+    // Chỉ search khi có ít nhất 2 ký tự
+    if (searchTerm.length < 2) {
+      this.filteredInventory = [];
+      return;
+    }
+    
+    this.searchTerm = searchTerm;
+    
+    // Search với performance tối ưu
+    const startTime = performance.now();
+    
+    this.filteredInventory = this.inventoryMaterials.filter(item => 
+      item.materialCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.poNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.factory?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.type?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    const endTime = performance.now();
+    console.log(`🔍 Search "${searchTerm}": ${this.filteredInventory.length} results in ${(endTime - startTime).toFixed(2)}ms`);
+  }
+
   // Filter by ASM1
   filterByASM1(): void {
     console.log('Filtering by ASM1...');
@@ -1898,6 +1903,52 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   // Check if location is IQC
   isIQCLocation(location: string): boolean {
     return location && location.toUpperCase() === 'IQC';
+  }
+
+  // Track by function for ngFor optimization
+  trackByFn(index: number, item: any): any {
+    return item.id || index;
+  }
+
+  // Status helper methods
+  getStatusClass(item: InventoryMaterial): string {
+    if (item.isCompleted) return 'status-completed';
+    if (item.isDuplicate) return 'status-duplicate';
+    if (item.importStatus === 'Import') return 'status-import';
+    return 'status-active';
+  }
+
+  getStatusText(item: InventoryMaterial): string {
+    if (item.isCompleted) return 'Hoàn thành';
+    if (item.isDuplicate) return 'Trùng lặp';
+    if (item.importStatus === 'Import') return 'Import';
+    return 'Hoạt động';
+  }
+
+  getExpiryDateText(expiryDate: Date): string {
+    if (!expiryDate) return 'N/A';
+    
+    const today = new Date();
+    const diffTime = expiryDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Hết hạn';
+    if (diffDays <= 30) return `${diffDays}d`;
+    if (diffDays <= 90) return `${Math.ceil(diffDays/30)}m`;
+    return `${Math.ceil(diffDays/365)}y`;
+  }
+
+  // Performance monitoring
+  private logPerformance(operation: string, startTime: number): void {
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    console.log(`⏱️ ${operation}: ${duration.toFixed(2)}ms`);
+    
+    // Log warning nếu quá chậm
+    if (duration > 100) {
+      console.warn(`⚠️ ${operation} chậm: ${duration.toFixed(2)}ms`);
+    }
   }
 
   // Check if material has duplicate PO within the same factory

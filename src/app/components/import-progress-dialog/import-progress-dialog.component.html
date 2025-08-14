@@ -1,0 +1,74 @@
+<div class="import-progress-dialog">
+  <div class="dialog-header">
+    <h2 mat-dialog-title>
+      <i class="material-icons">upload_file</i>
+      Import Excel File
+    </h2>
+    <button mat-icon-button (click)="onCancel()" class="close-button">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+
+  <mat-dialog-content>
+    <div class="progress-container">
+      <!-- Status Icon -->
+      <div class="status-icon">
+        <i class="material-icons" [style.color]="getProgressColor()">
+          {{ getStatusIcon() }}
+        </i>
+      </div>
+
+      <!-- Progress Message -->
+      <div class="progress-message">
+        <p>{{ progress.message }}</p>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="progress-bar-container">
+        <mat-progress-bar
+          mode="determinate"
+          [value]="getProgressPercentage()"
+          [color]="progress.status === 'error' ? 'warn' : 'primary'">
+        </mat-progress-bar>
+        
+        <div class="progress-text">
+          <span>{{ progress.current }}</span>
+          <span>/</span>
+          <span>{{ progress.total }}</span>
+          <span class="percentage">({{ getProgressPercentage().toFixed(1) }}%)</span>
+        </div>
+      </div>
+
+      <!-- Status Details -->
+      <div class="status-details" *ngIf="progress.status === 'completed'">
+        <div class="success-message">
+          <i class="material-icons">check_circle</i>
+          <span>Import hoàn thành thành công!</span>
+        </div>
+      </div>
+
+      <div class="status-details" *ngIf="progress.status === 'error'">
+        <div class="error-message">
+          <i class="material-icons">error</i>
+          <span>Có lỗi xảy ra trong quá trình import</span>
+        </div>
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button 
+      mat-button 
+      (click)="onCancel()"
+      *ngIf="progress.status === 'processing'">
+      Hủy
+    </button>
+    <button 
+      mat-raised-button 
+      color="primary"
+      (click)="dialogRef.close()"
+      *ngIf="progress.status === 'completed' || progress.status === 'error'">
+      Đóng
+    </button>
+  </mat-dialog-actions>
+</div>

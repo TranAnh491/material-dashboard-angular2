@@ -1,0 +1,403 @@
+.qr-scanner-modal {
+  width: 100%;
+  max-width: 500px;
+  min-height: 400px;
+  
+  // Modal Header
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #ffffff;
+    
+    h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #000000;
+      
+      .material-icons {
+        font-size: 24px;
+        color: #000000;
+      }
+    }
+    
+    .close-btn {
+      color: #666666;
+      
+      &:hover {
+        background: #f5f5f5;
+      }
+    }
+  }
+
+  // Modal Content
+  .modal-content {
+    padding: 20px;
+    background: #ffffff;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    
+    // Material Info
+    .material-info {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 16px;
+      
+      .info-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        .label {
+          font-weight: 600;
+          color: #666666;
+          min-width: 80px;
+        }
+        
+        .value {
+          font-weight: 700;
+          color: #000000;
+          font-family: 'Roboto Mono', monospace;
+        }
+      }
+    }
+
+    // Message
+    .message {
+      background: #e3f2fd;
+      border: 1px solid #bbdefb;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 16px;
+      color: #1565c0;
+      font-size: 14px;
+    }
+
+    // Scanner States
+    .scanner-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      
+      .state-icon {
+        margin-bottom: 16px;
+        
+        .material-icons {
+          font-size: 48px;
+          color: #666666;
+        }
+        
+        &.error-icon .material-icons {
+          color: #f44336;
+        }
+      }
+      
+      h3 {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #000000;
+      }
+      
+      p {
+        margin: 0 0 20px 0;
+        color: #666666;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      // Idle State
+      &.idle-state {
+        .start-btn {
+          background: #000000 !important;
+          color: #ffffff !important;
+          border: 1px solid #000000;
+          padding: 12px 24px;
+          font-weight: 600;
+          
+          .material-icons {
+            margin-right: 8px;
+          }
+          
+          &:hover {
+            background: #333333 !important;
+          }
+        }
+      }
+
+      // Starting State
+      &.starting-state {
+        .state-icon {
+          margin-bottom: 20px;
+        }
+      }
+
+      // Scanning State
+      &.scanning-state {
+        align-items: stretch;
+        
+        .video-container {
+          position: relative;
+          width: 100%;
+          max-width: 400px;
+          margin: 0 auto 20px auto;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #000000;
+          
+          .video-preview {
+            width: 100%;
+            min-height: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            video {
+              width: 100%;
+              height: auto;
+              display: block;
+            }
+          }
+          
+          .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            
+            .scan-box {
+              position: relative;
+              width: 200px;
+              height: 200px;
+              border: 2px solid rgba(255, 255, 255, 0.8);
+              border-radius: 8px;
+              
+              .corner {
+                position: absolute;
+                width: 20px;
+                height: 20px;
+                border: 3px solid #00ff00;
+                
+                &.top-left {
+                  top: -3px;
+                  left: -3px;
+                  border-right: none;
+                  border-bottom: none;
+                }
+                
+                &.top-right {
+                  top: -3px;
+                  right: -3px;
+                  border-left: none;
+                  border-bottom: none;
+                }
+                
+                &.bottom-left {
+                  bottom: -3px;
+                  left: -3px;
+                  border-right: none;
+                  border-top: none;
+                }
+                
+                &.bottom-right {
+                  bottom: -3px;
+                  right: -3px;
+                  border-left: none;
+                  border-top: none;
+                }
+              }
+            }
+          }
+        }
+        
+        .scan-instructions {
+          text-align: center;
+          
+          h3 {
+            margin-bottom: 8px;
+          }
+          
+          p {
+            margin-bottom: 16px;
+          }
+          
+          .scan-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            
+            button {
+              border: 1px solid #000000;
+              color: #000000;
+              
+              &:hover {
+                background: #f5f5f5;
+              }
+              
+              .material-icons {
+                margin-right: 4px;
+                font-size: 18px;
+              }
+            }
+          }
+        }
+      }
+
+      // Error State
+      &.error-state {
+        .error-message {
+          color: #f44336;
+          font-weight: 500;
+          background: #ffebee;
+          border: 1px solid #ffcdd2;
+          border-radius: 4px;
+          padding: 8px 12px;
+          margin-bottom: 20px;
+        }
+        
+        .error-actions {
+          display: flex;
+          gap: 12px;
+          justify-content: center;
+          
+          .retry-btn {
+            background: #000000 !important;
+            color: #ffffff !important;
+            border: 1px solid #000000;
+            
+            &:hover {
+              background: #333333 !important;
+            }
+          }
+          
+          .manual-btn {
+            border: 1px solid #000000;
+            color: #000000;
+            
+            &:hover {
+              background: #f5f5f5;
+            }
+          }
+          
+          .material-icons {
+            margin-right: 4px;
+            font-size: 18px;
+          }
+        }
+      }
+    }
+  }
+
+  // Modal Footer
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e0e0e0;
+    background: #ffffff;
+    display: flex;
+    justify-content: flex-end;
+    
+    .cancel-btn {
+      border: 1px solid #666666;
+      color: #666666;
+      
+      &:hover {
+        background: #f5f5f5;
+        border-color: #000000;
+        color: #000000;
+      }
+      
+      .material-icons {
+        margin-right: 4px;
+        font-size: 18px;
+      }
+    }
+  }
+}
+
+// Global override for black/white theme
+.qr-scanner-modal {
+  * {
+    background-image: none !important;
+  }
+  
+  // Material components override
+  ::ng-deep {
+    .mat-dialog-container {
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    
+    .mat-button, .mat-raised-button {
+      .mat-button-wrapper {
+        color: inherit !important;
+      }
+    }
+    
+    .mat-spinner circle {
+      stroke: #000000 !important;
+    }
+    
+    .mat-icon-button .mat-button-wrapper {
+      color: inherit !important;
+    }
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .qr-scanner-modal {
+    max-width: 95vw;
+    
+    .modal-content {
+      padding: 16px;
+      
+      .scanner-state.scanning-state {
+        .video-container {
+          max-width: 100%;
+          
+          .scan-overlay .scan-box {
+            width: 150px;
+            height: 150px;
+          }
+        }
+        
+        .scan-instructions .scan-actions {
+          flex-direction: column;
+          align-items: center;
+          
+          button {
+            width: 100%;
+            max-width: 200px;
+          }
+        }
+      }
+      
+      .scanner-state.error-state .error-actions {
+        flex-direction: column;
+        align-items: center;
+        
+        button {
+          width: 100%;
+          max-width: 200px;
+        }
+      }
+    }
+  }
+}

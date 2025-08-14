@@ -21,6 +21,12 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
 import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
+import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
+import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
+import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.component';
+import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
+import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
@@ -40,7 +46,12 @@ export const AdminLayoutRoutes: Routes = [
     canActivate: [AuthGuard]
   },
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard] },
-  { path: 'materials',            component: MaterialsInventoryComponent, canActivate: [AuthGuard] },
+  { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard] },
+  { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard] },
+  { path: 'inbound-asm1',         component: InboundASM1Component, canActivate: [AuthGuard] },
+  { path: 'inbound-asm2',         component: InboundASM2Component, canActivate: [AuthGuard] },
+  { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },
+  { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard] },
   { path: 'fg',                   component: TableListComponent, canActivate: [AuthGuard] },
 
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },

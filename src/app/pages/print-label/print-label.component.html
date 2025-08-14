@@ -1,367 +1,127 @@
-<div class="label-container" style="padding: 10px; max-width: 100%; overflow-x: hidden;">
-
-  
-  <style>
-    /* Mobile responsive styles */
-    @media (max-width: 768px) {
-      .mobile-hidden { display: none !important; }
-      .mobile-visible { display: block !important; }
-      
-      .mobile-table { 
-        font-size: 7px !important; 
-        min-width: 500px !important;
-      }
-      
-      .mobile-table th,
-      .mobile-table td {
-        padding: 3px !important;
-        font-size: 7px !important;
-        min-width: 25px !important;
-      }
-      
-      .mobile-table th {
-        font-size: 6px !important;
-      }
-      
-      .mobile-button {
-        padding: 6px 4px !important;
-        font-size: 9px !important;
-        min-width: 50px !important;
-        margin: 1px !important;
-      }
-      
-      .mobile-container {
-        padding: 3px !important;
-      }
-      
-      .mobile-function-box {
-        min-width: 100px !important;
-        padding: 8px !important;
-      }
-      
-      .mobile-function-box h4 {
-        font-size: 12px !important;
-      }
-      
-      .mobile-function-box p {
-        font-size: 8px !important;
-      }
-      
-      /* Hide unnecessary buttons on mobile for Print Schedules */
-      .mobile-print-schedules .mobile-hidden {
-        display: none !important;
-      }
-      
-      /* Show only essential buttons */
-      .mobile-print-schedules .mobile-visible {
-        display: inline-block !important;
-      }
-    }
-    
-    /* Desktop styles */
-    @media (min-width: 769px) {
-      .desktop-hidden { display: none !important; }
-      .desktop-visible { display: block !important; }
-    }
-  </style>
-    <!-- Two Function Boxes -->
-  <div style="display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap;">
-    
-    <!-- Print Schedules Box -->
-    <div 
-      (click)="selectFunction('print')"
-      [style.background]="selectedFunction === 'print' ? '#1976d2' : '#e3f2fd'"
-      [style.color]="selectedFunction === 'print' ? 'white' : '#1976d2'"
-      class="mobile-function-box"
-      style="flex: 1; min-width: 140px; padding: 15px; border: 2px solid #2196f3; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.3s ease; touch-action: manipulation;">
-      <h4 style="margin: 0 0 6px 0; font-size: 16px;">📋 Print Schedules</h4>
-      <p style="margin: 0; opacity: 0.8; font-size: 12px;">Manage label printing schedules</p>
+<div class="main-content">
+  <!-- Excel-like Container -->
+  <div class="excel-container">
+    <!-- Excel-like Header -->
+    <div class="excel-header">
+      <h4>📋 PRINT LABEL STATUS</h4>
     </div>
     
-    <!-- History Pic Box -->
-    <div 
-      (click)="selectFunction('check')"
-      [style.background]="selectedFunction === 'check' ? '#c2185b' : '#fce4ec'"
-      [style.color]="selectedFunction === 'check' ? 'white' : '#c2185b'"
-      class="mobile-function-box"
-      style="flex: 1; min-width: 140px; padding: 15px; border: 2px solid #e91e63; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.3s ease; touch-action: manipulation;">
-      <h4 style="margin: 0 0 6px 0; font-size: 16px;">📸 History Pic</h4>
-      <p style="margin: 0; opacity: 0.8; font-size: 12px;">Photo history and download</p>
-    </div>
-    
+    <!-- Excel-like Actions -->
+    <div class="excel-actions">
+      <div class="action-controls">
+        <div class="dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" aria-labelledby="moreDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="fileInput.click(); $event.preventDefault()">
+              <i class="material-icons">file_upload</i>
+              Import Excel
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
+              <i class="material-icons">download</i>
+              Template
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportExcel(); $event.preventDefault()">
+              <i class="material-icons">assessment</i>
+              Export
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="clearScheduleData(); $event.preventDefault()">
+              <i class="material-icons">cleaning_services</i>
+              Xóa dữ liệu
+            </a>
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="startFreshImport(); $event.preventDefault()">
+              <i class="material-icons">refresh</i>
+              Mới
+            </a>
+          </div>
   </div>
 
-  <!-- Content Area -->
-  <div style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 8px; min-height: 150px;">
-    
-    <!-- No Selection -->
-    <div *ngIf="!selectedFunction" style="text-align: center;">
-      <p style="color: #999; font-size: 18px; margin: 0;">👆 Please select a function above</p>
+        <div class="search-box">
+          <input type="text" 
+                 placeholder="TÌM KIẾM..." 
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="custom-input search-input-uppercase">
     </div>
     
-    <!-- Print Schedules Content -->
-    <div *ngIf="selectedFunction === 'print'" class="mobile-print-schedules">
-      
-      <!-- Control Buttons -->
-      <div style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;" class="mobile-container">
-        <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
-          <button 
-          type="button"
-          (click)="fileInput.click()" 
-          [disabled]="isSaving || isLoading"
-          class="mobile-button mobile-hidden"
-          style="background: #4caf50; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
-          [style.opacity]="isSaving || isLoading ? '0.6' : '1'">
-          <span *ngIf="isSaving">Đang lưu...</span>
-          <span *ngIf="!isSaving">Import Excel</span>
-          </button>
-          <button 
-          type="button"
-            (click)="downloadTemplate()"
-          class="mobile-button mobile-hidden"
-          style="background: #ff9800; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Template
+        <button class="custom-btn" (click)="refreshDisplay()">
+          <i class="material-icons">refresh</i>
+          Refresh
         </button>
-        <button 
-          type="button"
-          (click)="exportExcel()" 
-          [disabled]="scheduleData.length === 0"
-          class="mobile-button mobile-hidden"
-          style="background: #9c27b0; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
-          [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
-          Export
-          </button>
-          <button 
-          type="button"
-          (click)="clearScheduleData()" 
-          [disabled]="scheduleData.length === 0"
-          class="mobile-button mobile-hidden"
-          style="background: #f44336; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;"
-          [style.opacity]="scheduleData.length > 0 ? '1' : '0.5'">
-          Xóa
-          </button>
-          <button 
-          type="button"
-          (click)="startFreshImport()" 
-          class="mobile-button mobile-hidden"
-          style="background: #607d8b; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Mới
-          </button>
-          <button 
-          type="button"
-          (click)="toggleShowCompletedItems()" 
-          [style.background]="showCompletedItems ? '#ff9800' : '#2196f3'"
-          class="mobile-button mobile-hidden"
-          style="color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
+        
+                <button class="custom-btn" 
+                [class.active]="showCompletedItems"
+                (click)="toggleShowCompletedItems()">
+          <i class="material-icons">visibility</i>
           {{showCompletedItems ? 'Ẩn' : 'Hiện'}}
           </button>
-          <button 
-          type="button"
-          (click)="showImportHistory()" 
-          class="mobile-button mobile-hidden"
-          style="background: #795548; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Lịch sử
-          </button>
-          <button 
-          *ngIf="isAuthenticated"
-          type="button"
-          (click)="logout()" 
-          class="mobile-button mobile-hidden"
-          style="background: #ff5722; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Đăng xuất
-          </button>
-          <button 
-          type="button"
-          (click)="checkDocumentSizes()" 
-          class="mobile-button mobile-hidden"
-          style="background: #ff9800; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Check Sizes
-          </button>
-          <button 
-          type="button"
-          (click)="splitLargeDocument()" 
-          class="mobile-button mobile-hidden"
-          style="background: #f44336; color: white; padding: 10px 12px; margin: 4px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 100px; touch-action: manipulation;">
-          Split Large Doc
-          </button>
-
-
-      </div>
-      
-      <!-- Mobile Camera Button - Only visible on mobile -->
-      <div class="mobile-visible" style="text-align: center; margin: 10px 0; display: none;">
-        <button 
-          type="button"
-          (click)="showMobileCameraInfo()"
-          style="background: #e91e63; color: white; padding: 15px 20px; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: bold; touch-action: manipulation; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-          Chụp hình tem
+        
+                <button class="custom-btn" 
+                (click)="filterByMonth()">
+          <i class="material-icons">filter_list</i>
+          Lọc theo tháng
         </button>
-        <p style="font-size: 12px; color: #666; margin-top: 5px;">Vuốt ngang để xem bảng dữ liệu</p>
-      </div>
-
-      <!-- Loading/Status Indicators -->
-      <div *ngIf="isLoading" style="text-align: center; padding: 12px; background: #e3f2fd; border-radius: 6px; margin-bottom: 12px;">
-        <div style="font-size: 14px; color: #1976d2;">Loading</div>
-      </div>
-
-      <div *ngIf="isSaving" style="text-align: center; padding: 12px; background: #fff3e0; border-radius: 6px; margin-bottom: 12px;">
-        <div style="font-size: 14px; color: #f57c00;">Đang lưu dữ liệu vào Firebase...</div>
-      </div>
-
-      <!-- Authentication Status -->
-      <div *ngIf="isAuthenticated" style="text-align: center; padding: 8px; background: #e8f5e8; border-radius: 6px; margin-bottom: 12px;">
-        <div style="font-size: 12px; color: #4caf50;">Đã đăng nhập - Có quyền thực hiện các chức năng xóa</div>
-      </div>
-
-
         
-      
-
-
-
-      <!-- Schedule Table -->
-      <div *ngIf="scheduleData.length > 0" style="margin-top: 12px;">
-        <!-- <h5 style="color: #1976d2; text-align: center; margin-bottom: 15px;">📋 Print Schedule Report</h5> -->
-        
-        <!-- Record Count and Actions -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                      <div style="background: #e3f2fd; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #1976d2; font-size: 12px;">
-            📊 Total: {{scheduleData.length}} records
-          </div>
-          <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px;">
+        <!-- Status Indicators -->
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: 10px;">
+          <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             🔍 IQC: {{getIQCItemsCount()}}
           </div>
-          <div style="background: #e8f5e8; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #2e7d32; font-size: 12px;">
+          <div style="background: #e8f5e8; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #2e7d32; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ✅ Pass: {{getPassItemsCount()}}
           </div>
-          <div style="background: #ffebee; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #c62828; font-size: 12px;">
+          <div style="background: #ffebee; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #c62828; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ❌ NG: {{getNGItemsCount()}}
           </div>
-          <div style="background: #fff8e1; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #f57f17; font-size: 12px;">
+          <div style="background: #fff8e1; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #f57f17; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ⏳ Pending: {{getPendingItemsCount()}}
           </div>
-          </div>
-        </div>
-
-
-
-              <!-- Login Dialog -->
-      <div *ngIf="showLoginDialog" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 999999;">
-        <div style="background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px;">
-          <h3 style="margin: 0 0 20px 0; color: #333; text-align: center;">Xác thực quyền truy cập</h3>
-          
-          <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; color: #666; font-weight: bold;">Mã nhân viên:</label>
-            <input 
-              type="text" 
-              [(ngModel)]="currentEmployeeId"
-              placeholder="Nhập mã nhân viên"
-              style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <label style="display: block; margin-bottom: 5px; color: #666; font-weight: bold;">Mật khẩu:</label>
-            <input 
-              type="password" 
-              [(ngModel)]="currentPassword"
-              placeholder="Nhập mật khẩu"
-              style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
-          </div>
-          
-          <div *ngIf="loginError" style="color: #f44336; margin-bottom: 15px; font-size: 14px; text-align: center;">
-            {{loginError}}
-          </div>
-          
-          <div style="display: flex; gap: 10px;">
-            <button 
-              type="button"
-              (click)="authenticateUser()"
-              style="flex: 1; background: #4caf50; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-              Xác nhận
-            </button>
-            <button 
-              type="button"
-              (click)="cancelLogin()"
-              style="flex: 1; background: #f44336; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-              Hủy
-            </button>
-          </div>
-          
-          <div style="margin-top: 15px; font-size: 12px; color: #666; text-align: center;">
-            Vui lòng đăng ký tài khoản trong tab Settings trước khi sử dụng
-          </div>
         </div>
       </div>
-
-      <!-- No data message -->
-      <div *ngIf="getDisplayScheduleData().length === 0" style="text-align: center; padding: 25px; background: #f5f5f5; border-radius: 8px; margin-bottom: 15px;">
-        <div style="font-size: 36px; margin-bottom: 10px;">{{showCompletedItems ? '📋' : '✅'}}</div>
-        <h5 style="color: #666; margin: 0 0 10px 0;">
-          {{showCompletedItems ? 'Không có dữ liệu nào' : 'Tất cả đã hoàn thành!'}}
-        </h5>
-        <p style="color: #666; margin: 0; font-size: 14px;">
-          {{showCompletedItems ? 'Vui lòng import dữ liệu Excel' : 'Tất cả items đã được đánh dấu hoàn thành'}}
-        </p>
       </div>
 
-        <div *ngIf="getDisplayScheduleData().length > 0" style="overflow-x: auto; max-height: 600px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; -webkit-overflow-scrolling: touch; position: relative;">
-          <!-- Mobile Loading Overlay -->
-          <div *ngIf="isLoading" style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255,255,255,0.9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            border-radius: 8px;
-          ">
-            <div style="text-align: center;">
-              <div style="font-size: 24px; margin-bottom: 10px;">⏳</div>
-              <div style="font-size: 14px; color: #1976d2;">Đang tải dữ liệu...</div>
-              <div style="font-size: 12px; color: #666; margin-top: 5px;">Vui lòng đợi</div>
-            </div>
-          </div>
-          <table class="mobile-table" style="width: 100%; border-collapse: collapse; font-size: 10px; min-width: 1200px;">
-            <thead style="background: #1976d2; color: white; position: sticky; top: 0; z-index: 10;">
+    <!-- Excel-like Body -->
+    <div class="excel-body">
+      <div *ngIf="scheduleData.length > 0">
+
+                <div class="table-container">
+          <table class="excel-table">
+            <thead class="sticky-header">
               <tr>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">Năm</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 9px;">Tháng</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">STT</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Size Phôi</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Mã tem</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Số lượng yêu cầu</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Số lượng phôi</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Mã Hàng</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 80px; font-size: 9px;">Lệnh sản xuất</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 75px; font-size: 9px;">Khách hàng</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 85px; font-size: 9px;">Ngày nhận kế hoạch</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">YY</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 35px; font-size: 9px;">WW</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Line nhãn</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Người in</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Tình trạng</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 50px; font-size: 9px;">Bản vẽ</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 65px; font-size: 9px;">Ghi chú</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 80px; font-size: 9px;">📸/📁/📄</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">✅</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️🔥</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; min-width: 40px; font-size: 9px;">🗑️📋</th>
+                <th>Năm</th>
+                <th>Tháng</th>
+                <th>STT</th>
+                <th>Size Phôi</th>
+                <th>Mã tem</th>
+                <th>Số lượng yêu cầu</th>
+                <th>Số lượng phôi</th>
+                <th>Mã Hàng</th>
+                <th>Lệnh sản xuất</th>
+                <th>Khách hàng</th>
+                <th>Ngày nhận kế hoạch</th>
+                <th>YY</th>
+                <th>WW</th>
+                <th>Line nhãn</th>
+                <th>Người in</th>
+                <th>Tình trạng</th>
+                <th>Ghi chú</th>
+                <th>Hoàn thành</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of getDisplayScheduleData(); let i = index" 
-                  [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f9f9f9' : 'white')"
+                          <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
+              <tr *ngIf="showCompletedItems || !item.isCompleted"
+                  [class.completed-row]="item.isCompleted"
+                  [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f5f5f5' : 'white')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.nam || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.thang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.stt || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+              <td>{{item.nam || ''}}</td>
+              <td>{{item.thang || ''}}</td>
+              <td>{{item.stt || ''}}</td>
+              <td>
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
@@ -372,17 +132,17 @@
                   </select>
                   <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.maTem || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.soLuongYeuCau || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.soLuongPhoi || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.maHang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.lenhSanXuat || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.khachHang || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.ngayNhanKeHoach || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.yy || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.ww || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #000;">{{item.lineNhan || ''}}</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+              <td>{{item.maTem || ''}}</td>
+              <td>{{item.soLuongYeuCau || ''}}</td>
+              <td>{{item.soLuongPhoi || ''}}</td>
+              <td>{{item.maHang || ''}}</td>
+              <td>{{item.lenhSanXuat || ''}}</td>
+              <td>{{item.khachHang || ''}}</td>
+              <td>{{item.ngayNhanKeHoach || ''}}</td>
+              <td>{{item.yy || ''}}</td>
+              <td>{{item.ww || ''}}</td>
+              <td>{{item.lineNhan || ''}}</td>
+              <td>
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
@@ -399,7 +159,7 @@
                   </select>
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+              <td>
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
@@ -411,18 +171,7 @@
                     <option value="Done">Done</option>
                   </select>
               </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                  <select [(ngModel)]="item.banVe" (change)="onFieldChange(item, 'banVe')" 
-                          [disabled]="!canEditField('banVe')"
-                          style="width: 100%; padding: 4px; border: none; background: transparent; font-size: 12px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; color: #000;" 
-                          onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
-                    <option value="">Chọn bản vẽ</option>
-                    <option value="Có">Có</option>
-                    <option value="Chưa có">Chưa có</option>
-                  </select>
-                  <span *ngIf="!canEditField('banVe')" style="font-size: 10px; color: #000;">{{item.banVe || 'Chưa có'}}</span>
-              </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+              <td>
                   <input 
                     type="text" 
                     [(ngModel)]="item.ghiChu" 
@@ -438,216 +187,39 @@
                     onblur="this.style.background='transparent'"
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
                 </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                    <div style="display: flex; gap: 2px; justify-content: center; flex-wrap: wrap;">
-                      <button 
-                        (click)="captureAndCompareLabel(item)"
-                        [title]="getComparisonTooltip(item)"
-                        style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-                        📸
-                      </button>
-                      <button 
-                        *ngIf="canDelete()"
-                        (click)="importPhotoFromFile(item, 'design')"
-                        title="Import bản vẽ từ file"
-                        style="background: none; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-                        📁
-                      </button>
-                      <button 
-                        *ngIf="canDelete()"
-                        (click)="importPhotoFromFile(item, 'printed')"
-                        title="Import tem in từ file"
-                        style="background: none; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: all 0.3s; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-                        📄
-                      </button>
-                      <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; font-style: italic;">QA chỉ chỉnh sửa trạng thái</span>
-                    </div>
-                </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+              
+              <!-- Cột Hoàn thành -->
+              <td style="text-align: center;">
                     <button 
-                      *ngIf="!item.isCompleted && canDelete()"
+                  *ngIf="!item.isCompleted"
                       (click)="markAsCompleted(item)"
                       title="Đánh dấu hoàn thành"
-                      style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                  class="complete-btn"
+                  style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px; border-radius: 4px; transition: all 0.3s; color: #4caf50;">
                       ✅
                     </button>
-                    <button 
-                      *ngIf="item.isCompleted && canDelete()"
-                      (click)="markAsIncomplete(item)"
-                      title="Bỏ đánh dấu hoàn thành"
-                      style="background: none; border: none; font-size: 16px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                      🔄
-                    </button>
-                    <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; text-align: center; display: block;">
-                      {{item.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'}}
+                                  <span 
+                    *ngIf="item.isCompleted"
+                    style="color: #4caf50; font-size: 14px; font-weight: bold;">
+                    Đã hoàn thành
                     </span>
                 </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                    <button 
-                      *ngIf="item.labelComparison"
-                    (click)="forceCompletePhotoDeletion(item)"
-                    title="Xóa hoàn toàn hình khỏi Firebase"
-                    style="background: none; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                    🗑️
-                    </button>
-                </td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-                    <button 
-                      *ngIf="canDelete()"
-                      (click)="deleteScheduleItem(i)"
-                      title="Xóa toàn bộ dòng"
-                      style="background: none; border: none; font-size: 14px; cursor: pointer; padding: 6px 8px; border-radius: 4px; transition: all 0.3s; font-weight: bold; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                      🗑️
-                    </button>
-                    <span *ngIf="!canDelete()" style="font-size: 10px; color: #999; text-align: center;">Không có quyền xóa</span>
-                </td>
               </tr>
+              </ng-container>
             </tbody>
           </table>
         </div>
         
-
+      <!-- No Data Message -->
+      <div *ngIf="scheduleData.length === 0" style="text-align: center; padding: 40px; color: #999;">
+        <p style="font-size: 18px; margin: 0;">📊 Không có dữ liệu để hiển thị</p>
+        <p style="font-size: 14px; margin: 10px 0 0 0;">Vui lòng import file Excel hoặc tạo dữ liệu mới</p>
+      </div>
       </div>
     </div>
-
-    <!-- Check Label Content -->
-    <div *ngIf="selectedFunction === 'check'">
-
-
-      <!-- Quick Stats -->
-      <div style="background: #f0f8ff; border-radius: 6px; padding: 10px; margin-bottom: 10px; border-left: 3px solid #2196f3;">
-        <div style="display: flex; justify-content: space-around; text-align: center; font-size: 11px; flex-wrap: wrap; gap: 5px;">
-          <div style="flex: 1; min-width: 60px;">
-            <span style="font-weight: bold; color: #2196f3; font-size: 16px;">{{getPhotoCapturedItems().length}}</span>
-            <div style="color: #666; font-size: 10px;">Tổng cộng</div>
-          </div>
-          <div style="flex: 1; min-width: 60px;">
-            <span style="font-weight: bold; color: #4caf50; font-size: 16px;">{{getBothPhotosCount()}}</span>
-            <div style="color: #666; font-size: 10px;">Cả 2 hình</div>
-          </div>
-          <div style="flex: 1; min-width: 60px;">
-            <span style="font-weight: bold; color: #ff9800; font-size: 16px;">{{getPrintedPhotosCount() - getBothPhotosCount()}}</span>
-            <div style="color: #666; font-size: 10px;">Chỉ tem in</div>
-          </div>
-          <div style="flex: 1; min-width: 60px;">
-            <span style="font-weight: bold; color: #9c27b0; font-size: 16px;">{{getDesignPhotosCount() - getBothPhotosCount()}}</span>
-            <div style="color: #666; font-size: 10px;">Chỉ bản vẽ</div>
-          </div>
-        </div>
-      </div>
-
-
-
-      <!-- Photo Report -->
-      <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-
-        
-        <!-- Report Actions -->
-        <div style="text-align: center; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
-          <button (click)="showTimeRangeSelector()" 
-                  style="background: #1976d2; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
-            {{getCurrentTimeRangeText()}}
-          </button>
-                      <button (click)="downloadPhotosAsZip()" 
-                    style="background: #4caf50; color: white; border: none; padding: 10px 16px; border-radius: 6px; margin: 4px; cursor: pointer; font-size: 13px; font-weight: bold; touch-action: manipulation;">
-              Tải báo cáo
-          </button>
-
-        </div>
-        
-        <!-- Photo Report Table -->
-        <div *ngIf="getPhotoCapturedItems().length === 0" style="text-align: center; padding: 40px; background: #f5f5f5; border-radius: 8px; margin-bottom: 20px;">
-          <div style="font-size: 48px; margin-bottom: 15px;">📷</div>
-          <h5 style="color: #666; margin: 0 0 10px 0;">Chưa có hình nào được chụp</h5>
-          <p style="color: #666; margin: 0; font-size: 14px;">Vui lòng chụp hình ở tab Print Schedules</p>
-        </div>
-
-        <!-- Detailed Photo Report Table -->
-        <div *ngIf="getPhotoCapturedItems().length > 0" style="max-height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; -webkit-overflow-scrolling: touch;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 700px;">
-            <thead style="background: #1976d2; color: white; position: sticky; top: 0;">
-              <tr>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 60px;">STT</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Mã tem</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Mã hàng</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 150px;">Khách hàng</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Lệnh SX</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Line</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Người in</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 120px;">Ngày chụp</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Bản vẽ</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 80px;">Tem in</th>
-                <th style="padding: 12px 8px; border: 1px solid #ddd; text-align: center; min-width: 100px;">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let item of getPhotoCapturedItems(); let i = index" 
-                  [style.background]="i % 2 === 0 ? '#fafafa' : 'white'"
-                  style="transition: background-color 0.2s;"
-                  onmouseenter="this.style.background='#e3f2fd'"
-                  onmouseleave="this.style.background=this.getAttribute('data-original-bg')"
-                  [attr.data-original-bg]="i % 2 === 0 ? '#fafafa' : 'white'">
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
-                  {{item.stt || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #1976d2;">
-                  {{item.maTem || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center;">
-                  {{item.maHang || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: left;">
-                  {{item.khachHang || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center;">
-                  {{item.lenhSanXuat || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center;">
-                  {{item.lineNhan || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center;">
-                  {{item.nguoiIn || 'N/A'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
-                  {{item.labelComparison?.comparedAt | date:'dd/MM/yyyy HH:mm'}}
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
-                  <span *ngIf="item.labelComparison?.designPhotoId" style="color: #4caf50; font-weight: bold;">✅</span>
-                  <span *ngIf="!item.labelComparison?.designPhotoId" style="color: #ff9800;">⏳</span>
-                </td>
-                <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: center; font-size: 12px;">
-                  <span *ngIf="item.labelComparison?.printedPhotoId" style="color: #4caf50; font-weight: bold;">✅</span>
-                  <span *ngIf="!item.labelComparison?.printedPhotoId" style="color: #ff9800;">⏳</span>
-                  <div *ngIf="item.labelComparison?.printedPhotoId && !item.labelComparison?.designPhotoId" 
-                       style="font-size: 10px; color: #2196f3; margin-top: 2px;">(Chỉ tem in)</div>
-                </td>
-                <td style="padding: 8px 6px; border: 1px solid #ddd; text-align: center;">
-                  <div style="display: flex; gap: 3px; justify-content: center; flex-wrap: wrap;">
-                    <button (click)="viewFullImage(item)" 
-                            title="Xem hình"
-                            style="background: none; border: none; padding: 8px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; min-width: 32px; touch-action: manipulation;">
-                      👁️
-                    </button>
-                    <button (click)="downloadPhoto(item)" 
-                            title="Tải về"
-                            style="background: none; border: none; padding: 8px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; min-width: 32px; touch-action: manipulation;">
-                      💾
-                    </button>
-                    <button (click)="forceCompletePhotoDeletion(item)" 
-                            title="Xóa hoàn toàn khỏi Firebase"
-                            style="background: none; border: none; padding: 8px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; min-width: 32px; touch-action: manipulation;">
-                      🗑️
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-
-      </div>
-    </div>
+  
+  <!-- Hidden file input for import -->
+  <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
 
       <!-- A5 Calibration Template Preview -->
       <div *ngIf="showA5Preview" style="background: white; border: 2px solid #ff5722; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center;">
@@ -737,75 +309,254 @@
         </button>
       </div>
 
-      <!-- Image Preview -->
-      <div *ngIf="capturedImagePreview" style="background: white; border: 2px solid #4caf50; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
-        <h5 style="color: #4caf50; margin: 0 0 15px 0;">📷 Captured Image:</h5>
-        <img [src]="capturedImagePreview" alt="Captured Label" style="max-width: 100%; max-height: 300px; border: 1px solid #ddd; border-radius: 5px;">
-      </div>
-
-      <!-- Analysis Result - Mobile Optimized -->
-      <div *ngIf="analysisResult" style="background: white; border: 2px solid #009688; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-        <h5 style="color: #009688; margin: 0 0 15px 0; text-align: center;">🔍 Kết quả phân tích thông minh:</h5>
-        
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
-          <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #0277bd; font-size: 14px;">Độ khớp tổng thể:</div>
-            <div style="font-size: 28px; color: #0277bd; font-weight: bold;">{{analysisResult.comparison.overallMatch}}%</div>
-    </div>
-          <div style="background: #e8f5e8; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #388e3c; font-size: 14px;">Khớp kích thước:</div>
-            <div style="font-size: 24px; color: #388e3c;">{{analysisResult.comparison.sizeMatch}}%</div>
-  </div>
-          <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #7b1fa2; font-size: 14px;">Khớp font:</div>
-            <div style="font-size: 24px; color: #7b1fa2;">{{analysisResult.comparison.fontMatch}}%</div>
-          </div>
-          <div style="background: #fff3e0; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #f57c00; font-size: 14px;">Khớp nội dung:</div>
-            <div style="font-size: 24px; color: #f57c00;">{{analysisResult.comparison.textMatch}}%</div>
-          </div>
-          <div style="background: #fce4ec; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="font-weight: bold; color: #c2185b; font-size: 14px;">Chất lượng in:</div>
-            <div style="font-size: 24px; color: #c2185b;">{{analysisResult.comparison.qualityMatch}}%</div>
-          </div>
-        </div>
-        
-        <!-- Design vs Label Comparison -->
-        <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-          <h6 style="margin: 0 0 10px 0; color: #333; text-align: center;">📐 So sánh thiết kế vs thực tế:</h6>
-          <div style="font-size: 12px; line-height: 1.4;">
-            <div style="margin-bottom: 8px;">
-              <strong>Kích thước:</strong> {{analysisResult.designSpecs.labelSize.width}}x{{analysisResult.designSpecs.labelSize.height}}mm 
-              → {{analysisResult.labelMeasurements.actualSize.width}}x{{analysisResult.labelMeasurements.actualSize.height}}mm
-            </div>
-            <div style="margin-bottom: 8px;">
-              <strong>Font:</strong> {{analysisResult.designSpecs.fontSpecs.family}} {{analysisResult.designSpecs.fontSpecs.size}}pt 
-              → {{analysisResult.labelMeasurements.fontAnalysis.detectedFont}} {{analysisResult.labelMeasurements.fontAnalysis.fontSize}}pt
-            </div>
-            <div>
-              <strong>OCR:</strong> {{analysisResult.labelMeasurements.textRecognition.accuracy}}% chính xác
-            </div>
-          </div>
-        </div>
-        
-        <!-- Recommendations -->
-        <div style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-          <h6 style="margin: 0 0 10px 0; color: #2e7d32; text-align: center;">💡 Khuyến nghị:</h6>
-          <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.4;">
-            <li *ngFor="let rec of analysisResult.comparison.recommendations" style="margin-bottom: 5px;">
-              {{rec}}
-            </li>
-          </ul>
-            </div>
-        
-        <div style="text-align: center;">
-          <span 
-            [style.background]="analysisResult.comparison.overallMatch >= 90 ? '#4caf50' : analysisResult.comparison.overallMatch >= 70 ? '#ff9800' : '#f44336'"
-            style="color: white; padding: 10px 20px; border-radius: 25px; font-weight: bold; font-size: 16px;">
-            {{getQualityStatus(analysisResult.comparison.overallMatch)}}
-          </span>
-        </div>
-      </div>
-    </div>
+  <style>
+    /* Excel-like styles */
+    .main-content {
+      padding: 0;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
     
+    .excel-container {
+      background: white;
+      border-radius: 0;
+      box-shadow: none;
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+    }
+    
+    .excel-header {
+      background: #ff9800;
+      color: #000;
+      padding: 15px 20px;
+      text-align: center;
+      margin: 0;
+    }
+    
+    .excel-header h4 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: #000;
+    }
+    
+    .excel-actions {
+      background: #f8f9fa;
+      padding: 15px 20px;
+      border-bottom: 1px solid #e9ecef;
+    }
+    
+    .action-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .custom-btn {
+      background: #fff;
+      border: 2px solid #ff9800;
+      color: #000;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    
+    .custom-btn:hover {
+      background: #fff3e0;
+      border-color: #f57c00;
+    }
+    
+    .custom-btn.active {
+      background: #ff9800;
+      color: #000;
+      border-color: #f57c00;
+    }
+    
+    .dropdown-toggle::after {
+      content: '';
+      display: inline-block;
+      margin-left: 6px;
+      vertical-align: middle;
+      border-top: 4px solid;
+      border-right: 4px solid transparent;
+      border-left: 4px solid transparent;
+    }
+    
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 1000;
+      display: none;
+      min-width: 160px;
+      padding: 8px 0;
+      margin: 2px 0 0;
+      background-color: #fff;
+      border: 1px solid rgba(0,0,0,.15);
+      border-radius: 6px;
+      box-shadow: 0 6px 12px rgba(0,0,0,.175);
+    }
+    
+    .dropdown:hover .dropdown-menu {
+      display: block;
+    }
+    
+    .dropdown-item {
+      display: block;
+      width: 100%;
+      padding: 8px 16px;
+      clear: both;
+      font-weight: 400;
+      color: #212529;
+      text-align: inherit;
+      text-decoration: none;
+      white-space: nowrap;
+      background-color: transparent;
+      border: 0;
+      cursor: pointer;
+    }
+    
+    .dropdown-item:hover {
+      background-color: #f8f9fa;
+    }
+    
+    .dropdown-divider {
+      height: 0;
+      margin: 8px 0;
+      overflow: hidden;
+      border-top: 1px solid #e9ecef;
+    }
+    
+    .search-box {
+      flex: 1;
+      max-width: 300px;
+    }
+    
+    .search-input-uppercase {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+    
+    .excel-body {
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .table-container {
+      max-height: 70vh;
+      overflow-y: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+    }
+    
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .excel-table th {
+      background: #ff9800;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 600;
+      color: #000;
+      border: 1px solid #f57c00;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .excel-table td {
+      padding: 8px;
+      border: 1px solid #dee2e6;
+      vertical-align: middle;
+      text-align: center;
+    }
+    
+    .excel-table tbody tr:hover {
+      background-color: #fff3e0 !important;
+    }
+    
+    .complete-btn:hover {
+      background-color: #e8f5e8 !important;
+      transform: scale(1.1);
+    }
+    
+    .excel-table tbody tr.completed-row {
+      opacity: 0.6;
+      background-color: #e8f5e8 !important;
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .excel-container {
+        margin: 0;
+        height: 100vh;
+      }
+      
+      .excel-header h4 {
+        font-size: 18px;
+      }
+      
+      .excel-header {
+        padding: 10px 15px;
+      }
+      
+      .action-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .custom-btn {
+        justify-content: center;
+      }
+      
+      .search-box {
+        max-width: none;
+      }
+      
+      .excel-table {
+        font-size: 12px;
+      }
+      
+      .excel-table th,
+      .excel-table td {
+        padding: 6px 4px;
+      }
+      
+      .excel-body {
+        padding: 15px;
+        text-align: center;
+      }
+      
+      .table-container {
+        max-height: 60vh;
+      }
+      
+      .complete-btn {
+        font-size: 16px !important;
+        padding: 4px !important;
+      }
+    }
+  </style>
 </div> 

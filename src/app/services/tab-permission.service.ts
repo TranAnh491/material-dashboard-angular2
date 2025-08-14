@@ -43,6 +43,8 @@ export class TabPermissionService {
                     'work-order-status': true,
                     'shipment': true,
                     'materials': true,
+                    'materials-asm1': true,
+                    'materials-asm2': true,
                     'fg': true,
                     'label': true,
                     'index': true,

@@ -17,6 +17,8 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 // Firebase imports
 import { AngularFireModule } from '@angular/fire/compat';
@@ -53,6 +55,8 @@ import { LoginComponent } from './pages/login/login.component';
     MatProgressSpinnerModule,
     MatTabsModule,
     MatSlideToggleModule,
+    MatDialogModule,
+    MatProgressBarModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
     AngularFireAuthModule

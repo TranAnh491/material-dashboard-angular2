@@ -1,0 +1,380 @@
+// Import shared styles from original materials-inventory
+@import '../materials-inventory/materials-inventory.component.scss';
+
+// OVERRIDE ALL COLORS TO WHITE/BLACK THEME
+* {
+  // Remove all gradients and colors
+  background-image: none !important;
+  
+  // Override common color patterns
+  &[style*="background"] {
+    background: #ffffff !important;
+  }
+  
+  &[style*="color"] {
+    color: #000000 !important;
+  }
+}
+
+// ASM1 minimal white/black theme
+.excel-header h4 {
+  color: #000000; // Pure black text
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
+  font-weight: 600;
+}
+
+.factory-asm1 {
+  background: #ffffff !important; // White background
+  color: #000000 !important; // Pure black text
+  font-weight: 600 !important;
+  border-left: 2px solid #000000 !important;
+}
+
+// Search results counter minimal
+.search-results-counter {
+  background: #333333 !important; // Black background
+  color: #ffffff !important; // White text
+}
+
+// Custom button minimal
+.custom-btn:hover {
+  background: #f5f5f5 !important;
+  color: #333333 !important;
+}
+
+// Status badges minimal
+.status-active {
+  background: #f5f5f5 !important;
+  color: #333333 !important;
+}
+
+.status-completed {
+  background: #f5f5f5 !important;
+  color: #333333 !important;
+}
+
+.status-duplicate {
+  background: #f9f9f9 !important;
+  color: #666666 !important;
+}
+
+.status-import {
+  background: #f9f9f9 !important;
+  color: #666666 !important;
+}
+
+// Loading spinner minimal
+.loading-spinner {
+  color: #333333;
+  
+  i {
+    color: #333333 !important;
+  }
+}
+
+// Message styling minimal
+.no-search-message,
+.no-results-message {
+  i {
+    color: #333333 !important;
+  }
+  
+  p {
+    color: #333333;
+  }
+}
+
+// Table header minimal
+.excel-table th {
+  background: #333333 !important; // Black header
+  color: #ffffff !important; // White text
+}
+
+// Row styling minimal
+.duplicate-row {
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+.duplicate-cell {
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+.iqc-row {
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+
+.iqc-location {
+  background: rgba(0, 0, 0, 0.1) !important;
+  font-weight: 600 !important;
+}
+
+// Editable cells minimal
+.editable-cell {
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: white;
+  
+  &:focus {
+    border-color: #333333; // Black focus
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  }
+}
+
+// Search and counter container
+.search-counter-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+// Inline search box
+.inline-search-box {
+  .inline-search-input {
+    border: 1px solid #000000;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #ffffff;
+    color: #000000;
+    width: 200px;
+    
+    &::placeholder {
+      color: #666666;
+    }
+    
+    &:focus {
+      outline: none;
+      border-color: #000000;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    }
+  }
+}
+
+// Total counter box
+.total-counter-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #000000;
+  
+  i {
+    font-size: 18px;
+    color: #000000;
+  }
+  
+  span {
+    white-space: nowrap;
+  }
+}
+
+// Action buttons minimal
+.scan-change-btn,
+.delete-btn,
+.qr-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f5f5f5;
+  }
+  
+  i {
+    font-size: 18px;
+    color: #666;
+  }
+}
+
+.delete-btn:hover i {
+  color: #333333;
+}
+
+.qr-btn:hover i {
+  color: #333333;
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .excel-header h4 {
+    font-size: 16px;
+  }
+  
+  .search-box .search-input {
+    width: 200px;
+  }
+  
+  .action-buttons {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+// Remove branding
+.excel-container::before {
+  display: none;
+}
+
+// Force white/black override for all elements
+.main-content {
+  background: #ffffff !important;
+  
+  // Override all buttons to white/black
+  button, .custom-btn, .btn {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    
+    &:hover {
+      background: #f5f5f5 !important;
+      color: #000000 !important;
+    }
+  }
+  
+  // Override all dropdowns
+  .dropdown-menu {
+    background: #ffffff !important;
+    border: 1px solid #000000 !important;
+    
+    .dropdown-item {
+      color: #000000 !important;
+      
+      &:hover {
+        background: #f5f5f5 !important;
+        color: #000000 !important;
+      }
+    }
+  }
+  
+  // Override status badges
+  .status-badge {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+  }
+  
+  // Override all icons
+  .material-icons {
+    color: #000000 !important;
+  }
+  
+  // Override loading indicators
+  .loading-spinner {
+    color: #000000 !important;
+  }
+}
+
+// Ensure clean white/black theme with fixed header
+.excel-container {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+// Fixed header section
+.excel-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #ffffff;
+  border-bottom: 2px solid #000000;
+  padding: 16px;
+  
+  h4 {
+    margin: 0;
+    padding: 8px 0;
+  }
+}
+
+// Fixed action buttons section
+.excel-actions {
+  position: sticky;
+  top: 60px; // After header
+  z-index: 99;
+  background: #ffffff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 12px 16px;
+}
+
+// Table container with fixed headers
+.table-container {
+  flex: 1;
+  overflow: auto;
+  background: #ffffff;
+}
+
+// Table styling minimal with fixed header
+.excel-table {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  width: 100%;
+  border-collapse: collapse;
+  
+  // Fixed table header
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    
+    th {
+      background: #000000 !important;
+      color: #ffffff !important;
+      border: 1px solid #333333;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+  }
+  
+  tbody {
+    tr:nth-child(even) {
+      background: #fafafa;
+    }
+    
+    tr:hover {
+      background: #f5f5f5;
+    }
+    
+    td {
+      color: #333333;
+      border: 1px solid #e0e0e0;
+      padding: 8px;
+      text-align: center;
+    }
+  }
+}
+
+// Danger item styling for delete all button
+.dropdown-item.danger-item {
+  color: #dc3545 !important;
+  border-left: 3px solid #dc3545 !important;
+  font-weight: 600;
+  
+  &:hover {
+    background-color: #f8d7da !important;
+    color: #721c24 !important;
+  }
+  
+  i {
+    color: #dc3545 !important;
+  }
+}

@@ -1,0 +1,508 @@
+// Copy y nguyên từ inbound-asm1 với ASM2 branding
+.main-content { padding: 0; margin: 0; height: 100vh; overflow: hidden; background: #ffffff; position: absolute; top: 0; left: 0; width: 100%; z-index: 1; }
+.excel-container { background: #ffffff; border: 1px solid #dee2e6; border-radius: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; margin: 0; }
+.excel-header { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: 16px 24px; flex-shrink: 0; }
+.excel-header h4 { margin: 0; font-size: 18px; font-weight: 600; color: #000000; font-family: Arial, sans-serif; }
+.excel-body { overflow: auto; flex: 1; position: relative; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #cbd5e0 #f7fafc; }
+.excel-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: Arial, sans-serif; font-size: 10px; min-width: 1200px; }
+.excel-table th, .excel-table td { border: 1px solid #000000; padding: 8px 6px; text-align: left; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; background: transparent; }
+.excel-table th { background: #ff9800 !important; color: #000000 !important; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; position: sticky; top: 0; z-index: 1000; border-bottom: 2px solid #f57c00; padding: 6px 4px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.factory-cell { text-align: center; font-weight: 600; min-width: 80px; width: 80px; font-size: 10px; }
+.factory-cell.factory-asm2 { background-color: #e0f2f1 !important; color: #00695c !important; }
+.excel-table tbody tr { background-color: #f8f8f8; }
+.excel-table tbody tr:hover { background: #eeeeee; }
+.excel-table td { font-size: 10px; color: #000000; border-color: #000000; text-align: center; font-family: Arial, sans-serif; background-color: #f8f8f8; }
+
+// Specific column widths for better data display
+.row-header {
+  min-width: 40px;
+  width: 40px;
+}
+
+.date-cell {
+  min-width: 110px;
+  width: 110px;
+}
+
+.batch-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.code-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.po-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.number-cell {
+  min-width: 80px;
+  width: 80px;
+}
+
+.location-cell {
+  min-width: 100px;
+  width: 100px;
+}
+
+.type-cell {
+  min-width: 80px;
+  width: 80px;
+}
+
+.status-cell {
+  min-width: 80px;
+  width: 80px;
+}
+
+.notes-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.supplier-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.remarks-cell {
+  min-width: 120px;
+  width: 120px;
+}
+
+.action-cell {
+  min-width: 60px;
+  width: 60px;
+}
+
+.print-column-header {
+  min-width: 80px;
+  width: 80px;
+}
+
+.print-cell {
+  min-width: 100px;
+  width: 100px;
+}
+
+.unit-input {
+  width: 60px !important;
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+// Action buttons styling
+.action-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  
+  &.delete-btn {
+    background: #dc3545;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #c82333;
+    }
+    
+    &:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+  }
+  
+  &.complete-btn {
+    background: #28a745;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #218838;
+    }
+    
+    &:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.print-qr-btn {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  
+  &:hover:not(:disabled) {
+    background: #138496;
+  }
+  
+  &:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+  }
+}
+
+.status-badge {
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  
+  &.status-pending {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  &.status-completed {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  &.status-received {
+    background: #cce5ff;
+    color: #004085;
+  }
+}
+
+.excel-actions { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.excel-actions .action-controls { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; position: relative; z-index: 1500; }
+
+// Action controls horizontal (new layout)
+.action-controls-horizontal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+}
+
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .search-input {
+    width: 250px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+  }
+  
+  .search-type-select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+  }
+}
+
+.status-filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  min-width: 150px;
+  
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+  }
+}
+
+.date-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+  }
+  
+  .date-input {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+  }
+}
+
+.refresh-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #f8f9fa;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: #e9ecef;
+    border-color: #bbb;
+  }
+  
+  i {
+    font-size: 16px;
+  }
+}
+.custom-btn { height: 40px; padding: 8px 16px; border: 2px solid #ff9800; background: #ffffff; color: #000000; font-weight: 500; font-size: 14px; border-radius: 6px; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease; white-space: nowrap; }
+.custom-btn .material-icons { font-size: 18px; color: #000000; }
+.custom-btn:hover { background: #fff3e0; border-color: #f57c00; color: #000000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.custom-input, .custom-select { height: 40px; padding: 8px 12px; border: 2px solid #ff9800; background: #ffffff; color: #000000; font-size: 14px; border-radius: 6px; min-width: 200px; transition: all 0.3s ease; }
+.custom-input:focus, .custom-select:focus { outline: none; border-color: #f57c00; box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2); background: #ffffff; }
+.editable-input { border: none; background: #f8f8f8; font-family: Arial, sans-serif; font-size: 10px; color: #000000; width: 100%; padding: 4px 6px; border-radius: 0; }
+.editable-input:focus { outline: none; border: none; background: #e8e8e8; }
+.action-btn { background: #ffffff; border: 1px solid #000000; color: #000000; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.action-btn:hover { background: #f5f5f5; }
+.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.print-qr-btn { background: #ffffff; border: 2px solid #4caf50; color: #000000; font-size: 12px; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.3s ease; width: 100%; justify-content: center; }
+.print-qr-btn .material-icons { font-size: 16px; color: #000000; }
+.print-qr-btn:hover { background: #f1f8e9; border-color: #388e3c; color: #000000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.status-badge { font-size: 10px; padding: 4px 8px; border-radius: 0; font-weight: 500; letter-spacing: 0.2px; font-family: Arial, sans-serif; color: #000000; }
+.status-badge.badge-info { background: #f8f9fa; color: #000000; border: 1px solid #dee2e6; }
+.status-badge.badge-success { background: #d4edda; color: #000000; border: 1px solid #c3e6cb; }
+.status-badge.badge-warning { background: #fff3cd; color: #000000; border: 1px solid #ffeaa7; }
+.pagination-container { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+.pagination-info { font-size: 14px; color: #4a5568; }
+.pagination-controls { display: flex; gap: 8px; }
+.page-btn { width: 32px; height: 32px; border: 1px solid #cbd5e0; background: #ffffff; color: #4a5568; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
+.page-btn:hover { background: #edf2f7; border-color: #a0aec0; }
+.page-btn.active { background: #3182ce; color: #ffffff; border-color: #3182ce; }
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.loading-container { display: flex; justify-content: center; align-items: center; padding: 40px; }
+.loading-spinner { display: flex; align-items: center; gap: 12px; font-size: 16px; color: #4a5568; }
+.spinning { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.error-message { background: #fed7d7; color: #c53030; padding: 16px; border-radius: 8px; margin: 16px 20px; display: flex; align-items: center; gap: 8px; }
+.error-message .material-icons { font-size: 20px; }
+.factory-badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+.factory-badge.asm2-badge { background: #fff3e0; color: #f57c00; border: 1px solid #ffcc02; }
+.date-filter-row { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 12px 20px; }
+.date-inputs { display: flex; gap: 16px; align-items: center; }
+.input-group { display: flex; align-items: center; gap: 8px; }
+.input-group label { font-size: 14px; color: #4a5568; font-weight: 500; white-space: nowrap; }
+.input-group input[type="date"] { padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px; background: #ffffff; }
+.input-group input[type="date"]:focus { outline: none; border-color: #3182ce; box-shadow: 0 0 0 1px #3182ce; }
+.unit-input { width: 60px !important; margin-left: 4px; font-size: 10px; }
+@media (max-width: 768px) { 
+  .excel-table { 
+    font-size: 9px; 
+    min-width: 1000px; 
+  } 
+  .custom-btn { 
+    font-size: 12px; 
+    padding: 6px 12px; 
+  } 
+  .pagination-container { 
+    flex-direction: column; 
+    gap: 12px; 
+    text-align: center; 
+  }
+  
+  // Adjust column widths for mobile
+  .factory-cell {
+    min-width: 60px;
+    width: 60px;
+  }
+  
+  .row-header {
+    min-width: 30px;
+    width: 30px;
+  }
+  
+  .date-cell {
+    min-width: 90px;
+    width: 90px;
+  }
+  
+  .batch-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .code-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .po-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .number-cell {
+    min-width: 70px;
+    width: 70px;
+  }
+  
+  .location-cell {
+    min-width: 80px;
+    width: 80px;
+  }
+  
+  .type-cell {
+    min-width: 70px;
+    width: 70px;
+  }
+  
+  .status-cell {
+    min-width: 70px;
+    width: 70px;
+  }
+  
+  .notes-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .supplier-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .remarks-cell {
+    min-width: 100px;
+    width: 100px;
+  }
+  
+  .action-cell {
+    min-width: 50px;
+    width: 50px;
+  }
+  
+  .print-cell {
+    min-width: 80px;
+    width: 80px;
+  }
+}
+
+// Dropdown styling to fix z-index issues
+.dropdown {
+  position: relative;
+  display: inline-block;
+  
+  .more-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    color: #374151;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+    
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+    
+    .material-icons {
+      font-size: 18px;
+    }
+  }
+  
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 9999 !important; // High z-index to appear above header
+    min-width: 200px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    margin-top: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    
+    &.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      color: #374151;
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.2s;
+      
+      &:hover {
+        background: #f3f4f6;
+        color: #1f2937;
+      }
+      
+      &:active {
+        background: #e5e7eb;
+      }
+      
+      .material-icons {
+        font-size: 18px;
+        color: #6b7280;
+      }
+    }
+  }
+}
