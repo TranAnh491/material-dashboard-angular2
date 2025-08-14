@@ -472,8 +472,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             data: { progress$: this.excelImportService.progress$ }
           });
 
-          // Start import process with ASM2 filter and duplicate strategy
-          const result = await this.excelImportService.importStockFile(file, 200, 'ASM2', duplicateStrategy);
+                      // Start import process with ASM2 filter and duplicate strategy
+            const result = await this.excelImportService.importStockFile(file, 50, 'ASM2', duplicateStrategy);
           
           const dialogResult = await dialogRef.afterClosed().toPromise();
           
@@ -997,120 +997,170 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     
     // Use exact same format as Inbound for consistency
     printWindow.document.write(`
-      <!DOCTYPE html>
       <html>
-      <head>
-        <title>QR Code - ASM2 - ${material.materialCode}</title>
-        <style>
-          @page { margin: 0.5cm; }
-          body { 
-            font-family: Arial, sans-serif; 
-            margin: 0; 
-            padding: 10px;
-            background: white;
-          }
-          .qr-container { 
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 10px;
-            justify-content: center;
-          }
-          .qr-item { 
-            border: 2px solid #000; 
-            padding: 10px; 
-            text-align: center; 
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            width: 240px;
-          }
-          .qr-header {
-            background: #000000;
-            color: white;
-            padding: 8px;
-            margin: -10px -10px 10px -10px;
-            font-weight: bold;
-            font-size: 14px;
-          }
-          .qr-info { 
-            font-size: 12px; 
-            margin: 8px 0; 
-            line-height: 1.4;
-          }
-          .qr-code img { 
-            width: 180px; 
-            height: 180px; 
-            border: 1px solid #ddd;
-          }
-          .factory-badge {
-            background: #000000;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-          }
-          .print-info {
-            text-align: center;
-            margin: 20px 0;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
-          }
-          @media print {
-            .no-print { display: none; }
-            .qr-item { break-inside: avoid; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="print-info no-print">
-          <h3>🏷️ QR Code Labels - ASM2 Factory</h3>
-          <p>Material: <strong>${material.materialCode}</strong> | PO: <strong>${material.poNumber}</strong></p>
-          <p>Total Labels: <strong>${qrImages.length}</strong> | Date: <strong>${currentDate}</strong></p>
-          <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; background: #000; color: white; border: none; border-radius: 4px; cursor: pointer;">🖨️ Print Labels</button>
-          <hr>
-        </div>
-        
-        <div class="qr-container">
-          ${qrImages.map(qr => `
-            <div class="qr-item">
-              <div class="qr-header">
-                <span class="factory-badge">ASM2</span>
-                QR #${qr.index}
+        <head>
+          <title>QR Label - ASM2 - ${material.materialCode}</title>
+          <style>
+            * {
+              margin: 0 !important;
+              padding: 0 !important;
+              box-sizing: border-box !important;
+            }
+            
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0 !important; 
+              padding: 0 !important;
+              background: white !important;
+              overflow: hidden !important;
+              width: 57mm !important;
+              height: 32mm !important;
+            }
+            
+            .qr-container { 
+              display: flex !important; 
+              margin: 0 !important; 
+              padding: 0 !important; 
+              border: 1px solid #000 !important; 
+              width: 57mm !important; 
+              height: 32mm !important; 
+              page-break-inside: avoid !important;
+              background: white !important;
+              box-sizing: border-box !important;
+            }
+            
+            .qr-section {
+              width: 30mm !important;
+              height: 30mm !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              border-right: 1px solid #ccc !important;
+              box-sizing: border-box !important;
+            }
+            
+            .qr-image {
+              width: 28mm !important;
+              height: 28mm !important;
+              display: block !important;
+            }
+            
+            .info-section {
+              flex: 1 !important;
+              padding: 1mm !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              font-size: 8px !important;
+              line-height: 1.1 !important;
+              box-sizing: border-box !important;
+            }
+            
+            .info-row {
+              margin: 0.3mm 0 !important;
+              font-weight: bold !important;
+            }
+            
+            .info-row.small {
+              font-size: 7px !important;
+              color: #666 !important;
+            }
+            
+            .qr-grid {
+              text-align: center !important;
+              display: flex !important;
+              flex-direction: row !important;
+              flex-wrap: wrap !important;
+              align-items: flex-start !important;
+              justify-content: flex-start !important;
+              gap: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              width: 57mm !important;
+              height: 32mm !important;
+            }
+            
+            @media print {
+              body { 
+                margin: 0 !important; 
+                padding: 0 !important;
+                overflow: hidden !important;
+                width: 57mm !important;
+                height: 32mm !important;
+              }
+              
+              @page {
+                margin: 0 !important;
+                size: 57mm 32mm !important;
+                padding: 0 !important;
+              }
+              
+              .qr-container { 
+                margin: 0 !important; 
+                padding: 0 !important;
+                width: 57mm !important;
+                height: 32mm !important;
+                page-break-inside: avoid !important;
+                border: 1px solid #000 !important;
+              }
+              
+              .qr-section {
+                width: 30mm !important;
+                height: 30mm !important;
+              }
+              
+              .qr-image {
+                width: 28mm !important;
+                height: 28mm !important;
+              }
+              
+              .info-section {
+                font-size: 8px !important;
+                padding: 1mm !important;
+              }
+              
+              .info-row.small {
+                font-size: 7px !important;
+              }
+              
+              .qr-grid {
+                gap: 0 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 57mm !important;
+                height: 32mm !important;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="qr-grid">
+            ${qrImages.map(qr => `
+              <div class="qr-container">
+                <div class="qr-section">
+                  <img src="${qr.image}" alt="QR Code" class="qr-image">
+                </div>
+                <div class="info-section">
+                  <div class="info-row">${qr.materialCode}</div>
+                  <div class="info-row">${qr.poNumber}</div>
+                  <div class="info-row">${qr.unitNumber}</div>
+                  <div class="info-row small">ASM2</div>
+                  <div class="info-row small">${currentDate}</div>
+                </div>
               </div>
-              <div class="qr-info">
-                <strong>Mã hàng:</strong> ${qr.materialCode}<br>
-                <strong>PO:</strong> ${qr.poNumber}<br>
-                <strong>Số lượng:</strong> ${qr.unitNumber}<br>
-                <strong>Ngày:</strong> ${currentDate}
-              </div>
-              <div class="qr-code">
-                <img src="${qr.image}" alt="QR Code ${qr.index}">
-              </div>
-              <div style="font-size: 10px; color: #666; margin-top: 8px;">
-                ASM2 Factory Inventory
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        
-        <div class="print-info">
-          <p>Generated: ${currentDate} | Factory: ASM2 | Total: ${qrImages.length} labels</p>
-        </div>
-        
-        <script>
-          // Auto-focus for printing
-          window.addEventListener('load', function() {
-            setTimeout(() => {
-              window.focus();
-            }, 500);
-          });
-        </script>
-      </body>
+            `).join('')}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+              }, 500);
+            };
+          </script>
+        </body>
       </html>
     `);
+
     printWindow.document.close();
     console.log(`✅ QR labels created for ASM2 with Inbound format - ${qrImages.length} labels`);
   }

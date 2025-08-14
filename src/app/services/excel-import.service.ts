@@ -60,7 +60,7 @@ export class ExcelImportService {
   /**
    * Import Excel file with progress tracking and batch processing
    */
-  async importStockFile(file: File, batchSize: number = 200, factoryFilter?: string, duplicateStrategy: 'skip' | 'update' | 'ask' = 'ask'): Promise<{ success: number; errors: string[]; duplicates: number; updated: number }> {
+  async importStockFile(file: File, batchSize: number = 50, factoryFilter?: string, duplicateStrategy: 'skip' | 'update' | 'ask' = 'ask'): Promise<{ success: number; errors: string[]; duplicates: number; updated: number }> {
     try {
       // Read Excel file
       const stockItems = await this.readStockFile(file);

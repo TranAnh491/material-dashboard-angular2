@@ -472,8 +472,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             data: { progress$: this.excelImportService.progress$ }
           });
 
-          // Start import process with ASM1 filter and duplicate strategy
-          const result = await this.excelImportService.importStockFile(file, 200, 'ASM1', duplicateStrategy);
+                      // Start import process with ASM1 filter and duplicate strategy
+            const result = await this.excelImportService.importStockFile(file, 50, 'ASM1', duplicateStrategy);
           
           const dialogResult = await dialogRef.afterClosed().toPromise();
           
