@@ -65,6 +65,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Search and filter
   searchTerm = '';
+  searchType: 'material' | 'po' | 'location' = 'material';
   private searchSubject = new Subject<string>();
   
   // Dropdown state
@@ -234,19 +235,32 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return false;
       }
 
-      // Apply search filter
+      // Apply search filter based on search type
       if (this.searchTerm) {
-        const searchableText = [
-          material.materialCode,
-          material.materialName,
-          material.location,
-          material.quantity?.toString(),
-          material.stock?.toString(),
-          material.poNumber
-        ].filter(Boolean).join(' ').toLowerCase();
+        const searchTermLower = this.searchTerm.toLowerCase();
         
-        if (!searchableText.includes(this.searchTerm)) {
-          return false;
+        switch (this.searchType) {
+          case 'material':
+            // Search by material code or name
+            if (!material.materialCode?.toLowerCase().includes(searchTermLower) &&
+                !material.materialName?.toLowerCase().includes(searchTermLower)) {
+              return false;
+            }
+            break;
+            
+          case 'po':
+            // Search by PO number
+            if (!material.poNumber?.toLowerCase().includes(searchTermLower)) {
+              return false;
+            }
+            break;
+            
+          case 'location':
+            // Search by location
+            if (!material.location?.toLowerCase().includes(searchTermLower)) {
+              return false;
+            }
+            break;
         }
       }
       
@@ -287,6 +301,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   onSearchInput(event: any): void {
     const searchTerm = event.target.value;
     this.searchSubject.next(searchTerm);
+  }
+
+  // Change search type
+  changeSearchType(type: 'material' | 'po' | 'location'): void {
+    this.searchType = type;
+    this.searchTerm = ''; // Clear search when changing type
+    this.applyFilters(); // Reapply filters
   }
 
   // Perform search with performance optimization

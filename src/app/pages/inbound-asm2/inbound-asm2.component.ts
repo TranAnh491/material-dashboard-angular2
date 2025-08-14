@@ -39,24 +39,39 @@ export interface InboundMaterial {
 export class InboundASM2Component implements OnInit, OnDestroy {
   materials: InboundMaterial[] = [];
   filteredMaterials: InboundMaterial[] = [];
+  
+  // Search and filter
   searchTerm: string = '';
-  searchType: string = 'all';
+  searchType: string = 'materialCode'; // Default to Mã Hàng
+  
+  // Factory filter - Fixed to ASM2
   selectedFactory: string = 'ASM2';
   availableFactories: string[] = ['ASM2'];
+  
+  // Time range filter
   startDate: string = '';
   endDate: string = '';
-  statusFilter: string = '';
-  currentPage: number = 1;
-  itemsPerPage: number = 50;
-  totalPages: number = 1;
+  
+  // Status filter
+  statusFilter: string = 'pending'; // Default to Chưa
+  
+  // Loading state
   isLoading: boolean = false;
+  
+  // Error handling
   errorMessage: string = '';
+  
+  // Excel import
   selectedFile: File | null = null;
+  
+  // User permissions
   canAddMaterials: boolean = false;
   canEditMaterials: boolean = false;
   canDeleteMaterials: boolean = false;
   canGenerateQR: boolean = false;
   canExportData: boolean = false;
+  
+  // Lifecycle management
   private destroy$ = new Subject<void>();
   
   constructor(
@@ -239,62 +254,60 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     });
     
     this.filteredMaterials = filtered;
-    this.updatePagination();
+    // this.updatePagination(); // Removed pagination update
     
     console.log(`🔍 ASM2 filtered: ${filtered.length}/${this.materials.length} materials`);
   }
   
-  updatePagination(): void {
-    this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
-    if (this.currentPage > this.totalPages) { this.currentPage = 1; }
-  }
+  // updatePagination(): void { // Removed pagination update
+  //   this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
+  //   if (this.currentPage > this.totalPages) { this.currentPage = 1; }
+  // }
   
-  getPaginatedMaterials(): InboundMaterial[] {
-    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-    const endIndex = startIndex + this.itemsPerPage;
-    return this.filteredMaterials.slice(startIndex, endIndex);
-  }
+  // getPaginatedMaterials(): InboundMaterial[] { // Removed pagination
+  //   const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+  //   const endIndex = startIndex + this.itemsPerPage;
+  //   return this.filteredMaterials.slice(startIndex, endIndex);
+  // }
   
   onSearchChange(): void {
-    this.currentPage = 1;
+    // this.currentPage = 1; // Removed pagination
     this.applyFilters();
   }
   
   onDateFilterChange(): void {
-    this.currentPage = 1;
+    // this.currentPage = 1; // Removed pagination
     this.applyFilters();
   }
   
   onStatusFilterChange(): void {
-    this.currentPage = 1;
+    // this.currentPage = 1; // Removed pagination
     this.applyFilters();
   }
   
   onSearchTypeChange(): void {
-    this.currentPage = 1;
+    // this.currentPage = 1; // Removed pagination
     this.applyFilters();
   }
   
   getSearchPlaceholder(): string {
     switch (this.searchType) {
       case 'materialCode':
-        return 'Tìm kiếm theo mã hàng...';
+        return '🔍 Tìm kiếm theo Mã Hàng...';
       case 'batchNumber':
-        return 'Tìm kiếm theo lô hàng...';
-      case 'poNumber':
-        return 'Tìm kiếm theo PO...';
+        return '🔍 Tìm kiếm theo Lô Hàng...';
       default:
-        return 'Tìm kiếm ASM2...';
+        return '🔍 Tìm kiếm ASM2...';
     }
   }
   
   clearFilters(): void {
     this.searchTerm = '';
-    this.searchType = 'all';
+    this.searchType = 'materialCode';
     this.startDate = '';
     this.endDate = '';
-    this.statusFilter = '';
-    this.currentPage = 1;
+    this.statusFilter = 'pending';
+    this.setupDateDefaults();
     this.applyFilters();
   }
   
@@ -376,459 +389,726 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.updateMaterial(material);
   }
   
-
+  // Dropdown functionality
+  showDropdown: boolean = false;
   
-  goToPage(page: number): void { if (page >= 1 && page <= this.totalPages) { this.currentPage = page; } }
-  previousPage(): void { if (this.currentPage > 1) { this.currentPage--; } }
-  nextPage(): void { if (this.currentPage < this.totalPages) { this.currentPage++; } }
-  
-  onFileSelect(event: any): void {
-    const file = event.target.files[0];
-    if (file) {
-      this.selectedFile = file;
-      console.log('📁 ASM2 file selected:', file.name);
+  toggleDropdown(): void {
+    this.showDropdown = !this.showDropdown;
+    
+    // Close dropdown when clicking outside
+    if (this.showDropdown) {
+      setTimeout(() => {
+        document.addEventListener('click', this.onDocumentClick.bind(this), { once: true });
+      }, 0);
     }
   }
   
-  async importFromExcel(): Promise<void> {
-    if (!this.selectedFile) {
-      this.errorMessage = 'Vui lòng chọn file Excel';
+  onDocumentClick(event: Event): void {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.dropdown')) {
+      this.showDropdown = false;
+    }
+  }
+  
+  // Search functionality
+  onSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.searchTerm = target.value;
+    this.applyFilters();
+  }
+  
+  changeSearchType(type: string): void {
+    this.searchType = type;
+    this.applyFilters();
+  }
+  
+  changeStatusFilter(status: string): void {
+    this.statusFilter = status;
+    this.applyFilters();
+  }
+  
+  // Import functionality
+  importFile(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls,.csv';
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.onFileSelect(file);
+      }
+    };
+    fileInput.click();
+  }
+  
+  onFileSelect(file: File): void {
+    // Basic file validation
+    if (!file) return;
+    
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      alert('❌ Chỉ hỗ trợ file Excel (.xlsx, .xls) hoặc CSV');
       return;
     }
+    
+    console.log('📁 File selected:', file.name);
+    
+    // Show loading state
     this.isLoading = true;
-    this.errorMessage = '';
-    try {
-      console.log('📊 Importing ASM2 data from Excel...');
-      const data = await this.readExcelFile(this.selectedFile);
-      const materials = this.parseExcelData(data);
-      if (materials.length === 0) {
-        throw new Error('Không có dữ liệu hợp lệ trong file Excel');
+    this.errorMessage = 'Đang import dữ liệu...';
+    
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length < 2) {
+          alert('❌ File không có dữ liệu hoặc format không đúng');
+          this.isLoading = false;
+          this.errorMessage = '';
+          return;
+        }
+        
+        // Get headers from first row
+        const headers = jsonData[0] as string[];
+        console.log('📋 Headers found:', headers);
+        
+        // Process data rows (skip header row)
+        const materialsToAdd: InboundMaterial[] = [];
+        
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (row.length === 0 || !row.some(cell => cell !== null && cell !== undefined && cell !== '')) {
+            continue; // Skip empty rows
+          }
+          
+          try {
+            const material = this.parseExcelRow(row, headers);
+            if (material) {
+              materialsToAdd.push(material);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Skipping row ${i + 1}:`, error);
+          }
+        }
+        
+        if (materialsToAdd.length === 0) {
+          alert('❌ Không có dữ liệu hợp lệ để import');
+          this.isLoading = false;
+          this.errorMessage = '';
+          return;
+        }
+        
+        console.log(`📦 Found ${materialsToAdd.length} materials to import`);
+        
+        // Add materials to Firebase
+        this.addMaterialsToFirebase(materialsToAdd);
+        
+      } catch (error) {
+        console.error('❌ Error processing file:', error);
+        alert(`❌ Lỗi xử lý file: ${error.message}`);
+        this.isLoading = false;
+        this.errorMessage = '';
       }
+    };
+    
+    reader.onerror = () => {
+      alert('❌ Lỗi đọc file');
+      this.isLoading = false;
+      this.errorMessage = '';
+    };
+    
+    reader.readAsArrayBuffer(file);
+  }
+  
+  private parseExcelRow(row: any[], headers: string[]): InboundMaterial | null {
+    try {
+      const getValue = (index: number): string => {
+        return row[index] ? String(row[index]).trim() : '';
+      };
+      
+      const getNumberValue = (index: number): number => {
+        const value = row[index];
+        if (value === null || value === undefined || value === '') return 0;
+        const num = Number(value);
+        return isNaN(num) ? 0 : num;
+      };
+
+      // Map only the 6 essential columns from template
+      const lotNumber = getValue(0);         // LÔ HÀNG/ DNNK
+      const materialCode = getValue(1);      // MÃ HÀNG
+      const poNumber = getValue(2);          // SỐ P.O
+      const quantity = getNumberValue(3);    // LƯỢNG NHẬP
+      const type = getValue(4);              // LOẠI HÌNH
+      const supplier = getValue(5);          // NHÀ CUNG CẤP
+
+      if (!lotNumber || !materialCode || !poNumber || quantity <= 0) {
+        return null;
+      }
+
+      return {
+        id: '',
+        factory: 'ASM2', // Auto-filled
+        importDate: new Date(), // Auto-filled
+        batchNumber: lotNumber,
+        materialCode: materialCode,
+        poNumber: poNumber,
+        quantity: quantity,
+        unit: '', // No default value - leave empty
+        location: 'IQC', // Default value
+        type: type || 'Raw Material', // From import or default
+        expiryDate: null, // Default value
+        qualityCheck: false, // Default value
+        isReceived: false, // Default value
+        notes: '', // Default value
+        rollsOrBags: 0, // Default value
+        supplier: supplier, // From import
+        remarks: '', // Default value
+        isCompleted: false, // Default value
+        hasQRGenerated: false, // Default value
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    } catch (error) {
+      console.error('Error parsing row:', error);
+      return null;
+    }
+  }
+  
+  private async addMaterialsToFirebase(materials: InboundMaterial[]): Promise<void> {
+    try {
       let successCount = 0;
       let errorCount = 0;
-      for (const material of materials) {
+      
+      // Use batch operations for better performance
+      const batchSize = 500; // Firestore batch limit
+      
+      for (let i = 0; i < materials.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const batchMaterials = materials.slice(i, i + batchSize);
+        
+        batchMaterials.forEach(material => {
+          const docRef = this.firestore.collection('inbound-materials').doc().ref;
+          batch.set(docRef, material);
+        });
+        
         try {
-          material.factory = 'ASM2';
-          material.createdAt = new Date();
-          material.updatedAt = new Date();
-          await this.firestore.collection('inbound-materials').add(material);
-          successCount++;
+          await batch.commit();
+          successCount += batchMaterials.length;
+          console.log(`✅ Batch ${Math.floor(i / batchSize) + 1} completed: ${batchMaterials.length} materials`);
         } catch (error) {
-          console.error('❌ Error saving material:', error);
-          errorCount++;
+          console.error(`❌ Batch ${Math.floor(i / batchSize) + 1} failed:`, error);
+          errorCount += batchMaterials.length;
         }
       }
-      console.log(`✅ ASM2 import completed: ${successCount} success, ${errorCount} errors`);
-      alert(`Import hoàn thành!\n✅ Thành công: ${successCount}\n❌ Lỗi: ${errorCount}`);
-      this.selectedFile = null;
-      this.loadMaterials();
+      
+      // Show results
+      if (successCount > 0) {
+        alert(`✅ Import thành công ${successCount} materials!\n${errorCount > 0 ? `❌ ${errorCount} materials bị lỗi` : ''}`);
+        
+        // Reload materials to show new data
+        this.loadMaterials();
+      } else {
+        alert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
+      }
+      
     } catch (error) {
-      console.error('❌ ASM2 import error:', error);
-      this.errorMessage = 'Lỗi import: ' + error.message;
+      console.error('❌ Error adding materials to Firebase:', error);
+      alert(`❌ Lỗi import: ${error.message}`);
+    } finally {
+      this.isLoading = false;
+      this.errorMessage = '';
+    }
+  }
+  
+  // Material update methods
+  updateMaterial(material: InboundMaterial): void {
+    if (!this.canEditMaterials) return;
+    
+    // Check if material is already in inventory - prevent modification
+    if (material.isReceived) {
+      this.errorMessage = `❌ Không thể sửa material ${material.materialCode} - đã được đưa vào Inventory!`;
+      alert(this.errorMessage);
+      return;
+    }
+    
+    material.updatedAt = new Date();
+    
+    this.firestore.collection('inbound-materials').doc(material.id).update({
+      batchNumber: material.batchNumber,
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+      quantity: material.quantity,
+      unit: material.unit,
+      location: material.location,
+      type: material.type,
+      expiryDate: material.expiryDate,
+      qualityCheck: material.qualityCheck,
+      isReceived: material.isReceived,
+      notes: material.notes,
+      rollsOrBags: material.rollsOrBags,
+      supplier: material.supplier,
+      remarks: material.remarks,
+      isCompleted: material.isCompleted,
+      updatedAt: material.updatedAt
+    }).then(() => {
+      console.log(`✅ Material ${material.materialCode} updated successfully`);
+    }).catch((error) => {
+      console.error(`❌ Error updating material ${material.materialCode}:`, error);
+      this.errorMessage = `Lỗi cập nhật ${material.materialCode}: ${error.message}`;
+    });
+  }
+  
+  deleteMaterial(material: InboundMaterial): void {
+    if (!this.canDeleteMaterials) return;
+    
+    // Check if material is already in inventory - prevent deletion
+    if (material.isReceived) {
+      this.errorMessage = `❌ Không thể xóa material ${material.materialCode} - đã được đưa vào Inventory!`;
+      alert(this.errorMessage);
+      return;
+    }
+    
+    if (confirm(`Bạn có chắc muốn xóa material ${material.materialCode}?`)) {
+      this.firestore.collection('inbound-materials').doc(material.id).delete()
+        .then(() => {
+          console.log(`✅ Material ${material.materialCode} deleted successfully`);
+          this.loadMaterials(); // Reload the list
+        }).catch((error) => {
+          console.error(`❌ Error deleting material ${material.materialCode}:`, error);
+          this.errorMessage = `Lỗi xóa ${material.materialCode}: ${error.message}`;
+        });
+    }
+  }
+  
+  // Delete all materials from inbound tab
+  async deleteAllMaterials(): Promise<void> {
+    if (!this.canDeleteMaterials) {
+      this.errorMessage = 'Bạn không có quyền xóa materials';
+      return;
+    }
+    
+    // Check if there are materials already in inventory
+    const materialsInInventory = this.filteredMaterials.filter(m => m.isReceived);
+    if (materialsInInventory.length > 0) {
+      const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
+      this.errorMessage = `❌ Không thể xóa tất cả - có ${materialsInInventory.length} materials đã trong Inventory: ${materialCodes}`;
+      alert(this.errorMessage);
+      return;
+    }
+    
+    // Get all materials from current view
+    const materialIds = this.filteredMaterials.map(m => m.id).filter(id => id) as string[];
+    
+    if (materialIds.length === 0) {
+      alert('❌ Không có materials nào để xóa');
+      return;
+    }
+    
+    // Show confirmation dialog with count
+    const confirmed = confirm(
+      `⚠️ CẢNH BÁO: Bạn sắp xóa ${materialIds.length} materials từ tab Inbound ASM2!\n\n` +
+      `Hành động này KHÔNG THỂ HOÀN TÁC.\n\n` +
+      `Bạn có chắc chắn muốn tiếp tục?`
+    );
+    
+    if (!confirmed) return;
+    
+    // Show loading state
+    this.isLoading = true;
+    
+    try {
+      // Use Firestore batch for efficient deletion (max 500 per batch)
+      const batch = this.firestore.firestore.batch();
+      let batchCount = 0;
+      let totalDeleted = 0;
+      
+      for (const materialId of materialIds) {
+        const docRef = this.firestore.collection('inbound-materials').doc(materialId).ref;
+        batch.delete(docRef);
+        batchCount++;
+        
+        // Firestore batch limit is 500 operations
+        if (batchCount >= 500) {
+          await batch.commit();
+          totalDeleted += batchCount;
+          batchCount = 0;
+          console.log(`✅ Deleted batch of ${batchCount} materials`);
+        }
+      }
+      
+      // Commit remaining operations
+      if (batchCount > 0) {
+        await batch.commit();
+        totalDeleted += batchCount;
+      }
+      
+      // Show success message
+      alert(`✅ Đã xóa thành công ${totalDeleted} materials từ tab Inbound ASM2`);
+      
+      // Close dropdown
+      this.showDropdown = false;
+      
+      // Reload materials to refresh the view
+      this.loadMaterials();
+      
+    } catch (error: any) {
+      console.error('❌ Error deleting all materials:', error);
+      this.errorMessage = `Lỗi xóa materials: ${error.message}`;
     } finally {
       this.isLoading = false;
     }
   }
   
-  private readExcelFile(file: File): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e: any) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          resolve(jsonData);
-        } catch (error) { reject(error); }
-      };
-      reader.onerror = () => reject(new Error('Lỗi đọc file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-  
-  private parseExcelData(data: any[]): InboundMaterial[] {
-    return data.map((row, index) => {
-      try {
-        return {
-          factory: 'ASM2',
-          importDate: this.parseDate(row['Import Date'] || row['Ngày nhập'] || new Date()),
-          batchNumber: String(row['Batch Number'] || row['Số lô'] || ''),
-          materialCode: String(row['Material Code'] || row['Mã hàng'] || ''),
-          poNumber: String(row['PO Number'] || row['Số PO'] || ''),
-          quantity: Number(row['Quantity'] || row['Số lượng'] || 0),
-          unit: String(row['Unit'] || row['Đơn vị'] || ''),
-          location: String(row['Location'] || row['Vị trí'] || ''),
-          type: String(row['Type'] || row['Loại'] || ''),
-          expiryDate: this.parseDate(row['Expiry Date'] || row['Hạn sử dụng']),
-          qualityCheck: Boolean(row['Quality Check'] || row['Kiểm tra chất lượng'] || false),
-          isReceived: Boolean(row['Is Received'] || row['Đã nhận'] || false),
-          notes: String(row['Notes'] || row['Ghi chú'] || ''),
-          rollsOrBags: Number(row['Rolls/Bags'] || row['Cuộn/Túi'] || 0),
-          supplier: String(row['Supplier'] || row['Nhà cung cấp'] || ''),
-          remarks: String(row['Remarks'] || row['Nhận xét'] || ''),
-          isCompleted: Boolean(row['Is Completed'] || row['Hoàn thành'] || false),
-          hasQRGenerated: false
-        } as InboundMaterial;
-      } catch (error) {
-        console.warn(`⚠️ Error parsing row ${index + 1}:`, error);
-        return null;
-      }
-    }).filter(material => material !== null) as InboundMaterial[];
-  }
-  
-  private parseDate(dateValue: any): Date | null {
-    if (!dateValue) return null;
-    if (dateValue instanceof Date) return dateValue;
-    if (typeof dateValue === 'string') {
-      const parsed = new Date(dateValue);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
-    if (typeof dateValue === 'number') {
-      const excelEpoch = new Date(1900, 0, 1);
-      const days = dateValue - 2;
-      return new Date(excelEpoch.getTime() + days * 24 * 60 * 60 * 1000);
-    }
-    return null;
-  }
-  
-  async addMaterial(): Promise<void> {
-    if (!this.canAddMaterials) return;
-    const newMaterial: InboundMaterial = {
-      factory: 'ASM2', importDate: new Date(), batchNumber: '', materialCode: '', poNumber: '', quantity: 0, unit: '', location: '', type: '', expiryDate: null, qualityCheck: false, isReceived: false, notes: '', rollsOrBags: 0, supplier: '', remarks: '', isCompleted: false, hasQRGenerated: false, createdAt: new Date(), updatedAt: new Date()
-    };
-    try {
-      await this.firestore.collection('inbound-materials').add(newMaterial);
-      console.log('✅ ASM2 material added');
-      this.loadMaterials();
-    } catch (error) {
-      console.error('❌ Error adding ASM2 material:', error);
-      this.errorMessage = 'Lỗi thêm material: ' + error.message;
-    }
-  }
-  
-  async updateMaterial(material: InboundMaterial): Promise<void> {
-    if (!this.canEditMaterials || !material.id) return;
-    try {
-      material.updatedAt = new Date();
-      material.factory = 'ASM2';
-      await this.firestore.collection('inbound-materials').doc(material.id).update(material);
-      console.log('✅ ASM2 material updated:', material.materialCode);
-    } catch (error) {
-      console.error('❌ Error updating ASM2 material:', error);
-      this.errorMessage = 'Lỗi cập nhật: ' + error.message;
-    }
-  }
-  
-  async deleteMaterial(material: InboundMaterial): Promise<void> {
-    if (!this.canDeleteMaterials || !material.id) return;
-    if (!confirm(`Xóa material ${material.materialCode}?`)) return;
-    try {
-      await this.firestore.collection('inbound-materials').doc(material.id).delete();
-      console.log('✅ ASM2 material deleted:', material.materialCode);
-      this.loadMaterials();
-    } catch (error) {
-      console.error('❌ Error deleting ASM2 material:', error);
-      this.errorMessage = 'Lỗi xóa: ' + error.message;
-    }
-  }
-  
-  async generateQRCode(material: InboundMaterial): Promise<void> {
-    if (!this.canGenerateQR) return;
-    
-    // Validate required fields
-    if (!material.rollsOrBags || material.rollsOrBags <= 0) {
-      alert('Vui lòng nhập số đơn vị trước khi tạo QR code!');
+  async printQRCode(material: InboundMaterial): Promise<void> {
+    if (!this.canGenerateQR) {
+      alert('Bạn không có quyền tạo QR code');
       return;
     }
-    
+
+    if (!material.rollsOrBags || material.rollsOrBags <= 0) {
+      alert('Vui lòng nhập lượng đơn vị trước khi tạo QR code!');
+      return;
+    }
+
     try {
-      console.log('🏷️ Generating QR codes for ASM2 material:', material.materialCode);
+      // Calculate quantity per roll/bag
+      const rollsOrBags = parseFloat(material.rollsOrBags.toString()) || 1;
+      const totalQuantity = material.quantity;
       
-      // Calculate quantities - FIXED LOGIC
-      const totalQuantity = material.quantity; // Lượng nhập (ví dụ: 6740)
-      const quantityPerUnit = material.rollsOrBags; // Số đơn vị (ví dụ: 100)
+      // Calculate how many full units we can make
+      const fullUnits = Math.floor(totalQuantity / rollsOrBags);
+      const remainingQuantity = totalQuantity % rollsOrBags;
       
-      // Calculate full labels and remainder
-      const fullLabels = Math.floor(totalQuantity / quantityPerUnit); // 67 tem đầy đủ
-      const remainderQuantity = totalQuantity % quantityPerUnit; // 40 còn lại
-      const totalLabels = fullLabels + (remainderQuantity > 0 ? 1 : 0); // 67 + 1 = 68 tem
-      
-      console.log(`📊 Label calculation:`, {
-        totalQuantity, // 6740
-        quantityPerUnit, // 100
-        fullLabels, // 67
-        remainderQuantity, // 40
-        totalLabels // 68
-      });
-      
-      if (totalLabels === 0) {
-        alert('Số lượng không đủ để tạo tem QR!');
-        return;
-      }
-      
-      // Generate QR codes
+      // Generate QR codes based on quantity per unit
       const qrCodes = [];
       
-      // Generate full labels (67 tem × 100)
-      for (let i = 0; i < fullLabels; i++) {
-        const qrDataString = `${material.materialCode}|${material.poNumber}|${quantityPerUnit}`;
-        
-        const qrCodeDataURL = await QRCode.toDataURL(qrDataString, {
-          width: 240,
-          margin: 1,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
-        });
-        
+      // Add full units
+      for (let i = 0; i < fullUnits; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
-          unitNumber: quantityPerUnit,
-          qrData: qrDataString,
-          qrImage: qrCodeDataURL,
-          index: i + 1,
-          pageNumber: i + 1,
-          totalPages: totalLabels
+          unitNumber: rollsOrBags,
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}`
         });
       }
       
-      // Generate remainder label if exists (1 tem × 40)
-      if (remainderQuantity > 0) {
-        const qrDataString = `${material.materialCode}|${material.poNumber}|${remainderQuantity}`;
-        
-        const qrCodeDataURL = await QRCode.toDataURL(qrDataString, {
-          width: 240,
-          margin: 1,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
-        });
-        
+      // Add remaining quantity if any
+      if (remainingQuantity > 0) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
-          unitNumber: remainderQuantity,
-          qrData: qrDataString,
-          qrImage: qrCodeDataURL,
-          index: fullLabels + 1,
-          pageNumber: fullLabels + 1,
-          totalPages: totalLabels
+          unitNumber: remainingQuantity,
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
         });
       }
-      
-      // Create print window with all labels (copy inventory format)
-      await this.createQRPrintWindow(material, qrCodes);
-      
-      // Mark as QR generated
-      if (material.id) {
-        await this.firestore.collection('inbound-materials').doc(material.id).update({
-          hasQRGenerated: true,
-          updatedAt: new Date()
-        });
+
+      if (qrCodes.length === 0) {
+        alert('Vui lòng nhập số đơn vị trước khi tạo QR code!');
+        return;
       }
+
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+      const totalPages = qrCodes.length;
       
-      console.log(`✅ Generated ${qrCodes.length} QR code labels for ASM2 material`);
-      
+      // Generate QR code images
+      const qrImages = await Promise.all(
+        qrCodes.map(async (qr, index) => {
+          const qrData = qr.qrData;
+          const qrImage = await QRCode.toDataURL(qrData, {
+            width: 240, // 30mm = 240px (8px/mm)
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          return {
+            ...qr,
+            qrImage,
+            index: index + 1,
+            pageNumber: index + 1,
+            totalPages: totalPages,
+            printDate: printDate,
+            printedBy: currentUser
+          };
+        })
+      );
+
+      // Create print window with real QR codes
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title></title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 1mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 8px !important;
+                  line-height: 1.1 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .info-row {
+                  margin: 0.3mm 0 !important;
+                  font-weight: bold !important;
+                }
+                
+                .info-row.small {
+                  font-size: 7px !important;
+                  color: #666 !important;
+                }
+                
+                .qr-grid {
+                  text-align: center !important;
+                  display: flex !important;
+                  flex-direction: row !important;
+                  flex-wrap: wrap !important;
+                  align-items: flex-start !important;
+                  justify-content: flex-start !important;
+                  gap: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 8px !important;
+                    padding: 1mm !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 7px !important;
+                  }
+                  
+                  .qr-grid {
+                    gap: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  /* Hide all browser elements */
+                  @media screen {
+                    body::before,
+                    body::after,
+                    header,
+                    footer,
+                    nav,
+                    .browser-ui {
+                      display: none !important;
+                    }
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-grid">
+                ${qrImages.map(qr => `
+                  <div class="qr-container">
+                    <div class="qr-section">
+                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                    </div>
+                    <div class="info-section">
+                      <div>
+                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row">PO: ${qr.poNumber}</div>
+                        <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                      </div>
+                      <div>
+                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">NV: ${qr.printedBy}</div>
+                        <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <script>
+                window.onload = function() {
+                  // Remove all browser UI elements
+                  document.title = '';
+                  
+                  // Hide browser elements
+                  const style = document.createElement('style');
+                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                  document.head.appendChild(style);
+                  
+                  // Remove any browser elements
+                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                  elementsToRemove.forEach(el => el.remove());
+                  
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
     } catch (error) {
-      console.error('❌ Error generating QR code:', error);
-      alert('Lỗi tạo QR code: ' + error.message);
+      console.error('Error generating QR codes:', error);
+      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
   
-  private async createQRPrintWindow(material: InboundMaterial, qrCodes: any[]): Promise<void> {
-    // Get current user info from auth
-    const user = await this.afAuth.currentUser;
-    const currentUser = user ? (user.email || user.uid) : 'UNKNOWN';
-    const printDate = new Date().toLocaleDateString('vi-VN');
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+  // Additional functionality methods
+  importFromExcel(): void {
+    // Trigger file input for Excel import
+    this.importFile();
+  }
+  
+  addMaterial(): void {
+    if (!this.canAddMaterials) {
+      alert('❌ Bạn không có quyền thêm material mới');
       return;
     }
     
-    // Copy exact format from inventory
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title></title>
-          <style>
-            * {
-              margin: 0 !important;
-              padding: 0 !important;
-              box-sizing: border-box !important;
-            }
-            
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0 !important; 
-              padding: 0 !important;
-              background: white !important;
-              overflow: hidden !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
-            
-            .qr-container { 
-              display: flex !important; 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              border: 1px solid #000 !important; 
-              width: 57mm !important; 
-              height: 32mm !important; 
-              page-break-inside: avoid !important;
-              background: white !important;
-              box-sizing: border-box !important;
-            }
-            
-            .qr-section {
-              width: 30mm !important;
-              height: 30mm !important;
-              display: flex !important;
-              align-items: center !important;
-              justify-content: center !important;
-              border-right: 1px solid #ccc !important;
-              box-sizing: border-box !important;
-            }
-            
-            .qr-image {
-              width: 28mm !important;
-              height: 28mm !important;
-              display: block !important;
-            }
-            
-            .info-section {
-              flex: 1 !important;
-              padding: 1mm !important;
-              display: flex !important;
-              flex-direction: column !important;
-              justify-content: space-between !important;
-              font-size: 8px !important;
-              line-height: 1.1 !important;
-              box-sizing: border-box !important;
-            }
-            
-            .info-row {
-              margin: 0.3mm 0 !important;
-              font-weight: bold !important;
-            }
-            
-            .info-row.small {
-              font-size: 7px !important;
-              color: #666 !important;
-            }
-            
-            .qr-grid {
-              text-align: center !important;
-              display: flex !important;
-              flex-direction: row !important;
-              flex-wrap: wrap !important;
-              align-items: flex-start !important;
-              justify-content: flex-start !important;
-              gap: 0 !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
-            
-            @media print {
-              body { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                overflow: hidden !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-              
-              @page {
-                margin: 0 !important;
-                size: 57mm 32mm !important;
-                padding: 0 !important;
-              }
-              
-              .qr-container { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-                page-break-inside: avoid !important;
-                border: 1px solid #000 !important;
-              }
-              
-              .qr-section {
-                width: 30mm !important;
-                height: 30mm !important;
-              }
-              
-              .qr-image {
-                width: 28mm !important;
-                height: 28mm !important;
-              }
-              
-              .info-section {
-                font-size: 8px !important;
-                padding: 1mm !important;
-              }
-              
-              .info-row.small {
-                font-size: 7px !important;
-              }
-              
-              .qr-grid {
-                gap: 0 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="qr-grid">
-            ${qrCodes.map(qr => `
-              <div class="qr-container">
-                <div class="qr-section">
-                  <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
-                </div>
-                <div class="info-section">
-                  <div>
-                    <div class="info-row">Mã: ${qr.materialCode}</div>
-                    <div class="info-row">PO: ${qr.poNumber}</div>
-                    <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
-                  </div>
-                  <div>
-                    <div class="info-row small">Ngày in: ${printDate}</div>
-                    <div class="info-row small">NV: ${currentUser}</div>
-                    <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
-                  </div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-          <script>
-            window.onload = function() {
-              setTimeout(() => {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                };
-              }, 1000);
-            };
-          </script>
-        </body>
-      </html>
-    `);
+    // Create a new empty material
+    const newMaterial: InboundMaterial = {
+      factory: 'ASM2',
+      importDate: new Date(),
+      batchNumber: '',
+      materialCode: '',
+      poNumber: '',
+      quantity: 0,
+      unit: '',
+      location: '',
+      type: '',
+      expiryDate: null,
+      qualityCheck: false,
+      isReceived: false,
+      notes: '',
+      rollsOrBags: 0,
+      supplier: '',
+      remarks: '',
+      isCompleted: false,
+      hasQRGenerated: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     
-    printWindow.document.close();
+    // Add to Firebase
+    this.firestore.collection('inbound-materials').add(newMaterial)
+      .then((docRef) => {
+        newMaterial.id = docRef.id;
+        console.log(`✅ New ASM2 material added with ID: ${docRef.id}`);
+        
+        // Add to local array and refresh
+        this.materials.unshift(newMaterial);
+        this.applyFilters();
+        
+        alert('✅ Material mới đã được thêm thành công!');
+      })
+      .catch((error) => {
+        console.error('❌ Error adding new material:', error);
+        this.errorMessage = 'Lỗi thêm material mới: ' + error.message;
+        alert('❌ Lỗi thêm material mới: ' + error.message);
+      });
   }
   
+  // Export functionality
   exportToExcel(): void {
     if (!this.canExportData) return;
     try {
@@ -894,6 +1174,33 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       this.errorMessage = 'Lỗi export: ' + error.message;
       alert('Lỗi export: ' + error.message);
     }
+  }
+  
+  // Download Excel template for import
+  downloadTemplate(): void {
+    const templateData = [
+      ['LÔ HÀNG/ DNNK', 'MÃ HÀNG', 'SỐ P.O', 'LƯỢNG NHẬP', 'LOẠI HÌNH', 'NHÀ CUNG CẤP'],
+      ['RM2-B001', 'RM2-MAT001', 'RM2-PO001', 100, 'Raw Material', 'Supplier A'],
+      ['RM2-B002', 'RM2-MAT002', 'RM2-PO002', 50, 'Raw Material', 'Supplier B']
+    ];
+    
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 18 },  // LÔ HÀNG/ DNNK
+      { wch: 15 },  // MÃ HÀNG
+      { wch: 12 },  // SỐ P.O
+      { wch: 15 },  // LƯỢNG NHẬP
+      { wch: 15 },  // LOẠI HÌNH
+      { wch: 20 }   // NHÀ CUNG CẤP
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+    
+    XLSX.writeFile(workbook, 'ASM2_Import_Template.xlsx');
   }
   
   formatDate(date: Date | null): string { if (!date) return ''; return date.toLocaleDateString('vi-VN'); }

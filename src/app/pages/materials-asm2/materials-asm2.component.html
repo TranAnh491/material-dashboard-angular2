@@ -71,9 +71,35 @@
           </button>
           <!-- Search Box and Total Counter -->
           <div class="search-counter-container">
+            <div class="search-type-selector">
+              <div class="dropdown">
+                <button class="btn btn-secondary dropdown-toggle search-type-dropdown" 
+                        type="button" 
+                        data-toggle="dropdown" 
+                        aria-haspopup="true" 
+                        aria-expanded="false">
+                  <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+                  {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+                </button>
+                <div class="dropdown-menu">
+                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                    <i class="material-icons">inventory</i>
+                    Mã
+                  </a>
+                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                    <i class="material-icons">receipt</i>
+                    PO
+                  </a>
+                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                    <i class="material-icons">place</i>
+                    Vị trí
+                  </a>
+                </div>
+              </div>
+            </div>
             <div class="inline-search-box">
               <input type="text" 
-                     placeholder="🔍 Tìm kiếm..." 
+                     [placeholder]="'🔍 Tìm kiếm theo ' + (searchType === 'material' ? 'mã hàng' : searchType === 'po' ? 'PO' : 'vị trí') + '...'" 
                      [(ngModel)]="searchTerm" 
                      (input)="onSearchInput($event)"
                      class="inline-search-input">
@@ -172,8 +198,13 @@
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
 
-            <td class="number-cell">
-              <input type="text" class="editable-cell" [(ngModel)]="material.rollsOrBags" (change)="updateRollsOrBags(material)">
+            <td class="rolls-bags-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.rollsOrBags" 
+                     (change)="updateMaterial(material)" 
+                     min="0" 
+                     placeholder="Rolls/Bags">
             </td>
             <td class="status-cell">
               <span class="badge" 

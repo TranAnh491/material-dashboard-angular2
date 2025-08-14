@@ -65,6 +65,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Search and filter
   searchTerm = '';
+  searchType: 'material' | 'po' | 'location' = 'material';
   private searchSubject = new Subject<string>();
   
   // Dropdown state
@@ -234,19 +235,32 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return false;
       }
 
-      // Apply search filter
+      // Apply search filter based on search type
       if (this.searchTerm) {
-        const searchableText = [
-          material.materialCode,
-          material.materialName,
-          material.location,
-          material.quantity?.toString(),
-          material.stock?.toString(),
-          material.poNumber
-        ].filter(Boolean).join(' ').toLowerCase();
+        const searchTermLower = this.searchTerm.toLowerCase();
         
-        if (!searchableText.includes(this.searchTerm)) {
+        switch (this.searchType) {
+          case 'material':
+            // Search by material code or name
+            if (!material.materialCode?.toLowerCase().includes(searchTermLower) &&
+                !material.materialName?.toLowerCase().includes(searchTermLower)) {
           return false;
+        }
+            break;
+            
+          case 'po':
+            // Search by PO number
+            if (!material.poNumber?.toLowerCase().includes(searchTermLower)) {
+              return false;
+            }
+            break;
+            
+          case 'location':
+            // Search by location
+            if (!material.location?.toLowerCase().includes(searchTermLower)) {
+              return false;
+            }
+            break;
         }
       }
       
@@ -287,6 +301,13 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   onSearchInput(event: any): void {
     const searchTerm = event.target.value;
     this.searchSubject.next(searchTerm);
+  }
+
+  // Change search type
+  changeSearchType(type: 'material' | 'po' | 'location'): void {
+    this.searchType = type;
+    this.searchTerm = ''; // Clear search when changing type
+    this.applyFilters(); // Reapply filters
   }
 
   // Perform search with performance optimization
@@ -481,7 +502,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           this.showImportResults(result);
           
           // Reload inventory data
-          this.loadInventoryFromFirebase();
+            this.loadInventoryFromFirebase();
           
         } catch (error) {
           console.error('Import error:', error);
@@ -998,17 +1019,17 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // Use exact same format as Inbound for consistency
     printWindow.document.write(`
       <html>
-        <head>
+      <head>
           <title>QR Label - ASM2 - ${material.materialCode}</title>
-          <style>
+        <style>
             * {
               margin: 0 !important;
               padding: 0 !important;
               box-sizing: border-box !important;
             }
             
-            body { 
-              font-family: Arial, sans-serif; 
+          body { 
+            font-family: Arial, sans-serif; 
               margin: 0 !important; 
               padding: 0 !important;
               background: white !important;
@@ -1017,7 +1038,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
               height: 32mm !important;
             }
             
-            .qr-container { 
+          .qr-container { 
               display: flex !important; 
               margin: 0 !important; 
               padding: 0 !important; 
@@ -1080,7 +1101,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
               height: 32mm !important;
             }
             
-            @media print {
+          @media print {
               body { 
                 margin: 0 !important; 
                 padding: 0 !important;
@@ -1130,34 +1151,34 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
                 width: 57mm !important;
                 height: 32mm !important;
               }
-            }
-          </style>
-        </head>
-        <body>
+          }
+        </style>
+      </head>
+      <body>
           <div class="qr-grid">
-            ${qrImages.map(qr => `
+          ${qrImages.map(qr => `
               <div class="qr-container">
                 <div class="qr-section">
                   <img src="${qr.image}" alt="QR Code" class="qr-image">
-                </div>
+              </div>
                 <div class="info-section">
                   <div class="info-row">${qr.materialCode}</div>
                   <div class="info-row">${qr.poNumber}</div>
                   <div class="info-row">${qr.unitNumber}</div>
                   <div class="info-row small">ASM2</div>
                   <div class="info-row small">${currentDate}</div>
-                </div>
               </div>
-            `).join('')}
-          </div>
-          <script>
+            </div>
+          `).join('')}
+        </div>
+        <script>
             window.onload = function() {
-              setTimeout(() => {
+            setTimeout(() => {
                 window.print();
-              }, 500);
+            }, 500);
             };
-          </script>
-        </body>
+        </script>
+      </body>
       </html>
     `);
 

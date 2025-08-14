@@ -121,7 +121,193 @@
   &:focus {
     border-color: #333333; // Black focus
     outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
+  }
+}
+
+// Editable input for Rolls/Bags column - ensure it fits within column width
+.editable-input {
+  width: 100%;
+  max-width: 100%; // Use full cell width
+  border: 1px solid #e0e0e0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  text-align: center;
+  
+  &:focus {
+    border-color: #333333; // Black focus
+    outline: none;
+    box-shadow: none;
+  }
+  
+  // Ensure input doesn't overflow column boundaries
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Remove the :has() selector approach
+// .number-cell {
+//   // Existing styles...
+//   
+//   // Special handling for Rolls/Bags column
+//   &:has(.editable-input) {
+//     width: 100px; // Fixed width for Rolls/Bags column
+//     min-width: 100px;
+//     max-width: 100px;
+//     text-align: center;
+//   }
+// }
+
+// Specific styling for Rolls/Bags column
+.rolls-bags-cell {
+  width: 100px !important; // Fixed width for Rolls/Bags column
+  min-width: 100px !important;
+  max-width: 100px !important;
+  text-align: center;
+  padding: 4px 6px;
+  
+  // Ensure the input fits perfectly within the cell
+  .editable-input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+// Ensure all action controls have equal height and consistent styling
+.action-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  
+  // All buttons and inputs should have equal height
+  .custom-btn,
+  .more-btn,
+  .refresh-btn,
+  .sync-btn,
+  .clear-btn,
+  .search-type-dropdown,
+  .search-input,
+  .total-counter-box {
+    height: 40px !important; // Fixed height for all elements
+    min-height: 40px !important;
+    max-height: 40px !important;
+    border: 2px solid #000000 !important; // Black border
+    border-radius: 6px;
+    box-sizing: border-box;
+    
+    // Remove all glow effects
+    box-shadow: none !important;
+    outline: none !important;
+    
+    &:focus {
+      box-shadow: none !important;
+      outline: none !important;
+    }
+    
+    &:hover {
+      box-shadow: none !important;
+    }
+  }
+  
+  // Button specific styling
+  .custom-btn,
+  .more-btn,
+  .refresh-btn,
+  .sync-btn,
+  .clear-btn {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: none; // Remove transitions
+    
+    &:hover {
+      background: #f5f5f5 !important;
+      border-color: #000000 !important;
+      box-shadow: none !important;
+    }
+    
+    i {
+      font-size: 18px;
+    }
+  }
+  
+  // Search type dropdown styling
+  .search-type-dropdown {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+    justify-content: space-between;
+    
+    &:hover {
+      background: #f5f5f5 !important;
+      border-color: #000000 !important;
+      box-shadow: none !important;
+    }
+    
+    &:focus {
+      box-shadow: none !important;
+      outline: none !important;
+    }
+  }
+  
+  // Search input styling
+  .search-input {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 8px 16px;
+    font-size: 14px;
+    min-width: 200px;
+    
+    &::placeholder {
+      color: #666666;
+    }
+    
+    &:focus {
+      border-color: #000000 !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+  }
+  
+  // Total counter box styling
+  .total-counter-box {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 180px;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    i {
+      font-size: 18px;
+      color: #000000 !important;
+    }
+    
+    span {
+      white-space: nowrap;
+      font-weight: 600;
+    }
   }
 }
 
@@ -131,6 +317,68 @@
   align-items: center;
   gap: 8px;
   margin-left: 8px;
+}
+
+// Search type selector
+.search-type-selector {
+  display: flex;
+  gap: 4px;
+  
+  .dropdown {
+    position: relative;
+  }
+  
+  .search-type-dropdown {
+    padding: 8px 16px;
+    border: 1px solid #000000;
+    background: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #000000;
+    min-width: 120px;
+    justify-content: space-between;
+    height: 40px;
+    
+    &:hover {
+      background: #f5f5f5;
+    }
+    
+    &:focus {
+      box-shadow: none;
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
+  .dropdown-menu {
+    min-width: 120px;
+    border: 1px solid #000000;
+    border-radius: 4px;
+    box-shadow: none;
+    
+    .dropdown-item {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #000000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      &:hover {
+        background-color: #f8f9fa;
+      }
+      
+      i {
+        font-size: 14px;
+      }
+    }
+  }
 }
 
 // Inline search box
@@ -151,7 +399,7 @@
     &:focus {
       outline: none;
       border-color: #000000;
-      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+      box-shadow: none;
     }
   }
 }
@@ -188,7 +436,6 @@
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
-  transition: all 0.2s ease;
   
   &:hover {
     background: #f5f5f5;
@@ -282,7 +529,7 @@
 .excel-container {
   background: #ffffff;
   border: 1px solid #e0e0e0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -376,5 +623,26 @@
   
   i {
     color: #dc3545 !important;
+  }
+}
+
+// Remove orange glow effect from action buttons
+.btn {
+  &:focus {
+    box-shadow: none !important;
+  }
+  
+  &.btn-outline-warning {
+    &:focus {
+      box-shadow: none !important;
+    }
+  }
+}
+
+.action-buttons {
+  .btn {
+    &:focus {
+      box-shadow: none !important;
+    }
   }
 }

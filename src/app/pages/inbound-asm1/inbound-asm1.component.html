@@ -9,68 +9,100 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- More Dropdown -->
+        <!-- More Button with Dropdown -->
         <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+          <button class="more-btn" (click)="toggleDropdown()">
             <i class="material-icons">more_vert</i>
             More
           </button>
-          <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFromExcel(); $event.preventDefault()">
+          <div class="dropdown-menu" [class.show]="showDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+              <i class="material-icons">file_download</i>
+              Export to Excel
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate()">
+              <i class="material-icons">description</i>
+              Download Template
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile()">
               <i class="material-icons">file_upload</i>
-              Import Excel
+              Import File
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Export Excel
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); $event.preventDefault()">
-              <i class="material-icons">add</i>
-              Thêm Material
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="clearFilters(); $event.preventDefault()">
-              <i class="material-icons">clear</i>
-              Xóa Filter
+            <a class="dropdown-item delete-all-item" href="javascript:void(0)" (click)="deleteAllMaterials()">
+              <i class="material-icons">delete_sweep</i>
+              Xóa tất cả
             </a>
           </div>
         </div>
         
-        <!-- Search Box with Type -->
-        <div class="search-group">
+        <!-- Total Materials Counter -->
+        <div class="total-counter-box">
+          <span>Tổng: {{filteredMaterials.length}} materials</span>
+        </div>
+        
+        <!-- Search Box -->
+        <div class="search-box">
           <input type="text" 
-                 [placeholder]="getSearchPlaceholder()" 
+                 [placeholder]="getSearchPlaceholder()"
                  [(ngModel)]="searchTerm"
-                 (input)="onSearchChange()"
-                 class="custom-input search-input">
-          <select class="search-type-select" [(ngModel)]="searchType" (change)="onSearchTypeChange()">
-            <option value="all">Tất cả</option>
-            <option value="materialCode">Mã hàng</option>
-            <option value="batchNumber">Lô hàng</option>
-            <option value="poNumber">PO</option>
-          </select>
+                 (input)="onSearchInput($event)"
+                 class="search-input">
         </div>
         
-        <!-- Status Filter -->
-        <select class="status-filter-select" [(ngModel)]="statusFilter" (change)="onStatusFilterChange()">
-          <option value="">Tất cả trạng thái</option>
-          <option value="completed">Hoàn thành</option>
-          <option value="pending">Chưa hoàn thành</option>
-        </select>
-        
-        <!-- Date Filters -->
-        <div class="date-group">
-          <label>Từ ngày:</label>
-          <input type="date" [(ngModel)]="startDate" (change)="onDateFilterChange()" class="date-input">
-          <label>Đến ngày:</label>
-          <input type="date" [(ngModel)]="endDate" (change)="onDateFilterChange()" class="date-input">
+        <!-- Filter Buttons -->
+        <div class="filter-buttons">
+          <!-- Search Type Filter -->
+          <div class="filter-group">
+            <select class="filter-select" 
+                    [(ngModel)]="searchType" 
+                    (change)="changeSearchType($event.target.value)">
+              <option value="materialCode">Mã Hàng</option>
+              <option value="batchNumber">Lô Hàng</option>
+            </select>
+          </div>
+          
+          <!-- Status Filter -->
+          <div class="filter-group">
+            <select class="filter-select" 
+                    [(ngModel)]="statusFilter" 
+                    (change)="changeStatusFilter($event.target.value)">
+              <option value="pending">Chưa</option>
+              <option value="completed">Hoàn Thành</option>
+            </select>
+          </div>
         </div>
         
-        <!-- Refresh Button -->
-        <button class="custom-btn refresh-btn" (click)="loadMaterials()">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
+        <!-- Date Range Selector -->
+        <div class="date-range-selector">
+          <input type="date" 
+                 [(ngModel)]="startDate" 
+                 (change)="applyFilters()"
+                 class="date-input"
+                 title="Từ ngày">
+          <span class="date-separator">→</span>
+          <input type="date" 
+                 [(ngModel)]="endDate" 
+                 (change)="applyFilters()"
+                 class="date-input"
+                 title="Đến ngày">
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="clear-btn" (click)="clearFilters()">
+            <i class="material-icons">clear</i>
+            Reset
+          </button>
+          
+          <!-- Refresh Button -->
+          <button class="refresh-btn" (click)="loadMaterials()">
+            <i class="material-icons">refresh</i>
+            Refresh
+          </button>
+        </div>
+        
+        <!-- Factory Badge -->
+        <span class="factory-badge asm1-badge">ASM1</span>
       </div>
     </div>
     
@@ -93,44 +125,43 @@
       <table class="excel-table">
         <thead>
           <tr>
-            <th>Factory</th>
+            <th class="factory-cell">FACTORY</th>
             <th class="row-header">#</th>
-            <th>Ngày nhập</th>
-            <th>Lô Hàng/ DNNK</th>
-            <th>Mã hàng</th>
-            <th>Số P.O</th>
-            <th>Lượng Nhập</th>
-            <th>Vị trí</th>
-            <th>Loại hình</th>
-            <th>HSD</th>
-            <th>KK</th>
-            <th>Đã nhận</th>
-            <th>Ghi chú</th>
-            <th>Số đơn vị</th>
-            <th>Lượng Hàng</th>
-            <th>Nhà cung cấp</th>
-            <th>Lưu ý</th>
-            <th>Trạng thái</th>
-            <th>Hoàn thành</th>
-            <th>Xóa</th>
-            <th class="print-column-header">Print</th>
+            <th class="date-cell">NGÀY NHẬP</th>
+            <th class="batch-cell">LÔ HÀNG/ DNNK</th>
+            <th class="code-cell">MÃ HÀNG</th>
+            <th class="po-cell">SỐ P.O</th>
+            <th class="number-cell">LƯỢNG NHẬP</th>
+            <th class="location-cell">VỊ TRÍ</th>
+            <th class="type-cell">LOẠI HÌNH</th>
+            <th class="date-cell">HSD</th>
+            <th class="status-cell">KK</th>
+            <th class="status-cell">ĐÃ NHẬN</th>
+            <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
+            <th class="supplier-cell">NHÀ CUNG CẤP</th>
+            <th class="remarks-cell">LƯU Ý</th>
+            <th class="status-cell">TRẠNG THÁI</th>
+            <th class="action-cell">HOÀN THÀNH</th>
+            <th class="action-cell">XÓA</th>
+            <th class="action-cell">QR</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index" 
+          <tr *ngFor="let material of filteredMaterials; let i = index" 
               [class.received-row]="material.isReceived"
               [class.completed-row]="material.isCompleted">
             <td class="factory-cell factory-asm1">
               ASM1
             </td>
-            <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
+            <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{formatDate(material.importDate)}}</td>
             <td class="batch-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.batchNumber" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials">
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lô hàng'">
             </td>
             <td class="code-cell" 
                 [class.material-code-printed]="material.hasQRGenerated"
@@ -139,34 +170,32 @@
                      class="editable-input" 
                      [(ngModel)]="material.materialCode" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials">
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa mã hàng'">
             </td>
             <td class="po-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.poNumber" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials">
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số PO'">
             </td>
             <td class="number-cell">
               <input type="number" 
                      class="editable-input" 
                      [(ngModel)]="material.quantity" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"> 
-              <input type="text" 
-                     class="editable-input unit-input" 
-                     [(ngModel)]="material.unit" 
-                     (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
-                     placeholder="đơn vị">
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số lượng'">
             </td>
             <td class="location-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.location" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa vị trí'"
                      placeholder="Vị trí">
             </td>
             <td class="type-cell">
@@ -174,7 +203,8 @@
                      class="editable-input" 
                      [(ngModel)]="material.type" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa loại hình'"
                      placeholder="Loại">
             </td>
             <td class="date-cell">
@@ -182,44 +212,39 @@
                      class="date-input" 
                      [value]="material.expiryDate ? material.expiryDate.toISOString().split('T')[0] : ''"
                      (change)="onExpiryDateChange($event, material)"
-                     [disabled]="!canEditMaterials">
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa hạn sử dụng'">
             </td>
             <td class="status-cell">
               <input type="checkbox" 
                      [checked]="material.qualityCheck" 
-                     (change)="material.qualityCheck = $event.target.checked; updateMaterial(material)"
-                     [disabled]="!canEditMaterials">
+                     (change)="onQualityCheckChange($event, material)"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Kiểm tra chất lượng'">
             </td>
             <td class="status-cell">
               <input type="checkbox" 
                      [checked]="material.isReceived" 
                      (change)="onReceivedChange($event, material)"
-                     [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Đã chuyển vào Inventory ASM1' : 'Tick để chuyển vào Inventory ASM1'">
-            </td>
-            <td class="notes-cell">
-              <input type="text" 
-                     class="editable-input" 
-                     [(ngModel)]="material.notes" 
-                     (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
-                     placeholder="Ghi chú">
+                     [disabled]="material.isReceived || !canEditMaterials"
+                     [title]="material.isReceived ? 'Đã nhận - không thể thay đổi' : 'Đánh dấu đã nhận'">
             </td>
             <td class="number-cell">
               <input type="number" 
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
-                     (change)="updateMaterial(material)" 
-                     min="0" 
-                     [disabled]="!canEditMaterials">
+                     (change)="updateMaterial(material)"
+                     min="0"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị'">
             </td>
-            <td class="number-cell">{{material.quantity / (material.rollsOrBags || 1) | number:'1.0-2'}} {{material.unit}}</td>
             <td class="supplier-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.supplier" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa nhà cung cấp'"
                      placeholder="Nhà cung cấp">
             </td>
             <td class="remarks-cell">
@@ -227,7 +252,8 @@
                      class="editable-input" 
                      [(ngModel)]="material.remarks" 
                      (change)="updateMaterial(material)"
-                     [disabled]="!canEditMaterials"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lưu ý'"
                      placeholder="Lưu ý">
             </td>
             <td class="status-cell">
@@ -246,46 +272,24 @@
             <td class="status-cell">
               <button class="action-btn delete-btn" 
                       (click)="deleteMaterial(material)" 
-                      [disabled]="!canDeleteMaterials"
-                      title="Xóa material">
+                      [disabled]="!canDeleteMaterials || material.isReceived" 
+                      [title]="material.isReceived ? 'Không thể xóa - đã trong Inventory' : 'Xóa material'">
                 <i class="material-icons">delete</i>
               </button>
             </td>
-            <td class="print-cell">
-              <button class="print-qr-btn" 
-                      (click)="generateQRCode(material)" 
-                      [disabled]="!canGenerateQR"
-                      title="In QR Code ASM1">
-                <i class="material-icons">print</i>
-                Print
-              </button>
-            </td>
+                         <td class="qr-cell">
+               <button class="print-qr-btn" 
+                       (click)="printQRCode(material)" 
+                       [disabled]="!canGenerateQR || !material.rollsOrBags || material.rollsOrBags <= 0"
+                       [title]="!material.rollsOrBags || material.rollsOrBags <= 0 ? 'Vui lòng nhập lượng đơn vị trước' : 'In tem QR code'">
+                 <i class="material-icons">print</i>
+                 Print
+               </button>
+             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    
-    <!-- Pagination -->
-    <div class="pagination-container" *ngIf="totalPages > 1">
-      <div class="pagination-info">
-        Trang {{currentPage}} / {{totalPages}} - Tổng: {{filteredMaterials.length}} materials
-      </div>
-      <div class="pagination-controls">
-        <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
-          <i class="material-icons">chevron_left</i>
-        </button>
-        <button class="page-btn" 
-                *ngFor="let page of [].constructor(totalPages); let i = index"
-                [class.active]="currentPage === i + 1"
-                (click)="goToPage(i + 1)">
-          {{i + 1}}
-        </button>
-        <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
-          <i class="material-icons">chevron_right</i>
-        </button>
-      </div>
-    </div>
-    
   </div>
 </div>
 
