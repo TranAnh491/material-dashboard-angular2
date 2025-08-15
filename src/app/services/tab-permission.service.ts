@@ -39,13 +39,25 @@ export class TabPermissionService {
                 } else {
                   // Default: tất cả tab mẹ đều accessible (chỉ hiện tab mẹ)
                   return {
+                    // Main tabs
                     'dashboard': true,
                     'work-order-status': true,
                     'shipment': true,
-                    'materials': true,
+                    
+                    // Inbound tabs
+                    'inbound-asm1': true,
+                    'inbound-asm2': true,
+                    
+                    // Outbound tabs
+                    'outbound-asm1': true,
+                    'outbound-asm2': true,
+                    
+                    // Inventory tabs
                     'materials-asm1': true,
                     'materials-asm2': true,
                     'materials-inventory': true,
+                    
+                    // Other tabs
                     'fg': true,
                     'label': true,
                     'index': true,
@@ -56,15 +68,17 @@ export class TabPermissionService {
                     'equipment': true,
                     'task': true,
                     'settings': true,
-                    // Inventory operation permissions
+                    
+                    // Legacy permissions for backward compatibility
+                    'materials': true,
+                    
+                    // Operation-specific permissions
                     'inventory-delete': true,
                     'inventory-export': true,
                     'inventory-edit-hsd': true,
-                    // Materials-inventory specific permissions
                     'materials-inventory-delete': true,
                     'materials-inventory-export': true,
                     'materials-inventory-edit-hsd': true,
-                    // Inbound operation permissions
                     'inbound-add': true,
                     'inbound-edit': true,
                     'inbound-delete': true,

@@ -34,13 +34,27 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Firebase user departments
   firebaseUserDepartments: { [key: string]: string } = {};
   isEditingPermissions = false;
-  // Available tabs for permissions - chỉ hiện tab mẹ và tab có trong giao diện
+  // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
   availableTabs = [
-    // Main tabs (chỉ tab mẹ)
+    // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },
-    { key: 'materials', name: 'Materials' }, // Tab mẹ, không hiện tab con
+    
+    // Inbound tabs
+    { key: 'inbound-asm1', name: 'RM1 Inbound' },
+    { key: 'inbound-asm2', name: 'RM2 Inbound' },
+    
+    // Outbound tabs
+    { key: 'outbound-asm1', name: 'RM1 Outbound' },
+    { key: 'outbound-asm2', name: 'RM2 Outbound' },
+    
+    // Inventory tabs
+    { key: 'materials-asm1', name: 'RM1 Inventory' },
+    { key: 'materials-asm2', name: 'RM2 Inventory' },
+    { key: 'materials-inventory', name: 'Materials Inventory' },
+    
+    // Other tabs
     { key: 'fg', name: 'Finished Goods' },
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
@@ -658,24 +672,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
     try {
-      // Tự động cấp quyền cho tab con khi có quyền tab mẹ
+      // Sử dụng permissions mặc định - mỗi tab được quản lý riêng biệt
       const finalPermissions = { ...defaultPermissions };
-      
-      if (finalPermissions['materials'] === true) {
-        // Materials tab con
-        const materialsChildren = ['inbound-materials', 'outbound-materials', 'materials-inventory'];
-        for (const childTab of materialsChildren) {
-          finalPermissions[childTab] = true;
-        }
-      }
-      
-      if (finalPermissions['fg'] === true) {
-        // Finished Goods tab con
-        const fgChildren = ['inbound-fgs', 'outbound-fgs'];
-        for (const childTab of fgChildren) {
-          finalPermissions[childTab] = true;
-        }
-      }
       
       await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
         uid: user.uid,
@@ -710,38 +708,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
         const userTabPermissions = this.firebaseUserTabPermissions[user.uid] || {};
         let hasChanges = false;
         
-        // Check if user has permissions for all available tabs (chỉ tab mẹ)
+        // Check if user has permissions for all available tabs
         for (const tab of this.availableTabs) {
           if (userTabPermissions[tab.key] === undefined) {
             // Add missing tab permission (default to true)
             userTabPermissions[tab.key] = true;
             hasChanges = true;
             console.log(`➕ Added missing permission for ${user.email}: ${tab.name}`);
-          }
-        }
-        
-        // Tự động cấp quyền cho tab con khi có quyền tab mẹ
-        if (userTabPermissions['materials'] === true) {
-          // Materials tab con
-          const materialsChildren = ['inbound-materials', 'outbound-materials', 'materials-inventory'];
-          for (const childTab of materialsChildren) {
-            if (userTabPermissions[childTab] === undefined) {
-              userTabPermissions[childTab] = true;
-              hasChanges = true;
-              console.log(`➕ Added materials child permission for ${user.email}: ${childTab}`);
-            }
-          }
-        }
-        
-        if (userTabPermissions['fg'] === true) {
-          // Finished Goods tab con
-          const fgChildren = ['inbound-fgs', 'outbound-fgs'];
-          for (const childTab of fgChildren) {
-            if (userTabPermissions[childTab] === undefined) {
-              userTabPermissions[childTab] = true;
-              hasChanges = true;
-              console.log(`➕ Added FG child permission for ${user.email}: ${childTab}`);
-            }
           }
         }
         
@@ -873,23 +846,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Update local data
       this.firebaseUserTabPermissions[userId][tabKey] = hasAccess;
 
-      // Tự động cập nhật quyền tab con khi thay đổi quyền tab mẹ
-      if (tabKey === 'materials') {
-        const materialsChildren = ['inbound-materials', 'outbound-materials', 'materials-inventory'];
-        for (const childTab of materialsChildren) {
-          this.firebaseUserTabPermissions[userId][childTab] = hasAccess;
-          console.log(`🔄 Auto-updated ${childTab} permission to ${hasAccess} for ${user.email}`);
-        }
-      }
-      
-      if (tabKey === 'fg') {
-        const fgChildren = ['inbound-fgs', 'outbound-fgs'];
-        for (const childTab of fgChildren) {
-          this.firebaseUserTabPermissions[userId][childTab] = hasAccess;
-          console.log(`🔄 Auto-updated ${childTab} permission to ${hasAccess} for ${user.email}`);
-        }
-      }
-
       // Update in Firestore
       await this.firestore.collection('user-tab-permissions').doc(userId).set({
         uid: userId,
@@ -899,7 +855,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       }, { merge: true });
 
-      console.log(`✅ Updated tab permission for ${user.email}: ${tabKey} = ${hasAccess} (including child tabs)`);
+      console.log(`✅ Updated tab permission for ${user.email}: ${tabKey} = ${hasAccess}`);
     } catch (error) {
       console.error('❌ Error updating user tab permission:', error);
     }
@@ -1039,13 +995,62 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return '📧';
   }
 
+  // Get factory display class for styling
+  getFactoryClass(factory: string): string {
+    switch (factory?.toUpperCase()) {
+      case 'ASM1': return 'factory-asm1';
+      case 'ASM2': return 'factory-asm2';
+      case 'ALL': return 'factory-all';
+      default: return 'factory-default';
+    }
+  }
+
+  // Get role display class for styling
+  getRoleClass(role: string): string {
+    switch (role?.toLowerCase()) {
+      case 'admin': return 'role-admin';
+      case 'quản lý': return 'role-manager';
+      case 'user': return 'role-user';
+      default: return 'role-default';
+    }
+  }
+
   getSortedFirebaseUsers(): User[] {
-    // Sort users: special users first, then by email
+    // Sort users: special users first, then by role (Admin > Quản lý > User), then by factory (ASM1 > ASM2 > ALL), then by email
     return this.firebaseUsers.sort((a, b) => {
+      // Special users first
       if (a.uid === 'special-steve-uid') return -1;
       if (b.uid === 'special-steve-uid') return 1;
       if (a.uid === 'special-asp0001-uid') return -1;
       if (b.uid === 'special-asp0001-uid') return 1;
+      
+      // Sort by role priority: Admin > Quản lý > User
+      const getRolePriority = (role: string): number => {
+        switch (role?.toLowerCase()) {
+          case 'admin': return 1;
+          case 'quản lý': return 2;
+          case 'user': return 3;
+          default: return 4;
+        }
+      };
+      
+      const roleComparison = getRolePriority(a.role || 'user') - getRolePriority(b.role || 'user');
+      if (roleComparison !== 0) return roleComparison;
+      
+      // Sort by factory priority: ASM1 > ASM2 > ALL > others
+      const getFactoryPriority = (factory: string): number => {
+        switch (factory?.toUpperCase()) {
+          case 'ASM1': return 1;
+          case 'ASM2': return 2;
+          case 'ALL': return 3;
+          default: return 4;
+        }
+      };
+      
+      const factoryComparison = getFactoryPriority(a.factory || '') - getFactoryPriority(b.factory || '');
+      if (factoryComparison !== 0) return factoryComparison;
+      
+      // Finally sort by email
       return (a.email || '').localeCompare(b.email || '');
     });
   }

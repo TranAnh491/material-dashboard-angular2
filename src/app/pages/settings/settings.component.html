@@ -233,15 +233,15 @@
                 <ng-container matColumnDef="role">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Vai trò</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
-                    <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
+                    <span *ngIf="!isEditingPermissions" [class]="getRoleClass(user.role || 'User')">{{ user.role || 'User' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.role" 
                             (change)="updateUserRole(user.uid, user.role)"
                             class="excel-select"
                             style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="User">User</option>
-                      <option value="Quản lý">Quản lý</option>
                       <option value="Admin">Admin</option>
+                      <option value="Quản lý">Quản lý</option>
+                      <option value="User">User</option>
                     </select>
                   </td>
                 </ng-container>
@@ -272,16 +272,15 @@
                 <ng-container matColumnDef="factory">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Nhà máy</th>
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
-                    <span *ngIf="!isEditingPermissions">{{ user.factory || 'Tất cả' }}</span>
+                    <span *ngIf="!isEditingPermissions" [class]="getFactoryClass(user.factory || 'Tất cả')">{{ user.factory || 'Tất cả' }}</span>
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.factory" 
                             (change)="updateUserFactory(user.uid, user.factory)"
                             class="excel-select"
                             style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="">Tất cả</option>
                       <option value="ASM1">ASM1</option>
                       <option value="ASM2">ASM2</option>
-                      <option value="ASM3">ASM3</option>
+                      <option value="ALL">Tất cả</option>
                     </select>
                   </td>
                 </ng-container>

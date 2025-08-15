@@ -1825,4 +1825,66 @@
     min-width: 60px !important;
     max-width: 80px !important;
   }
+}
+
+// Factory Color Styling
+.factory-asm1 {
+  color: #f44336 !important; // Red
+  font-weight: 600;
+}
+
+.factory-asm2 {
+  color: #2196f3 !important; // Blue
+  font-weight: 600;
+}
+
+.factory-all {
+  color: #333333 !important; // Black
+  font-weight: 600;
+}
+
+.factory-default {
+  color: #666666 !important; // Gray
+  font-weight: normal;
+}
+
+// Role Color Styling
+.role-admin {
+  color: #e91e63 !important; // Pink/Red for Admin
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.role-manager {
+  color: #ff9800 !important; // Orange for Manager
+  font-weight: 600;
+}
+
+.role-user {
+  color: #4caf50 !important; // Green for User
+  font-weight: 500;
+}
+
+.role-default {
+  color: #666666 !important; // Gray for default
+  font-weight: normal;
+}
+
+// Additional styling for factory and role cells
+.factory-cell, .role-cell {
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 12px;
+  min-width: 60px;
+}
+
+// Special user styling
+.special-user {
+  background: linear-gradient(45deg, #ffd700, #ffed4e);
+  color: #333 !important;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 11px;
 } 
