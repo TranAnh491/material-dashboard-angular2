@@ -16,6 +16,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'inventory_2', class: '' },
   { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', class: '' },
   { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', class: '' },
+  { path: '/materials-inventory', title: 'Materials Inventory', icon: 'inventory', class: '' },
   { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
   { path: '/label', title: 'Label', icon: 'label', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },

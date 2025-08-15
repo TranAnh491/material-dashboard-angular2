@@ -215,7 +215,8 @@
             <td class="delete-cell">
               <button class="delete-btn" 
                       *ngIf="canDelete"
-                      title="Xóa item">
+                      (click)="deleteInventoryItem(material)"
+                      title="Xóa item này khỏi ASM2 Inventory">
                 <i class="material-icons">delete</i>
               </button>
             </td>

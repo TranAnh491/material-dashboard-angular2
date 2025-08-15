@@ -147,7 +147,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // Filter for ASM1 factory and sort client-side
         const allMaterials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
-          console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}`);
+          console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}, isReceived: ${data.isReceived}`);
           return {
             id: doc.payload.doc.id,
             factory: data.factory || 'ASM1',
@@ -175,6 +175,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         
         console.log(`🏭 All materials before filter: ${allMaterials.length}`);
         console.log(`🏭 Factory values found:`, allMaterials.map(m => m.factory));
+        console.log(`🏭 Received status found:`, allMaterials.map(m => ({ materialCode: m.materialCode, isReceived: m.isReceived })));
         
         this.materials = allMaterials
           .filter(material => material.factory === 'ASM1')
@@ -339,15 +340,27 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
+    // Update local state first
     material.isReceived = isReceived;
     material.updatedAt = new Date();
     console.log(`Updated received status for ${material.materialCode}: ${isReceived}`);
     
-    // Save to Firebase
-    this.updateMaterial(material);
-    
-    // Auto-add to Inventory when marked as received
-    this.addToInventory(material);
+    // Save to Firebase first to ensure persistence
+    this.firestore.collection('inbound-materials').doc(material.id).update({
+      isReceived: isReceived,
+      updatedAt: material.updatedAt
+    }).then(() => {
+      console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
+      
+      // Now add to Inventory
+      this.addToInventory(material);
+    }).catch((error) => {
+      console.error(`❌ Error saving received status to Firebase:`, error);
+      // Revert local state if Firebase update failed
+      material.isReceived = false;
+      target.checked = false;
+      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+    });
   }
   
   onQualityCheckChange(event: any, material: InboundMaterial): void {
@@ -385,16 +398,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       updatedAt: new Date()
     };
     
-    // Add to inventory-materials collection
+    // Add to inventory-materials collection (no notification)
     this.firestore.collection('inventory-materials').add(inventoryMaterial)
       .then(() => {
         console.log(`✅ ${material.materialCode} added to Inventory ASM1`);
-        // Show success message
-        alert(`✅ Material ${material.materialCode} đã được chuyển vào Inventory ASM1!`);
+        // No notification shown - silent operation
       })
       .catch((error) => {
         console.error('❌ Error adding to inventory:', error);
-        alert(`❌ Lỗi khi chuyển ${material.materialCode} vào Inventory: ${error.message}`);
         // Revert the checkbox if failed
         material.isReceived = false;
         this.updateMaterial(material);
@@ -605,15 +616,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const getNumberValue = (index: number): number => {
         const value = row[index];
         if (value === null || value === undefined || value === '') return 0;
+        // Parse as number and convert to integer (no decimal points)
         const num = Number(value);
-        return isNaN(num) ? 0 : num;
+        return isNaN(num) ? 0 : Math.floor(num);
       };
 
       // Map only the 6 essential columns from template
       const lotNumber = getValue(0);         // LÔ HÀNG/ DNNK
       const materialCode = getValue(1);      // MÃ HÀNG
       const poNumber = getValue(2);          // SỐ P.O
-      const quantity = getNumberValue(3);    // LƯỢNG NHẬP
+      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (whole number only)
       const type = getValue(4);              // LOẠI HÌNH
       const supplier = getValue(5);          // NHÀ CUNG CẤP
 
@@ -700,11 +712,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   updateMaterial(material: InboundMaterial): void {
     if (!this.canEditMaterials) return;
     
-    // Check if material is already in inventory - prevent modification
+    // Allow updates even if material is received (since it's already in inventory)
+    // But show a warning that the material is already in inventory
     if (material.isReceived) {
-      this.errorMessage = `❌ Không thể sửa material ${material.materialCode} - đã được đưa vào Inventory!`;
-      alert(this.errorMessage);
-      return;
+      console.log(`⚠️ Updating material ${material.materialCode} that is already in inventory`);
     }
     
     material.updatedAt = new Date();
@@ -728,6 +739,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       updatedAt: material.updatedAt
     }).then(() => {
       console.log(`✅ Material ${material.materialCode} updated successfully`);
+      if (material.isReceived) {
+        console.log(`ℹ️ Note: ${material.materialCode} is already in inventory, changes here won't affect inventory data`);
+      }
     }).catch((error) => {
       console.error(`❌ Error updating material ${material.materialCode}:`, error);
       this.errorMessage = `Lỗi cập nhật ${material.materialCode}: ${error.message}`;
@@ -737,23 +751,38 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   deleteMaterial(material: InboundMaterial): void {
     if (!this.canDeleteMaterials) return;
     
-    // Check if material is already in inventory - prevent deletion
+    // Allow deletion even if material is received (since it's already in inventory)
+    // But show a warning that the material is already in inventory
     if (material.isReceived) {
-      this.errorMessage = `❌ Không thể xóa material ${material.materialCode} - đã được đưa vào Inventory!`;
-      alert(this.errorMessage);
-      return;
+      const confirmed = confirm(
+        `⚠️ CẢNH BÁO: Material ${material.materialCode} đã được đưa vào Inventory!\n\n` +
+        `Việc xóa ở đây sẽ:\n` +
+        `• Xóa material khỏi tab Inbound\n` +
+        `• KHÔNG ảnh hưởng đến dữ liệu trong Inventory\n` +
+        `• Material vẫn tồn tại trong Inventory với trạng thái đã nhận\n\n` +
+        `Bạn có chắc muốn xóa material này khỏi tab Inbound?`
+      );
+      
+      if (!confirmed) return;
+      
+      console.log(`⚠️ Deleting material ${material.materialCode} that is already in inventory`);
+    } else {
+      if (!confirm(`Bạn có chắc muốn xóa material ${material.materialCode}?`)) {
+        return;
+      }
     }
     
-    if (confirm(`Bạn có chắc muốn xóa material ${material.materialCode}?`)) {
-      this.firestore.collection('inbound-materials').doc(material.id).delete()
-        .then(() => {
-          console.log(`✅ Material ${material.materialCode} deleted successfully`);
-          this.loadMaterials(); // Reload the list
-        }).catch((error) => {
-          console.error(`❌ Error deleting material ${material.materialCode}:`, error);
-          this.errorMessage = `Lỗi xóa ${material.materialCode}: ${error.message}`;
-        });
-    }
+    this.firestore.collection('inbound-materials').doc(material.id).delete()
+      .then(() => {
+        console.log(`✅ Material ${material.materialCode} deleted successfully from Inbound`);
+        if (material.isReceived) {
+          console.log(`ℹ️ Note: ${material.materialCode} remains in inventory with received status`);
+        }
+        this.loadMaterials(); // Reload the list
+      }).catch((error) => {
+        console.error(`❌ Error deleting material ${material.materialCode}:`, error);
+        this.errorMessage = `Lỗi xóa ${material.materialCode}: ${error.message}`;
+      });
   }
   
   // Delete all materials from inbound tab
@@ -763,29 +792,37 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
-    // Check if there are materials already in inventory
-    const materialsInInventory = this.materials.filter(m => m.isReceived);
-    if (materialsInInventory.length > 0) {
-      const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
-      this.errorMessage = `❌ Không thể xóa tất cả - có ${materialsInInventory.length} materials đã trong Inventory: ${materialCodes}`;
-      alert(this.errorMessage);
-      return;
-    }
-    
     const totalCount = this.materials.length;
     if (totalCount === 0) {
       alert('Không có dữ liệu nào để xóa');
       return;
     }
     
-    const confirmed = confirm(
-      `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ASM1?\n\n` +
-      `Hành động này sẽ xóa:\n` +
-      `• Tất cả materials đã hoàn thành\n` +
-      `• Tất cả materials chưa hoàn thành\n` +
-      `• Không thể hoàn tác!\n\n` +
-      `Nhập "DELETE" để xác nhận:`
-    );
+    // Check if there are materials already in inventory
+    const materialsInInventory = this.materials.filter(m => m.isReceived);
+    const materialsNotInInventory = this.materials.filter(m => !m.isReceived);
+    
+    let warningMessage = `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ASM1?\n\n`;
+    
+    if (materialsInInventory.length > 0) {
+      const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
+      warningMessage += `📦 ${materialsInInventory.length} materials đã trong Inventory: ${materialCodes}\n`;
+      warningMessage += `• Việc xóa ở đây sẽ KHÔNG ảnh hưởng đến dữ liệu trong Inventory\n`;
+      warningMessage += `• Materials vẫn tồn tại trong Inventory với trạng thái đã nhận\n\n`;
+    }
+    
+    if (materialsNotInInventory.length > 0) {
+      warningMessage += `📋 ${materialsNotInInventory.length} materials chưa trong Inventory\n`;
+      warningMessage += `• Sẽ bị xóa hoàn toàn khỏi hệ thống\n\n`;
+    }
+    
+    warningMessage += `Hành động này sẽ xóa:\n`;
+    warningMessage += `• Tất cả materials đã hoàn thành\n`;
+    warningMessage += `• Tất cả materials chưa hoàn thành\n`;
+    warningMessage += `• Không thể hoàn tác!\n\n`;
+    warningMessage += `Nhập "DELETE" để xác nhận:`;
+    
+    const confirmed = confirm(warningMessage);
     
     if (!confirmed) return;
     
@@ -824,12 +861,20 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     Promise.all(deletePromises)
       .then(() => {
         console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ASM1`);
+        if (materialsInInventory.length > 0) {
+          console.log(`ℹ️ Note: ${materialsInInventory.length} materials remain in inventory with received status`);
+        }
+        
         this.materials = [];
         this.filteredMaterials = [];
         this.isLoading = false;
         
         // Show success message
-        alert(`✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ASM1`);
+        let successMessage = `✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ASM1`;
+        if (materialsInInventory.length > 0) {
+          successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại và không bị ảnh hưởng`;
+        }
+        alert(successMessage);
         
         // Close dropdown
         this.showDropdown = false;
@@ -1028,9 +1073,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   
                   .qr-container { 
                     margin: 0 !important; 
-                    padding: 0 !important;
-                    width: 57mm !important;
-                    height: 32mm !important;
+                    padding: 0 !important; 
+                    width: 57mm !important; 
+                    height: 32mm !important; 
                     page-break-inside: avoid !important;
                     border: 1px solid #000 !important;
                   }
@@ -1073,53 +1118,52 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                       display: none !important;
                     }
                   }
-                }
-              </style>
-            </head>
-            <body>
-              <div class="qr-grid">
-                ${qrImages.map(qr => `
-                  <div class="qr-container">
-                    <div class="qr-section">
-                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
-                    </div>
-                    <div class="info-section">
-                      <div>
-                        <div class="info-row">Mã: ${qr.materialCode}</div>
-                        <div class="info-row">PO: ${qr.poNumber}</div>
-                        <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                </style>
+              </head>
+              <body>
+                <div class="qr-grid">
+                  ${qrImages.map(qr => `
+                    <div class="qr-container">
+                      <div class="qr-section">
+                        <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
-                      <div>
-                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
-                        <div class="info-row small">NV: ${qr.printedBy}</div>
-                        <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                      <div class="info-section">
+                        <div>
+                          <div class="info-row">Mã: ${qr.materialCode}</div>
+                          <div class="info-row">PO: ${qr.poNumber}</div>
+                          <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                        </div>
+                        <div>
+                          <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                          <div class="info-row small">NV: ${qr.printedBy}</div>
+                          <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                `).join('')}
-              </div>
-              <script>
-                window.onload = function() {
-                  // Remove all browser UI elements
-                  document.title = '';
-                  
-                  // Hide browser elements
-                  const style = document.createElement('style');
-                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
-                  document.head.appendChild(style);
-                  
-                  // Remove any browser elements
-                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
-                  elementsToRemove.forEach(el => el.remove());
-                  
-                  setTimeout(() => {
-                    window.print();
-                  }, 500);
-                }
-              </script>
-            </body>
-          </html>
-        `);
+                  `).join('')}
+                </div>
+                <script>
+                  window.onload = function() {
+                    // Remove all browser UI elements
+                    document.title = '';
+                    
+                    // Hide browser elements
+                    const style = document.createElement('style');
+                    style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                    document.head.appendChild(style);
+                    
+                    // Remove any browser elements
+                    const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                    elementsToRemove.forEach(el => el.remove());
+                    
+                    setTimeout(() => {
+                      window.print();
+                    }, 500);
+                  }
+                </script>
+              </body>
+            </html>
+          `);
         newWindow.document.close();
       }
     } catch (error) {

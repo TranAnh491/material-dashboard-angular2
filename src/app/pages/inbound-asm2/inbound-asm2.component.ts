@@ -333,18 +333,30 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       return;
     }
     
+    // Update local state first
     material.isReceived = isReceived;
     material.updatedAt = new Date();
     
     console.log(`ASM2 material ${material.materialCode} marked as received`);
     
-    // Update the material in Firebase
-    this.updateMaterial(material);
-    
-    // Add to inventory if received
-    if (isReceived) {
-      this.addToInventory(material);
-    }
+    // Save to Firebase first to ensure persistence
+    this.firestore.collection('inbound-materials').doc(material.id).update({
+      isReceived: isReceived,
+      updatedAt: material.updatedAt
+    }).then(() => {
+      console.log(`✅ Received status saved to Firebase for ASM2 ${material.materialCode}`);
+      
+      // Now add to inventory if received (no notification)
+      if (isReceived) {
+        this.addToInventory(material);
+      }
+    }).catch((error) => {
+      console.error(`❌ Error saving received status to Firebase:`, error);
+      // Revert local state if Firebase update failed
+      material.isReceived = false;
+      target.checked = false;
+      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+    });
   }
   
   private addToInventory(material: InboundMaterial): void {
@@ -378,6 +390,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.firestore.collection('inventory-materials').add(inventoryItem)
       .then(() => {
         console.log(`✅ ASM2 material ${material.materialCode} added to inventory`);
+        // No notification shown - silent operation
       })
       .catch(error => {
         console.error(`❌ Error adding ASM2 material to inventory:`, error);
@@ -541,15 +554,16 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       const getNumberValue = (index: number): number => {
         const value = row[index];
         if (value === null || value === undefined || value === '') return 0;
+        // Parse as number and convert to integer (no decimal points)
         const num = Number(value);
-        return isNaN(num) ? 0 : num;
+        return isNaN(num) ? 0 : Math.floor(num);
       };
 
       // Map only the 6 essential columns from template
       const lotNumber = getValue(0);         // LÔ HÀNG/ DNNK
       const materialCode = getValue(1);      // MÃ HÀNG
       const poNumber = getValue(2);          // SỐ P.O
-      const quantity = getNumberValue(3);    // LƯỢNG NHẬP
+      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (whole number only)
       const type = getValue(4);              // LOẠI HÌNH
       const supplier = getValue(5);          // NHÀ CUNG CẤP
 
@@ -636,19 +650,18 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   updateMaterial(material: InboundMaterial): void {
     if (!this.canEditMaterials) return;
     
-    // Check if material is already in inventory - prevent modification
+    // Allow updates even if material is received (since it's already in inventory)
+    // But show a warning that the material is already in inventory
     if (material.isReceived) {
-      this.errorMessage = `❌ Không thể sửa material ${material.materialCode} - đã được đưa vào Inventory!`;
-      alert(this.errorMessage);
-      return;
+      console.log(`⚠️ Updating ASM2 material ${material.materialCode} that is already in inventory`);
     }
     
     material.updatedAt = new Date();
     
     this.firestore.collection('inbound-materials').doc(material.id).update({
       batchNumber: material.batchNumber,
-          materialCode: material.materialCode,
-          poNumber: material.poNumber,
+      materialCode: material.materialCode,
+      poNumber: material.poNumber,
       quantity: material.quantity,
       unit: material.unit,
       location: material.location,
@@ -663,9 +676,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       isCompleted: material.isCompleted,
       updatedAt: material.updatedAt
     }).then(() => {
-      console.log(`✅ Material ${material.materialCode} updated successfully`);
+      console.log(`✅ ASM2 material ${material.materialCode} updated successfully`);
+      if (material.isReceived) {
+        console.log(`ℹ️ Note: ${material.materialCode} is already in inventory, changes here won't affect inventory data`);
+      }
     }).catch((error) => {
-      console.error(`❌ Error updating material ${material.materialCode}:`, error);
+      console.error(`❌ Error updating ASM2 material ${material.materialCode}:`, error);
       this.errorMessage = `Lỗi cập nhật ${material.materialCode}: ${error.message}`;
     });
   }
@@ -673,38 +689,44 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   deleteMaterial(material: InboundMaterial): void {
     if (!this.canDeleteMaterials) return;
     
-    // Check if material is already in inventory - prevent deletion
+    // Allow deletion even if material is received (since it's already in inventory)
+    // But show a warning that the material is already in inventory
     if (material.isReceived) {
-      this.errorMessage = `❌ Không thể xóa material ${material.materialCode} - đã được đưa vào Inventory!`;
-      alert(this.errorMessage);
-      return;
+      const confirmed = confirm(
+        `⚠️ CẢNH BÁO: Material ${material.materialCode} đã được đưa vào Inventory!\n\n` +
+        `Việc xóa ở đây sẽ:\n` +
+        `• Xóa material khỏi tab Inbound ASM2\n` +
+        `• KHÔNG ảnh hưởng đến dữ liệu trong Inventory\n` +
+        `• Material vẫn tồn tại trong Inventory với trạng thái đã nhận\n\n` +
+        `Bạn có chắc muốn xóa material này khỏi tab Inbound ASM2?`
+      );
+      
+      if (!confirmed) return;
+      
+      console.log(`⚠️ Deleting ASM2 material ${material.materialCode} that is already in inventory`);
+    } else {
+      if (!confirm(`Bạn có chắc muốn xóa material ${material.materialCode}?`)) {
+        return;
+      }
     }
     
-    if (confirm(`Bạn có chắc muốn xóa material ${material.materialCode}?`)) {
-      this.firestore.collection('inbound-materials').doc(material.id).delete()
-        .then(() => {
-          console.log(`✅ Material ${material.materialCode} deleted successfully`);
-          this.loadMaterials(); // Reload the list
-        }).catch((error) => {
-          console.error(`❌ Error deleting material ${material.materialCode}:`, error);
-          this.errorMessage = `Lỗi xóa ${material.materialCode}: ${error.message}`;
-        });
-    }
+    this.firestore.collection('inbound-materials').doc(material.id).delete()
+      .then(() => {
+        console.log(`✅ ASM2 material ${material.materialCode} deleted successfully from Inbound`);
+        if (material.isReceived) {
+          console.log(`ℹ️ Note: ${material.materialCode} remains in inventory with received status`);
+        }
+        this.loadMaterials(); // Reload the list
+      }).catch((error) => {
+        console.error(`❌ Error deleting ASM2 material ${material.materialCode}:`, error);
+        this.errorMessage = `Lỗi xóa ${material.materialCode}: ${error.message}`;
+      });
   }
   
   // Delete all materials from inbound tab
   async deleteAllMaterials(): Promise<void> {
     if (!this.canDeleteMaterials) {
       this.errorMessage = 'Bạn không có quyền xóa materials';
-      return;
-    }
-    
-    // Check if there are materials already in inventory
-    const materialsInInventory = this.filteredMaterials.filter(m => m.isReceived);
-    if (materialsInInventory.length > 0) {
-      const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
-      this.errorMessage = `❌ Không thể xóa tất cả - có ${materialsInInventory.length} materials đã trong Inventory: ${materialCodes}`;
-      alert(this.errorMessage);
       return;
     }
     
@@ -716,12 +738,31 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       return;
     }
     
-    // Show confirmation dialog with count
-    const confirmed = confirm(
-      `⚠️ CẢNH BÁO: Bạn sắp xóa ${materialIds.length} materials từ tab Inbound ASM2!\n\n` +
-      `Hành động này KHÔNG THỂ HOÀN TÁC.\n\n` +
-      `Bạn có chắc chắn muốn tiếp tục?`
-    );
+    // Check if there are materials already in inventory
+    const materialsInInventory = this.filteredMaterials.filter(m => m.isReceived);
+    const materialsNotInInventory = this.filteredMaterials.filter(m => !m.isReceived);
+    
+    let warningMessage = `⚠️ CẢNH BÁO: Bạn sắp xóa ${materialIds.length} materials từ tab Inbound ASM2!\n\n`;
+    
+    if (materialsInInventory.length > 0) {
+      const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
+      warningMessage += `📦 ${materialsInInventory.length} materials đã trong Inventory: ${materialCodes}\n`;
+      warningMessage += `• Việc xóa ở đây sẽ KHÔNG ảnh hưởng đến dữ liệu trong Inventory\n`;
+      warningMessage += `• Materials vẫn tồn tại trong Inventory với trạng thái đã nhận\n\n`;
+    }
+    
+    if (materialsNotInInventory.length > 0) {
+      warningMessage += `📋 ${materialsNotInInventory.length} materials chưa trong Inventory\n`;
+      warningMessage += `• Sẽ bị xóa hoàn toàn khỏi hệ thống\n\n`;
+    }
+    
+    warningMessage += `Hành động này sẽ xóa:\n`;
+    warningMessage += `• Tất cả materials đã hoàn thành\n`;
+    warningMessage += `• Tất cả materials chưa hoàn thành\n`;
+    warningMessage += `• Không thể hoàn tác!\n\n`;
+    warningMessage += `Bạn có chắc chắn muốn tiếp tục?`;
+    
+    const confirmed = confirm(warningMessage);
     
     if (!confirmed) return;
     
@@ -755,7 +796,11 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       }
       
       // Show success message
-      alert(`✅ Đã xóa thành công ${totalDeleted} materials từ tab Inbound ASM2`);
+      let successMessage = `✅ Đã xóa thành công ${totalDeleted} materials từ tab Inbound ASM2`;
+      if (materialsInInventory.length > 0) {
+        successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại và không bị ảnh hưởng`;
+      }
+      alert(successMessage);
       
       // Close dropdown
       this.showDropdown = false;

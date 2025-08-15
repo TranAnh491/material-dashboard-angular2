@@ -133,10 +133,15 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   ) {}
 
   ngOnInit(): void {
+    console.log('🚀 MaterialsInventoryComponent ngOnInit started');
+    
     // Load catalog first, then inventory to ensure names are available
     this.loadCatalogFromFirebase().then(() => {
       this.loadInventoryFromFirebase();
     });
+    
+    // Load permissions with debug
+    console.log('🔐 Loading permissions...');
     this.loadPermissions();
     
     // Load factory access and set default factory
@@ -147,6 +152,8 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     
     // Setup debounced search for better performance
     this.setupDebouncedSearch();
+    
+    console.log('✅ MaterialsInventoryComponent ngOnInit completed');
   }
 
   // Load factory access permissions and set default factory
@@ -1228,41 +1235,114 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
 
   // Delete inventory item
   deleteInventoryItem(material: InventoryMaterial): void {
-    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi Inventory?`)) {
-      if (material.id) {
-        // Delete from Firebase
-        this.firestore.collection('inventory-materials').doc(material.id).delete()
-          .then(() => {
-            console.log('Inventory item deleted from Firebase successfully');
-          })
-          .catch(error => {
-            console.error('Error deleting inventory item from Firebase:', error);
-          });
-      }
+    console.log('🗑️ deleteInventoryItem method called!');
+    console.log(`🗑️ Attempting to delete inventory item: ${material.materialCode} (ID: ${material.id})`);
+    console.log(`🔍 Material details:`, {
+      id: material.id,
+      materialCode: material.materialCode,
+      poNumber: material.poNumber,
+      factory: material.factory,
+      location: material.location,
+      quantity: material.quantity,
+      stock: material.stock
+    });
+    
+    // Check if user has delete permission
+    if (!this.canDelete) {
+      console.error('❌ User does not have delete permission');
+      alert('❌ Bạn không có quyền xóa item này. Vui lòng liên hệ admin để được cấp quyền.');
+      return;
+    }
+    
+    if (!material.id) {
+      console.error('❌ Cannot delete item: No ID found');
+      alert('❌ Không thể xóa item: Không tìm thấy ID');
+      return;
+    }
+    
+    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
+      console.log(`✅ User confirmed deletion of ${material.materialCode}`);
       
-      // Add to deleted items collection to prevent re-adding
-      const deletedItem = {
-        materialCode: material.materialCode,
-        poNumber: material.poNumber,
-        deletedAt: new Date(),
-        reason: 'manual_delete'
-      };
+      // Show loading state
+      this.isLoading = true;
       
-      this.firestore.collection('inventory-deleted-items').add(deletedItem)
+      // Delete from Firebase first
+      console.log(`🔥 Deleting from Firebase collection 'inventory-materials' with ID: ${material.id}`);
+      
+      this.firestore.collection('inventory-materials').doc(material.id).delete()
         .then(() => {
-          console.log(`Added ${material.materialCode} to deleted items list`);
+          console.log('✅ Inventory item deleted from Firebase successfully');
+          
+          // Add to deleted items collection to prevent re-adding
+          const deletedItem = {
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            deletedAt: new Date(),
+            reason: 'manual_delete',
+            factory: material.factory || 'ASM1',
+            originalQuantity: material.quantity,
+            originalLocation: material.location
+          };
+          
+          console.log(`📝 Adding to deleted items collection:`, deletedItem);
+          return this.firestore.collection('inventory-deleted-items').add(deletedItem);
         })
-        .catch(error => {
-          console.error('Error adding to deleted items list:', error);
+        .then(() => {
+          console.log(`✅ Added ${material.materialCode} to deleted items list`);
+          
+          // Remove from local array only after Firebase operations succeed
+          const index = this.inventoryMaterials.indexOf(material);
+          if (index > -1) {
+            this.inventoryMaterials.splice(index, 1);
+            console.log(`✅ Removed ${material.materialCode} from local array`);
+            
+            // Refresh the view
+            this.applyFilters();
+            
+            // Show success message
+            alert(`✅ Đã xóa thành công item ${material.materialCode} khỏi Inventory!\n\nPO: ${material.poNumber}\nVị trí: ${material.location}`);
+          } else {
+            console.warn(`⚠️ Item ${material.materialCode} not found in local array`);
+          }
+        })
+        .catch((error) => {
+          console.error('❌ Error during deletion process:', error);
+          console.error('❌ Error details:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+          });
+          
+          // Show error message to user
+          let errorMessage = `❌ Lỗi khi xóa item ${material.materialCode}: `;
+          
+          if (error.code === 'permission-denied') {
+            errorMessage += 'Không có quyền xóa item này. Vui lòng kiểm tra quyền truy cập Firebase.';
+          } else if (error.code === 'not-found') {
+            errorMessage += 'Item không tồn tại trong database.';
+          } else if (error.code === 'unavailable') {
+            errorMessage += 'Kết nối mạng không ổn định. Vui lòng thử lại.';
+          } else if (error.code === 'failed-precondition') {
+            errorMessage += 'Item đang được sử dụng bởi process khác. Vui lòng thử lại sau.';
+          } else {
+            errorMessage += error.message || 'Lỗi không xác định';
+          }
+          
+          alert(errorMessage);
+          
+          // Log additional debug info
+          console.log('🔍 Additional debug info:', {
+            currentUser: this.afAuth.currentUser,
+            canDelete: this.canDelete,
+            materialId: material.id,
+            collectionPath: 'inventory-materials'
+          });
+        })
+        .finally(() => {
+          this.isLoading = false;
         });
-      
-      // Remove from local array
-      const index = this.inventoryMaterials.indexOf(material);
-      if (index > -1) {
-        this.inventoryMaterials.splice(index, 1);
-        console.log(`Deleted inventory item: ${material.materialCode}`);
-        this.applyFilters();
-      }
+    } else {
+      console.log(`❌ User cancelled deletion of ${material.materialCode}`);
     }
   }
 
@@ -1984,18 +2064,110 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
 
   // Load user permissions for inventory
   loadPermissions(): void {
+    console.log('🔐 loadPermissions method called');
+    console.log('🔐 Current permission state before loading:', {
+      canExport: this.canExport,
+      canDelete: this.canDelete,
+      canEditHSD: this.canEditHSD
+    });
+    
     this.tabPermissionService.getCurrentUserTabPermissions()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(permissions => {
-        this.canExport = permissions['inventory-export'] !== false;
-        this.canDelete = permissions['inventory-delete'] !== false;
-        this.canEditHSD = permissions['inventory-edit-hsd'] !== false;
-        console.log('Inventory permissions loaded:', { 
-          canExport: this.canExport, 
-          canDelete: this.canDelete,
-          canEditHSD: this.canEditHSD 
-        });
+      .subscribe({
+        next: (permissions) => {
+          console.log('🔐 Raw permissions received from service:', permissions);
+          
+          // Set default permissions if not defined - use materials-inventory specific keys
+          this.canExport = permissions['materials-inventory-export'] ?? permissions['inventory-export'] ?? true;
+          this.canDelete = permissions['materials-inventory-delete'] ?? permissions['inventory-delete'] ?? true;
+          this.canEditHSD = permissions['materials-inventory-edit-hsd'] ?? permissions['inventory-edit-hsd'] ?? true;
+          
+          console.log('🔐 Permissions set after processing:', { 
+            canExport: this.canExport, 
+            canDelete: this.canDelete,
+            canEditHSD: this.canEditHSD,
+            allPermissions: permissions
+          });
+          
+          // Log if any permissions are missing
+          if (permissions['materials-inventory-delete'] === undefined && permissions['inventory-delete'] === undefined) {
+            console.log('⚠️ materials-inventory-delete and inventory-delete permissions not defined, using default: true');
+          }
+          if (permissions['materials-inventory-export'] === undefined && permissions['inventory-export'] === undefined) {
+            console.log('⚠️ materials-inventory-export and inventory-export permissions not defined, using default: true');
+          }
+          if (permissions['materials-inventory-edit-hsd'] === undefined && permissions['inventory-edit-hsd'] === undefined) {
+            console.log('⚠️ materials-inventory-edit-hsd and inventory-edit-hsd permissions not defined, using default: true');
+          }
+          
+          // Force change detection
+          this.cdr.detectChanges();
+          
+          console.log('✅ Permissions loaded and change detection triggered');
+        },
+        error: (error) => {
+          console.error('❌ Error loading permissions:', error);
+          console.error('❌ Error details:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+          });
+          
+          // Set default permissions on error
+          this.canExport = true;
+          this.canDelete = true;
+          this.canEditHSD = true;
+          
+          console.log('⚠️ Using default permissions due to error');
+          this.cdr.detectChanges();
+        }
       });
+  }
+  
+  // Debug method to check current permissions
+  debugPermissions(): void {
+    console.log('🔍 Current permission state:', {
+      canDelete: this.canDelete,
+      canExport: this.canExport,
+      canEditHSD: this.canEditHSD
+    });
+    
+    // Check current user
+    this.afAuth.currentUser.then(user => {
+      if (user) {
+        console.log('👤 Current user:', {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+      } else {
+        console.log('❌ No user logged in');
+      }
+    });
+    
+    // Show user-friendly message
+    let message = '🔍 Debug Permissions:\n\n';
+    message += `canDelete: ${this.canDelete}\n`;
+    message += `canExport: ${this.canExport}\n`;
+    message += `canEditHSD: ${this.canEditHSD}\n\n`;
+    
+    if (this.canDelete === undefined) {
+      message += '⚠️ Quyền chưa được load\n';
+    } else if (this.canDelete === false) {
+      message += '❌ Không có quyền xóa\n';
+      message += '\nBạn có muốn bật quyền xóa không? (Chỉ dùng cho mục đích test)\n';
+      if (confirm(message + '\nNhấn OK để bật quyền xóa tạm thời.')) {
+        this.canDelete = true;
+        this.cdr.detectChanges();
+        alert('✅ Đã bật quyền xóa tạm thời. Hãy thử lại nút xóa.');
+        return;
+      }
+    } else if (this.canDelete === true) {
+      message += '✅ Có quyền xóa\n';
+    }
+    
+    message += '\nKiểm tra Console để xem chi tiết.';
+    alert(message);
   }
 
   // Handle location change to uppercase
@@ -2289,4 +2461,7 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
       alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
+
+
+
 }

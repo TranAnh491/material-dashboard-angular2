@@ -268,15 +268,15 @@
               <button class="action-btn complete-btn" 
                       (click)="onMarkCompleted(material)" 
                       [disabled]="material.isCompleted || !canEditMaterials" 
-                      title="Đánh dấu hoàn thành">
+                      [title]="material.isCompleted ? 'Đã hoàn thành' : 'Đánh dấu hoàn thành'">
                 <i class="material-icons">check_circle</i>
               </button>
             </td>
             <td class="status-cell">
               <button class="action-btn delete-btn" 
                       (click)="deleteMaterial(material)" 
-                      [disabled]="!canDeleteMaterials || material.isReceived" 
-                      [title]="material.isReceived ? 'Không thể xóa - đã trong Inventory' : 'Xóa material'">
+                      [disabled]="!canDeleteMaterials" 
+                      [title]="material.isReceived ? 'Xóa khỏi Inbound (không ảnh hưởng Inventory)' : 'Xóa material'">
                 <i class="material-icons">delete</i>
               </button>
             </td>

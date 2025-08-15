@@ -617,6 +617,57 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('Download FIFO report for ASM1');
   }
 
+  // Delete single inventory item
+  async deleteInventoryItem(material: InventoryMaterial): Promise<void> {
+    console.log('🗑️ ASM1 deleteInventoryItem called for:', material.materialCode);
+    
+    // Check permissions
+    if (!this.canDelete) {
+      console.error('❌ User does not have delete permission');
+      alert('❌ Bạn không có quyền xóa item này. Vui lòng liên hệ admin để được cấp quyền.');
+      return;
+    }
+    
+    if (!material.id) {
+      console.error('❌ Cannot delete item: No ID found');
+      alert('❌ Không thể xóa item: Không tìm thấy ID');
+      return;
+    }
+    
+    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM1 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
+      console.log(`✅ User confirmed deletion of ${material.materialCode}`);
+      
+      try {
+        // Show loading
+        this.isLoading = true;
+        
+        // Delete from Firebase
+        await this.firestore.collection('inventory-materials').doc(material.id).delete();
+        console.log('✅ Item deleted from Firebase successfully');
+        
+        // Remove from local array
+        const index = this.inventoryMaterials.indexOf(material);
+        if (index > -1) {
+          this.inventoryMaterials.splice(index, 1);
+          console.log(`✅ Removed ${material.materialCode} from local array`);
+          
+          // Refresh the view
+          this.applyFilters();
+          
+          // Show success message
+          alert(`✅ Đã xóa thành công item ${material.materialCode}!\n\nPO: ${material.poNumber}\nVị trí: ${material.location}`);
+        }
+      } catch (error) {
+        console.error('❌ Error deleting item:', error);
+        alert(`❌ Lỗi khi xóa item ${material.materialCode}: ${error.message || 'Lỗi không xác định'}`);
+      } finally {
+        this.isLoading = false;
+      }
+    } else {
+      console.log(`❌ User cancelled deletion of ${material.materialCode}`);
+    }
+  }
+
   // Delete all inventory for ASM1
   async deleteAllInventory(): Promise<void> {
     try {

@@ -9,6 +9,44 @@
   z-index: 1;
 }
 
+// Disabled button styling
+.disabled-button {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  
+  &:hover {
+    opacity: 0.5 !important;
+  }
+}
+
+// Delete button styling
+.delete-btn {
+  background: #f44336 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: background-color 0.3s !important;
+  
+  &:hover:not(:disabled) {
+    background: #d32f2f !important;
+  }
+  
+  &:disabled {
+    background: #ccc !important;
+    cursor: not-allowed !important;
+  }
+  
+  .material-icons {
+    font-size: 20px !important;
+  }
+}
+
 // Factory column styling
 .factory-cell {
   text-align: center !important;
@@ -1558,6 +1596,47 @@ mat-checkbox {
     .material-icons {
       color: #4caf50;
       font-size: 20px;
+    }
+  }
+  
+  /* Debug and Test button styling */
+  .debug-btn, .test-btn {
+    display: flex !important;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    
+    .material-icons {
+      font-size: 16px;
+    }
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+  }
+  
+  .debug-btn {
+    background: #ff9800 !important;
+    color: white !important;
+    
+    &:hover {
+      background: #f57c00 !important;
+    }
+  }
+  
+  .test-btn {
+    background: #4caf50 !important;
+    color: white !important;
+    
+    &:hover {
+      background: #388e3c !important;
     }
   }
 }

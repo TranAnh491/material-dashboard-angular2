@@ -799,8 +799,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       await this.loadMaterials();
       console.log('✅ Materials data reloaded');
       
-      // Show success message
-      alert(`✅ Đã tự động xuất ${successData.exportQuantity} ${successData.unit} của ${successData.materialCode}`);
+      // Success - no popup needed for normal export
+      console.log(`✅ Auto-export completed: ${successData.exportQuantity} ${successData.unit} của ${successData.materialCode}`);
       
     } catch (error) {
       console.error('❌ Error in auto-export:', error);

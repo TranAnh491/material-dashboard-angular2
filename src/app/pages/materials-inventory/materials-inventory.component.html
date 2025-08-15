@@ -97,6 +97,12 @@
             <i class="material-icons">{{showCompleted ? 'visibility_off' : 'visibility'}}</i>
             {{showCompleted ? 'Ẩn hoàn thành' : 'Hiện hoàn thành'}}
           </button>
+          <!-- Debug permissions button -->
+          <button class="custom-btn" (click)="debugPermissions()" title="Debug quyền xóa" style="background: #ff9800; color: white;">
+            <i class="material-icons">bug_report</i>
+            Debug Quyền
+          </button>
+
           <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
             <i class="material-icons">check_circle</i>
           </div>
@@ -201,11 +207,17 @@
               </span>
             </td>
             <td class="status-cell">
-              <button mat-icon-button color="warn" 
+              <!-- Debug info for permissions -->
+              <div style="font-size: 10px; color: #666; margin-bottom: 2px;">
+                canDelete: {{canDelete}}
+              </div>
+              <button class="delete-btn" 
                       (click)="deleteInventoryItem(material)" 
                       [disabled]="!canDelete"
-                      matTooltip="Xóa item này khỏi Inventory">
-                <mat-icon>delete</mat-icon>
+                      [title]="canDelete ? 'Xóa item này khỏi Inventory' : 'Không có quyền xóa - canDelete: ' + canDelete"
+                      [class.disabled-button]="!canDelete">
+                <i class="material-icons">delete</i>
+                Xóa
               </button>
             </td>
             <td class="qr-cell" *ngIf="material.importStatus === 'Import'">

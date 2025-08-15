@@ -45,6 +45,7 @@ export class TabPermissionService {
                     'materials': true,
                     'materials-asm1': true,
                     'materials-asm2': true,
+                    'materials-inventory': true,
                     'fg': true,
                     'label': true,
                     'index': true,
@@ -54,7 +55,21 @@ export class TabPermissionService {
                     'checklist': true,
                     'equipment': true,
                     'task': true,
-                    'settings': true
+                    'settings': true,
+                    // Inventory operation permissions
+                    'inventory-delete': true,
+                    'inventory-export': true,
+                    'inventory-edit-hsd': true,
+                    // Materials-inventory specific permissions
+                    'materials-inventory-delete': true,
+                    'materials-inventory-export': true,
+                    'materials-inventory-edit-hsd': true,
+                    // Inbound operation permissions
+                    'inbound-add': true,
+                    'inbound-edit': true,
+                    'inbound-delete': true,
+                    'inbound-generate-qr': true,
+                    'inbound-export': true
                   };
                 }
               })
