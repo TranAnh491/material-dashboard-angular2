@@ -54,7 +54,7 @@ export class TabPermissionGuard implements CanActivate {
       '/shipment': 'shipment',
       '/inbound-materials': 'materials', // Tab con -> tab mẹ
       '/outbound-materials': 'materials', // Tab con -> tab mẹ
-      '/materials-inventory': 'materials', // Tab con -> tab mẹ
+
       '/inbound-fgs': 'fg', // Tab con -> tab mẹ
       '/outbound-fgs': 'fg', // Tab con -> tab mẹ
       '/fg': 'fg',

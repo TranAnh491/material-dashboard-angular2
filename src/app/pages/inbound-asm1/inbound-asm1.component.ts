@@ -203,7 +203,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   private tryAlternativeCollections(): void {
-    const alternativeCollections = ['inbound-materials', 'materials', 'inbound-asm1', 'materials-inventory'];
+    const alternativeCollections = ['inbound-materials', 'materials', 'inbound-asm1'];
     
     console.log('🔄 Trying alternative collections:', alternativeCollections);
     

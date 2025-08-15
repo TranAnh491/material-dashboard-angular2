@@ -1,5 +1,4 @@
-// Import shared styles from original materials-inventory
-@import '../materials-inventory/materials-inventory.component.scss';
+
 
 // OVERRIDE ALL COLORS TO WHITE/BLACK THEME
 * {
@@ -39,11 +38,7 @@
   color: #ffffff !important; // White text
 }
 
-// Custom button minimal
-.custom-btn:hover {
-  background: #f5f5f5 !important;
-  color: #333333 !important;
-}
+
 
 // Status badges minimal
 .status-active {
@@ -373,231 +368,92 @@
   }
 }
 
-// Ensure all action controls have equal height and consistent styling
-.action-controls {
+// Horizontal Layout Styles - Copy from inbound
+.action-controls-horizontal {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  padding: 8px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+// More Button styling
+.more-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #6b7280;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  height: 32px; // Fixed height to match filter buttons
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
-  // All buttons and inputs should have equal height
-  .custom-btn,
-  .more-btn,
-  .refresh-btn,
-  .sync-btn,
-  .clear-btn,
-  .search-type-dropdown,
-  .search-input,
-  .total-counter-box {
-    height: 40px !important; // Fixed height for all elements
-    min-height: 40px !important;
-    max-height: 40px !important;
-    border: 2px solid #000000 !important; // Black border
-    border-radius: 6px;
-    box-sizing: border-box;
-    
-    // Remove all glow effects
-    box-shadow: none !important;
-    outline: none !important;
-    
-    &:focus {
-      box-shadow: none !important;
-      outline: none !important;
-    }
-    
-    &:hover {
-      box-shadow: none !important;
-    }
+  &:hover {
+    background: #4b5563;
   }
   
-  // Button specific styling
-  .custom-btn,
-  .more-btn,
-  .refresh-btn,
-  .sync-btn,
-  .clear-btn {
-    background: #ffffff !important;
-    color: #000000 !important;
-    padding: 8px 16px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: none; // Remove transitions
-    
-    &:hover {
-      background: #f5f5f5 !important;
-      border-color: #000000 !important;
-      box-shadow: none !important;
-    }
-    
-    i {
-      font-size: 18px;
-    }
-  }
-  
-  // Search type dropdown styling
-  .search-type-dropdown {
-    background: #ffffff !important;
-    color: #000000 !important;
-    padding: 8px 16px;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 120px;
-    justify-content: space-between;
-    
-    &:hover {
-      background: #f5f5f5 !important;
-      border-color: #000000 !important;
-      box-shadow: none !important;
-    }
-    
-    &:focus {
-      box-shadow: none !important;
-      outline: none !important;
-    }
-  }
-  
-  // Search input styling
-  .search-input {
-    background: #ffffff !important;
-    color: #000000 !important;
-    padding: 8px 16px;
-    font-size: 14px;
-    min-width: 200px;
-    
-    &::placeholder {
-      color: #666666;
-    }
-    
-    &:focus {
-      border-color: #000000 !important;
-      box-shadow: none !important;
-      outline: none !important;
-    }
-  }
-  
-  // Total counter box styling
-  .total-counter-box {
-    background: #ffffff !important;
-    color: #000000 !important;
-    padding: 8px 16px;
-    font-size: 14px;
-    font-weight: 500;
-    min-width: 180px;
-    justify-content: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    
-    i {
-      font-size: 18px;
-      color: #000000 !important;
-    }
-    
-    span {
-      white-space: nowrap;
-      font-weight: 600;
-    }
+  i {
+    font-size: 16px;
   }
 }
 
-// Search and counter container
-.search-counter-container {
+// Total counter box styling
+.total-counter-box {
+  background: #ffffff;
+  color: #000000;
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 140px;
+  text-align: center;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 8px;
-}
-
-// Search type selector
-.search-type-selector {
-  display: flex;
-  gap: 4px;
   
-  .dropdown {
-    position: relative;
-  }
-  
-  .search-type-dropdown {
-    padding: 8px 16px;
-    border: 1px solid #000000;
-    background: #ffffff;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  i {
+    font-size: 16px;
     color: #000000;
-    min-width: 120px;
-    justify-content: space-between;
-    height: 40px;
-    
-    &:hover {
-      background: #f5f5f5;
-    }
-    
-    &:focus {
-      box-shadow: none;
-    }
-    
-    i {
-      font-size: 16px;
-    }
   }
   
-  .dropdown-menu {
-    min-width: 120px;
-    border: 1px solid #000000;
-    border-radius: 4px;
-    box-shadow: none;
-    
-    .dropdown-item {
-      padding: 8px 12px;
-      font-size: 12px;
-      color: #000000;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      
-      &:hover {
-        background-color: #f8f9fa;
-      }
-      
-      i {
-        font-size: 14px;
-      }
-    }
+  span {
+    white-space: nowrap;
+    font-weight: 600;
   }
 }
 
-// Inline search box
-.inline-search-box {
+// Search box styling
+.search-box {
   position: relative;
   
-  .inline-search-input {
-    border: 1px solid #000000;
+  .search-input {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
     border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 14px;
-    background: #ffffff;
-    color: #000000;
+    font-size: 12px;
     width: 200px;
-    
-    &::placeholder {
-      color: #666666;
-    }
+    background: white;
+    height: 32px;
     
     &:focus {
       outline: none;
-      border-color: #000000;
-      box-shadow: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+    
+    &::placeholder {
+      color: #9ca3af;
+      font-size: 11px;
     }
   }
   
@@ -651,26 +507,172 @@
   }
 }
 
-// Total counter box
-.total-counter-box {
+// Search type selector styling
+.search-type-selector {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #ffffff;
-  border: 1px solid #000000;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #000000;
+  gap: 4px;
   
-  i {
-    font-size: 18px;
-    color: #000000;
+  .dropdown {
+    position: relative;
   }
   
-  span {
-    white-space: nowrap;
+  .search-type-dropdown {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #000000;
+    min-width: 120px;
+    justify-content: space-between;
+    height: 32px;
+    
+    &:hover {
+      background: #f5f5f5;
+    }
+    
+    &:focus {
+      box-shadow: none;
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
+  .dropdown-menu {
+    min-width: 120px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    box-shadow: none;
+    
+    .dropdown-item {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #000000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      &:hover {
+        background-color: #f8f9fa;
+      }
+      
+      i {
+        font-size: 14px;
+      }
+    }
+  }
+}
+
+// Action buttons styling
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  
+  .refresh-btn,
+  .sync-btn,
+  .reset-btn {
+    height: 32px;
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #000000;
+    font-weight: 500;
+    font-size: 12px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    cursor: pointer;
+    
+    &:hover {
+      background: #f5f5f5;
+      border-color: #9ca3af;
+    }
+    
+    i {
+      font-size: 16px;
+      color: #000000;
+    }
+  }
+}
+
+// Catalog ready icon
+.catalog-ready-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  
+  i {
+    font-size: 20px;
+    color: #10b981;
+  }
+}
+
+// Dropdown menu styling
+.dropdown {
+  position: relative;
+  
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+    padding: 4px 0;
+    
+    .dropdown-item {
+      padding: 8px 16px;
+      font-size: 14px;
+      color: #000000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background-color: #f8f9fa;
+      }
+      
+      i {
+        font-size: 18px;
+        color: #000000;
+      }
+    }
+    
+    .dropdown-divider {
+      height: 1px;
+      background-color: #e5e7eb;
+      margin: 4px 0;
+    }
+    
+    .danger-item {
+      color: #dc3545 !important;
+      border-left: 3px solid #dc3545 !important;
+      font-weight: 600;
+      
+      &:hover {
+        background-color: #f8d7da !important;
+        color: #721c24 !important;
+      }
+      
+      i {
+        color: #dc3545 !important;
+      }
+    }
   }
 }
 
@@ -727,17 +729,7 @@
 .main-content {
   background: #ffffff !important;
   
-  // Override all buttons to white/black
-  button, .custom-btn, .btn {
-    background: #ffffff !important;
-    color: #000000 !important;
-    border: 1px solid #000000 !important;
-    
-    &:hover {
-      background: #f5f5f5 !important;
-      color: #000000 !important;
-    }
-  }
+
   
   // Override all dropdowns
   .dropdown-menu {
@@ -804,7 +796,6 @@
   z-index: 99;
   background: #ffffff;
   border-bottom: 1px solid #e0e0e0;
-  padding: 12px 16px;
 }
 
 // Table container with fixed headers
@@ -873,23 +864,3 @@
   }
 }
 
-// Remove orange glow effect from action buttons
-.btn {
-  &:focus {
-    box-shadow: none !important;
-  }
-  
-  &.btn-outline-warning {
-    &:focus {
-      box-shadow: none !important;
-    }
-  }
-}
-
-.action-buttons {
-  .btn {
-    &:focus {
-      box-shadow: none !important;
-    }
-  }
-}

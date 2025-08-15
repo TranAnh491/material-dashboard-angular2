@@ -34,7 +34,7 @@ import { LoginComponent } from './pages/login/login.component';
 // import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
 // import { InboundMaterialsComponent } from './pages/inbound-materials/inbound-materials.component';
 // import { OutboundMaterialsComponent } from './pages/outbound-materials/outbound-materials.component';
-// import { MaterialsInventoryComponent } from './pages/materials-inventory/materials-inventory.component';
+
 
 @NgModule({
   imports: [

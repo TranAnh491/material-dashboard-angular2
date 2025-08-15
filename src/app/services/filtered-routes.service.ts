@@ -79,7 +79,7 @@ export class FilteredRoutesService {
       '#materials': 'materials',
       '/inbound-materials': 'materials',
       '/outbound-materials': 'materials',
-      '/materials-inventory': 'materials',
+
       '/fg': 'fg',
       '/label': 'label',
       '/bm': 'bm',

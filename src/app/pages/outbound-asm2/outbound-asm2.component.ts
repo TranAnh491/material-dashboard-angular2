@@ -23,6 +23,10 @@ export interface OutboundMaterial {
   notes?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  productionOrder?: string; // Lệnh sản xuất
+  employeeId?: string; // Mã nhân viên
+  batchStartTime?: Date; // Thời gian bắt đầu batch
+  batchEndTime?: Date; // Thời gian kết thúc batch
 }
 
 @Component({
@@ -53,6 +57,15 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   scannerBuffer: string = '';
   scannerTimeout: any = null;
   scanStartTime: number = 0;
+  
+  // Batch Scanning Mode properties
+  isBatchScanningMode: boolean = false;
+  batchProductionOrder: string = '';
+  batchEmployeeId: string = '';
+  batchMaterials: any[] = [];
+  isProductionOrderScanned: boolean = false;
+  isEmployeeIdScanned: boolean = false;
+  batchStartTime: Date | null = null; // Thời gian bắt đầu batch
   
   // Date Range properties
   startDate: string = '';
@@ -144,6 +157,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             exportDate: data.exportDate?.toDate() || new Date(),
             location: data.location || '',
             exportedBy: data.exportedBy || '',
+            employeeId: data.employeeId || '', // Fix: properly map employeeId
+            productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
+            batchStartTime: data.batchStartTime?.toDate() || data.batchStartTime || null,
+            batchEndTime: data.batchEndTime?.toDate() || data.batchEndTime || null,
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -215,6 +232,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         existing.updatedAt = new Date(Math.max(existing.updatedAt.getTime(), material.updatedAt.getTime()));
         existing.createdAt = new Date(Math.min(existing.createdAt.getTime(), material.createdAt.getTime())); // Keep earliest creation
         existing.exportedBy = material.exportedBy; // Use latest user
+        existing.employeeId = material.employeeId || existing.employeeId; // Keep employeeId if available
+        existing.productionOrder = material.productionOrder || existing.productionOrder; // Keep productionOrder if available
+        existing.batchStartTime = material.batchStartTime || existing.batchStartTime; // Keep batchStartTime if available
+        existing.batchEndTime = material.batchEndTime || existing.batchEndTime; // Keep batchEndTime if available
         existing.scanMethod = material.scanMethod; // Use latest scan method
         existing.notes = `Gộp từ ${existing.exportQuantity - material.exportQuantity + material.exportQuantity} lần quét - ${material.notes || 'Auto-scanned export'}`;
       } else {
@@ -239,6 +260,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       exportDate: new Date(),
       location: '',
       exportedBy: exportedBy,
+      employeeId: exportedBy, // Use exportedBy as employeeId for now
+      productionOrder: '', // Empty for manual scans
       scanMethod: 'QR_SCANNER',
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
       createdAt: new Date(),
@@ -266,7 +289,19 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   
   onExportDateChange(event: any, material: OutboundMaterial): void {
     const target = event.target as HTMLInputElement;
-    material.exportDate = target.value ? new Date(target.value) : new Date();
+    if (target.value) {
+      // Xử lý datetime-local input
+      const [datePart, timePart] = target.value.split('T');
+      if (datePart && timePart) {
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute] = timePart.split(':').map(Number);
+        material.exportDate = new Date(year, month - 1, day, hour, minute);
+      } else {
+        material.exportDate = new Date(target.value);
+      }
+    } else {
+      material.exportDate = new Date();
+    }
     this.updateMaterial(material);
   }
   
@@ -285,6 +320,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       exportDate: new Date(),
       location: '',
       exportedBy: '',
+      employeeId: '',
+      productionOrder: '',
+      batchStartTime: null,
+      batchEndTime: null,
       scanMethod: 'MANUAL',
       notes: '',
       createdAt: new Date(),
@@ -338,13 +377,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         'Qty': material.quantity || 0,
         'Unit': material.unit || '',
         'Export Qty': material.exportQuantity || 0,
-        'Date': material.exportDate ? material.exportDate.toLocaleDateString('vi-VN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: '2-digit'
-        }) : '',
+        'Thời gian bắt đầu': material.exportDate ? material.exportDate.toLocaleString('vi-VN') : '',
+        'Thời gian thực hiện': this.calculateDuration(material),
         'Location': material.location || '',
-        'User': material.exportedBy || '',
+        'Employee ID': material.employeeId || '',
+        'Production Order': material.productionOrder || '',
         'Method': material.scanMethod || 'MANUAL'
       }));
       
@@ -358,9 +395,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         { wch: 8 },   // Qty
         { wch: 6 },   // Unit
         { wch: 10 },  // Export Qty
-        { wch: 10 },  // Date
+        { wch: 18 },  // Thời gian bắt đầu
+        { wch: 15 },  // Thời gian thực hiện
         { wch: 12 },  // Location
-        { wch: 20 },  // User
+        { wch: 12 },  // Employee ID
+        { wch: 18 },  // Production Order
         { wch: 8 }    // Method
       ];
       worksheet['!cols'] = colWidths;
@@ -432,6 +471,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             exportDate: data.exportDate?.toDate() || new Date(),
             location: data.location || '',
             exportedBy: data.exportedBy || '',
+            employeeId: data.employeeId || '',
+            productionOrder: data.productionOrder || '',
+            batchStartTime: data.batchStartTime?.toDate() || data.batchStartTime || null,
+            batchEndTime: data.batchEndTime?.toDate() || data.batchEndTime || null,
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || ''
           };
@@ -461,13 +504,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           'Qty': item.quantity,
           'Unit': item.unit,
           'Export Qty': item.exportQuantity,
-          'Date': item.exportDate.toLocaleDateString('vi-VN', {
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit'
-          }),
+          'Thời gian bắt đầu': item.exportDate.toLocaleString('vi-VN'),
+          'Thời gian thực hiện': this.calculateDuration(item),
           'Location': item.location,
-          'User': item.exportedBy,
+          'Employee ID': item.employeeId,
+          'Production Order': item.productionOrder,
           'Method': item.scanMethod
         }));
         
@@ -476,7 +517,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         // Set column widths
         const colWidths = [
           { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 8 }, { wch: 6 },
-          { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 8 }
+          { wch: 10 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+          { wch: 18 }, { wch: 8 }
         ];
         worksheet['!cols'] = colWidths;
         
@@ -538,6 +580,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           'Export Date': data.exportDate?.toDate().toLocaleDateString('vi-VN') || '',
           'Location': data.location,
           'Exported By': data.exportedBy,
+          'Employee ID': data.employeeId || '',
+          'Production Order': data.productionOrder || '',
+          'Batch Start Time': data.batchStartTime?.toDate?.()?.toLocaleString('vi-VN') || data.batchStartTime?.toLocaleString?.('vi-VN') || '',
+          'Batch End Time': data.batchEndTime?.toDate?.()?.toLocaleString('vi-VN') || data.batchEndTime?.toLocaleString?.('vi-VN') || '',
           'Scan Method': data.scanMethod,
           'Notes': data.notes
         };
@@ -1032,6 +1078,325 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
   
+  // Batch Scanning Mode methods
+  startBatchScanningMode(): void {
+    console.log('🚀 Starting batch scanning mode...');
+    this.isBatchScanningMode = true;
+    this.batchProductionOrder = '';
+    this.batchEmployeeId = '';
+    this.batchMaterials = [];
+    this.isProductionOrderScanned = false;
+    this.isEmployeeIdScanned = false;
+    this.scannerBuffer = '';
+    this.batchStartTime = new Date(); // Ghi lại thời gian bắt đầu
+    this.focusScannerInput();
+    console.log('✅ Batch scanning mode activated at:', this.batchStartTime);
+  }
+
+  stopBatchScanningMode(): void {
+    console.log('🛑 Stopping batch scanning mode...');
+    this.isBatchScanningMode = false;
+    this.batchProductionOrder = '';
+    this.batchEmployeeId = '';
+    this.batchMaterials = [];
+    this.isProductionOrderScanned = false;
+    this.isEmployeeIdScanned = false;
+    this.scannerBuffer = '';
+    this.batchStartTime = null; // Reset thời gian bắt đầu
+    console.log('✅ Batch scanning mode deactivated');
+  }
+
+  private processBatchScanInput(scannedData: string): void {
+    if (!scannedData.trim()) return;
+
+    console.log('🔍 Processing batch scan input:', scannedData);
+
+    // Check if this is a production order (LHLSX + 9 characters) - ASM2 format
+    if (scannedData.startsWith('LHLSX') && scannedData.length === 14 && !this.isProductionOrderScanned) {
+      this.batchProductionOrder = scannedData;
+      this.isProductionOrderScanned = true;
+      console.log('✅ Production Order scanned:', scannedData);
+      // Show brief confirmation in console
+      console.log('📋 Production Order: ' + scannedData + ' - Ready for employee ID scan');
+      return;
+    }
+
+    // Check if this is an employee ID (ASP + 4 digits) - extract first 7 characters
+    if (scannedData.startsWith('ASP') && !this.isEmployeeIdScanned) {
+      // Extract only first 7 characters from employee ID scan
+      const employeeId = scannedData.substring(0, 7);
+      this.batchEmployeeId = employeeId;
+      this.isEmployeeIdScanned = true;
+      console.log('✅ Employee ID scanned:', employeeId, '(from full scan:', scannedData, ')');
+      // Show brief confirmation in console
+      console.log('👤 Employee ID: ' + employeeId + ' - Ready for material scanning');
+      return;
+    }
+
+    // If both production order and employee ID are scanned, process as material
+    if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+      this.processBatchMaterialScan(scannedData);
+    } else {
+      if (!this.isProductionOrderScanned) {
+        console.log('⚠️ Vui lòng scan lệnh sản xuất (LHLSX...) trước!');
+      } else if (!this.isEmployeeIdScanned) {
+        console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
+      }
+    }
+  }
+
+  private processBatchMaterialScan(scannedData: string): void {
+    try {
+      console.log('🔍 Processing material scan:', scannedData);
+      
+      let materialCode = '';
+      let poNumber = '';
+      let quantity = 1;
+      
+      // Pattern 1: Format "MaterialCode|PONumber|Quantity" (dấu |)
+      if (scannedData.includes('|')) {
+        const parts = scannedData.split('|');
+        if (parts.length >= 3) {
+          materialCode = parts[0].trim();
+          poNumber = parts[1].trim();
+          quantity = parseInt(parts[2]) || 1;
+          console.log('✅ Parsed pipe format:', { materialCode, poNumber, quantity });
+        }
+      }
+      // Pattern 2: Format "MaterialCode,PONumber,Quantity" (dấu phẩy)
+      else if (scannedData.includes(',')) {
+        const parts = scannedData.split(',');
+        if (parts.length >= 3) {
+          materialCode = parts[0].trim();
+          poNumber = parts[1].trim();
+          quantity = parseInt(parts[2]) || 1;
+          console.log('✅ Parsed comma format:', { materialCode, poNumber, quantity });
+        }
+      }
+      // Pattern 3: Format "MaterialCode PONumber Quantity" (dấu cách)
+      else if (scannedData.includes(' ')) {
+        const parts = scannedData.split(' ');
+        if (parts.length >= 3) {
+          materialCode = parts[0].trim();
+          poNumber = parts[1].trim();
+          quantity = parseInt(parts[2]) || 1;
+          console.log('✅ Parsed space format:', { materialCode, poNumber, quantity });
+        }
+      }
+      // Pattern 4: Try to extract material code pattern (e.g., B024039, A002009)
+      else {
+        // Look for material code pattern: letter + 6+ digits
+        const materialCodeMatch = scannedData.match(/[A-Z]\d{6,}/);
+        if (materialCodeMatch) {
+          materialCode = materialCodeMatch[0];
+          // Look for PO pattern: PO + digits or KZP + digits
+          const poMatch = scannedData.match(/(?:PO|KZP)\d+[\/\d]*/i);
+          if (poMatch) {
+            poNumber = poMatch[0];
+          }
+          // Look for quantity (number at the end)
+          const quantityMatch = scannedData.match(/\d+$/);
+          if (quantityMatch) {
+            quantity = parseInt(quantityMatch[0]);
+          }
+          console.log('✅ Parsed pattern extraction:', { materialCode, poNumber, quantity });
+        }
+      }
+      
+      // Validate parsed data
+      if (!materialCode) {
+        console.log('⚠️ Could not extract material code, using raw data');
+        materialCode = scannedData.trim();
+      }
+      
+      if (!poNumber) {
+        console.log('⚠️ Could not extract PO number, using default');
+        poNumber = 'Unknown';
+      }
+      
+      if (quantity <= 0) {
+        console.log('⚠️ Invalid quantity, using default 1');
+        quantity = 1;
+      }
+      
+      const materialData = {
+        materialCode,
+        poNumber,
+        quantity,
+        scannedData,
+        timestamp: new Date()
+      };
+
+      this.batchMaterials.push(materialData);
+      console.log('✅ Material added to batch:', materialData);
+      
+      // Auto-save after adding material (no popup needed)
+      this.autoSaveBatchMaterial(materialData);
+      
+    } catch (error) {
+      console.error('❌ Error processing material scan:', error);
+      console.log('❌ Lỗi xử lý mã hàng!');
+    }
+  }
+
+  private async autoSaveBatchMaterial(materialData: any): Promise<void> {
+    try {
+      console.log('💾 Auto-saving batch material:', materialData);
+      const outboundRecord: OutboundMaterial = {
+        factory: 'ASM2',
+        materialCode: materialData.materialCode,
+        poNumber: materialData.poNumber,
+        quantity: materialData.quantity,
+        unit: 'KG', // Default unit
+        exportQuantity: materialData.quantity,
+        exportDate: this.batchStartTime || new Date(), // Sử dụng thời gian bắt đầu batch
+        location: 'ASM2',
+        exportedBy: this.batchEmployeeId, // Use the 7-character employee ID
+        productionOrder: this.batchProductionOrder,
+        employeeId: this.batchEmployeeId, // Use the 7-character employee ID
+        batchStartTime: this.batchStartTime, // Lưu thời gian bắt đầu
+        scanMethod: 'Batch Scanner',
+        notes: `Batch scan - ${this.batchProductionOrder}`,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Lưu vào outbound
+      await this.firestore.collection('outbound-materials').add(outboundRecord);
+      console.log('✅ Batch material saved successfully:', outboundRecord.materialCode);
+      
+      // ⚠️ QUAN TRỌNG: Cập nhật inventory stock để trừ số lượng
+      console.log('📦 Starting inventory update for batch material...');
+      await this.updateInventoryStock(materialData.materialCode, materialData.poNumber, materialData.quantity);
+      console.log('✅ Inventory updated for batch material');
+      
+      // No alert needed - just log to console for silent operation
+    } catch (error) {
+      console.error('❌ Error auto-saving batch material:', error);
+      alert('❌ Lỗi khi lưu mã hàng: ' + error.message);
+    }
+  }
+
+  async saveBatchToOutbound(): Promise<void> {
+    console.log('🔄 Completing batch scanning...');
+    console.log(`📦 Total materials scanned in this batch: ${this.batchMaterials.length}`);
+    
+    try {
+      // Tính thời gian thực hiện
+      const batchEndTime = new Date();
+      const durationMinutes = this.batchStartTime ? 
+        Math.round((batchEndTime.getTime() - this.batchStartTime.getTime()) / (1000 * 60)) : 0;
+      
+      console.log(`⏱️ Batch duration: ${durationMinutes} minutes`);
+      
+      // Cập nhật batchEndTime cho tất cả materials đã scan
+      if (this.batchMaterials.length > 0) {
+        await this.updateBatchEndTimeForMaterials(durationMinutes);
+      }
+      
+      // Show summary of all scanned materials
+      const summary = this.batchMaterials.map((item, index) => 
+        `${index + 1}. ${item.materialCode} - PO: ${item.poNumber} - Qty: ${item.quantity}`
+      ).join('\n');
+      
+      console.log('📋 Batch Summary:');
+      console.log(summary);
+      
+      // Reload data to show all materials in the report
+      await this.loadMaterials();
+      console.log('✅ Data reloaded successfully');
+      
+      // Reset batch mode
+      this.stopBatchScanningMode();
+      
+      // Show completion message with summary
+      alert(`✅ Batch scanning completed!\n\n📦 Total materials: ${this.batchMaterials.length}\n⏱️ Duration: ${durationMinutes} minutes\n\n${summary}`);
+      
+    } catch (error) {
+      console.error('❌ Error completing batch:', error);
+      alert('❌ Lỗi khi hoàn thành batch: ' + error.message);
+    }
+  }
+
+  // Cập nhật batchEndTime cho tất cả materials đã scan
+  private async updateBatchEndTimeForMaterials(durationMinutes: number): Promise<void> {
+    try {
+      console.log('🔄 Updating batch end time for materials...');
+      
+      // Tìm tất cả materials có cùng productionOrder và employeeId trong batch này
+      const batchMaterialsQuery = await this.firestore.collection('outbound-materials', ref =>
+        ref.where('productionOrder', '==', this.batchProductionOrder)
+           .where('employeeId', '==', this.batchEmployeeId)
+           .where('scanMethod', '==', 'Batch Scanner')
+           .limit(100)
+      ).get().toPromise();
+      
+      if (batchMaterialsQuery && !batchMaterialsQuery.empty) {
+        const updatePromises = batchMaterialsQuery.docs.map(doc => {
+          const data = doc.data() as any;
+          // Chỉ cập nhật những materials được scan trong batch này (có batchStartTime)
+          if (data.batchStartTime && this.batchStartTime) {
+            const dataStartTime = data.batchStartTime.toDate ? data.batchStartTime.toDate() : data.batchStartTime;
+            if (Math.abs(dataStartTime.getTime() - this.batchStartTime.getTime()) < 60000) { // Trong vòng 1 phút
+              return doc.ref.update({
+                batchEndTime: new Date(),
+                updatedAt: new Date()
+              });
+            }
+          }
+          return Promise.resolve();
+        });
+        
+        await Promise.all(updatePromises);
+        console.log(`✅ Updated ${updatePromises.length} materials with batch end time`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error updating batch end time:', error);
+    }
+  }
+
+  // Tính thời gian thực hiện cho material
+  calculateDuration(material: OutboundMaterial): string {
+    if (!material.batchStartTime || !material.batchEndTime) {
+      return '-';
+    }
+    
+    try {
+      // Xử lý cả Date và Firestore Timestamp
+      let startTime: Date;
+      let endTime: Date;
+      
+      if (material.batchStartTime && typeof material.batchStartTime === 'object') {
+        startTime = (material.batchStartTime as any).toDate ? (material.batchStartTime as any).toDate() : material.batchStartTime;
+      } else {
+        return '-';
+      }
+      
+      if (material.batchEndTime && typeof material.batchEndTime === 'object') {
+        endTime = (material.batchEndTime as any).toDate ? (material.batchEndTime as any).toDate() : material.batchEndTime;
+      } else {
+        return '-';
+      }
+      
+      const durationMs = endTime.getTime() - startTime.getTime();
+      const durationMinutes = Math.round(durationMs / (1000 * 60));
+      
+      if (durationMinutes < 1) {
+        return '< 1 phút';
+      } else if (durationMinutes < 60) {
+        return `${durationMinutes} phút`;
+      } else {
+        const hours = Math.floor(durationMinutes / 60);
+        const minutes = durationMinutes % 60;
+        return `${hours}h ${minutes}p`;
+      }
+    } catch (error) {
+      console.error('❌ Error calculating duration:', error);
+      return '-';
+    }
+  }
+
   private focusScannerInput(): void {
     setTimeout(() => {
       const inputElement = document.querySelector('.scanner-input') as HTMLInputElement;
@@ -1086,6 +1451,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     if (!scannedData.trim()) return;
     
     console.log('🔌 Physical scanner input received:', scannedData);
+    console.log('🔌 Input length:', scannedData.length);
+    console.log('🔌 Input characters:', scannedData.split('').map(c => c.charCodeAt(0)));
     
     // Clear the input
     this.scannerBuffer = '';
@@ -1094,12 +1461,22 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       inputElement.value = '';
     }
     
-    // Process the scanned data (same as camera scan)
-    this.onScanSuccess(scannedData);
-    
-    // Keep input focused for next scan
-    if (this.isScannerInputActive) {
-      this.focusScannerInput();
+    // If in batch mode, process with batch logic
+    if (this.isBatchScanningMode) {
+      this.processBatchScanInput(scannedData);
+      
+      // Auto-focus for next scan in batch mode
+      setTimeout(() => {
+        this.focusScannerInput();
+      }, 100);
+    } else {
+      // Process the scanned data (same as camera scan)
+      this.onScanSuccess(scannedData);
+      
+      // Keep input focused for next scan
+      if (this.isScannerInputActive) {
+        this.focusScannerInput();
+      }
     }
   }
   

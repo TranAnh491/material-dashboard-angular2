@@ -52,7 +52,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Inventory tabs
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
-    { key: 'materials-inventory', name: 'Materials Inventory' },
     
     // Other tabs
     { key: 'fg', name: 'Finished Goods' },

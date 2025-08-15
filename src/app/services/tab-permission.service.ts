@@ -55,7 +55,7 @@ export class TabPermissionService {
                     // Inventory tabs
                     'materials-asm1': true,
                     'materials-asm2': true,
-                    'materials-inventory': true,
+                
                     
                     // Other tabs
                     'fg': true,
@@ -76,9 +76,7 @@ export class TabPermissionService {
                     'inventory-delete': true,
                     'inventory-export': true,
                     'inventory-edit-hsd': true,
-                    'materials-inventory-delete': true,
-                    'materials-inventory-export': true,
-                    'materials-inventory-edit-hsd': true,
+                    
                     'inbound-add': true,
                     'inbound-edit': true,
                     'inbound-delete': true,

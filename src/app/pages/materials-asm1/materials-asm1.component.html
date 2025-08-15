@@ -13,9 +13,10 @@
     
     <!-- Excel Actions -->
     <div class="excel-actions">
-      <div class="action-controls">
+      <div class="action-controls-horizontal">
+        <!-- More Button with Dropdown -->
         <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" (click)="toggleDropdown($event)">
+          <button class="more-btn" (click)="toggleDropdown($event)">
             <i class="material-icons">more_vert</i>
             More
           </button>
@@ -53,81 +54,84 @@
           </div>
         </div>
         
-
+        <!-- Total Counter Box -->
+        <div class="total-counter-box">
+          <i class="material-icons">inventory_2</i>
+          <span>Tổng: {{ filteredInventory.length }} mã</span>
+        </div>
+        
+        <!-- Search Type Selector -->
+        <div class="search-type-selector">
+          <div class="dropdown">
+            <button class="search-type-dropdown" 
+                    type="button" 
+                    data-toggle="dropdown" 
+                    aria-haspopup="true" 
+                    aria-expanded="false">
+              <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+              {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+            </button>
+            <div class="dropdown-menu">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                <i class="material-icons">inventory</i>
+                Mã
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                <i class="material-icons">receipt</i>
+                PO
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                <i class="material-icons">place</i>
+                Vị trí
+              </a>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Search Box -->
+        <div class="search-box">
+          <input type="text"
+                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
+          
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
+          <!-- Search warning -->
+          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+            <i class="material-icons">info</i>
+            Cần ít nhất 3 ký tự
+          </div>
+        </div>
         
         <!-- Action Buttons -->
         <div class="action-buttons">
-          <button class="custom-btn" (click)="refreshInventory()" title="Làm mới dữ liệu ASM1">
+          <button class="refresh-btn" (click)="refreshInventory()" title="Làm mới dữ liệu ASM1">
             <i class="material-icons">refresh</i>
             Refresh
           </button>
-          <button class="custom-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound ASM1">
+          <button class="sync-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound ASM1">
             <i class="material-icons">sync</i>
             Sync
           </button>
-          <button class="custom-btn" (click)="resetZeroStock()" title="Xóa hàng có tồn kho = 0">
+          <button class="reset-btn" (click)="resetZeroStock()" title="Xóa hàng có tồn kho = 0">
             <i class="material-icons">restart_alt</i>
             Reset
           </button>
-          <!-- Search Box and Total Counter -->
-          <div class="search-counter-container">
-            <div class="search-type-selector">
-              <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle search-type-dropdown" 
-                        type="button" 
-                        data-toggle="dropdown" 
-                        aria-haspopup="true" 
-                        aria-expanded="false">
-                  <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-                  {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
-                </button>
-                <div class="dropdown-menu">
-                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
-                    <i class="material-icons">inventory</i>
-                    Mã
-                  </a>
-                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
-                    <i class="material-icons">receipt</i>
-                    PO
-                  </a>
-                  <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
-                    <i class="material-icons">place</i>
-                    Vị trí
-                  </a>
-                </div>
-              </div>
-            </div>
-            <div class="inline-search-box">
-              <input type="text"
-                     [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
-                     [(ngModel)]="searchTerm"
-                     (input)="onSearchInput($event)"
-                     (keyup)="onSearchKeyUp($event)"
-                     class="search-input"
-                     [disabled]="isLoading">
-              
-              <!-- Clear search button -->
-              <button class="clear-search-btn" 
-                      *ngIf="searchTerm" 
-                      (click)="clearSearch()" 
-                      title="Xóa tìm kiếm">
-                <i class="material-icons">clear</i>
-              </button>
-              
-              <!-- Search warning -->
-              <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
-                <i class="material-icons">info</i>
-                Cần ít nhất 3 ký tự
-              </div>
-            </div>
-            <div class="total-counter-box">
-              <i class="material-icons">inventory_2</i>
-              <span>Tổng: {{ filteredInventory.length }} mã</span>
-            </div>
-          </div>
-          <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
-            <i class="material-icons">check_circle</i>
-          </div>
+        </div>
+        
+        <!-- Catalog Ready Icon -->
+        <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
+          <i class="material-icons">check_circle</i>
         </div>
       </div>
     </div>

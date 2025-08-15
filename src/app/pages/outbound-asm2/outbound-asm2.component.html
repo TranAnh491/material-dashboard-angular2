@@ -5,7 +5,7 @@
     </div>
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- Physical Scanner Input -->
+        <!-- Scanner Input and Batch Scan -->
         <div class="scanner-input-group">
           <input type="text" 
                  #scannerInput
@@ -15,23 +15,56 @@
                  placeholder="Quét barcode/QR code hoặc nhập thủ công..."
                  class="scanner-input"
                  [class.active]="isScannerInputActive">
-          <div class="scanner-buttons">
-            <button class="scanner-btn camera" 
-                    (click)="startCameraScanning()" 
-                    [disabled]="isScannerLoading || isCameraScanning"
-                    title="Quét bằng camera">
-              <i class="material-icons" *ngIf="!isScannerLoading && !isCameraScanning">qr_code_scanner</i>
-              <i class="material-icons spinning" *ngIf="isScannerLoading">hourglass_empty</i>
-              <i class="material-icons" *ngIf="isCameraScanning">videocam</i>
-            </button>
-            <button class="scanner-btn physical" 
-                    (click)="activatePhysicalScanner()" 
-                    [class.active]="isScannerInputActive"
-                    title="Kích hoạt máy scan USB/Bluetooth">
-              <i class="material-icons">scanner</i>
-            </button>
+          
+                  <!-- Batch Scan Button -->
+        <button class="batch-scan-btn" 
+                (click)="startBatchScanningMode()" 
+                [disabled]="isBatchScanningMode"
+                title="Bắt đầu Batch Scan">
+          <i class="material-icons">playlist_add_check</i>
+          Batch Scan
+        </button>
+      </div>
+
+      <!-- Batch Scanning Active Display -->
+      <div class="batch-scanning-active" *ngIf="isBatchScanningMode">
+        <div class="batch-info">
+          <div class="batch-field">
+            <label>Lệnh sản xuất:</label>
+            <span class="batch-value" [class.scanned]="isProductionOrderScanned">
+              {{ batchProductionOrder || 'Chưa scan (LHLSX...)' }}
+            </span>
+          </div>
+          <div class="batch-field">
+            <label>Mã nhân viên:</label>
+            <span class="batch-value" [class.scanned]="isEmployeeIdScanned">
+              {{ batchEmployeeId || 'Chưa scan (ASP...)' }}
+            </span>
+          </div>
+          <div class="batch-field">
+            <label>Số mã hàng đã scan:</label>
+            <span class="batch-count">{{ batchMaterials.length }}</span>
+          </div>
+          <div class="batch-field" *ngIf="batchMaterials.length > 0">
+            <label>Mã hàng gần nhất:</label>
+            <span class="batch-value">
+              {{ batchMaterials[batchMaterials.length - 1]?.materialCode || '' }}
+            </span>
           </div>
         </div>
+        <div class="batch-actions">
+          <button class="batch-save-btn" 
+                  (click)="saveBatchToOutbound()" 
+                  [disabled]="batchMaterials.length === 0">
+            <i class="material-icons">check_circle</i>
+            Hoàn thành ({{ batchMaterials.length }})
+          </button>
+          <button class="batch-cancel-btn" (click)="stopBatchScanningMode()">
+            <i class="material-icons">cancel</i>
+            Hủy
+          </button>
+        </div>
+      </div>
         
         <!-- More Dropdown -->
         <div class="dropdown" #dropdown>
@@ -103,8 +136,10 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
-            <th>Ngày xuất</th>
-            <th>Người xuất</th>
+            <th>Thời gian bắt đầu</th>
+            <th>Thời gian thực hiện</th>
+            <th>Mã nhân viên</th>
+            <th>Lệnh sản xuất</th>
             <th>Xóa</th>
           </tr>
         </thead>
@@ -122,10 +157,16 @@
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
             </td>
             <td class="date-cell">
-              <input type="date" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().split('T')[0] : ''" (change)="onExportDateChange($event, material)">
+              <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">
             </td>
-            <td class="exporter-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.exportedBy" (change)="updateMaterial(material)">
+            <td class="duration-cell">
+              <span class="duration-display">{{ calculateDuration(material) }}</span>
+            </td>
+            <td class="employee-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="Mã nhân viên">
+            </td>
+            <td class="production-order-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.productionOrder" (change)="updateMaterial(material)" placeholder="Lệnh sản xuất">
             </td>
             <td class="action-cell">
               <button class="action-btn delete-btn" (click)="deleteMaterial(material)">

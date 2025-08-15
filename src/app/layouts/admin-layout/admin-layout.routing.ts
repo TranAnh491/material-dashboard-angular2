@@ -20,7 +20,7 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 import { InboundMaterialsComponent } from '../../pages/inbound-materials/inbound-materials.component';
 import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbound-materials.component';
-import { MaterialsInventoryComponent } from '../../pages/materials-inventory/materials-inventory.component';
+
 import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
 import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
 import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
@@ -72,7 +72,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'shipment',             component: ShipmentComponent, canActivate: [AuthGuard] },
   { path: 'inbound-materials',    component: InboundMaterialsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-materials',   component: OutboundMaterialsComponent, canActivate: [AuthGuard] },
-  { path: 'materials-inventory',  component: MaterialsInventoryComponent, canActivate: [AuthGuard] },
+
 
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
