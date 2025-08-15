@@ -135,9 +135,12 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
   ngOnInit(): void {
     console.log('🚀 MaterialsInventoryComponent ngOnInit started');
     
-    // Load catalog first, then inventory to ensure names are available
+    // Initialize search term
+    this.searchTerm = '';
+    
+    // Load catalog first for material names mapping
     this.loadCatalogFromFirebase().then(() => {
-      this.loadInventoryFromFirebase();
+      console.log('📚 Catalog loaded, inventory ready for search');
     });
     
     // Load permissions with debug
@@ -147,13 +150,24 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     // Load factory access and set default factory
     this.loadFactoryAccess();
     
-    // Disable auto-sync to prevent deleted items from reappearing
-    // Use manual sync button instead
+    // Load initial inventory data first, then setup search
+    this.loadInitialInventoryAndSetupSearch();
     
-    // Setup debounced search for better performance
+    console.log('✅ MaterialsInventoryComponent ngOnInit completed - Search setup will happen after data loads');
+  }
+
+  // Load initial inventory and setup search mechanism
+  private loadInitialInventoryAndSetupSearch(): void {
+    console.log('📦 Setting up search mechanism without loading initial data...');
+    
+    // Don't load any data initially - only setup search
+    this.inventoryMaterials = [];
+    this.filteredInventory = [];
+    
+    // Setup search mechanism immediately
+    console.log('🔍 Setting up search mechanism...');
     this.setupDebouncedSearch();
-    
-    console.log('✅ MaterialsInventoryComponent ngOnInit completed');
+    console.log('✅ Search mechanism setup completed - No initial data loaded');
   }
 
   // Load factory access permissions and set default factory
@@ -182,13 +196,16 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
 
   // Setup debounced search for better performance
   private setupDebouncedSearch(): void {
+    console.log('🔍 Setting up debounced search with 1.5s delay');
     this.searchSubject.pipe(
-      debounceTime(300), // Đợi 300ms sau khi user ngừng gõ
+      debounceTime(1500), // Đợi 1.5 giây sau khi user ngừng gõ (đợi nhập xong hết)
       distinctUntilChanged(), // Chỉ search khi search term thay đổi
       takeUntil(this.destroy$)
     ).subscribe(searchTerm => {
+      console.log(`🔍 SearchSubject received: "${searchTerm}" (length: ${searchTerm.length})`);
       this.performSearch(searchTerm);
     });
+    console.log('🔍 Debounced search setup completed');
   }
 
   // Kiểm tra user có thể chỉnh sửa inventory material của nhà máy cụ thể không
@@ -1895,39 +1912,312 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
 
   // New optimized search method
   onSearchInput(event: any): void {
-    const searchTerm = event.target.value;
+    let searchTerm = event.target.value;
+    console.log('🔍 Search input event:', { searchTerm, length: searchTerm.length });
+    
+    // Auto-convert to uppercase (only if different to avoid infinite loop)
+    if (searchTerm && searchTerm !== searchTerm.toUpperCase()) {
+      searchTerm = searchTerm.toUpperCase();
+      console.log('🔍 Converting to uppercase:', searchTerm);
+      // Use setTimeout to avoid infinite loop with ngModel
+      setTimeout(() => {
+        event.target.value = searchTerm;
+        this.searchTerm = searchTerm;
+      }, 0);
+    }
+    
+    // Clear results immediately if search is empty
+    if (!searchTerm || searchTerm.trim() === '') {
+      console.log('🔍 Empty search term, calling clearSearch');
+      this.clearSearch();
+      return;
+    }
+    
+    // Send to debounced search
+    console.log(`🔍 Sending to searchSubject: "${searchTerm}"`);
     this.searchSubject.next(searchTerm);
   }
 
-  // Perform search with performance optimization
-  private performSearch(searchTerm: string): void {
+  // Handle search input with better uppercase conversion
+  onSearchKeyUp(event: any): void {
+    const searchTerm = event.target.value;
+    
+    // Convert to uppercase on key up
+    if (searchTerm && searchTerm !== searchTerm.toUpperCase()) {
+      event.target.value = searchTerm.toUpperCase();
+      this.searchTerm = searchTerm.toUpperCase();
+    }
+  }
+
+  // Clear search and reset to initial state
+  clearSearch(): void {
+    console.log('🧹 Clearing search and resetting state...');
+    console.log('🧹 Current state before clear:', {
+      searchTerm: this.searchTerm,
+      filteredInventoryLength: this.filteredInventory.length,
+      inventoryMaterialsLength: this.inventoryMaterials.length
+    });
+    
+    // Reset search state
+    this.searchTerm = '';
+    this.filteredInventory = [];
+    this.inventoryMaterials = [];
+    
+    console.log('🧹 State after reset:', {
+      searchTerm: this.searchTerm,
+      filteredInventoryLength: this.filteredInventory.length,
+      inventoryMaterialsLength: this.inventoryMaterials.length
+    });
+    
+    // Return to initial state - no data displayed
+    console.log('🧹 Search cleared, returning to initial state (no data displayed)');
+  }
+
+
+
+  // Perform search with Search-First approach - IMPROVED VERSION
+  private async performSearch(searchTerm: string): Promise<void> {
+    console.log(`🔍 performSearch called with: "${searchTerm}" (length: ${searchTerm.length})`);
+    
+    // Handle empty search term - just clear filtered results but keep inventory data
     if (searchTerm.length === 0) {
       this.filteredInventory = [];
-      this.searchTerm = '';
+      console.log('🔍 Empty search term, clearing filtered results');
       return;
     }
     
-    // Chỉ search khi có ít nhất 2 ký tự
-    if (searchTerm.length < 2) {
+    // Chỉ search khi có ít nhất 3 ký tự để tránh mất thời gian
+    if (searchTerm.length < 3) {
       this.filteredInventory = [];
+      console.log(`⏰ Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
       return;
     }
     
+    console.log(`🔍 Starting search for: "${searchTerm}"`);
     this.searchTerm = searchTerm;
+    this.isLoading = true;
     
-    // Search với performance tối ưu
-    const startTime = performance.now();
+    try {
+      console.log(`🔍 Searching for: "${searchTerm}" - Loading from Firebase...`);
+      
+      // IMPROVED: Query Firebase với nhiều điều kiện hơn để tìm kiếm toàn diện
+      let querySnapshot;
+      
+      // Thử tìm kiếm theo materialCode trước (chính xác nhất)
+      querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', searchTerm)
+           .limit(50)
+      ).get().toPromise();
+      
+      // Nếu không tìm thấy, tìm kiếm theo pattern matching
+      if (!querySnapshot || querySnapshot.empty) {
+        console.log(`🔍 No exact match for "${searchTerm}", trying pattern search...`);
+        
+        // Tìm kiếm theo pattern: materialCode bắt đầu bằng searchTerm
+        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+          ref.where('materialCode', '>=', searchTerm)
+             .where('materialCode', '<=', searchTerm + '\uf8ff')
+             .limit(100)
+        ).get().toPromise();
+      }
+      
+      // Nếu vẫn không tìm thấy, tìm kiếm theo PO number
+      if (!querySnapshot || querySnapshot.empty) {
+        console.log(`🔍 No pattern match for "${searchTerm}", trying PO search...`);
+        
+        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+          ref.where('poNumber', '>=', searchTerm)
+             .where('poNumber', '<=', searchTerm + '\uf8ff')
+             .limit(100)
+        ).get().toPromise();
+      }
+      
+      // Nếu vẫn không tìm thấy, tìm kiếm theo location
+      if (!querySnapshot || querySnapshot.empty) {
+        console.log(`🔍 No location match for "${searchTerm}", trying broader search...`);
+        
+        // Tìm kiếm rộng hơn: tìm tất cả documents và filter ở client
+        querySnapshot = await this.firestore.collection('inventory-materials')
+          .get()
+          .pipe(takeUntil(this.destroy$))
+          .toPromise();
+          
+        if (querySnapshot && !querySnapshot.empty) {
+          // Filter ở client side
+          const filteredDocs = querySnapshot.docs.filter(doc => {
+            const data = doc.data() as any;
+            const searchLower = searchTerm.toLowerCase();
+            return (
+              (data.materialCode && data.materialCode.toLowerCase().includes(searchLower)) ||
+              (data.poNumber && data.poNumber.toLowerCase().includes(searchLower)) ||
+              (data.location && data.location.toLowerCase().includes(searchLower)) ||
+              (data.materialName && data.materialName.toLowerCase().includes(searchLower))
+            );
+          });
+          
+          // Tạo mock querySnapshot với filtered docs
+          querySnapshot = {
+            docs: filteredDocs,
+            empty: filteredDocs.length === 0
+          } as any;
+        }
+      }
+      
+      if (querySnapshot && !querySnapshot.empty) {
+        console.log(`✅ Found ${querySnapshot.docs.length} documents from Firebase`);
+        
+        // Process search results
+        this.inventoryMaterials = querySnapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            id: doc.id,
+            factory: data.factory || 'ASM1',
+            importDate: data.importDate?.toDate() || new Date(),
+            receivedDate: data.receivedDate?.toDate(),
+            batchNumber: data.batchNumber || '',
+            materialCode: data.materialCode || '',
+            materialName: data.materialName || '',
+            poNumber: data.poNumber || '',
+            quantity: data.quantity || 0,
+            unit: data.unit || '',
+            exported: data.exported || 0,
+            stock: data.stock || 0,
+            location: data.location || '',
+            type: data.type || '',
+            expiryDate: data.expiryDate?.toDate() || new Date(),
+            qualityCheck: data.qualityCheck || false,
+            isReceived: data.isReceived || false,
+            notes: data.notes || '',
+            rollsOrBags: data.rollsOrBags || '',
+            supplier: data.supplier || '',
+            remarks: data.remarks || '',
+            isCompleted: data.isCompleted || false,
+            isDuplicate: data.isDuplicate || false,
+            importStatus: data.importStatus || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date()
+          } as InventoryMaterial;
+        });
+        
+        // Apply factory filter if selected
+        if (this.selectedFactory) {
+          this.inventoryMaterials = this.inventoryMaterials.filter(item => 
+            item.factory === this.selectedFactory
+          );
+          console.log(`🏭 After factory filter (${this.selectedFactory}): ${this.inventoryMaterials.length} items`);
+        }
+        
+        // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
+        this.filteredInventory = [...this.inventoryMaterials];
+        
+        console.log(`✅ Search completed: ${this.filteredInventory.length} results from ${this.inventoryMaterials.length} loaded items`);
+        
+        // Debug: Log tất cả material codes tìm được
+        const materialCodes = this.filteredInventory.map(item => item.materialCode);
+        console.log(`🔍 Found material codes:`, materialCodes);
+        
+      } else {
+        // No results found
+        this.inventoryMaterials = [];
+        this.filteredInventory = [];
+        console.log(`🔍 No results found for: "${searchTerm}" after trying all search methods`);
+        
+        // Show user-friendly message
+        if (searchTerm.length >= 2) {
+          console.log(`💡 Search tips for "${searchTerm}":`);
+          console.log('   - Kiểm tra chính tả');
+          console.log('   - Thử tìm kiếm với ít ký tự hơn');
+          console.log('   - Kiểm tra factory filter (ASM1/ASM2)');
+          console.log('   - Thử tìm kiếm theo PO number');
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error during search:', error);
+      this.filteredInventory = [];
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges(); // Force UI update
+      console.log(`🔍 Search completed for: "${searchTerm}"`);
+    }
+  }
+
+  // Debug method to check Firebase data
+  async debugFirebaseData(searchTerm: string): Promise<void> {
+    console.log(`🔍 DEBUG: Checking Firebase data for "${searchTerm}"...`);
     
-    this.filteredInventory = this.inventoryMaterials.filter(item => 
-      item.materialCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.poNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.factory?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.type?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    
-    const endTime = performance.now();
-    console.log(`🔍 Search "${searchTerm}": ${this.filteredInventory.length} results in ${(endTime - startTime).toFixed(2)}ms`);
+    try {
+      // Check all documents without any filter
+      const allDocs = await this.firestore.collection('inventory-materials').get().toPromise();
+      console.log(`📊 Total documents in Firebase: ${allDocs?.docs.length || 0}`);
+      
+      if (allDocs && !allDocs.empty) {
+        // Find documents with matching materialCode
+        const matchingDocs = allDocs.docs.filter(doc => {
+          const data = doc.data() as any;
+          return data.materialCode === searchTerm;
+        });
+        
+        console.log(`🎯 Documents with materialCode "${searchTerm}":`, matchingDocs.length);
+        
+        matchingDocs.forEach((doc, index) => {
+          const data = doc.data() as any;
+          console.log(`📋 Match ${index + 1}:`, {
+            id: doc.id,
+            materialCode: data.materialCode,
+            factory: data.factory,
+            poNumber: data.poNumber,
+            location: data.location
+          });
+        });
+        
+        // Check if any documents contain the search term
+        const containingDocs = allDocs.docs.filter(doc => {
+          const data = doc.data() as any;
+          return data.materialCode?.includes(searchTerm) || 
+                 data.poNumber?.includes(searchTerm) ||
+                 data.location?.includes(searchTerm);
+        });
+        
+        console.log(`🔍 Documents containing "${searchTerm}":`, containingDocs.length);
+        containingDocs.slice(0, 5).forEach((doc, index) => {
+          const data = doc.data() as any;
+          console.log(`📋 Contains ${index + 1}:`, {
+            id: doc.id,
+            materialCode: data.materialCode,
+            factory: data.factory,
+            poNumber: data.poNumber,
+            location: data.location
+          });
+        });
+        
+        // Test direct search methods
+        console.log(`🧪 Testing direct search methods...`);
+        
+        // Test exact match
+        const exactMatch = await this.firestore.collection('inventory-materials', ref => 
+          ref.where('materialCode', '==', searchTerm)
+        ).get().toPromise();
+        console.log(`🎯 Exact match query: ${exactMatch?.docs.length || 0} results`);
+        
+        // Test pattern match
+        const patternMatch = await this.firestore.collection('inventory-materials', ref => 
+          ref.where('materialCode', '>=', searchTerm)
+             .where('materialCode', '<=', searchTerm + '\uf8ff')
+        ).get().toPromise();
+        console.log(`🔍 Pattern match query: ${patternMatch?.docs.length || 0} results`);
+        
+        if (patternMatch && !patternMatch.empty) {
+          console.log(`📋 Pattern match results:`, patternMatch.docs.map(doc => {
+            const data = doc.data() as any;
+            return data.materialCode;
+          }));
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Debug error:', error);
+    }
   }
 
   // Filter by ASM1
@@ -2168,6 +2458,33 @@ export class MaterialsInventoryComponent implements OnInit, OnDestroy, AfterView
     
     message += '\nKiểm tra Console để xem chi tiết.';
     alert(message);
+  }
+
+  // Debug search functionality
+  debugSearch(): void {
+    console.log('🔍 Debug Search Functionality:');
+    console.log('Search term:', this.searchTerm);
+    console.log('Search subject:', this.searchSubject);
+    console.log('Inventory materials count:', this.inventoryMaterials.length);
+    console.log('Filtered inventory count:', this.filteredInventory.length);
+    console.log('Is loading:', this.isLoading);
+    console.log('Selected factory:', this.selectedFactory);
+    
+    // Test search subject
+    console.log('🧪 Testing search subject...');
+    this.searchSubject.next('TEST');
+    
+    // Show user-friendly message
+    alert(`🔍 Search Debug Info:\n\n` +
+          `Search term: "${this.searchTerm}"\n` +
+          `Search length: ${this.searchTerm.length} (min: 3)\n` +
+          `Debounce time: 1.5 seconds\n` +
+          `Inventory items: ${this.inventoryMaterials.length}\n` +
+          `Filtered results: ${this.filteredInventory.length}\n` +
+          `Is loading: ${this.isLoading}\n` +
+          `Factory: ${this.selectedFactory || 'All'}\n\n` +
+          `Note: Search requires minimum 3 characters\n` +
+          `Check console for detailed info.`);
   }
 
   // Handle location change to uppercase

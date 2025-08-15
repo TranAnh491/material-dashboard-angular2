@@ -73,13 +73,33 @@
                  placeholder="🔍 Tìm kiếm Mã hàng, PO, Vị trí, Factory..." 
                  [(ngModel)]="searchTerm" 
                  (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
                  class="search-input"
                  autocomplete="off">
           <i class="material-icons search-icon">search</i>
           
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
           <!-- Search results counter -->
           <div class="search-results-counter" *ngIf="searchTerm && filteredInventory.length > 0">
             {{ filteredInventory.length }} kết quả
+          </div>
+          
+          <!-- Search term too short warning -->
+          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+            <i class="material-icons">info</i>
+            Cần ít nhất 3 ký tự
+          </div>
+          
+          <!-- Loading indicator -->
+          <div class="search-loading" *ngIf="isLoading">
+            <i class="material-icons rotating">sync</i>
           </div>
         </div>
         
@@ -101,6 +121,18 @@
           <button class="custom-btn" (click)="debugPermissions()" title="Debug quyền xóa" style="background: #ff9800; color: white;">
             <i class="material-icons">bug_report</i>
             Debug Quyền
+          </button>
+          
+          <!-- Debug Firebase Data button -->
+          <button class="custom-btn" (click)="debugFirebaseData(searchTerm)" title="Debug Firebase Data" *ngIf="searchTerm" style="background: #9c27b0; color: white;">
+            <i class="material-icons">storage</i>
+            Debug Data
+          </button>
+          
+          <!-- Debug Search button -->
+          <button class="custom-btn" (click)="debugSearch()" title="Debug Search Functionality" style="background: #4caf50; color: white;">
+            <i class="material-icons">search</i>
+            Debug Search
           </button>
 
           <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
@@ -239,11 +271,69 @@
         </tbody>
       </table>
 
-      <!-- No Data Message -->
-      <div class="no-data" *ngIf="filteredInventory.length === 0 && !isLoading">
-        <i class="material-icons">inventory</i>
-        <h5>No Inventory Items</h5>
-        <p>No materials have been marked as received in Inbound Materials tab</p>
+      <!-- Empty State - Search First Approach -->
+      <div class="empty-state" *ngIf="!searchTerm && filteredInventory.length === 0 && !isLoading">
+        <div class="empty-state-content">
+          <i class="material-icons">search</i>
+          <h3>🔍 Tìm kiếm Inventory</h3>
+          <p>Nhập từ khóa để tìm kiếm materials trong inventory</p>
+          
+          <!-- Search Suggestions -->
+          <div class="search-suggestions">
+            <h5>💡 Gợi ý tìm kiếm:</h5>
+            <div class="suggestion-tags">
+              <span class="suggestion-tag" (click)="searchTerm = 'B018694'; onSearchInput({target: {value: 'B018694'}})">B018694</span>
+              <span class="suggestion-tag" (click)="searchTerm = 'PO123'; onSearchInput({target: {value: 'PO123'}})">PO123</span>
+              <span class="suggestion-tag" (click)="searchTerm = 'ASM1'; onSearchInput({target: {value: 'ASM1'}})">ASM1</span>
+              <span class="suggestion-tag" (click)="searchTerm = 'Location A'; onSearchInput({target: {value: 'Location A'}})">Location A</span>
+            </div>
+          </div>
+          
+          <!-- Quick Stats -->
+          <div class="quick-stats">
+            <div class="stat-item">
+              <i class="material-icons">factory</i>
+              <span>ASM1 & ASM2</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">inventory</i>
+              <span>Real-time Search</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">speed</i>
+              <span>Fast Loading</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No Search Results -->
+      <div class="no-results" *ngIf="searchTerm && filteredInventory.length === 0 && !isLoading">
+        <div class="no-results-content">
+          <i class="material-icons">search_off</i>
+          <h4>🔍 Không tìm thấy kết quả</h4>
+          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>"</p>
+          
+          <!-- Search Tips -->
+          <div class="search-tips">
+            <h6>💡 Mẹo tìm kiếm:</h6>
+            <ul>
+              <li>Kiểm tra chính tả</li>
+              <li>Thử tìm kiếm với ít ký tự hơn</li>
+              <li>Kiểm tra factory filter (ASM1/ASM2)</li>
+              <li>Thử tìm kiếm theo PO number</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-state" *ngIf="isLoading">
+        <div class="loading-content">
+          <i class="material-icons rotating">sync</i>
+          <h4>🔍 Đang tìm kiếm...</h4>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong inventory</p>
+        </div>
       </div>
     </div>
   </div>

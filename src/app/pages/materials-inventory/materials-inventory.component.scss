@@ -1205,7 +1205,7 @@ mat-checkbox {
   
   .search-results-counter {
     position: absolute;
-    right: -120px;
+    right: -140px;
     top: 50%;
     transform: translateY(-50%);
     background: #2196F3;
@@ -1216,6 +1216,68 @@ mat-checkbox {
     font-weight: 500;
     white-space: nowrap;
     z-index: 10;
+  }
+  
+  .clear-search-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    z-index: 5;
+    
+    &:hover {
+      background: #495057;
+    }
+    
+    .material-icons {
+      font-size: 14px;
+    }
+  }
+  
+  .search-loading {
+    position: absolute;
+    right: 35px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #007bff;
+    z-index: 5;
+    
+    .material-icons {
+      font-size: 16px;
+    }
+  }
+  
+  .search-warning {
+    position: absolute;
+    right: -180px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #ff9800;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    
+    .material-icons {
+      font-size: 12px;
+    }
   }
 }
 
@@ -1737,6 +1799,214 @@ mat-checkbox {
       max-width: 110px !important;
     }
   }
+}
+
+/* Search-First Approach Styling */
+.search-loading {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  
+  .material-icons {
+    color: #1976d2;
+    font-size: 16px;
+  }
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 40px 20px;
+  
+  .empty-state-content {
+    text-align: center;
+    max-width: 600px;
+    
+    .material-icons {
+      font-size: 64px;
+      color: #1976d2;
+      margin-bottom: 20px;
+    }
+    
+    h3 {
+      color: #333;
+      margin-bottom: 16px;
+      font-size: 24px;
+    }
+    
+    p {
+      color: #666;
+      font-size: 16px;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+    
+    .search-suggestions {
+      margin-bottom: 32px;
+      
+      h5 {
+        color: #555;
+        margin-bottom: 16px;
+        font-size: 16px;
+      }
+      
+      .suggestion-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        
+        .suggestion-tag {
+          background: #e3f2fd;
+          color: #1976d2;
+          padding: 8px 16px;
+          border-radius: 20px;
+          cursor: pointer;
+          transition: all 0.3s;
+          font-size: 14px;
+          border: 1px solid #bbdefb;
+          
+          &:hover {
+            background: #1976d2;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(25, 118, 210, 0.3);
+          }
+        }
+      }
+    }
+    
+    .quick-stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      flex-wrap: wrap;
+      
+      .stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        
+        .material-icons {
+          font-size: 24px;
+          color: #4caf50;
+          margin-bottom: 0;
+        }
+        
+        span {
+          color: #666;
+          font-size: 14px;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+}
+
+.no-results {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  padding: 40px 20px;
+  
+  .no-results-content {
+    text-align: center;
+    max-width: 500px;
+    
+    .material-icons {
+      font-size: 48px;
+      color: #f57c00;
+      margin-bottom: 16px;
+    }
+    
+    h4 {
+      color: #333;
+      margin-bottom: 12px;
+      font-size: 20px;
+    }
+    
+    p {
+      color: #666;
+      font-size: 16px;
+      margin-bottom: 24px;
+      
+      strong {
+        color: #1976d2;
+      }
+    }
+    
+    .search-tips {
+      text-align: left;
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #1976d2;
+      
+      h6 {
+        color: #333;
+        margin-bottom: 12px;
+        font-size: 16px;
+      }
+      
+      ul {
+        color: #666;
+        margin: 0;
+        padding-left: 20px;
+        
+        li {
+          margin-bottom: 8px;
+          line-height: 1.4;
+        }
+      }
+    }
+  }
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  padding: 40px 20px;
+  
+  .loading-content {
+    text-align: center;
+    
+    .material-icons {
+      font-size: 48px;
+      color: #1976d2;
+      margin-bottom: 16px;
+    }
+    
+    h4 {
+      color: #333;
+      margin-bottom: 12px;
+      font-size: 20px;
+    }
+    
+    p {
+      color: #666;
+      font-size: 16px;
+      
+      strong {
+        color: #1976d2;
+      }
+    }
+  }
+}
+
+.rotating {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 
