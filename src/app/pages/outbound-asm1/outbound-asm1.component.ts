@@ -183,15 +183,24 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
               return exportDate >= this.startDate && exportDate <= this.endDate;
             }
             return true;
-          })
-          .sort((a, b) => {
-            // Sort by export date first (oldest first)
-            const dateCompare = a.exportDate.getTime() - b.exportDate.getTime();
-            if (dateCompare !== 0) return dateCompare;
-            
-            // If same date, sort by creation time (export order)
-            return a.createdAt.getTime() - b.createdAt.getTime();
           });
+        
+        // Consolidate records by same date + material code + PO
+        this.materials = this.consolidateOutboundRecords(this.materials);
+        
+        // Sort by latest scan first (newest first)
+        this.materials.sort((a, b) => {
+          // Sort by latest updated time first (newest first)
+          const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
+          if (updatedCompare !== 0) return updatedCompare;
+          
+          // If same updated time, sort by export date (newest first)
+          const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
+          if (dateCompare !== 0) return dateCompare;
+          
+          // If same date, sort by creation time (newest first)
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
         
@@ -737,6 +746,61 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
+  // Consolidate outbound records by same date + material code + PO
+  private consolidateOutboundRecords(materials: OutboundMaterial[]): OutboundMaterial[] {
+    const consolidatedMap = new Map<string, OutboundMaterial>();
+    
+    materials.forEach(material => {
+      // Create key: date + materialCode + poNumber
+      const exportDate = material.exportDate.toISOString().split('T')[0];
+      const key = `${exportDate}_${material.materialCode}_${material.poNumber}`;
+      
+      if (consolidatedMap.has(key)) {
+        // Merge with existing record
+        const existing = consolidatedMap.get(key)!;
+        existing.exportQuantity += material.exportQuantity;
+        existing.quantity = Math.max(existing.quantity, material.quantity); // Keep max quantity
+        existing.updatedAt = new Date(Math.max(existing.updatedAt.getTime(), material.updatedAt.getTime()));
+        existing.createdAt = new Date(Math.min(existing.createdAt.getTime(), material.createdAt.getTime())); // Keep earliest creation
+        existing.exportedBy = material.exportedBy; // Use latest user
+        existing.scanMethod = material.scanMethod; // Use latest scan method
+        existing.notes = `Gộp từ ${existing.exportQuantity - material.exportQuantity + material.exportQuantity} lần quét - ${material.notes || 'Auto-scanned export'}`;
+      } else {
+        // New record
+        consolidatedMap.set(key, { ...material });
+      }
+    });
+    
+    console.log(`🔄 Consolidated ${materials.length} records into ${consolidatedMap.size} unique entries`);
+    return Array.from(consolidatedMap.values());
+  }
+
+  // Create new outbound record
+  private async createNewOutboundRecord(exportedBy: string): Promise<void> {
+    const outboundRecord: OutboundMaterial = {
+      factory: 'ASM1',
+      materialCode: this.lastScannedData.materialCode,
+      poNumber: this.lastScannedData.poNumber,
+      quantity: this.lastScannedData.quantity,
+      unit: 'KG', // Default unit
+      exportQuantity: this.exportQuantity,
+      exportDate: new Date(),
+      location: '',
+      exportedBy: exportedBy,
+      scanMethod: 'QR_SCANNER',
+      notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    console.log('📝 Creating new outbound record:', outboundRecord);
+    
+    // Add to outbound collection
+    console.log('🔥 Adding to Firebase collection: outbound-materials');
+    const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
+    console.log('✅ New outbound record created with ID:', docRef.id);
+  }
+
   // Auto-export method that runs immediately after scan
   private async autoExportScannedMaterial(): Promise<void> {
     if (!this.lastScannedData || !this.exportQuantity || this.exportQuantity <= 0) {
@@ -754,29 +818,45 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       const exportedBy = user ? (user.email || user.uid) : 'SCANNER_USER';
       console.log('👤 Current user:', exportedBy);
       
-      // Create outbound record
-      const outboundRecord: OutboundMaterial = {
-        factory: 'ASM1',
-        materialCode: this.lastScannedData.materialCode,
-        poNumber: this.lastScannedData.poNumber,
-        quantity: this.lastScannedData.quantity,
-        unit: 'KG', // Default unit
-        exportQuantity: this.exportQuantity,
-        exportDate: new Date(),
-        location: '',
-        exportedBy: exportedBy,
-        scanMethod: 'QR_SCANNER',
-        notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+      // Check if record with same date + material code + PO already exists
+      const today = new Date().toISOString().split('T')[0];
+      const existingRecordQuery = await this.firestore.collection('outbound-materials', ref => 
+        ref.where('factory', '==', 'ASM1')
+           .where('materialCode', '==', this.lastScannedData.materialCode)
+           .where('poNumber', '==', this.lastScannedData.poNumber)
+           .limit(1)
+      ).get().toPromise();
       
-      console.log('📝 Outbound record to create:', outboundRecord);
-      
-      // Add to outbound collection
-      console.log('🔥 Adding to Firebase collection: outbound-materials');
-      const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
-      console.log('✅ Outbound record created with ID:', docRef.id);
+      if (existingRecordQuery && !existingRecordQuery.empty) {
+        // Update existing record
+        const existingDoc = existingRecordQuery.docs[0];
+        const existingData = existingDoc.data() as any;
+        const existingDate = (existingData.exportDate?.toDate ? existingData.exportDate.toDate() : existingData.exportDate).toISOString().split('T')[0];
+        
+        if (existingDate === today) {
+          // Same day - update existing record
+          console.log('🔄 Updating existing record for same day:', existingDoc.id);
+          
+          const newExportQuantity = existingData.exportQuantity + this.exportQuantity;
+          const newNotes = `Gộp từ ${existingData.exportQuantity} + ${this.exportQuantity} = ${newExportQuantity} - ${existingData.notes || 'Auto-scanned export'}`;
+          
+          await existingDoc.ref.update({
+            exportQuantity: newExportQuantity,
+            updatedAt: new Date(),
+            exportedBy: exportedBy,
+            scanMethod: 'QR_SCANNER',
+            notes: newNotes
+          });
+          
+          console.log('✅ Existing record updated successfully');
+        } else {
+          // Different day - create new record
+          await this.createNewOutboundRecord(exportedBy);
+        }
+      } else {
+        // No existing record - create new one
+        await this.createNewOutboundRecord(exportedBy);
+      }
       
       // Update inventory stock
       console.log('📦 Starting inventory update...');
@@ -787,7 +867,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       const successData = {
         materialCode: this.lastScannedData.materialCode,
         exportQuantity: this.exportQuantity,
-        unit: outboundRecord.unit
+        unit: 'KG' // Default unit
       };
       
       // Reset scanner state
