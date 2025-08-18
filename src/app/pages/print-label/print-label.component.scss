@@ -806,3 +806,20 @@
     }
   }
 }
+
+// Styling for action buttons
+.complete-btn {
+  &:hover {
+    background-color: #e8f5e8 !important;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  }
+}
+
+.delete-btn {
+  &:hover {
+    background-color: #ffebee !important;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+  }
+}

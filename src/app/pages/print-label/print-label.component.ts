@@ -134,6 +134,9 @@ export class PrintLabelComponent implements OnInit {
     // Load user department information
     this.loadUserDepartment();
     
+    // Load trạng thái hiển thị từ localStorage
+    this.loadDisplayStateFromStorage();
+    
     // Check if mobile device
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
@@ -231,27 +234,33 @@ export class PrintLabelComponent implements OnInit {
 
         // Remove header row and convert to ScheduleItem format
         const dataRows = jsonData.slice(1); // Skip header row
-        const newScheduleData = dataRows.map((row: any, index: number) => ({
-          nam: row[0]?.toString() || '',
-          thang: row[1]?.toString() || '',
-          stt: row[2]?.toString() || '',
-          sizePhoi: row[3]?.toString() || '',
-          maTem: row[4]?.toString() || '',
-          soLuongYeuCau: row[5]?.toString() || '',
-          soLuongPhoi: row[6]?.toString() || '',
-          maHang: row[7]?.toString() || '',
-          lenhSanXuat: row[8]?.toString() || '',
-          khachHang: row[9]?.toString() || '',
-          ngayNhanKeHoach: this.formatDateValue(row[10]) || '',
-          yy: row[11]?.toString() || '',
-          ww: row[12]?.toString() || '',
-          lineNhan: row[13]?.toString() || '',
-          nguoiIn: row[14]?.toString() || '',
-          tinhTrang: row[15]?.toString() || '',
-          banVe: row[16]?.toString() || '',
-          ghiChu: row[17]?.toString() || ''
-          // Remove labelComparison: undefined - Firebase doesn't allow undefined values
-        }));
+        const newScheduleData = dataRows.map((row: any, index: number) => {
+          // Process quantity fields to ensure they are even integers
+          const soLuongYeuCau = this.processQuantityField(row[5], 'Số lượng yêu cầu');
+          const soLuongPhoi = this.processQuantityField(row[6], 'Số lượng phôi');
+          
+          return {
+            nam: row[0]?.toString() || '',
+            thang: row[1]?.toString() || '',
+            stt: row[2]?.toString() || '', // STT lấy theo file
+            sizePhoi: row[3]?.toString() || '',
+            maTem: row[4]?.toString() || '',
+            soLuongYeuCau: soLuongYeuCau,
+            soLuongPhoi: soLuongPhoi,
+            maHang: row[7]?.toString() || '',
+            lenhSanXuat: row[8]?.toString() || '',
+            khachHang: row[9]?.toString() || '',
+            ngayNhanKeHoach: this.formatDateValue(row[10]) || '',
+            yy: row[11]?.toString() || '',
+            ww: row[12]?.toString() || '',
+            lineNhan: row[13]?.toString() || '',
+            nguoiIn: row[14]?.toString() || '',
+            tinhTrang: row[15]?.toString() || '',
+            banVe: row[16]?.toString() || '',
+            ghiChu: row[17]?.toString() || ''
+            // Remove labelComparison: undefined - Firebase doesn't allow undefined values
+          };
+        });
         
         console.log('📋 Processed new schedule data:', newScheduleData.length, 'items');
         
@@ -284,6 +293,69 @@ export class PrintLabelComponent implements OnInit {
       alert('❌ Lỗi khi đọc file Excel');
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  // Process quantity field to ensure it's an even integer
+  private processQuantityField(value: any, fieldName: string): string {
+    if (value === null || value === undefined || value === '') {
+      return '0';
+    }
+    
+    // Handle numbers with thousand separators (e.g., "1.000", "1.500.000")
+    let cleanValue = value.toString();
+    
+    // Remove thousand separators (dots) but keep the number
+    if (cleanValue.includes('.')) {
+      // Check if it's a valid thousand separator format (e.g., "1.000", "1.500.000")
+      const parts = cleanValue.split('.');
+      const lastPart = parts[parts.length - 1];
+      
+      // If last part has 3 digits, it's likely thousand separator
+      if (lastPart.length === 3 && parts.every(part => /^\d{1,3}$/.test(part))) {
+        // Valid thousand separator format, remove dots
+        cleanValue = cleanValue.replace(/\./g, '');
+        console.log(`✅ ${fieldName} "${value}" được nhận diện là format hàng ngàn, chuyển thành: ${cleanValue}`);
+      } else {
+        // Not thousand separator, treat as decimal
+        cleanValue = cleanValue.replace(/\./g, '');
+        console.warn(`⚠️ ${fieldName} "${value}" có dấu chấm không phải format hàng ngàn, loại bỏ dấu chấm`);
+      }
+    }
+    
+    // Convert to number
+    let numValue = parseFloat(cleanValue.replace(/[^\d.-]/g, ''));
+    
+    // If not a valid number, return 0
+    if (isNaN(numValue)) {
+      console.warn(`⚠️ ${fieldName} không phải số hợp lệ: "${value}", gán giá trị 0`);
+      return '0';
+    }
+    
+    // Convert to integer (remove decimal places)
+    numValue = Math.floor(Math.abs(numValue));
+    
+    // Ensure it's an even number
+    if (numValue % 2 !== 0) {
+      numValue += 1; // Make it even by adding 1
+      console.warn(`⚠️ ${fieldName} "${value}" đã được làm tròn thành số chẵn: ${numValue}`);
+    }
+    
+    return numValue.toString();
+  }
+
+  // Format number for display with thousand separators
+  formatNumberForDisplay(value: string | number): string {
+    if (!value || value === '0') {
+      return '0';
+    }
+    
+    const numValue = parseInt(value.toString());
+    if (isNaN(numValue)) {
+      return value.toString();
+    }
+    
+    // Add thousand separators
+    return numValue.toLocaleString('vi-VN');
   }
 
   saveToFirebase(data: ScheduleItem[]): void {
@@ -350,7 +422,15 @@ export class PrintLabelComponent implements OnInit {
   }
 
   loadDataFromFirebase(): void {
+    // Check if data was just cleared
+    if ((window as any).dataCleared) {
+      console.log('🚫 Data was just cleared, skipping reload');
+      (window as any).dataCleared = false;
+      return;
+    }
+    
     console.log('🔥 Loading data from Firebase...');
+    console.log('🔍 Call stack:', new Error().stack);
     this.isLoading = true;
     
     // Check if mobile device
@@ -896,21 +976,65 @@ export class PrintLabelComponent implements OnInit {
     alert(`Đã tải về report Status hiện tại với ${currentData.length} records thành công!`);
   }
 
-  clearScheduleData(): void {
-    if (!this.hasPermission()) {
-      this.showLoginDialogForAction('clearData');
-      return;
-    }
+  // Test method for debugging
+  testClearData(): void {
+    console.log('🧪 testClearData() called');
+    alert('🧪 Test method được gọi thành công!');
+  }
 
+  clearScheduleData(): void {
+    console.log('🔍 clearScheduleData() called');
+    
     if (confirm('⚠️ Bạn có chắc chắn muốn xóa tất cả dữ liệu hiện tại? Hành động này không thể hoàn tác!')) {
-      console.log('🗑️ Clearing all schedule data...');
+      console.log('🗑️ User confirmed deletion, clearing all schedule data...');
+      
+      // Clear local data
       this.scheduleData = [];
       this.firebaseSaved = false;
       
-      // Save empty data to Firebase to clear it
-      this.saveToFirebase([]);
+      console.log('🗑️ Local data cleared, calling clearFirebaseData()...');
+      
+      // Clear data from Firebase by updating the latest document
+      this.clearFirebaseData();
       
       alert('🗑️ Đã xóa tất cả dữ liệu lịch trình in!');
+    } else {
+      console.log('❌ User cancelled deletion');
+    }
+  }
+
+  // Clear data from Firebase
+  private async clearFirebaseData(): Promise<void> {
+    try {
+      console.log('🔥 Clearing ALL data from Firebase...');
+      
+      // Delete ALL documents in the printSchedules collection
+      const querySnapshot = await this.firestore.collection('printSchedules').get().toPromise();
+      
+      if (querySnapshot && !querySnapshot.empty) {
+        console.log(`🗑️ Found ${querySnapshot.size} documents to delete`);
+        
+        // Delete all documents
+        const deletePromises = querySnapshot.docs.map((doc: any) => doc.ref.delete());
+        await Promise.all(deletePromises);
+        
+        console.log('✅ ALL Firebase data deleted successfully');
+      } else {
+        console.log('ℹ️ No documents found to delete');
+      }
+      
+      // Also clear any cached data
+      this.scheduleData = [];
+      this.firebaseSaved = false;
+      
+      // Set a flag to prevent auto-reload
+      (window as any).dataCleared = true;
+      
+      alert('🗑️ Đã xóa HOÀN TOÀN tất cả dữ liệu về mã tem khỏi Firebase!\n\nDữ liệu đã bị xóa vĩnh viễn và không thể khôi phục.');
+      
+    } catch (error) {
+      console.error('❌ Error deleting Firebase data:', error);
+      alert('❌ Lỗi khi xóa dữ liệu khỏi Firebase');
     }
   }
 
@@ -2964,10 +3088,98 @@ export class PrintLabelComponent implements OnInit {
       
       console.log(`✅ Marked item as completed:`, item);
       
-      // Refresh display to hide completed items if needed
-      if (!this.showCompletedItems) {
-        this.scheduleData = this.scheduleData.filter(item => !item.isCompleted);
+      // Không cần xóa item khỏi scheduleData
+      // getDisplayScheduleData() sẽ tự động ẩn các item đã hoàn thành
+      // khi showCompletedItems = false
+    }
+  }
+
+  // Delete item from schedule and Firebase
+  deleteItem(item: ScheduleItem): void {
+    console.log('🔍 deleteItem called with item:', item);
+    console.log('🔍 Current scheduleData length:', this.scheduleData.length);
+    
+    if (confirm(`⚠️ Xác nhận xóa item "${item.maTem || item.maHang || 'này'}"?\n\nHành động này không thể hoàn tác!`)) {
+      console.log(`🗑️ Deleting item:`, item);
+      
+      // Remove item from local data
+      const itemIndex = this.scheduleData.findIndex(i => 
+        i.stt === item.stt && 
+        i.maTem === item.maTem && 
+        i.maHang === item.maHang
+      );
+      
+      console.log(`🔍 Found item at index: ${itemIndex}`);
+      
+      if (itemIndex !== -1) {
+        this.scheduleData.splice(itemIndex, 1);
+        console.log(`✅ Item removed from local data`);
+        console.log(`📊 Current scheduleData length: ${this.scheduleData.length}`);
+        
+        // Update Firebase
+        this.updateFirebaseAfterItemDeletion();
+        
+        alert(`✅ Đã xóa item "${item.maTem || item.maHang || 'này'}" thành công!`);
+      } else {
+        console.error('❌ Item not found in local data');
+        console.error('❌ Item to delete:', item);
+        console.error('❌ Available items:', this.scheduleData.map(i => ({ stt: i.stt, maTem: i.maTem, maHang: i.maHang })));
+        alert('❌ Không tìm thấy item để xóa!');
       }
+    } else {
+      console.log('❌ User cancelled deletion');
+    }
+  }
+
+  // Update Firebase after item deletion
+  private async updateFirebaseAfterItemDeletion(): Promise<void> {
+    try {
+      console.log('🔥 Updating Firebase after item deletion...');
+      
+      // Clean data to remove undefined values before sending to Firebase
+      const cleanScheduleData = this.scheduleData.map(item => ({
+        nam: item.nam || '',
+        thang: item.thang || '',
+        stt: item.stt || '',
+        sizePhoi: item.sizePhoi || '',
+        maTem: item.maTem || '',
+        soLuongYeuCau: item.soLuongYeuCau || '',
+        soLuongPhoi: item.soLuongPhoi || '',
+        maHang: item.maHang || '',
+        lenhSanXuat: item.lenhSanXuat || '',
+        khachHang: item.khachHang || '',
+        ngayNhanKeHoach: item.ngayNhanKeHoach || '',
+        yy: item.yy || '',
+        ww: item.ww || '',
+        lineNhan: item.lineNhan || '',
+        nguoiIn: item.nguoiIn || '',
+        tinhTrang: item.tinhTrang || '',
+        banVe: item.banVe || '',
+        ghiChu: item.ghiChu || '',
+        isCompleted: item.isCompleted || false,
+        completedAt: item.completedAt || null,
+        completedBy: item.completedBy || '',
+        labelComparison: item.labelComparison || null
+      }));
+      
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(1)
+      ).get().toPromise();
+      
+      if (querySnapshot && !querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        await doc.ref.update({
+          data: cleanScheduleData,
+          lastUpdated: new Date(),
+          completedCount: this.getCompletedItemsCount(),
+          incompleteCount: this.getIncompleteItemsCount()
+        });
+        
+        console.log('✅ Firebase updated successfully after item deletion');
+      }
+    } catch (error) {
+      console.error('❌ Error updating Firebase after item deletion:', error);
+      alert('❌ Lỗi khi cập nhật Firebase sau khi xóa item');
     }
   }
 
@@ -3779,6 +3991,22 @@ export class PrintLabelComponent implements OnInit {
   toggleShowCompletedItems(): void {
     this.showCompletedItems = !this.showCompletedItems;
     console.log('🔄 Toggle show completed items:', this.showCompletedItems);
+    
+    // Lưu trạng thái vào localStorage để không bị mất khi F5
+    localStorage.setItem('printLabel_showCompletedItems', this.showCompletedItems.toString());
+  }
+
+  // Load trạng thái hiển thị từ localStorage
+  private loadDisplayStateFromStorage(): void {
+    const savedState = localStorage.getItem('printLabel_showCompletedItems');
+    if (savedState !== null) {
+      this.showCompletedItems = savedState === 'true';
+      console.log('📱 Loaded display state from localStorage:', this.showCompletedItems);
+    } else {
+      // Mặc định ẩn các mã đã hoàn thành
+      this.showCompletedItems = false;
+      console.log('📱 Using default display state: hide completed items');
+    }
   }
 
   // Add function to get display data based on filter
@@ -3817,35 +4045,29 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Add function to update Firebase after bulk update
-  updateFirebaseAfterBulkUpdate(): void {
-    console.log('🔥 Updating Firebase after bulk completion update...');
-    
-    const updatePromise = this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').limit(1)
-    ).get().toPromise().then((querySnapshot: any) => {
+  async updateFirebaseAfterBulkUpdate(): Promise<void> {
+    try {
+      console.log('🔥 Updating Firebase after bulk completion update...');
+      
+      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(1)
+      ).get().toPromise();
+      
       if (querySnapshot && !querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
-        return doc.ref.update({
+        await doc.ref.update({
           data: this.scheduleData,
           lastUpdated: new Date(),
           completedCount: this.getCompletedItemsCount(),
           incompleteCount: this.getIncompleteItemsCount()
         });
-      }
-    });
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Firebase update timeout after 10 seconds')), 10000)
-    );
-
-    Promise.race([updatePromise, timeoutPromise])
-      .then(() => {
+        
         console.log('✅ Firebase updated successfully after bulk completion');
-      })
-      .catch((error) => {
-        console.error('❌ Error updating Firebase after bulk completion:', error);
-        alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
-      });
+      }
+    } catch (error) {
+      console.error('❌ Error updating Firebase after bulk completion:', error);
+      alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
+    }
   }
 
   // Add function to show note save success message
@@ -4124,6 +4346,7 @@ export class PrintLabelComponent implements OnInit {
 
   // Check if user has permission for sensitive actions
   hasPermission(): boolean {
+    console.log('🔍 hasPermission() called, isAuthenticated:', this.isAuthenticated);
     return this.isAuthenticated;
   }
 

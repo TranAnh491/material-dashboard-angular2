@@ -40,6 +40,11 @@
               <i class="material-icons">cleaning_services</i>
               Xóa dữ liệu
             </a>
+            <!-- Test button -->
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="testClearData(); $event.preventDefault()">
+              <i class="material-icons">bug_report</i>
+              TEST Xóa dữ liệu
+            </a>
             <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="startFreshImport(); $event.preventDefault()">
               <i class="material-icons">refresh</i>
               Mới
@@ -118,10 +123,11 @@
                 <th>YY</th>
                 <th>WW</th>
                 <th>Line nhận</th>
-                <th>Người in</th>
-                <th>Tình trạng</th>
-                <th>Ghi chú</th>
+                <th style="min-width: 100px;">Người in</th>
+                <th style="min-width: 120px;">Tình trạng</th>
+                <th style="min-width: 150px;">Ghi chú</th>
                 <th>Hoàn thành</th>
+                <th>Xóa</th>
               </tr>
             </thead>
             <tbody>
@@ -146,8 +152,8 @@
                   <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000;">{{item.maTem || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.soLuongYeuCau || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.soLuongPhoi || ''}}</td>
+              <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
+              <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
               <td style="border: 1px solid #000000;">{{item.maHang || ''}}</td>
               <td style="border: 1px solid #000000;">{{item.lenhSanXuat || ''}}</td>
               <td style="border: 1px solid #000000;">{{item.khachHang || ''}}</td>
@@ -219,6 +225,17 @@
                     Đã hoàn thành
                     </span>
                 </td>
+              
+              <!-- Cột Xóa -->
+              <td style="text-align: center; border: 1px solid #000000;">
+                <button 
+                  (click)="deleteItem(item)"
+                  title="Xóa item này"
+                  class="delete-btn"
+                  style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px; border-radius: 4px; transition: all 0.3s; color: #f44336;">
+                  🗑️
+                </button>
+              </td>
               </tr>
               </ng-container>
             </tbody>
@@ -235,6 +252,51 @@
   
   <!-- Hidden file input for import -->
   <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
+
+  <!-- Login Dialog -->
+  <div *ngIf="showLoginDialog" class="login-dialog-overlay" (click)="cancelLogin()">
+    <div class="login-dialog" (click)="$event.stopPropagation()">
+      <div class="login-header">
+        <h3>🔐 Đăng nhập</h3>
+        <p>Vui lòng đăng nhập để thực hiện hành động này</p>
+      </div>
+      
+      <div class="login-form">
+        <div class="form-group">
+          <label for="employeeId">Mã nhân viên:</label>
+          <input 
+            type="text" 
+            id="employeeId"
+            [(ngModel)]="currentEmployeeId"
+            placeholder="Nhập mã nhân viên"
+            class="form-input">
+        </div>
+        
+        <div class="form-group">
+          <label for="password">Mật khẩu:</label>
+          <input 
+            type="password" 
+            id="password"
+            [(ngModel)]="currentPassword"
+            placeholder="Nhập mật khẩu"
+            class="form-input">
+        </div>
+        
+        <div *ngIf="loginError" class="error-message">
+          {{ loginError }}
+        </div>
+        
+        <div class="login-buttons">
+          <button type="button" (click)="authenticateUser()" class="login-btn">
+            Đăng nhập
+          </button>
+          <button type="button" (click)="cancelLogin()" class="cancel-btn">
+            Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
       <!-- A5 Calibration Template Preview -->
       <div *ngIf="showA5Preview" style="background: white; border: 2px solid #ff5722; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center;">
