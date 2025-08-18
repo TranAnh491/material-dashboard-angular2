@@ -772,7 +772,7 @@ export class PrintLabelComponent implements OnInit {
       ['Done', currentData.filter(item => item.tinhTrang === 'Done').length, `${((currentData.filter(item => item.tinhTrang === 'Done').length / currentData.length) * 100).toFixed(1)}%`],
       [],
       ['CHI TIẾT DỮ LIỆU:'],
-      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhãn', 'Người in', 'Tình trạng', 'Ghi chú', 'Hoàn thành'],
+      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhận', 'Người in', 'Tình trạng', 'Ghi chú', 'Hoàn thành'],
       ...currentData.map(item => [
         item.nam || '',
         item.thang || '',
@@ -823,7 +823,7 @@ export class PrintLabelComponent implements OnInit {
       { wch: 20 }, // Ngày nhận kế hoạch
       { wch: 4 },  // YY
       { wch: 4 },  // WW
-      { wch: 15 }, // Line nhãn
+      { wch: 15 }, // Line nhận
       { wch: 15 }, // Người in
       { wch: 15 }, // Tình trạng
       { wch: 20 }, // Ghi chú
