@@ -27,6 +27,10 @@
               <i class="material-icons">assessment</i>
               Export
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadStatusReport(); $event.preventDefault()">
+              <i class="material-icons">analytics</i>
+              Status hiện tại
+            </a>
             <div class="dropdown-divider"></div>
             <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="clearScheduleData(); $event.preventDefault()">
               <i class="material-icons">cleaning_services</i>
@@ -44,25 +48,24 @@
                  placeholder="TÌM KIẾM..." 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 class="custom-input search-input-uppercase">
+                 class="custom-input search-input-uppercase"
+                 style="width: 4cm;">
     </div>
     
-        <button class="custom-btn" (click)="refreshDisplay()">
+        <button class="custom-btn" (click)="refreshDisplay()" style="width: auto; min-width: 40px;">
           <i class="material-icons">refresh</i>
-          Refresh
         </button>
         
                 <button class="custom-btn" 
                 [class.active]="showCompletedItems"
                 (click)="toggleShowCompletedItems()">
           <i class="material-icons">visibility</i>
-          {{showCompletedItems ? 'Ẩn' : 'Hiện'}}
-          </button>
+        </button>
         
                 <button class="custom-btn" 
                 (click)="filterByMonth()">
           <i class="material-icons">filter_list</i>
-          Lọc theo tháng
+          Lọc
         </button>
         
         <!-- Status Indicators -->
@@ -79,6 +82,12 @@
           <div style="background: #fff8e1; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #f57f17; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ⏳ Pending: {{getPendingItemsCount()}}
           </div>
+          <div style="background: #e3f2fd; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #1976d2; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            📐 Chờ bản vẽ: {{getChoBanVeItemsCount()}}
+          </div>
+          <div style="background: #f3e5f5; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #7b1fa2; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            🎨 Chờ Template: {{getChoTemplateItemsCount()}}
+          </div>
         </div>
       </div>
       </div>
@@ -88,13 +97,13 @@
       <div *ngIf="scheduleData.length > 0">
 
                 <div class="table-container">
-          <table class="excel-table">
+          <table class="excel-table" style="border: 2px solid #000000;">
             <thead class="sticky-header">
               <tr>
                 <th>Năm</th>
                 <th>Tháng</th>
                 <th>STT</th>
-                <th>Size Phôi</th>
+                <th style="min-width: 120px;">Size Phôi</th>
                 <th>Mã tem</th>
                 <th>Số lượng yêu cầu</th>
                 <th>Số lượng phôi</th>
@@ -117,11 +126,11 @@
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f5f5f5' : 'white')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
-                  style="border-bottom: 1px solid #e0e0e0;">
-              <td>{{item.nam || ''}}</td>
-              <td>{{item.thang || ''}}</td>
-              <td>{{item.stt || ''}}</td>
-              <td>
+                  style="border-bottom: 2px solid #000000;">
+              <td style="border: 1px solid #000000;">{{item.nam || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.thang || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.stt || ''}}</td>
+              <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
@@ -132,17 +141,17 @@
                   </select>
                   <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
-              <td>{{item.maTem || ''}}</td>
-              <td>{{item.soLuongYeuCau || ''}}</td>
-              <td>{{item.soLuongPhoi || ''}}</td>
-              <td>{{item.maHang || ''}}</td>
-              <td>{{item.lenhSanXuat || ''}}</td>
-              <td>{{item.khachHang || ''}}</td>
-              <td>{{item.ngayNhanKeHoach || ''}}</td>
-              <td>{{item.yy || ''}}</td>
-              <td>{{item.ww || ''}}</td>
-              <td>{{item.lineNhan || ''}}</td>
-              <td>
+              <td style="border: 1px solid #000000;">{{item.maTem || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.soLuongYeuCau || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.soLuongPhoi || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.maHang || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.lenhSanXuat || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.khachHang || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.ngayNhanKeHoach || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.yy || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.ww || ''}}</td>
+              <td style="border: 1px solid #000000;">{{item.lineNhan || ''}}</td>
+              <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
@@ -159,11 +168,13 @@
                   </select>
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
-              <td>
+              <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Pending">Pending</option>
+                    <option value="Chờ bản vẽ">Chờ bản vẽ</option>
+                    <option value="Chờ Template">Chờ Template</option>
                     <option value="Chờ in">Chờ in</option>
                     <option value="Đã in">Đã in</option>
                     <option value="Pass">Pass</option>
@@ -171,7 +182,7 @@
                     <option value="Done">Done</option>
                   </select>
               </td>
-              <td>
+              <td style="border: 1px solid #000000;">
                   <input 
                     type="text" 
                     [(ngModel)]="item.ghiChu" 
@@ -189,7 +200,7 @@
                 </td>
               
               <!-- Cột Hoàn thành -->
-              <td style="text-align: center;">
+              <td style="text-align: center; border: 1px solid #000000;">
                     <button 
                   *ngIf="!item.isCompleted"
                       (click)="markAsCompleted(item)"

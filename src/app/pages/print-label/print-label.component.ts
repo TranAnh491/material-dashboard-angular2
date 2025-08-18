@@ -736,6 +736,166 @@ export class PrintLabelComponent implements OnInit {
     alert(`Exported ${monthlyData.length} records for ${monthName} successfully!`);
   }
 
+  // Download Status Report - Report dựa theo giao diện hiện tại
+  downloadStatusReport(): void {
+    if (this.scheduleData.length === 0) {
+      alert('Không có dữ liệu để tạo report!');
+      return;
+    }
+
+    console.log('Download Status Report clicked');
+    
+    // Lấy dữ liệu hiện tại (theo filter hiện tại)
+    const currentData = this.getDisplayScheduleData();
+    
+    if (currentData.length === 0) {
+      alert('Không có dữ liệu để hiển thị trong report!');
+      return;
+    }
+
+    // Tạo dữ liệu cho report
+    const reportData = [
+      ['BÁO CÁO STATUS HIỆN TẠI - PRINT LABEL'],
+      [`Ngày tạo: ${new Date().toLocaleDateString('vi-VN')}`],
+      [`Tổng số records: ${currentData.length}`],
+      [],
+      ['TỔNG KẾT THEO TÌNH TRẠNG:'],
+      ['Tình trạng', 'Số lượng', 'Tỷ lệ %'],
+      ['IQC', this.getIQCItemsCount(), `${((this.getIQCItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Pass', this.getPassItemsCount(), `${((this.getPassItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['NG', this.getNGItemsCount(), `${((this.getNGItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Pending', this.getPendingItemsCount(), `${((this.getPendingItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Chờ bản vẽ', this.getChoBanVeItemsCount(), `${((this.getChoBanVeItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Chờ Template', this.getChoTemplateItemsCount(), `${((this.getChoTemplateItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Chờ in', currentData.filter(item => item.tinhTrang === 'Chờ in').length, `${((currentData.filter(item => item.tinhTrang === 'Chờ in').length / currentData.length) * 100).toFixed(1)}%`],
+      ['Đã in', currentData.filter(item => item.tinhTrang === 'Đã in').length, `${((currentData.filter(item => item.tinhTrang === 'Đã in').length / currentData.length) * 100).toFixed(1)}%`],
+      ['Done', currentData.filter(item => item.tinhTrang === 'Done').length, `${((currentData.filter(item => item.tinhTrang === 'Done').length / currentData.length) * 100).toFixed(1)}%`],
+      [],
+      ['CHI TIẾT DỮ LIỆU:'],
+      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhãn', 'Người in', 'Tình trạng', 'Ghi chú', 'Hoàn thành'],
+      ...currentData.map(item => [
+        item.nam || '',
+        item.thang || '',
+        item.stt || '',
+        item.sizePhoi || '',
+        item.maTem || '',
+        item.soLuongYeuCau || '',
+        item.soLuongPhoi || '',
+        item.maHang || '',
+        item.lenhSanXuat || '',
+        item.khachHang || '',
+        item.ngayNhanKeHoach || '',
+        item.yy || '',
+        item.ww || '',
+        item.lineNhan || '',
+        item.nguoiIn || '',
+        item.tinhTrang || '',
+        item.ghiChu || '',
+        item.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'
+      ])
+    ];
+    
+    // Tạo Excel file
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(reportData);
+
+    // Merge cells cho tiêu đề
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 17 } }, // Tiêu đề chính
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 17 } }, // Ngày tạo
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 17 } }, // Tổng số records
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 17 } }, // Tổng kết theo tình trạng
+      { s: { r: 16, c: 0 }, e: { r: 16, c: 17 } } // Chi tiết dữ liệu
+    ];
+
+    // Set column widths
+    const columnWidths = [
+      { wch: 6 },  // Năm
+      { wch: 6 },  // Tháng
+      { wch: 5 },  // STT
+      { wch: 12 }, // Size Phôi
+      { wch: 12 }, // Mã tem
+      { wch: 18 }, // Số lượng yêu cầu
+      { wch: 18 }, // Số lượng phôi
+      { wch: 12 }, // Mã Hàng
+      { wch: 18 }, // Lệnh sản xuất
+      { wch: 15 }, // Khách hàng
+      { wch: 20 }, // Ngày nhận kế hoạch
+      { wch: 4 },  // YY
+      { wch: 4 },  // WW
+      { wch: 15 }, // Line nhãn
+      { wch: 15 }, // Người in
+      { wch: 15 }, // Tình trạng
+      { wch: 20 }, // Ghi chú
+      { wch: 18 }  // Hoàn thành
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Style cho tiêu đề
+    const titleCell = worksheet['A1'];
+    if (titleCell) {
+      titleCell.s = {
+        font: { bold: true, size: 16, color: { rgb: '000000' } },
+        alignment: { horizontal: 'center' },
+        fill: { fgColor: { rgb: 'FF9800' } }
+      };
+    }
+
+    // Style cho ngày tạo
+    const dateCell = worksheet['A2'];
+    if (dateCell) {
+      dateCell.s = {
+        font: { italic: true, size: 12, color: { rgb: '666666' } },
+        alignment: { horizontal: 'center' }
+      };
+    }
+
+    // Style cho tổng số records
+    const countCell = worksheet['A3'];
+    if (countCell) {
+      countCell.s = {
+        font: { bold: true, size: 12, color: { rgb: '1976D2' } },
+        alignment: { horizontal: 'center' }
+      };
+    }
+
+    // Style cho header tổng kết
+    const summaryHeader = worksheet['A5'];
+    if (summaryHeader) {
+      summaryHeader.s = {
+        font: { bold: true, size: 14, color: { rgb: '2E7D32' } },
+        fill: { fgColor: { rgb: 'E8F5E8' } }
+      };
+    }
+
+    // Style cho header chi tiết
+    const detailHeader = worksheet['A17'];
+    if (detailHeader) {
+      detailHeader.s = {
+        font: { bold: true, size: 12, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: 'FF9800' } },
+        alignment: { horizontal: 'center' }
+      };
+    }
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Status Report');
+
+    // Generate Excel file
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    // Download file
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Status_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    alert(`Đã tải về report Status hiện tại với ${currentData.length} records thành công!`);
+  }
+
   clearScheduleData(): void {
     if (!this.hasPermission()) {
       this.showLoginDialogForAction('clearData');
@@ -2829,7 +2989,20 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => !item.isCompleted).length;
   }
 
+  // Add function to get Pending items count
+  getPendingItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'Pending').length;
+  }
 
+  // Add function to get Chờ bản vẽ items count
+  getChoBanVeItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ bản vẽ').length;
+  }
+
+  // Add function to get Chờ Template items count
+  getChoTemplateItemsCount(): number {
+    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ Template').length;
+  }
 
   // Export photo report to Excel
   exportPhotoReport(): void {
@@ -3525,11 +3698,6 @@ export class PrintLabelComponent implements OnInit {
   // Add function to get NG items count
   getNGItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
-  }
-
-  // Add function to get Pending items count
-  getPendingItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Pending').length;
   }
 
   // Load user department information
