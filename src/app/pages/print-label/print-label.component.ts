@@ -436,8 +436,12 @@ export class PrintLabelComponent implements OnInit {
     // Check if mobile device
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
+    // Load only data from last 30 days by default
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
     this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc')
+      ref.where('importedAt', '>=', thirtyDaysAgo).orderBy('importedAt', 'desc')
     ).get().toPromise()
       .then((scheduleSnapshot: any) => {
         this.isLoading = false;
@@ -982,6 +986,86 @@ export class PrintLabelComponent implements OnInit {
     alert('🧪 Test method được gọi thành công!');
   }
 
+  // Popup xác nhận xóa
+  showDeleteDialog: boolean = false;
+  deleteDialogMessage: string = '';
+  deleteCode: string = '';
+  deletePassword: string = '';
+  currentDeleteAction: 'clearData' | 'deleteCompleted' | 'freshImport' = 'clearData';
+
+  // Hiển thị popup xác nhận xóa dữ liệu
+  showDeleteConfirmDialog(): void {
+    this.currentDeleteAction = 'clearData';
+    this.deleteDialogMessage = 'Bạn có chắc chắn muốn xóa TẤT CẢ dữ liệu? Hành động này không thể hoàn tác!';
+    this.deleteCode = '';
+    this.deletePassword = '';
+    this.showDeleteDialog = true;
+  }
+
+  // Hiển thị popup xác nhận xóa mã đã hoàn thành
+  showDeleteCompletedConfirmDialog(): void {
+    this.currentDeleteAction = 'deleteCompleted';
+    this.deleteDialogMessage = 'Bạn có chắc chắn muốn xóa TẤT CẢ các mã đã hoàn thành?';
+    this.deleteCode = '';
+    this.deletePassword = '';
+    this.showDeleteDialog = true;
+  }
+
+  // Đóng popup
+  closeDeleteDialog(): void {
+    this.showDeleteDialog = false;
+    this.deleteCode = '';
+    this.deletePassword = '';
+  }
+
+  // Xác nhận xóa sau khi nhập mã và password
+  async confirmDelete(): Promise<void> {
+    if (!this.deleteCode || !this.deletePassword) {
+      alert('Vui lòng nhập đầy đủ mã và mật khẩu!');
+      return;
+    }
+
+    try {
+      // Kiểm tra mã và password (giống như đăng nhập Settings)
+      const isValid = await this.validateDeleteCredentials(this.deleteCode, this.deletePassword);
+      
+      if (isValid) {
+        // Thực hiện xóa dựa trên action
+        if (this.currentDeleteAction === 'clearData') {
+          await this.clearScheduleData();
+        } else if (this.currentDeleteAction === 'deleteCompleted') {
+          await this.deleteAllCompletedItems();
+        } else if (this.currentDeleteAction === 'freshImport') {
+          await this.startFreshImport();
+        }
+        
+        this.closeDeleteDialog();
+        alert('✅ Xóa dữ liệu thành công!');
+      } else {
+        alert('❌ Mã hoặc mật khẩu không đúng!');
+      }
+    } catch (error) {
+      console.error('❌ Lỗi khi xác nhận xóa:', error);
+      alert('❌ Lỗi khi xác nhận xóa!');
+    }
+  }
+
+  // Kiểm tra mã và password (giống như đăng nhập Settings)
+  private async validateDeleteCredentials(code: string, password: string): Promise<boolean> {
+    try {
+      // Sử dụng logic tương tự như đăng nhập Settings
+      // Bạn cần implement logic này dựa trên hệ thống authentication hiện tại
+      const userDoc = await this.firestore.collection('users', (ref: any) => 
+        ref.where('code', '==', code).where('password', '==', password)
+      ).get().toPromise();
+      
+      return userDoc && !userDoc.empty;
+    } catch (error) {
+      console.error('❌ Lỗi khi kiểm tra credentials:', error);
+      return false;
+    }
+  }
+
   clearScheduleData(): void {
     console.log('🔍 clearScheduleData() called');
     
@@ -1102,13 +1186,26 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Add function to start fresh import (clear existing data first)
-  startFreshImport(): void {
-    if (confirm('🔄 Bạn muốn bắt đầu import mới? Dữ liệu cũ sẽ bị xóa và thay thế bằng dữ liệu mới.')) {
-      console.log('🔄 Starting fresh import...');
-      this.scheduleData = [];
-      this.firebaseSaved = false;
-      alert('🔄 Đã sẵn sàng cho import mới. Vui lòng chọn file Excel.');
-    }
+  async startFreshImport(): Promise<void> {
+    console.log('🔄 Starting fresh import...');
+    
+    // Clear local data
+    this.scheduleData = [];
+    this.firebaseSaved = false;
+    
+    // Clear Firebase data
+    await this.clearFirebaseData();
+    
+    alert('🔄 Đã xóa dữ liệu cũ và sẵn sàng cho import mới. Vui lòng chọn file Excel.');
+  }
+
+  // Hiển thị popup xác nhận xóa dữ liệu cũ và import lại
+  showFreshImportConfirmDialog(): void {
+    this.currentDeleteAction = 'freshImport';
+    this.deleteDialogMessage = 'Bạn có chắc chắn muốn xóa dữ liệu cũ và import lại? Dữ liệu cũ sẽ bị mất!';
+    this.deleteCode = '';
+    this.deletePassword = '';
+    this.showDeleteDialog = true;
   }
 
   getMonthName(monthKey: string): string {
@@ -3025,17 +3122,47 @@ export class PrintLabelComponent implements OnInit {
   // Search functionality
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value;
-    // Implement search logic here if needed
+    console.log('🔍 Search term changed:', this.searchTerm);
   }
 
-  // Refresh display
+  // Tìm kiếm trong các cột: Mã tem, Mã hàng, Tình trạng
+  getFilteredScheduleData(): ScheduleItem[] {
+    if (!this.searchTerm || this.searchTerm.trim() === '') {
+      return this.scheduleData.filter(item => !item.isCompleted);
+    }
+
+    const searchLower = this.searchTerm.toLowerCase().trim();
+    
+    return this.scheduleData.filter(item => {
+      // Chỉ hiển thị item chưa hoàn thành
+      if (item.isCompleted) return false;
+      
+      // Tìm kiếm trong các cột: Mã tem, Mã hàng, Tình trạng
+      const maTem = (item.maTem || '').toLowerCase();
+      const maHang = (item.maHang || '').toLowerCase();
+      const tinhTrang = (item.tinhTrang || '').toLowerCase();
+      
+      return maTem.includes(searchLower) || 
+             maHang.includes(searchLower) || 
+             tinhTrang.includes(searchLower);
+    });
+  }
+
+  // Refresh display - Load last 30 days data
   refreshDisplay(): void {
+    console.log('🔄 Refreshing display - Loading last 30 days data...');
+    this.loadDataFromFirebase();
+  }
+
+  // Reset to last 30 days data
+  resetToLast30Days(): void {
+    console.log('🔄 Resetting to last 30 days data...');
     this.loadDataFromFirebase();
   }
 
   // Filter by month
   filterByMonth(): void {
-    const selectedMonth = prompt('Nhập tháng (1-12) để lọc dữ liệu:');
+    const selectedMonth = prompt('Nhập tháng (1-12) để lọc dữ liệu:\n\nLưu ý: Mặc định chỉ hiển thị tem của 30 ngày gần nhất.\nChọn tháng để xem dữ liệu xa hơn.');
     if (selectedMonth && !isNaN(Number(selectedMonth))) {
       const month = parseInt(selectedMonth);
       if (month >= 1 && month <= 12) {
@@ -3218,10 +3345,7 @@ export class PrintLabelComponent implements OnInit {
       });
   }
 
-  // Get filtered data (hide completed items)
-  getFilteredScheduleData(): ScheduleItem[] {
-    return this.scheduleData.filter(item => !item.isCompleted);
-  }
+
 
   // Get completed items count
   getCompletedItemsCount(): number {
@@ -3246,6 +3370,11 @@ export class PrintLabelComponent implements OnInit {
   // Add function to get Chờ Template items count
   getChoTemplateItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'Chờ Template').length;
+  }
+
+  // Get count of items that are NOT done (completed)
+  getNotDoneItemsCount(): number {
+    return this.scheduleData.filter(item => !item.isCompleted).length;
   }
 
   // Export photo report to Excel
@@ -3992,6 +4121,12 @@ export class PrintLabelComponent implements OnInit {
     this.showCompletedItems = !this.showCompletedItems;
     console.log('🔄 Toggle show completed items:', this.showCompletedItems);
     
+    if (this.showCompletedItems) {
+      console.log('👁️ Showing completed items');
+    } else {
+      console.log('🙈 Hiding completed items');
+    }
+    
     // Lưu trạng thái vào localStorage để không bị mất khi F5
     localStorage.setItem('printLabel_showCompletedItems', this.showCompletedItems.toString());
   }
@@ -4005,16 +4140,16 @@ export class PrintLabelComponent implements OnInit {
     } else {
       // Mặc định ẩn các mã đã hoàn thành
       this.showCompletedItems = false;
-      console.log('📱 Using default display state: hide completed items');
+      console.log('📱 Using default display state: hide completed items (last 30 days only)');
     }
   }
 
   // Add function to get display data based on filter
   getDisplayScheduleData(): ScheduleItem[] {
     if (this.showCompletedItems) {
-      return this.scheduleData; // Show all items
+      return this.scheduleData; // Show all items including completed
     } else {
-      return this.getFilteredScheduleData(); // Hide completed items
+      return this.getFilteredScheduleData(); // Hide completed items by default
     }
   }
 

@@ -8,6 +8,33 @@
   z-index: 1;
   overflow: visible;
 
+  // Đảm bảo bảng hiển thị đến cuối trang
+  .excel-body {
+    min-height: calc(100vh - 300px); // Để bảng có đủ chiều cao
+  }
+
+  .table-container {
+    min-height: calc(100vh - 350px); // Đảm bảo bảng không bị cắt
+  }
+
+  // Excel header styling
+  .excel-header {
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 16px 24px; // Trả lại padding như cũ
+    flex-shrink: 0;
+    
+    h4 { // Trả lại h4 như cũ
+      margin: 0;
+      font-size: 18px; // Trả lại font-size như cũ
+      font-weight: 600;
+      color: #000000;
+      font-family: Arial, sans-serif;
+    }
+  }
+
+
+
   // Mobile Responsive Design
   @media (max-width: 768px) {
     padding: 10px;
@@ -821,5 +848,180 @@
     background-color: #ffebee !important;
     transform: scale(1.1);
     box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+  }
+}
+
+// Nút More - Giảm chiều rộng còn 80% hiện tại
+.print-label-container .dropdown button[data-toggle="dropdown"],
+.print-label-container .custom-btn.dropdown-toggle {
+  width: 80% !important; // Giảm chiều rộng còn 80%
+  max-width: 80% !important;
+}
+
+// IMPORTANT: Table header styling - Điều chỉnh theo yêu cầu cụ thể
+// Sử dụng !important để đảm bảo không bị ghi đè
+.print-label-container .excel-table thead th {
+  font-size: 11px !important; // Font-size 11px
+  padding: 8px 4px !important; // Padding 8px 4px
+  line-height: 1.1 !important; // Line-height 1.1
+  font-weight: 600 !important;
+  background: #ff9800 !important; // Màu cam
+  border: 1px solid #000000 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  height: 40px !important; // Height 40px
+  min-height: 40px !important; // Min-height 40px
+}
+
+// CSS MẠNH HƠN - Điều chỉnh theo yêu cầu cụ thể
+.print-label-container .excel-table thead tr th,
+.print-label-container .excel-table thead th,
+.excel-table thead th,
+table.excel-table thead th,
+thead th {
+  font-size: 11px !important; // Font-size 11px
+  padding: 8px 4px !important; // Padding 8px 4px
+  line-height: 1.1 !important; // Line-height 1.1
+  font-weight: 600 !important;
+  background: #ff9800 !important; // Màu cam
+  border: 1px solid #000000 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  height: 40px !important; // Height 40px
+  min-height: 40px !important; // Min-height 40px
+  overflow: visible !important;
+  white-space: normal !important;
+}
+
+// CSS cho tất cả các th elements trong bảng - Điều chỉnh theo yêu cầu cụ thể
+.print-label-container table thead th,
+.print-label-container .excel-table thead th,
+.print-label-container .table-container thead th {
+  font-size: 11px !important; // Font-size 11px
+  padding: 8px 4px !important; // Padding 8px 4px
+  line-height: 1.1 !important; // Line-height 1.1
+  height: 40px !important; // Height 40px
+  min-height: 40px !important; // Min-height 40px
+  background: #ff9800 !important; // Màu cam
+}
+
+// CSS cho popup xác nhận xóa
+.delete-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-confirm-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 0 20px;
+  border-bottom: 1px solid #dee2e6;
+  
+  h5 {
+    margin: 0;
+    color: #dc3545;
+    font-weight: 600;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6c757d;
+    
+    &:hover {
+      color: #000;
+    }
+  }
+}
+
+.dialog-body {
+  padding: 20px;
+  
+  .warning-text {
+    color: #dc3545;
+    font-weight: 500;
+    margin-bottom: 20px;
+  }
+  
+  .form-group {
+    margin-bottom: 15px;
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #495057;
+    }
+    
+    .form-control {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 14px;
+      
+      &:focus {
+        outline: none;
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+      }
+    }
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 20px 20px;
+  
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    
+    &.btn-secondary {
+      background: #6c757d;
+      color: white;
+      
+      &:hover {
+        background: #5a6268;
+      }
+    }
+    
+    &.btn-danger {
+      background: #dc3545;
+      color: white;
+      
+      &:hover:not(:disabled) {
+        background: #c82333;
+      }
+      
+      &:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+      }
+    }
   }
 }
