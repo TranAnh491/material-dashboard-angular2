@@ -3,6 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Observable, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
+import { FactoryAccessService } from './factory-access.service';
 
 export interface TabPermission {
   uid: string;
@@ -20,7 +21,8 @@ export class TabPermissionService {
   
   constructor(
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private factoryAccessService: FactoryAccessService
   ) { }
 
   // Lấy quyền truy cập tab của user hiện tại
@@ -33,56 +35,15 @@ export class TabPermissionService {
             .doc(user.uid)
             .valueChanges()
             .pipe(
-              map((data: any) => {
+              switchMap((data: any) => {
                 if (data && data.tabPermissions) {
-                  return data.tabPermissions;
+                  // Nếu user có permissions được cấu hình cụ thể, sử dụng permissions đó
+                  return of(data.tabPermissions);
                 } else {
-                  // Default: tất cả tab mẹ đều accessible (chỉ hiện tab mẹ)
-                  return {
-                    // Main tabs
-                    'dashboard': true,
-                    'work-order-status': true,
-                    'shipment': true,
-                    
-                    // Inbound tabs
-                    'inbound-asm1': true,
-                    'inbound-asm2': true,
-                    
-                    // Outbound tabs
-                    'outbound-asm1': true,
-                    'outbound-asm2': true,
-                    
-                    // Inventory tabs
-                    'materials-asm1': true,
-                    'materials-asm2': true,
-                
-                    
-                    // Other tabs
-                    'fg': true,
-                    'label': true,
-                    'index': true,
-                    'utilization': true,
-                    'find': true,
-                    'layout': true,
-                    'checklist': true,
-                    'equipment': true,
-                    'task': true,
-                    'settings': true,
-                    
-                    // Legacy permissions for backward compatibility
-                    'materials': true,
-                    
-                    // Operation-specific permissions
-                    'inventory-delete': true,
-                    'inventory-export': true,
-                    'inventory-edit-hsd': true,
-                    
-                    'inbound-add': true,
-                    'inbound-edit': true,
-                    'inbound-delete': true,
-                    'inbound-generate-qr': true,
-                    'inbound-export': true
-                  };
+                  // Nếu không có permissions được cấu hình, tạo permissions dựa trên factory access
+                  return this.factoryAccessService.getCurrentUserFactoryAccess().pipe(
+                    map(factoryAccess => this.generateDefaultPermissions(factoryAccess))
+                  );
                 }
               })
             );
@@ -93,12 +54,65 @@ export class TabPermissionService {
     );
   }
 
+  // Tạo default permissions dựa trên factory access
+  private generateDefaultPermissions(factoryAccess: any): { [key: string]: boolean } {
+    const basePermissions = {
+      // Main tabs - luôn cho phép
+      'dashboard': true,
+      'work-order-status': true,
+      'shipment': true,
+      
+      // Other tabs - luôn cho phép
+      'fg': true,
+      'label': true,
+      'index': true,
+      'utilization': true,
+      'find': true,
+      'layout': true,
+      'checklist': true,
+      'equipment': true,
+      'task': true,
+      'settings': true,
+      
+      // Legacy permissions for backward compatibility
+      'materials': true,
+      
+      // Operation-specific permissions - mặc định cho phép
+      'inventory-delete': true,
+      'inventory-export': true,
+      'inventory-edit-hsd': true,
+      'inbound-add': true,
+      'inbound-edit': true,
+      'inbound-delete': true,
+      'inbound-generate-qr': true,
+      'inbound-export': true
+    };
+
+    // Factory-specific permissions dựa trên quyền truy cập nhà máy
+    // Nếu user có quyền truy cập nhà máy, cho phép truy cập tabs tương ứng
+    const factoryPermissions = {
+      // Inbound tabs
+      'inbound-asm1': factoryAccess.canAccessASM1 !== false, // Cho phép nếu không bị chặn rõ ràng
+      'inbound-asm2': factoryAccess.canAccessASM2 !== false, // Cho phép nếu không bị chặn rõ ràng
+      
+      // Outbound tabs
+      'outbound-asm1': factoryAccess.canAccessASM1 !== false,
+      'outbound-asm2': factoryAccess.canAccessASM2 !== false,
+      
+      // Inventory tabs
+      'materials-asm1': factoryAccess.canAccessASM1 !== false,
+      'materials-asm2': factoryAccess.canAccessASM2 !== false
+    };
+
+    return { ...basePermissions, ...factoryPermissions };
+  }
+
   // Kiểm tra user có quyền truy cập tab không
   canAccessTab(tabKey: string): Observable<boolean> {
     return this.getCurrentUserTabPermissions().pipe(
       map(permissions => {
-        // Nếu không có permission cho tab này, mặc định cho phép truy cập
-        return permissions[tabKey] !== false;
+        // Chỉ cho phép truy cập nếu có permission rõ ràng là true
+        return permissions[tabKey] === true;
       })
     );
   }

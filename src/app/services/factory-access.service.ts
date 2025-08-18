@@ -35,7 +35,8 @@ export class FactoryAccessService {
                 if (data && data.factory && data.factory.trim() !== '') {
                   return this.calculateFactoryAccess(data.factory, data.role);
                 } else {
-                  // Nếu không có factory setting hoặc factory rỗng, cho phép truy cập tất cả nhà máy
+                  // Nếu không có factory setting, mặc định cho phép truy cập tất cả nhà máy
+                  // Điều này đảm bảo user hiện tại không bị mất quyền truy cập
                   return {
                     canAccessASM1: true,
                     canAccessASM2: true,

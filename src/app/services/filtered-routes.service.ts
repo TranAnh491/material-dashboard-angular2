@@ -66,23 +66,38 @@ export class FilteredRoutesService {
       return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
-    // Kiểm tra permission, mặc định là true nếu không có setting
-    return permissions[tabKey] !== false;
+    // Kiểm tra permission - cho phép nếu có permission rõ ràng là true
+    // hoặc nếu không có permission được cấu hình (mặc định cho phép)
+    return permissions[tabKey] === true || permissions[tabKey] === undefined;
   }
 
   // Map route path sang tab key
   private getTabKeyFromRoute(path: string): string | null {
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
-      '/work-order-status': 'work-order',
+      '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
+      
+      // ASM1 routes
+      '/inbound-asm1': 'inbound-asm1',
+      '/outbound-asm1': 'outbound-asm1',
+      '/materials-asm1': 'materials-asm1',
+      
+      // ASM2 routes
+      '/inbound-asm2': 'inbound-asm2',
+      '/outbound-asm2': 'outbound-asm2',
+      '/materials-asm2': 'materials-asm2',
+      
+      // Legacy routes
       '#materials': 'materials',
       '/inbound-materials': 'materials',
       '/outbound-materials': 'materials',
 
+      // Other routes
       '/fg': 'fg',
       '/label': 'label',
       '/bm': 'bm',
+      '/index': 'index',
       '/utilization': 'utilization',
       '/find': 'find',
       '/layout': 'layout',
