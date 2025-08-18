@@ -1528,8 +1528,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       return;
     }
     
-    // Clear input để chuẩn bị scan mới
-    this.batchEmployeeId = '';
+    // Không clear input khi focus - để máy scan có thể nhập dữ liệu
     console.log('🎯 Employee ID input focused, ready for scanning');
   }
 
@@ -1541,8 +1540,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       this.processEmployeeId();
     }
     
-    // Chặn tất cả các phím khác (không cho phép nhập thủ công)
-    if (event.key !== 'Enter' && event.key !== 'Tab' && event.key !== 'Escape') {
+    // KHÔNG chặn các phím khác - để máy scan có thể nhập dữ liệu
+    // Chỉ chặn một số phím đặc biệt để tránh xung đột
+    if (event.key === 'F1' || event.key === 'F2' || event.key === 'F3' || 
+        event.key === 'F4' || event.key === 'F5' || event.key === 'F6' || 
+        event.key === 'F7' || event.key === 'F8' || event.key === 'F9' || 
+        event.key === 'F10' || event.key === 'F11' || event.key === 'F12') {
       event.preventDefault();
       return;
     }
@@ -1553,25 +1556,33 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing scanned employee ID:', this.batchEmployeeId);
       
-      // Kiểm tra format mã nhân viên (ASP + 4 chữ số)
-      if (this.batchEmployeeId && this.batchEmployeeId.startsWith('ASP') && this.batchEmployeeId.length >= 7) {
-        // Extract chỉ 7 ký tự đầu tiên
+      // Đọc toàn bộ dữ liệu scan được, sau đó lấy 7 ký tự đầu tiên
+      if (this.batchEmployeeId && this.batchEmployeeId.length > 0) {
+        // Lấy 7 ký tự đầu tiên từ dữ liệu scan được
         const employeeId = this.batchEmployeeId.substring(0, 7);
-        this.batchEmployeeId = employeeId;
-        this.isEmployeeIdScanned = true;
         
-        console.log('✅ Employee ID scanned successfully:', employeeId);
-        
-        // Hiển thị thông báo thành công
-        alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
-        
-        // Focus vào input scanner để scan mã hàng
-        setTimeout(() => {
-          this.focusScannerInput();
-        }, 500);
+        // Kiểm tra xem có bắt đầu bằng ASP không
+        if (employeeId.startsWith('ASP')) {
+          this.batchEmployeeId = employeeId;
+          this.isEmployeeIdScanned = true;
+          
+          console.log('✅ Employee ID scanned successfully:', employeeId);
+          console.log('📝 Full scanned data was:', this.batchEmployeeId);
+          
+          // Hiển thị thông báo thành công
+          alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
+          
+          // Focus vào input scanner để scan mã hàng
+          setTimeout(() => {
+            this.focusScannerInput();
+          }, 500);
+          
+        } else {
+          throw new Error('Mã nhân viên phải bắt đầu bằng ASP');
+        }
         
       } else {
-        throw new Error('Mã nhân viên không đúng format (phải bắt đầu bằng ASP và có ít nhất 7 ký tự)');
+        throw new Error('Không có dữ liệu scan được');
       }
       
     } catch (error) {

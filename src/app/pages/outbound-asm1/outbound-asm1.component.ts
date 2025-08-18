@@ -1105,8 +1105,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
-    // Clear input để chuẩn bị scan mới
-    this.batchEmployeeId = '';
+    // Không clear input khi focus - để máy scan có thể nhập dữ liệu
     console.log('🎯 Employee ID input focused, ready for scanning');
   }
 
@@ -1115,11 +1114,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     // Chỉ xử lý khi nhấn Enter (máy scan thường gửi Enter)
     if (event.key === 'Enter') {
       event.preventDefault();
+      console.log('🔍 Enter key pressed, current batchEmployeeId:', this.batchEmployeeId);
       this.processEmployeeId();
     }
     
-    // Chặn tất cả các phím khác (không cho phép nhập thủ công)
-    if (event.key !== 'Enter' && event.key !== 'Tab' && event.key !== 'Escape') {
+    // KHÔNG chặn các phím khác - để máy scan có thể nhập dữ liệu
+    // Chỉ chặn một số phím đặc biệt để tránh xung đột
+    if (event.key === 'F1' || event.key === 'F2' || event.key === 'F3' || 
+        event.key === 'F4' || event.key === 'F5' || event.key === 'F6' || 
+        event.key === 'F7' || event.key === 'F8' || event.key === 'F9' || 
+        event.key === 'F10' || event.key === 'F11' || event.key === 'F12') {
       event.preventDefault();
       return;
     }
@@ -1129,15 +1133,25 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private processEmployeeId(): void {
     try {
       console.log('🔍 Processing scanned employee ID:', this.batchEmployeeId);
+      console.log('🔍 Type of batchEmployeeId:', typeof this.batchEmployeeId);
+      console.log('🔍 Length of batchEmployeeId:', this.batchEmployeeId ? this.batchEmployeeId.length : 'undefined');
       
-      // Kiểm tra format mã nhân viên (ASP + 4 chữ số)
-      if (this.batchEmployeeId && this.batchEmployeeId.startsWith('ASP') && this.batchEmployeeId.length >= 7) {
-        // Extract chỉ 7 ký tự đầu tiên
-        const employeeId = this.batchEmployeeId.substring(0, 7);
+      // Đọc toàn bộ dữ liệu scan được, sau đó lấy 7 ký tự đầu tiên
+      if (this.batchEmployeeId && this.batchEmployeeId.toString().length > 0) {
+        const scannedData = this.batchEmployeeId.toString();
+        console.log('🔍 Scanned data received:', scannedData);
+        
+        // Lấy 7 ký tự đầu tiên từ dữ liệu scan được
+        const employeeId = scannedData.substring(0, 7);
+        console.log('🔍 Extracted 7 characters:', employeeId);
+        
+        // Kiểm tra xem có bắt đầu bằng ASP không
+        if (employeeId.startsWith('ASP')) {
         this.batchEmployeeId = employeeId;
         this.isEmployeeIdScanned = true;
         
         console.log('✅ Employee ID scanned successfully:', employeeId);
+          console.log('📝 Full scanned data was:', scannedData);
         
         // Hiển thị thông báo thành công
         alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
@@ -1148,7 +1162,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         }, 500);
         
       } else {
-        throw new Error('Mã nhân viên không đúng format (phải bắt đầu bằng ASP và có ít nhất 7 ký tự)');
+          throw new Error(`Mã nhân viên phải bắt đầu bằng ASP, nhận được: ${employeeId}`);
+        }
+        
+      } else {
+        throw new Error(`Không có dữ liệu scan được. batchEmployeeId: "${this.batchEmployeeId}"`);
       }
       
     } catch (error) {
@@ -1177,13 +1195,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
-    // KHÔNG cho phép scan mã nhân viên qua scanner vật lý nữa
-    // Chỉ cho phép scan mã nhân viên qua camera
-    if (scannedData.startsWith('ASP') && !this.isEmployeeIdScanned) {
-      console.log('⚠️ Mã nhân viên phải được scan bằng camera, không thể scan qua scanner vật lý!');
-      alert('⚠️ Mã nhân viên phải được scan bằng camera!\n\nVui lòng nhấn nút "Scan" bên cạnh để scan mã nhân viên.');
-      return;
-    }
+    // Cho phép scan mã nhân viên qua máy scan USB (đã được xử lý ở onEmployeeIdKeydown)
+    // Không cần xử lý ở đây nữa vì đã có input riêng cho mã nhân viên
 
     // If both production order and employee ID are scanned, process as material
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {

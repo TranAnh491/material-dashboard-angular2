@@ -914,6 +914,38 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
+  // Xóa tất cả các mã đã hoàn thành
+  deleteAllCompletedItems(): void {
+    if (!this.hasPermission()) {
+      this.showLoginDialogForAction('deleteCompleted');
+      return;
+    }
+
+    // Đếm số lượng mã đã hoàn thành
+    const completedItems = this.scheduleData.filter(item => item.isCompleted);
+    
+    if (completedItems.length === 0) {
+      alert('ℹ️ Không có mã nào đã hoàn thành để xóa!');
+      return;
+    }
+
+    if (confirm(`⚠️ Bạn có chắc chắn muốn xóa tất cả ${completedItems.length} mã đã hoàn thành?\n\nHành động này không thể hoàn tác!`)) {
+      console.log(`🗑️ Deleting ${completedItems.length} completed items...`);
+      
+      // Lọc ra các mã chưa hoàn thành
+      const remainingItems = this.scheduleData.filter(item => !item.isCompleted);
+      
+      // Cập nhật dữ liệu
+      this.scheduleData = remainingItems;
+      this.firebaseSaved = false;
+      
+      // Lưu vào Firebase
+      this.saveToFirebase(remainingItems);
+      
+      alert(`✅ Đã xóa thành công ${completedItems.length} mã đã hoàn thành!\n\nCòn lại: ${remainingItems.length} mã chưa hoàn thành.`);
+    }
+  }
+
   // Add function to show import history
   showImportHistory(): void {
     console.log('📋 Showing import history...');
@@ -4078,6 +4110,9 @@ export class PrintLabelComponent implements OnInit {
         break;
       case 'clearFirebase':
         this.clearOldFirebaseData();
+        break;
+      case 'deleteCompleted':
+        this.deleteAllCompletedItems();
         break;
       case 'deleteItem':
         // This will be handled by the specific delete method

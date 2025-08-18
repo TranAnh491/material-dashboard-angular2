@@ -32,6 +32,10 @@
               Status hiện tại
             </a>
             <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-info" href="javascript:void(0)" (click)="deleteAllCompletedItems(); $event.preventDefault()">
+              <i class="material-icons">delete_sweep</i>
+              Xóa tất cả các mã đã hoàn thành
+            </a>
             <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="clearScheduleData(); $event.preventDefault()">
               <i class="material-icons">cleaning_services</i>
               Xóa dữ liệu
