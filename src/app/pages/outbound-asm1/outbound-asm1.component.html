@@ -40,19 +40,25 @@
             <div class="batch-field">
               <label>Mã nhân viên:</label>
               <div class="employee-scan-controls">
-                <span class="batch-value" [class.scanned]="isEmployeeIdScanned">
-                  {{ batchEmployeeId || 'Chưa scan (ASP...)' }}
-                </span>
+                <input type="text" 
+                       [(ngModel)]="batchEmployeeId"
+                       (keydown)="onEmployeeIdKeydown($event)"
+                       placeholder="Chưa scan (ASP...)"
+                       class="employee-input"
+                       [class.scanned]="isEmployeeIdScanned"
+                       [disabled]="isEmployeeIdScanned"
+                       readonly
+                       (focus)="onEmployeeInputFocus($event)">
                 <button class="scan-employee-btn" 
-                        (click)="scanEmployeeId()"
+                        (click)="focusEmployeeInput()"
                         [disabled]="isEmployeeIdScanned"
-                        title="Scan mã nhân viên bằng camera">
-                  <i class="material-icons">qr_code_scanner</i>
+                        title="Focus vào ô nhập mã nhân viên để scan">
+                  <i class="material-icons">input</i>
                   Scan
                 </button>
               </div>
               <div class="scan-note" *ngIf="!isEmployeeIdScanned">
-                <small>⚠️ Phải scan mã nhân viên bằng camera trước khi scan mã hàng</small>
+                <small>⚠️ Phải scan mã nhân viên bằng máy scan trước khi scan mã hàng</small>
               </div>
             </div>
             <div class="batch-field">

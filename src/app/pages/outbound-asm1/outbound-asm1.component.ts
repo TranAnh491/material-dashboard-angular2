@@ -1087,84 +1087,57 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('✅ Batch scanning mode deactivated');
   }
 
-  // Scan mã nhân viên bằng camera
-  async scanEmployeeId(): Promise<void> {
-    try {
-      console.log('📱 Starting employee ID scanner...');
-      this.isScannerLoading = true;
-      this.errorMessage = '';
-      
-      // Show modal first, then wait for DOM element
-      this.isCameraScanning = true;
-      this.cdr.detectChanges(); // Force change detection to render modal
-      
-      // Wait for DOM element to be available after modal renders
-      await this.waitForElement('qr-reader');
-      
-      // Initialize scanner
-      this.scanner = new Html5Qrcode("qr-reader");
-      
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      };
-      
-      await this.scanner.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          console.log('📱 Employee ID scanned:', decodedText);
-          this.onEmployeeIdScanSuccess(decodedText);
-        },
-        (errorMessage) => {
-          // Silent error handling for scanning attempts
-        }
-      );
-      
-      // Scanner started successfully
-      this.isScannerLoading = false;
-      console.log('✅ Employee ID scanner started successfully');
-      
-    } catch (error) {
-      console.error('❌ Error starting employee ID scanner:', error);
-      
-      let errorMsg = 'Không thể khởi động scanner';
-      if (error?.message) {
-        if (error.message.includes('not found')) {
-          errorMsg = 'Không tìm thấy camera hoặc element scanner';
-        } else if (error.message.includes('Permission')) {
-          errorMsg = 'Vui lòng cấp quyền truy cập camera';
-        } else {
-          errorMsg = error.message;
-        }
-      }
-      
-      this.errorMessage = 'Lỗi scanner: ' + errorMsg;
-      this.isCameraScanning = false;
-      this.isScannerLoading = false;
-      
-      // Show user alert
-      alert('❌ ' + errorMsg + '\n\nVui lòng:\n1. Cấp quyền camera\n2. Sử dụng HTTPS\n3. Thử lại');
+  // Scan mã nhân viên bằng máy scan
+  focusEmployeeInput(): void {
+    // Focus vào input để người dùng có thể scan bằng máy scan
+    const employeeInput = document.querySelector('.employee-input') as HTMLInputElement;
+    if (employeeInput) {
+      employeeInput.focus();
+      console.log('🎯 Focused on employee ID input for scanning');
     }
   }
 
-  // Xử lý khi scan thành công mã nhân viên
-  private onEmployeeIdScanSuccess(decodedText: string): void {
+  // Xử lý khi focus vào input mã nhân viên
+  onEmployeeInputFocus(event: FocusEvent): void {
+    // Nếu input đã được scan, không cho phép focus
+    if (this.isEmployeeIdScanned) {
+      event.preventDefault();
+      return;
+    }
+    
+    // Clear input để chuẩn bị scan mới
+    this.batchEmployeeId = '';
+    console.log('🎯 Employee ID input focused, ready for scanning');
+  }
+
+  // Xử lý khi nhập mã nhân viên bằng máy scan
+  onEmployeeIdKeydown(event: KeyboardEvent): void {
+    // Chỉ xử lý khi nhấn Enter (máy scan thường gửi Enter)
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.processEmployeeId();
+    }
+    
+    // Chặn tất cả các phím khác (không cho phép nhập thủ công)
+    if (event.key !== 'Enter' && event.key !== 'Tab' && event.key !== 'Escape') {
+      event.preventDefault();
+      return;
+    }
+  }
+
+  // Xử lý mã nhân viên đã scan
+  private processEmployeeId(): void {
     try {
-      console.log('🔍 Processing scanned employee ID:', decodedText);
+      console.log('🔍 Processing scanned employee ID:', this.batchEmployeeId);
       
       // Kiểm tra format mã nhân viên (ASP + 4 chữ số)
-      if (decodedText.startsWith('ASP') && decodedText.length >= 7) {
+      if (this.batchEmployeeId && this.batchEmployeeId.startsWith('ASP') && this.batchEmployeeId.length >= 7) {
         // Extract chỉ 7 ký tự đầu tiên
-        const employeeId = decodedText.substring(0, 7);
+        const employeeId = this.batchEmployeeId.substring(0, 7);
         this.batchEmployeeId = employeeId;
         this.isEmployeeIdScanned = true;
         
         console.log('✅ Employee ID scanned successfully:', employeeId);
-        
-        // Dừng scanner
-        this.stopScanning();
         
         // Hiển thị thông báo thành công
         alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
@@ -1182,8 +1155,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.error('❌ Error processing employee ID:', error);
       alert(`❌ Lỗi xử lý mã nhân viên: ${error.message}\n\nVui lòng quét lại mã nhân viên hợp lệ.`);
       
-      // Dừng scanner để người dùng thử lại
-      this.stopScanning();
+      // Reset và focus lại
+      this.batchEmployeeId = '';
+      this.isEmployeeIdScanned = false;
+      this.focusEmployeeInput();
     }
   }
 

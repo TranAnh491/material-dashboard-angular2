@@ -70,6 +70,7 @@ import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SettingsGuard } from '../../guards/settings.guard';
+import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-inventory.component';
 
 @NgModule({
   imports: [
@@ -134,7 +135,8 @@ import { SettingsGuard } from '../../guards/settings.guard';
     FinishedGoodsTestComponent,
     SettingsComponent,
     PrintLabelComponent,
-    IndexComponent
+    IndexComponent,
+    ManageInventoryComponent
   ],
   providers: [
     GoogleSheetService,

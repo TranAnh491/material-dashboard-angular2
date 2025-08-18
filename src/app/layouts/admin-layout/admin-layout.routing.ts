@@ -37,6 +37,7 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
 import { IndexComponent } from '../../pages/index/index.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
+import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-inventory.component';
 
 export const AdminLayoutRoutes: Routes = [
   { 
@@ -72,6 +73,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'shipment',             component: ShipmentComponent, canActivate: [AuthGuard] },
   { path: 'inbound-materials',    component: InboundMaterialsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-materials',   component: OutboundMaterialsComponent, canActivate: [AuthGuard] },
+  { path: 'manage-inventory',     component: ManageInventoryComponent, canActivate: [AuthGuard] },
 
 
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },

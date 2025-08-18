@@ -62,6 +62,9 @@ export class TabPermissionService {
       'work-order-status': true,
       'shipment': true,
       
+      // Manage Inventory tab - luôn cho phép
+      'manage-inventory': true,
+      
       // Other tabs - luôn cho phép
       'fg': true,
       'label': true,
@@ -160,4 +163,39 @@ export class TabPermissionService {
         })
       );
   }
+
+  // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
+  availableTabs = [
+    // Main tabs
+    { key: 'dashboard', name: 'Dashboard' },
+    { key: 'work-order-status', name: 'Work Order' },
+    { key: 'shipment', name: 'Shipment' },
+    
+    // Inbound tabs
+    { key: 'inbound-asm1', name: 'RM1 Inbound' },
+    { key: 'inbound-asm2', name: 'RM2 Inbound' },
+    
+    // Outbound tabs
+    { key: 'outbound-asm1', name: 'RM1 Outbound' },
+    { key: 'outbound-asm2', name: 'RM2 Outbound' },
+    
+    // Inventory tabs
+    { key: 'materials-asm1', name: 'RM1 Inventory' },
+    { key: 'materials-asm2', name: 'RM2 Inventory' },
+    
+    // Manage Inventory tab
+    { key: 'manage-inventory', name: 'Manage Inventory' },
+    
+    // Other tabs
+    { key: 'fg', name: 'Finished Goods' },
+    { key: 'label', name: 'Label' },
+    { key: 'index', name: 'Bonded Report' },
+    { key: 'utilization', name: 'Utilization' },
+    { key: 'find', name: 'Find' },
+    { key: 'layout', name: 'Layout' },
+    { key: 'checklist', name: 'Safety & Quality' },
+    { key: 'equipment', name: 'Training' },
+    { key: 'task', name: 'Flow Work' },
+    { key: 'settings', name: 'Settings' }
+  ];
 } 
