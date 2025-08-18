@@ -243,7 +243,8 @@
             <td class="qr-cell">
               <button class="qr-btn" 
                       (click)="printQRCode(material)"
-                      title="Tạo QR code">
+                      [disabled]="!isRollsOrBagsValid(material)"
+                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
                 <i class="material-icons">qr_code</i>
               </button>
             </td>

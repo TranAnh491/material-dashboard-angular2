@@ -1018,10 +1018,27 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return 'PCS';
   }
 
+  // Helper method to check if Rolls/Bags is valid for QR printing
+  isRollsOrBagsValid(material: InventoryMaterial): boolean {
+    const rollsOrBagsValue = material.rollsOrBags;
+    return rollsOrBagsValue && 
+           !(typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') &&
+           parseFloat(String(rollsOrBagsValue)) > 0;
+  }
+
   // Print QR Code for inventory items
   async printQRCode(material: InventoryMaterial): Promise<void> {
     try {
       console.log('🏷️ Generating QR code for ASM1 material:', material.materialCode);
+      
+      // Kiểm tra Rolls/Bags trước khi tạo QR
+      const rollsOrBagsValue = material.rollsOrBags;
+      if (!rollsOrBagsValue || 
+          (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') ||
+          parseFloat(String(rollsOrBagsValue)) <= 0) {
+        alert('❌ Không thể in tem QR!\n\nLý do: Thiếu Rolls/Bags\n\nVui lòng nhập số lượng Rolls/Bags trước khi in tem QR.');
+        return;
+      }
       
       // Calculate quantity per roll/bag
       const rollsOrBags = parseFloat(material.rollsOrBags) || 1;

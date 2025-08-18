@@ -83,8 +83,8 @@
 
 // Table header minimal
 .excel-table th {
-  background: #333333 !important; // Black header
-  color: #ffffff !important; // White text
+  background: #f5f5f5 !important; // Màu xám nhạt thay vì đen
+  color: #000000 !important; // Màu đen thay vì trắng
 }
 
 // Row styling minimal
@@ -301,35 +301,49 @@
   font-weight: 600 !important;
 }
 
-// Editable cells minimal
+// Editable cells minimal - Giao diện phẳng, không viền
 .editable-cell {
-  border: 1px solid #e0e0e0;
+  border: none;
   padding: 4px 8px;
-  border-radius: 4px;
-  background: white;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
   
   &:focus {
-    border-color: #333333; // Black focus
+    border: none;
     outline: none;
     box-shadow: none;
+    background: #f8f9fa;
+  }
+  
+  &:hover {
+    background: #f8f9fa;
   }
 }
 
-// Editable input for Rolls/Bags column - ensure it fits within column width
+// Editable input for Rolls/Bags column - Giao diện phẳng, không viền
 .editable-input {
   width: 100%;
   max-width: 100%; // Use full cell width
-  border: 1px solid #e0e0e0;
+  border: none;
   padding: 4px 6px;
-  border-radius: 4px;
-  background: white;
+  border-radius: 0;
+  background: transparent;
   font-size: 12px;
   text-align: center;
   
   &:focus {
-    border-color: #333333; // Black focus
+    border: none;
     outline: none;
     box-shadow: none;
+    background: #f8f9fa;
+  }
+  
+  &:hover {
+    background: #f8f9fa;
   }
   
   // Ensure input doesn't overflow column boundaries
@@ -805,9 +819,9 @@
     z-index: 10;
     
     th {
-      background: #000000 !important;
-      color: #ffffff !important;
-      border: 1px solid #333333;
+      background: #f5f5f5 !important; // Màu xám nhạt thay vì đen
+      color: #000000 !important; // Màu đen thay vì trắng
+      border: 1px solid #e0e0e0; // Viền xám nhạt thay vì đen
       padding: 12px 8px;
       text-align: center;
       font-weight: 600;
@@ -831,6 +845,51 @@
       padding: 8px;
       text-align: center;
     }
+  }
+  
+  // Thu nhỏ kích thước các cột cụ thể
+  th:nth-child(6), // Cột "Đã xuất"
+  td:nth-child(6) {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+  }
+  
+  th:nth-child(9), // Cột "Loại Hình"
+  td:nth-child(9) {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+  }
+  
+  th:nth-child(8), // Cột "Vị trí"
+  td:nth-child(8) {
+    width: 120px;
+    min-width: 120px;
+    max-width: 120px;
+  }
+}
+
+// Giao diện phẳng cho cột Vị trí RM2
+.location-input {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 4px 6px !important;
+  font-size: 12px !important;
+  text-align: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  
+  &:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #f8f9fa !important;
+  }
+  
+  &:hover {
+    background: #f8f9fa !important;
   }
 }
 

@@ -7,6 +7,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 
+
 export interface InboundMaterial {
   id?: string;
   factory?: string;
@@ -29,6 +30,11 @@ export interface InboundMaterial {
   hasQRGenerated?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  batchStartTime?: Date; // Thêm trường để lưu thời gian bắt đầu kiểm lô
+  batchEndTime?: Date;   // Thêm trường để lưu thời gian kết thúc kiểm lô
+  employeeIds?: string[]; // Thêm trường để lưu danh sách MSNV
+  batchStatus?: 'idle' | 'active' | 'completed'; // Trạng thái lô hàng
+  batchDuration?: number; // Thời gian hoàn thành (phút)
 }
 
 @Component({
@@ -55,6 +61,9 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   // Status filter
   statusFilter: string = 'pending'; // Default to Chưa
   
+  // Auto-hide received materials after next day (not 24 hours, but by calendar day)
+  hideReceivedAfterNextDay: boolean = true;
+  
   // Loading state
   isLoading: boolean = false;
   
@@ -63,6 +72,22 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   
   // Excel import
   selectedFile: File | null = null;
+  
+  // Batch processing properties
+  isBatchActive: boolean = false;
+  currentBatchNumber: string = '';
+  currentEmployeeIds: string[] = [];
+  batchStartTime: Date | null = null;
+  showBatchModal: boolean = false;
+  scannedEmployeeId: string = '';
+  isScannerInputActive: boolean = false;
+  scannerBuffer: string = '';
+  scannerTimeout: any = null;
+  scanStartTime: number = 0;
+  
+  // Camera Mode properties
+  isCameraModeActive: boolean = false;
+  cameraScanner: any = null; // HTML5 QR Scanner instance
   
   // User permissions
   canAddMaterials: boolean = false;
@@ -107,8 +132,9 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   
   private setupDateDefaults(): void {
     const today = new Date();
-    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    this.startDate = lastWeek.toISOString().split('T')[0];
+    // Cố định hiển thị 30 ngày, tính từ hôm nay quay ngược lại 30 ngày
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    this.startDate = thirtyDaysAgo.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
   }
   
@@ -151,7 +177,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             isCompleted: data.isCompleted || false,
             hasQRGenerated: data.hasQRGenerated || false,
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date(),
+            batchStartTime: data.batchStartTime?.toDate(), // Lấy thời gian bắt đầu
+            batchEndTime: data.batchEndTime?.toDate(),   // Lấy thời gian kết thúc
+            employeeIds: data.employeeIds, // Lấy danh sách MSNV
+            batchStatus: data.batchStatus || 'idle', // Lấy trạng thái lô hàng
+            batchDuration: data.batchDuration // Lấy thời gian hoàn thành
           } as InboundMaterial;
         });
         
@@ -186,6 +217,31 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   
   applyFilters(): void {
     let filtered = [...this.materials];
+    
+    // Auto-hide received materials after next day (not 24 hours, but by calendar day)
+    if (this.hideReceivedAfterNextDay) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Start of today
+      
+      filtered = filtered.filter(material => {
+        // If material is not received, always show it
+        if (!material.isReceived) {
+          return true;
+        }
+        
+        // If material is received, check if it was received before today
+        // We need to check when the material was marked as received
+        // Since we don't have a specific "receivedAt" field, we'll use updatedAt
+        // which gets updated when isReceived is set to true
+        const receivedTime = material.updatedAt || material.createdAt;
+        const receivedDate = new Date(receivedTime.getFullYear(), receivedTime.getMonth(), receivedTime.getDate()); // Start of received date
+        
+        // Hide if received before today (i.e., received yesterday or earlier)
+        return receivedDate >= today;
+      });
+      
+      console.log(`🕐 Auto-hide filter: ${this.materials.length - filtered.length} received materials from previous days will be hidden`);
+    }
     
     // Search filter
     if (this.searchTerm.trim()) {
@@ -241,6 +297,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
           filtered = filtered.filter(material => !material.isCompleted);
           break;
       }
+    }
+    
+    // Filter by current batch when processing
+    if (this.isBatchActive && this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
+      filtered = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
+      console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}`);
     }
     
     // Always maintain sort order by import date (oldest first) and creation time
@@ -333,6 +395,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       return;
     }
     
+    console.log(`🔄 Đang tick "đã nhận" cho ${material.materialCode} trong lô hàng ${material.batchNumber}`);
+    
     // Update local state first
     material.isReceived = isReceived;
     material.updatedAt = new Date();
@@ -350,6 +414,15 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       if (isReceived) {
         this.addToInventory(material);
       }
+      
+      // Check batch completion only if we're in an active batch and this material belongs to it
+      if (this.isBatchActive && material.batchNumber === this.currentBatchNumber) {
+        console.log(`🔍 Kiểm tra hoàn thành lô hàng ASM2 sau khi tick ${material.materialCode}`);
+        this.checkBatchCompletion();
+      } else {
+        console.log(`ℹ️ Không kiểm tra hoàn thành lô hàng ASM2 - không trong batch active hoặc material không thuộc lô hàng hiện tại`);
+      }
+      
     }).catch((error) => {
       console.error(`❌ Error saving received status to Firebase:`, error);
       // Revert local state if Firebase update failed
@@ -1249,7 +1322,440 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   }
   
   formatDate(date: Date | null): string { if (!date) return ''; return date.toLocaleDateString('vi-VN'); }
-  formatDateTime(date: Date | null): string { if (!date) return ''; return date.toLocaleString('vi-VN'); }
   getStatusBadgeClass(material: InboundMaterial): string { if (material.isCompleted) return 'badge-success'; if (material.isReceived && material.qualityCheck) return 'badge-info'; if (material.isReceived) return 'badge-warning'; return 'badge-secondary'; }
   getStatusText(material: InboundMaterial): string { if (material.isCompleted) return 'Hoàn thành'; if (material.isReceived && material.qualityCheck) return 'Đã kiểm tra'; if (material.isReceived) return 'Đã nhận'; return 'Chờ nhận'; }
+  
+  // Batch Processing Methods
+  openBatchModal(): void {
+    this.showBatchModal = true;
+    this.scannedEmployeeId = '';
+    this.currentEmployeeIds = [];
+    this.currentBatchNumber = '';
+  }
+  
+  closeBatchModal(): void {
+    this.showBatchModal = false;
+    this.scannedEmployeeId = '';
+    this.currentEmployeeIds = [];
+    this.currentBatchNumber = '';
+  }
+  
+  canStartBatch(): boolean {
+    return this.currentEmployeeIds.length > 0 && this.currentBatchNumber.trim() !== '';
+  }
+  
+  startBatchProcessing(): void {
+    if (!this.canStartBatch()) {
+      alert('❌ Vui lòng nhập đầy đủ thông tin: MSNV và mã lô hàng!');
+      return;
+    }
+    
+    this.isBatchActive = true;
+    this.batchStartTime = new Date();
+    this.closeBatchModal();
+    
+    console.log('🚀 Bắt đầu kiểm lô hàng ASM2:', {
+      batchNumber: this.currentBatchNumber,
+      employeeIds: this.currentEmployeeIds,
+      startTime: this.batchStartTime
+    });
+    
+    alert(`✅ Đã bắt đầu kiểm lô hàng: ${this.currentBatchNumber}\nMSNV: ${this.currentEmployeeIds.join(', ')}`);
+  }
+  
+  stopBatchProcessing(): void {
+    this.isBatchActive = false;
+    this.batchStartTime = null;
+    
+    console.log('⏹️ Dừng kiểm lô hàng ASM2');
+    alert('⏹️ Đã dừng kiểm lô hàng');
+  }
+  
+  getBatchDuration(): number {
+    if (!this.batchStartTime) return 0;
+    const now = new Date();
+    return Math.round((now.getTime() - this.batchStartTime.getTime()) / (1000 * 60));
+  }
+  
+  // Scanner Mode Methods
+  startScannerMode(): void {
+    this.isScannerInputActive = true;
+    this.scannerBuffer = '';
+    console.log('🔍 Bật chế độ máy scan');
+    
+    // Focus vào input field
+    setTimeout(() => {
+      this.focusScannerInput();
+    }, 100);
+  }
+  
+  stopScannerMode(): void {
+    this.isScannerInputActive = false;
+    this.scannerBuffer = '';
+    console.log('🔍 Tắt chế độ máy scan');
+  }
+  
+  onScannerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.processScannedData(this.scannerBuffer);
+      this.scannerBuffer = '';
+    }
+  }
+  
+  onScannerInputBlur(): void {
+    // Auto-process after a short delay if there's data
+    if (this.scannerBuffer.trim()) {
+      setTimeout(() => {
+        this.processScannedData(this.scannerBuffer);
+        this.scannerBuffer = '';
+      }, 500);
+    }
+  }
+  
+  private processScannedData(scannedData: string): void {
+    console.log('📱 Dữ liệu scan được:', scannedData);
+    
+    // Xử lý dữ liệu scan (có thể là mã hàng, lô hàng, hoặc MSNV)
+    // TODO: Implement logic based on scanned data format
+    alert(`📱 Đã scan: ${scannedData}\n\nChức năng này sẽ được implement sau.`);
+  }
+  
+  private focusScannerInput(): void {
+    // Focus vào input field
+    const input = document.querySelector('.scanner-input-field') as HTMLInputElement;
+    if (input) {
+      input.focus();
+    }
+  }
+  
+  // Camera Mode Methods
+  startCameraMode(): void {
+    this.isCameraModeActive = true;
+    console.log('📷 Bật chế độ camera');
+    
+    // Initialize camera scanner
+    setTimeout(() => {
+      this.initializeCameraScanner();
+    }, 100);
+  }
+  
+  stopCameraMode(): void {
+    this.isCameraModeActive = false;
+    if (this.cameraScanner) {
+      this.cameraScanner.stop();
+      this.cameraScanner = null;
+    }
+    console.log('📷 Tắt chế độ camera');
+  }
+  
+  private async initializeCameraScanner(): Promise<void> {
+    try {
+      // TODO: Implement HTML5 QR Scanner
+      console.log('📷 Khởi tạo camera scanner...');
+      alert('📷 Chức năng camera scanner sẽ được implement sau.');
+    } catch (error) {
+      console.error('❌ Lỗi khởi tạo camera scanner:', error);
+      alert('❌ Lỗi khởi tạo camera scanner: ' + error.message);
+    }
+  }
+  
+  private onCameraScanSuccess(decodedText: string): void {
+    console.log('📷 Camera scan thành công:', decodedText);
+    this.processScannedData(decodedText);
+  }
+  
+  // Employee Management Methods
+  activatePhysicalScanner(): void {
+    this.isScannerInputActive = !this.isScannerInputActive;
+    if (this.isScannerInputActive) {
+      this.scannedEmployeeId = '';
+      console.log('🔍 Kích hoạt máy scanner');
+    } else {
+      console.log('🔍 Tắt máy scanner');
+    }
+  }
+  
+  onEmployeeScannerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.scannedEmployeeId.trim()) {
+      this.addEmployee(this.scannedEmployeeId.trim());
+      this.scannedEmployeeId = '';
+    }
+  }
+  
+  addEmployee(employeeId: string): void {
+    if (this.currentEmployeeIds.length >= 5) {
+      alert('❌ Tối đa chỉ được 5 nhân viên!');
+      return;
+    }
+    
+    if (this.currentEmployeeIds.includes(employeeId)) {
+      alert('⚠️ Nhân viên này đã được thêm!');
+      return;
+    }
+    
+    this.currentEmployeeIds.push(employeeId);
+    console.log('👤 Thêm nhân viên:', employeeId);
+    alert(`✅ Đã thêm nhân viên: ${employeeId}`);
+  }
+  
+  removeEmployee(employeeId: string): void {
+    const index = this.currentEmployeeIds.indexOf(employeeId);
+    if (index > -1) {
+      this.currentEmployeeIds.splice(index, 1);
+      console.log('👤 Xóa nhân viên:', employeeId);
+      alert(`✅ Đã xóa nhân viên: ${employeeId}`);
+    }
+  }
+  
+
+  
+  // Download Inbound Report - Lịch sử kiểm lô hàng
+  downloadInboundReport(): void {
+    try {
+      console.log('📊 Tạo report lịch sử kiểm lô hàng ASM2...');
+      
+      // Tạo dữ liệu report
+      const reportData = this.generateInboundReportData();
+      
+      if (reportData.length === 0) {
+        alert('Không có dữ liệu để tạo report!');
+        return;
+      }
+      
+      // Tạo worksheet
+      const worksheet = XLSX.utils.aoa_to_sheet(reportData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 20 },  // NGÀY KIỂM
+        { wch: 18 },  // LÔ HÀNG/DNNK
+        { wch: 15 },  // MÃ HÀNG
+        { wch: 15 },  // MSNV
+        { wch: 20 },  // THỜI GIAN BẮT ĐẦU
+        { wch: 20 },  // THỜI GIAN KẾT THÚC
+        { wch: 15 },  // THỜI GIAN HOÀN THÀNH (phút)
+        { wch: 15 },  // TRẠNG THÁI
+        { wch: 20 },  // NHÀ CUNG CẤP
+        { wch: 15 },  // SỐ LƯỢNG
+        { wch: 20 }   // GHI CHÚ
+      ];
+      worksheet['!cols'] = colWidths;
+      
+      // Tạo workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM2_Inbound_Report');
+      
+      // Tạo tên file với timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const fileName = `ASM2_Inbound_Report_${timestamp}.xlsx`;
+      
+      // Download file
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log('✅ Report đã được tải xuống:', fileName);
+      alert(`Report đã được tải xuống: ${fileName}`);
+      
+    } catch (error: any) {
+      console.error('❌ Lỗi tạo report:', error);
+      this.errorMessage = 'Lỗi tạo report: ' + error.message;
+      alert('Lỗi tạo report: ' + error.message);
+    }
+  }
+
+
+  
+  // Tạo dữ liệu cho report
+  private generateInboundReportData(): (string | number)[][] {
+    // Header của report
+    const headers = [
+      'NGÀY KIỂM',
+      'LÔ HÀNG/DNNK', 
+      'MÃ HÀNG',
+      'MSNV',
+      'THỜI GIAN BẮT ĐẦU',
+      'THỜI GIAN KẾT THÚC',
+      'THỜI GIAN HOÀN THÀNH (phút)',
+      'TRẠNG THÁI',
+      'NHÀ CUNG CẤP',
+      'SỐ LƯỢNG',
+      'GHI CHÚ'
+    ];
+    
+    const reportData: (string | number)[][] = [headers];
+    
+    // Debug: Log số lượng materials
+    console.log('🔍 Debug generateInboundReportData ASM2:');
+    console.log('Tổng materials:', this.materials.length);
+    console.log('Filtered materials:', this.filteredMaterials.length);
+    
+    // Lọc materials có thông tin batch
+    const materialsWithBatch = this.materials.filter(material => 
+      material.batchNumber && 
+      material.batchNumber.trim() !== '' &&
+      (material.batchStartTime || material.batchEndTime || material.employeeIds)
+    );
+    
+    console.log('Materials có batch info:', materialsWithBatch.length);
+    
+    // Nếu không có materials với batch info, tạo report từ tất cả materials
+    if (materialsWithBatch.length === 0) {
+      console.log('⚠️ Không có materials với batch info, tạo report từ tất cả materials');
+      
+      this.materials.forEach(material => {
+        const row = [
+          this.formatDate(material.importDate),
+          material.batchNumber || 'N/A',
+          material.materialCode,
+          material.employeeIds ? material.employeeIds.join(', ') : 'N/A',
+          material.batchStartTime ? this.formatDateTime(material.batchStartTime) : 'N/A',
+          material.batchEndTime ? this.formatDateTime(material.batchEndTime) : 'N/A',
+          (material.batchStartTime && material.batchEndTime) ? 
+            Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60)) + ' phút' : 'N/A',
+          this.getStatusText(material),
+          material.supplier || 'N/A',
+          material.quantity || 0,
+          material.remarks || 'N/A'
+        ];
+        
+        reportData.push(row);
+      });
+    } else {
+      // Nhóm materials theo batch
+      const batchGroups = this.groupMaterialsByBatch(materialsWithBatch);
+      
+      // Tạo dữ liệu cho từng batch
+      batchGroups.forEach(batchGroup => {
+        const batchNumber = batchGroup.batchNumber;
+        const batchMaterials = batchGroup.materials;
+        const batchStartTime = batchGroup.batchStartTime;
+        const batchEndTime = batchGroup.batchEndTime;
+        const employeeIds = batchGroup.employeeIds;
+        
+        // Tính thời gian hoàn thành
+        let duration = 0;
+        if (batchStartTime && batchEndTime) {
+          duration = Math.round((batchEndTime.getTime() - batchStartTime.getTime()) / (1000 * 60));
+        }
+        
+        // Tạo dòng cho từng material trong batch
+        batchMaterials.forEach(material => {
+          const row = [
+            this.formatDate(material.importDate),
+            batchNumber,
+            material.materialCode,
+            employeeIds ? employeeIds.join(', ') : 'N/A',
+            batchStartTime ? this.formatDateTime(batchStartTime) : 'N/A',
+            batchEndTime ? this.formatDateTime(batchEndTime) : 'N/A',
+            duration > 0 ? duration : 'N/A',
+            this.getStatusText(material),
+            material.supplier || 'N/A',
+            material.quantity || 0,
+            material.remarks || 'N/A'
+          ];
+          
+          reportData.push(row);
+        });
+      });
+    }
+    
+    console.log('📊 Dữ liệu report được tạo:', reportData.length - 1, 'dòng');
+    return reportData;
+  }
+  
+  // Nhóm materials theo batch
+  private groupMaterialsByBatch(materials: InboundMaterial[]): any[] {
+    const batchGroups: { [key: string]: any } = {};
+    
+    materials.forEach(material => {
+      const batchKey = material.batchNumber;
+      
+      if (!batchGroups[batchKey]) {
+        batchGroups[batchKey] = {
+          batchNumber: batchKey,
+          materials: [],
+          batchStartTime: material.batchStartTime,
+          batchEndTime: material.batchEndTime,
+          employeeIds: material.employeeIds
+        };
+      }
+      
+      batchGroups[batchKey].materials.push(material);
+      
+      // Cập nhật thời gian batch nếu có
+      if (material.batchStartTime && (!batchGroups[batchKey].batchStartTime || 
+          material.batchStartTime < batchGroups[batchKey].batchStartTime)) {
+        batchGroups[batchKey].batchStartTime = material.batchStartTime;
+      }
+      
+      if (material.batchEndTime && (!batchGroups[batchKey].batchEndTime || 
+          material.batchEndTime > batchGroups[batchKey].batchEndTime)) {
+        batchGroups[batchKey].batchEndTime = material.batchEndTime;
+      }
+      
+      // Cập nhật employee IDs
+      if (material.employeeIds && material.employeeIds.length > 0) {
+        if (!batchGroups[batchKey].employeeIds) {
+          batchGroups[batchKey].employeeIds = [];
+        }
+        material.employeeIds.forEach(id => {
+          if (!batchGroups[batchKey].employeeIds.includes(id)) {
+            batchGroups[batchKey].employeeIds.push(id);
+          }
+        });
+      }
+    });
+    
+    return Object.values(batchGroups);
+  }
+  
+  // Format date time for report
+  private formatDateTime(date: Date): string {
+    return date.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+  
+  // Check if batch is completed (all materials received)
+  private checkBatchCompletion(): void {
+    // Lấy tất cả materials của lô hàng hiện tại
+    const batchMaterials = this.materials.filter(m => m.batchNumber === this.currentBatchNumber);
+    
+    console.log(`🔍 Kiểm tra hoàn thành lô hàng ASM2 ${this.currentBatchNumber}:`);
+    console.log(`📦 Tổng materials trong lô: ${batchMaterials.length}`);
+    console.log(`✅ Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+    
+    // Chỉ hoàn thành khi TẤT CẢ materials trong lô hàng đã được tick "đã nhận"
+    const allReceived = batchMaterials.every(m => m.isReceived);
+    
+    if (allReceived && batchMaterials.length > 0) {
+      // Complete the batch
+      const endTime = new Date();
+      const duration = Math.round((endTime.getTime() - this.batchStartTime!.getTime()) / (1000 * 60));
+      
+      batchMaterials.forEach(material => {
+        material.batchStatus = 'completed';
+        material.batchEndTime = endTime;
+        material.batchDuration = duration;
+        
+        // Update in Firebase
+        this.firestore.collection('inbound-materials').doc(material.id).update({
+          batchStatus: 'completed',
+          batchEndTime: endTime,
+          batchDuration: duration
+        });
+      });
+      
+      console.log(`🎉 Hoàn thành lô hàng ASM2 ${this.currentBatchNumber} trong ${duration} phút`);
+      alert(`🎉 Hoàn thành lô hàng ASM2 ${this.currentBatchNumber} trong ${duration} phút!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}\n⏱️ Thời gian: ${duration} phút`);
+      
+      // Reset batch state
+      this.stopBatchProcessing();
+    } else {
+      console.log(`⏳ Lô hàng ASM2 ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
+    }
+  }
 }

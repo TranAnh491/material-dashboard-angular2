@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 
+
 export interface OutboundMaterial {
   id?: string;
   factory?: string;
@@ -66,6 +67,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
   batchStartTime: Date | null = null; // Thời gian bắt đầu batch
+  isBatchCompleted: boolean = false; // Trạng thái hoàn thành batch
+  isBatchFullyReceived: boolean = false; // Tick xác nhận đã nhận toàn bộ lô hàng
   
   // Date Range properties
   startDate: string = '';
@@ -1063,6 +1066,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isEmployeeIdScanned = false;
     this.scannerBuffer = '';
     this.batchStartTime = new Date(); // Ghi lại thời gian bắt đầu
+    this.isBatchCompleted = false; // Reset trạng thái hoàn thành
+    this.isBatchFullyReceived = false; // Reset trạng thái xác nhận
     this.focusScannerInput();
     console.log('✅ Batch scanning mode activated at:', this.batchStartTime);
   }
@@ -1077,7 +1082,109 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isEmployeeIdScanned = false;
     this.scannerBuffer = '';
     this.batchStartTime = null; // Reset thời gian bắt đầu
+    this.isBatchCompleted = false; // Reset trạng thái hoàn thành
+    this.isBatchFullyReceived = false; // Reset trạng thái xác nhận
     console.log('✅ Batch scanning mode deactivated');
+  }
+
+  // Scan mã nhân viên bằng camera
+  async scanEmployeeId(): Promise<void> {
+    try {
+      console.log('📱 Starting employee ID scanner...');
+      this.isScannerLoading = true;
+      this.errorMessage = '';
+      
+      // Show modal first, then wait for DOM element
+      this.isCameraScanning = true;
+      this.cdr.detectChanges(); // Force change detection to render modal
+      
+      // Wait for DOM element to be available after modal renders
+      await this.waitForElement('qr-reader');
+      
+      // Initialize scanner
+      this.scanner = new Html5Qrcode("qr-reader");
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+      
+      await this.scanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          console.log('📱 Employee ID scanned:', decodedText);
+          this.onEmployeeIdScanSuccess(decodedText);
+        },
+        (errorMessage) => {
+          // Silent error handling for scanning attempts
+        }
+      );
+      
+      // Scanner started successfully
+      this.isScannerLoading = false;
+      console.log('✅ Employee ID scanner started successfully');
+      
+    } catch (error) {
+      console.error('❌ Error starting employee ID scanner:', error);
+      
+      let errorMsg = 'Không thể khởi động scanner';
+      if (error?.message) {
+        if (error.message.includes('not found')) {
+          errorMsg = 'Không tìm thấy camera hoặc element scanner';
+        } else if (error.message.includes('Permission')) {
+          errorMsg = 'Vui lòng cấp quyền truy cập camera';
+        } else {
+          errorMsg = error.message;
+        }
+      }
+      
+      this.errorMessage = 'Lỗi scanner: ' + errorMsg;
+      this.isCameraScanning = false;
+      this.isScannerLoading = false;
+      
+      // Show user alert
+      alert('❌ ' + errorMsg + '\n\nVui lòng:\n1. Cấp quyền camera\n2. Sử dụng HTTPS\n3. Thử lại');
+    }
+  }
+
+  // Xử lý khi scan thành công mã nhân viên
+  private onEmployeeIdScanSuccess(decodedText: string): void {
+    try {
+      console.log('🔍 Processing scanned employee ID:', decodedText);
+      
+      // Kiểm tra format mã nhân viên (ASP + 4 chữ số)
+      if (decodedText.startsWith('ASP') && decodedText.length >= 7) {
+        // Extract chỉ 7 ký tự đầu tiên
+        const employeeId = decodedText.substring(0, 7);
+        this.batchEmployeeId = employeeId;
+        this.isEmployeeIdScanned = true;
+        
+        console.log('✅ Employee ID scanned successfully:', employeeId);
+        
+        // Dừng scanner
+        this.stopScanning();
+        
+        // Hiển thị thông báo thành công
+        alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
+        
+        // Focus vào input scanner để scan mã hàng
+        setTimeout(() => {
+          this.focusScannerInput();
+        }, 500);
+        
+      } else {
+        throw new Error('Mã nhân viên không đúng format (phải bắt đầu bằng ASP và có ít nhất 7 ký tự)');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing employee ID:', error);
+      alert(`❌ Lỗi xử lý mã nhân viên: ${error.message}\n\nVui lòng quét lại mã nhân viên hợp lệ.`);
+      
+      // Dừng scanner để người dùng thử lại
+      this.stopScanning();
+    }
   }
 
   private processBatchScanInput(scannedData: string): void {
@@ -1095,15 +1202,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
-    // Check if this is an employee ID (ASP + 4 digits) - extract first 7 characters
+    // KHÔNG cho phép scan mã nhân viên qua scanner vật lý nữa
+    // Chỉ cho phép scan mã nhân viên qua camera
     if (scannedData.startsWith('ASP') && !this.isEmployeeIdScanned) {
-      // Extract only first 7 characters from employee ID scan
-      const employeeId = scannedData.substring(0, 7);
-      this.batchEmployeeId = employeeId;
-      this.isEmployeeIdScanned = true;
-      console.log('✅ Employee ID scanned:', employeeId, '(from full scan:', scannedData, ')');
-      // Show brief confirmation in console
-      console.log('👤 Employee ID: ' + employeeId + ' - Ready for material scanning');
+      console.log('⚠️ Mã nhân viên phải được scan bằng camera, không thể scan qua scanner vật lý!');
+      alert('⚠️ Mã nhân viên phải được scan bằng camera!\n\nVui lòng nhấn nút "Scan" bên cạnh để scan mã nhân viên.');
       return;
     }
 
@@ -1114,13 +1217,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (!this.isProductionOrderScanned) {
         console.log('⚠️ Vui lòng scan lệnh sản xuất (KZLSX...) trước!');
       } else if (!this.isEmployeeIdScanned) {
-        console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
+        console.log('⚠️ Vui lòng scan mã nhân viên bằng camera trước!');
       }
     }
   }
 
   private processBatchMaterialScan(scannedData: string): void {
     try {
+      // Kiểm tra xem đã scan mã nhân viên bằng camera chưa
+      if (!this.isEmployeeIdScanned) {
+        console.log('⚠️ Phải scan mã nhân viên bằng camera trước khi scan mã hàng!');
+        alert('⚠️ Phải scan mã nhân viên bằng camera trước!\n\nVui lòng nhấn nút "Scan" để scan mã nhân viên.');
+        return;
+      }
+      
       console.log('🔍 Processing material scan:', scannedData);
       
       let materialCode = '';
@@ -1203,9 +1313,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
       this.batchMaterials.push(materialData);
       console.log('✅ Material added to batch:', materialData);
+      console.log(`📦 Total materials in batch: ${this.batchMaterials.length}`);
       
-      // Auto-save after adding material (no popup needed)
-      this.autoSaveBatchMaterial(materialData);
+      // KHÔNG tự động lưu nữa - chỉ thêm vào batch array
+      // this.autoSaveBatchMaterial(materialData);
       
     } catch (error) {
       console.error('❌ Error processing material scan:', error);
@@ -1213,9 +1324,29 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  private async autoSaveBatchMaterial(materialData: any): Promise<void> {
+  // Xóa method autoSaveBatchMaterial vì không cần thiết nữa
+  // private async autoSaveBatchMaterial(materialData: any): Promise<void> { ... }
+
+  async saveBatchToOutbound(): Promise<void> {
+    console.log('🔄 Completing batch scanning...');
+    console.log(`📦 Total materials scanned in this batch: ${this.batchMaterials.length}`);
+    
+    if (this.batchMaterials.length === 0) {
+      alert('⚠️ Chưa có mã hàng nào được scan trong batch này!');
+      return;
+    }
+    
     try {
-      console.log('💾 Auto-saving batch material:', materialData);
+      // Tính thời gian thực hiện
+      const batchEndTime = new Date();
+      const durationMinutes = this.batchStartTime ? 
+        Math.round((batchEndTime.getTime() - this.batchStartTime.getTime()) / (1000 * 60)) : 0;
+      
+      console.log(`⏱️ Batch duration: ${durationMinutes} minutes`);
+      
+      // Lưu tất cả materials trong batch vào database
+      console.log('💾 Saving all batch materials to database...');
+      const savePromises = this.batchMaterials.map(async (materialData) => {
       const outboundRecord: OutboundMaterial = {
         factory: 'ASM1',
         materialCode: materialData.materialCode,
@@ -1229,6 +1360,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         productionOrder: this.batchProductionOrder,
         employeeId: this.batchEmployeeId, // Use the 7-character employee ID
         batchStartTime: this.batchStartTime, // Lưu thời gian bắt đầu
+          batchEndTime: batchEndTime, // Lưu thời gian kết thúc
         scanMethod: 'Batch Scanner',
         notes: `Batch scan - ${this.batchProductionOrder}`,
         createdAt: new Date(),
@@ -1236,37 +1368,26 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       };
 
       // Lưu vào outbound
-      await this.firestore.collection('outbound-materials').add(outboundRecord);
-      console.log('✅ Batch material saved successfully:', outboundRecord.materialCode);
+        const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
+        console.log('✅ Saved batch material:', materialData.materialCode, 'with ID:', docRef.id);
       
-      // ⚠️ QUAN TRỌNG: Cập nhật inventory stock để trừ số lượng
-      console.log('📦 Starting inventory update for batch material...');
+        // Cập nhật inventory stock để trừ số lượng
+        console.log('📦 Updating inventory stock for:', materialData.materialCode);
       await this.updateInventoryStock(materialData.materialCode, materialData.poNumber, materialData.quantity);
-      console.log('✅ Inventory updated for batch material');
+        console.log('✅ Inventory updated for:', materialData.materialCode);
+        
+        return docRef;
+      });
       
-      // No alert needed - just log to console for silent operation
-    } catch (error) {
-      console.error('❌ Error auto-saving batch material:', error);
-      alert('❌ Lỗi khi lưu mã hàng: ' + error.message);
-    }
-  }
-
-  async saveBatchToOutbound(): Promise<void> {
-    console.log('🔄 Completing batch scanning...');
-    console.log(`📦 Total materials scanned in this batch: ${this.batchMaterials.length}`);
-    
-    try {
-      // Tính thời gian thực hiện
-      const batchEndTime = new Date();
-      const durationMinutes = this.batchStartTime ? 
-        Math.round((batchEndTime.getTime() - this.batchStartTime.getTime()) / (1000 * 60)) : 0;
+      // Đợi tất cả materials được lưu xong
+      await Promise.all(savePromises);
+      console.log(`✅ All ${this.batchMaterials.length} materials saved successfully`);
       
-      console.log(`⏱️ Batch duration: ${durationMinutes} minutes`);
+      // Đánh dấu batch đã hoàn thành
+      this.isBatchCompleted = true;
       
       // Cập nhật batchEndTime cho tất cả materials đã scan
-      if (this.batchMaterials.length > 0) {
         await this.updateBatchEndTimeForMaterials(durationMinutes);
-      }
       
       // Show summary of all scanned materials
       const summary = this.batchMaterials.map((item, index) => 
@@ -1453,4 +1574,6 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return '-';
     }
   }
+
+
 }

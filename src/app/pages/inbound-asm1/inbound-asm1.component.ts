@@ -7,6 +7,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 
+
 export interface InboundMaterial {
   id?: string;
   factory?: string; // Factory identifier (ASM1, ASM2, etc.)
@@ -29,6 +30,13 @@ export interface InboundMaterial {
   hasQRGenerated?: boolean; // Track if QR code has been generated
   createdAt?: Date;
   updatedAt?: Date;
+  
+  // New fields for batch processing
+  batchStartTime?: Date; // Thời gian bắt đầu kiểm lô hàng
+  batchEndTime?: Date;   // Thời gian kết thúc kiểm lô hàng
+  employeeIds?: string[]; // Danh sách mã nhân viên tham gia kiểm
+  batchStatus?: 'idle' | 'active' | 'completed'; // Trạng thái lô hàng
+  batchDuration?: number; // Thời gian hoàn thành (phút)
 }
 
 @Component({
@@ -54,6 +62,27 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   // Status filter
   statusFilter: string = 'pending'; // Default to Chưa
+  
+  // Auto-hide received materials after next day (not 24 hours, but by calendar day)
+  hideReceivedAfterNextDay: boolean = true;
+  
+  // Batch processing properties
+  isBatchActive: boolean = false;
+  currentBatchNumber: string = '';
+  currentEmployeeIds: string[] = [];
+  batchStartTime: Date | null = null;
+  showBatchModal: boolean = false;
+  scannedEmployeeId: string = '';
+  
+  // Physical Scanner properties (copy from outbound)
+  isScannerInputActive: boolean = false;
+  scannerBuffer: string = '';
+  scannerTimeout: any = null;
+  scanStartTime: number = 0;
+  
+  // Camera Mode properties
+  isCameraModeActive: boolean = false;
+  cameraScanner: any = null; // HTML5 QR Scanner instance
   
   // Loading state
   isLoading: boolean = false;
@@ -108,9 +137,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   private setupDateDefaults(): void {
     const today = new Date();
-    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    // Cố định hiển thị 30 ngày, tính từ hôm nay quay ngược lại 30 ngày
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
     
-    this.startDate = lastWeek.toISOString().split('T')[0];
+    this.startDate = thirtyDaysAgo.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
   }
   
@@ -229,6 +259,31 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   applyFilters(): void {
     let filtered = [...this.materials];
     
+    // Auto-hide received materials after next day (not 24 hours, but by calendar day)
+    if (this.hideReceivedAfterNextDay) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Start of today
+      
+      filtered = filtered.filter(material => {
+        // If material is not received, always show it
+        if (!material.isReceived) {
+          return true;
+        }
+        
+        // If material is received, check if it was received before today
+        // We need to check when the material was marked as received
+        // Since we don't have a specific "receivedAt" field, we'll use updatedAt
+        // which gets updated when isReceived is set to true
+        const receivedTime = material.updatedAt || material.createdAt;
+        const receivedDate = new Date(receivedTime.getFullYear(), receivedTime.getMonth(), receivedTime.getDate()); // Start of received date
+        
+        // Hide if received before today (i.e., received yesterday or earlier)
+        return receivedDate >= today;
+      });
+      
+      console.log(`🕐 Auto-hide filter: ${this.materials.length - filtered.length} received materials from previous days will be hidden`);
+    }
+    
     // Search filter
     if (this.searchTerm.trim()) {
       const searchLower = this.searchTerm.toLowerCase().trim();
@@ -285,6 +340,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     }
     
+    // Filter by current batch when processing
+    if (this.isBatchActive && this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
+      filtered = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
+      console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}`);
+    }
+    
     // Always maintain sort order by import date (oldest first) and creation time
     filtered.sort((a, b) => {
       // Sort by import date first (oldest first)
@@ -330,38 +391,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.updateMaterial(material);
   }
   
-  onReceivedChange(event: any, material: InboundMaterial): void {
-    const target = event.target as HTMLInputElement;
-    const isReceived = target.checked;
-    
-    // Only allow ticking (true), not unticking (false)
-    if (!isReceived) {
-      console.log(`Cannot untick received status for ${material.materialCode}`);
-      return;
-    }
-    
-    // Update local state first
-    material.isReceived = isReceived;
-    material.updatedAt = new Date();
-    console.log(`Updated received status for ${material.materialCode}: ${isReceived}`);
-    
-    // Save to Firebase first to ensure persistence
-    this.firestore.collection('inbound-materials').doc(material.id).update({
-      isReceived: isReceived,
-      updatedAt: material.updatedAt
-    }).then(() => {
-      console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
-      
-      // Now add to Inventory
-      this.addToInventory(material);
-    }).catch((error) => {
-      console.error(`❌ Error saving received status to Firebase:`, error);
-      // Revert local state if Firebase update failed
-      material.isReceived = false;
-      target.checked = false;
-      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
-    });
-  }
+
   
   onQualityCheckChange(event: any, material: InboundMaterial): void {
     const target = event.target as HTMLInputElement;
@@ -476,6 +506,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         document.addEventListener('click', this.onDocumentClick.bind(this), { once: true });
       }, 0);
     }
+  }
+  
+  closeDropdown(): void {
+    this.showDropdown = false;
   }
   
   onDocumentClick(event: Event): void {
@@ -1323,6 +1357,208 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     XLSX.writeFile(workbook, 'ASM1_Import_Template.xlsx');
   }
+
+  // Download Inbound Report - Lịch sử kiểm lô hàng
+  downloadInboundReport(): void {
+    try {
+      console.log('📊 Tạo report lịch sử kiểm lô hàng...');
+      
+      // Tạo dữ liệu report
+      const reportData = this.generateInboundReportData();
+      
+      if (reportData.length === 0) {
+        alert('Không có dữ liệu để tạo report!');
+        return;
+      }
+      
+      // Tạo worksheet
+      const worksheet = XLSX.utils.aoa_to_sheet(reportData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 20 },  // NGÀY KIỂM
+        { wch: 18 },  // LÔ HÀNG/DNNK
+        { wch: 15 },  // MÃ HÀNG
+        { wch: 15 },  // MSNV
+        { wch: 20 },  // THỜI GIAN BẮT ĐẦU
+        { wch: 20 },  // THỜI GIAN KẾT THÚC
+        { wch: 15 },  // THỜI GIAN HOÀN THÀNH (phút)
+        { wch: 15 },  // TRẠNG THÁI
+        { wch: 20 },  // NHÀ CUNG CẤP
+        { wch: 15 },  // SỐ LƯỢNG
+        { wch: 20 }   // GHI CHÚ
+      ];
+      worksheet['!cols'] = colWidths;
+      
+      // Tạo workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inbound_Report');
+      
+      // Tạo tên file với timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const fileName = `ASM1_Inbound_Report_${timestamp}.xlsx`;
+      
+      // Download file
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inbound_Report');
+      
+      // Download file
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log('✅ Report đã được tải xuống:', fileName);
+      alert(`Report đã được tải xuống: ${fileName}`);
+      
+    } catch (error: any) {
+      console.error('❌ Lỗi tạo report:', error);
+      this.errorMessage = 'Lỗi tạo report: ' + error.message;
+      alert('Lỗi tạo report: ' + error.message);
+    }
+  }
+
+
+
+  // Tạo dữ liệu cho report
+  private generateInboundReportData(): (string | number)[][] {
+    // Header của report
+    const headers = [
+      'NGÀY KIỂM',
+      'LÔ HÀNG/DNNK', 
+      'MÃ HÀNG',
+      'MSNV',
+      'THỜI GIAN BẮT ĐẦU',
+      'THỜI GIAN KẾT THÚC',
+      'THỜI GIAN HOÀN THÀNH (phút)',
+      'TRẠNG THÁI',
+      'NHÀ CUNG CẤP',
+      'SỐ LƯỢNG',
+      'GHI CHÚ'
+    ];
+    
+    const reportData: (string | number)[][] = [headers];
+    
+    // Debug: Log số lượng materials
+    console.log('🔍 Debug generateInboundReportData:');
+    console.log('Tổng materials:', this.materials.length);
+    console.log('Filtered materials:', this.filteredMaterials.length);
+    
+    // Lọc materials có thông tin batch
+    const materialsWithBatch = this.materials.filter(material => 
+      material.batchNumber && 
+      material.batchNumber.trim() !== '' &&
+      (material.batchStartTime || material.batchEndTime || material.employeeIds)
+    );
+    
+    console.log('Materials có batch info:', materialsWithBatch.length);
+    
+    // Nếu không có materials với batch info, tạo report từ tất cả materials
+    if (materialsWithBatch.length === 0) {
+      console.log('⚠️ Không có materials với batch info, tạo report từ tất cả materials');
+      
+      this.materials.forEach(material => {
+        const row = [
+          this.formatDate(material.importDate),
+          material.batchNumber || 'N/A',
+          material.materialCode,
+          material.employeeIds ? material.employeeIds.join(', ') : 'N/A',
+          material.batchStartTime ? this.formatDateTime(material.batchStartTime) : 'N/A',
+          material.batchEndTime ? this.formatDateTime(material.batchEndTime) : 'N/A',
+          (material.batchStartTime && material.batchEndTime) ? 
+            Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60)) + ' phút' : 'N/A',
+          this.getStatusText(material),
+          material.supplier || 'N/A',
+          material.quantity || 0,
+          material.remarks || 'N/A'
+        ];
+        
+        reportData.push(row);
+      });
+    } else {
+      // Nhóm materials theo batch
+      const batchGroups = this.groupMaterialsByBatch(materialsWithBatch);
+      
+      // Tạo dữ liệu cho từng batch
+      batchGroups.forEach(batchGroup => {
+        const batchNumber = batchGroup.batchNumber;
+        const batchMaterials = batchGroup.materials;
+        const batchStartTime = batchGroup.batchStartTime;
+        const batchEndTime = batchGroup.batchEndTime;
+        const employeeIds = batchGroup.employeeIds;
+        
+        // Tính thời gian hoàn thành
+        let duration = 0;
+        if (batchStartTime && batchEndTime) {
+          duration = Math.round((batchEndTime.getTime() - batchStartTime.getTime()) / (1000 * 60));
+        }
+        
+        // Tạo dòng cho từng material trong batch
+        batchMaterials.forEach(material => {
+          const row = [
+            this.formatDate(material.importDate),
+            batchNumber,
+            material.materialCode,
+            employeeIds ? employeeIds.join(', ') : 'N/A',
+            batchStartTime ? this.formatDateTime(batchStartTime) : 'N/A',
+            batchEndTime ? this.formatDateTime(batchEndTime) : 'N/A',
+            duration > 0 ? duration : 'N/A',
+            this.getStatusText(material),
+            material.supplier || 'N/A',
+            material.quantity || 0,
+            material.remarks || 'N/A'
+          ];
+          
+          reportData.push(row);
+        });
+      });
+    }
+    
+    console.log('📊 Dữ liệu report được tạo:', reportData.length - 1, 'dòng');
+    return reportData;
+  }
+
+  // Nhóm materials theo batch
+  private groupMaterialsByBatch(materials: InboundMaterial[]): any[] {
+    const batchGroups: { [key: string]: any } = {};
+    
+    materials.forEach(material => {
+      const batchKey = material.batchNumber;
+      
+      if (!batchGroups[batchKey]) {
+        batchGroups[batchKey] = {
+          batchNumber: batchKey,
+          materials: [],
+          batchStartTime: material.batchStartTime,
+          batchEndTime: material.batchEndTime,
+          employeeIds: material.employeeIds
+        };
+      }
+      
+      batchGroups[batchKey].materials.push(material);
+      
+      // Cập nhật thời gian batch nếu có
+      if (material.batchStartTime && (!batchGroups[batchKey].batchStartTime || 
+          material.batchStartTime < batchGroups[batchKey].batchStartTime)) {
+        batchGroups[batchKey].batchStartTime = material.batchStartTime;
+      }
+      
+      if (material.batchEndTime && (!batchGroups[batchKey].batchEndTime || 
+          material.batchEndTime > batchGroups[batchKey].batchEndTime)) {
+        batchGroups[batchKey].batchEndTime = material.batchEndTime;
+      }
+      
+      // Cập nhật employee IDs
+      if (material.employeeIds && material.employeeIds.length > 0) {
+        if (!batchGroups[batchKey].employeeIds) {
+          batchGroups[batchKey].employeeIds = [];
+        }
+        material.employeeIds.forEach(id => {
+          if (!batchGroups[batchKey].employeeIds.includes(id)) {
+            batchGroups[batchKey].employeeIds.push(id);
+          }
+        });
+      }
+    });
+    
+    return Object.values(batchGroups);
+  }
   
   // Utility methods
   formatDate(date: Date | null): string {
@@ -1347,5 +1583,446 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     if (material.isReceived && material.qualityCheck) return 'Đã kiểm tra';
     if (material.isReceived) return 'Đã nhận';
     return 'Chờ nhận';
+  }
+  
+  // Physical Scanner methods (copy from outbound)
+  activatePhysicalScanner(): void {
+    console.log('🔌 Activating physical scanner input...');
+    this.isScannerInputActive = !this.isScannerInputActive;
+    
+    if (this.isScannerInputActive) {
+      this.scannerBuffer = '';
+      this.focusEmployeeScanner();
+      console.log('✅ Physical scanner activated - Ready to receive input');
+    } else {
+      console.log('⏹️ Physical scanner deactivated');
+    }
+  }
+  
+  // Batch processing methods
+  canStartBatch(): boolean {
+    const canStart = this.currentEmployeeIds.length > 0 && this.currentBatchNumber.trim() !== '';
+    console.log('🔍 Kiểm tra canStartBatch:', {
+      employeeCount: this.currentEmployeeIds.length,
+      batchNumber: this.currentBatchNumber,
+      batchNumberTrimmed: this.currentBatchNumber.trim(),
+      canStart: canStart
+    });
+    return canStart;
+  }
+  
+  startBatchProcessing(): void {
+    console.log('🚀 Gọi startBatchProcessing()');
+    console.log('📊 Kiểm tra điều kiện:', {
+      currentEmployeeIds: this.currentEmployeeIds,
+      currentBatchNumber: this.currentBatchNumber,
+      canStartBatch: this.canStartBatch()
+    });
+    
+    if (!this.canStartBatch()) {
+      console.log('❌ Không thể bắt đầu batch - điều kiện không đủ');
+      return;
+    }
+    
+    this.isBatchActive = true;
+    this.batchStartTime = new Date();
+    this.showBatchModal = false;
+    
+    // Update all materials in the current batch
+    this.updateBatchMaterials();
+    
+    console.log(`🚀 Bắt đầu kiểm lô hàng: ${this.currentBatchNumber} với ${this.currentEmployeeIds.length} nhân viên`);
+    console.log('✅ Batch đã được kích hoạt:', {
+      isBatchActive: this.isBatchActive,
+      batchStartTime: this.batchStartTime,
+      showBatchModal: this.showBatchModal
+    });
+  }
+  
+  stopBatchProcessing(): void {
+    if (!this.isBatchActive) return;
+    
+    this.isBatchActive = false;
+    this.batchStartTime = null;
+    this.currentBatchNumber = '';
+    this.currentEmployeeIds = [];
+    
+    console.log('⏹️ Dừng kiểm lô hàng');
+  }
+  
+  private updateBatchMaterials(): void {
+    const batchMaterials = this.materials.filter(m => m.batchNumber === this.currentBatchNumber);
+    
+    batchMaterials.forEach(material => {
+      material.batchStatus = 'active';
+      material.batchStartTime = this.batchStartTime;
+      material.employeeIds = [...this.currentEmployeeIds];
+      
+      // Update in Firebase
+      this.firestore.collection('inbound-materials').doc(material.id).update({
+        batchStatus: 'active',
+        batchStartTime: this.batchStartTime,
+        employeeIds: this.currentEmployeeIds
+      });
+    });
+  }
+  
+  onEmployeeScannerKeydown(event: KeyboardEvent): void {
+    const input = event.target as HTMLInputElement;
+    
+    // Record scan start time on first character
+    if (input.value.length === 0) {
+      this.scanStartTime = Date.now();
+    }
+    
+    // Clear existing timeout
+    if (this.scannerTimeout) {
+      clearTimeout(this.scannerTimeout);
+    }
+    
+    // Handle Enter key (most scanners send Enter after scanning)
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.processEmployeeScannerInput(input.value);
+      return;
+    }
+    
+    // Set timeout to auto-process if no more input (for scanners without Enter)
+    this.scannerTimeout = setTimeout(() => {
+      if (input.value.trim().length > 5) { // Minimum barcode length
+        const scanDuration = Date.now() - this.scanStartTime;
+        // If input was typed very fast (< 500ms), likely from scanner
+        if (scanDuration < 500) {
+          this.processEmployeeScannerInput(input.value);
+        }
+      }
+    }, 300);
+  }
+  
+  private processEmployeeScannerInput(scannedData: string): void {
+    if (!scannedData.trim()) return;
+    
+    console.log('🔌 Physical scanner input received:', scannedData);
+    console.log('🔌 Input length:', scannedData.length);
+    console.log('🔌 Input characters:', scannedData.split('').map(c => c.charCodeAt(0)));
+    
+    // Clear the input
+    this.scannedEmployeeId = '';
+    const inputElement = document.querySelector('.scanner-input') as HTMLInputElement;
+    if (inputElement) {
+      inputElement.value = '';
+    }
+    
+    // Process the scanned employee ID
+    this.addEmployee(scannedData);
+    
+    // Auto-focus for next scan
+    setTimeout(() => {
+      this.focusEmployeeScanner();
+    }, 100);
+  }
+  
+  addEmployee(employeeId: string): void {
+    // Extract first 7 characters
+    const shortId = employeeId.substring(0, 7);
+    
+    if (!this.currentEmployeeIds.includes(shortId)) {
+      this.currentEmployeeIds.push(shortId);
+      console.log(`✅ Thêm nhân viên: ${shortId}`);
+      console.log('📊 Danh sách nhân viên hiện tại:', this.currentEmployeeIds);
+    } else {
+      console.log(`⚠️ Nhân viên ${shortId} đã tồn tại`);
+    }
+  }
+  
+  removeEmployee(employeeId: string): void {
+    const index = this.currentEmployeeIds.indexOf(employeeId);
+    if (index > -1) {
+      this.currentEmployeeIds.splice(index, 1);
+      console.log(`❌ Xóa nhân viên: ${employeeId}`);
+    }
+  }
+  
+  focusEmployeeScanner(): void {
+    // Focus on employee scanner input
+    setTimeout(() => {
+      const input = document.querySelector('.scanner-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select(); // Select all text for easy replacement
+        console.log('🎯 Focus vào ô input scanner - sẵn sàng quét mã nhân viên');
+      }
+    }, 100);
+  }
+  
+  closeBatchModal(): void {
+    this.showBatchModal = false;
+    console.log('🔒 Modal đã đóng');
+  }
+  
+  openBatchModal(): void {
+    this.showBatchModal = true;
+    console.log('🚀 Mở modal batch processing');
+    console.log('📊 Trạng thái hiện tại:', {
+      isBatchActive: this.isBatchActive,
+      currentEmployeeIds: this.currentEmployeeIds,
+      currentBatchNumber: this.currentBatchNumber,
+      showBatchModal: this.showBatchModal
+    });
+  }
+  
+  canEditInBatch(material: InboundMaterial): boolean {
+    if (!this.isBatchActive) return false;
+    return material.batchNumber === this.currentBatchNumber;
+  }
+  
+  getEmployeeDisplay(material: InboundMaterial): string {
+    if (material.employeeIds && material.employeeIds.length > 0) {
+      // Show first employee in UI, but log all
+      return material.employeeIds[0];
+    }
+    return '';
+  }
+  
+  getTimeDisplay(material: InboundMaterial): string {
+    if (material.batchStartTime && material.batchEndTime) {
+      const duration = Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60));
+      return `${duration} phút`;
+    }
+    return '';
+  }
+  
+  getBatchDuration(): number {
+    if (!this.batchStartTime) return 0;
+    const now = new Date();
+    return Math.round((now.getTime() - this.batchStartTime.getTime()) / (1000 * 60));
+  }
+  
+  getCompleteButtonTitle(material: InboundMaterial): string {
+    if (material.isCompleted) return 'Đã hoàn thành';
+    if (!this.canEditInBatch(material)) return 'Chỉ có thể sửa trong lô hàng đang kiểm';
+    return 'Đánh dấu hoàn thành';
+  }
+  
+  getQualityCheckTitle(material: InboundMaterial): string {
+    if (material.isReceived) return 'Không thể sửa - đã trong Inventory';
+    if (!this.canEditInBatch(material)) return 'Chỉ có thể sửa trong lô hàng đang kiểm';
+    return 'Kiểm tra chất lượng';
+  }
+  
+  getReceivedTitle(material: InboundMaterial): string {
+    if (material.isReceived) return 'Đã nhận - không thể thay đổi';
+    if (!this.canEditInBatch(material)) return 'Chỉ có thể sửa trong lô hàng đang kiểm';
+    return 'Đánh dấu đã nhận';
+  }
+  
+  // Override onReceivedChange to handle batch completion
+  onReceivedChange(event: any, material: InboundMaterial): void {
+    const target = event.target as HTMLInputElement;
+    const isReceived = target.checked;
+    
+    // Only allow ticking (true), not unticking (false)
+    if (!isReceived) {
+      console.log(`Cannot untick received status for ${material.materialCode}`);
+      return;
+    }
+    
+    console.log(`🔄 Đang tick "đã nhận" cho ${material.materialCode} trong lô hàng ${material.batchNumber}`);
+    
+    // Update local state first
+    material.isReceived = isReceived;
+    material.updatedAt = new Date();
+    
+    // Save to Firebase first to ensure persistence
+    this.firestore.collection('inbound-materials').doc(material.id).update({
+      isReceived: isReceived,
+      updatedAt: material.updatedAt
+    }).then(() => {
+      console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
+      
+      // Now add to Inventory
+      this.addToInventory(material);
+      
+      // Check batch completion only if we're in an active batch and this material belongs to it
+      if (this.isBatchActive && material.batchNumber === this.currentBatchNumber) {
+        console.log(`🔍 Kiểm tra hoàn thành lô hàng sau khi tick ${material.materialCode}`);
+        this.checkBatchCompletion();
+      } else {
+        console.log(`ℹ️ Không kiểm tra hoàn thành lô hàng - không trong batch active hoặc material không thuộc lô hàng hiện tại`);
+      }
+      
+    }).catch((error) => {
+      console.error(`❌ Error saving received status to Firebase:`, error);
+      // Revert local state if Firebase update failed
+      material.isReceived = false;
+      target.checked = false;
+      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+    });
+  }
+  
+  private checkBatchCompletion(): void {
+    // Lấy tất cả materials của lô hàng hiện tại (không chỉ những có batchStatus = 'active')
+    const batchMaterials = this.materials.filter(m => m.batchNumber === this.currentBatchNumber);
+    
+    console.log(`🔍 Kiểm tra hoàn thành lô hàng ${this.currentBatchNumber}:`);
+    console.log(`📦 Tổng materials trong lô: ${batchMaterials.length}`);
+    console.log(`✅ Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+    
+    // Chỉ hoàn thành khi TẤT CẢ materials trong lô hàng đã được tick "đã nhận"
+    const allReceived = batchMaterials.every(m => m.isReceived);
+    
+    if (allReceived && batchMaterials.length > 0) {
+      // Complete the batch
+      const endTime = new Date();
+      const duration = Math.round((endTime.getTime() - this.batchStartTime!.getTime()) / (1000 * 60));
+      
+      batchMaterials.forEach(material => {
+        material.batchStatus = 'completed';
+        material.batchEndTime = endTime;
+        material.batchDuration = duration;
+        
+        // Update in Firebase
+        this.firestore.collection('inbound-materials').doc(material.id).update({
+          batchStatus: 'completed',
+          batchEndTime: endTime,
+          batchDuration: duration
+        });
+      });
+      
+      console.log(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber} trong ${duration} phút`);
+      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber} trong ${duration} phút!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}\n⏱️ Thời gian: ${duration} phút`);
+      
+      // Reset batch state
+      this.stopBatchProcessing();
+    } else {
+      console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
+    }
+  }
+  
+  // Scanner Mode Methods
+  startScannerMode(): void {
+    console.log('🔍 Starting scanner mode...');
+    this.isScannerInputActive = true;
+    this.isCameraModeActive = false;
+    this.scannerBuffer = '';
+    this.focusScannerInput();
+  }
+  
+  stopScannerMode(): void {
+    console.log('🛑 Stopping scanner mode...');
+    this.isScannerInputActive = false;
+    this.scannerBuffer = '';
+    if (this.scannerTimeout) {
+      clearTimeout(this.scannerTimeout);
+      this.scannerTimeout = null;
+    }
+  }
+  
+  onScannerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.processScannedData(this.scannerBuffer);
+      this.scannerBuffer = '';
+    }
+  }
+  
+  onScannerInputBlur(): void {
+    // Keep scanner active for a short time to allow for rapid scanning
+    this.scannerTimeout = setTimeout(() => {
+      if (this.scannerBuffer.trim()) {
+        this.processScannedData(this.scannerBuffer);
+        this.scannerBuffer = '';
+      }
+    }, 100);
+  }
+  
+  private processScannedData(scannedData: string): void {
+    if (!scannedData.trim()) return;
+    
+    console.log('🔍 Processing scanned data:', scannedData);
+    
+    // Process the scanned data based on format
+    // This can be material code, batch number, or other identifiers
+    if (scannedData.startsWith('KZLSX')) {
+      // Production order format
+      this.currentBatchNumber = scannedData;
+      console.log('✅ Production order scanned:', scannedData);
+    } else if (scannedData.startsWith('ASP')) {
+      // Employee ID format
+      if (!this.currentEmployeeIds.includes(scannedData)) {
+        this.currentEmployeeIds.push(scannedData);
+        console.log('✅ Employee ID scanned:', scannedData);
+      }
+    } else {
+      // Material code or other format
+      console.log('📦 Material code scanned:', scannedData);
+      // You can add logic here to auto-fill material fields
+    }
+  }
+  
+  private focusScannerInput(): void {
+    setTimeout(() => {
+      const scannerInput = document.querySelector('.scanner-input-field') as HTMLInputElement;
+      if (scannerInput) {
+        scannerInput.focus();
+      }
+    }, 100);
+  }
+  
+  // Camera Mode Methods
+  startCameraMode(): void {
+    console.log('📱 Starting camera mode...');
+    this.isCameraModeActive = true;
+    this.isScannerInputActive = false;
+    this.initializeCameraScanner();
+  }
+  
+  stopCameraMode(): void {
+    console.log('🛑 Stopping camera mode...');
+    this.isCameraModeActive = false;
+    if (this.cameraScanner) {
+      this.cameraScanner.stop();
+      this.cameraScanner = null;
+    }
+  }
+  
+  private async initializeCameraScanner(): Promise<void> {
+    try {
+      // Import HTML5 QR Scanner dynamically
+      const { Html5Qrcode } = await import('html5-qrcode');
+      
+      this.cameraScanner = new Html5Qrcode("qr-reader");
+      
+      const cameras = await Html5Qrcode.getCameras();
+      if (cameras && cameras.length > 0) {
+        await this.cameraScanner.start(
+          { deviceId: cameras[0].id },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
+          (decodedText: string) => {
+            this.onCameraScanSuccess(decodedText);
+          },
+          (errorMessage: string) => {
+            // Ignore errors during scanning
+          }
+        );
+        console.log('✅ Camera scanner started successfully');
+      } else {
+        throw new Error('No cameras found');
+      }
+    } catch (error) {
+      console.error('❌ Error starting camera scanner:', error);
+      alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+      this.stopCameraMode();
+    }
+  }
+  
+  private onCameraScanSuccess(decodedText: string): void {
+    console.log('📱 Camera scan success:', decodedText);
+    this.processScannedData(decodedText);
+    
+    // Stop camera after successful scan
+    this.stopCameraMode();
   }
 }

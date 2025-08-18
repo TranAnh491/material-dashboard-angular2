@@ -9,6 +9,39 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
+        <!-- Start Batch Processing Button -->
+        <div class="start-batch-container">
+          <button class="start-batch-btn" 
+                  [class.active]="isBatchActive"
+                  (click)="openBatchModal()"
+                  [disabled]="isBatchActive">
+            <i class="material-icons">{{ isBatchActive ? 'pause' : 'play_arrow' }}</i>
+            {{ isBatchActive ? 'Đang kiểm: ' + currentBatchNumber : 'Start' }}
+          </button>
+          
+          <!-- Scan Options - Ẩn vì không cần thiết trong bước "Đang kiểm" -->
+          <!-- <div class="scan-options" *ngIf="isBatchActive">
+            <button class="scan-option-btn scanner-btn" 
+                    (click)="startScannerMode()"
+                    title="Sử dụng máy scan vật lý">
+              <i class="material-icons">scanner</i>
+              Scan máy scan
+            </button>
+            <button class="scan-option-btn camera-btn" 
+                    (click)="startCameraMode()"
+                    title="Sử dụng camera điện thoại">
+              <i class="material-icons">qr_code_scanner</i>
+              Quét QR code
+            </button>
+          </div> -->
+          
+          <div class="batch-info" *ngIf="isBatchActive">
+            <span class="batch-number">{{ currentBatchNumber }}</span>
+            <span class="employee-ids">{{ currentEmployeeIds.join(', ') }}</span>
+            <span class="batch-timer" *ngIf="batchStartTime">{{ getBatchDuration() }} phút</span>
+          </div>
+        </div>
+        
         <!-- More Button with Dropdown -->
         <div class="dropdown">
           <button class="more-btn" (click)="toggleDropdown()">
@@ -16,27 +49,38 @@
             More
           </button>
           <div class="dropdown-menu" [class.show]="showDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
-              <i class="material-icons">file_upload</i>
-              Import Excel
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+              <i class="material-icons">file_download</i>
+              Export to Excel
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate()">
               <i class="material-icons">description</i>
               Download Template
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Export Excel
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile()">
+              <i class="material-icons">file_upload</i>
+              Import File
             </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); $event.preventDefault()">
-              <i class="material-icons">add</i>
-              Thêm Material
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadInboundReport()">
+              <i class="material-icons">assessment</i>
+              Download Report
             </a>
+            
             <a class="dropdown-item delete-all-item" href="javascript:void(0)" (click)="deleteAllMaterials()">
               <i class="material-icons">delete_sweep</i>
               Xóa tất cả
             </a>
+            
+            <!-- Auto-hide Received Materials Toggle -->
+            <div class="dropdown-item toggle-item">
+              <label class="toggle-label">
+                <input type="checkbox" 
+                       [(ngModel)]="hideReceivedAfterNextDay" 
+                       (change)="applyFilters()"
+                       class="toggle-checkbox">
+                <span class="toggle-text">Ẩn mã đã nhận qua ngày hôm sau</span>
+              </label>
+            </div>
           </div>
         </div>
         
@@ -106,8 +150,8 @@
           </button>
         </div>
         
-        <!-- Factory Badge -->
-        <span class="factory-badge asm2-badge">ASM2</span>
+        <!-- Ẩn Factory Badge vì không có chức năng -->
+        <!-- <span class="factory-badge asm2-badge">ASM2</span> -->
       </div>
     </div>
     
@@ -146,6 +190,9 @@
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
             <th class="remarks-cell">LƯU Ý</th>
             <th class="status-cell">TRẠNG THÁI</th>
+            <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
+            <!-- <th class="employee-cell">MSNV</th> -->
+            <!-- <th class="time-cell">THỜI GIAN</th> -->
             <th class="action-cell">HOÀN THÀNH</th>
             <th class="action-cell">XÓA</th>
             <th class="action-cell">QR</th>
@@ -264,6 +311,13 @@
             <td class="status-cell">
               <span class="status-badge" [ngClass]="getStatusBadgeClass(material)">{{getStatusText(material)}}</span>
             </td>
+            <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
+            <!-- <td class="employee-cell">
+              <span class="employee-display">{{ getEmployeeDisplay(material) }}</span>
+            </td>
+            <td class="time-cell">
+              <span class="time-display">{{ getTimeDisplay(material) }}</span>
+            </td> -->
             <td class="status-cell">
               <button class="action-btn complete-btn" 
                       (click)="onMarkCompleted(material)" 
@@ -295,4 +349,144 @@
     </div>
   </div>
 </div>
-<input type="file" #fileInput accept=".xlsx,.xls,.csv" style="display: none" (change)="onFileSelect($event)">
+
+<!-- File Upload (Hidden) -->
+<input type="file" 
+       #fileInput 
+       accept=".xlsx,.xls,.csv" 
+       style="display: none" 
+       (change)="onFileSelect($event)">
+
+<!-- Batch Start Modal -->
+<div class="modal-overlay" *ngIf="showBatchModal" (click)="closeBatchModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🚀 Bắt đầu kiểm lô hàng</h3>
+      <button class="close-btn" (click)="closeBatchModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Employee ID Scanner -->
+      <div class="scanner-section">
+        <label>📱 Quét mã nhân viên bằng máy scanner:</label>
+        <div class="scanner-input-group">
+          <input type="text" 
+                 #employeeScanner
+                 [(ngModel)]="scannedEmployeeId"
+                 (keydown)="onEmployeeScannerKeydown($event)"
+                 placeholder="Sử dụng máy scanner để quét mã nhân viên..."
+                 class="scanner-input"
+                 [disabled]="isBatchActive">
+          <button class="scan-btn" (click)="activatePhysicalScanner()" 
+                  [class.active]="isScannerInputActive"
+                  [title]="isScannerInputActive ? 'Máy scanner đang hoạt động' : 'Kích hoạt máy scanner'">
+            <i class="material-icons">{{ isScannerInputActive ? 'scanner' : 'keyboard' }}</i>
+          </button>
+        </div>
+        <div class="scanned-employees" *ngIf="currentEmployeeIds.length > 0">
+          <span class="employee-tag" *ngFor="let empId of currentEmployeeIds">
+            {{ empId }}
+            <button class="remove-emp" (click)="removeEmployee(empId)" *ngIf="!isBatchActive">
+              <i class="material-icons">close</i>
+            </button>
+          </span>
+        </div>
+        
+        <!-- Scanner Instructions -->
+        <div class="scanner-instructions">
+          <p class="instruction-text">
+            <i class="material-icons">info</i>
+            <strong>Hướng dẫn sử dụng máy scanner:</strong>
+          </p>
+          <ul class="instruction-list">
+            <li>1. Click nút "Kích hoạt máy scanner" (nút xanh) để bật chế độ scanner</li>
+            <li>2. Sử dụng máy scanner QR code thực tế để quét mã nhân viên</li>
+            <li>3. Mã sẽ tự động được nhập và xử lý</li>
+            <li>4. Có thể quét nhiều nhân viên (tối đa 5 người)</li>
+            <li>5. Click nút "Dừng scanner" để tắt chế độ scanner</li>
+          </ul>
+        </div>
+      </div>
+      
+      <!-- Batch Number Input -->
+      <div class="batch-input-section">
+        <label>📦 Nhập mã lô hàng/DNNK:</label>
+        <input type="text" 
+               [(ngModel)]="currentBatchNumber"
+               placeholder="Nhập mã lô hàng..."
+               class="batch-input"
+               [disabled]="isBatchActive">
+      </div>
+      
+      <!-- Start Button -->
+      <div class="modal-actions">
+        <button class="start-btn" 
+                (click)="startBatchProcessing()"
+                [disabled]="!canStartBatch() || isBatchActive">
+          <i class="material-icons">play_arrow</i>
+          Bắt đầu kiểm
+        </button>
+        
+        <button class="stop-btn" 
+                (click)="stopBatchProcessing()"
+                [disabled]="!isBatchActive">
+          <i class="material-icons">stop</i>
+          Dừng kiểm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner Input for Physical Scanner Mode -->
+<div class="scanner-input-overlay" *ngIf="isScannerInputActive">
+  <div class="scanner-input-container">
+    <div class="scanner-input-header">
+      <h5><i class="material-icons">scanner</i> Chế độ máy scan</h5>
+      <button class="close-scanner-btn" (click)="stopScannerMode()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="scanner-input-body">
+      <input type="text" 
+             #scannerInput
+             [(ngModel)]="scannerBuffer"
+             (keydown)="onScannerKeydown($event)"
+             (blur)="onScannerInputBlur()"
+             placeholder="Quét barcode/QR code bằng máy scan..."
+             class="scanner-input-field"
+             autofocus>
+      <div class="scanner-instructions">
+        <p><i class="material-icons">info</i> Sử dụng máy scan để quét mã hàng</p>
+        <p><i class="material-icons">keyboard</i> Hoặc nhập trực tiếp từ bàn phím</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Camera QR Scanner Modal -->
+<div class="camera-modal" *ngIf="isCameraModeActive">
+  <div class="camera-modal-content">
+    <div class="camera-modal-header">
+      <h5><i class="material-icons">qr_code_scanner</i> Quét QR code bằng camera</h5>
+      <button class="close-camera-btn" (click)="stopCameraMode()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="camera-modal-body">
+      <div class="camera-container">
+        <div id="qr-reader"></div>
+        <div class="camera-overlay">
+          <div class="camera-frame"></div>
+          <div class="camera-hint">Đặt mã QR vào khung để quét</div>
+        </div>
+      </div>
+      <div class="camera-instructions">
+        <p><i class="material-icons">info</i> Sử dụng camera điện thoại để quét mã QR</p>
+        <p><i class="material-icons">smartphone</i> Đảm bảo camera có quyền truy cập</p>
+      </div>
+    </div>
+  </div>
+</div>

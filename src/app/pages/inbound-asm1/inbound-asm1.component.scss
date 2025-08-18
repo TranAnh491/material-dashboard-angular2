@@ -4,6 +4,289 @@
   height: 85vh;
 }
 
+// Modal styling for batch processing
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 4px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+  }
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.scanner-section, .batch-input-section {
+  margin-bottom: 24px;
+  
+  label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #374151;
+  }
+}
+
+.scanner-input-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  
+  .scanner-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+  }
+  
+  .scan-btn {
+    padding: 10px 12px;
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: #059669;
+      transform: translateY(-1px);
+    }
+    
+    &.active {
+      background: #dc2626;
+      
+      &:hover {
+        background: #b91c1c;
+      }
+    }
+  }
+}
+
+// Scan Options Styling
+.scan-options {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  
+  .scan-option-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    
+    &.scanner-btn {
+      background: #3b82f6;
+      color: white;
+      
+      &:hover {
+        background: #2563eb;
+        transform: translateY(-1px);
+      }
+    }
+    
+    &.camera-btn {
+      background: #10b981;
+      color: white;
+      
+      &:hover {
+        background: #059669;
+        transform: translateY(-1px);
+      }
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+}
+
+.scanned-employees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  
+  .employee-tag {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 8px;
+    border-radius: 16px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    
+    .remove-emp {
+      background: none;
+      border: none;
+      color: #1e40af;
+      cursor: pointer;
+      padding: 0;
+      font-size: 14px;
+      
+      &:hover {
+        color: #dc2626;
+      }
+    }
+  }
+}
+
+.scanner-instructions {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  
+  .instruction-text {
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #0369a1;
+    font-size: 14px;
+    
+    i {
+      font-size: 18px;
+      color: #0284c7;
+    }
+  }
+  
+  .instruction-list {
+    margin: 0;
+    padding-left: 20px;
+    color: #0c4a6e;
+    font-size: 13px;
+    line-height: 1.5;
+    
+    li {
+      margin-bottom: 6px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+.batch-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  
+  .start-btn, .stop-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+  
+  .start-btn {
+    background: #10b981;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #059669;
+    }
+  }
+  
+  .stop-btn {
+    background: #ef4444;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #dc2626;
+    }
+  }
+}
+
 iframe {
   width: 100%;
   height: 100%;
@@ -41,6 +324,124 @@ iframe {
   display: flex;
   flex-direction: column;
   margin: 0;
+  
+  // Start Batch Processing Button
+  .start-batch-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    
+    .start-batch-btn {
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      height: 40px; // Fixed height to match all controls
+      box-sizing: border-box;
+      
+      &:hover:not(:disabled) {
+        background: #059669;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      &.active {
+        background: #f59e0b;
+        
+        &:hover {
+          background: #d97706;
+        }
+      }
+      
+      i {
+        font-size: 18px;
+      }
+    }
+    
+    .batch-info {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #6b7280;
+      
+      .batch-number {
+        font-weight: 600;
+        color: #059669;
+      }
+      
+      .employee-ids {
+        color: #3b82f6;
+      }
+      
+      .batch-timer {
+        color: #f59e0b;
+        font-weight: 600;
+      }
+    }
+    
+    // Scan Options styling
+    .scan-options {
+      display: flex;
+      gap: 8px;
+      
+      .scan-option-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        height: 40px; // Fixed height to match all controls
+        box-sizing: border-box;
+        
+        &:hover {
+          background: #f9fafb;
+          border-color: #9ca3af;
+        }
+        
+        &.scanner-btn {
+          border-color: #3b82f6;
+          color: #3b82f6;
+          
+          &:hover {
+            background: #eff6ff;
+          }
+        }
+        
+        &.camera-btn {
+          border-color: #10b981;
+          color: #10b981;
+          
+          &:hover {
+            background: #ecfdf5;
+          }
+        }
+        
+        i {
+          font-size: 16px;
+        }
+      }
+    }
+  }
   
   .excel-header {
     background: #f8f9fa;
@@ -223,11 +624,14 @@ iframe {
     width: 80px;
   }
   
-
+  .batch-cell {
+    min-width: 144px;
+    width: 144px;
+  }
   
   .date-cell {
-    min-width: 110px;
-    width: 110px;
+    min-width: 88px;
+    width: 88px;
   }
   
   .location-cell {
@@ -683,6 +1087,36 @@ iframe {
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   flex-wrap: wrap;
+  
+  // Ensure all direct children are properly aligned
+  > * {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    box-sizing: border-box;
+  }
+  
+  // Special handling for start-batch-container
+  .start-batch-container {
+    height: auto;
+    
+    .start-batch-btn,
+    .scan-options .scan-option-btn {
+      height: 40px;
+    }
+  }
+  
+  // Ensure proper spacing and alignment
+  .start-batch-container,
+  .dropdown,
+  .total-counter-box,
+  .search-box,
+  .filter-buttons,
+  .date-range-selector,
+  .action-buttons {
+    margin: 0;
+    padding: 0;
+  }
 }
 
 // More Button styling
@@ -698,7 +1132,7 @@ iframe {
   font-size: 12px;
   cursor: pointer;
   transition: background-color 0.2s;
-  height: 32px; // Fixed height to match filter buttons
+  height: 40px; // Fixed height to match all controls
   display: flex;
   align-items: center;
   justify-content: center;
@@ -716,13 +1150,17 @@ iframe {
 .total-counter-box {
   background: #ffffff;
   color: #000000;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
   min-width: 140px;
   text-align: center;
+  height: 40px; // Fixed height to match all controls
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
   span {
     white-space: nowrap;
@@ -733,12 +1171,14 @@ iframe {
 // Search box styling
 .search-box {
   .search-input {
-    padding: 6px 10px;
+    padding: 8px 12px;
     border: 1px solid #d1d5db;
     border-radius: 4px;
     font-size: 12px;
     width: 200px;
     background: white;
+    height: 40px; // Fixed height to match all controls
+    box-sizing: border-box;
     
     &:focus {
       outline: none;
@@ -763,7 +1203,7 @@ iframe {
     gap: 4px;
     
     .filter-select {
-      padding: 6px 12px;
+      padding: 8px 12px;
       border: 1px solid #d1d5db;
       background: #ffffff;
       color: #374151;
@@ -771,12 +1211,13 @@ iframe {
       font-size: 12px;
       cursor: pointer;
       transition: all 0.2s;
-      height: 32px; // Same height as More button
+      height: 40px; // Fixed height to match all controls
       display: flex;
       align-items: center;
       justify-content: center;
       min-width: 100px;
       outline: none;
+      box-sizing: border-box;
       
       &:hover {
         border-color: #9ca3af;
@@ -803,16 +1244,20 @@ iframe {
   align-items: center;
   gap: 8px;
   background: #f5f5f5;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 4px;
   border: 1px solid #e0e0e0;
+  height: 40px; // Fixed height to match all controls
+  box-sizing: border-box;
   
   .date-input {
     border: 1px solid #ddd;
     border-radius: 3px;
-    padding: 4px 8px;
+    padding: 8px 12px;
     font-size: 11px;
     width: 110px;
+    height: 24px; // Fixed height for date inputs
+    box-sizing: border-box;
     
     &:focus {
       outline: none;
@@ -837,7 +1282,7 @@ iframe {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 12px;
+    padding: 8px 16px;
     background: #10b981;
     color: white;
     border: none;
@@ -845,6 +1290,8 @@ iframe {
     font-size: 12px;
     cursor: pointer;
     transition: background-color 0.2s;
+    height: 40px; // Fixed height to match all controls
+    box-sizing: border-box;
     
     &:hover {
       background: #059669;
@@ -953,6 +1400,241 @@ iframe {
     
     .action-buttons {
       justify-content: center;
+    }
+  }
+}
+
+// Scanner Input Overlay Styling
+.scanner-input-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+}
+
+.scanner-input-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.scanner-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  
+  h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .close-scanner-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 4px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+  }
+}
+
+.scanner-input-body {
+  padding: 24px;
+  
+  .scanner-input-field {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 16px;
+    
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+  }
+  
+  .scanner-instructions {
+    p {
+      margin: 8px 0;
+      color: #6b7280;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      i {
+        color: #3b82f6;
+        font-size: 16px;
+      }
+    }
+  }
+}
+
+// Camera Modal Styling
+.camera-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+}
+
+.camera-modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.camera-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  
+  h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .close-camera-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 4px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+  }
+}
+
+.camera-modal-body {
+  padding: 24px;
+  
+  .camera-container {
+    position: relative;
+    margin-bottom: 16px;
+    
+    #qr-reader {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .camera-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      
+      .camera-frame {
+        width: 250px;
+        height: 250px;
+        border: 3px solid #3b82f6;
+        border-radius: 8px;
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3);
+      }
+      
+      .camera-hint {
+        margin-top: 16px;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      }
+    }
+  }
+  
+  .camera-instructions {
+    p {
+      margin: 8px 0;
+      color: #6b7280;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      i {
+        color: #10b981;
+        font-size: 16px;
+      }
+    }
+  }
+}
+
+// Toggle styling for auto-hide received materials
+.toggle-item {
+  padding: 8px 16px;
+  
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #374151;
+    
+    .toggle-checkbox {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    
+    .toggle-text {
+      user-select: none;
     }
   }
 }

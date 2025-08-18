@@ -39,13 +39,27 @@
             </div>
             <div class="batch-field">
               <label>Mã nhân viên:</label>
-              <span class="batch-value" [class.scanned]="isEmployeeIdScanned">
-                {{ batchEmployeeId || 'Chưa scan (ASP...)' }}
-              </span>
+              <div class="employee-scan-controls">
+                <span class="batch-value" [class.scanned]="isEmployeeIdScanned">
+                  {{ batchEmployeeId || 'Chưa scan (ASP...)' }}
+                </span>
+                <button class="scan-employee-btn" 
+                        (click)="scanEmployeeId()"
+                        [disabled]="isEmployeeIdScanned"
+                        title="Scan mã nhân viên bằng camera">
+                  <i class="material-icons">qr_code_scanner</i>
+                  Scan
+                </button>
+              </div>
+              <div class="scan-note" *ngIf="!isEmployeeIdScanned">
+                <small>⚠️ Phải scan mã nhân viên bằng camera trước khi scan mã hàng</small>
+              </div>
             </div>
             <div class="batch-field">
               <label>Mã hàng đã scan:</label>
-              <span class="batch-count">{{ batchMaterials.length }}</span>
+              <span class="batch-count" [class.ready]="batchMaterials.length > 0">
+                {{ batchMaterials.length }} / <span class="expected-count">?</span>
+              </span>
             </div>
             <div class="batch-field" *ngIf="batchMaterials.length > 0">
               <label>Mã hàng gần nhất:</label>
@@ -53,14 +67,51 @@
                 {{ batchMaterials[batchMaterials.length - 1]?.materialCode || '' }}
               </span>
             </div>
+            <div class="batch-status" *ngIf="batchMaterials.length > 0">
+              <label>Trạng thái:</label>
+              <span class="status-indicator" [class.pending]="!isBatchCompleted" [class.completed]="isBatchCompleted">
+                <span *ngIf="!isBatchCompleted">⏳ Đang scan... ({{ batchMaterials.length }} mã hàng)</span>
+                <span *ngIf="isBatchCompleted">✅ Đã hoàn thành ({{ batchMaterials.length }} mã hàng)</span>
+              </span>
+            </div>
+            
+            <!-- Tick xác nhận đã nhận toàn bộ lô hàng -->
+            <div class="batch-confirmation" *ngIf="batchMaterials.length > 0 && !isBatchCompleted">
+              <label class="confirmation-label">
+                <input type="checkbox" 
+                       [(ngModel)]="isBatchFullyReceived" 
+                       (change)="onBatchConfirmationChange()"
+                       class="confirmation-checkbox">
+                <span class="confirmation-text">
+                  ✅ Đã nhận toàn bộ lô hàng ({{ batchMaterials.length }} mã hàng)
+                </span>
+              </label>
+              <small class="confirmation-note">
+                Tick vào ô này để xác nhận đã scan đủ tất cả mã hàng trong lô
+              </small>
+            </div>
+            
+            <!-- Danh sách mã hàng đã scan -->
+            <div class="batch-materials-list" *ngIf="batchMaterials.length > 0">
+              <label>Danh sách mã hàng:</label>
+              <div class="materials-grid">
+                <div class="material-item" *ngFor="let material of batchMaterials; let i = index">
+                  <span class="material-number">{{ i + 1 }}</span>
+                  <span class="material-code">{{ material.materialCode }}</span>
+                  <span class="material-po">{{ material.poNumber }}</span>
+                  <span class="material-qty">{{ material.quantity }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="batch-actions">
             <button class="batch-save-btn" 
                     (click)="saveBatchToOutbound()"
-                    [disabled]="!isProductionOrderScanned || !isEmployeeIdScanned"
-                    title="Hoàn thành batch scanning">
-              <i class="material-icons">check_circle</i>
-              Hoàn thành ({{ batchMaterials.length }})
+                    [disabled]="!isProductionOrderScanned || !isEmployeeIdScanned || batchMaterials.length === 0 || isBatchCompleted"
+                    [title]="isBatchCompleted ? 'Batch đã hoàn thành' : 'Hoàn thành batch scanning - Lưu tất cả mã hàng đã scan'">
+              <i class="material-icons">{{ isBatchCompleted ? 'check_circle' : 'check_circle' }}</i>
+              <span *ngIf="!isBatchCompleted">Hoàn thành Batch ({{ batchMaterials.length }})</span>
+              <span *ngIf="isBatchCompleted">Đã hoàn thành ({{ batchMaterials.length }})</span>
             </button>
             <button class="batch-cancel-btn" 
                     (click)="stopBatchScanningMode()"
@@ -82,6 +133,7 @@
               <i class="material-icons">download</i>
               Export Excel
             </a>
+            
             <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
               <i class="material-icons">add</i>
               Thêm Material
@@ -198,4 +250,44 @@
 
   <!-- QR Scanner Modal - Removed since we auto-export now -->
   <!-- <div class="qr-scanner-modal" *ngIf="isCameraScanning || lastScannedData"> -->
+  
+  <!-- QR Scanner Modal for Employee ID -->
+  <div class="qr-scanner-modal" *ngIf="isCameraScanning">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5>
+          <i class="material-icons">qr_code_scanner</i>
+          Scan Mã Nhân Viên
+        </h5>
+        <button class="close-btn" (click)="stopScanning()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="scanner-container">
+          <div id="qr-reader"></div>
+          <div class="scanner-overlay">
+            <div class="scanner-frame"></div>
+            <div class="scanner-hint">
+              Đặt mã nhân viên vào khung để scan
+            </div>
+          </div>
+        </div>
+        
+        <div class="scanner-info">
+          <h6>Hướng dẫn scan mã nhân viên:</h6>
+          <p><strong>Format:</strong> ASP + 4 chữ số (ví dụ: ASP1234)</p>
+          <p><strong>Lưu ý:</strong> Chỉ scan mã nhân viên, không scan mã hàng</p>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="stopScanning()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
