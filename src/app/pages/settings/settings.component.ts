@@ -923,6 +923,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
       return '👑 ' + (user.displayName || user.email);
     }
     
+    // admin@asp.com chỉ hiển thị là Admin
+    if (user.email === 'admin@asp.com') {
+      return 'Admin';
+    }
+    
     // Nếu có employeeId, hiển thị mã nhân viên ASP
     if (user.employeeId) {
       const displayName = user.displayName ? ` - ${user.displayName}` : '';
@@ -938,6 +943,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         const displayName = user.displayName ? ` - ${user.displayName}` : '';
         return `ASP${numbers}${displayName}`;
       }
+    }
+    
+    // Email @gmail hiển thị nguyên email
+    if (user.email && user.email.includes('@gmail')) {
+      return user.email;
     }
     
     // Nếu không có employeeId và không phải email asp, hiển thị email
@@ -1133,5 +1143,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
       console.error('❌ Lỗi tạo tài khoản ASP0001:', error);
       alert('❌ Có lỗi xảy ra khi tạo tài khoản ASP0001!');
     }
+  }
+
+  // Get count of admin users
+  getAdminUsersCount(): number {
+    return this.firebaseUsers.filter(user => 
+      user.role === 'admin' || 
+      user.role === 'Admin' || 
+      user.role === 'Quản lý' ||
+      user.uid === 'special-steve-uid' ||
+      user.uid === 'special-asp0001-uid'
+    ).length;
   }
 }

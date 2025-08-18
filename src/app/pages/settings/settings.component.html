@@ -3,11 +3,19 @@
     
     <!-- Admin Login Section -->
     <div *ngIf="!isAdminLoggedIn" class="admin-login">
+      <!-- Warehouse Background Elements -->
+      <div class="warehouse-elements">
+        <div class="warehouse-box"></div>
+        <div class="warehouse-box"></div>
+        <div class="warehouse-box"></div>
+        <div class="warehouse-box"></div>
+      </div>
+      
       <div class="login-card">
         <div class="login-header">
-          <mat-icon>admin_panel_settings</mat-icon>
-          <h2>Admin Login</h2>
-          <p>Vui lòng đăng nhập để truy cập Settings</p>
+          <mat-icon>warehouse</mat-icon>
+          <h2>Warehouse Management</h2>
+          <p>Đăng nhập để truy cập hệ thống quản lý kho</p>
         </div>
         
         <form (ngSubmit)="adminLogin()" #loginForm="ngForm">
@@ -49,111 +57,135 @@
     </div>
 
     <!-- Settings Dashboard -->
-    <div *ngIf="isAdminLoggedIn" class="excel-container">
-      <!-- Excel Header -->
-      <div class="excel-header">
-        <h4>⚙️ SETTINGS MANAGEMENT</h4>
-      </div>
-      
-      <!-- Excel Actions -->
-      <div class="excel-actions">
-        <div class="action-controls">
-          <span class="subtitle">Quản lý quyền xóa và truy cập tab cho nhân viên</span>
-          
-          <button mat-stroked-button (click)="logout()" class="logout-btn">
-            <mat-icon>logout</mat-icon>
-            Đăng xuất
-          </button>
+    <div *ngIf="isAdminLoggedIn" class="settings-dashboard">
+      <!-- Modern Header -->
+      <div class="dashboard-header">
+        <div class="header-content">
+          <div class="header-left">
+            <h1 class="dashboard-title">
+              <mat-icon>settings</mat-icon>
+              Settings
+            </h1>
+            <p class="dashboard-subtitle">Quản lý quyền truy cập và cài đặt hệ thống</p>
+          </div>
+          <div class="header-right">
+            <button mat-raised-button color="warn" (click)="logout()" class="logout-btn">
+              <mat-icon>logout</mat-icon>
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Settings Body -->
       <div class="settings-body">
-        <!-- New User Notifications Section -->
-      <div class="new-user-notifications-section" *ngIf="newUserNotifications.length > 0">
-        <div class="section-header">
-          <h3 style="margin: 0; font-size: 18px; color: #f44336;">
-            <mat-icon style="font-size: 20px; margin-right: 8px; color: #f44336;">notifications_active</mat-icon>
-            Tài khoản mới đăng ký ({{ newUserNotifications.length }})
-          </h3>
-          <button mat-raised-button 
-                  color="primary" 
-                  (click)="markAllNotificationsAsReadPublic(); console.log('Button clicked!')"
-                  style="font-size: 12px; padding: 4px 8px; min-width: auto;">
-            <mat-icon style="font-size: 16px;">check</mat-icon>
-            Đã đọc
-          </button>
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">
+              <mat-icon>notifications</mat-icon>
+            </div>
+            <div class="stat-content">
+              <h3 class="stat-number">{{ newUserNotifications.length }}</h3>
+              <p class="stat-label">Tài khoản mới</p>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">
+              <mat-icon>people</mat-icon>
+            </div>
+            <div class="stat-content">
+              <h3 class="stat-number">{{ firebaseUsers.length }}</h3>
+              <p class="stat-label">Người dùng</p>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">
+              <mat-icon>security</mat-icon>
+            </div>
+            <div class="stat-content">
+              <h3 class="stat-number">{{ getAdminUsersCount() }}</h3>
+              <p class="stat-label">Quản trị viên</p>
+            </div>
+          </div>
         </div>
-        
-        <div class="notifications-list">
-          <div class="notification-item" *ngFor="let notification of newUserNotifications">
-            <div class="notification-content">
-              <div class="user-info">
-                <strong>{{ notification.displayName || notification.userEmail }}</strong>
-                <span class="user-details">
-                  {{ notification.department }} • {{ notification.factory }} • {{ notification.role }}
-                </span>
+
+        <!-- New User Notifications Section -->
+        <div class="section-card" *ngIf="newUserNotifications.length > 0">
+          <div class="card-header">
+            <div class="card-title">
+              <mat-icon>notifications_active</mat-icon>
+              <h3>Tài khoản mới đăng ký</h3>
+              <span class="badge">{{ newUserNotifications.length }}</span>
+            </div>
+            <button mat-raised-button 
+                    color="primary" 
+                    (click)="markAllNotificationsAsReadPublic()"
+                    class="action-btn">
+              <mat-icon>check</mat-icon>
+              Đánh dấu đã đọc
+            </button>
+          </div>
+          
+          <div class="notifications-grid">
+            <div class="notification-card" *ngFor="let notification of newUserNotifications">
+              <div class="notification-header">
+                <div class="user-avatar">
+                  <mat-icon>person</mat-icon>
+                </div>
+                <div class="user-info">
+                  <h4>{{ notification.displayName || notification.userEmail }}</h4>
+                  <div class="user-meta">
+                    <span class="department">{{ notification.department }}</span>
+                    <span class="factory">{{ notification.factory }}</span>
+                    <span class="role">{{ notification.role }}</span>
+                  </div>
+                </div>
+                <div class="notification-time">
+                  {{ notification.createdAt | date:'dd/MM HH:mm' }}
+                </div>
               </div>
               <div class="notification-actions">
-                <div class="notification-time">
-                  {{ notification.createdAt | date:'dd/MM/yyyy HH:mm' }}
-                </div>
                 <button mat-icon-button 
                         color="primary" 
                         (click)="markNotificationAsRead(notification.id)"
-                        matTooltip="Đánh dấu đã đọc"
-                        style="transform: scale(0.8);">
-                  <mat-icon style="font-size: 16px;">check</mat-icon>
+                        matTooltip="Đánh dấu đã đọc">
+                  <mat-icon>check</mat-icon>
                 </button>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
 
 
         <!-- Firebase Users Section -->
-        <div class="firebase-users-section">
-            <!-- Unified Header -->
-            <div class="section-header-unified">
-              <div class="header-title">
-                <mat-icon>account_circle</mat-icon>
-                Danh sách Email đã đăng nhập
-                <span class="user-count" *ngIf="!isLoadingFirebaseUsers">
-                  ({{ firebaseUsers.length }} users)
-                </span>
-              </div>
-              <div class="header-actions">
-                <button class="custom-btn create-admin-btn" 
-                        (click)="createSpecialAccount()"
-                        style="background-color: #4CAF50; color: white; margin-right: 8px;"
-                        matTooltip="Tạo tài khoản quản lý đặc biệt ASP0001">
-                  <mat-icon>admin_panel_settings</mat-icon>
-                  Tạo TK ASP0001
-                </button>
-                <button class="custom-btn edit-btn" 
-                        (click)="togglePermissionMode()"
-                        [disabled]="isLoadingFirebaseUsers">
-                  <mat-icon>{{ isEditingPermissions ? 'save' : 'edit' }}</mat-icon>
-                  {{ isEditingPermissions ? 'Lưu' : 'Sửa' }}
-                </button>
-                <button class="custom-btn refresh-btn" 
-                        (click)="refreshFirebaseUsers()"
-                        [disabled]="isLoadingFirebaseUsers">
-                  <mat-icon>refresh</mat-icon>
-                  Làm mới
-                </button>
-                <button class="custom-btn status-btn" (click)="checkFirestoreStatus()">
-                  <i class="material-icons">info</i>
-                  Trạng thái
-                </button>
-                <button class="custom-btn refresh-tabs-btn" (click)="refreshTabPermissions()">
-                  <i class="material-icons">tab</i>
-                  Làm mới Tab Permissions
-                </button>
-              </div>
+        <div class="section-card">
+          <div class="card-header">
+            <div class="card-title">
+              <mat-icon>account_circle</mat-icon>
+              <h3>Quản lý người dùng</h3>
+              <span class="badge" *ngIf="!isLoadingFirebaseUsers">{{ firebaseUsers.length }}</span>
             </div>
+            <div class="card-actions">
+              <button mat-raised-button 
+                      [color]="isEditingPermissions ? 'primary' : 'default'"
+                      (click)="togglePermissionMode()"
+                      [disabled]="isLoadingFirebaseUsers"
+                      class="action-btn">
+                <mat-icon>{{ isEditingPermissions ? 'save' : 'edit' }}</mat-icon>
+                {{ isEditingPermissions ? 'Lưu' : 'Sửa' }}
+              </button>
+              <button mat-stroked-button 
+                      (click)="refreshTabPermissions()"
+                      class="action-btn">
+                <mat-icon>tab</mat-icon>
+                Làm mới Tab
+              </button>
+            </div>
+          </div>
 
             <!-- Simplified Permission Controls -->
             <div *ngIf="isEditingPermissions" class="permission-controls" style="margin: 8px 0; padding: 8px; background: #f5f5f5; border-radius: 4px;">

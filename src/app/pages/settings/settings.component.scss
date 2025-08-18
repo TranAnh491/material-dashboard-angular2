@@ -20,49 +20,105 @@
   overflow: hidden;
 }
 
-// Admin Login Styles
+// Admin Login Styles with Modern Warehouse Background
 .admin-login {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 60vh;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  position: relative;
+  overflow: hidden;
+  
+  // Modern Warehouse Background Pattern
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      // Grid pattern for warehouse floor
+      linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: gridMove 20s linear infinite;
+  }
+  
+  // Floating warehouse elements
+  &::after {
+    content: '';
+    position: absolute;
+    top: 20%;
+    right: 10%;
+    width: 200px;
+    height: 200px;
+    background: 
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(255,255,255,0.1) 0%, transparent 50%);
+    border-radius: 50%;
+    animation: float 6s ease-in-out infinite;
+  }
   
   .login-card {
-    background: white;
-    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
     padding: 40px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     width: 100%;
     max-width: 400px;
+    position: relative;
+    z-index: 10;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     
+    // Warehouse-themed header
     .login-header {
       text-align: center;
       margin-bottom: 30px;
       
       mat-icon {
-        font-size: 48px;
-        width: 48px;
-        height: 48px;
-        color: #3f51b5;
-        margin-bottom: 15px;
+        font-size: 56px;
+        width: 56px;
+        height: 56px;
+        color: #1e3c72;
+        margin-bottom: 20px;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
       
       h2 {
-        margin: 0 0 10px 0;
-        color: #333;
-        font-weight: 600;
+        margin: 0 0 15px 0;
+        color: #1e3c72;
+        font-weight: 700;
+        font-size: 28px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
       }
       
       p {
-        color: #666;
+        color: #5a6c7d;
         margin: 0;
-        font-size: 14px;
+        font-size: 16px;
+        font-weight: 500;
       }
     }
     
     .full-width {
       width: 100%;
       margin-bottom: 20px;
+      
+      .mat-form-field-wrapper {
+        .mat-form-field-outline {
+          color: #1e3c72;
+        }
+        
+        .mat-form-field-label {
+          color: #5a6c7d;
+        }
+      }
     }
     
     .error-message {
@@ -72,6 +128,10 @@
       color: #f44336;
       font-size: 14px;
       margin-bottom: 20px;
+      background: rgba(244, 67, 54, 0.1);
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #f44336;
       
       mat-icon {
         font-size: 18px;
@@ -82,14 +142,444 @@
     
     .login-btn {
       width: 100%;
-      height: 48px;
+      height: 52px;
       font-size: 16px;
       font-weight: 600;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s;
+      }
+      
+      &:hover::before {
+        left: 100%;
+      }
+      
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(30, 60, 114, 0.4);
+      }
       
       mat-icon {
         margin-right: 8px;
       }
     }
+  }
+}
+
+// Warehouse background animations
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+  }
+}
+
+// Additional warehouse elements
+.warehouse-elements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+  
+  .warehouse-box {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    animation: warehouseFloat 8s ease-in-out infinite;
+    
+    &:nth-child(1) {
+      top: 15%;
+      left: 15%;
+      animation-delay: 0s;
+    }
+    
+    &:nth-child(2) {
+      top: 25%;
+      right: 20%;
+      animation-delay: 2s;
+    }
+    
+    &:nth-child(3) {
+      bottom: 20%;
+      left: 20%;
+      animation-delay: 4s;
+    }
+    
+    &:nth-child(4) {
+      bottom: 30%;
+      right: 15%;
+      animation-delay: 6s;
+    }
+  }
+}
+
+@keyframes warehouseFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-15px) scale(1.1);
+    opacity: 1;
+  }
+}
+
+// Responsive design for warehouse background
+@media (max-width: 768px) {
+  .admin-login {
+    padding: 20px;
+    
+    .login-card {
+      padding: 30px 25px;
+      max-width: 100%;
+      margin: 0 10px;
+    }
+    
+    .warehouse-elements .warehouse-box {
+      width: 60px;
+      height: 60px;
+    }
+    
+    &::after {
+      width: 150px;
+      height: 150px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-login {
+    .login-card {
+      padding: 25px 20px;
+      
+      .login-header {
+        h2 {
+          font-size: 24px;
+        }
+        
+        p {
+          font-size: 14px;
+        }
+        
+        mat-icon {
+          font-size: 48px;
+          width: 48px;
+          height: 48px;
+        }
+      }
+    }
+    
+    .warehouse-elements .warehouse-box {
+      width: 50px;
+      height: 50px;
+    }
+  }
+}
+
+// Modern Settings Dashboard - Compact like Work Order
+.settings-dashboard {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 12px 15px; /* Compact padding like Work Order */
+}
+
+.dashboard-header {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 15px 20px; /* Compact padding like Work Order */
+  margin-bottom: 12px; /* Reduced margin like Work Order */
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .header-left {
+      .dashboard-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 5px 0; /* Reduced margin */
+        font-size: 1.4em; /* Compact font size like Work Order */
+        font-weight: 600; /* Reduced weight */
+        color: #2c3e50;
+        
+        mat-icon {
+          font-size: 24px; /* Reduced icon size */
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+        }
+      }
+      
+      .dashboard-subtitle {
+        margin: 0;
+        color: #7f8c8d;
+        font-size: 0.9em; /* Compact font size like Work Order */
+      }
+    }
+    
+    .header-right {
+      .logout-btn {
+        background: #e74c3c;
+        color: white;
+        border-radius: 8px;
+        padding: 8px 16px; /* Compact padding */
+        font-weight: 500; /* Reduced weight */
+        font-size: 0.9em; /* Compact font size */
+        
+        mat-icon {
+          margin-right: 6px;
+          font-size: 18px; /* Smaller icon */
+        }
+      }
+    }
+  }
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* Reduced gap like Work Order */
+}
+
+// Stats Grid - Compact like Work Order
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Reduced min-width */
+  gap: 12px; /* Reduced gap like Work Order */
+  margin-bottom: 12px; /* Reduced margin like Work Order */
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px; /* Reduced border radius */
+  padding: 15px 20px; /* Compact padding like Work Order */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); /* Reduced shadow */
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 15px; /* Reduced gap */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  min-height: 60px; /* Set minimum height like Work Order */
+  
+  &:hover {
+    transform: translateY(-2px); /* Reduced hover effect */
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  }
+  
+  .stat-icon {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border-radius: 8px; /* Reduced border radius */
+    padding: 10px; /* Reduced padding */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    mat-icon {
+      font-size: 18px; /* Reduced icon size */
+      width: 18px;
+      height: 18px;
+      color: white;
+    }
+  }
+  
+  .stat-content {
+    .stat-number {
+      margin: 0 0 2px 0; /* Reduced margin */
+      font-size: 1.3em; /* Compact font size like Work Order */
+      font-weight: 600; /* Reduced weight */
+      color: #2c3e50;
+    }
+    
+    .stat-label {
+      margin: 0;
+      color: #7f8c8d;
+      font-size: 0.75em; /* Compact font size like Work Order */
+      font-weight: 500;
+    }
+  }
+}
+
+// Section Cards - Compact like Work Order
+.section-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px; /* Reduced border radius */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); /* Reduced shadow */
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  margin-bottom: 12px; /* Reduced margin like Work Order */
+  
+  .card-header {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    padding: 15px 20px; /* Compact padding like Work Order */
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px; /* Reduced gap */
+      
+      mat-icon {
+        font-size: 20px; /* Reduced icon size */
+        width: 20px;
+        height: 20px;
+        color: #667eea;
+      }
+      
+      h3 {
+        margin: 0;
+        font-size: 1.3em; /* Compact font size like Work Order */
+        font-weight: 600;
+        color: #2c3e50;
+      }
+      
+      .badge {
+        background: #667eea;
+        color: white;
+        padding: 3px 8px; /* Reduced padding */
+        border-radius: 16px; /* Reduced border radius */
+        font-size: 0.75em; /* Compact font size like Work Order */
+        font-weight: 600;
+        margin-left: 8px; /* Reduced margin */
+      }
+    }
+    
+    .card-actions {
+      display: flex;
+      gap: 8px; /* Reduced gap */
+      flex-wrap: wrap;
+      
+      .action-btn {
+        border-radius: 6px; /* Reduced border radius */
+        font-weight: 500;
+        padding: 6px 12px; /* Compact padding */
+        min-width: auto;
+        font-size: 0.85em; /* Compact font size */
+        
+        mat-icon {
+          margin-right: 4px; /* Reduced margin */
+          font-size: 16px; /* Smaller icon */
+        }
+      }
+    }
+  }
+}
+
+// Notifications Grid - Compact like Work Order
+.notifications-grid {
+  padding: 15px 20px; /* Compact padding like Work Order */
+  display: grid;
+  gap: 12px; /* Reduced gap like Work Order */
+}
+
+.notification-card {
+  background: #f8f9fa;
+  border-radius: 8px; /* Reduced border radius */
+  padding: 15px 20px; /* Compact padding like Work Order */
+  border: 1px solid #e9ecef;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: #e9ecef;
+    transform: translateX(2px); /* Reduced hover effect */
+  }
+  
+  .notification-header {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Reduced gap */
+    margin-bottom: 12px; /* Reduced margin */
+    
+    .user-avatar {
+      background: #667eea;
+      border-radius: 50%;
+      width: 36px; /* Reduced size */
+      height: 36px; /* Reduced size */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+      mat-icon {
+        color: white;
+        font-size: 18px; /* Reduced icon size */
+        width: 18px;
+        height: 18px;
+      }
+    }
+    
+    .user-info {
+      flex: 1;
+      
+      h4 {
+        margin: 0 0 6px 0; /* Reduced margin */
+        font-size: 0.9em; /* Compact font size like Work Order */
+        font-weight: 600;
+        color: #2c3e50;
+      }
+      
+      .user-meta {
+        display: flex;
+        gap: 8px; /* Reduced gap */
+        flex-wrap: wrap;
+        
+        span {
+          background: #e9ecef;
+          padding: 3px 6px; /* Reduced padding */
+          border-radius: 4px; /* Reduced border radius */
+          font-size: 0.7em; /* Compact font size like Work Order */
+          color: #6c757d;
+          font-weight: 500;
+        }
+      }
+    }
+    
+    .notification-time {
+      color: #6c757d;
+      font-size: 0.7em; /* Compact font size like Work Order */
+      font-weight: 500;
+    }
+  }
+  
+  .notification-actions {
+    display: flex;
+    justify-content: flex-end;
   }
 }
 
