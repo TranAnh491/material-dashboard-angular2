@@ -19,6 +19,7 @@ export interface LabelScheduleData {
   statusUpdateTime?: Date; // Thời gian cập nhật trạng thái
   banVe: string; // Bản vẽ
   ghiChu: string; // Ghi chú
+  isUrgent?: boolean; // Đánh dấu gấp
   
   // Additional fields for processing
   status?: 'pending' | 'printing' | 'completed' | 'failed';

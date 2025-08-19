@@ -323,6 +323,21 @@
                   <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">{{ user.displayName || '-' }}</td>
                 </ng-container>
 
+                <!-- Read Only Column -->
+                <ng-container matColumnDef="readOnly">
+                  <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;" matTooltip="Tài khoản chỉ được xem, không được chỉnh sửa">Chỉ xem</th>
+                  <td mat-cell *matCellDef="let user" style="padding: 8px 4px; text-align: center; border: 1px solid #e0e0e0;">
+                    <mat-checkbox
+                      [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
+                      (change)="updateUserReadOnlyPermission(user.uid, $event.checked)"
+                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
+                      color="warn"
+                      matTooltip="Bật/tắt chế độ chỉ xem (không được chỉnh sửa)"
+                      style="transform: scale(0.8);">
+                    </mat-checkbox>
+                  </td>
+                </ng-container>
+
                 <!-- Created Date Column -->
                 <ng-container matColumnDef="createdAt">
                   <th mat-header-cell *matHeaderCellDef style="padding: 8px 4px; font-size: 11px; text-align: center; background-color: #f0f0f0; border: 1px solid #d0d0d0; font-weight: bold;">Ngày tạo</th>

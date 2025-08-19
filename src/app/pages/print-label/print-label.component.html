@@ -145,6 +145,7 @@
                 <th>Tháng</th>
                 <th>STT</th>
                 <th style="min-width: 120px;">Size Phôi</th>
+                <th style="min-width: 60px;">Gấp</th>
                 <th>Mã tem</th>
                 <th>Số lượng yêu cầu</th>
                 <th>Số lượng phôi</th>
@@ -164,7 +165,7 @@
               </tr>
             </thead>
             <tbody>
-                          <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
+              <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
               <tr *ngIf="showCompletedItems || !item.isCompleted"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f5f5f5' : 'white')"
@@ -183,6 +184,16 @@
                     <option value="40x25">40x25</option>
                   </select>
                   <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
+              </td>
+              <td style="border: 1px solid #000000; text-align: center;">
+                  <button mat-icon-button color="warning"
+                          (click)="toggleUrgent(item)"
+                          matTooltip="Đánh dấu gấp"
+                          *ngIf="!item.isUrgent"
+                          style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer;">
+                      <mat-icon style="font-size: 24px; width: 24px; height: 24px; color: #ff9800;">priority_high</mat-icon>
+                  </button>
+                  <span *ngIf="item.isUrgent" style="color: #ff5722; font-size: 17.5px; display: block; text-align: center;">🔥</span>
               </td>
               <td style="border: 1px solid #000000;">{{item.maTem || ''}}</td>
               <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
@@ -226,7 +237,9 @@
                   </select>
               </td>
               <td style="border: 1px solid #000000; text-align: center; font-size: 11px; color: #666;">
-                  <span class="status-time">{{ item.statusUpdateTime | date:'dd/MM/yyyy HH:mm' }}</span>
+                  <span class="status-time">
+                      {{ item.statusUpdateTime | date:'dd/MM/yyyy HH:mm' }}
+                  </span>
               </td>
               <td style="border: 1px solid #000000;">
                   <input 

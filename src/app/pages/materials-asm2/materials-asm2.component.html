@@ -185,6 +185,7 @@
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
+            <!-- Cột "Đã xuất" - Luôn có thể chỉnh sửa (giống cột "Vị trí") -->
             <td class="number-cell">
               <input type="number" 
                      class="editable-cell" 
@@ -192,7 +193,7 @@
                      (change)="updateExported(material)" 
                      min="0"
                      step="0.1"
-                     [disabled]="!canExport">
+                     placeholder="Nhập số lượng đã xuất">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"

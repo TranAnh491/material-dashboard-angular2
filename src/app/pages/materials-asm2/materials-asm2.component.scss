@@ -853,6 +853,28 @@
     width: 80px;
     min-width: 80px;
     max-width: 80px;
+    
+    // Style giống cột "Vị trí" - luôn có thể chỉnh sửa
+    .editable-cell {
+      width: 100%;
+      padding: 4px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 12px;
+      text-align: center;
+      background: #fff;
+      transition: all 0.2s ease;
+      
+      &:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+      }
+      
+      &:hover {
+        border-color: #0056b3;
+      }
+    }
   }
   
   th:nth-child(9), // Cột "Loại Hình"

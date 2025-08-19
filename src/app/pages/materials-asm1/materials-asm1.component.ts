@@ -612,6 +612,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         this.canDelete = canAccess;
         // this.canEditHSD = canAccess; // Removed - HSD column deleted
         
+        // Lưu ý: Cột "Đã xuất" luôn có thể chỉnh sửa (giống cột "Vị trí")
+        // không phụ thuộc vào canExport permission
+        
         console.log('🔑 ASM1 Permissions loaded:', {
           canView: this.canView,
           canEdit: this.canEdit,

@@ -27,6 +27,7 @@ interface ScheduleItem {
   isCompleted?: boolean;
   completedAt?: Date;
   completedBy?: string;
+  isUrgent?: boolean; // Đánh dấu gấp
   labelComparison?: {
     comparisonResult?: 'Pass' | 'Fail' | 'Pending' | 'Completed';
     comparedAt?: Date;
@@ -259,7 +260,8 @@ export class PrintLabelComponent implements OnInit {
             tinhTrang: row[15]?.toString() || '',
             statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
             banVe: row[16]?.toString() || '',
-            ghiChu: row[17]?.toString() || ''
+            ghiChu: row[17]?.toString() || '',
+            isUrgent: false // Mặc định không gấp
             // Remove labelComparison: undefined - Firebase doesn't allow undefined values
           };
         });
@@ -456,7 +458,7 @@ export class PrintLabelComponent implements OnInit {
           if (latestData.data && Array.isArray(latestData.data) && latestData.data.length > 0) {
             console.log('📋 Loading from latest document data field');
             this.scheduleData = latestData.data.map((item: any) => {
-              return {
+              const processedItem = {
                 nam: item.nam || '',
                 thang: item.thang || '',
                 stt: item.stt || '',
@@ -473,13 +475,17 @@ export class PrintLabelComponent implements OnInit {
                 lineNhan: item.lineNhan || '',
                 nguoiIn: item.nguoiIn || '',
                 tinhTrang: item.tinhTrang || '',
+                statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
                 banVe: item.banVe || '',
                 ghiChu: item.ghiChu || '',
                 isCompleted: item.isCompleted || false,
                 completedAt: item.completedAt ? new Date(item.completedAt.toDate()) : undefined,
                 completedBy: item.completedBy || '',
+                isUrgent: item.isUrgent || false,
                 labelComparison: item.labelComparison || undefined
               };
+              
+              return processedItem;
             });
           } else {
             // Fallback: load from individual documents (old format)
@@ -505,11 +511,13 @@ export class PrintLabelComponent implements OnInit {
                 lineNhan: data.lineNhan || '',
                 nguoiIn: data.nguoiIn || '',
                 tinhTrang: data.tinhTrang || '',
+                statusUpdateTime: data.statusUpdateTime ? new Date(data.statusUpdateTime.toDate ? data.statusUpdateTime.toDate() : data.statusUpdateTime) : new Date(),
                 banVe: data.banVe || '',
                 ghiChu: data.ghiChu || '',
                 isCompleted: data.isCompleted || false,
                 completedAt: data.completedAt ? new Date(data.completedAt.toDate()) : undefined,
                 completedBy: data.completedBy || '',
+                isUrgent: data.isUrgent || false,
                 labelComparison: data.labelComparison || undefined
               };
               
@@ -3023,6 +3031,11 @@ export class PrintLabelComponent implements OnInit {
               ...cleanItem
             };
             
+            // Ensure statusUpdateTime is preserved
+            if (cleanItem.statusUpdateTime) {
+              updatedData[foundItemIndex].statusUpdateTime = cleanItem.statusUpdateTime;
+            }
+            
             // Clean the entire data array to remove undefined values
             const cleanData = updatedData.map((item: any) => this.cleanScheduleItem(item));
             
@@ -4150,12 +4163,24 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to get display data based on filter
   getDisplayScheduleData(): ScheduleItem[] {
-    if (this.showCompletedItems) {
-      return this.scheduleData; // Show all items including completed
-    } else {
-      return this.getFilteredScheduleData(); // Hide completed items by default
-    }
+    const displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
+    
+    // Sort: urgent items first, then by STT
+    displayData.sort((a, b) => {
+      // First priority: urgent items go to the top
+      if (a.isUrgent && !b.isUrgent) return -1;
+      if (!a.isUrgent && b.isUrgent) return 1;
+      
+      // Second priority: by STT (numerical order)
+      const sttA = parseInt(a.stt || '0') || 0;
+      const sttB = parseInt(b.stt || '0') || 0;
+      return sttA - sttB;
+    });
+    
+    return displayData;
   }
+
+
 
   // Add function to mark all visible items as completed
   markAllVisibleAsCompleted(): void {
@@ -4314,7 +4339,17 @@ export class PrintLabelComponent implements OnInit {
     // Nếu thay đổi tình trạng, cập nhật thời gian cập nhật trạng thái
     if (fieldName === 'tinhTrang') {
       item.statusUpdateTime = new Date();
-      console.log(`⏰ Status updated: ${item.tinhTrang} at ${item.statusUpdateTime}`);
+      
+      // Force update the item in scheduleData array
+      const itemIndex = this.scheduleData.findIndex(scheduleItem => 
+        scheduleItem.stt === item.stt && scheduleItem.maTem === item.maTem
+      );
+      if (itemIndex !== -1) {
+        this.scheduleData[itemIndex].statusUpdateTime = item.statusUpdateTime;
+      }
+      
+      // Force Angular change detection
+      this.scheduleData = [...this.scheduleData];
     }
     
     // Update Firebase immediately
@@ -4322,10 +4357,23 @@ export class PrintLabelComponent implements OnInit {
     
     // Show brief success indicator
     this.showFieldSaveSuccess(fieldName);
+  }
+
+  // Toggle urgent status for an item
+  toggleUrgent(item: ScheduleItem): void {
+    item.isUrgent = !item.isUrgent;
     
-    // Debug: log current state
-    console.log('🔍 Current scheduleData length:', this.scheduleData.length);
-    console.log('🔍 Updated item:', item);
+    // Update Firebase immediately
+    this.updateScheduleInFirebase(item);
+    
+    if (item.isUrgent) {
+      console.log('🔥 Đánh dấu gấp cho item:', item.maTem);
+    } else {
+      console.log('✅ Bỏ đánh dấu gấp cho item:', item.maTem);
+    }
+    
+    // Force Angular change detection
+    this.scheduleData = [...this.scheduleData];
   }
 
   // Add function to update entire schedule data in Firebase
@@ -4369,7 +4417,19 @@ export class PrintLabelComponent implements OnInit {
     // Only include defined values
     Object.keys(item).forEach(key => {
       if (item[key] !== undefined && item[key] !== null) {
-        cleanItem[key] = item[key];
+        // Special handling for statusUpdateTime to ensure it's preserved
+        if (key === 'statusUpdateTime' && item[key] instanceof Date) {
+          cleanItem[key] = item[key];
+        } else if (key === 'statusUpdateTime' && typeof item[key] === 'string') {
+          // Convert string back to Date if it was serialized
+          cleanItem[key] = new Date(item[key]);
+        } else if (key === 'statusUpdateTime' && item[key]) {
+          // Handle other cases where statusUpdateTime exists
+          cleanItem[key] = item[key];
+        } else if (key !== 'statusUpdateTime') {
+          // For non-statusUpdateTime fields, use normal logic
+          cleanItem[key] = item[key];
+        }
       }
     });
     

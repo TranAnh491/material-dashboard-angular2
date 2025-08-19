@@ -31,6 +31,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Firebase user permissions
   firebaseUserPermissions: { [key: string]: boolean } = {};
   firebaseUserCompletePermissions: { [key: string]: boolean } = {};
+  firebaseUserReadOnlyPermissions: { [key: string]: boolean } = {};
   // Firebase user departments
   firebaseUserDepartments: { [key: string]: string } = {};
   isEditingPermissions = false;
@@ -393,6 +394,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
       // 6. Load permissions, departments và tab permissions cho tất cả users
       await this.loadFirebaseUserPermissions();
+      await this.loadFirebaseUserReadOnlyPermissions();
       await this.loadFirebaseUserDepartments();
       await this.loadFirebaseUserTabPermissions();
 
@@ -436,7 +438,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
           lastLoginAt: new Date()
         });
 
-        // Tạo permissions mặc định
+        // Tạo permissions mặc định - Tài khoản mới mặc định chỉ được xem
         await this.firestore.collection('user-permissions').doc(currentUser.uid).set({
           uid: currentUser.uid,
           email: currentUser.email,
@@ -446,14 +448,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
           role: 'User',
           hasDeletePermission: false,
           hasCompletePermission: false,
+          hasReadOnlyPermission: true, // Mặc định chỉ được xem
           createdAt: new Date(),
           updatedAt: new Date()
         });
 
-        // Tạo tab permissions mặc định - tất cả tab đều accessible
+        // Tạo tab permissions mặc định - Chỉ tab Dashboard được truy cập
         const defaultTabPermissions: { [key: string]: boolean } = {};
         this.availableTabs.forEach(tab => {
-          defaultTabPermissions[tab.key] = true;
+          // Chỉ tab Dashboard được tick mặc định, các tab khác không tick
+          defaultTabPermissions[tab.key] = tab.key === 'dashboard';
         });
 
         await this.firestore.collection('user-tab-permissions').doc(currentUser.uid).set({
@@ -529,6 +533,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== user.uid);
         delete this.firebaseUserPermissions[user.uid];
         delete this.firebaseUserCompletePermissions[user.uid];
+        delete this.firebaseUserReadOnlyPermissions[user.uid];
         delete this.firebaseUserDepartments[user.uid];
         delete this.firebaseUserTabPermissions[user.uid];
         
@@ -576,27 +581,65 @@ export class SettingsComponent implements OnInit, OnDestroy {
           const data = doc.data() as any;
           this.firebaseUserPermissions[user.uid] = data.hasDeletePermission || false;
           this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
-          console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}`);
+          this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
+          console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}, readOnly=${data.hasReadOnlyPermission}`);
         } else {
           // Đặc biệt cho Steve và Admin - luôn có quyền
           if (user.uid === 'special-steve-uid') {
             this.firebaseUserPermissions[user.uid] = true;
             this.firebaseUserCompletePermissions[user.uid] = true;
-            console.log(`✅ Special permissions for Steve: delete=true, complete=true`);
+            this.firebaseUserReadOnlyPermissions[user.uid] = false; // Không phải read-only
+            console.log(`✅ Special permissions for Steve: delete=true, complete=true, readOnly=false`);
           } else {
             this.firebaseUserPermissions[user.uid] = false; // Default to false
             this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
-            console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false`);
+            this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem)
+            console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=true (chỉ xem)`);
           }
         }
       } catch (error) {
         console.error('❌ Error loading permissions for user', user.email, ':', error);
         this.firebaseUserPermissions[user.uid] = false; // Default to false on error
         this.firebaseUserCompletePermissions[user.uid] = false; // Default to false on error
+        this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem) on error
       }
     }
     
     console.log('✅ Firebase user permissions loaded');
+  }
+
+  async loadFirebaseUserReadOnlyPermissions(): Promise<void> {
+    console.log('🔍 Loading Firebase user read-only permissions...');
+    console.log('📋 Logic mới: Tài khoản mới mặc định "Chỉ xem" = true, chỉ tab Dashboard được tick');
+    
+    for (const user of this.firebaseUsers) {
+      try {
+        const userRef = this.firestore.collection('user-permissions').doc(user.uid);
+        const doc = await userRef.get().toPromise();
+        
+        if (doc?.exists) {
+          const data = doc.data() as any;
+          this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
+          console.log(`✅ Loaded read-only permission for ${user.email}: ${data.hasReadOnlyPermission}`);
+        } else {
+          // Đặc biệt cho Steve và Admin - không phải read-only
+          if (user.uid === 'special-steve-uid') {
+            this.firebaseUserReadOnlyPermissions[user.uid] = false;
+            console.log(`✅ Special read-only permission for Steve: false`);
+          } else {
+            // User mới mặc định chỉ được xem
+            this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem)
+            console.log(`✅ Default read-only permission for ${user.email}: true (chỉ xem)`);
+          }
+        }
+              } catch (error) {
+          console.error('❌ Error loading read-only permission for user', user.email, ':', error);
+          // User mới mặc định chỉ được xem, ngay cả khi có lỗi
+          this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem) on error
+        }
+    }
+    
+    console.log('✅ Firebase user read-only permissions loaded');
   }
 
   async loadFirebaseUserDepartments(): Promise<void> {
@@ -624,6 +667,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async loadFirebaseUserTabPermissions(): Promise<void> {
     console.log('🔍 Loading Firebase user tab permissions...');
+    console.log('📋 Logic mới: Tài khoản mới mặc định chỉ tab Dashboard được tick, các tab khác không tick');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -644,10 +688,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
             this.firebaseUserTabPermissions[user.uid] = allPermissions;
             console.log(`✅ Special tab permissions for Steve: all tabs enabled`);
           } else {
-            // Tạo permissions mặc định cho user mới
+            // Tạo permissions mặc định cho user mới - Chỉ tab Dashboard được tick
             const defaultPermissions: { [key: string]: boolean } = {};
             this.availableTabs.forEach(tab => {
-              defaultPermissions[tab.key] = true; // Mặc định tất cả tab đều accessible
+              // Chỉ tab Dashboard được tick mặc định, các tab khác không tick
+              defaultPermissions[tab.key] = tab.key === 'dashboard';
             });
             this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
             
@@ -657,10 +702,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
       } catch (error) {
         console.error('❌ Error loading tab permissions for user', user.email, ':', error);
-        // Tạo permissions mặc định nếu có lỗi
+        // Tạo permissions mặc định nếu có lỗi - Chỉ tab Dashboard được tick
         const defaultPermissions: { [key: string]: boolean } = {};
         this.availableTabs.forEach(tab => {
-          defaultPermissions[tab.key] = true;
+          // Chỉ tab Dashboard được tick mặc định, các tab khác không tick
+          defaultPermissions[tab.key] = tab.key === 'dashboard';
         });
         this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
       }
@@ -671,7 +717,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
     try {
-      // Sử dụng permissions mặc định - mỗi tab được quản lý riêng biệt
+      // Sử dụng permissions mặc định - Chỉ tab Dashboard được tick
       const finalPermissions = { ...defaultPermissions };
       
       await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
@@ -682,7 +728,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-      console.log(`✅ Created default tab permissions for ${user.email} (including child tabs)`);
+      console.log(`✅ Created default tab permissions for ${user.email} - Chỉ tab Dashboard được tick`);
     } catch (error) {
       console.error(`❌ Error creating default tab permissions for ${user.email}:`, error);
     }
@@ -710,10 +756,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
         // Check if user has permissions for all available tabs
         for (const tab of this.availableTabs) {
           if (userTabPermissions[tab.key] === undefined) {
-            // Add missing tab permission (default to true)
-            userTabPermissions[tab.key] = true;
+            // Add missing tab permission - Chỉ tab Dashboard được tick mặc định
+            userTabPermissions[tab.key] = tab.key === 'dashboard';
             hasChanges = true;
-            console.log(`➕ Added missing permission for ${user.email}: ${tab.name}`);
+            console.log(`➕ Added missing permission for ${user.email}: ${tab.name} = ${tab.key === 'dashboard' ? 'true (Dashboard)' : 'false'}`);
           }
         }
         
@@ -750,6 +796,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         displayName: user.displayName || '',
         hasDeletePermission: hasPermission,
         hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
+        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
         updatedAt: new Date()
       }, { merge: true });
 
@@ -771,6 +818,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         displayName: user.displayName || '',
         hasDeletePermission: this.firebaseUserPermissions[userId] || false,
         hasCompletePermission: hasPermission,
+        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
         updatedAt: new Date()
       }, { merge: true });
 
@@ -778,6 +826,28 @@ export class SettingsComponent implements OnInit, OnDestroy {
       console.log(`✅ Updated complete permission for ${user.email}: ${hasPermission}`);
     } catch (error) {
       console.error('❌ Error updating user complete permission:', error);
+    }
+  }
+
+  async updateUserReadOnlyPermission(userId: string, hasPermission: boolean): Promise<void> {
+    try {
+      const user = this.firebaseUsers.find(u => u.uid === userId);
+      if (!user) return;
+
+      await this.firestore.collection('user-permissions').doc(userId).set({
+        uid: userId,
+        email: user.email,
+        displayName: user.displayName || '',
+        hasDeletePermission: this.firebaseUserPermissions[userId] || false,
+        hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
+        hasReadOnlyPermission: hasPermission,
+        updatedAt: new Date()
+      }, { merge: true });
+
+      this.firebaseUserReadOnlyPermissions[userId] = hasPermission;
+      console.log(`✅ Updated read-only permission for ${user.email}: ${hasPermission}`);
+    } catch (error) {
+      console.error('❌ Error updating user read-only permission:', error);
     }
   }
 
@@ -790,6 +860,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
         department: department,
         updatedAt: new Date()
       });
+
+      // Cập nhật permissions nếu có
+      if (this.firebaseUserPermissions[userId] !== undefined || 
+          this.firebaseUserCompletePermissions[userId] !== undefined ||
+          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
+        await this.firestore.collection('user-permissions').doc(userId).set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
+          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
+          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
+          updatedAt: new Date()
+        }, { merge: true });
+      }
 
       this.firebaseUserDepartments[userId] = department;
       console.log(`✅ Updated department for ${user.email}: ${department}`);
@@ -808,6 +893,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       });
 
+      // Cập nhật permissions nếu có
+      if (this.firebaseUserPermissions[userId] !== undefined || 
+          this.firebaseUserCompletePermissions[userId] !== undefined ||
+          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
+        await this.firestore.collection('user-permissions').doc(userId).set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
+          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
+          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
+          updatedAt: new Date()
+        }, { merge: true });
+      }
+
       user.factory = factory;
       console.log(`✅ Updated factory for ${user.email}: ${factory}`);
     } catch (error) {
@@ -824,6 +924,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
         role: role,
         updatedAt: new Date()
       });
+
+      // Cập nhật permissions nếu có
+      if (this.firebaseUserPermissions[userId] !== undefined || 
+          this.firebaseUserCompletePermissions[userId] !== undefined ||
+          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
+        await this.firestore.collection('user-permissions').doc(userId).set({
+          uid: userId,
+          email: user.email,
+          displayName: user.displayName || '',
+          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
+          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
+          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
+          updatedAt: new Date()
+        }, { merge: true });
+      }
 
       user.role = role;
       console.log(`✅ Updated role for ${user.email}: ${role}`);
@@ -864,11 +979,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       console.log('💾 Saving all permissions...');
 
-      // Save delete and complete permissions
+      // Save delete, complete and read-only permissions
       const permissions = Object.keys(this.firebaseUserPermissions).map(uid => ({
         uid: uid,
         hasDeletePermission: this.firebaseUserPermissions[uid],
-        hasCompletePermission: this.firebaseUserCompletePermissions[uid] || false
+        hasCompletePermission: this.firebaseUserCompletePermissions[uid] || false,
+        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[uid] || false
       }));
 
       for (const permission of permissions) {
@@ -880,6 +996,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
             displayName: user.displayName || '',
             hasDeletePermission: permission.hasDeletePermission,
             hasCompletePermission: permission.hasCompletePermission,
+            hasReadOnlyPermission: permission.hasReadOnlyPermission,
             updatedAt: new Date()
           }, { merge: true });
         }
@@ -911,11 +1028,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.isEditingPermissions = false;
     // Reload permissions to reset any unsaved changes
     this.loadFirebaseUserPermissions();
+    this.loadFirebaseUserReadOnlyPermissions();
     this.loadFirebaseUserTabPermissions();
   }
 
   getTableColumns(): string[] {
-    return ['email', 'accountType', 'role', 'department', 'factory', 'displayName', 'createdAt', 'permission', 'completePermission', 'lastLoginAt', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
+    return ['email', 'accountType', 'role', 'department', 'factory', 'displayName', 'readOnly', 'createdAt', 'permission', 'completePermission', 'lastLoginAt', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
   }
 
   getAccountDisplay(user: any): string {
