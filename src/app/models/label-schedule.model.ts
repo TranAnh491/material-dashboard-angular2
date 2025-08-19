@@ -16,6 +16,7 @@ export interface LabelScheduleData {
   lineNhan: string; // Line nhận
   nguoiIn: string; // Người in
   tinhTrang: string; // Tình trạng
+  statusUpdateTime?: Date; // Thời gian cập nhật trạng thái
   banVe: string; // Bản vẽ
   ghiChu: string; // Ghi chú
   

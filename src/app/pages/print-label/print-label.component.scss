@@ -1025,3 +1025,17 @@ thead th {
     }
   }
 }
+
+// Status time column styling
+.status-time {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #666;
+  background: #f8f9fa;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  display: inline-block;
+  min-width: 120px;
+  text-align: center;
+}

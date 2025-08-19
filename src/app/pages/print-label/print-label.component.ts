@@ -21,6 +21,7 @@ interface ScheduleItem {
   lineNhan?: string;
   nguoiIn?: string;
   tinhTrang?: string;
+  statusUpdateTime?: Date; // Thời gian cập nhật trạng thái
   banVe?: string;
   ghiChu?: string;
   isCompleted?: boolean;
@@ -256,6 +257,7 @@ export class PrintLabelComponent implements OnInit {
             lineNhan: row[13]?.toString() || '',
             nguoiIn: row[14]?.toString() || '',
             tinhTrang: row[15]?.toString() || '',
+            statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
             banVe: row[16]?.toString() || '',
             ghiChu: row[17]?.toString() || ''
             // Remove labelComparison: undefined - Firebase doesn't allow undefined values
@@ -856,7 +858,7 @@ export class PrintLabelComponent implements OnInit {
       ['Done', currentData.filter(item => item.tinhTrang === 'Done').length, `${((currentData.filter(item => item.tinhTrang === 'Done').length / currentData.length) * 100).toFixed(1)}%`],
       [],
       ['CHI TIẾT DỮ LIỆU:'],
-      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhận', 'Người in', 'Tình trạng', 'Ghi chú', 'Hoàn thành'],
+      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhận', 'Người in', 'Tình trạng', 'Thời gian', 'Ghi chú', 'Hoàn thành'],
       ...currentData.map(item => [
         item.nam || '',
         item.thang || '',
@@ -874,6 +876,7 @@ export class PrintLabelComponent implements OnInit {
         item.lineNhan || '',
         item.nguoiIn || '',
         item.tinhTrang || '',
+        item.statusUpdateTime ? new Date(item.statusUpdateTime).toLocaleString('vi-VN') : '',
         item.ghiChu || '',
         item.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'
       ])
@@ -885,11 +888,11 @@ export class PrintLabelComponent implements OnInit {
 
     // Merge cells cho tiêu đề
     worksheet['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 17 } }, // Tiêu đề chính
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 17 } }, // Ngày tạo
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 17 } }, // Tổng số records
-      { s: { r: 4, c: 0 }, e: { r: 4, c: 17 } }, // Tổng kết theo tình trạng
-      { s: { r: 16, c: 0 }, e: { r: 16, c: 17 } } // Chi tiết dữ liệu
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 18 } }, // Tiêu đề chính
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 18 } }, // Ngày tạo
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 18 } }, // Tổng số records
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 18 } }, // Tổng kết theo tình trạng
+      { s: { r: 16, c: 0 }, e: { r: 16, c: 18 } } // Chi tiết dữ liệu
     ];
 
     // Set column widths
@@ -910,6 +913,7 @@ export class PrintLabelComponent implements OnInit {
       { wch: 15 }, // Line nhận
       { wch: 15 }, // Người in
       { wch: 15 }, // Tình trạng
+      { wch: 20 }, // Thời gian
       { wch: 20 }, // Ghi chú
       { wch: 18 }  // Hoàn thành
     ];
@@ -4306,6 +4310,12 @@ export class PrintLabelComponent implements OnInit {
   // Add function to handle field changes (auto-save)
   onFieldChange(item: ScheduleItem, fieldName: string): void {
     console.log(`💾 Field changed for item: ${item.maTem}, Field: ${fieldName}, New value:`, item[fieldName as keyof ScheduleItem]);
+    
+    // Nếu thay đổi tình trạng, cập nhật thời gian cập nhật trạng thái
+    if (fieldName === 'tinhTrang') {
+      item.statusUpdateTime = new Date();
+      console.log(`⏰ Status updated: ${item.tinhTrang} at ${item.statusUpdateTime}`);
+    }
     
     // Update Firebase immediately
     this.updateScheduleInFirebase(item);
