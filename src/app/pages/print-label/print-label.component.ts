@@ -242,27 +242,27 @@ export class PrintLabelComponent implements OnInit {
           const soLuongPhoi = this.processQuantityField(row[6], 'Số lượng phôi');
           
           return {
-            nam: row[0]?.toString() || '',
-            thang: row[1]?.toString() || '',
+          nam: row[0]?.toString() || '',
+          thang: row[1]?.toString() || '',
             stt: row[2]?.toString() || '', // STT lấy theo file
-            sizePhoi: row[3]?.toString() || '',
-            maTem: row[4]?.toString() || '',
+          sizePhoi: row[3]?.toString() || '',
+          maTem: row[4]?.toString() || '',
             soLuongYeuCau: soLuongYeuCau,
             soLuongPhoi: soLuongPhoi,
-            maHang: row[7]?.toString() || '',
-            lenhSanXuat: row[8]?.toString() || '',
-            khachHang: row[9]?.toString() || '',
-            ngayNhanKeHoach: this.formatDateValue(row[10]) || '',
-            yy: row[11]?.toString() || '',
-            ww: row[12]?.toString() || '',
-            lineNhan: row[13]?.toString() || '',
-            nguoiIn: row[14]?.toString() || '',
-            tinhTrang: row[15]?.toString() || '',
+          maHang: row[7]?.toString() || '',
+          lenhSanXuat: row[8]?.toString() || '',
+          khachHang: row[9]?.toString() || '',
+          ngayNhanKeHoach: this.formatDateValue(row[10]) || '',
+          yy: row[11]?.toString() || '',
+          ww: row[12]?.toString() || '',
+          lineNhan: row[13]?.toString() || '',
+          nguoiIn: row[14]?.toString() || '',
+          tinhTrang: row[15]?.toString() || '',
             statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
-            banVe: row[16]?.toString() || '',
+          banVe: row[16]?.toString() || '',
             ghiChu: row[17]?.toString() || '',
             isUrgent: false // Mặc định không gấp
-            // Remove labelComparison: undefined - Firebase doesn't allow undefined values
+          // Remove labelComparison: undefined - Firebase doesn't allow undefined values
           };
         });
         
@@ -1080,7 +1080,7 @@ export class PrintLabelComponent implements OnInit {
 
   clearScheduleData(): void {
     console.log('🔍 clearScheduleData() called');
-    
+
     if (confirm('⚠️ Bạn có chắc chắn muốn xóa tất cả dữ liệu hiện tại? Hành động này không thể hoàn tác!')) {
       console.log('🗑️ User confirmed deletion, clearing all schedule data...');
       
@@ -1199,11 +1199,11 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to start fresh import (clear existing data first)
   async startFreshImport(): Promise<void> {
-    console.log('🔄 Starting fresh import...');
+      console.log('🔄 Starting fresh import...');
     
     // Clear local data
-    this.scheduleData = [];
-    this.firebaseSaved = false;
+      this.scheduleData = [];
+      this.firebaseSaved = false;
     
     // Clear Firebase data
     await this.clearFirebaseData();
@@ -4137,7 +4137,7 @@ export class PrintLabelComponent implements OnInit {
   toggleShowCompletedItems(): void {
     this.showCompletedItems = !this.showCompletedItems;
     console.log('🔄 Toggle show completed items:', this.showCompletedItems);
-    
+
     if (this.showCompletedItems) {
       console.log('👁️ Showing completed items');
     } else {
@@ -4211,10 +4211,10 @@ export class PrintLabelComponent implements OnInit {
   // Add function to update Firebase after bulk update
   async updateFirebaseAfterBulkUpdate(): Promise<void> {
     try {
-      console.log('🔥 Updating Firebase after bulk completion update...');
-      
+    console.log('🔥 Updating Firebase after bulk completion update...');
+    
       const querySnapshot = await this.firestore.collection('printSchedules', ref => 
-        ref.orderBy('importedAt', 'desc').limit(1)
+      ref.orderBy('importedAt', 'desc').limit(1)
       ).get().toPromise();
       
       if (querySnapshot && !querySnapshot.empty) {
@@ -4229,8 +4229,8 @@ export class PrintLabelComponent implements OnInit {
         console.log('✅ Firebase updated successfully after bulk completion');
       }
     } catch (error) {
-      console.error('❌ Error updating Firebase after bulk completion:', error);
-      alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
+        console.error('❌ Error updating Firebase after bulk completion:', error);
+        alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
     }
   }
 
@@ -4428,7 +4428,7 @@ export class PrintLabelComponent implements OnInit {
           cleanItem[key] = item[key];
         } else if (key !== 'statusUpdateTime') {
           // For non-statusUpdateTime fields, use normal logic
-          cleanItem[key] = item[key];
+        cleanItem[key] = item[key];
         }
       }
     });

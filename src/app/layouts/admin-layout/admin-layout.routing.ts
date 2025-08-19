@@ -85,5 +85,5 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'materials-test',       component: MaterialsTestComponent, canActivate: [AuthGuard] },
   { path: 'finished-goods-test',  component: FinishedGoodsTestComponent, canActivate: [AuthGuard] },
   { path: 'task',                 loadChildren: () => import('../../pages/task/task.module').then(m => m.TaskModule), canActivate: [AuthGuard] },
-  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard] }
+  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard] }
 ];

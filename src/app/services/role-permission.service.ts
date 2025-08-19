@@ -12,12 +12,24 @@ export class RolePermissionService {
 
   // Kiểm tra xem user có quyền truy cập Settings không
   canAccessSettings(): Observable<boolean> {
+    console.log('🔍 RolePermissionService: Kiểm tra quyền Settings...');
+    
     return this.authService.currentUser.pipe(
       map(user => {
-        if (!user) return false;
+        console.log('👤 RolePermissionService: User data:', user);
+        
+        if (!user) {
+          console.log('❌ RolePermissionService: Không có user');
+          return false;
+        }
+        
+        console.log('🔑 RolePermissionService: User role:', user.role);
         
         // Chỉ cho phép Admin và Quản lý truy cập Settings
-        return user.role === 'Admin' || user.role === 'Quản lý';
+        const hasAccess = user.role === 'Admin' || user.role === 'Quản lý';
+        console.log('✅ RolePermissionService: Kết quả kiểm tra quyền:', hasAccess);
+        
+        return hasAccess;
       })
     );
   }
