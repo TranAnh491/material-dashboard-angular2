@@ -4,6 +4,14 @@
     <!-- Report Title -->
     <div class="excel-header">
       <h4>📦 INVENTORY ASM1</h4>
+      <!-- Consolidation Status Message -->
+      <div class="consolidation-message" *ngIf="showConsolidationMessage" [class.success]="consolidationMessage.includes('✅')" [class.info]="consolidationMessage.includes('ℹ️')">
+        <i class="material-icons">{{consolidationMessage.includes('✅') ? 'check_circle' : 'info'}}</i>
+        <span>{{ consolidationMessage }}</span>
+        <button class="close-message" (click)="showConsolidationMessage = false">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
       <!-- Catalog Loading Indicator -->
       <div class="catalog-status" *ngIf="isCatalogLoading">
         <i class="material-icons rotating">sync</i>
@@ -40,6 +48,10 @@
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
               <i class="material-icons">file_download</i>
               Export to Excel
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="consolidateInventoryData()">
+              <i class="material-icons">merge_type</i>
+              🔄 Gộp dữ liệu
             </a>
             <div class="dropdown-divider"></div>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM1()">
@@ -127,6 +139,12 @@
             <i class="material-icons">restart_alt</i>
             Reset
           </button>
+        </div>
+        
+        <!-- Negative Stock Counter Box -->
+        <div class="negative-stock-counter-box">
+          <i class="material-icons">warning</i>
+          <span>Mã âm: {{ getNegativeStockCount() }}</span>
         </div>
         
         <!-- Catalog Ready Icon -->

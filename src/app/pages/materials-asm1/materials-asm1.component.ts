@@ -59,6 +59,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   isLoading = false;
   isCatalogLoading = false;
   
+  // Consolidation status
+  consolidationMessage = '';
+  showConsolidationMessage = false;
+  
   // Catalog cache for faster access
   private catalogCache = new Map<string, any>();
   public catalogLoaded = false;
@@ -172,7 +176,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // Set filteredInventory to show all loaded items initially
         this.filteredInventory = [...this.inventoryMaterials];
         
-        // Mark duplicates for display
+        // Bỏ gộp inventory tự động - để Outbound xử lý thông minh
+        // this.consolidateInventoryData();
+        
+        // Mark duplicates for display (không cần gộp nữa)
         this.markDuplicates();
         
         this.isLoading = false;
@@ -600,6 +607,123 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
+  // Consolidate inventory data by material code + PO + location
+  consolidateInventoryData(): void {
+    console.log('🔄 Starting inventory data consolidation...');
+    
+    const consolidatedMap = new Map<string, InventoryMaterial>();
+    
+    this.inventoryMaterials.forEach(material => {
+      // Create key: materialCode + PO + location
+      const key = `${material.materialCode}_${material.poNumber}_${material.location}`;
+      
+      if (consolidatedMap.has(key)) {
+        // Same material + PO + location - merge quantities
+        const existing = consolidatedMap.get(key)!;
+        existing.quantity += material.quantity;
+        existing.stock = (existing.stock || 0) + (material.stock || 0);
+        existing.exported = (existing.exported || 0) + (material.exported || 0);
+        
+        // Keep earliest import date and latest expiry date
+        if (material.importDate < existing.importDate) {
+          existing.importDate = material.importDate;
+        }
+        if (material.expiryDate > existing.expiryDate) {
+          existing.expiryDate = material.expiryDate;
+        }
+        
+        // Merge other fields
+        existing.notes = existing.notes ? `${existing.notes}; ${material.notes}` : material.notes;
+        existing.remarks = existing.remarks ? `${existing.remarks}; ${material.remarks}` : material.remarks;
+        existing.supplier = existing.supplier ? `${existing.supplier}; ${material.supplier}` : material.supplier;
+        
+        console.log(`🔄 Merged duplicate: ${material.materialCode} - PO: ${material.poNumber} - Location: ${material.location}`);
+        
+      } else {
+        // New unique combination - add to map
+        consolidatedMap.set(key, { ...material });
+      }
+    });
+    
+    // Now handle same material + PO but different locations
+    const materialPoMap = new Map<string, InventoryMaterial[]>();
+    
+    consolidatedMap.forEach((material, key) => {
+      const materialPoKey = `${material.materialCode}_${material.poNumber}`;
+      
+      if (!materialPoMap.has(materialPoKey)) {
+        materialPoMap.set(materialPoKey, []);
+      }
+      materialPoMap.get(materialPoKey)!.push(material);
+    });
+    
+    // Final consolidation map
+    const finalConsolidatedMap = new Map<string, InventoryMaterial>();
+    
+    materialPoMap.forEach((materials, materialPoKey) => {
+      if (materials.length === 1) {
+        // Single location - keep as is
+        const material = materials[0];
+        finalConsolidatedMap.set(materialPoKey, material);
+      } else {
+        // Multiple locations - merge into one row with combined location info
+        const baseMaterial = { ...materials[0] };
+        const locations = materials.map(m => m.location).join('; ');
+        
+        // Combine quantities
+        baseMaterial.quantity = materials.reduce((sum, m) => sum + m.quantity, 0);
+        baseMaterial.stock = materials.reduce((sum, m) => sum + (m.stock || 0), 0);
+        baseMaterial.exported = materials.reduce((sum, m) => sum + (m.exported || 0), 0);
+        
+        // Combine location field
+        baseMaterial.location = locations;
+        
+        // Keep earliest import date and latest expiry date
+        baseMaterial.importDate = new Date(Math.min(...materials.map(m => m.importDate.getTime())));
+        baseMaterial.expiryDate = new Date(Math.max(...materials.map(m => m.expiryDate.getTime())));
+        
+        // Merge other fields
+        baseMaterial.notes = materials.map(m => m.notes).filter(n => n).join('; ');
+        baseMaterial.remarks = materials.map(m => m.remarks).filter(r => r).join('; ');
+        baseMaterial.supplier = materials.map(m => m.supplier).filter(s => s).join('; ');
+        
+        finalConsolidatedMap.set(materialPoKey, baseMaterial);
+        
+        console.log(`🔄 Consolidated multi-location: ${baseMaterial.materialCode} - PO: ${baseMaterial.poNumber} - Locations: ${locations}`);
+      }
+    });
+    
+    // Update the inventory data
+    const originalCount = this.inventoryMaterials.length;
+    this.inventoryMaterials = Array.from(finalConsolidatedMap.values());
+    this.filteredInventory = [...this.inventoryMaterials];
+    
+    console.log(`✅ Inventory consolidation completed: ${originalCount} → ${this.inventoryMaterials.length} items`);
+    
+    // Show consolidation message
+    const reducedCount = originalCount - this.inventoryMaterials.length;
+    if (reducedCount > 0) {
+      this.consolidationMessage = `✅ Đã gộp ${reducedCount} dòng dữ liệu trùng lặp. Từ ${originalCount} → ${this.inventoryMaterials.length} dòng.`;
+      this.showConsolidationMessage = true;
+      
+      // Auto-hide message after 5 seconds
+      setTimeout(() => {
+        this.showConsolidationMessage = false;
+      }, 5000);
+    } else {
+      this.consolidationMessage = 'ℹ️ Không có dữ liệu trùng lặp để gộp.';
+      this.showConsolidationMessage = true;
+      
+      // Auto-hide message after 3 seconds
+      setTimeout(() => {
+        this.showConsolidationMessage = false;
+      }, 3000);
+    }
+    
+    // Mark duplicates after consolidation
+    this.markDuplicates();
+  }
+
   // Load permissions
   loadPermissions(): void {
     this.tabPermissionService.canAccessTab('materials-asm1')
@@ -913,13 +1037,32 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // }
 
   syncFromInbound(): void {
-    console.log('Sync from inbound for ASM1');
+    console.log('🔄 Syncing inventory data from Firebase...');
+    
+    // Reload inventory data from Firebase
+    this.loadInventoryFromFirebase();
+    
+    // Reload catalog data
+    this.loadCatalogFromFirebase();
+    
+    console.log('✅ Sync completed - Data reloaded from Firebase');
   }
 
   // Update methods for editing
   updateExported(material: InventoryMaterial): void {
     if (!this.canEdit) return;
+    
+    console.log(`🔄 Updating exported quantity for ${material.materialCode}: ${material.exported}`);
+    
+    // Auto-save to Firebase immediately
     this.updateMaterialInFirebase(material);
+    
+    // Recalculate stock immediately after update
+    const newStock = this.calculateCurrentStock(material);
+    console.log(`📊 New stock calculated: ${newStock} (Quantity: ${material.quantity} - Exported: ${material.exported})`);
+    
+    // Force UI refresh
+    this.cdr.detectChanges();
   }
 
   updateLocation(material: InventoryMaterial): void {
@@ -963,6 +1106,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     material.updatedAt = new Date();
     
+    console.log(`💾 Saving to Firebase: ${material.materialCode} - Exported: ${material.exported}`);
+    
     this.firestore.collection('inventory-materials').doc(material.id).update({
       exported: material.exported,
       location: material.location,
@@ -972,16 +1117,49 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       expiryDate: material.expiryDate,
       updatedAt: material.updatedAt
     }).then(() => {
-      console.log('✅ ASM1 Material updated successfully');
+      console.log(`✅ ASM1 Material updated successfully: ${material.materialCode}`);
+      console.log(`📊 Stock updated: ${this.calculateCurrentStock(material)} (Quantity: ${material.quantity} - Exported: ${material.exported})`);
+      
+      // Show success message to user
+      this.showUpdateSuccessMessage(material);
+      
     }).catch(error => {
-      console.error('❌ Error updating ASM1 material:', error);
+      console.error(`❌ Error updating ASM1 material ${material.materialCode}:`, error);
+      
+      // Show error message to user
+      this.showUpdateErrorMessage(material, error);
     });
+  }
+
+  // Show success message when update is successful
+  private showUpdateSuccessMessage(material: InventoryMaterial): void {
+    const stock = this.calculateCurrentStock(material);
+    console.log(`🎉 Update successful! ${material.materialCode} - New stock: ${stock}`);
+    
+    // You can add a toast notification here if needed
+    // For now, just log to console
+  }
+
+  // Show error message when update fails
+  private showUpdateErrorMessage(material: InventoryMaterial, error: any): void {
+    console.error(`💥 Update failed for ${material.materialCode}:`, error.message);
+    
+    // You can add an error toast notification here if needed
+    // For now, just log to console
   }
 
   // Calculate current stock for display
   calculateCurrentStock(material: InventoryMaterial): number {
     const stock = (material.quantity || 0) - (material.exported || 0);
     return stock;
+  }
+
+  // Get count of materials with negative stock
+  getNegativeStockCount(): number {
+    return this.filteredInventory.filter(material => {
+      const stock = this.calculateCurrentStock(material);
+      return stock < 0;
+    }).length;
   }
 
   // Format numbers with thousand separators

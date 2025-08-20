@@ -48,15 +48,9 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   
   // Scanner properties
   isScannerActive = false;
-  showScannerModal = false;
   scanCount = 0;
   successfulScans = 0;
   errorScans = 0;
-  scanRate = 0;
-  recentScans: any[] = [];
-  private scannerInterval: any;
-  private lastScanTime = 0;
-  private scanTimes: number[] = [];
   
   private destroy$ = new Subject<void>();
 
@@ -456,52 +450,30 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   }
 
   // Scanner Mode Methods
-  async startScannerMode(): Promise<void> {
+  async startBatchScan(): Promise<void> {
     // Validate factory selection first
     if (!this.selectedFactory) {
-      alert('⚠️ Vui lòng chọn nhà máy (ASM1 hoặc ASM2) trước khi bật Scanner!');
+      alert('⚠️ Vui lòng chọn nhà máy (ASM1 hoặc ASM2) trước khi bắt đầu Batch Scan!');
       return;
     }
 
-    // Validate stock availability for the selected factory
-    const hasStock = await this.validateFactoryStock();
-    if (!hasStock) {
-      return;
-    }
-
-    console.log(`🚀 Starting scanner mode for factory: ${this.selectedFactory}...`);
+    console.log(`🚀 Starting batch scan mode for factory: ${this.selectedFactory}...`);
     this.isScannerActive = true;
     this.scanCount = 0;
     this.successfulScans = 0;
     this.errorScans = 0;
-    this.recentScans = [];
-    this.scanTimes = [];
-    
-    // Start listening for keyboard input (simulating scanner input)
-    this.startKeyboardListener();
-    
-    // Start rate calculation
-    this.scannerInterval = setInterval(() => {
-      this.calculateScanRate();
-    }, 1000);
     
     // Focus scanner input after a short delay
     setTimeout(() => {
       this.focusScannerInput();
-    }, 1000);
+    }, 500);
     
-    // Log to console instead of showing alert
-    console.log(`🟢 Scanner đã được bật cho ${this.selectedFactory}!\n\n📋 Hướng dẫn:\n• Máy scan sẽ tự động gửi dữ liệu\n• Hệ thống sẽ xử lý liên tục\n• Kiểm tra trạng thái để theo dõi\n\n💡 Tip: Click vào bất kỳ đâu trên trang để focus scanner input`);
+    console.log(`🟢 Batch Scan đã được bật cho ${this.selectedFactory}!\n\n📋 Hướng dẫn:\n• Quét QR code lệnh sản xuất và mã nhân viên\n• Sau đó bắt đầu quét QR code xuất hàng\n• Hệ thống sẽ xử lý tự động`);
   }
 
   stopScannerMode(): void {
     console.log('🛑 Stopping scanner mode...');
     this.isScannerActive = false;
-    
-    if (this.scannerInterval) {
-      clearInterval(this.scannerInterval);
-      this.scannerInterval = null;
-    }
     
     // Stop keyboard listener
     this.stopKeyboardListener();
@@ -510,13 +482,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     console.log('🔴 Scanner đã dừng!\n\n📊 Thống kê:\n• Tổng quét: ' + this.scanCount + '\n• Thành công: ' + this.successfulScans + '\n• Lỗi: ' + this.errorScans);
   }
 
-  showScannerStatus(): void {
-    this.showScannerModal = true;
-  }
 
-  closeScannerModal(): void {
-    this.showScannerModal = false;
-  }
 
   private startKeyboardListener(): void {
     // Listen for keyboard input (simulating scanner)
@@ -525,6 +491,35 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
 
   private stopKeyboardListener(): void {
     document.removeEventListener('keydown', this.handleScannerInput.bind(this));
+  }
+
+  // Handle batch scan input (lệnh sản xuất và mã nhân viên)
+  handleBatchScanInput(event: any): void {
+    const input = event.target;
+    const batchData = input.value.trim();
+    
+    if (!batchData) {
+      alert('⚠️ Vui lòng nhập dữ liệu lệnh sản xuất và mã nhân viên!');
+      return;
+    }
+    
+    console.log('📋 Batch scan data received:', batchData);
+    
+    // Parse batch data (format: PO|EmployeeID or similar)
+    try {
+      // Clear input and show success message
+      input.value = '';
+      alert('✅ Đã nhận lệnh sản xuất và mã nhân viên!\n\nBây giờ bạn có thể bắt đầu quét QR code xuất hàng.');
+      
+      // Focus back to input for next scan
+      setTimeout(() => {
+        input.focus();
+      }, 100);
+      
+    } catch (error) {
+      console.error('❌ Error parsing batch scan data:', error);
+      alert('❌ Lỗi xử lý dữ liệu batch scan!');
+    }
   }
 
   private handleScannerInput(event: KeyboardEvent): void {
@@ -562,11 +557,10 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         const quantity = parseInt(parts[2]);
         
         if (isNaN(quantity) || quantity <= 0) {
-          console.error('❌ Invalid quantity in scanned data:', scannedData);
-          alert('❌ Dữ liệu scan không hợp lệ: Số lượng phải là số dương!');
-          this.errorScans++;
-          this.recordScan(scannedData, false);
-          return;
+                  console.error('❌ Invalid quantity in scanned data:', scannedData);
+        alert('❌ Dữ liệu scan không hợp lệ: Số lượng phải là số dương!');
+        this.errorScans++;
+        return;
         }
         
         console.log('🔍 Looking for inventory item:', { materialCode, poNumber, quantity });
@@ -576,7 +570,6 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         if (!fifoResult.isCompliant) {
           alert(fifoResult.message);
           this.errorScans++;
-          this.recordScan(scannedData, false);
           return;
         }
 
@@ -584,25 +577,17 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         this.findAndUpdateInventory(materialCode, poNumber, quantity, this.isScannerActive);
         
         // Record successful scan
-        this.recordScan(scannedData, true);
         this.successfulScans++;
-        
-        // Update scan rate calculation
-        const now = Date.now();
-        this.scanTimes.push(now);
-        this.lastScanTime = now;
         
       } else {
         console.error('❌ Invalid QR code format:', scannedData);
         alert('❌ Định dạng QR code không hợp lệ! Cần: Mã hàng|PO|Số lượng');
         this.errorScans++;
-        this.recordScan(scannedData, false);
       }
     } catch (error) {
       console.error('❌ Error processing scanned data:', error);
       alert('❌ Lỗi xử lý dữ liệu scan!');
       this.errorScans++;
-      this.recordScan(scannedData, false);
     }
   }
 
@@ -768,29 +753,7 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     });
   }
 
-  private recordScan(data: string, success: boolean): void {
-    const scanRecord = {
-      data: data,
-      success: success,
-      timestamp: new Date()
-    };
-    
-    this.recentScans.unshift(scanRecord);
-    
-    // Keep only last 20 scans
-    if (this.recentScans.length > 20) {
-      this.recentScans = this.recentScans.slice(0, 20);
-    }
-  }
 
-  private calculateScanRate(): void {
-    const now = Date.now();
-    const oneMinuteAgo = now - 60000;
-    
-    // Count scans in last minute
-    const recentScans = this.scanTimes.filter(time => time >= oneMinuteAgo);
-    this.scanRate = recentScans.length;
-  }
 
   // Test scanner input method
   testScannerInput(event: any): void {

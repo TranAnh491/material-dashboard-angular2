@@ -26,8 +26,7 @@ export interface OutboundMaterial {
   updatedAt?: Date;
   productionOrder?: string; // Lệnh sản xuất
   employeeId?: string; // Mã nhân viên
-  batchStartTime?: Date; // Thời gian bắt đầu batch
-  batchEndTime?: Date; // Thời gian kết thúc batch
+
 }
 
 @Component({
@@ -63,12 +62,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   isBatchScanningMode: boolean = false;
   batchProductionOrder: string = '';
   batchEmployeeId: string = '';
-  batchMaterials: any[] = [];
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
-  batchStartTime: Date | null = null; // Thời gian bắt đầu batch
-  isBatchCompleted: boolean = false; // Trạng thái hoàn thành batch
-  isBatchFullyReceived: boolean = false; // Tick xác nhận đã nhận toàn bộ lô hàng
   
   // Date Range properties
   startDate: string = '';
@@ -182,8 +177,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportedBy: data.exportedBy || '',
                          employeeId: data.employeeId || '', // Fix: properly map employeeId
              productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
-             batchStartTime: data.batchStartTime?.toDate() || data.batchStartTime || null,
-             batchEndTime: data.batchEndTime?.toDate() || data.batchEndTime || null,
+             
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -290,8 +284,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       exportedBy: '',
       employeeId: '',
       productionOrder: '',
-      batchStartTime: null,
-      batchEndTime: null,
+      
       scanMethod: 'MANUAL',
       notes: '',
       createdAt: new Date(),
@@ -345,8 +338,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
          'Qty': material.quantity || 0,
          'Unit': material.unit || '',
          'Export Qty': material.exportQuantity || 0,
-         'Thời gian bắt đầu': material.exportDate ? material.exportDate.toLocaleString('vi-VN') : '',
-         'Thời gian thực hiện': this.calculateDuration(material),
+         'Ngày xuất': material.exportDate ? material.exportDate.toLocaleString('vi-VN') : '',
          'Location': material.location || '',
          'Employee ID': material.employeeId || '',
          'Production Order': material.productionOrder || '',
@@ -363,8 +355,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
          { wch: 8 },   // Qty
          { wch: 6 },   // Unit
          { wch: 10 },  // Export Qty
-         { wch: 18 },  // Thời gian bắt đầu
-         { wch: 15 },  // Thời gian thực hiện
+         { wch: 18 },  // Ngày xuất
          { wch: 12 },  // Location
          { wch: 12 },  // Employee ID
          { wch: 18 },  // Production Order
@@ -787,36 +778,39 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
-  // Consolidate outbound records by same date + material code + PO
+  // Consolidate outbound records by ALL 4 fields: material code + PO + employee ID + production order (LSX)
   private consolidateOutboundRecords(materials: OutboundMaterial[]): OutboundMaterial[] {
     const consolidatedMap = new Map<string, OutboundMaterial>();
     
     materials.forEach(material => {
-      // Create key: date + materialCode + poNumber
-      const exportDate = material.exportDate.toISOString().split('T')[0];
-      const key = `${exportDate}_${material.materialCode}_${material.poNumber}`;
+      // Create key: materialCode + poNumber + employeeId + productionOrder
+      // Chỉ gộp khi CẢ 4 thông tin giống hệt nhau
+      const key = `${material.materialCode}_${material.poNumber}_${material.employeeId || 'NO_EMPLOYEE'}_${material.productionOrder || 'NO_LSX'}`;
       
       if (consolidatedMap.has(key)) {
-        // Merge with existing record
+        // Merge with existing record - chỉ khi 4 thông tin giống hệt
         const existing = consolidatedMap.get(key)!;
         existing.exportQuantity += material.exportQuantity;
         existing.quantity = Math.max(existing.quantity, material.quantity); // Keep max quantity
         existing.updatedAt = new Date(Math.max(existing.updatedAt.getTime(), material.updatedAt.getTime()));
         existing.createdAt = new Date(Math.min(existing.createdAt.getTime(), material.createdAt.getTime())); // Keep earliest creation
-        existing.exportedBy = material.exportedBy; // Use latest user
-                 existing.employeeId = material.employeeId || existing.employeeId; // Keep employeeId if available
-         existing.productionOrder = material.productionOrder || existing.productionOrder; // Keep productionOrder if available
-         existing.batchStartTime = material.batchStartTime || existing.batchStartTime; // Keep batchStartTime if available
-         existing.batchEndTime = material.batchEndTime || existing.batchEndTime; // Keep batchEndTime if available
-         existing.scanMethod = material.scanMethod; // Use latest scan method
-         existing.notes = `Gộp từ ${existing.exportQuantity - material.exportQuantity + material.exportQuantity} lần quét - ${material.notes || 'Auto-scanned export'}`;
+        
+        // Ghi chú về việc gộp
+        const oldQuantity = existing.exportQuantity - material.exportQuantity;
+        existing.notes = `Gộp từ ${oldQuantity} + ${material.exportQuantity} = ${existing.exportQuantity} - ${material.notes || 'Auto-scanned export'}`;
+        
+        console.log(`🔄 Merged outbound record: ${material.materialCode} - PO: ${material.poNumber} - Employee: ${material.employeeId} - LSX: ${material.productionOrder}`);
+        
       } else {
-        // New record
+        // New record - tạo dòng mới khi có bất kỳ thông tin nào khác nhau
         consolidatedMap.set(key, { ...material });
+        console.log(`➕ New outbound record: ${material.materialCode} - PO: ${material.poNumber} - Employee: ${material.employeeId} - LSX: ${material.productionOrder}`);
       }
     });
     
     console.log(`🔄 Consolidated ${materials.length} records into ${consolidatedMap.size} unique entries`);
+    console.log(`📊 Consolidation rule: Only merge when ALL 4 fields match (Material + PO + Employee + LSX)`);
+    
     return Array.from(consolidatedMap.values());
   }
 
@@ -937,106 +931,118 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         lastScannedData: this.lastScannedData,
         exportQuantity: this.exportQuantity
       });
-      alert('Lỗi tự động xuất: ' + error.message);
+      // Bỏ alert - chỉ log console để scan liên tục
+      console.error('❌ Lỗi tự động xuất:', error.message);
     }
   }
   
   private async updateInventoryStock(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
     try {
-      console.log(`📦 Updating inventory stock for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
+      console.log(`📦 Smart inventory update for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
       
-      // First, try to find by materialCode and factory
-      let inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+      // Find ALL inventory items with same material code and PO (ASM1 only)
+      const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
         ref.where('materialCode', '==', materialCode)
            .where('factory', '==', 'ASM1')
-           .limit(10)
+           .limit(50)
       ).get().toPromise();
       
-      let inventoryDoc = null;
-      let inventoryData = null;
-      
-      if (inventoryQuery && !inventoryQuery.empty) {
-        // If multiple items found, try to match by PO number
-        if (inventoryQuery.docs.length > 1) {
-          console.log(`🔍 Found ${inventoryQuery.docs.length} inventory items for ${materialCode}, searching for PO match...`);
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            if (data.poNumber === poNumber) {
-              inventoryDoc = doc;
-              inventoryData = data;
-              console.log('✅ Found matching inventory item by PO:', data);
-              break;
-            }
-          }
-        } else {
-          // Single item found
-          inventoryDoc = inventoryQuery.docs[0];
-          inventoryData = inventoryDoc.data();
-          console.log('✅ Found single inventory item:', inventoryData);
-        }
+      if (!inventoryQuery || inventoryQuery.empty) {
+        throw new Error(`Không tìm thấy ${materialCode} trong inventory ASM1. Vui lòng kiểm tra dữ liệu inventory.`);
       }
       
-      // If still no match, try broader search
-      if (!inventoryDoc) {
-        console.log('🔍 Trying broader inventory search...');
-        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('materialCode', '==', materialCode)
-             .limit(20)
-        ).get().toPromise();
-        
-        if (inventoryQuery && !inventoryQuery.empty) {
-          console.log(`🔍 Found ${inventoryQuery.docs.length} inventory items across all factories`);
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            console.log(`  - Factory: ${data.factory}, PO: ${data.poNumber}, Stock: ${data.stock}`);
-          }
-          
-          // Use first ASM1 item or first available item
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            if (data.factory === 'ASM1') {
-              inventoryDoc = doc;
-              inventoryData = data;
-              console.log('✅ Using ASM1 inventory item:', data);
-              break;
-            }
-          }
-          
-          if (!inventoryDoc && inventoryQuery.docs.length > 0) {
-            inventoryDoc = inventoryQuery.docs[0];
-            inventoryData = inventoryDoc.data() as any;
-            console.log('⚠️ Using first available inventory item (not ASM1):', inventoryData);
-          }
-        }
+      // Filter by PO number and sort by import date (FIFO - First In First Out)
+      const matchingItems = inventoryQuery.docs
+        .map(doc => ({
+          id: doc.id,
+          data: doc.data() as any,
+          doc: doc
+        }))
+        .filter(item => item.data.poNumber === poNumber)
+        .sort((a, b) => {
+          // Sort by import date (earliest first for FIFO)
+          const dateA = a.data.importDate?.toDate ? a.data.importDate.toDate() : new Date(a.data.importDate);
+          const dateB = b.data.importDate?.toDate ? b.data.importDate.toDate() : new Date(b.data.importDate);
+          return dateA.getTime() - dateB.getTime();
+        });
+      
+      if (matchingItems.length === 0) {
+        throw new Error(`Không tìm thấy ${materialCode} với PO ${poNumber} trong inventory ASM1.`);
       }
       
-      if (!inventoryDoc || !inventoryData) {
-        throw new Error(`Không tìm thấy ${materialCode} trong inventory. Vui lòng kiểm tra dữ liệu inventory.`);
-      }
-      
-      const currentStock = inventoryData.stock || 0;
-      const currentExported = inventoryData.exported || 0;
-      
-      console.log(`📊 Current inventory: Stock: ${currentStock}, Already Exported: ${currentExported}`);
-      
-      if (currentStock < exportQuantity) {
-        throw new Error(`Không đủ tồn kho! Hiện có: ${currentStock}, muốn xuất: ${exportQuantity}`);
-      }
-      
-      // Update inventory
-      const newStock = currentStock - exportQuantity;
-      const newExported = currentExported + exportQuantity;
-      
-      await this.firestore.collection('inventory-materials').doc(inventoryDoc.id).update({
-        stock: newStock,
-        exported: newExported,
-        updatedAt: new Date()
+      console.log(`🔍 Found ${matchingItems.length} inventory lines for ${materialCode} - PO: ${poNumber}`);
+      matchingItems.forEach((item, index) => {
+        // Calculate stock correctly: quantity - exported
+        const calculatedStock = (item.data.quantity || 0) - (item.data.exported || 0);
+        const location = item.data.location || 'Unknown';
+        const importDate = item.data.importDate?.toDate ? item.data.importDate.toDate() : new Date(item.data.importDate);
+        console.log(`  ${index + 1}. Location: ${location}, Stock: ${calculatedStock} (Quantity: ${item.data.quantity} - Exported: ${item.data.exported}), Import: ${importDate.toLocaleDateString()}`);
       });
       
-      console.log(`✅ Inventory updated: Stock: ${currentStock} → ${newStock}, Exported: ${currentExported} → ${newExported}`);
+      // Calculate total available stock using calculated values
+      const totalAvailableStock = matchingItems.reduce((sum, item) => {
+        const calculatedStock = (item.data.quantity || 0) - (item.data.exported || 0);
+        return sum + calculatedStock;
+      }, 0);
+      console.log(`📊 Total available stock: ${totalAvailableStock}`);
+      
+      if (totalAvailableStock < exportQuantity) {
+        throw new Error(`Không đủ tồn kho! Tổng có: ${totalAvailableStock}, muốn xuất: ${exportQuantity}`);
+      }
+      
+      // Process export using FIFO logic
+      let remainingExportQuantity = exportQuantity;
+      const updates = [];
+      
+      for (const item of matchingItems) {
+        if (remainingExportQuantity <= 0) break;
+        
+        // Calculate current stock correctly: quantity - exported
+        const currentStock = (item.data.quantity || 0) - (item.data.exported || 0);
+        const currentExported = item.data.exported || 0;
+        
+        if (currentStock <= 0) continue; // Skip items with no stock
+        
+        // Calculate how much to take from this item
+        const takeFromThisItem = Math.min(currentStock, remainingExportQuantity);
+        const newStock = currentStock - takeFromThisItem;
+        const newExported = currentExported + takeFromThisItem;
+        
+        console.log(`🔄 Processing ${item.data.location}: Stock ${currentStock} → ${newStock}, Export ${currentExported} → ${newExported}`);
+        
+        // Prepare update
+        updates.push({
+          docId: item.id,
+          update: {
+            stock: newStock,
+            exported: newExported,
+            updatedAt: new Date()
+          }
+        });
+        
+        remainingExportQuantity -= takeFromThisItem;
+        
+        if (remainingExportQuantity <= 0) {
+          console.log(`✅ Export completed from ${item.data.location}`);
+          break;
+        }
+      }
+      
+      // Execute all updates
+      console.log(`💾 Executing ${updates.length} inventory updates...`);
+      const updatePromises = updates.map(update => 
+        this.firestore.collection('inventory-materials').doc(update.docId).update(update.update)
+      );
+      
+      await Promise.all(updatePromises);
+      
+      console.log(`✅ Smart inventory update completed!`);
+      console.log(`📦 Exported: ${exportQuantity}`);
+      console.log(`🔄 Updated ${updates.length} inventory lines`);
+      console.log(`📊 Remaining export quantity: ${remainingExportQuantity}`);
       
     } catch (error) {
-      console.error('❌ Error updating inventory stock:', error);
+      console.error('❌ Error in smart inventory update:', error);
       throw error;
     }
   }
@@ -1061,15 +1067,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isBatchScanningMode = true;
     this.batchProductionOrder = '';
     this.batchEmployeeId = '';
-    this.batchMaterials = [];
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
     this.scannerBuffer = '';
-    this.batchStartTime = new Date(); // Ghi lại thời gian bắt đầu
-    this.isBatchCompleted = false; // Reset trạng thái hoàn thành
-    this.isBatchFullyReceived = false; // Reset trạng thái xác nhận
     this.focusScannerInput();
-    console.log('✅ Batch scanning mode activated at:', this.batchStartTime);
+    console.log('✅ Batch scanning mode activated');
   }
 
   stopBatchScanningMode(): void {
@@ -1077,145 +1079,111 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isBatchScanningMode = false;
     this.batchProductionOrder = '';
     this.batchEmployeeId = '';
-    this.batchMaterials = [];
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
     this.scannerBuffer = '';
-    this.batchStartTime = null; // Reset thời gian bắt đầu
-    this.isBatchCompleted = false; // Reset trạng thái hoàn thành
-    this.isBatchFullyReceived = false; // Reset trạng thái xác nhận
     console.log('✅ Batch scanning mode deactivated');
   }
 
-  // Scan mã nhân viên bằng máy scan
-  focusEmployeeInput(): void {
-    // Focus vào input để người dùng có thể scan bằng máy scan
-    const employeeInput = document.querySelector('.employee-input') as HTMLInputElement;
-    if (employeeInput) {
-      employeeInput.focus();
-      console.log('🎯 Focused on employee ID input for scanning');
-    }
-  }
 
-  // Xử lý khi focus vào input mã nhân viên
-  onEmployeeInputFocus(event: FocusEvent): void {
-    // Nếu input đã được scan, không cho phép focus
-    if (this.isEmployeeIdScanned) {
-      event.preventDefault();
-      return;
-    }
-    
-    // Không clear input khi focus - để máy scan có thể nhập dữ liệu
-    console.log('🎯 Employee ID input focused, ready for scanning');
-  }
-
-  // Xử lý khi nhập mã nhân viên bằng máy scan
-  onEmployeeIdKeydown(event: KeyboardEvent): void {
-    // Chỉ xử lý khi nhấn Enter (máy scan thường gửi Enter)
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      console.log('🔍 Enter key pressed, current batchEmployeeId:', this.batchEmployeeId);
-      this.processEmployeeId();
-    }
-    
-    // KHÔNG chặn các phím khác - để máy scan có thể nhập dữ liệu
-    // Chỉ chặn một số phím đặc biệt để tránh xung đột
-    if (event.key === 'F1' || event.key === 'F2' || event.key === 'F3' || 
-        event.key === 'F4' || event.key === 'F5' || event.key === 'F6' || 
-        event.key === 'F7' || event.key === 'F8' || event.key === 'F9' || 
-        event.key === 'F10' || event.key === 'F11' || event.key === 'F12') {
-      event.preventDefault();
-      return;
-    }
-  }
-
-  // Xử lý mã nhân viên đã scan
-  private processEmployeeId(): void {
-    try {
-      console.log('🔍 Processing scanned employee ID:', this.batchEmployeeId);
-      console.log('🔍 Type of batchEmployeeId:', typeof this.batchEmployeeId);
-      console.log('🔍 Length of batchEmployeeId:', this.batchEmployeeId ? this.batchEmployeeId.length : 'undefined');
-      
-      // Đọc toàn bộ dữ liệu scan được, sau đó lấy 7 ký tự đầu tiên
-      if (this.batchEmployeeId && this.batchEmployeeId.toString().length > 0) {
-        const scannedData = this.batchEmployeeId.toString();
-        console.log('🔍 Scanned data received:', scannedData);
-        
-        // Lấy 7 ký tự đầu tiên từ dữ liệu scan được
-        const employeeId = scannedData.substring(0, 7);
-        console.log('🔍 Extracted 7 characters:', employeeId);
-        
-        // Kiểm tra xem có bắt đầu bằng ASP không
-        if (employeeId.startsWith('ASP')) {
-        this.batchEmployeeId = employeeId;
-        this.isEmployeeIdScanned = true;
-        
-        console.log('✅ Employee ID scanned successfully:', employeeId);
-          console.log('📝 Full scanned data was:', scannedData);
-        
-        // Hiển thị thông báo thành công
-        alert(`✅ Đã scan mã nhân viên: ${employeeId}\n\nBây giờ bạn có thể scan các mã hàng.`);
-        
-        // Focus vào input scanner để scan mã hàng
-        setTimeout(() => {
-          this.focusScannerInput();
-        }, 500);
-        
-      } else {
-          throw new Error(`Mã nhân viên phải bắt đầu bằng ASP, nhận được: ${employeeId}`);
-        }
-        
-      } else {
-        throw new Error(`Không có dữ liệu scan được. batchEmployeeId: "${this.batchEmployeeId}"`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error processing employee ID:', error);
-      alert(`❌ Lỗi xử lý mã nhân viên: ${error.message}\n\nVui lòng quét lại mã nhân viên hợp lệ.`);
-      
-      // Reset và focus lại
-      this.batchEmployeeId = '';
-      this.isEmployeeIdScanned = false;
-      this.focusEmployeeInput();
-    }
-  }
 
   private processBatchScanInput(scannedData: string): void {
     if (!scannedData.trim()) return;
 
     console.log('🔍 Processing batch scan input:', scannedData);
 
-    // Check if this is a production order (KZLSX + 9 characters)
-    if (scannedData.startsWith('KZLSX') && scannedData.length === 14 && !this.isProductionOrderScanned) {
-      this.batchProductionOrder = scannedData;
-      this.isProductionOrderScanned = true;
-      console.log('✅ Production Order scanned:', scannedData);
-      // Show brief confirmation in console
-      console.log('📋 Production Order: ' + scannedData + ' - Ready for employee ID scan');
+    // Auto-detect what type of data was scanned
+    
+    // Check if this is an employee ID (ASP + 4 digits)
+    if (scannedData.startsWith('ASP') && scannedData.length >= 7 && !this.isEmployeeIdScanned) {
+      this.processEmployeeIdScan(scannedData);
       return;
     }
-
-    // Cho phép scan mã nhân viên qua máy scan USB (đã được xử lý ở onEmployeeIdKeydown)
-    // Không cần xử lý ở đây nữa vì đã có input riêng cho mã nhân viên
-
+    
+    // Check if this is a production order (KZLSX + 9 characters)
+    if (scannedData.startsWith('KZLSX') && scannedData.length === 14 && !this.isProductionOrderScanned) {
+      this.processProductionOrderScan(scannedData);
+      return;
+    }
+    
     // If both production order and employee ID are scanned, process as material
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
       this.processBatchMaterialScan(scannedData);
     } else {
+      // Show what's still needed - chỉ log console, không alert
       if (!this.isProductionOrderScanned) {
         console.log('⚠️ Vui lòng scan lệnh sản xuất (KZLSX...) trước!');
+        // Bỏ alert - chỉ log console
       } else if (!this.isEmployeeIdScanned) {
-        console.log('⚠️ Vui lòng scan mã nhân viên bằng camera trước!');
+        console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
+        // Bỏ alert - chỉ log console
       }
+    }
+  }
+
+  // Process employee ID scan
+  private processEmployeeIdScan(scannedData: string): void {
+    try {
+      console.log('🔍 Processing employee ID scan:', scannedData);
+      
+      // Extract 7 characters (ASP + 4 digits)
+      const employeeId = scannedData.substring(0, 7);
+      
+      if (employeeId.startsWith('ASP')) {
+        this.batchEmployeeId = employeeId;
+        this.isEmployeeIdScanned = true;
+        
+        console.log('✅ Employee ID scanned successfully:', employeeId);
+        // Bỏ alert - chỉ log console
+        
+        // Auto-focus for next scan
+        setTimeout(() => {
+          this.focusScannerInput();
+        }, 100);
+        
+      } else {
+        throw new Error(`Mã nhân viên phải bắt đầu bằng ASP, nhận được: ${employeeId}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing employee ID:', error);
+      // Bỏ alert - chỉ log console
+    }
+  }
+
+  // Process production order scan
+  private processProductionOrderScan(scannedData: string): void {
+    try {
+      console.log('🔍 Processing production order scan:', scannedData);
+      
+      if (scannedData.startsWith('KZLSX') && scannedData.length === 14) {
+        this.batchProductionOrder = scannedData;
+        this.isProductionOrderScanned = true;
+        
+        console.log('✅ Production Order scanned successfully:', scannedData);
+        // Bỏ alert - chỉ log console
+        
+        // Auto-focus for next scan
+        setTimeout(() => {
+          this.focusScannerInput();
+        }, 100);
+        
+      } else {
+        throw new Error(`Lệnh sản xuất phải bắt đầu bằng KZLSX và có 14 ký tự, nhận được: ${scannedData}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing production order:', error);
+      // Bỏ alert - chỉ log console
     }
   }
 
   private processBatchMaterialScan(scannedData: string): void {
     try {
-      // Kiểm tra xem đã scan mã nhân viên bằng camera chưa
+      // Kiểm tra xem đã scan mã nhân viên chưa
       if (!this.isEmployeeIdScanned) {
-        console.log('⚠️ Phải scan mã nhân viên bằng camera trước khi scan mã hàng!');
-        alert('⚠️ Phải scan mã nhân viên bằng camera trước!\n\nVui lòng nhấn nút "Scan" để scan mã nhân viên.');
+        console.log('⚠️ Phải scan mã nhân viên trước khi scan mã hàng!');
+        // Bỏ alert - chỉ log console
         return;
       }
       
@@ -1291,20 +1259,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         quantity = 1;
       }
       
-      const materialData = {
-        materialCode,
-        poNumber,
-        quantity,
-        scannedData,
-        timestamp: new Date()
-      };
-
-      this.batchMaterials.push(materialData);
-      console.log('✅ Material added to batch:', materialData);
-      console.log(`📦 Total materials in batch: ${this.batchMaterials.length}`);
-      
-      // KHÔNG tự động lưu nữa - chỉ thêm vào batch array
-      // this.autoSaveBatchMaterial(materialData);
+      // Lưu thẳng vào database thay vì lưu vào batch array
+      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity);
       
     } catch (error) {
       console.error('❌ Error processing material scan:', error);
@@ -1312,94 +1268,52 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // Xóa method autoSaveBatchMaterial vì không cần thiết nữa
-  // private async autoSaveBatchMaterial(materialData: any): Promise<void> { ... }
-
-  async saveBatchToOutbound(): Promise<void> {
-    console.log('🔄 Completing batch scanning...');
-    console.log(`📦 Total materials scanned in this batch: ${this.batchMaterials.length}`);
-    
-    if (this.batchMaterials.length === 0) {
-      alert('⚠️ Chưa có mã hàng nào được scan trong batch này!');
-      return;
-    }
-    
+  // Lưu mã hàng trực tiếp vào database
+  private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number): Promise<void> {
     try {
-      // Tính thời gian thực hiện
-      const batchEndTime = new Date();
-      const durationMinutes = this.batchStartTime ? 
-        Math.round((batchEndTime.getTime() - this.batchStartTime.getTime()) / (1000 * 60)) : 0;
+      console.log('💾 Saving material directly to database:', { materialCode, poNumber, quantity });
       
-      console.log(`⏱️ Batch duration: ${durationMinutes} minutes`);
-      
-      // Lưu tất cả materials trong batch vào database
-      console.log('💾 Saving all batch materials to database...');
-      const savePromises = this.batchMaterials.map(async (materialData) => {
       const outboundRecord: OutboundMaterial = {
         factory: 'ASM1',
-        materialCode: materialData.materialCode,
-        poNumber: materialData.poNumber,
-        quantity: materialData.quantity,
+        materialCode: materialCode,
+        poNumber: poNumber,
+        quantity: quantity,
         unit: 'KG', // Default unit
-        exportQuantity: materialData.quantity,
-        exportDate: this.batchStartTime || new Date(), // Sử dụng thời gian bắt đầu batch
+        exportQuantity: quantity,
+        exportDate: new Date(),
         location: 'ASM1',
-        exportedBy: this.batchEmployeeId, // Use the 7-character employee ID
+        exportedBy: this.batchEmployeeId,
         productionOrder: this.batchProductionOrder,
-        employeeId: this.batchEmployeeId, // Use the 7-character employee ID
-        batchStartTime: this.batchStartTime, // Lưu thời gian bắt đầu
-          batchEndTime: batchEndTime, // Lưu thời gian kết thúc
-        scanMethod: 'Batch Scanner',
-        notes: `Batch scan - ${this.batchProductionOrder}`,
+        employeeId: this.batchEmployeeId,
+        scanMethod: 'Direct Scanner',
+        notes: `Direct scan - ${this.batchProductionOrder}`,
         createdAt: new Date(),
         updatedAt: new Date()
       };
 
-      // Lưu vào outbound
-        const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
-        console.log('✅ Saved batch material:', materialData.materialCode, 'with ID:', docRef.id);
+      // Lưu vào outbound collection
+      const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
+      console.log('✅ Material saved directly to database:', materialCode, 'with ID:', docRef.id);
       
-        // Cập nhật inventory stock để trừ số lượng
-        console.log('📦 Updating inventory stock for:', materialData.materialCode);
-      await this.updateInventoryStock(materialData.materialCode, materialData.poNumber, materialData.quantity);
-        console.log('✅ Inventory updated for:', materialData.materialCode);
-        
-        return docRef;
-      });
+      // Cập nhật inventory stock
+      console.log('📦 Updating inventory stock for:', materialCode);
+      await this.updateInventoryStock(materialCode, poNumber, quantity);
+      console.log('✅ Inventory updated for:', materialCode);
       
-      // Đợi tất cả materials được lưu xong
-      await Promise.all(savePromises);
-      console.log(`✅ All ${this.batchMaterials.length} materials saved successfully`);
+      // Bỏ alert - chỉ log console để scan liên tục
+      console.log(`✅ Đã lưu mã hàng: ${materialCode}, PO: ${poNumber}, Số lượng: ${quantity}`);
       
-      // Đánh dấu batch đã hoàn thành
-      this.isBatchCompleted = true;
-      
-      // Cập nhật batchEndTime cho tất cả materials đã scan
-        await this.updateBatchEndTimeForMaterials(durationMinutes);
-      
-      // Show summary of all scanned materials
-      const summary = this.batchMaterials.map((item, index) => 
-        `${index + 1}. ${item.materialCode} - PO: ${item.poNumber} - Qty: ${item.quantity}`
-      ).join('\n');
-      
-      console.log('📋 Batch Summary:');
-      console.log(summary);
-      
-      // Reload data to show all materials in the report
+      // Reload data để hiển thị mã hàng mới
       await this.loadMaterials();
       console.log('✅ Data reloaded successfully');
       
-      // Reset batch mode
-      this.stopBatchScanningMode();
-      
-      // Show completion message with summary
-      alert(`✅ Batch scanning completed!\n\n📦 Total materials: ${this.batchMaterials.length}\n⏱️ Duration: ${durationMinutes} minutes\n\n${summary}`);
-      
     } catch (error) {
-      console.error('❌ Error completing batch:', error);
-      alert('❌ Lỗi khi hoàn thành batch: ' + error.message);
+      console.error('❌ Error saving material directly:', error);
+      alert('❌ Lỗi khi lưu mã hàng: ' + error.message);
     }
   }
+
+
 
   private focusScannerInput(): void {
     setTimeout(() => {
@@ -1484,84 +1398,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // Cập nhật batchEndTime cho tất cả materials đã scan
-  private async updateBatchEndTimeForMaterials(durationMinutes: number): Promise<void> {
-    try {
-      console.log('🔄 Updating batch end time for materials...');
-      
-      // Tìm tất cả materials có cùng productionOrder và employeeId trong batch này
-      const batchMaterialsQuery = await this.firestore.collection('outbound-materials', ref =>
-        ref.where('productionOrder', '==', this.batchProductionOrder)
-           .where('employeeId', '==', this.batchEmployeeId)
-           .where('scanMethod', '==', 'Batch Scanner')
-           .limit(100)
-      ).get().toPromise();
-      
-      if (batchMaterialsQuery && !batchMaterialsQuery.empty) {
-        const updatePromises = batchMaterialsQuery.docs.map(doc => {
-          const data = doc.data() as any;
-          // Chỉ cập nhật những materials được scan trong batch này (có batchStartTime)
-          if (data.batchStartTime && this.batchStartTime) {
-            const dataStartTime = data.batchStartTime.toDate ? data.batchStartTime.toDate() : data.batchStartTime;
-            if (Math.abs(dataStartTime.getTime() - this.batchStartTime.getTime()) < 60000) { // Trong vòng 1 phút
-              return doc.ref.update({
-                batchEndTime: new Date(),
-                updatedAt: new Date()
-              });
-            }
-          }
-          return Promise.resolve();
-        });
-        
-        await Promise.all(updatePromises);
-        console.log(`✅ Updated ${updatePromises.length} materials with batch end time`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error updating batch end time:', error);
-    }
-  }
 
-  // Tính thời gian thực hiện cho material
-  calculateDuration(material: OutboundMaterial): string {
-    if (!material.batchStartTime || !material.batchEndTime) {
-      return '-';
-    }
-    
-    try {
-      // Xử lý cả Date và Firestore Timestamp
-      let startTime: Date;
-      let endTime: Date;
-      
-      if (material.batchStartTime && typeof material.batchStartTime === 'object') {
-        startTime = (material.batchStartTime as any).toDate ? (material.batchStartTime as any).toDate() : material.batchStartTime;
-      } else {
-        return '-';
-      }
-      
-      if (material.batchEndTime && typeof material.batchEndTime === 'object') {
-        endTime = (material.batchEndTime as any).toDate ? (material.batchEndTime as any).toDate() : material.batchEndTime;
-      } else {
-        return '-';
-      }
-      
-      const durationMs = endTime.getTime() - startTime.getTime();
-      const durationMinutes = Math.round(durationMs / (1000 * 60));
-      
-      if (durationMinutes < 1) {
-        return '< 1 phút';
-      } else if (durationMinutes < 60) {
-        return `${durationMinutes} phút`;
-      } else {
-        const hours = Math.floor(durationMinutes / 60);
-        const minutes = durationMinutes % 60;
-        return `${hours}h ${minutes}p`;
-      }
-    } catch (error) {
-      console.error('❌ Error calculating duration:', error);
-      return '-';
-    }
-  }
+
+
 
 
 }

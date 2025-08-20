@@ -34,7 +34,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   firebaseUserReadOnlyPermissions: { [key: string]: boolean } = {};
   // Firebase user departments
   firebaseUserDepartments: { [key: string]: string } = {};
-  isEditingPermissions = false;
+  isEditingPermissions = true;
   // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
   availableTabs = [
     // Main tabs
@@ -71,6 +71,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Notifications
   newUserNotifications: any[] = [];
   
+  // Table columns for Firebase users
+  displayedColumns: string[] = ['email', 'role', 'department', 'factory', 'displayName', 'readOnly', 'lastLoginAt', 'createdAt', 'permission', 'completePermission', 'actions'];
+  
   // Thêm biến để kiểm soát refresh
   private refreshTimeout: any = null;
   private isRefreshing = false;
@@ -99,6 +102,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Load initial data
     this.loadUserPermissions();
     this.loadFirebaseUsers();
+    // Luôn load permissions vì luôn cho phép sửa
+    this.loadFirebaseUserPermissions();
     
 
     
@@ -559,13 +564,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return currentUser;
   }
 
-  // Permission management methods
-  togglePermissionMode(): void {
-    this.isEditingPermissions = !this.isEditingPermissions;
-    if (this.isEditingPermissions) {
-      this.loadFirebaseUserPermissions();
-    }
-  }
+
 
   async loadFirebaseUserPermissions(): Promise<void> {
     console.log('🔍 Loading Firebase user permissions...');
@@ -583,26 +582,26 @@ export class SettingsComponent implements OnInit, OnDestroy {
           this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
           console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}, readOnly=${data.hasReadOnlyPermission}`);
-        } else {
-          // Đặc biệt cho Steve và Admin - luôn có quyền
-          if (user.uid === 'special-steve-uid') {
-            this.firebaseUserPermissions[user.uid] = true;
-            this.firebaseUserCompletePermissions[user.uid] = true;
-            this.firebaseUserReadOnlyPermissions[user.uid] = false; // Không phải read-only
-            console.log(`✅ Special permissions for Steve: delete=true, complete=true, readOnly=false`);
-          } else {
-            this.firebaseUserPermissions[user.uid] = false; // Default to false
-            this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
-            this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem)
-            console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=true (chỉ xem)`);
+                  } else {
+            // Đặc biệt cho Steve và Admin - luôn có quyền
+            if (user.uid === 'special-steve-uid') {
+              this.firebaseUserPermissions[user.uid] = true;
+              this.firebaseUserCompletePermissions[user.uid] = true;
+              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Không phải read-only
+              console.log(`✅ Special permissions for Steve: delete=true, complete=true, readOnly=false`);
+            } else {
+              this.firebaseUserPermissions[user.uid] = false; // Default to false
+              this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
+              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
+              console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=false (không xem gì cả)`);
+            }
           }
+              } catch (error) {
+          console.error('❌ Error loading permissions for user', user.email, ':', error);
+          this.firebaseUserPermissions[user.uid] = false; // Default to false on error
+          this.firebaseUserCompletePermissions[user.uid] = false; // Default to false on error
+          this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả) on error
         }
-      } catch (error) {
-        console.error('❌ Error loading permissions for user', user.email, ':', error);
-        this.firebaseUserPermissions[user.uid] = false; // Default to false on error
-        this.firebaseUserCompletePermissions[user.uid] = false; // Default to false on error
-        this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem) on error
-      }
     }
     
     console.log('✅ Firebase user permissions loaded');
@@ -621,21 +620,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
           const data = doc.data() as any;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
           console.log(`✅ Loaded read-only permission for ${user.email}: ${data.hasReadOnlyPermission}`);
-        } else {
-          // Đặc biệt cho Steve và Admin - không phải read-only
-          if (user.uid === 'special-steve-uid') {
-            this.firebaseUserReadOnlyPermissions[user.uid] = false;
-            console.log(`✅ Special read-only permission for Steve: false`);
-          } else {
-            // User mới mặc định chỉ được xem
-            this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem)
-            console.log(`✅ Default read-only permission for ${user.email}: true (chỉ xem)`);
+                  } else {
+            // Đặc biệt cho Steve và Admin - không phải read-only
+            if (user.uid === 'special-steve-uid') {
+              this.firebaseUserReadOnlyPermissions[user.uid] = false;
+              console.log(`✅ Special read-only permission for Steve: false`);
+            } else {
+              // User mới mặc định KHÔNG xem được gì cả
+              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
+              console.log(`✅ Default read-only permission for ${user.email}: false (không xem gì cả)`);
+            }
           }
-        }
               } catch (error) {
           console.error('❌ Error loading read-only permission for user', user.email, ':', error);
-          // User mới mặc định chỉ được xem, ngay cả khi có lỗi
-          this.firebaseUserReadOnlyPermissions[user.uid] = true; // Default to true (chỉ xem) on error
+          // User mới mặc định KHÔNG xem được gì cả, ngay cả khi có lỗi
+          this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả) on error
         }
     }
     
@@ -667,7 +666,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async loadFirebaseUserTabPermissions(): Promise<void> {
     console.log('🔍 Loading Firebase user tab permissions...');
-    console.log('📋 Logic mới: Tài khoản mới mặc định chỉ tab Dashboard được tick, các tab khác không tick');
+    console.log('📋 Logic mới: Tài khoản mới mặc định KHÔNG có tab nào được tick - không xem được gì cả');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -688,11 +687,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
             this.firebaseUserTabPermissions[user.uid] = allPermissions;
             console.log(`✅ Special tab permissions for Steve: all tabs enabled`);
           } else {
-            // Tạo permissions mặc định cho user mới - Chỉ tab Dashboard được tick
+            // Tạo permissions mặc định cho user mới - KHÔNG có tab nào được tick
             const defaultPermissions: { [key: string]: boolean } = {};
             this.availableTabs.forEach(tab => {
-              // Chỉ tab Dashboard được tick mặc định, các tab khác không tick
-              defaultPermissions[tab.key] = tab.key === 'dashboard';
+              // KHÔNG có tab nào được tick mặc định - user mới không xem được gì cả
+              defaultPermissions[tab.key] = false;
             });
             this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
             
@@ -702,11 +701,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
       } catch (error) {
         console.error('❌ Error loading tab permissions for user', user.email, ':', error);
-        // Tạo permissions mặc định nếu có lỗi - Chỉ tab Dashboard được tick
+        // Tạo permissions mặc định nếu có lỗi - KHÔNG có tab nào được tick
         const defaultPermissions: { [key: string]: boolean } = {};
         this.availableTabs.forEach(tab => {
-          // Chỉ tab Dashboard được tick mặc định, các tab khác không tick
-          defaultPermissions[tab.key] = tab.key === 'dashboard';
+          // KHÔNG có tab nào được tick mặc định - user mới không xem được gì cả
+          defaultPermissions[tab.key] = false;
         });
         this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
       }
@@ -717,7 +716,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
     try {
-      // Sử dụng permissions mặc định - Chỉ tab Dashboard được tick
+      // Sử dụng permissions mặc định - KHÔNG có tab nào được tick
       const finalPermissions = { ...defaultPermissions };
       
       await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
@@ -728,7 +727,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-      console.log(`✅ Created default tab permissions for ${user.email} - Chỉ tab Dashboard được tick`);
+      console.log(`✅ Created default tab permissions for ${user.email} - KHÔNG có tab nào được tick`);
     } catch (error) {
       console.error(`❌ Error creating default tab permissions for ${user.email}:`, error);
     }
@@ -756,10 +755,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
         // Check if user has permissions for all available tabs
         for (const tab of this.availableTabs) {
           if (userTabPermissions[tab.key] === undefined) {
-            // Add missing tab permission - Chỉ tab Dashboard được tick mặc định
-            userTabPermissions[tab.key] = tab.key === 'dashboard';
+            // Add missing tab permission - KHÔNG có tab nào được tick mặc định
+            userTabPermissions[tab.key] = false;
             hasChanges = true;
-            console.log(`➕ Added missing permission for ${user.email}: ${tab.name} = ${tab.key === 'dashboard' ? 'true (Dashboard)' : 'false'}`);
+            console.log(`➕ Added missing permission for ${user.email}: ${tab.name} = false (không xem gì cả)`);
           }
         }
         
@@ -1033,7 +1032,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   getTableColumns(): string[] {
-    return ['email', 'accountType', 'role', 'department', 'factory', 'displayName', 'readOnly', 'createdAt', 'permission', 'completePermission', 'lastLoginAt', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
+    return ['email', 'role', 'department', 'factory', 'displayName', 'readOnly', 'lastLoginAt', 'createdAt', 'permission', 'completePermission', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
   }
 
   getAccountDisplay(user: any): string {
@@ -1060,6 +1059,41 @@ export class SettingsComponent implements OnInit, OnDestroy {
         const numbers = match[1];
         const displayName = user.displayName ? ` - ${user.displayName}` : '';
         return `ASP${numbers}${displayName}`;
+      }
+    }
+    
+    // Email @gmail hiển thị nguyên email
+    if (user.email && user.email.includes('@gmail')) {
+      return user.email;
+    }
+    
+    // Nếu không có employeeId và không phải email asp, hiển thị email
+    return user.email;
+  }
+
+  // Chỉ hiển thị mã nhân viên, không hiển thị tên
+  getEmployeeIdOnly(user: any): string {
+    if (user.uid === 'special-steve-uid') {
+      return '👑 Steve';
+    }
+    
+    // admin@asp.com chỉ hiển thị là Admin
+    if (user.email === 'admin@asp.com') {
+      return 'Admin';
+    }
+    
+    // Nếu có employeeId, chỉ hiển thị mã nhân viên
+    if (user.employeeId) {
+      return user.employeeId;
+    }
+    
+    // Xử lý email bắt đầu bằng "asp" - chỉ hiển thị 4 số sau
+    if (user.email && user.email.toLowerCase().startsWith('asp')) {
+      const email = user.email.toLowerCase();
+      const match = email.match(/^asp(\d{4})@/);
+      if (match) {
+        const numbers = match[1];
+        return `ASP${numbers}`;
       }
     }
     
@@ -1263,14 +1297,62 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Xóa tài khoản ASP0001
+  async deleteASP0001Account(): Promise<void> {
+    try {
+      console.log('🗑️ Xóa tài khoản ASP0001...');
+      
+      // Tìm tài khoản ASP0001
+      const asp0001User = this.firebaseUsers.find(user => 
+        user.uid === 'special-asp0001-uid' || 
+        user.displayName === 'ASP0001' ||
+        user.email === 'ASP0001@asp.com'
+      );
+      
+      if (!asp0001User) {
+        alert('Không tìm thấy tài khoản ASP0001 để xóa!');
+        return;
+      }
+
+      if (confirm(`Bạn có chắc chắn muốn xóa tài khoản ${asp0001User.displayName}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
+        try {
+          console.log(`🗑️ Starting deletion of ASP0001: ${asp0001User.email} (${asp0001User.uid})`);
+          
+          // Sử dụng service để xóa hoàn toàn
+          await this.firebaseAuthService.deleteUser(asp0001User.uid);
+          
+          // Remove from local arrays
+          this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== asp0001User.uid);
+          delete this.firebaseUserPermissions[asp0001User.uid];
+          delete this.firebaseUserCompletePermissions[asp0001User.uid];
+          delete this.firebaseUserReadOnlyPermissions[asp0001User.uid];
+          delete this.firebaseUserDepartments[asp0001User.uid];
+          delete this.firebaseUserTabPermissions[asp0001User.uid];
+          
+          // Show success message
+          alert(`✅ Đã xóa thành công tài khoản ${asp0001User.displayName}!`);
+          
+          console.log(`📊 Updated user count: ${this.firebaseUsers.length}`);
+          
+        } catch (error) {
+          console.error('❌ Error deleting ASP0001 account:', error);
+          alert(`❌ Có lỗi xảy ra khi xóa tài khoản ${asp0001User.displayName}:\n${error}`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Lỗi xóa tài khoản ASP0001:', error);
+      alert('❌ Có lỗi xảy ra khi xóa tài khoản ASP0001!');
+    }
+  }
+
   // Get count of admin users
   getAdminUsersCount(): number {
     return this.firebaseUsers.filter(user => 
       user.role === 'admin' || 
       user.role === 'Admin' || 
       user.role === 'Quản lý' ||
-      user.uid === 'special-steve-uid' ||
-      user.uid === 'special-asp0001-uid'
+      user.uid === 'special-steve-uid'
     ).length;
   }
 }

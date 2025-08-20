@@ -3,7 +3,7 @@
   margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: #f8f8f8;
   position: relative;
   width: 100%;
   display: flex;
@@ -18,6 +18,7 @@
   max-width: none;
   width: 100%;
   overflow: hidden;
+  padding: 0; /* Loại bỏ padding để tận dụng toàn bộ màn hình */
 }
 
 // Admin Login Styles with Modern Warehouse Background
@@ -309,9 +310,12 @@
 
 // Modern Settings Dashboard - Compact like Work Order
 .settings-dashboard {
-  min-height: 100vh;
+  height: 100vh; /* Sử dụng toàn bộ chiều cao màn hình */
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 12px 15px; /* Compact padding like Work Order */
+  padding: 0 15px 0 15px; /* Loại bỏ padding bottom để tràn xuống dưới */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Ẩn overflow để tránh scrollbar toàn trang */
 }
 
 .dashboard-header {
@@ -374,106 +378,121 @@
   display: flex;
   flex-direction: column;
   gap: 12px; /* Reduced gap like Work Order */
+  flex: 1; /* Tận dụng toàn bộ không gian còn lại */
+  overflow: hidden; /* Ẩn overflow */
 }
 
-// Stats Grid - Compact like Work Order
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Reduced min-width */
-  gap: 12px; /* Reduced gap like Work Order */
-  margin-bottom: 12px; /* Reduced margin like Work Order */
+// Stats Grid - Compact Horizontal Black & White Theme
+.stats-grid-compact {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  margin-bottom: 8px; /* Giảm margin để tiết kiệm không gian */
+  justify-content: flex-start;
+  align-items: stretch;
+  flex-shrink: 0; /* Không cho phép co lại */
 }
 
-.stat-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px; /* Reduced border radius */
-  padding: 15px 20px; /* Compact padding like Work Order */
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); /* Reduced shadow */
-  backdrop-filter: blur(10px);
+.stat-card-compact {
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
-  gap: 15px; /* Reduced gap */
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  min-height: 60px; /* Set minimum height like Work Order */
+  gap: 8px;
+  min-width: 120px;
+  max-width: 150px;
+  min-height: 50px;
   
   &:hover {
-    transform: translateY(-2px); /* Reduced hover effect */
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    background-color: #f8f9fa;
+    border-color: #333333;
   }
   
-  .stat-icon {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    border-radius: 8px; /* Reduced border radius */
-    padding: 10px; /* Reduced padding */
+  .stat-icon-compact {
+    background: #000000;
+    border-radius: 4px;
+    padding: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     
     mat-icon {
-      font-size: 18px; /* Reduced icon size */
-      width: 18px;
-      height: 18px;
-      color: white;
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      color: #ffffff;
     }
   }
   
-  .stat-content {
-    .stat-number {
-      margin: 0 0 2px 0; /* Reduced margin */
-      font-size: 1.3em; /* Compact font size like Work Order */
-      font-weight: 600; /* Reduced weight */
-      color: #2c3e50;
+  .stat-content-compact {
+    flex: 1;
+    
+    .stat-number-compact {
+      margin: 0 0 2px 0;
+      font-size: 1.3em;
+      font-weight: 700;
+      color: #000000;
+      line-height: 1;
     }
     
-    .stat-label {
+    .stat-label-compact {
       margin: 0;
-      color: #7f8c8d;
-      font-size: 0.75em; /* Compact font size like Work Order */
-      font-weight: 500;
+      color: #333333;
+      font-size: 0.7em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
   }
 }
 
-// Section Cards - Compact like Work Order
+// Section Cards - Black & White Theme
 .section-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px; /* Reduced border radius */
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); /* Reduced shadow */
-  backdrop-filter: blur(10px);
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   overflow: hidden;
-  margin-bottom: 12px; /* Reduced margin like Work Order */
+  margin-bottom: 8px; /* Giảm margin để tiết kiệm không gian */
+  flex: 1; /* Tận dụng toàn bộ không gian còn lại */
+  display: flex;
+  flex-direction: column;
   
-  .card-header {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    padding: 15px 20px; /* Compact padding like Work Order */
-    border-bottom: 1px solid #dee2e6;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+      .card-header {
+      background: #000000;
+      padding: 8px 20px; /* Giảm padding để tiết kiệm không gian */
+      border-bottom: 1px solid #333333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0; /* Không cho phép co lại */
     
     .card-title {
       display: flex;
       align-items: center;
-      gap: 10px; /* Reduced gap */
+      gap: 10px;
       
       mat-icon {
-        font-size: 20px; /* Reduced icon size */
+        font-size: 20px;
         width: 20px;
         height: 20px;
-        color: #667eea;
+        color: #ffffff;
       }
       
       h3 {
         margin: 0;
-        font-size: 1.3em; /* Compact font size like Work Order */
+        font-size: 1.3em;
         font-weight: 600;
-        color: #2c3e50;
+        color: #ffffff;
       }
       
       .badge {
-        background: #667eea;
-        color: white;
-        padding: 3px 8px; /* Reduced padding */
+        background: #ffffff;
+        color: #000000;
+        padding: 3px 8px;
         border-radius: 16px; /* Reduced border radius */
         font-size: 0.75em; /* Compact font size like Work Order */
         font-weight: 600;
@@ -510,15 +529,16 @@
 }
 
 .notification-card {
-  background: #f8f9fa;
-  border-radius: 8px; /* Reduced border radius */
-  padding: 15px 20px; /* Compact padding like Work Order */
-  border: 1px solid #e9ecef;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 15px 20px;
+  border: 1px solid #000000;
   transition: all 0.3s ease;
   
   &:hover {
-    background: #e9ecef;
-    transform: translateX(2px); /* Reduced hover effect */
+    background: #f0f0f0;
+    transform: translateX(2px);
+    border-color: #333333;
   }
   
   .notification-header {
@@ -528,17 +548,17 @@
     margin-bottom: 12px; /* Reduced margin */
     
     .user-avatar {
-      background: #667eea;
+      background: #000000;
       border-radius: 50%;
-      width: 36px; /* Reduced size */
-      height: 36px; /* Reduced size */
+      width: 36px;
+      height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
       
       mat-icon {
-        color: white;
-        font-size: 18px; /* Reduced icon size */
+        color: #ffffff;
+        font-size: 18px;
         width: 18px;
         height: 18px;
       }
@@ -560,11 +580,11 @@
         flex-wrap: wrap;
         
         span {
-          background: #e9ecef;
-          padding: 3px 6px; /* Reduced padding */
-          border-radius: 4px; /* Reduced border radius */
-          font-size: 0.7em; /* Compact font size like Work Order */
-          color: #6c757d;
+          background: #000000;
+          padding: 3px 6px;
+          border-radius: 4px;
+          font-size: 0.7em;
+          color: #ffffff;
           font-weight: 500;
         }
       }
@@ -719,53 +739,87 @@
   background: white;
   border: 2px solid #ff9800;
   border-top: none;
-  overflow: hidden;
-  margin-bottom: 20px;
+  overflow: hidden; /* Ẩn overflow để tránh scrollbar kép */
+  margin-bottom: 0; /* Loại bỏ margin bottom để tràn xuống dưới */
+  flex: 1; /* Tận dụng toàn bộ không gian còn lại */
+  display: flex;
+  flex-direction: column;
   
   .table-scroll-container {
-    max-height: calc(100vh - 200px);
+    flex: 1; /* Tận dụng toàn bộ không gian còn lại */
     overflow-y: auto;
     overflow-x: auto;
     position: relative;
     
+    /* Cải tiến thanh cuộn */
     &::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+      width: 12px; /* Tăng độ rộng thanh cuộn */
+      height: 12px;
     }
     
     &::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 4px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #e9ecef;
     }
     
     &::-webkit-scrollbar-thumb {
-      background: #c1c1c1;
-      border-radius: 4px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 6px;
+      border: 1px solid #ffffff;
       
       &:hover {
-        background: #a8a8a8;
+        background: linear-gradient(135deg, #5a6fd8, #6a4190);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+      
+      &:active {
+        background: linear-gradient(135deg, #4e5fc6, #5e3780);
       }
     }
     
+    /* Thanh cuộn ngang */
+    &::-webkit-scrollbar-corner {
+      background: #f8f9fa;
+      border-radius: 6px;
+    }
+    
+    /* Firefox scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: #667eea #f8f9fa;
+    
+    /* Bỏ smooth scrolling để tăng hiệu suất */
+    scroll-behavior: auto;
+    
+    /* Đảm bảo có thể cuộn đến cuối */
+    padding-bottom: 20px;
+    
     .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed; /* Cải thiện hiệu suất cuộn */
+      
       th {
         position: sticky !important;
-        top: 60px !important;
+        top: 0 !important; /* Giảm khoảng cách từ top */
         z-index: 50 !important;
         background-color: #ff9800 !important;
         color: #000000 !important;
         text-align: center !important;
         font-weight: 600 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        padding: 8px 4px !important;
-        font-size: 11px !important;
+        padding: 8px 4px !important; /* Tăng padding để dễ đọc */
+        font-size: 11px !important; /* Tăng font size để dễ đọc */
         border: 1px solid #d0d0d0 !important;
+        white-space: nowrap !important;
+        min-width: 80px !important; /* Tăng độ rộng tối thiểu */
+        max-width: 200px !important; /* Tăng độ rộng tối đa */
       }
       
       // Override any inline styles
       th[mat-header-cell] {
         position: sticky !important;
-        top: 60px !important;
+        top: 0 !important;
         z-index: 50 !important;
         background-color: #ff9800 !important;
         color: #000000 !important;
@@ -775,7 +829,7 @@
       thead th,
       .mat-header-cell {
         position: sticky !important;
-        top: 60px !important;
+        top: 0 !important;
         z-index: 50 !important;
         background-color: #ff9800 !important;
         color: #000000 !important;
@@ -783,20 +837,131 @@
         font-weight: 600 !important;
       }
       
-      // Name column expansion
-      .mat-column-fullName,
-      th:nth-child(5),
-      td:nth-child(5) {
-        min-width: 200px !important;
-        max-width: 300px !important;
-        width: 250px !important;
+      // Name column expansion - mở rộng để hiển thị đủ tên
+      .mat-column-displayName {
+        min-width: 180px !important; /* Độ rộng tối thiểu cho tên */
+        max-width: 250px !important; /* Độ rộng tối đa cho tên */
+        width: 200px !important; /* Độ rộng cố định vừa đủ */
         
         // Uppercase text display
         text-transform: uppercase !important;
         word-wrap: break-word !important;
         white-space: normal !important;
       }
+      
+      // Cải thiện hiển thị dữ liệu
+      td {
+        padding: 6px 4px !important; /* Tăng padding để dễ đọc */
+        font-size: 11px !important; /* Tăng font size để dễ đọc */
+        border: 1px solid #e0e0e0 !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-width: 150px !important; /* Tăng độ rộng tối đa */
+        min-width: 60px !important; /* Đảm bảo độ rộng tối thiểu */
+        
+        // Hover effect - bỏ animation
+        &:hover {
+          background-color: #f8f9fa !important;
+          overflow: visible !important;
+          white-space: normal !important;
+          word-break: break-word !important;
+          z-index: 10 !important;
+          position: relative !important;
+        }
+      }
+      
+      // Alternating row colors
+      tr:nth-child(even) {
+        background-color: #fafbfc !important;
+      }
+      
+      tr:nth-child(odd) {
+        background-color: #ffffff !important;
+      }
+      
+      // Row hover effect - bỏ animation
+      tr:hover {
+        background-color: #f0f8ff !important;
+      }
+      
+      // Đảm bảo dòng cuối cùng có thể cuộn đến
+      tr:last-child {
+        margin-bottom: 20px;
+      }
+      
+      // Điều chỉnh độ rộng cụ thể cho từng loại cột
+      .mat-column-email {
+        min-width: 80px !important; /* Độ rộng tối thiểu cho mã nhân viên */
+        max-width: 120px !important; /* Độ rộng tối đa cho mã nhân viên */
+        width: 100px !important; /* Độ rộng vừa đủ cho mã nhân viên */
+      }
+      
+      .mat-column-accountType {
+        min-width: 60px !important;
+        max-width: 90px !important;
+        width: 75px !important;
+      }
+      
+      .mat-column-role {
+        min-width: 60px !important;
+        max-width: 90px !important;
+        width: 75px !important;
+      }
+      
+      .mat-column-department {
+        min-width: 50px !important;
+        max-width: 80px !important;
+        width: 65px !important;
+      }
+      
+      .mat-column-factory {
+        min-width: 50px !important;
+        max-width: 80px !important;
+        width: 65px !important;
+      }
+      
+      .mat-column-readOnly {
+        min-width: 50px !important;
+        max-width: 70px !important;
+        width: 60px !important;
+      }
+      
+      .mat-column-lastLoginAt {
+        min-width: 80px !important;
+        max-width: 120px !important;
+        width: 100px !important;
+      }
+      
+      .mat-column-createdAt {
+        min-width: 60px !important;
+        max-width: 80px !important;
+        width: 70px !important;
+      }
+      
+      .mat-column-permission,
+      .mat-column-completePermission {
+        min-width: 50px !important;
+        max-width: 70px !important;
+        width: 60px !important;
+      }
+      
+      .mat-column-actions {
+        min-width: 50px !important;
+        max-width: 70px !important;
+        width: 60px !important;
+      }
     }
+  }
+  
+  // Đảm bảo container có thể cuộn đầy đủ
+  &:after {
+    content: '';
+    display: block;
+    height: 20px;
+    width: 100%;
   }
 }
 
@@ -2087,6 +2252,31 @@
   .mat-row:nth-child(odd) {
     background-color: #ffffff;
   }
+  
+  // Tab permissions columns - độ rộng cố định 1cm mỗi cột
+  .mat-column-tab-Dashboard,
+  .mat-column-tab-WorkOrder,
+  .mat-column-tab-Shipment,
+  .mat-column-tab-RM1Inbound,
+  .mat-column-tab-RM2Inbound,
+  .mat-column-tab-RM1Outbound,
+  .mat-column-tab-RM2Outbound,
+  .mat-column-tab-RM1Inventory,
+  .mat-column-tab-RM2Inventory,
+  .mat-column-tab-FinishedGoods,
+  .mat-column-tab-Label,
+  .mat-column-tab-BondedReport,
+  .mat-column-tab-Utilization,
+  .mat-column-tab-Find,
+  .mat-column-tab-Layout,
+  .mat-column-tab-SafetyQuality,
+  .mat-column-tab-Training,
+  .mat-column-tab-FlowWork,
+  .mat-column-tab-Setting {
+    min-width: 37.8px !important; /* 1cm = 37.8px */
+    max-width: 37.8px !important; /* 1cm = 37.8px */
+    width: 37.8px !important; /* 1cm = 37.8px */
+  }
 }
 
 .excel-select {
@@ -2275,10 +2465,7 @@
     max-width: 220px !important;
   }
   
-  .mat-column-accountType {
-    min-width: 120px !important;
-    max-width: 140px !important;
-  }
+
   
   .mat-column-role {
     min-width: 100px !important;
@@ -2314,6 +2501,31 @@
   .mat-column-actions {
     min-width: 60px !important;
     max-width: 80px !important;
+  }
+  
+  // Tab permissions columns - độ rộng cố định 1cm mỗi cột
+  .mat-column-tab-Dashboard,
+  .mat-column-tab-WorkOrder,
+  .mat-column-tab-Shipment,
+  .mat-column-tab-RM1Inbound,
+  .mat-column-tab-RM2Inbound,
+  .mat-column-tab-RM1Outbound,
+  .mat-column-tab-RM2Outbound,
+  .mat-column-tab-RM1Inventory,
+  .mat-column-tab-RM2Inventory,
+  .mat-column-tab-FinishedGoods,
+  .mat-column-tab-Label,
+  .mat-column-tab-BondedReport,
+  .mat-column-tab-Utilization,
+  .mat-column-tab-Find,
+  .mat-column-tab-Layout,
+  .mat-column-tab-SafetyQuality,
+  .mat-column-tab-Training,
+  .mat-column-tab-FlowWork,
+  .mat-column-tab-Setting {
+    min-width: 37.8px !important; /* 1cm = 37.8px */
+    max-width: 37.8px !important; /* 1cm = 37.8px */
+    width: 37.8px !important; /* 1cm = 37.8px */
   }
 }
 
@@ -2377,4 +2589,6 @@
   padding: 2px 6px;
   border-radius: 12px;
   font-size: 11px;
-} 
+}
+
+ 

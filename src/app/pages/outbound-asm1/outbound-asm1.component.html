@@ -13,118 +13,39 @@
                   [(ngModel)]="scannerBuffer"
                   (keydown)="onScannerKeydown($event)"
                   (blur)="onScannerInputBlur()"
-                  placeholder="Quét barcode/QR code cho batch scan..."
+                  placeholder="Quét barcode/QR code..."
                   class="scanner-input"
                   [class.active]="isScannerInputActive">
          </div>
 
-        <!-- Batch Scanning Mode Controls -->
-        <div class="batch-scanning-controls" *ngIf="!isBatchScanningMode">
-          <button class="batch-start-btn" 
+        <!-- Simple Start/Stop Controls -->
+        <div class="scan-controls" *ngIf="!isBatchScanningMode">
+          <button class="start-btn" 
                   (click)="startBatchScanningMode()"
-                  title="Bắt đầu chế độ scan batch">
-            <i class="material-icons">playlist_add</i>
-            Batch Scan
+                  title="Bắt đầu chế độ scan">
+            <i class="material-icons">play_arrow</i>
+            Start
           </button>
         </div>
 
-        <!-- Batch Scanning Mode Active -->
-        <div class="batch-scanning-active" *ngIf="isBatchScanningMode">
-          <div class="batch-info">
-            <div class="batch-field">
-              <label>Lệnh sản xuất:</label>
-              <span class="batch-value" [class.scanned]="isProductionOrderScanned">
-                {{ batchProductionOrder || 'Chưa scan (KZLSX...)' }}
-              </span>
-            </div>
-            <div class="batch-field">
-              <label>Mã nhân viên:</label>
-              <div class="employee-scan-controls">
-                <input type="text" 
-                       [(ngModel)]="batchEmployeeId"
-                       (keydown)="onEmployeeIdKeydown($event)"
-                       placeholder="Chưa scan (ASP...)"
-                       class="employee-input"
-                       [class.scanned]="isEmployeeIdScanned"
-                       [disabled]="isEmployeeIdScanned"
-                       (focus)="onEmployeeInputFocus($event)">
-                <button class="scan-employee-btn" 
-                        (click)="focusEmployeeInput()"
-                        [disabled]="isEmployeeIdScanned"
-                        title="Focus vào ô nhập mã nhân viên để scan">
-                  <i class="material-icons">input</i>
-                  Scan
-                </button>
-              </div>
-              <div class="scan-note" *ngIf="!isEmployeeIdScanned">
-                <small>⚠️ Phải scan mã nhân viên bằng máy scan trước khi scan mã hàng</small>
-              </div>
-            </div>
-            <div class="batch-field">
-              <label>Mã hàng đã scan:</label>
-              <span class="batch-count" [class.ready]="batchMaterials.length > 0">
-                {{ batchMaterials.length }} / <span class="expected-count">?</span>
-              </span>
-            </div>
-            <div class="batch-field" *ngIf="batchMaterials.length > 0">
-              <label>Mã hàng gần nhất:</label>
-              <span class="batch-value">
-                {{ batchMaterials[batchMaterials.length - 1]?.materialCode || '' }}
-              </span>
-            </div>
-            <div class="batch-status" *ngIf="batchMaterials.length > 0">
-              <label>Trạng thái:</label>
-              <span class="status-indicator" [class.pending]="!isBatchCompleted" [class.completed]="isBatchCompleted">
-                <span *ngIf="!isBatchCompleted">⏳ Đang scan... ({{ batchMaterials.length }} mã hàng)</span>
-                <span *ngIf="isBatchCompleted">✅ Đã hoàn thành ({{ batchMaterials.length }} mã hàng)</span>
-              </span>
-            </div>
-            
-            <!-- Tick xác nhận đã nhận toàn bộ lô hàng -->
-            <div class="batch-confirmation" *ngIf="batchMaterials.length > 0 && !isBatchCompleted">
-              <label class="confirmation-label">
-                <input type="checkbox" 
-                       [(ngModel)]="isBatchFullyReceived" 
-                       (change)="onBatchConfirmationChange()"
-                       class="confirmation-checkbox">
-                <span class="confirmation-text">
-                  ✅ Đã nhận toàn bộ lô hàng ({{ batchMaterials.length }} mã hàng)
-                </span>
-              </label>
-              <small class="confirmation-note">
-                Tick vào ô này để xác nhận đã scan đủ tất cả mã hàng trong lô
-              </small>
-            </div>
-            
-            <!-- Danh sách mã hàng đã scan -->
-            <div class="batch-materials-list" *ngIf="batchMaterials.length > 0">
-              <label>Danh sách mã hàng:</label>
-              <div class="materials-grid">
-                <div class="material-item" *ngFor="let material of batchMaterials; let i = index">
-                  <span class="material-number">{{ i + 1 }}</span>
-                  <span class="material-code">{{ material.materialCode }}</span>
-                  <span class="material-po">{{ material.poNumber }}</span>
-                  <span class="material-qty">{{ material.quantity }}</span>
-                </div>
-              </div>
-            </div>
+        <!-- Active Scanning Status -->
+        <div class="scan-status" *ngIf="isBatchScanningMode">
+          <div class="status-display">
+            <span class="status-item" [class.scanned]="isEmployeeIdScanned">
+              <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+              {{ batchEmployeeId || 'Chưa scan mã nhân viên' }}
+            </span>
+            <span class="status-item" [class.scanned]="isProductionOrderScanned">
+              <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+              {{ batchProductionOrder || 'Chưa scan LSX' }}
+            </span>
           </div>
-          <div class="batch-actions">
-            <button class="batch-save-btn" 
-                    (click)="saveBatchToOutbound()"
-                    [disabled]="!isProductionOrderScanned || !isEmployeeIdScanned || batchMaterials.length === 0 || isBatchCompleted"
-                    [title]="isBatchCompleted ? 'Batch đã hoàn thành' : 'Hoàn thành batch scanning - Lưu tất cả mã hàng đã scan'">
-              <i class="material-icons">{{ isBatchCompleted ? 'check_circle' : 'check_circle' }}</i>
-              <span *ngIf="!isBatchCompleted">Hoàn thành Batch ({{ batchMaterials.length }})</span>
-              <span *ngIf="isBatchCompleted">Đã hoàn thành ({{ batchMaterials.length }})</span>
-            </button>
-            <button class="batch-cancel-btn" 
-                    (click)="stopBatchScanningMode()"
-                    title="Hủy batch scanning">
-              <i class="material-icons">cancel</i>
-              Hủy
-            </button>
-          </div>
+          <button class="done-btn" 
+                  (click)="stopBatchScanningMode()"
+                  title="Dừng chế độ scan">
+            <i class="material-icons">stop</i>
+            Done
+          </button>
         </div>
         
         <!-- More Dropdown -->
@@ -198,8 +119,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
-                         <th>Thời gian bắt đầu</th>
-             <th>Thời gian thực hiện</th>
+            <th>Ngày xuất</th>
             <th>Mã nhân viên</th>
             <th>Lệnh sản xuất</th>
             <th>Xóa</th>
@@ -218,11 +138,8 @@
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
             </td>
-                         <td class="date-cell">
+            <td class="date-cell">
                <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">
-             </td>
-             <td class="duration-cell">
-               <span class="duration-display">{{ calculateDuration(material) }}</span>
              </td>
             <td class="employee-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="ASP1234">
@@ -253,9 +170,6 @@
     </div>
   </div>
 
-  <!-- QR Scanner Modal - Removed since we auto-export now -->
-  <!-- <div class="qr-scanner-modal" *ngIf="isCameraScanning || lastScannedData"> -->
-  
   <!-- QR Scanner Modal for Employee ID -->
   <div class="qr-scanner-modal" *ngIf="isCameraScanning">
     <div class="modal-content">
