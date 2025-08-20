@@ -3359,6 +3359,83 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang !== 'Done').length;
   }
 
+  // Get late items count (items past due date and not Done)
+  getLateItemsCount(): number {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day
+    
+    console.log('🔍 Calculating late items count...');
+    console.log('📅 Today:', today.toISOString().split('T')[0]);
+    console.log('📊 Total items:', this.scheduleData.length);
+    
+    // Debug: Check all items with ngayNhanKeHoach
+    const itemsWithDates = this.scheduleData.filter(item => item.ngayNhanKeHoach);
+    console.log('📅 Items with ngayNhanKeHoach:', itemsWithDates.length);
+    
+    itemsWithDates.forEach(item => {
+      console.log(`📋 Item ${item.maTem}: ngayNhanKeHoach type:`, typeof item.ngayNhanKeHoach, 'value:', item.ngayNhanKeHoach);
+    });
+    
+    const lateItems = this.scheduleData.filter(item => {
+      // Skip if status is Done
+      if (item.tinhTrang === 'Done') return false;
+      
+      // Check if item has a due date
+      if (item.ngayNhanKeHoach) {
+        try {
+          let dueDate: Date;
+          
+          // Handle different date formats from Firebase
+          if (item.ngayNhanKeHoach && typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+            // Firestore Timestamp
+            dueDate = (item.ngayNhanKeHoach as any).toDate();
+          } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach.includes('/')) {
+            // Handle DD/MM/YYYY format from Excel import
+            const parts = item.ngayNhanKeHoach.split('/');
+            if (parts.length === 3) {
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+              const year = parseInt(parts[2]);
+              dueDate = new Date(year, month, day);
+            } else {
+              dueDate = new Date(item.ngayNhanKeHoach as any);
+            }
+          } else {
+            // Try to create Date object for other formats
+            dueDate = new Date(item.ngayNhanKeHoach as any);
+          }
+          
+          // Check if date is valid
+          if (isNaN(dueDate.getTime())) {
+            console.warn('⚠️ Invalid date for item:', item.maTem, item.ngayNhanKeHoach);
+            return false;
+          }
+          
+          // Reset time to start of day for comparison
+          dueDate.setHours(0, 0, 0, 0);
+          
+          const isLate = dueDate < today;
+          
+          // Debug log for items with dates
+          if (item.maTem) {
+            console.log(`📋 Item ${item.maTem}: Due date: ${dueDate.toISOString().split('T')[0]}, Is late: ${isLate}`);
+          }
+          
+          // Item is late if due date is before today
+          return isLate;
+        } catch (error) {
+          console.warn('❌ Error processing date for item:', item, error);
+          return false;
+        }
+      }
+      
+      return false;
+    });
+    
+    console.log(`⏰ Found ${lateItems.length} late items`);
+    return lateItems.length;
+  }
+
   // Export photo report to Excel
   exportPhotoReport(): void {
     const photoCapturedItems = this.getPhotoCapturedItems();

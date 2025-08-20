@@ -414,7 +414,7 @@
               }
 
               .code-text {
-                font-family: 'Courier New', monospace;
+                font-family: Arial, sans-serif;
                 background: #e7f3ff;
                 padding: 1px 3px;
                 border-radius: 2px;
@@ -423,7 +423,7 @@
               }
 
               .product-code {
-                font-family: 'Courier New', monospace;
+                font-family: Arial, sans-serif;
                 background: #fff3cd;
                 padding: 1px 3px;
                 border-radius: 2px;
@@ -432,7 +432,7 @@
               }
 
               .order-code {
-                font-family: 'Courier New', monospace;
+                font-family: Arial, sans-serif;
                 background: #d1ecf1;
                 padding: 1px 3px;
                 border-radius: 2px;
@@ -1066,7 +1066,7 @@ thead th {
 
 // Status time column styling
 .status-time {
-  font-family: 'Courier New', monospace;
+  font-family: Arial, sans-serif;
   font-size: 11px;
   color: #666;
   background: #f8f9fa;

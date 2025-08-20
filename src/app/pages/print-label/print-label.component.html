@@ -45,6 +45,10 @@
               <i class="material-icons">restore</i>
               Reset về 30 ngày gần nhất
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="filterByMonth(); $event.preventDefault()">
+              <i class="material-icons">filter_list</i>
+              Lọc theo tháng
+            </a>
             <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="showFreshImportConfirmDialog(); $event.preventDefault()">
               <i class="material-icons">refresh</i>
               Xóa dữ liệu cũ, import lại
@@ -71,18 +75,15 @@
                   (click)="toggleShowCompletedItems()">
             <i class="material-icons">visibility</i>
           </button>
-          
-          <button class="custom-btn" 
-                  (click)="filterByMonth()">
-            <i class="material-icons">filter_list</i>
-            Lọc
-          </button>
         </div>
         
         <!-- Status Indicators -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; margin-right: 0;">
           <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             🔍 IQC: {{getIQCItemsCount()}}
+          </div>
+          <div style="background: #ff5722; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: white; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ⏰ Late: {{getLateItemsCount()}}
           </div>
           <div style="background: #e8f5e8; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #2e7d32; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ✅ Pass: {{getPassItemsCount()}}
