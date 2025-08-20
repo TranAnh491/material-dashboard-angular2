@@ -160,13 +160,12 @@
                 <th style="min-width: 120px;">Tình trạng</th>
                 <th style="min-width: 140px;">Thời gian</th>
                 <th style="min-width: 150px;">Ghi chú</th>
-                <th>Hoàn thành</th>
                 <th>Xóa</th>
               </tr>
             </thead>
             <tbody>
               <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
-              <tr *ngIf="showCompletedItems || !item.isCompleted"
+              <tr *ngIf="showCompletedItems || (!item.isCompleted && item.tinhTrang !== 'Done')"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f5f5f5' : 'white')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
@@ -256,23 +255,6 @@
                     onfocus="this.style.background='#e6f3ff'" 
                     onblur="this.style.background='transparent'"
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
-                </td>
-              
-              <!-- Cột Hoàn thành -->
-              <td style="text-align: center; border: 1px solid #000000;">
-                    <button 
-                  *ngIf="!item.isCompleted"
-                      (click)="markAsCompleted(item)"
-                      title="Đánh dấu hoàn thành"
-                  class="complete-btn"
-                  style="background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px; border-radius: 4px; transition: all 0.3s; color: #4caf50;">
-                      ✅
-                    </button>
-                                  <span 
-                    *ngIf="item.isCompleted"
-                    style="color: #4caf50; font-size: 14px; font-weight: bold;">
-                    Đã hoàn thành
-                    </span>
                 </td>
               
               <!-- Cột Xóa -->

@@ -24,9 +24,6 @@ interface ScheduleItem {
   statusUpdateTime?: Date; // Thời gian cập nhật trạng thái
   banVe?: string;
   ghiChu?: string;
-  isCompleted?: boolean;
-  completedAt?: Date;
-  completedBy?: string;
   isUrgent?: boolean; // Đánh dấu gấp
   labelComparison?: {
     comparisonResult?: 'Pass' | 'Fail' | 'Pending' | 'Completed';
@@ -478,9 +475,7 @@ export class PrintLabelComponent implements OnInit {
                 statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
                 banVe: item.banVe || '',
                 ghiChu: item.ghiChu || '',
-                isCompleted: item.isCompleted || false,
-                completedAt: item.completedAt ? new Date(item.completedAt.toDate()) : undefined,
-                completedBy: item.completedBy || '',
+
                 isUrgent: item.isUrgent || false,
                 labelComparison: item.labelComparison || undefined
               };
@@ -514,9 +509,7 @@ export class PrintLabelComponent implements OnInit {
                 statusUpdateTime: data.statusUpdateTime ? new Date(data.statusUpdateTime.toDate ? data.statusUpdateTime.toDate() : data.statusUpdateTime) : new Date(),
                 banVe: data.banVe || '',
                 ghiChu: data.ghiChu || '',
-                isCompleted: data.isCompleted || false,
-                completedAt: data.completedAt ? new Date(data.completedAt.toDate()) : undefined,
-                completedBy: data.completedBy || '',
+
                 isUrgent: data.isUrgent || false,
                 labelComparison: data.labelComparison || undefined
               };
@@ -886,7 +879,7 @@ export class PrintLabelComponent implements OnInit {
         item.tinhTrang || '',
         item.statusUpdateTime ? new Date(item.statusUpdateTime).toLocaleString('vi-VN') : '',
         item.ghiChu || '',
-        item.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'
+        item.tinhTrang === 'Done' ? 'Đã hoàn thành' : 'Chưa hoàn thành'
       ])
     ];
     
@@ -1141,19 +1134,19 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
 
-    // Đếm số lượng mã đã hoàn thành
-    const completedItems = this.scheduleData.filter(item => item.isCompleted);
+    // Đếm số lượng mã đã hoàn thành (chỉ dựa trên tình trạng "Done")
+    const completedItems = this.scheduleData.filter(item => item.tinhTrang === 'Done');
     
     if (completedItems.length === 0) {
-      alert('ℹ️ Không có mã nào đã hoàn thành để xóa!');
+      alert('ℹ️ Không có mã nào đã hoàn thành hoặc có tình trạng "Done" để xóa!');
       return;
     }
 
-    if (confirm(`⚠️ Bạn có chắc chắn muốn xóa tất cả ${completedItems.length} mã đã hoàn thành?\n\nHành động này không thể hoàn tác!`)) {
+    if (confirm(`⚠️ Bạn có chắc chắn muốn xóa tất cả ${completedItems.length} mã đã hoàn thành và có tình trạng "Done"?\n\nHành động này không thể hoàn tác!`)) {
       console.log(`🗑️ Deleting ${completedItems.length} completed items...`);
       
-      // Lọc ra các mã chưa hoàn thành
-      const remainingItems = this.scheduleData.filter(item => !item.isCompleted);
+      // Lọc ra các mã chưa hoàn thành và không có tình trạng "Done"
+      const remainingItems = this.scheduleData.filter(item => item.tinhTrang !== 'Done');
       
       // Cập nhật dữ liệu
       this.scheduleData = remainingItems;
@@ -1162,7 +1155,7 @@ export class PrintLabelComponent implements OnInit {
       // Lưu vào Firebase
       this.saveToFirebase(remainingItems);
       
-      alert(`✅ Đã xóa thành công ${completedItems.length} mã đã hoàn thành!\n\nCòn lại: ${remainingItems.length} mã chưa hoàn thành.`);
+      alert(`✅ Đã xóa thành công ${completedItems.length} mã đã hoàn thành và có tình trạng "Done"!\n\nCòn lại: ${remainingItems.length} mã chưa hoàn thành.`);
     }
   }
 
@@ -3145,14 +3138,14 @@ export class PrintLabelComponent implements OnInit {
   // Tìm kiếm trong các cột: Mã tem, Mã hàng, Tình trạng
   getFilteredScheduleData(): ScheduleItem[] {
     if (!this.searchTerm || this.searchTerm.trim() === '') {
-      return this.scheduleData.filter(item => !item.isCompleted);
+      return this.scheduleData.filter(item => item.tinhTrang !== 'Done');
     }
 
     const searchLower = this.searchTerm.toLowerCase().trim();
     
     return this.scheduleData.filter(item => {
-      // Chỉ hiển thị item chưa hoàn thành
-      if (item.isCompleted) return false;
+      // Chỉ hiển thị item không có tình trạng "Done"
+      if (item.tinhTrang === 'Done') return false;
       
       // Tìm kiếm trong các cột: Mã tem, Mã hàng, Tình trạng
       const maTem = (item.maTem || '').toLowerCase();
@@ -3220,23 +3213,7 @@ export class PrintLabelComponent implements OnInit {
       });
   }
 
-  // Mark item as completed
-  markAsCompleted(item: ScheduleItem): void {
-    if (confirm(`Xác nhận đánh dấu hoàn thành cho ${item.maTem || item.maHang || 'item này'}?`)) {
-      item.isCompleted = true;
-      item.completedAt = new Date();
-      item.completedBy = this.currentUserId || 'Unknown';
-      
-      // Update in Firebase
-      this.updateItemInFirebase(item);
-      
-      console.log(`✅ Marked item as completed:`, item);
-      
-      // Không cần xóa item khỏi scheduleData
-      // getDisplayScheduleData() sẽ tự động ẩn các item đã hoàn thành
-      // khi showCompletedItems = false
-    }
-  }
+
 
   // Delete item from schedule and Firebase
   deleteItem(item: ScheduleItem): void {
@@ -3300,9 +3277,7 @@ export class PrintLabelComponent implements OnInit {
         tinhTrang: item.tinhTrang || '',
         banVe: item.banVe || '',
         ghiChu: item.ghiChu || '',
-        isCompleted: item.isCompleted || false,
-        completedAt: item.completedAt || null,
-        completedBy: item.completedBy || '',
+
         labelComparison: item.labelComparison || null
       }));
       
@@ -3314,9 +3289,7 @@ export class PrintLabelComponent implements OnInit {
         const doc = querySnapshot.docs[0];
         await doc.ref.update({
           data: cleanScheduleData,
-          lastUpdated: new Date(),
-          completedCount: this.getCompletedItemsCount(),
-          incompleteCount: this.getIncompleteItemsCount()
+          lastUpdated: new Date()
         });
         
         console.log('✅ Firebase updated successfully after item deletion');
@@ -3364,15 +3337,7 @@ export class PrintLabelComponent implements OnInit {
 
 
 
-  // Get completed items count
-  getCompletedItemsCount(): number {
-    return this.scheduleData.filter(item => item.isCompleted).length;
-  }
 
-  // Get incomplete items count
-  getIncompleteItemsCount(): number {
-    return this.scheduleData.filter(item => !item.isCompleted).length;
-  }
 
   // Add function to get Pending items count
   getPendingItemsCount(): number {
@@ -3391,7 +3356,7 @@ export class PrintLabelComponent implements OnInit {
 
   // Get count of items that are NOT done (completed)
   getNotDoneItemsCount(): number {
-    return this.scheduleData.filter(item => !item.isCompleted).length;
+    return this.scheduleData.filter(item => item.tinhTrang !== 'Done').length;
   }
 
   // Export photo report to Excel
@@ -4163,7 +4128,12 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to get display data based on filter
   getDisplayScheduleData(): ScheduleItem[] {
-    const displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
+    let displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
+    
+    // Ẩn các dòng có tình trạng "Done" (trừ khi showCompletedItems = true)
+    if (!this.showCompletedItems) {
+      displayData = displayData.filter(item => item.tinhTrang !== 'Done');
+    }
     
     // Sort: urgent items first, then by STT
     displayData.sort((a, b) => {
@@ -4182,57 +4152,9 @@ export class PrintLabelComponent implements OnInit {
 
 
 
-  // Add function to mark all visible items as completed
-  markAllVisibleAsCompleted(): void {
-    const visibleItems = this.getDisplayScheduleData();
-    const incompleteItems = visibleItems.filter(item => !item.isCompleted);
-    
-    if (incompleteItems.length === 0) {
-      alert('ℹ️ Không có item nào để đánh dấu hoàn thành!');
-      return;
-    }
-    
-    if (confirm(`✅ Đánh dấu hoàn thành cho ${incompleteItems.length} items?`)) {
-      console.log('✅ Marking all visible items as completed');
-      
-      incompleteItems.forEach(item => {
-        item.isCompleted = true;
-        item.completedAt = new Date();
-        item.completedBy = 'User';
-      });
-      
-      // Update Firebase
-      this.updateFirebaseAfterBulkUpdate();
-      
-      alert(`✅ Đã đánh dấu hoàn thành cho ${incompleteItems.length} items!`);
-    }
-  }
 
-  // Add function to update Firebase after bulk update
-  async updateFirebaseAfterBulkUpdate(): Promise<void> {
-    try {
-    console.log('🔥 Updating Firebase after bulk completion update...');
-    
-      const querySnapshot = await this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').limit(1)
-      ).get().toPromise();
-      
-      if (querySnapshot && !querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        await doc.ref.update({
-          data: this.scheduleData,
-          lastUpdated: new Date(),
-          completedCount: this.getCompletedItemsCount(),
-          incompleteCount: this.getIncompleteItemsCount()
-        });
-        
-        console.log('✅ Firebase updated successfully after bulk completion');
-      }
-    } catch (error) {
-        console.error('❌ Error updating Firebase after bulk completion:', error);
-        alert('❌ Lỗi khi cập nhật Firebase sau khi đánh dấu hoàn thành hàng loạt');
-    }
-  }
+
+
 
   // Add function to show note save success message
   showNoteSaveSuccess(input: HTMLInputElement): void {
@@ -4347,6 +4269,9 @@ export class PrintLabelComponent implements OnInit {
       if (itemIndex !== -1) {
         this.scheduleData[itemIndex].statusUpdateTime = item.statusUpdateTime;
       }
+      
+      // Nếu tình trạng được thay đổi thành "Done", item sẽ tự động ẩn
+      // (được xử lý bởi getDisplayScheduleData() và getFilteredScheduleData())
       
       // Force Angular change detection
       this.scheduleData = [...this.scheduleData];

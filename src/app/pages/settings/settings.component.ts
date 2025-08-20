@@ -1033,7 +1033,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   getTableColumns(): string[] {
-    return ['email', 'role', 'department', 'factory', 'displayName', 'readOnly', 'permission', 'completePermission', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
+    return ['email', 'accountType', 'role', 'department', 'factory', 'displayName', 'readOnly', 'createdAt', 'permission', 'completePermission', 'lastLoginAt', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
   }
 
   getAccountDisplay(user: any): string {

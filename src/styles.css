@@ -1,8 +1,5 @@
 /* You can add global styles to this file, and also import other style files */
 
-/* Import Local Fonts */
-@import url('./assets/css/local-fonts.css');
-
 /* Set white background for entire application */
 html, body {
   background-color: #ffffff !important;
