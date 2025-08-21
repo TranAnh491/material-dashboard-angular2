@@ -98,6 +98,12 @@
 
         <!-- Factory Badge -->
         <span class="factory-badge asm1-badge">ASM1</span>
+        
+        <!-- Negative stock counter -->
+        <div class="negative-stock-counter" *ngIf="getNegativeStockCount() > 0">
+          <i class="material-icons">warning</i>
+          <span>{{ getNegativeStockCount() }} mã có tồn kho âm</span>
+        </div>
       </div>
     </div>
     <div class="loading-container" *ngIf="isLoading">
@@ -119,6 +125,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
+            <th>Tồn kho</th>
             <th>Ngày xuất</th>
             <th>Mã nhân viên</th>
             <th>Lệnh sản xuất</th>
@@ -126,7 +133,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index"
+              [class.negative-stock]="getMaterialStock(material) < 0">
             <td class="factory-cell factory-asm1">ASM1</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
             <td class="code-cell">
@@ -137,6 +145,13 @@
             </td>
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
+            </td>
+            <td class="stock-cell" 
+                [class.negative-stock]="getMaterialStock(material) < 0"
+                [title]="'Tồn kho: ' + getMaterialStock(material) + ' (Nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exportQuantity || 0) + ')'">
+              <span class="stock-value" [class.negative]="getMaterialStock(material) < 0">
+                {{ getMaterialStock(material) }}
+              </span>
             </td>
             <td class="date-cell">
                <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">

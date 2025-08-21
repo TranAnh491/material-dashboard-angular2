@@ -936,9 +936,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
+  /**
+   * Update inventory stock when exporting materials
+   * IMPORTANT: This function allows negative inventory (stock < 0) to support business requirements
+   * When export quantity > available stock, negative inventory is created automatically
+   */
   private async updateInventoryStock(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
     try {
       console.log(`📦 Smart inventory update for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
+      console.log(`💡 Note: Negative inventory is allowed and will be created if needed`);
       
       // Find ALL inventory items with same material code and PO (ASM1 only)
       const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
@@ -986,14 +992,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }, 0);
       console.log(`📊 Total available stock: ${totalAvailableStock}`);
       
+      // Allow negative inventory - accept export even if stock is insufficient
       if (totalAvailableStock < exportQuantity) {
-        throw new Error(`Không đủ tồn kho! Tổng có: ${totalAvailableStock}, muốn xuất: ${exportQuantity}`);
+        console.log(`⚠️ Warning: Insufficient stock! Total available: ${totalAvailableStock}, Exporting: ${exportQuantity}`);
+        console.log(`💡 Negative inventory will be created - this is acceptable`);
       }
       
-      // Process export using FIFO logic
+      // Process export using FIFO logic - allow negative inventory
       let remainingExportQuantity = exportQuantity;
       const updates = [];
       
+      // First, try to export from items with positive stock
       for (const item of matchingItems) {
         if (remainingExportQuantity <= 0) break;
         
@@ -1028,6 +1037,31 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         }
       }
       
+      // If still have remaining export quantity, create negative inventory
+      if (remainingExportQuantity > 0) {
+        console.log(`⚠️ Remaining export quantity: ${remainingExportQuantity} - creating negative inventory`);
+        
+        // Find the first inventory item to create negative stock
+        if (matchingItems.length > 0) {
+          const firstItem = matchingItems[0];
+          const currentExported = firstItem.data.exported || 0;
+          const newExported = currentExported + remainingExportQuantity;
+          
+          console.log(`🔄 Creating negative inventory for ${firstItem.data.location}: Export ${currentExported} → ${newExported}`);
+          
+          // Update the first item to create negative stock
+          updates.push({
+            docId: firstItem.id,
+            update: {
+              exported: newExported,
+              updatedAt: new Date()
+            }
+          });
+          
+          remainingExportQuantity = 0;
+        }
+      }
+      
       // Execute all updates
       console.log(`💾 Executing ${updates.length} inventory updates...`);
       const updatePromises = updates.map(update => 
@@ -1040,6 +1074,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log(`📦 Exported: ${exportQuantity}`);
       console.log(`🔄 Updated ${updates.length} inventory lines`);
       console.log(`📊 Remaining export quantity: ${remainingExportQuantity}`);
+      
+      // Log final inventory status
+      if (remainingExportQuantity === 0) {
+        console.log(`✅ Export completed successfully - negative inventory allowed`);
+      } else {
+        console.log(`⚠️ Export partially completed - some items may have insufficient stock`);
+      }
       
     } catch (error) {
       console.error('❌ Error in smart inventory update:', error);
@@ -1398,9 +1439,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
+  // Get current stock for a material (quantity - exportQuantity)
+  getMaterialStock(material: OutboundMaterial): number {
+    const stock = (material.quantity || 0) - (material.exportQuantity || 0);
+    return stock;
+  }
 
+  // Get count of materials with negative stock
+  getNegativeStockCount(): number {
+    return this.materials.filter(material => this.getMaterialStock(material) < 0).length;
+  }
 
-
-
+  // Get count of materials with negative inventory (legacy function)
+  getNegativeInventoryCount(): number {
+    return this.getNegativeStockCount();
+  }
 
 }

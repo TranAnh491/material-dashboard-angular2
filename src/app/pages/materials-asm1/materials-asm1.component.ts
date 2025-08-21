@@ -35,6 +35,7 @@ export interface InventoryMaterial {
   rollsOrBags: string;
   supplier: string;
   remarks: string;
+  standardPacking?: number;
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
@@ -884,13 +885,163 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Placeholder for auto-resize functionality
   }
 
-  // Placeholder for other methods that exist in original component
-  importCatalog(): void {
-    console.log('Import catalog for ASM1');
+  // Import catalog with Standard Packing support
+  async importCatalog(): Promise<void> {
+    try {
+      console.log('📥 Importing catalog with Standard Packing column');
+      
+      // Create file input element
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.xlsx,.xls';
+      fileInput.style.display = 'none';
+      
+      fileInput.onchange = async (event: any) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+          // Show loading
+          this.isCatalogLoading = true;
+          
+          // Read Excel file
+          const data = await this.readExcelFile(file);
+          console.log('📊 Excel data read:', data);
+          
+          // Process catalog data
+          const catalogData = this.processCatalogData(data);
+          console.log('📋 Processed catalog data:', catalogData);
+          
+          // Save to Firebase
+          await this.saveCatalogToFirebase(catalogData);
+          
+          // Update local cache
+          this.updateCatalogCache(catalogData);
+          
+          // Show success message
+          alert(`✅ Import danh mục thành công!\n\n📦 Tổng số mã hàng: ${catalogData.length}\n💡 Standard Packing đã được cập nhật`);
+          
+        } catch (error) {
+          console.error('❌ Error importing catalog:', error);
+          alert('❌ Lỗi khi import danh mục: ' + error.message);
+        } finally {
+          this.isCatalogLoading = false;
+          // Remove file input
+          document.body.removeChild(fileInput);
+        }
+      };
+      
+      // Trigger file selection
+      document.body.appendChild(fileInput);
+      fileInput.click();
+      
+    } catch (error) {
+      console.error('❌ Error in importCatalog:', error);
+      alert('❌ Lỗi khi import danh mục: ' + error.message);
+    }
+  }
+
+  // Read Excel file and return data
+  private async readExcelFile(file: File): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          resolve(jsonData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // Process catalog data from Excel
+  private processCatalogData(data: any[]): any[] {
+    return data.map(row => ({
+      materialCode: row['Mã hàng'] || row['materialCode'] || '',
+      materialName: row['Tên hàng'] || row['materialName'] || '',
+      unit: row['Đơn vị'] || row['unit'] || 'PCS',
+      standardPacking: parseFloat(row['Standard Packing'] || row['standardPacking'] || '0') || 0
+    })).filter(item => item.materialCode && item.materialCode.trim() !== '');
+  }
+
+  // Save catalog to Firebase
+  private async saveCatalogToFirebase(catalogData: any[]): Promise<void> {
+    const batch = this.firestore.firestore.batch();
+    
+    for (const item of catalogData) {
+      const docRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
+      batch.set(docRef, {
+        ...item,
+        updatedAt: new Date()
+      }, { merge: true });
+    }
+    
+    await batch.commit();
+    console.log(`💾 Saved ${catalogData.length} catalog items to Firebase`);
+  }
+
+  // Update local catalog cache
+  private updateCatalogCache(catalogData: any[]): void {
+    for (const item of catalogData) {
+      this.catalogCache.set(item.materialCode, item);
+    }
+    this.catalogLoaded = true;
+    console.log(`🔄 Updated local catalog cache with ${catalogData.length} items`);
   }
 
   downloadCatalogTemplate(): void {
-    console.log('Download catalog template');
+    try {
+      console.log('📥 Downloading catalog template with Standard Packing column');
+      
+      // Create template data with Standard Packing column
+      const templateData = [
+        {
+          'Mã hàng': 'EXAMPLE001',
+          'Tên hàng': 'Ví dụ tên hàng',
+          'Đơn vị': 'PCS',
+          'Standard Packing': 100
+        },
+        {
+          'Mã hàng': 'EXAMPLE002',
+          'Tên hàng': 'Ví dụ tên hàng 2',
+          'Đơn vị': 'KG',
+          'Standard Packing': 25
+        }
+      ];
+      
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+      
+      // Set column widths
+      worksheet['!cols'] = [
+        { width: 15 }, // Mã hàng
+        { width: 25 }, // Tên hàng
+        { width: 10 }, // Đơn vị
+        { width: 15 }  // Standard Packing
+      ];
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh mục hàng hóa');
+      
+      // Generate file and download
+      const fileName = `Danh_muc_hang_hoa_ASM1_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log('✅ Catalog template downloaded successfully');
+      
+    } catch (error) {
+      console.error('❌ Error downloading catalog template:', error);
+      alert('❌ Lỗi khi tải template: ' + error.message);
+    }
   }
 
   downloadStockTemplate(): void {
@@ -1100,6 +1251,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateMaterialInFirebase(material);
   }
 
+
+
   // Update material in Firebase
   private updateMaterialInFirebase(material: InventoryMaterial): void {
     if (!material.id) return;
@@ -1114,6 +1267,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       type: material.type,
       rollsOrBags: material.rollsOrBags,
       remarks: material.remarks,
+      standardPacking: material.standardPacking,
       expiryDate: material.expiryDate,
       updatedAt: material.updatedAt
     }).then(() => {
@@ -1162,6 +1316,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }).length;
   }
 
+
+
   // Format numbers with thousand separators
   formatNumber(value: any): string {
     if (value === null || value === undefined || value === '') {
@@ -1197,6 +1353,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return this.catalogCache.get(materialCode)!.unit;
     }
     return 'PCS';
+  }
+
+  // Get standard packing from catalog
+  getStandardPacking(materialCode: string): number {
+    if (this.catalogCache.has(materialCode)) {
+      const catalogItem = this.catalogCache.get(materialCode);
+      return catalogItem?.standardPacking || 0;
+    }
+    return 0;
   }
 
   // Helper method to check if Rolls/Bags is valid for QR printing
