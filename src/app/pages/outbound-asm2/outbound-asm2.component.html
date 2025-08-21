@@ -5,83 +5,47 @@
     </div>
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- Scanner Input and Batch Scan -->
-        <div class="scanner-input-group">
-          <input type="text" 
-                 #scannerInput
-                 [(ngModel)]="scannerBuffer"
-                 (keydown)="onScannerKeydown($event)"
-                 (blur)="onScannerInputBlur()"
-                 placeholder="Quét barcode/QR code hoặc nhập thủ công..."
-                 class="scanner-input"
-                 [class.active]="isScannerInputActive">
-          
-                  <!-- Batch Scan Button -->
-        <button class="batch-scan-btn" 
-                (click)="startBatchScanningMode()" 
-                [disabled]="isBatchScanningMode"
-                title="Bắt đầu Batch Scan">
-          <i class="material-icons">playlist_add_check</i>
-          Batch Scan
-        </button>
-      </div>
+                 <!-- Scanner Input for Batch Mode -->
+         <div class="scanner-input-group">
+           <input type="text" 
+                  #scannerInput
+                  [(ngModel)]="scannerBuffer"
+                  (keydown)="onScannerKeydown($event)"
+                  (blur)="onScannerInputBlur()"
+                  placeholder="Quét barcode/QR code..."
+                  class="scanner-input"
+                  [class.active]="isScannerInputActive">
+         </div>
 
-      <!-- Batch Scanning Active Display -->
-      <div class="batch-scanning-active" *ngIf="isBatchScanningMode">
-        <div class="batch-info">
-          <div class="batch-field">
-            <label>Lệnh sản xuất:</label>
-            <span class="batch-value" [class.scanned]="isProductionOrderScanned">
-              {{ batchProductionOrder || 'Chưa scan (LHLSX...)' }}
-            </span>
-          </div>
-          <div class="batch-field">
-            <label>Mã nhân viên:</label>
-            <div class="employee-scan-controls">
-              <input type="text" 
-                     [(ngModel)]="batchEmployeeId"
-                     (keydown)="onEmployeeIdKeydown($event)"
-                     placeholder="Chưa scan (ASP...)"
-                     class="employee-input"
-                     [class.scanned]="isEmployeeIdScanned"
-                     [disabled]="isEmployeeIdScanned"
-                     (focus)="onEmployeeInputFocus($event)">
-              <button class="scan-employee-btn" 
-                      (click)="focusEmployeeInput()"
-                      [disabled]="isEmployeeIdScanned"
-                      title="Focus vào ô nhập mã nhân viên để scan">
-                <i class="material-icons">input</i>
-                Scan
-              </button>
-            </div>
-            <div class="scan-note" *ngIf="!isEmployeeIdScanned">
-              <small>⚠️ Phải scan mã nhân viên bằng máy scan trước khi scan mã hàng</small>
-            </div>
-          </div>
-          <div class="batch-field">
-            <label>Số mã hàng đã scan:</label>
-            <span class="batch-count">{{ batchMaterials.length }}</span>
-          </div>
-          <div class="batch-field" *ngIf="batchMaterials.length > 0">
-            <label>Mã hàng gần nhất:</label>
-            <span class="batch-value">
-              {{ batchMaterials[batchMaterials.length - 1]?.materialCode || '' }}
-            </span>
-          </div>
-        </div>
-        <div class="batch-actions">
-          <button class="batch-save-btn" 
-                  (click)="saveBatchToOutbound()" 
-                  [disabled]="batchMaterials.length === 0">
-            <i class="material-icons">check_circle</i>
-            Hoàn thành ({{ batchMaterials.length }})
-          </button>
-          <button class="batch-cancel-btn" (click)="stopBatchScanningMode()">
-            <i class="material-icons">cancel</i>
-            Hủy
-          </button>
-        </div>
-      </div>
+         <!-- Simple Start/Stop Controls -->
+         <div class="scan-controls" *ngIf="!isBatchScanningMode">
+           <button class="start-btn" 
+                   (click)="startBatchScanningMode()"
+                   title="Bắt đầu chế độ scan">
+             <i class="material-icons">play_arrow</i>
+             Start
+           </button>
+         </div>
+
+         <!-- Active Scanning Status -->
+         <div class="scan-status" *ngIf="isBatchScanningMode">
+           <div class="status-display">
+             <span class="status-item" [class.scanned]="isEmployeeIdScanned">
+               <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+               {{ batchEmployeeId || 'Chưa scan mã nhân viên' }}
+             </span>
+             <span class="status-item" [class.scanned]="isProductionOrderScanned">
+               <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+               {{ batchProductionOrder || 'Chưa scan LSX' }}
+             </span>
+           </div>
+           <button class="done-btn" 
+                   (click)="stopBatchScanningMode()"
+                   title="Dừng chế độ scan">
+             <i class="material-icons">stop</i>
+             Done
+           </button>
+         </div>
         
         <!-- More Dropdown -->
         <div class="dropdown" #dropdown>
@@ -132,6 +96,12 @@
 
         <!-- Factory Badge -->
         <span class="factory-badge asm2-badge">ASM2</span>
+        
+        <!-- Negative stock counter -->
+        <div class="negative-stock-counter" *ngIf="getNegativeStockCount() > 0">
+          <i class="material-icons">warning</i>
+          <span>{{ getNegativeStockCount() }} mã có tồn kho âm</span>
+        </div>
       </div>
     </div>
     <div class="loading-container" *ngIf="isLoading">
@@ -153,6 +123,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
+            <th>Tồn kho</th>
             <th>Thời gian bắt đầu</th>
             <th>Thời gian thực hiện</th>
             <th>Mã nhân viên</th>
@@ -161,7 +132,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index"
+              [class.negative-stock]="getMaterialStock(material) < 0">
             <td class="factory-cell factory-asm2">ASM2</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
             <td class="code-cell">
@@ -172,6 +144,13 @@
             </td>
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
+            </td>
+            <td class="stock-cell" 
+                [class.negative-stock]="getMaterialStock(material) < 0"
+                [title]="'Tồn kho: ' + getMaterialStock(material) + ' (Nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exportQuantity || 0) + ')'">
+              <span class="stock-value" [class.negative]="getMaterialStock(material) < 0">
+                {{ getMaterialStock(material) }}
+              </span>
             </td>
             <td class="date-cell">
               <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">

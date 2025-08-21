@@ -1261,16 +1261,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     console.log(`💾 Saving to Firebase: ${material.materialCode} - Exported: ${material.exported}`);
     
-    this.firestore.collection('inventory-materials').doc(material.id).update({
+    // Prepare update data, only include defined values
+    const updateData: any = {
       exported: material.exported,
       location: material.location,
       type: material.type,
       rollsOrBags: material.rollsOrBags,
       remarks: material.remarks,
-      standardPacking: material.standardPacking,
       expiryDate: material.expiryDate,
       updatedAt: material.updatedAt
-    }).then(() => {
+    };
+    
+    // Only add standardPacking if it has a valid value
+    if (material.standardPacking !== undefined && material.standardPacking !== null) {
+      updateData.standardPacking = material.standardPacking;
+    }
+    
+    this.firestore.collection('inventory-materials').doc(material.id).update(updateData).then(() => {
       console.log(`✅ ASM1 Material updated successfully: ${material.materialCode}`);
       console.log(`📊 Stock updated: ${this.calculateCurrentStock(material)} (Quantity: ${material.quantity} - Exported: ${material.exported})`);
       

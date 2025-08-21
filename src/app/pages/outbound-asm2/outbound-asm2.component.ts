@@ -1479,7 +1479,23 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       }
     }
   }
-  
+
+  // Get current stock for a material (quantity - exportQuantity)
+  getMaterialStock(material: OutboundMaterial): number {
+    const stock = (material.quantity || 0) - (material.exportQuantity || 0);
+    return stock;
+  }
+
+  // Get count of materials with negative stock
+  getNegativeStockCount(): number {
+    return this.materials.filter(material => this.getMaterialStock(material) < 0).length;
+  }
+
+  // Get count of materials with negative inventory (legacy function)
+  getNegativeInventoryCount(): number {
+    return this.getNegativeStockCount();
+  }
+
   // Manual barcode entry
   onManualScannerInput(): void {
     const scannedData = this.scannerBuffer.trim();

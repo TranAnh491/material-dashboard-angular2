@@ -164,6 +164,8 @@
             <th>Loại Hình</th>
 
             <th>Rolls/Bags</th>
+            <th>Lưu ý</th>
+            <th>Standard Packing</th>
             <th>Trạng thái</th>
             <th>Xóa</th>
             <th>QR</th>
@@ -226,6 +228,17 @@
                      (change)="updateMaterial(material)" 
                      min="0" 
                      placeholder="Rolls/Bags">
+            </td>
+            <td class="notes-cell">
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.remarks" 
+                     (change)="updateRemarks(material)"
+                     placeholder="Nhập lưu ý..."
+                     title="Lưu ý từ inbound">
+            </td>
+            <td class="standard-packing-cell">
+              <span class="standard-packing-value">{{ getStandardPacking(material.materialCode) }}</span>
             </td>
             <td class="status-cell">
               <span class="badge" 

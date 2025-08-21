@@ -368,6 +368,49 @@
   }
 }
 
+// Notes cell styling
+.notes-cell {
+  width: 150px !important; // Fixed width for Notes column
+  min-width: 150px !important;
+  max-width: 150px !important;
+  text-align: left;
+  padding: 4px 6px;
+  
+  // Ensure the input fits perfectly within the cell
+  .editable-input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    
+    &::placeholder {
+      color: #999;
+      font-style: italic;
+      font-size: 11px;
+    }
+  }
+}
+
+// Standard Packing cell styling
+.standard-packing-cell {
+  width: 120px !important; // Fixed width for Standard Packing column
+  min-width: 120px !important;
+  max-width: 120px !important;
+  text-align: center;
+  padding: 4px 6px;
+  
+  .standard-packing-value {
+    font-weight: 600;
+    color: #1976d2;
+    padding: 4px 8px;
+    background: #e3f2fd;
+    border-radius: 4px;
+    display: inline-block;
+    min-width: 40px;
+    font-size: 11px;
+  }
+}
+
 // Horizontal Layout Styles - Copy from inbound
 .action-controls-horizontal {
   display: flex;
