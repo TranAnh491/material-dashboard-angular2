@@ -287,28 +287,16 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       return true;
     });
 
-    // Sort by FIFO logic: Material Code (A->B->R) then by numbers, then IQC to bottom
+    // Sort by Material Code -> PO (oldest first) - SIMPLE FIFO LOGIC
     this.filteredInventory.sort((a, b) => {
-      // First priority: IQC items go to bottom
-      const aIsIQC = this.isIQCLocation(a.location);
-      const bIsIQC = this.isIQCLocation(b.location);
-      
-      if (aIsIQC && !bIsIQC) return 1;
-      if (!aIsIQC && bIsIQC) return -1;
-      
-      // Second priority: FIFO sorting for non-IQC items
-      if (!aIsIQC && !bIsIQC) {
-        // First compare by material code
-        const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
-        if (materialComparison !== 0) {
-          return materialComparison;
-        }
-        
-        // If same material code, then compare by PO (FIFO: older first)
-        return this.comparePOFIFO(a.poNumber, b.poNumber);
+      // First compare by Material Code (group same materials together)
+      const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
+      if (materialComparison !== 0) {
+        return materialComparison;
       }
       
-      return 0;
+      // If same material code, sort by PO: Year -> Month -> Sequence (oldest first)
+      return this.comparePOFIFO(a.poNumber, b.poNumber);
     });
     
     // Mark duplicates
@@ -510,7 +498,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return parsedA.number - parsedB.number;
   }
 
-  // Compare PO numbers for FIFO sorting (older first)
+  // Compare PO numbers for FIFO sorting (older first) - FIXED LOGIC
   private comparePOFIFO(poA: string, poB: string): number {
     if (!poA || !poB) return 0;
     
@@ -535,12 +523,12 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       return parsedA.year - parsedB.year;
     }
     
-    // If same year, earlier month first (04 before 05) 
+    // If same year, earlier month first (02 before 03) 
     if (parsedA.month !== parsedB.month) {
       return parsedA.month - parsedB.month;
     }
     
-    // If same month/year, lower sequence first (0001 before 0002)
+    // If same month/year, lower sequence first (0007 before 0165)
     return parsedA.sequence - parsedB.sequence;
   }
 

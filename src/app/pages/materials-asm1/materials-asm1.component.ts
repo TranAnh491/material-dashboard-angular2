@@ -212,7 +212,33 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('📋 Loading catalog from Firebase...');
     
     try {
-      const snapshot = await this.firestore.collection('material-catalog').get().toPromise();
+      // THỬ NHIỀU COLLECTION NAMES
+      let snapshot = null;
+      let collectionName = '';
+      
+      // Thử collection 'catalog' trước (thường dùng nhất)
+      try {
+        snapshot = await this.firestore.collection('catalog').get().toPromise();
+        if (snapshot && !snapshot.empty) {
+          collectionName = 'catalog';
+          console.log('✅ Found catalog data in collection: catalog');
+        }
+      } catch (e) {
+        console.log('❌ Collection "catalog" not found');
+      }
+      
+      // Nếu không có, thử 'material-catalog'
+      if (!snapshot || snapshot.empty) {
+        try {
+          snapshot = await this.firestore.collection('material-catalog').get().toPromise();
+          if (snapshot && !snapshot.empty) {
+            collectionName = 'material-catalog';
+            console.log('✅ Found catalog data in collection: material-catalog');
+          }
+        } catch (e) {
+          console.log('❌ Collection "material-catalog" not found');
+        }
+      }
       
       if (snapshot && !snapshot.empty) {
         this.catalogCache.clear();
@@ -223,31 +249,36 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             this.catalogCache.set(data.materialCode, {
               materialCode: data.materialCode,
               materialName: data.materialName,
-              unit: data.unit || 'PCS'
+              unit: data.unit || 'PCS',
+              standardPacking: data.standardPacking || 0 // ✅ THÊM standardPacking
             });
           }
         });
         
         this.catalogLoaded = true;
-        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase`);
+        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase collection: ${collectionName}`);
         
-        // Update any existing inventory items with catalog names
+        // Update any existing inventory items with catalog data
         if (this.inventoryMaterials.length > 0) {
           this.inventoryMaterials.forEach(material => {
             if (this.catalogCache.has(material.materialCode)) {
               const catalogItem = this.catalogCache.get(material.materialCode)!;
               material.materialName = catalogItem.materialName;
               material.unit = catalogItem.unit;
+              // ✅ Cập nhật standardPacking nếu có
+              if (catalogItem.standardPacking) {
+                material.standardPacking = catalogItem.standardPacking;
+              }
             }
           });
           this.cdr.detectChanges();
         }
       } else {
-        console.warn('No catalog data found in Firebase');
+        console.warn('❌ No catalog data found in any collection. Please check Firebase.');
         this.catalogLoaded = true;
       }
     } catch (error) {
-      console.error('Error loading catalog from Firebase:', error);
+      console.error('❌ Error loading catalog from Firebase:', error);
       this.catalogLoaded = true;
     } finally {
       this.isCatalogLoading = false;
@@ -294,28 +325,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return true;
     });
 
-    // Sort by FIFO logic: Material Code (A->B->R) then by numbers, then IQC to bottom
+    // Sort by Material Code -> PO (oldest first) - SIMPLE FIFO LOGIC
     this.filteredInventory.sort((a, b) => {
-      // First priority: IQC items go to bottom
-      const aIsIQC = this.isIQCLocation(a.location);
-      const bIsIQC = this.isIQCLocation(b.location);
-      
-      if (aIsIQC && !bIsIQC) return 1;
-      if (!aIsIQC && bIsIQC) return -1;
-      
-      // Second priority: FIFO sorting for non-IQC items
-      if (!aIsIQC && !bIsIQC) {
-        // First compare by material code
-        const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
-        if (materialComparison !== 0) {
-          return materialComparison;
-        }
-        
-        // If same material code, then compare by PO (FIFO: older first)
-        return this.comparePOFIFO(a.poNumber, b.poNumber);
+      // First compare by Material Code (group same materials together)
+      const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
+      if (materialComparison !== 0) {
+        return materialComparison;
       }
       
-      return 0;
+      // If same material code, sort by PO: Year -> Month -> Sequence (oldest first)
+      return this.comparePOFIFO(a.poNumber, b.poNumber);
     });
     
     // Mark duplicates
@@ -517,7 +536,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return parsedA.number - parsedB.number;
   }
 
-  // Compare PO numbers for FIFO sorting (older first)
+  // Compare PO numbers for FIFO sorting (older first) - FIXED LOGIC
   private comparePOFIFO(poA: string, poB: string): number {
     if (!poA || !poB) return 0;
     
@@ -542,12 +561,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return parsedA.year - parsedB.year;
     }
     
-    // If same year, earlier month first (04 before 05) 
+    // If same year, earlier month first (02 before 03) 
     if (parsedA.month !== parsedB.month) {
       return parsedA.month - parsedB.month;
     }
     
-    // If same month/year, lower sequence first (0001 before 0002)
+    // If same month/year, lower sequence first (0007 before 0165)
     return parsedA.sequence - parsedB.sequence;
   }
 

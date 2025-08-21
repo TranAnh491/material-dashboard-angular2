@@ -103,6 +103,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Lifecycle management
   private destroy$ = new Subject<void>();
   
+  // Thêm properties mới cho giao diện input trực tiếp
+  isEmployeeCodeSaved = false;
+  selectedBatch: string = '';
+  availableBatches: any[] = [];
+  employeeCode: string = '';
+  isBatchScanningMode: boolean = false;
+  
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -1757,17 +1764,20 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   closeBatchModal(): void {
     this.showBatchModal = false;
+    this.isBatchScanningMode = false; // Reset the new input interface
     console.log('🔒 Modal đã đóng');
   }
   
   openBatchModal(): void {
     this.showBatchModal = true;
-    console.log('🚀 Mở modal batch processing');
+    this.isBatchScanningMode = true; // Enable the new input interface
+    console.log('🚀 Mở modal batch processing với giao diện input trực tiếp');
     console.log('📊 Trạng thái hiện tại:', {
       isBatchActive: this.isBatchActive,
       currentEmployeeIds: this.currentEmployeeIds,
       currentBatchNumber: this.currentBatchNumber,
-      showBatchModal: this.showBatchModal
+      showBatchModal: this.showBatchModal,
+      isBatchScanningMode: this.isBatchScanningMode
     });
   }
   
@@ -2024,5 +2034,144 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     // Stop camera after successful scan
     this.stopCameraMode();
+  }
+
+  // Lưu mã nhân viên
+  saveEmployeeCode(): void {
+    if (this.employeeCode && this.employeeCode.trim()) {
+      this.isEmployeeCodeSaved = true;
+      console.log('✅ Mã nhân viên đã được lưu:', this.employeeCode);
+      console.log('🔄 Bắt đầu load danh sách lô hàng...');
+      this.loadAvailableBatches(); // Load danh sách lô hàng
+    } else {
+      console.log('❌ Mã nhân viên không hợp lệ:', this.employeeCode);
+    }
+  }
+
+  // Load danh sách lô hàng/DNNK chưa nhận
+  private async loadAvailableBatches(): Promise<void> {
+    try {
+      console.log('📦 Loading available batches...');
+      console.log('🔍 Factory filter:', this.selectedFactory);
+      
+      // Query để lấy tất cả lô hàng chờ nhận
+      const snapshot = await this.firestore.collection('inbound-materials', ref => 
+        ref.where('factory', '==', this.selectedFactory)
+           .where('isReceived', '==', false)
+           .limit(1000) // Tăng limit để lấy nhiều hơn
+      ).get().toPromise();
+
+      console.log('📊 Raw snapshot:', snapshot);
+      console.log('📊 Snapshot empty?', snapshot?.empty);
+
+      if (snapshot && !snapshot.empty) {
+        // Lấy tất cả lô hàng chờ nhận
+        this.availableBatches = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            id: doc.id,
+            batchNumber: data.batchNumber || '',
+            supplier: data.supplier || '',
+            materialCode: data.materialCode || '',
+            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date()
+          };
+        }).sort((a, b) => b.importDate.getTime() - a.importDate.getTime()); // Sắp xếp theo ngày mới nhất
+        
+        console.log(`✅ Loaded ${this.availableBatches.length} available batches:`, this.availableBatches);
+      } else {
+        console.log('⚠️ No available batches found');
+        this.availableBatches = [];
+        
+        // Thử load tất cả documents để debug
+        console.log('🔍 Trying to load all documents for debugging...');
+        const allSnapshot = await this.firestore.collection('inbound-materials').get().toPromise();
+        if (allSnapshot && !allSnapshot.empty) {
+          console.log(`📊 Total documents in collection: ${allSnapshot.docs.length}`);
+          allSnapshot.docs.slice(0, 3).forEach((doc, index) => {
+            const data = doc.data() as any;
+            console.log(`📄 Sample doc ${index + 1}:`, {
+              id: doc.id,
+              factory: data.factory,
+              isReceived: data.isReceived,
+              batchNumber: data.batchNumber,
+              supplier: data.supplier
+            });
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading available batches:', error);
+      this.availableBatches = [];
+    }
+  }
+
+  // Xử lý khi chọn lô hàng
+  onBatchSelectionChange(): void {
+    console.log('🔄 Batch selection changed:', this.selectedBatch);
+    console.log('📊 Available batches:', this.availableBatches);
+    
+    if (this.selectedBatch) {
+      const selectedBatchData = this.availableBatches.find(batch => batch.id === this.selectedBatch);
+      if (selectedBatchData) {
+        console.log('✅ Selected batch:', selectedBatchData);
+      } else {
+        console.log('❌ Selected batch not found in available batches');
+      }
+    } else {
+      console.log('ℹ️ No batch selected');
+    }
+  }
+
+  // Bắt đầu kiểm tra
+  startInspection(): void {
+    if (this.employeeCode && this.selectedBatch) {
+      console.log('🚀 Starting inspection with:', {
+        employeeCode: this.employeeCode,
+        batchId: this.selectedBatch
+      });
+      
+      // TODO: Implement inspection logic here
+      // Có thể mở modal kiểm tra hoặc chuyển sang chế độ kiểm tra
+      
+      alert(`Bắt đầu kiểm tra!\nMã nhân viên: ${this.employeeCode}\nLô hàng: ${this.selectedBatch}`);
+    }
+  }
+
+  // Reset khi dừng
+  stopBatchScanningMode(): void {
+    this.isBatchScanningMode = false;
+    this.employeeCode = '';
+    this.selectedBatch = '';
+    this.isEmployeeCodeSaved = false;
+    this.availableBatches = [];
+    console.log('🛑 Stopped batch scanning mode');
+  }
+
+  // Test method để debug
+  testLoadBatches(): void {
+    console.log('🧪 Testing batch loading...');
+    this.loadAvailableBatches();
+  }
+
+  // Tự động viết hoa mã nhân viên
+  onEmployeeCodeInput(event: any): void {
+    const input = event.target;
+    const value = input.value;
+    if (value) {
+      // Tự động viết hoa và cập nhật ngModel
+      this.employeeCode = value.toUpperCase();
+      // Cập nhật input value để hiển thị ngay lập tức
+      input.value = this.employeeCode;
+    }
+  }
+
+  onEmployeeCodeKeyup(event: any): void {
+    const input = event.target;
+    const value = input.value;
+    if (value) {
+      // Đảm bảo viết hoa khi nhập xong
+      this.employeeCode = value.toUpperCase();
+      input.value = this.employeeCode;
+    }
   }
 }
