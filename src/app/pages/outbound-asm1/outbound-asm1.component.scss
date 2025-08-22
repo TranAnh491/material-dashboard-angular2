@@ -1350,3 +1350,19 @@
     }
   }
 }
+
+// Quick success message animation
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.quick-success-message {
+  animation: slideIn 0.3s ease-out;
+}

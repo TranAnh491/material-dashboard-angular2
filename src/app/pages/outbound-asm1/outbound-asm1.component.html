@@ -131,8 +131,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
-            <th>Tồn kho</th>
-            <th>Ngày xuất</th>
+
             <th>Mã nhân viên</th>
             <th>Lệnh sản xuất</th>
             <th>Xóa</th>
@@ -152,16 +151,7 @@
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
             </td>
-            <td class="stock-cell" 
-                [class.negative-stock]="getMaterialStock(material) < 0"
-                [title]="'Tồn kho: ' + getMaterialStock(material) + ' (Nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exportQuantity || 0) + ')'">
-              <span class="stock-value" [class.negative]="getMaterialStock(material) < 0">
-                {{ getMaterialStock(material) }}
-              </span>
-            </td>
-            <td class="date-cell">
-               <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">
-             </td>
+
             <td class="employee-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="ASP1234">
             </td>
