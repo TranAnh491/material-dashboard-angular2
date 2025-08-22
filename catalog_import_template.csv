@@ -1,0 +1,9 @@
+materialCode,materialName,unit,standardPacking,supplier,category
+B001003,Dây điện UL1571 28AWG màu đỏ (Red) OD:0.6mm RoHS 2.0,m,100,Supplier A,Cable
+B001004,Dây điện UL1571 28AWG màu xanh (Blue) OD:0.6mm RoHS 2.0,m,100,Supplier A,Cable
+P0123,Plastic Bag 20x30cm,pcs,50,Supplier B,Packaging
+B018694,Steel Wire 1.5mm,m,200,Supplier C,Metal
+M001001,Motor 12V DC,pcs,1,Supplier D,Electronics
+C002001,Capacitor 100uF 25V,pcs,100,Supplier E,Electronics
+T003001,Thermistor NTC 10K,pcs,50,Supplier F,Sensors
+R004001,Resistor 1K Ohm 1/4W,pcs,1000,Supplier G,Electronics

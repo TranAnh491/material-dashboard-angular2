@@ -212,51 +212,129 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('📋 Loading catalog from Firebase...');
     
     try {
-      // THỬ NHIỀU COLLECTION NAMES
+      // THỬ NHIỀU COLLECTION NAMES - ƯU TIÊN 'materials' vì có 8750 documents với standardPacking
       let snapshot = null;
       let collectionName = '';
       
-      // Thử collection 'catalog' trước (thường dùng nhất)
+      // Thử collection 'materials' trước (có 8750 documents với standardPacking field)
       try {
-        snapshot = await this.firestore.collection('catalog').get().toPromise();
+        console.log('🔍 Trying collection: materials (priority - has 8750 docs with standardPacking)');
+        snapshot = await this.firestore.collection('materials').get().toPromise();
         if (snapshot && !snapshot.empty) {
-          collectionName = 'catalog';
-          console.log('✅ Found catalog data in collection: catalog');
+          collectionName = 'materials';
+          console.log('✅ Found catalog data in collection: materials');
+          console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
+        } else {
+          console.log('⚠️ Collection "materials" exists but is empty');
         }
       } catch (e) {
-        console.log('❌ Collection "catalog" not found');
+        console.log('❌ Collection "materials" not found or error:', e);
+      }
+      
+      // Nếu không có, thử collection 'catalog' (dự phòng)
+      if (!snapshot || snapshot.empty) {
+        try {
+          console.log('🔍 Trying collection: catalog (fallback)');
+          snapshot = await this.firestore.collection('catalog').get().toPromise();
+          if (snapshot && !snapshot.empty) {
+            collectionName = 'catalog';
+            console.log('✅ Found catalog data in collection: catalog');
+            console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
+          } else {
+            console.log('⚠️ Collection "catalog" exists but is empty');
+          }
+        } catch (e) {
+          console.log('❌ Collection "catalog" not found or error:', e);
+        }
       }
       
       // Nếu không có, thử 'material-catalog'
       if (!snapshot || snapshot.empty) {
         try {
+          console.log('🔍 Trying collection: material-catalog');
           snapshot = await this.firestore.collection('material-catalog').get().toPromise();
           if (snapshot && !snapshot.empty) {
             collectionName = 'material-catalog';
             console.log('✅ Found catalog data in collection: material-catalog');
+            console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
+          } else {
+            console.log('⚠️ Collection "material-catalog" exists but is empty');
           }
         } catch (e) {
-          console.log('❌ Collection "material-catalog" not found');
+          console.log('❌ Collection "material-catalog" not found or error:', e);
         }
       }
       
       if (snapshot && !snapshot.empty) {
         this.catalogCache.clear();
         
+        // Log first few documents to see structure
+        console.log('📄 Sample catalog documents:');
+        snapshot.docs.slice(0, 3).forEach((doc, index) => {
+          const data = doc.data() as any;
+          console.log(`  ${index + 1}. ${doc.id}:`, {
+            materialCode: data.materialCode,
+            materialName: data.materialName,
+            unit: data.unit,
+            standardPacking: data.standardPacking
+          });
+        });
+        
+        // Process all documents and add to cache - HANDLE DUPLICATES
+        let processedCount = 0;
+        let duplicateCount = 0;
+        const processedCodes = new Set<string>();
+        
         snapshot.forEach(doc => {
           const data = doc.data() as any;
-          if (data.materialCode && data.materialName) {
-            this.catalogCache.set(data.materialCode, {
-              materialCode: data.materialCode,
-              materialName: data.materialName,
-              unit: data.unit || 'PCS',
-              standardPacking: data.standardPacking || 0 // ✅ THÊM standardPacking
+          console.log(`📝 Processing doc ${doc.id}:`, data);
+          
+          // Kiểm tra các field có thể có trong collection 'materials'
+          const materialCode = data.materialCode || data.code || data.material_code;
+          const materialName = data.materialName || data.name || data.material_name;
+          
+          if (materialCode && materialName) {
+            // Kiểm tra trùng lặp materialCode
+            if (processedCodes.has(materialCode)) {
+              duplicateCount++;
+              console.log(`⚠️ Duplicate materialCode ${materialCode} found in doc ${doc.id} - skipping`);
+              return; // Skip duplicate
+            }
+            
+            const catalogItem = {
+              materialCode: materialCode,
+              materialName: materialName,
+              unit: data.unit || data.unitOfMeasure || 'PCS',
+              standardPacking: data.standardPacking || data.packing || data.unitSize || 0
+            };
+            
+            this.catalogCache.set(materialCode, catalogItem);
+            processedCodes.add(materialCode); // Mark as processed
+            processedCount++;
+            console.log(`✅ Added to cache: ${materialCode} ->`, catalogItem);
+          } else {
+            console.log(`⚠️ Skipping doc ${doc.id} - missing materialCode or materialName:`, {
+              materialCode: materialCode,
+              materialName: materialName,
+              availableFields: Object.keys(data)
             });
           }
         });
         
+        console.log(`📊 Duplicate handling: ${duplicateCount} duplicates skipped, ${processedCount} unique items processed`);
+        
         this.catalogLoaded = true;
         console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase collection: ${collectionName}`);
+        console.log(`📋 Catalog cache keys:`, Array.from(this.catalogCache.keys()));
+        console.log(`📊 Processed ${processedCount} documents`);
+        
+        if (duplicateCount > 0) {
+          console.log(`⚠️ WARNING: ${duplicateCount} duplicate materialCodes were skipped to avoid conflicts`);
+        }
+        
+        if (collectionName === 'materials') {
+          console.log('🎯 SUCCESS: Catalog loaded from "materials" collection with standardPacking field!');
+        }
         
         // Update any existing inventory items with catalog data
         if (this.inventoryMaterials.length > 0) {
@@ -904,10 +982,29 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Placeholder for auto-resize functionality
   }
 
-  // Import catalog with Standard Packing support
+  // Update Standard Packing only - Simple and focused
   async importCatalog(): Promise<void> {
     try {
-      console.log('📥 Importing catalog with Standard Packing column');
+      console.log('📥 Updating Standard Packing values');
+      
+      // Check Firebase status first
+      try {
+        console.log('🔍 Testing Firebase connection...');
+        const testSnapshot = await this.firestore.collection('materials').get().toPromise();
+        if (testSnapshot) {
+          console.log('✅ Firebase connection OK');
+        }
+      } catch (firebaseError) {
+        console.error('❌ Firebase connection failed:', firebaseError);
+        
+        if (firebaseError.code === 'resource-exhausted') {
+          alert(`❌ KHÔNG THỂ KẾT NỐI FIREBASE!\n\n🚨 Firebase Quota Exceeded\n\n💡 Giải pháp:\n1. Kiểm tra Firebase Console → Usage and billing\n2. Đợi quota reset hoặc upgrade plan\n3. Thử lại sau khi fix quota`);
+          return;
+        } else {
+          alert(`❌ Lỗi kết nối Firebase:\n\n${firebaseError.message}\n\n💡 Vui lòng kiểm tra kết nối và thử lại`);
+          return;
+        }
+      }
       
       // Create file input element
       const fileInput = document.createElement('input');
@@ -931,14 +1028,33 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           const catalogData = this.processCatalogData(data);
           console.log('📋 Processed catalog data:', catalogData);
           
-          // Save to Firebase
-          await this.saveCatalogToFirebase(catalogData);
-          
-          // Update local cache
-          this.updateCatalogCache(catalogData);
-          
-          // Show success message
-          alert(`✅ Import danh mục thành công!\n\n📦 Tổng số mã hàng: ${catalogData.length}\n💡 Standard Packing đã được cập nhật`);
+          try {
+            // Save to Firebase
+            await this.saveCatalogToFirebase(catalogData);
+            console.log('✅ Firebase update completed successfully');
+            
+            // Update local cache
+            this.updateCatalogCache(catalogData);
+            
+            // Reload catalog from Firebase to ensure consistency
+            await this.loadCatalogFromFirebase();
+            
+            // Show success message ONLY after successful Firebase update
+            alert(`✅ Cập nhật Standard Packing thành công!\n\n📦 Tổng số mã hàng: ${catalogData.length}\n💡 Chỉ cập nhật field Standard Packing\n🎯 Dữ liệu được update trong collections 'materials' (chính) và 'catalog'\n🔄 Cột Standard Packing sẽ hiển thị số đúng ngay lập tức`);
+            
+          } catch (firebaseError) {
+            console.error('❌ Firebase update failed:', firebaseError);
+            
+            // Check if it's a quota error
+            if (firebaseError.code === 'resource-exhausted') {
+              alert(`❌ KHÔNG THỂ LƯU DỮ LIỆU!\n\n🚨 Firebase Quota Exceeded\n\n💡 Giải pháp:\n1. Kiểm tra Firebase Console → Usage and billing\n2. Đợi quota reset hoặc upgrade plan\n3. Thử lại sau khi fix quota`);
+            } else {
+              alert(`❌ Lỗi khi lưu vào Firebase:\n\n${firebaseError.message}\n\n💡 Vui lòng thử lại hoặc liên hệ admin`);
+            }
+            
+            // Don't show success message if Firebase failed
+            return;
+          }
           
         } catch (error) {
           console.error('❌ Error importing catalog:', error);
@@ -981,30 +1097,63 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
-  // Process catalog data from Excel
+  // Process catalog data from Excel - FOCUS ON Standard Packing only
   private processCatalogData(data: any[]): any[] {
-    return data.map(row => ({
-      materialCode: row['Mã hàng'] || row['materialCode'] || '',
-      materialName: row['Tên hàng'] || row['materialName'] || '',
-      unit: row['Đơn vị'] || row['unit'] || 'PCS',
-      standardPacking: parseFloat(row['Standard Packing'] || row['standardPacking'] || '0') || 0
-    })).filter(item => item.materialCode && item.materialCode.trim() !== '');
+    return data.map(row => {
+      // ✅ CHỈ CẦN 2 FIELD: Mã hàng + Standard Packing
+      const materialCode = row['Mã hàng'] || row['materialCode'] || row['Mã'] || row['Code'] || '';
+      const standardPacking = parseFloat(row['Standard Packing'] || row['standardPacking'] || row['Số lượng đóng gói'] || '0') || 0;
+      
+      return {
+        materialCode,
+        standardPacking
+      };
+    }).filter(item => {
+      // Filter out rows without materialCode
+      const hasMaterialCode = item.materialCode && item.materialCode.trim() !== '';
+      // Warn if standardPacking is 0
+      if (hasMaterialCode && item.standardPacking === 0) {
+        console.warn(`⚠️ Warning: Material ${item.materialCode} has standardPacking = 0`);
+      }
+      return hasMaterialCode;
+    });
   }
 
-  // Save catalog to Firebase
+  // Save catalog to Firebase - UPDATE Standard Packing in both collections
   private async saveCatalogToFirebase(catalogData: any[]): Promise<void> {
-    const batch = this.firestore.firestore.batch();
-    
-    for (const item of catalogData) {
-      const docRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
-      batch.set(docRef, {
-        ...item,
-        updatedAt: new Date()
-      }, { merge: true });
+    try {
+      console.log('💾 Starting Firebase update...');
+      
+      const batch = this.firestore.firestore.batch();
+      
+              for (const item of catalogData) {
+          // ✅ UPDATE field standardPacking trong collection 'materials' (chính - có 8750 docs)
+          const materialsDocRef = this.firestore.collection('materials').doc(item.materialCode).ref;
+          batch.update(materialsDocRef, {
+            standardPacking: item.standardPacking,
+            updatedAt: new Date()
+          });
+          
+          // ✅ Cũng UPDATE trong collection 'catalog' (đồng bộ)
+          const catalogDocRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
+          batch.update(catalogDocRef, {
+            standardPacking: item.standardPacking,
+            updatedAt: new Date()
+          });
+          
+          console.log(`📝 Prepared update for ${item.materialCode}: standardPacking = ${item.standardPacking}`);
+        }
+      
+      console.log('🚀 Committing batch update to Firebase...');
+      await batch.commit();
+      console.log(`✅ Successfully updated Standard Packing for ${catalogData.length} materials in both collections`);
+      
+    } catch (error) {
+      console.error('❌ Firebase update failed:', error);
+      
+      // Re-throw the error to be handled by the caller
+      throw error;
     }
-    
-    await batch.commit();
-    console.log(`💾 Saved ${catalogData.length} catalog items to Firebase`);
   }
 
   // Update local catalog cache
@@ -1018,21 +1167,21 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   downloadCatalogTemplate(): void {
     try {
-      console.log('📥 Downloading catalog template with Standard Packing column');
+      console.log('📥 Downloading catalog template - Standard Packing only');
       
-      // Create template data with Standard Packing column
+      // ✅ CHỈ CẦN 2 CỘT: Mã hàng + Standard Packing
       const templateData = [
         {
-          'Mã hàng': 'EXAMPLE001',
-          'Tên hàng': 'Ví dụ tên hàng',
-          'Đơn vị': 'PCS',
+          'Mã hàng': 'B001003',
           'Standard Packing': 100
         },
         {
-          'Mã hàng': 'EXAMPLE002',
-          'Tên hàng': 'Ví dụ tên hàng 2',
-          'Đơn vị': 'KG',
-          'Standard Packing': 25
+          'Mã hàng': 'P0123',
+          'Standard Packing': 50
+        },
+        {
+          'Mã hàng': 'B018694',
+          'Standard Packing': 200
         }
       ];
       
@@ -1040,25 +1189,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(templateData);
       
-      // Set column widths
+      // Set column widths - chỉ 2 cột
       worksheet['!cols'] = [
         { width: 15 }, // Mã hàng
-        { width: 25 }, // Tên hàng
-        { width: 10 }, // Đơn vị
-        { width: 15 }  // Standard Packing
+        { width: 18 }  // Standard Packing
       ];
       
       // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh mục hàng hóa');
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Standard Packing Update');
       
       // Generate file and download
-      const fileName = `Danh_muc_hang_hoa_ASM1_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `Standard_Packing_Update_ASM1_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       
-      console.log('✅ Catalog template downloaded successfully');
+      console.log('✅ Standard Packing template downloaded successfully');
       
     } catch (error) {
-      console.error('❌ Error downloading catalog template:', error);
+      console.error('❌ Error downloading template:', error);
       alert('❌ Lỗi khi tải template: ' + error.message);
     }
   }
@@ -1399,6 +1546,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return 0;
     }
   }
+
+
+
+
 
   // Helper method to check if Rolls/Bags is valid for QR printing
   isRollsOrBagsValid(material: InventoryMaterial): boolean {

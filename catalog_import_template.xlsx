@@ -1,0 +1,30 @@
+# Excel Template for Catalog Import
+# File: catalog_import_template.xlsx
+
+# Sheet 1: Materials Catalog
+# Columns:
+# A: materialCode (Mã vật liệu)
+# B: materialName (Tên vật liệu) 
+# C: unit (Đơn vị)
+# D: standardPacking (Số lượng đóng gói tiêu chuẩn)
+# E: supplier (Nhà cung cấp - optional)
+# F: category (Danh mục - optional)
+
+# Sample Data:
+# materialCode | materialName | unit | standardPacking | supplier | category
+# B001003 | Dây điện UL1571 28AWG màu đỏ (Red) OD:0.6mm RoHS 2.0 | m | 100 | Supplier A | Cable
+# B001004 | Dây điện UL1571 28AWG màu xanh (Blue) OD:0.6mm RoHS 2.0 | m | 100 | Supplier A | Cable
+# P0123 | Plastic Bag 20x30cm | pcs | 50 | Supplier B | Packaging
+# B018694 | Steel Wire 1.5mm | m | 200 | Supplier C | Metal
+
+# Instructions:
+# 1. Fill in the materialCode (unique identifier)
+# 2. Fill in the materialName (descriptive name)
+# 3. Fill in the unit (m, pcs, kg, etc.)
+# 4. Fill in the standardPacking (actual quantity per package - NOT 0)
+# 5. Optional: fill in supplier and category
+# 6. Save as .xlsx file
+# 7. Import to Firebase collection 'materials'
+
+# Note: standardPacking should be the actual quantity, not 0
+# Example: If 1 package contains 100 meters of wire, standardPacking = 100

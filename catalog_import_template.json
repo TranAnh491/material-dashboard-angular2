@@ -1,0 +1,66 @@
+[
+  {
+    "materialCode": "B001003",
+    "materialName": "Dây điện UL1571 28AWG màu đỏ (Red) OD:0.6mm RoHS 2.0",
+    "unit": "m",
+    "standardPacking": 100,
+    "supplier": "Supplier A",
+    "category": "Cable"
+  },
+  {
+    "materialCode": "B001004",
+    "materialName": "Dây điện UL1571 28AWG màu xanh (Blue) OD:0.6mm RoHS 2.0",
+    "unit": "m",
+    "standardPacking": 100,
+    "supplier": "Supplier A",
+    "category": "Cable"
+  },
+  {
+    "materialCode": "P0123",
+    "materialName": "Plastic Bag 20x30cm",
+    "unit": "pcs",
+    "standardPacking": 50,
+    "supplier": "Supplier B",
+    "category": "Packaging"
+  },
+  {
+    "materialCode": "B018694",
+    "materialName": "Steel Wire 1.5mm",
+    "unit": "m",
+    "standardPacking": 200,
+    "supplier": "Supplier C",
+    "category": "Metal"
+  },
+  {
+    "materialCode": "M001001",
+    "materialName": "Motor 12V DC",
+    "unit": "pcs",
+    "standardPacking": 1,
+    "supplier": "Supplier D",
+    "category": "Electronics"
+  },
+  {
+    "materialCode": "C002001",
+    "materialName": "Capacitor 100uF 25V",
+    "unit": "pcs",
+    "standardPacking": 100,
+    "supplier": "Supplier E",
+    "category": "Electronics"
+  },
+  {
+    "materialCode": "T003001",
+    "materialName": "Thermistor NTC 10K",
+    "unit": "pcs",
+    "standardPacking": 50,
+    "supplier": "Supplier F",
+    "category": "Sensors"
+  },
+  {
+    "materialCode": "R004001",
+    "materialName": "Resistor 1K Ohm 1/4W",
+    "unit": "pcs",
+    "standardPacking": 1000,
+    "supplier": "Supplier G",
+    "category": "Electronics"
+  }
+]

@@ -30,42 +30,39 @@
           </button>
           <div class="dropdown-menu" [class.show]="isDropdownOpen">
             <a class="dropdown-item" href="javascript:void(0)" (click)="importCatalog()">
-              <i class="material-icons">upload_file</i>
-              Import File Danh mục
+              <i class="material-icons">file_upload</i>
+              Update Standard Packing
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
-              <i class="material-icons">download</i>
-              Tải Template Danh mục
+              <i class="material-icons">description</i>
+              Download Standard Packing Template
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="importCurrentStock()">
-              <i class="material-icons">upload_file</i>
-              Import Tồn kho ASM1
+              <i class="material-icons">file_upload</i>
+              Import Current Stock
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="deleteAllInventory()">
+              <i class="material-icons">delete_sweep</i>
+              Delete All ASM1 Data
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadStockTemplate()">
-              <i class="material-icons">download</i>
-              Tải Template Tồn kho
+              <i class="material-icons">description</i>
+              Download Stock Template
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
               <i class="material-icons">file_download</i>
               Export to Excel
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="consolidateInventoryData()">
-              <i class="material-icons">merge_type</i>
-              🔄 Gộp dữ liệu
-            </a>
-
             <div class="dropdown-divider"></div>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM1()">
-              <i class="material-icons">warning</i>
-              FIFO Report ASM1
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item danger-item" href="javascript:void(0)" (click)="deleteAllInventory()">
-              <i class="material-icons">delete_forever</i>
-              🗑️ Xóa tất cả tồn kho
+              <i class="material-icons">assessment</i>
+              Download FIFO Report ASM1
             </a>
           </div>
         </div>
+        
+
         
         <!-- Total Counter Box -->
         <div class="total-counter-box">
