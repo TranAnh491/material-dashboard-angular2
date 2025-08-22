@@ -73,6 +73,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // Dropdown management
   isDropdownOpen: boolean = false;
   
+  // Inventory materials for stock calculation
+  inventoryMaterials: any[] = [];
+  
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -84,6 +87,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🏭 Outbound ASM1 component initialized');
     this.setupDefaultDateRange();
     this.loadMaterials();
+    this.loadInventoryMaterials(); // Load inventory để tính tồn kho
     
     // Add click outside listener to close dropdown
     document.addEventListener('click', this.onDocumentClick.bind(this));
@@ -149,16 +153,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   loadMaterials(): void {
     this.isLoading = true;
     this.errorMessage = '';
-    console.log('📦 Loading ASM1 outbound materials...');
+    console.log('📦 Loading ASM1 outbound materials with real-time listener...');
     
-    // Use simplified query without where/orderBy to avoid index requirements
+    // Use real-time listener to automatically update when data changes
     this.firestore.collection('outbound-materials', ref => 
       ref.limit(1000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        console.log(`🔍 Raw snapshot from outbound-materials contains ${snapshot.length} documents`);
+        console.log(`🔍 Real-time update from outbound-materials contains ${snapshot.length} documents`);
         
         // Filter for ASM1 factory and sort client-side
         const allMaterials = snapshot.map(doc => {
@@ -223,11 +227,92 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.isLoading = false;
         
         console.log(`✅ Final filtered materials: ${this.filteredMaterials.length}`);
+        
+        // Force change detection to update UI
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('❌ Error loading ASM1 outbound materials:', error);
         this.errorMessage = 'Lỗi khi tải dữ liệu: ' + error.message;
         this.isLoading = false;
+      }
+    });
+  }
+  
+  // Load inventory materials để lấy số tồn kho chính xác
+  loadInventoryMaterials(): void {
+    console.log('📦 Loading ASM1 inventory materials for stock calculation with real-time listener...');
+    console.log(`🔍 Query: factory == '${this.selectedFactory}', limit: 5000`);
+    
+    this.firestore.collection('inventory-materials', ref => 
+      ref.where('factory', '==', this.selectedFactory)
+         .limit(5000) // Tăng limit để lấy nhiều dữ liệu hơn
+    ).snapshotChanges()
+    .pipe(takeUntil(this.destroy$))
+    .subscribe({
+      next: (snapshot) => {
+        console.log(`📦 Raw snapshot from Firebase: ${snapshot.length} documents`);
+        
+        this.inventoryMaterials = snapshot.map(doc => {
+          const data = doc.payload.doc.data() as any;
+          const mappedItem = {
+            id: doc.payload.doc.id,
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            quantity: data.quantity || 0,
+            unit: data.unit || '',
+            exported: data.exported || 0, // Add exported field
+            stock: data.stock || 0 // Add stock field
+          };
+          
+          // Debug logging for specific material
+          if (data.materialCode === 'B017008' && data.poNumber === 'KZPO0625/0105') {
+            console.log(`🔍 DEBUG B017008 - KZPO0625/0105:`);
+            console.log('  - Raw data from Firebase:', data);
+            console.log('  - Mapped item:', mappedItem);
+            console.log('  - Stock from Firebase:', data.stock);
+            console.log('  - Quantity from Firebase:', data.quantity);
+            console.log('  - Exported from Firebase:', data.exported);
+            console.log('  - Factory from Firebase:', data.factory);
+          }
+          
+          return mappedItem;
+        });
+        
+        console.log(`✅ Real-time update: Loaded ${this.inventoryMaterials.length} inventory materials for stock calculation`);
+        
+        // Debug: Check if B017008 is in loaded data
+        const b017008Items = this.inventoryMaterials.filter(item => 
+          item.materialCode === 'B017008' && item.poNumber === 'KZPO0625/0105'
+        );
+        if (b017008Items.length > 0) {
+          console.log(`🔍 Found ${b017008Items.length} B017008 items in loaded data:`, b017008Items);
+        } else {
+          console.log(`❌ B017008 - KZPO0625/0105 NOT found in loaded inventory data`);
+          
+          // Debug: Check what we actually loaded
+          const sampleItems = this.inventoryMaterials.slice(0, 5);
+          console.log(`🔍 Sample of loaded items:`, sampleItems);
+          
+          // Check if B017008 exists with different PO
+          const allB017008 = this.inventoryMaterials.filter(item => item.materialCode === 'B017008');
+          if (allB017008.length > 0) {
+            console.log(`🔍 Found ${allB017008.length} items with material code B017008:`, allB017008);
+          }
+          
+          // Check if KZPO0625/0105 exists with different material
+          const allKZPO0625_0105 = this.inventoryMaterials.filter(item => item.poNumber === 'KZPO0625/0105');
+          if (allKZPO0625_0105.length > 0) {
+            console.log(`🔍 Found ${allKZPO0625_0105.length} items with PO KZPO0625/0105:`, allKZPO0625_0105);
+          }
+        }
+        
+        // Force change detection to update stock display
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Error loading inventory materials:', error);
+        console.log('⚠️ Will use fallback calculation method');
       }
     });
   }
@@ -1167,15 +1252,36 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing employee ID scan:', scannedData);
       
-      // Extract 7 characters (ASP + 4 digits)
-      const employeeId = scannedData.substring(0, 7);
+      // Try different patterns for employee ID
+      let employeeId = '';
       
-      if (employeeId.startsWith('ASP')) {
+      // Pattern 1: ASP + 4 digits (7 characters total)
+      if (scannedData.startsWith('ASP') && scannedData.length >= 7) {
+        employeeId = scannedData.substring(0, 7);
+      }
+      // Pattern 2: Just ASP + digits (flexible length)
+      else if (scannedData.startsWith('ASP')) {
+        employeeId = scannedData;
+      }
+      // Pattern 3: Any 7-character code starting with ASP
+      else if (scannedData.length === 7 && scannedData.startsWith('ASP')) {
+        employeeId = scannedData;
+      }
+      // Pattern 4: Look for ASP pattern anywhere in the string
+      else {
+        const aspIndex = scannedData.indexOf('ASP');
+        if (aspIndex >= 0) {
+          employeeId = scannedData.substring(aspIndex, aspIndex + 7);
+        }
+      }
+      
+      if (employeeId && employeeId.startsWith('ASP')) {
         this.batchEmployeeId = employeeId;
         this.isEmployeeIdScanned = true;
         
         console.log('✅ Employee ID scanned successfully:', employeeId);
-        // Bỏ alert - chỉ log console
+        console.log('📊 Original scanned data:', scannedData);
+        console.log('📊 Extracted employee ID:', employeeId);
         
         // Auto-focus for next scan
         setTimeout(() => {
@@ -1183,12 +1289,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         }, 100);
         
       } else {
-        throw new Error(`Mã nhân viên phải bắt đầu bằng ASP, nhận được: ${employeeId}`);
+        throw new Error(`Không thể xác định mã nhân viên từ dữ liệu scan: ${scannedData}`);
       }
       
     } catch (error) {
       console.error('❌ Error processing employee ID:', error);
-      // Bỏ alert - chỉ log console
+      console.log('🔍 Raw scanned data for debugging:', scannedData);
+      console.log('🔍 Data length:', scannedData.length);
+      console.log('🔍 Data characters:', scannedData.split('').map(c => c.charCodeAt(0)));
     }
   }
 
@@ -1382,20 +1490,34 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     // Handle Enter key (most scanners send Enter after scanning)
     if (event.key === 'Enter') {
       event.preventDefault();
+      console.log('🔌 Enter key detected - processing scanner input');
       this.processScannerInput(input.value);
       return;
     }
     
-    // Set timeout to auto-process if no more input (for scanners without Enter)
+    // Handle Tab key (some scanners send Tab instead of Enter)
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      console.log('🔌 Tab key detected - processing scanner input');
+      this.processScannerInput(input.value);
+      return;
+    }
+    
+    // Set timeout to auto-process if no more input (for scanners without Enter/Tab)
     this.scannerTimeout = setTimeout(() => {
       if (input.value.trim().length > 5) { // Minimum barcode length
         const scanDuration = Date.now() - this.scanStartTime;
-        // If input was typed very fast (< 500ms), likely from scanner
-        if (scanDuration < 500) {
+        console.log(`🔌 Auto-process timeout - duration: ${scanDuration}ms, length: ${input.value.length}`);
+        
+        // If input was typed very fast (< 1000ms), likely from scanner
+        if (scanDuration < 1000) {
+          console.log('🔌 Fast input detected - processing as scanner input');
           this.processScannerInput(input.value);
+        } else {
+          console.log('🔌 Slow input - likely manual typing, not processing');
         }
       }
-    }, 300);
+    }, 200); // Giảm timeout để xử lý nhanh hơn
   }
   
   onScannerInputBlur(): void {
@@ -1409,9 +1531,27 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private processScannerInput(scannedData: string): void {
     if (!scannedData.trim()) return;
     
+    // Clean the scanned data - remove common scanner artifacts
+    let cleanData = scannedData.trim();
+    
+    // Remove common suffix characters that some scanners add
+    const suffixesToRemove = ['\r', '\n', '\t', ' ', '\0'];
+    suffixesToRemove.forEach(suffix => {
+      cleanData = cleanData.replace(new RegExp(suffix, 'g'), '');
+    });
+    
+    // Remove common prefix characters
+    const prefixesToRemove = ['\0', ' ', '\t'];
+    prefixesToRemove.forEach(prefix => {
+      if (cleanData.startsWith(prefix)) {
+        cleanData = cleanData.substring(prefix.length);
+      }
+    });
+    
     console.log('🔌 Physical scanner input received:', scannedData);
-    console.log('🔌 Input length:', scannedData.length);
-    console.log('🔌 Input characters:', scannedData.split('').map(c => c.charCodeAt(0)));
+    console.log('🔌 Cleaned data:', cleanData);
+    console.log('🔌 Input length:', cleanData.length);
+    console.log('🔌 Input characters:', cleanData.split('').map(c => c.charCodeAt(0)));
     
     // Clear the input
     this.scannerBuffer = '';
@@ -1422,7 +1562,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // If in batch mode, process with batch logic
     if (this.isBatchScanningMode) {
-      this.processBatchScanInput(scannedData);
+      this.processBatchScanInput(cleanData);
       
       // Auto-focus for next scan in batch mode
       setTimeout(() => {
@@ -1430,7 +1570,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }, 100);
     } else {
       // Process the scanned data (same as camera scan)
-      this.onScanSuccess(scannedData);
+      this.onScanSuccess(cleanData);
       
       // Keep input focused for next scan
       if (this.isScannerInputActive) {
@@ -1439,10 +1579,54 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // Get current stock for a material (quantity - exportQuantity)
+  // Get current stock for a material from Inventory collection (VLOOKUP style + SUM)
   getMaterialStock(material: OutboundMaterial): number {
-    const stock = (material.quantity || 0) - (material.exportQuantity || 0);
-    return stock;
+    // Debug logging for specific material
+    if (material.materialCode === 'B017008' && material.poNumber === 'KZPO0625/0105') {
+      console.log(`🔍 === STOCK CALCULATION DEBUG ===`);
+      console.log(`Material: ${material.materialCode} - ${material.poNumber}`);
+      console.log(`Total inventory materials loaded: ${this.inventoryMaterials.length}`);
+      console.log(`All inventory materials:`, this.inventoryMaterials);
+    }
+    
+    // Tìm tất cả dòng có cùng mã + PO trong Inventory
+    const matchingInventoryItems = this.inventoryMaterials.filter(inv => 
+      inv.materialCode === material.materialCode && 
+      inv.poNumber === material.poNumber
+    );
+    
+    if (matchingInventoryItems.length > 0) {
+      // Cộng tổng tất cả stock của cùng mã + PO
+      const totalStock = matchingInventoryItems.reduce((sum, item) => {
+        return sum + (Number(item.stock) || 0);
+      }, 0);
+      
+      // Debug logging for specific material
+      if (material.materialCode === 'B017008' && material.poNumber === 'KZPO0625/0105') {
+        console.log(`📊 Stock calculation for ${material.materialCode} - ${material.poNumber}:`);
+        console.log(`  - Found ${matchingInventoryItems.length} inventory items`);
+        console.log(`  - Individual items:`, matchingInventoryItems);
+        console.log(`  - Individual stocks:`, matchingInventoryItems.map(item => item.stock));
+        console.log(`  - Total stock: ${totalStock}`);
+        console.log(`=== END STOCK CALCULATION DEBUG ===`);
+        } else {
+        console.log(`📊 Stock calculation for ${material.materialCode} - ${material.poNumber}:`);
+        console.log(`  - Found ${matchingInventoryItems.length} inventory items`);
+        console.log(`  - Individual stocks:`, matchingInventoryItems.map(item => item.stock));
+        console.log(`  - Total stock: ${totalStock}`);
+      }
+      
+      return totalStock;
+    }
+    
+    // Nếu không tìm thấy trong inventory thì hiển thị 0
+    if (material.materialCode === 'B017008' && material.poNumber === 'KZPO0625/0105') {
+      console.log(`❌ No inventory found for ${material.materialCode} - ${material.poNumber}`);
+      console.log(`Available material codes:`, [...new Set(this.inventoryMaterials.map(item => item.materialCode))]);
+      console.log(`Available PO numbers:`, [...new Set(this.inventoryMaterials.map(item => item.poNumber))]);
+      console.log(`=== END STOCK CALCULATION DEBUG ===`);
+    }
+    return 0;
   }
 
   // Get count of materials with negative stock
@@ -1453,6 +1637,42 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // Get count of materials with negative inventory (legacy function)
   getNegativeInventoryCount(): number {
     return this.getNegativeStockCount();
+  }
+
+  // Debug method để kiểm tra máy scan
+  debugScannerInput(input: string): void {
+    console.log('🔍 === SCANNER DEBUG INFO ===');
+    console.log('🔍 Raw input:', input);
+    console.log('🔍 Input length:', input.length);
+    console.log('🔍 Input type:', typeof input);
+    console.log('🔍 Character codes:', input.split('').map(c => `${c}(${c.charCodeAt(0)})`));
+    console.log('🔍 Has Enter (13):', input.includes('\r'));
+    console.log('🔍 Has Newline (10):', input.includes('\n'));
+    console.log('🔍 Has Tab (9):', input.includes('\t'));
+    console.log('🔍 Has Null (0):', input.includes('\0'));
+    console.log('🔍 Has Space (32):', input.includes(' '));
+    console.log('🔍 === END DEBUG INFO ===');
+  }
+
+  // Debug method để kiểm tra tồn kho từ Inventory
+  debugMaterialStock(materialCode: string, poNumber?: string): void {
+    console.log('🔍 === INVENTORY STOCK DEBUG ===');
+    
+    const inventoryMaterial = this.inventoryMaterials.find(inv => 
+      inv.materialCode === materialCode && 
+      inv.poNumber === poNumber
+    );
+    
+    if (inventoryMaterial) {
+      console.log(`✅ Tìm thấy trong Inventory:`);
+      console.log('  - Material Code:', inventoryMaterial.materialCode);
+      console.log('  - PO Number:', inventoryMaterial.poNumber);
+      console.log('  - Stock từ Inventory:', inventoryMaterial.quantity);
+      } else {
+      console.log(`❌ Không tìm thấy trong Inventory: ${materialCode}${poNumber ? ' - ' + poNumber : ''}`);
+    }
+    
+    console.log('🔍 === END INVENTORY STOCK DEBUG ===');
   }
 
 }

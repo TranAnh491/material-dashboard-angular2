@@ -290,13 +290,13 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // Sort by Material Code -> PO (oldest first) - SIMPLE FIFO LOGIC
     this.filteredInventory.sort((a, b) => {
       // First compare by Material Code (group same materials together)
-      const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
-      if (materialComparison !== 0) {
-        return materialComparison;
-      }
-      
+        const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
+        if (materialComparison !== 0) {
+          return materialComparison;
+        }
+        
       // If same material code, sort by PO: Year -> Month -> Sequence (oldest first)
-      return this.comparePOFIFO(a.poNumber, b.poNumber);
+        return this.comparePOFIFO(a.poNumber, b.poNumber);
     });
     
     // Mark duplicates
@@ -876,6 +876,240 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return 'PCS';
   }
 
+  // Import catalog from Excel
+  async importCatalog(): Promise<void> {
+    try {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.xlsx,.xls,.csv';
+      
+      input.onchange = async (event: any) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+          const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(worksheet);
+
+          if (data.length === 0) {
+            alert('❌ File không có dữ liệu');
+      return;
+    }
+    
+          // Validate required columns
+          const firstRow = data[0] as any;
+          if (!firstRow.materialCode || !firstRow.standardPacking) {
+            alert('❌ File phải có cột "materialCode" và "standardPacking"');
+      return;
+    }
+    
+          // Process catalog data
+          const catalogData = data.map((row: any) => ({
+            materialCode: String(row.materialCode || '').trim(),
+            materialName: String(row.materialName || '').trim(),
+            unit: String(row.unit || 'PCS').trim(),
+            standardPacking: Number(row.standardPacking) || 0
+          })).filter(item => item.materialCode && item.standardPacking > 0);
+
+          if (catalogData.length === 0) {
+            alert('❌ Không có dữ liệu hợp lệ trong file');
+        return;
+      }
+      
+          // Save to Firebase
+        const batch = this.firestore.firestore.batch();
+          const catalogRef = this.firestore.collection('catalog');
+
+          catalogData.forEach(item => {
+            const docRef = catalogRef.doc().ref;
+            batch.set(docRef, {
+              ...item,
+              factory: this.FACTORY,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+        });
+        
+        await batch.commit();
+          
+          // Update local cache
+          this.loadCatalogFromFirebase();
+          
+          alert(`✅ Đã import ${catalogData.length} items vào catalog ASM2`);
+          
+        } catch (error) {
+          console.error('❌ Error importing catalog:', error);
+          alert(`❌ Lỗi khi import catalog: ${error}`);
+        }
+      };
+      
+      input.click();
+      
+    } catch (error) {
+      console.error('Error setting up file input:', error);
+      alert('Có lỗi xảy ra khi mở file picker');
+    }
+  }
+
+  // Download catalog template
+  downloadCatalogTemplate(): void {
+    const templateData = [
+      {
+        materialCode: 'B001001',
+        materialName: 'Ví dụ tên hàng',
+        unit: 'PCS',
+        standardPacking: 100
+      },
+      {
+        materialCode: 'B001002',
+        materialName: 'Ví dụ tên hàng khác',
+        unit: 'PCS',
+        standardPacking: 50
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Catalog Template');
+    
+    const fileName = `Danh_muc_hang_hoa_ASM2_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  }
+
+  // Delete all ASM2 data
+  async deleteAllASM2Data(): Promise<void> {
+    if (!this.canDelete) {
+      alert('❌ Bạn không có quyền xóa dữ liệu');
+      return;
+    }
+
+    if (!confirm('⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ dữ liệu ASM2?\n\nHành động này KHÔNG THỂ HOÀN TÁC!')) {
+        return;
+      }
+
+    try {
+      // Get all ASM2 documents
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.FACTORY)
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert('❌ Không có dữ liệu ASM2 để xóa');
+        return;
+      }
+
+      // Delete in batches
+        const batch = this.firestore.firestore.batch();
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+      
+      // Clear local arrays
+      this.inventoryMaterials = [];
+      this.filteredInventory = [];
+      
+      alert(`✅ Đã xóa ${snapshot.docs.length} items ASM2`);
+
+    } catch (error) {
+      console.error('❌ Error deleting all ASM2 data:', error);
+      alert(`❌ Lỗi khi xóa dữ liệu: ${error}`);
+    }
+  }
+
+  // Export to Excel
+  exportToExcel(): void {
+    try {
+      if (this.filteredInventory.length === 0) {
+        alert('❌ Không có dữ liệu để export');
+        return;
+      }
+      
+      const exportData = this.filteredInventory.map(material => ({
+        'Factory': material.factory || 'ASM2',
+        'Material Code': material.materialCode,
+        'Material Name': material.materialName || '',
+        'PO Number': material.poNumber,
+        'Quantity': material.quantity,
+        'Unit': material.unit,
+        'Exported': material.exported || 0,
+        'Stock': this.calculateCurrentStock(material),
+        'Location': material.location,
+        'Type': material.type,
+        'Expiry Date': material.expiryDate ? material.expiryDate.toISOString().split('T')[0] : '',
+        'Remarks': material.remarks || '',
+        'Standard Packing': material.standardPacking || 0,
+        'Import Date': material.importDate ? material.importDate.toISOString().split('T')[0] : '',
+        'Received Date': material.receivedDate ? material.receivedDate.toISOString().split('T')[0] : '',
+        'Status': this.getStatusText(material)
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM2 Inventory');
+      
+      const fileName = `ASM2_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log(`✅ Exported ${exportData.length} items to Excel`);
+      
+    } catch (error) {
+      console.error('❌ Error exporting to Excel:', error);
+      alert(`❌ Lỗi khi export Excel: ${error}`);
+    }
+  }
+
+  // Reset zero stock items
+  resetZeroStock(): void {
+    if (!this.canDelete) {
+      alert('❌ Bạn không có quyền thực hiện hành động này');
+        return;
+      }
+
+    const zeroStockItems = this.filteredInventory.filter(item => 
+      this.calculateCurrentStock(item) <= 0
+    );
+
+    if (zeroStockItems.length === 0) {
+      alert('✅ Không có items nào có tồn kho ≤ 0');
+      return;
+    }
+
+    if (confirm(`⚠️ Xác nhận xóa ${zeroStockItems.length} items có tồn kho ≤ 0?\n\nHành động này KHÔNG THỂ HOÀN TÁC!`)) {
+      try {
+        // Delete zero stock items
+        const batch = this.firestore.firestore.batch();
+        zeroStockItems.forEach(item => {
+          if (item.id) {
+            const docRef = this.firestore.collection('inventory-materials').doc(item.id).ref;
+            batch.delete(docRef);
+          }
+        });
+
+        batch.commit().then(() => {
+          // Remove from local arrays
+          this.inventoryMaterials = this.inventoryMaterials.filter(item => 
+            this.calculateCurrentStock(item) > 0
+          );
+          this.filteredInventory = this.filteredInventory.filter(item => 
+            this.calculateCurrentStock(item) > 0
+          );
+          
+          alert(`✅ Đã xóa ${zeroStockItems.length} items có tồn kho ≤ 0`);
+        }).catch(error => {
+          console.error('❌ Error deleting zero stock items:', error);
+          alert(`❌ Lỗi khi xóa items: ${error}`);
+        });
+        
+      } catch (error) {
+        console.error('❌ Error preparing batch delete:', error);
+        alert(`❌ Lỗi khi chuẩn bị xóa: ${error}`);
+      }
+    }
+  }
+
   // Delete single inventory item
   async deleteInventoryItem(material: InventoryMaterial): Promise<void> {
     console.log('🗑️ ASM2 deleteInventoryItem called for:', material.materialCode);
@@ -894,761 +1128,23 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
     
     if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM2 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
-      console.log(`✅ User confirmed deletion of ${material.materialCode}`);
+      console.log(`🗑️ Deleting ASM2 inventory item: ${material.materialCode} - PO: ${material.poNumber}`);
       
       try {
-        // Show loading
-        this.isLoading = true;
-        
-        // Delete from Firebase
         await this.firestore.collection('inventory-materials').doc(material.id).delete();
-        console.log('✅ Item deleted from Firebase successfully');
+        console.log(`✅ ASM2 inventory item deleted successfully: ${material.materialCode}`);
         
-        // Remove from local array
-        const index = this.inventoryMaterials.indexOf(material);
-        if (index > -1) {
-          this.inventoryMaterials.splice(index, 1);
-          console.log(`✅ Removed ${material.materialCode} from local array`);
-          
-          // Refresh the view
-          this.applyFilters();
-          
-          // Show success message
-          alert(`✅ Đã xóa thành công item ${material.materialCode}!\n\nPO: ${material.poNumber}\nVị trí: ${material.location}`);
-        }
-      } catch (error) {
-        console.error('❌ Error deleting item:', error);
-        alert(`❌ Lỗi khi xóa item ${material.materialCode}: ${error.message || 'Lỗi không xác định'}`);
-      } finally {
-        this.isLoading = false;
-      }
-    } else {
-      console.log(`❌ User cancelled deletion of ${material.materialCode}`);
-    }
-  }
-
-  // Delete all ASM2 inventory data
-  async deleteAllASM2Data(): Promise<void> {
-    const confirmed = confirm(
-      '⚠️ WARNING: Xóa toàn bộ dữ liệu inventory ASM2!\n\n' +
-      'Hành động này KHÔNG thể hoàn tác.\n\n' +
-      'Bạn có chắc chắn muốn tiếp tục?'
-    );
-    
-    if (!confirmed) {
-      return;
-    }
-    
-    const doubleConfirm = confirm(
-      '🔥 XÁC NHẬN CUỐI CÙNG 🔥\n\n' +
-      'Nhập "XOA ASM2" ở prompt tiếp theo để xác nhận.'
-    );
-    
-    if (!doubleConfirm) {
-      return;
-    }
-    
-    const typeConfirm = prompt('Nhập "XOA ASM2" để xác nhận:');
-    if (typeConfirm !== 'XOA ASM2') {
-      alert('❌ Hủy xóa - text xác nhận không đúng');
-      return;
-    }
-
-    try {
-      console.log('🚀 Bắt đầu xóa dữ liệu ASM2...');
-      
-      // Query all ASM2 documents
-              const querySnapshot = await this.firestore.collection('inventory-materials')
-        .ref.where('factory', '==', 'ASM2')
-        .get();
-      
-      if (querySnapshot.empty) {
-        alert('✅ Không có dữ liệu ASM2 nào để xóa.');
-        return;
-      }
-      
-      console.log(`📦 Tìm thấy ${querySnapshot.size} items ASM2 để xóa`);
-      
-      // Delete in batches
-      const batchSize = 500;
-      const docs = querySnapshot.docs;
-      let deletedCount = 0;
-      
-      for (let i = 0; i < docs.length; i += batchSize) {
-        const batch = this.firestore.firestore.batch();
-        const currentBatch = docs.slice(i, i + batchSize);
-        
-        console.log(`🗑️ Xóa batch ${Math.floor(i/batchSize) + 1} (${currentBatch.length} items)...`);
-        
-        currentBatch.forEach(doc => {
-          batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-        deletedCount += currentBatch.length;
-        
-        console.log(`✅ Đã xóa batch ${Math.floor(i/batchSize) + 1} - Tổng đã xóa: ${deletedCount}/${docs.length}`);
-        
-        // Add delay between batches
-        if (i + batchSize < docs.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-      
-      console.log(`🎉 Xóa thành công ${deletedCount} items ASM2!`);
-      alert(`✅ Xóa thành công ${deletedCount} items ASM2 inventory!`);
-      
-      // Reload data
-      this.loadInventoryFromFirebase();
-      
-    } catch (error) {
-      console.error('❌ Lỗi khi xóa dữ liệu ASM2:', error);
-      alert(`❌ Lỗi: ${error.message}`);
-    }
-  }
-
-  // Scan QR for location change
-  scanLocationQR(material: InventoryMaterial): void {
-    console.log('📷 Opening QR scanner for location change:', material.materialCode);
-    
-    const dialogData: QRScannerData = {
-      title: 'Quét Barcode Vị Trí',
-      message: 'Camera sẽ tự động quét barcode vị trí mới',
-      materialCode: material.materialCode
-    };
-
-    const dialogRef = this.dialog.open(QRScannerModalComponent, {
-      width: '500px',
-      maxWidth: '95vw',
-      data: dialogData,
-      disableClose: true, // Prevent accidental close
-      panelClass: 'qr-scanner-dialog'
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      console.log('📷 QR Scanner result:', result);
-      
-      if (result && result.success && result.location) {
-        // Update location
-        const oldLocation = material.location;
-        material.location = result.location;
-        
-        console.log(`📍 Location changed: ${oldLocation} → ${result.location}`);
-        
-        // Save to Firebase
-        this.updateLocation(material);
+        // Remove from local arrays
+        this.inventoryMaterials = this.inventoryMaterials.filter(item => item.id !== material.id);
+        this.filteredInventory = this.filteredInventory.filter(item => item.id !== material.id);
         
         // Show success message
-        const method = result.manual ? 'nhập thủ công' : 'quét QR';
-        alert(`✅ Đã thay đổi vị trí thành công!\n\nMã hàng: ${material.materialCode}\nVị trí cũ: ${oldLocation}\nVị trí mới: ${result.location}\n\nPhương thức: ${method}`);
-        
-      } else if (result && result.cancelled) {
-        console.log('❌ QR scan cancelled by user');
-      } else {
-        console.log('❌ QR scan failed or no result');
-      }
-    });
-  }
-
-  // Reset function - Delete items with zero stock
-  async resetZeroStock(): Promise<void> {
-    try {
-      // Find all items with stock = 0
-      const zeroStockItems = this.inventoryMaterials.filter(item => 
-        item.factory === this.FACTORY && (item.stock === 0 || item.stock === null || item.stock === undefined)
-      );
-
-      if (zeroStockItems.length === 0) {
-        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM2');
-        return;
-      }
-
-      // Show confirmation dialog
-      const confirmed = confirm(
-        `🔄 RESET ASM2 INVENTORY\n\n` +
-        `Tìm thấy ${zeroStockItems.length} mã hàng có tồn kho = 0\n\n` +
-        `Bạn có muốn xóa tất cả những mã hàng này không?\n\n` +
-        `⚠️ Hành động này không thể hoàn tác!`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      console.log(`🗑️ Starting reset for ASM2: ${zeroStockItems.length} items to delete`);
-
-      // Delete items in batches
-      const batchSize = 50;
-      let deletedCount = 0;
-
-      for (let i = 0; i < zeroStockItems.length; i += batchSize) {
-        const batch = this.firestore.firestore.batch();
-        const currentBatch = zeroStockItems.slice(i, i + batchSize);
-
-        currentBatch.forEach(item => {
-          if (item.id) {
-            const docRef = this.firestore.collection('inventory-materials').doc(item.id).ref;
-            batch.delete(docRef);
-          }
-        });
-
-        await batch.commit();
-        deletedCount += currentBatch.length;
-
-        console.log(`✅ ASM2 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockItems.length}`);
-
-        // Small delay between batches
-        if (i + batchSize < zeroStockItems.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM2`);
-
-      // Reload inventory data
-      this.loadInventoryFromFirebase();
-
-    } catch (error) {
-      console.error('❌ Error during ASM2 reset:', error);
-      alert(`❌ Lỗi khi reset ASM2: ${error.message}`);
-    }
-  }
-
-  // Helper method to check if Rolls/Bags is valid for QR printing
-  isRollsOrBagsValid(material: InventoryMaterial): boolean {
-    const rollsOrBagsValue = material.rollsOrBags;
-    return rollsOrBagsValue && 
-           !(typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') &&
-           parseFloat(String(rollsOrBagsValue)) > 0;
-  }
-
-  // Print QR Code for inventory items
-  async printQRCode(material: InventoryMaterial): Promise<void> {
-    try {
-      console.log('🏷️ Generating QR code for ASM2 material:', material.materialCode);
-      
-      // Kiểm tra Rolls/Bags trước khi tạo QR
-      const rollsOrBagsValue = material.rollsOrBags;
-      if (!rollsOrBagsValue || 
-          (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') ||
-          parseFloat(String(rollsOrBagsValue)) <= 0) {
-        alert('❌ Không thể in tem QR!\n\nLý do: Thiếu Rolls/Bags\n\nVui lòng nhập số lượng Rolls/Bags trước khi in tem QR.');
-        return;
-      }
-      
-      // Calculate quantity per roll/bag
-      const rollsOrBags = parseFloat(material.rollsOrBags) || 1;
-      const totalQuantity = material.stock || material.quantity;
-      
-      if (!totalQuantity || totalQuantity <= 0) {
-        alert('❌ Vui lòng nhập số lượng trước khi tạo QR code!');
-        return;
-      }
-      
-      // Calculate how many full units we can make
-      const fullUnits = Math.floor(totalQuantity / rollsOrBags);
-      const remainingQuantity = totalQuantity % rollsOrBags;
-      
-      console.log('📊 QR calculation:', {
-        totalQuantity,
-        rollsOrBags,
-        fullUnits,
-        remainingQuantity
-      });
-      
-      // Generate QR codes based on quantity per unit
-      const qrCodes = [];
-      
-      // Add full units
-      for (let i = 0; i < fullUnits; i++) {
-        qrCodes.push({
-          materialCode: material.materialCode,
-          poNumber: material.poNumber,
-          unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}`
-        });
-      }
-      
-      // Add remaining quantity if any
-      if (remainingQuantity > 0) {
-        qrCodes.push({
-          materialCode: material.materialCode,
-          poNumber: material.poNumber,
-          unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
-        });
-      }
-
-      if (qrCodes.length === 0) {
-        alert('❌ Vui lòng nhập đơn vị hợp lệ trước khi tạo QR code!');
-        return;
-      }
-
-      console.log(`📦 Generated ${qrCodes.length} QR codes for ASM2`);
-
-      // Generate QR code images
-      const qrImages = await Promise.all(
-        qrCodes.map(async (qrCode, index) => {
-          const qrImage = await QRCode.toDataURL(qrCode.qrData, {
-            width: 200,
-            margin: 1,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-          
-          return {
-            image: qrImage,
-            materialCode: qrCode.materialCode,
-            poNumber: qrCode.poNumber,
-            unitNumber: qrCode.unitNumber,
-            qrData: qrCode.qrData,
-            index: index + 1
-          };
-        })
-      );
-
-      // Create print window
-      this.createQRPrintWindow(qrImages, material);
+        alert(`✅ Đã xóa item ${material.materialCode} khỏi ASM2 Inventory`);
       
     } catch (error) {
-      console.error('❌ Error generating QR code for ASM2:', error);
-      alert('❌ Lỗi khi tạo QR code: ' + error.message);
+        console.error('❌ Error deleting ASM2 inventory item:', error);
+        alert(`❌ Lỗi khi xóa item: ${error}`);
     }
   }
-
-  // Create print window for QR codes - Using Inbound format
-  private createQRPrintWindow(qrImages: any[], material: InventoryMaterial): void {
-    const printWindow = window.open('', '_blank');
-    
-    if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
-      return;
-    }
-
-    const currentDate = new Date().toLocaleDateString('vi-VN');
-    
-    // Use exact same format as Inbound for consistency
-    printWindow.document.write(`
-      <html>
-      <head>
-          <title>QR Label - ASM2 - ${material.materialCode}</title>
-        <style>
-            * {
-              margin: 0 !important;
-              padding: 0 !important;
-              box-sizing: border-box !important;
-            }
-            
-          body { 
-            font-family: Arial, sans-serif; 
-              margin: 0 !important; 
-              padding: 0 !important;
-              background: white !important;
-              overflow: hidden !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
-            
-          .qr-container { 
-              display: flex !important; 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              border: 1px solid #000 !important; 
-              width: 57mm !important; 
-              height: 32mm !important; 
-              page-break-inside: avoid !important;
-              background: white !important;
-              box-sizing: border-box !important;
-            }
-            
-            .qr-section {
-              width: 30mm !important;
-              height: 30mm !important;
-              display: flex !important;
-              align-items: center !important;
-              justify-content: center !important;
-              border-right: 1px solid #ccc !important;
-              box-sizing: border-box !important;
-            }
-            
-            .qr-image {
-              width: 28mm !important;
-              height: 28mm !important;
-              display: block !important;
-            }
-            
-            .info-section {
-              flex: 1 !important;
-              padding: 1mm !important;
-              display: flex !important;
-              flex-direction: column !important;
-              justify-content: space-between !important;
-              font-size: 8px !important;
-              line-height: 1.1 !important;
-              box-sizing: border-box !important;
-            }
-            
-            .info-row {
-              margin: 0.3mm 0 !important;
-              font-weight: bold !important;
-            }
-            
-            .info-row.small {
-              font-size: 7px !important;
-              color: #666 !important;
-            }
-            
-            .qr-grid {
-              text-align: center !important;
-              display: flex !important;
-              flex-direction: row !important;
-              flex-wrap: wrap !important;
-              align-items: flex-start !important;
-              justify-content: flex-start !important;
-              gap: 0 !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
-            
-          @media print {
-              body { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                overflow: hidden !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-              
-              @page {
-                margin: 0 !important;
-                size: 57mm 32mm !important;
-                padding: 0 !important;
-              }
-              
-              .qr-container { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-                page-break-inside: avoid !important;
-                border: 1px solid #000 !important;
-              }
-              
-              .qr-section {
-                width: 30mm !important;
-                height: 30mm !important;
-              }
-              
-              .qr-image {
-                width: 28mm !important;
-                height: 28mm !important;
-              }
-              
-              .info-section {
-                font-size: 8px !important;
-                padding: 1mm !important;
-              }
-              
-              .info-row.small {
-                font-size: 7px !important;
-              }
-              
-              .qr-grid {
-                gap: 0 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-          }
-        </style>
-      </head>
-      <body>
-          <div class="qr-grid">
-          ${qrImages.map(qr => `
-              <div class="qr-container">
-                <div class="qr-section">
-                  <img src="${qr.image}" alt="QR Code" class="qr-image">
-              </div>
-                <div class="info-section">
-                  <div class="info-row">${qr.materialCode}</div>
-                  <div class="info-row">${qr.poNumber}</div>
-                  <div class="info-row">${qr.unitNumber}</div>
-                  <div class="info-row small">ASM2</div>
-                  <div class="info-row small">${currentDate}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        <script>
-            window.onload = function() {
-            setTimeout(() => {
-                window.print();
-            }, 500);
-            };
-        </script>
-      </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    console.log(`✅ QR labels created for ASM2 with Inbound format - ${qrImages.length} labels`);
-  }
-
-  // Export inventory data to Excel
-  exportToExcel(): void {
-    if (!this.canExport) {
-      alert('Bạn không có quyền xuất dữ liệu');
-      return;
-    }
-
-    try {
-      console.log('📊 Exporting ASM2 inventory data to Excel...');
-      
-      // Optimize data for smaller file size
-      const exportData = this.filteredInventory.map(material => ({
-        'Factory': material.factory || 'ASM2',
-        'Import Date': material.importDate.toLocaleDateString('vi-VN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: '2-digit'
-        }),
-        'Batch': material.batchNumber || '',
-        'Material': material.materialCode || '',
-        'Name': material.materialName || '',
-        'PO': material.poNumber || '',
-        'Qty': material.quantity || 0,
-        'Unit': material.unit || '',
-        'Exported': material.exported || 0,
-        'Stock': (material.quantity || 0) - (material.exported || 0),
-        'Location': material.location || '',
-        'Type': material.type || '',
-        'Expiry': material.expiryDate?.toLocaleDateString('vi-VN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: '2-digit'
-        }) || '',
-        'QC': material.qualityCheck ? 'Yes' : 'No',
-        'Received': material.isReceived ? 'Yes' : 'No',
-        'Completed': material.isCompleted ? 'Yes' : 'No',
-        'Supplier': material.supplier || ''
-      }));
-      
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      
-      // Set column widths for better readability
-      const colWidths = [
-        { wch: 8 },   // Factory
-        { wch: 10 },  // Import Date
-        { wch: 12 },  // Batch
-        { wch: 15 },  // Material
-        { wch: 20 },  // Name
-        { wch: 12 },  // PO
-        { wch: 8 },   // Qty
-        { wch: 6 },   // Unit
-        { wch: 8 },   // Exported
-        { wch: 8 },   // Stock
-        { wch: 12 },  // Location
-        { wch: 8 },   // Type
-        { wch: 10 },  // Expiry
-        { wch: 6 },   // QC
-        { wch: 8 },   // Received
-        { wch: 8 },   // Completed
-        { wch: 15 }   // Supplier
-      ];
-      worksheet['!cols'] = colWidths;
-      
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM2_Inventory');
-      
-      const fileName = `ASM2_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(workbook, fileName);
-      
-      console.log('✅ ASM2 inventory data exported to Excel');
-      alert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
-      
-    } catch (error) {
-      console.error('❌ Export error:', error);
-      alert('Lỗi export: ' + error.message);
-    }
-  }
-
-  // Update remarks for material
-  updateRemarks(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
-    this.updateMaterialInFirebase(material);
-  }
-
-  // Get standard packing from catalog
-  getStandardPacking(materialCode: string): number {
-    if (this.catalogCache.has(materialCode)) {
-      const catalogItem = this.catalogCache.get(materialCode);
-      return catalogItem?.standardPacking || 0;
-    }
-    return 0;
-  }
-
-  // Import catalog with Standard Packing support
-  async importCatalog(): Promise<void> {
-    try {
-      console.log('📥 Importing catalog with Standard Packing column for ASM2');
-      
-      // Create file input element
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = '.xlsx,.xls';
-      fileInput.style.display = 'none';
-      
-      fileInput.onchange = async (event: any) => {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        try {
-          // Show loading
-          this.isCatalogLoading = true;
-          
-          // Read Excel file
-          const data = await this.readExcelFile(file);
-          console.log('📊 Excel data read:', data);
-          
-          // Process catalog data
-          const catalogData = this.processCatalogData(data);
-          console.log('📋 Processed catalog data:', catalogData);
-          
-          // Save to Firebase
-          await this.saveCatalogToFirebase(catalogData);
-          
-          // Update local cache
-          this.updateCatalogCache(catalogData);
-          
-          // Show success message
-          alert(`✅ Import danh mục ASM2 thành công!\n\n📦 Tổng số mã hàng: ${catalogData.length}\n💡 Standard Packing đã được cập nhật`);
-          
-        } catch (error) {
-          console.error('❌ Error importing catalog:', error);
-          alert('❌ Lỗi khi import danh mục: ' + error.message);
-        } finally {
-          this.isCatalogLoading = false;
-          // Remove file input
-          document.body.removeChild(fileInput);
-        }
-      };
-      
-      // Trigger file selection
-      document.body.appendChild(fileInput);
-      fileInput.click();
-      
-    } catch (error) {
-      console.error('❌ Error in importCatalog:', error);
-      alert('❌ Lỗi khi import danh mục: ' + error.message);
-    }
-  }
-
-  // Read Excel file and return data
-  private async readExcelFile(file: File): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e: any) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          resolve(jsonData);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  // Process catalog data from Excel
-  private processCatalogData(data: any[]): any[] {
-    return data.map(row => ({
-      materialCode: row['Mã hàng'] || row['materialCode'] || '',
-      materialName: row['Tên hàng'] || row['materialName'] || '',
-      unit: row['Đơn vị'] || row['unit'] || 'PCS',
-      standardPacking: parseFloat(row['Standard Packing'] || row['standardPacking'] || '0') || 0
-    })).filter(item => item.materialCode && item.materialCode.trim() !== '');
-  }
-
-  // Save catalog to Firebase
-  private async saveCatalogToFirebase(catalogData: any[]): Promise<void> {
-    const batch = this.firestore.firestore.batch();
-    
-    for (const item of catalogData) {
-      const docRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
-      batch.set(docRef, {
-        ...item,
-        updatedAt: new Date()
-      }, { merge: true });
-    }
-    
-    await batch.commit();
-    console.log(`💾 Saved ${catalogData.length} catalog items to Firebase for ASM2`);
-  }
-
-  // Update local catalog cache
-  private updateCatalogCache(catalogData: any[]): void {
-    for (const item of catalogData) {
-      this.catalogCache.set(item.materialCode, item);
-    }
-    this.catalogLoaded = true;
-    console.log(`🔄 Updated local catalog cache with ${catalogData.length} items for ASM2`);
-  }
-
-  // Download catalog template with Standard Packing
-  downloadCatalogTemplate(): void {
-    try {
-      console.log('📥 Downloading catalog template with Standard Packing column for ASM2');
-      
-      // Create template data with Standard Packing column
-      const templateData = [
-        {
-          'Mã hàng': 'EXAMPLE001',
-          'Tên hàng': 'Ví dụ tên hàng ASM2',
-          'Đơn vị': 'PCS',
-          'Standard Packing': 100
-        },
-        {
-          'Mã hàng': 'EXAMPLE002',
-          'Tên hàng': 'Ví dụ tên hàng ASM2 2',
-          'Đơn vị': 'KG',
-          'Standard Packing': 25
-        }
-      ];
-      
-      // Create workbook and worksheet
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(templateData);
-      
-      // Set column widths
-      worksheet['!cols'] = [
-        { width: 15 }, // Mã hàng
-        { width: 25 }, // Tên hàng
-        { width: 10 }, // Đơn vị
-        { width: 15 }  // Standard Packing
-      ];
-      
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh mục hàng hóa ASM2');
-      
-      // Generate file and download
-      const fileName = `Danh_muc_hang_hoa_ASM2_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(workbook, fileName);
-      
-      console.log('✅ ASM2 catalog template downloaded successfully');
-      
-    } catch (error) {
-      console.error('❌ Error downloading ASM2 catalog template:', error);
-      alert('❌ Lỗi khi tải template: ' + error.message);
-    }
-  }
+}
 }

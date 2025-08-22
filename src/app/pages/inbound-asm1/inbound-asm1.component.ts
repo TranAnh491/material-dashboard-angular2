@@ -117,10 +117,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   ) {}
   
   ngOnInit(): void {
-    console.log('🏭 Inbound ASM1 component initialized');
     this.loadPermissions();
     this.loadMaterials();
-    this.setupDateDefaults();
+    
+    // Set default date range
+    this.startDate = '2020-01-01';
+    this.endDate = '2030-12-31';
   }
   
   ngOnDestroy(): void {
@@ -266,58 +268,37 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   applyFilters(): void {
     let filtered = [...this.materials];
     
-    // Auto-hide received materials after next day (not 24 hours, but by calendar day)
-    if (this.hideReceivedAfterNextDay) {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Start of today
-      
-      filtered = filtered.filter(material => {
-        // If material is not received, always show it
-        if (!material.isReceived) {
-          return true;
-        }
-        
-        // If material is received, check if it was received before today
-        // We need to check when the material was marked as received
-        // Since we don't have a specific "receivedAt" field, we'll use updatedAt
-        // which gets updated when isReceived is set to true
-        const receivedTime = material.updatedAt || material.createdAt;
-        const receivedDate = new Date(receivedTime.getFullYear(), receivedTime.getMonth(), receivedTime.getDate()); // Start of received date
-        
-        // Hide if received before today (i.e., received yesterday or earlier)
-        return receivedDate >= today;
-      });
-      
-      console.log(`🕐 Auto-hide filter: ${this.materials.length - filtered.length} received materials from previous days will be hidden`);
-    }
+    // Always filter by ASM1 only
+    filtered = filtered.filter(material => material.factory === this.selectedFactory);
     
-    // Search filter
-    if (this.searchTerm.trim()) {
-      const searchLower = this.searchTerm.toLowerCase().trim();
+    // Apply search filter based on search type
+    if (this.searchTerm) {
+      const searchTermLower = this.searchTerm.toLowerCase();
       
       switch (this.searchType) {
-        case 'materialCode':
+        case 'material':
+          // Search by material code or name
           filtered = filtered.filter(material => 
-            material.materialCode.toLowerCase().includes(searchLower)
+            material.materialCode.toLowerCase().includes(searchTermLower)
           );
           break;
         case 'batchNumber':
           filtered = filtered.filter(material => 
-            material.batchNumber.toLowerCase().includes(searchLower)
+            material.batchNumber.toLowerCase().includes(searchTermLower)
           );
           break;
         case 'poNumber':
           filtered = filtered.filter(material => 
-            material.poNumber.toLowerCase().includes(searchLower)
+            material.poNumber.toLowerCase().includes(searchTermLower)
           );
           break;
         default: // 'all'
           filtered = filtered.filter(material => 
-            material.materialCode.toLowerCase().includes(searchLower) ||
-            material.poNumber.toLowerCase().includes(searchLower) ||
-            material.batchNumber.toLowerCase().includes(searchLower) ||
-            material.supplier.toLowerCase().includes(searchLower) ||
-            material.location.toLowerCase().includes(searchLower)
+            material.materialCode.toLowerCase().includes(searchTermLower) ||
+            material.poNumber.toLowerCase().includes(searchTermLower) ||
+            material.batchNumber.toLowerCase().includes(searchTermLower) ||
+            material.supplier.toLowerCase().includes(searchTermLower) ||
+            material.location.toLowerCase().includes(searchTermLower)
           );
           break;
       }
@@ -348,7 +329,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     }
     
     // Filter by current batch when processing
-    if (this.isBatchActive && this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
+    if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
       filtered = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
       console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}`);
     }
@@ -367,6 +348,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     // this.updatePagination(); // Removed pagination update
     
     console.log(`🔍 ASM1 filtered: ${filtered.length}/${this.materials.length} materials`);
+    console.log('🔍 Final filtering result:');
+    console.log('  - Total materials:', this.materials.length);
+    console.log('  - Filtered materials:', this.filteredMaterials.length);
+
   }
   
   // updatePagination(): void { // Removed pagination update
@@ -1782,8 +1767,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   canEditInBatch(material: InboundMaterial): boolean {
-    if (!this.isBatchActive) return false;
-    return material.batchNumber === this.currentBatchNumber;
+    // Allow editing if we have a selected batch and material belongs to it
+    if (this.currentBatchNumber && material.batchNumber === this.currentBatchNumber) {
+      return true;
+    }
+    // Also allow if batch is active (for backward compatibility)
+    if (this.isBatchActive && material.batchNumber === this.currentBatchNumber) {
+      return true;
+    }
+    return false;
   }
   
   getEmployeeDisplay(material: InboundMaterial): string {
@@ -1854,11 +1846,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       this.addToInventory(material);
       
       // Check batch completion only if we're in an active batch and this material belongs to it
-      if (this.isBatchActive && material.batchNumber === this.currentBatchNumber) {
+      if (this.currentBatchNumber && material.batchNumber === this.currentBatchNumber) {
         console.log(`🔍 Kiểm tra hoàn thành lô hàng sau khi tick ${material.materialCode}`);
         this.checkBatchCompletion();
       } else {
-        console.log(`ℹ️ Không kiểm tra hoàn thành lô hàng - không trong batch active hoặc material không thuộc lô hàng hiện tại`);
+        console.log(`ℹ️ Không kiểm tra hoàn thành lô hàng - material không thuộc lô hàng hiện tại`);
       }
       
     }).catch((error) => {
@@ -1871,7 +1863,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   private checkBatchCompletion(): void {
-    // Lấy tất cả materials của lô hàng hiện tại (không chỉ những có batchStatus = 'active')
+    // Lấy tất cả materials của lô hàng hiện tại
     const batchMaterials = this.materials.filter(m => m.batchNumber === this.currentBatchNumber);
     
     console.log(`🔍 Kiểm tra hoàn thành lô hàng ${this.currentBatchNumber}:`);
@@ -1882,28 +1874,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     const allReceived = batchMaterials.every(m => m.isReceived);
     
     if (allReceived && batchMaterials.length > 0) {
-      // Complete the batch
-      const endTime = new Date();
-      const duration = Math.round((endTime.getTime() - this.batchStartTime!.getTime()) / (1000 * 60));
+      console.log(`🎉 Lô hàng ${this.currentBatchNumber} đã hoàn thành!`);
       
+      // Update all materials in the batch to completed status
       batchMaterials.forEach(material => {
-        material.batchStatus = 'completed';
-        material.batchEndTime = endTime;
-        material.batchDuration = duration;
+        material.isCompleted = true;
+        material.updatedAt = new Date();
         
         // Update in Firebase
         this.firestore.collection('inbound-materials').doc(material.id).update({
-          batchStatus: 'completed',
-          batchEndTime: endTime,
-          batchDuration: duration
+          isCompleted: true,
+          updatedAt: material.updatedAt
         });
       });
       
-      console.log(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber} trong ${duration} phút`);
-      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber} trong ${duration} phút!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}\n⏱️ Thời gian: ${duration} phút`);
+      // Show completion message
+      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}`);
       
-      // Reset batch state
-      this.stopBatchProcessing();
+      // Refresh the display
+      this.applyFilters();
     } else {
       console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
     }
@@ -2069,9 +2058,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         this.availableBatches = snapshot.docs.map(doc => {
           const data = doc.data() as any;
           return {
-            id: doc.id,
             batchNumber: data.batchNumber || '',
-            supplier: data.supplier || '',
             materialCode: data.materialCode || '',
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date()
           };
@@ -2090,11 +2077,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           allSnapshot.docs.slice(0, 3).forEach((doc, index) => {
             const data = doc.data() as any;
             console.log(`📄 Sample doc ${index + 1}:`, {
-              id: doc.id,
               factory: data.factory,
               isReceived: data.isReceived,
               batchNumber: data.batchNumber,
-              supplier: data.supplier
+              materialCode: data.materialCode
             });
           });
         }
@@ -2108,17 +2094,24 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Xử lý khi chọn lô hàng
   onBatchSelectionChange(): void {
     console.log('🔄 Batch selection changed:', this.selectedBatch);
-    console.log('📊 Available batches:', this.availableBatches);
     
     if (this.selectedBatch) {
-      const selectedBatchData = this.availableBatches.find(batch => batch.id === this.selectedBatch);
+      const selectedBatchData = this.availableBatches.find(batch => batch.batchNumber === this.selectedBatch);
       if (selectedBatchData) {
         console.log('✅ Selected batch:', selectedBatchData);
+        // Cập nhật currentBatchNumber để kích hoạt lọc
+        this.currentBatchNumber = this.selectedBatch;
+        // Áp dụng lọc để chỉ hiển thị materials của lô hàng này
+        this.applyFilters();
+        console.log(`📦 Đã lọc để hiển thị materials của lô hàng: ${this.selectedBatch}`);
       } else {
         console.log('❌ Selected batch not found in available batches');
       }
     } else {
       console.log('ℹ️ No batch selected');
+      // Reset lọc khi không chọn lô hàng
+      this.currentBatchNumber = '';
+      this.applyFilters();
     }
   }
 
@@ -2127,13 +2120,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     if (this.employeeCode && this.selectedBatch) {
       console.log('🚀 Starting inspection with:', {
         employeeCode: this.employeeCode,
-        batchId: this.selectedBatch
+        batchNumber: this.selectedBatch
       });
       
-      // TODO: Implement inspection logic here
-      // Có thể mở modal kiểm tra hoặc chuyển sang chế độ kiểm tra
+      // Đóng modal và hiển thị giao diện đã lọc
+      this.isBatchScanningMode = false;
       
-      alert(`Bắt đầu kiểm tra!\nMã nhân viên: ${this.employeeCode}\nLô hàng: ${this.selectedBatch}`);
+      // Hiển thị thông báo thành công
+      alert(`✅ Bắt đầu kiểm tra!\nMã nhân viên: ${this.employeeCode}\nLô hàng: ${this.selectedBatch}\n\nGiao diện đã được lọc để hiển thị materials của lô hàng này.`);
+      
+      console.log(`🎯 Đã chuyển sang chế độ kiểm tra lô hàng: ${this.selectedBatch}`);
     }
   }
 
@@ -2144,14 +2140,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.selectedBatch = '';
     this.isEmployeeCodeSaved = false;
     this.availableBatches = [];
-    console.log('🛑 Stopped batch scanning mode');
+    
+    // Reset lọc để hiển thị tất cả materials
+    this.currentBatchNumber = '';
+    this.applyFilters();
+    
+    console.log('🛑 Stopped batch scanning mode and reset filters');
   }
 
-  // Test method để debug
-  testLoadBatches(): void {
-    console.log('🧪 Testing batch loading...');
-    this.loadAvailableBatches();
-  }
+
 
   // Tự động viết hoa mã nhân viên
   onEmployeeCodeInput(event: any): void {
@@ -2173,5 +2170,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       this.employeeCode = value.toUpperCase();
       input.value = this.employeeCode;
     }
+  }
+
+  // Xóa bộ lọc lô hàng
+  clearBatchFilter(): void {
+    console.log('🧹 Clearing batch filter...');
+    this.currentBatchNumber = '';
+    this.selectedBatch = '';
+    this.applyFilters();
+    console.log('✅ Batch filter cleared');
   }
 }

@@ -75,6 +75,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Dropdown management
   isDropdownOpen: boolean = false;
   
+  // Inventory materials for stock calculation
+  inventoryMaterials: any[] = [];
+  
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -86,6 +89,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('🏭 Outbound ASM2 component initialized');
     this.setupDefaultDateRange();
     this.loadMaterials();
+    this.loadInventoryMaterials(); // Load inventory để tính tồn kho
     
     // Add click outside listener to close dropdown
     document.addEventListener('click', this.onDocumentClick.bind(this));
@@ -131,16 +135,16 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   loadMaterials(): void {
     this.isLoading = true;
     this.errorMessage = '';
-    console.log('📦 Loading ASM2 outbound materials...');
+    console.log('📦 Loading ASM2 outbound materials with real-time listener...');
     
-    // Use simplified query without where/orderBy to avoid index requirements
+    // Use real-time listener to automatically update when data changes
     this.firestore.collection('outbound-materials', ref => 
       ref.limit(1000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        console.log(`🔍 Raw snapshot from outbound-materials contains ${snapshot.length} documents`);
+        console.log(`🔍 Real-time update from outbound-materials contains ${snapshot.length} documents`);
         
         // Filter for ASM2 factory and sort client-side
         const allMaterials = snapshot.map(doc => {
@@ -157,10 +161,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             exportDate: data.exportDate?.toDate() || new Date(),
             location: data.location || '',
             exportedBy: data.exportedBy || '',
-            employeeId: data.employeeId || '', // Fix: properly map employeeId
-            productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
-            batchStartTime: data.batchStartTime?.toDate() || data.batchStartTime || null,
-            batchEndTime: data.batchEndTime?.toDate() || data.batchEndTime || null,
+            employeeId: data.employeeId || '',
+            productionOrder: data.productionOrder || '',
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -206,6 +208,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         this.isLoading = false;
         
         console.log(`✅ Final filtered materials: ${this.filteredMaterials.length}`);
+        
+        // Force change detection to update UI
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('❌ Error loading ASM2 outbound materials:', error);
@@ -274,6 +279,42 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('🔥 Adding to Firebase collection: outbound-materials');
     const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
     console.log('✅ New outbound record created with ID:', docRef.id);
+  }
+
+  // Load inventory materials để lấy số tồn kho chính xác
+  loadInventoryMaterials(): void {
+    console.log('📦 Loading ASM2 inventory materials for stock calculation with real-time listener...');
+    
+    this.firestore.collection('inventory-materials', ref => 
+      ref.where('factory', '==', this.selectedFactory)
+         .limit(1000)
+    ).snapshotChanges()
+    .pipe(takeUntil(this.destroy$))
+    .subscribe({
+      next: (snapshot) => {
+        this.inventoryMaterials = snapshot.map(doc => {
+          const data = doc.payload.doc.data() as any;
+          return {
+            id: doc.payload.doc.id,
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            quantity: data.quantity || 0,
+            unit: data.unit || '',
+            exported: data.exported || 0, // Add exported field
+            stock: data.stock || 0 // Add stock field
+          };
+        });
+        
+        console.log(`✅ Real-time update: Loaded ${this.inventoryMaterials.length} inventory materials for stock calculation`);
+        
+        // Force change detection to update stock display
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Error loading inventory materials:', error);
+        console.log('⚠️ Will use fallback calculation method');
+      }
+    });
   }
   
   updatePagination(): void {
@@ -1480,10 +1521,31 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
 
-  // Get current stock for a material (quantity - exportQuantity)
+  // Get current stock for a material from Inventory collection (VLOOKUP style + SUM)
   getMaterialStock(material: OutboundMaterial): number {
-    const stock = (material.quantity || 0) - (material.exportQuantity || 0);
-    return stock;
+    // Tìm tất cả dòng có cùng mã + PO trong Inventory
+    const matchingInventoryItems = this.inventoryMaterials.filter(inv =>
+      inv.materialCode === material.materialCode &&
+      inv.poNumber === material.poNumber
+    );
+
+    if (matchingInventoryItems.length > 0) {
+      // Cộng tổng tất cả stock của cùng mã + PO
+      const totalStock = matchingInventoryItems.reduce((sum, item) => {
+        return sum + (Number(item.stock) || 0);
+      }, 0);
+      
+      console.log(`📊 Stock calculation for ${material.materialCode} - ${material.poNumber}:`);
+      console.log(`  - Found ${matchingInventoryItems.length} inventory items`);
+      console.log(`  - Individual stocks:`, matchingInventoryItems.map(item => item.stock));
+      console.log(`  - Total stock: ${totalStock}`);
+      
+      return totalStock;
+    }
+
+    // Nếu không tìm thấy trong inventory thì hiển thị 0
+    console.log(`❌ No inventory found for ${material.materialCode} - ${material.poNumber}`);
+    return 0;
   }
 
   // Get count of materials with negative stock
@@ -1570,7 +1632,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Xử lý mã nhân viên đã scan
   private processEmployeeId(): void {
     try {
-      console.log('🔍 Processing scanned employee ID:', this.batchEmployeeId);
+      console.log('�� Processing scanned employee ID:', this.batchEmployeeId);
       
       // Đọc toàn bộ dữ liệu scan được, sau đó lấy 7 ký tự đầu tiên
       if (this.batchEmployeeId && this.batchEmployeeId.length > 0) {

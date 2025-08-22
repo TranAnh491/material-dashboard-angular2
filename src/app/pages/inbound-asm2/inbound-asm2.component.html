@@ -3,7 +3,18 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📦 INBOUND ASM2</h4>
+      <h4>�� INBOUND ASM2</h4>
+      
+      <!-- Batch Filter Indicator -->
+      <div class="batch-filter-indicator" *ngIf="currentBatchNumber && currentBatchNumber.trim() !== ''">
+        <div class="filter-badge">
+          <i class="material-icons">filter_list</i>
+          <span>Đang lọc theo lô hàng: <strong>{{ currentBatchNumber }}</strong></span>
+          <button class="clear-filter-btn" (click)="clearBatchFilter()" title="Xóa bộ lọc lô hàng">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+      </div>
     </div>
     
     <!-- Excel-like Actions -->
@@ -368,72 +379,85 @@
     </div>
     
     <div class="modal-body">
-      <!-- Employee ID Scanner -->
-      <div class="scanner-section">
-        <label>📱 Quét mã nhân viên bằng máy scanner:</label>
-        <div class="scanner-input-group">
-          <input type="text" 
-                 #employeeScanner
-                 [(ngModel)]="scannedEmployeeId"
-                 (keydown)="onEmployeeScannerKeydown($event)"
-                 placeholder="Sử dụng máy scanner để quét mã nhân viên..."
-                 class="scanner-input"
-                 [disabled]="isBatchActive">
-          <button class="scan-btn" (click)="activatePhysicalScanner()" 
-                  [class.active]="isScannerInputActive"
-                  [title]="isScannerInputActive ? 'Máy scanner đang hoạt động' : 'Kích hoạt máy scanner'">
-            <i class="material-icons">{{ isScannerInputActive ? 'scanner' : 'keyboard' }}</i>
+      <!-- Thay scanner bằng input trực tiếp -->
+      <div class="scanner-section" *ngIf="isBatchScanningMode">
+        <div class="employee-input-section">
+          <label for="employeeCodeInput">Nhập mã nhân viên:</label>
+          <input 
+            type="text" 
+            id="employeeCodeInput"
+            [(ngModel)]="employeeCode"
+            placeholder="Nhập mã nhân viên..."
+            class="employee-input uppercase-input"
+            [disabled]="isEmployeeCodeSaved"
+            (input)="onEmployeeCodeInput($event)"
+            (keyup)="onEmployeeCodeKeyup($event)">
+          
+          <button 
+            class="save-btn" 
+            (click)="saveEmployeeCode()"
+            [disabled]="!employeeCode || isEmployeeCodeSaved">
+            <i class="material-icons">save</i>
+            Save
           </button>
         </div>
-        <div class="scanned-employees" *ngIf="currentEmployeeIds.length > 0">
-          <span class="employee-tag" *ngFor="let empId of currentEmployeeIds">
-            {{ empId }}
-            <button class="remove-emp" (click)="removeEmployee(empId)" *ngIf="!isBatchActive">
-              <i class="material-icons">close</i>
+
+        <!-- Hiển thị trạng thái mã nhân viên -->
+        <div class="employee-status" *ngIf="isEmployeeCodeSaved">
+          <i class="material-icons success">check_circle</i>
+          <span>Mã nhân viên: {{ employeeCode }}</span>
+        </div>
+
+        <!-- Dropdown chọn lô hàng/DNNK -->
+        <div class="batch-selection-section" *ngIf="isEmployeeCodeSaved">
+          <label for="batchSelect">Chọn mã lô hàng/DNNK:</label>
+          
+          <!-- Debug info -->
+          <div class="debug-info" style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            <span>Debug: {{ availableBatches.length }} batches available</span>
+            <br>
+            <span>Factory: {{ selectedFactory }}</span>
+            <br>
+            <span>Total in collection: {{ availableBatches.length }}</span>
+          </div>
+          
+          <select 
+            id="batchSelect"
+            [(ngModel)]="selectedBatch"
+            class="batch-select"
+            (change)="onBatchSelectionChange()">
+            <option value="">-- Chọn lô hàng/DNNK --</option>
+            <option 
+              *ngFor="let batch of availableBatches" 
+              [value]="batch.batchNumber">
+              {{ batch.batchNumber }}
+            </option>
+          </select>
+          
+          <!-- Show if no batches available -->
+          <div *ngIf="availableBatches.length === 0" style="color: #f44336; font-size: 12px; margin-top: 4px;">
+            ⚠️ Không có lô hàng nào khả dụng
+            <br>
+            <button (click)="testLoadBatches()" style="margin-top: 8px; padding: 4px 8px; font-size: 11px;">
+              🧪 Test Load
             </button>
-          </span>
+          </div>
         </div>
-        
-        <!-- Scanner Instructions -->
-        <div class="scanner-instructions">
-          <p class="instruction-text">
-            <i class="material-icons">info</i>
-            <strong>Hướng dẫn sử dụng máy scanner:</strong>
-          </p>
-          <ul class="instruction-list">
-            <li>1. Click nút "Kích hoạt máy scanner" (nút xanh) để bật chế độ scanner</li>
-            <li>2. Sử dụng máy scanner QR code thực tế để quét mã nhân viên</li>
-            <li>3. Mã sẽ tự động được nhập và xử lý</li>
-            <li>4. Có thể quét nhiều nhân viên (tối đa 5 người)</li>
-            <li>5. Click nút "Dừng scanner" để tắt chế độ scanner</li>
-          </ul>
+
+        <!-- Nút bắt đầu kiểm tra -->
+        <div class="start-inspection-section" *ngIf="selectedBatch">
+          <button 
+            class="start-inspection-btn" 
+            (click)="startInspection()">
+            <i class="material-icons">play_arrow</i>
+            Bắt đầu kiểm tra
+          </button>
         </div>
-      </div>
-      
-      <!-- Batch Number Input -->
-      <div class="batch-input-section">
-        <label>📦 Nhập mã lô hàng/DNNK:</label>
-        <input type="text" 
-               [(ngModel)]="currentBatchNumber"
-               placeholder="Nhập mã lô hàng..."
-               class="batch-input"
-               [disabled]="isBatchActive">
-      </div>
-      
-      <!-- Start Button -->
-      <div class="modal-actions">
-        <button class="start-btn" 
-                (click)="startBatchProcessing()"
-                [disabled]="!canStartBatch() || isBatchActive">
-          <i class="material-icons">play_arrow</i>
-          Bắt đầu kiểm
-        </button>
-        
-        <button class="stop-btn" 
-                (click)="stopBatchProcessing()"
-                [disabled]="!isBatchActive">
+
+        <!-- Nút dừng -->
+        <button class="done-btn" (click)="stopBatchScanningMode()" title="Dừng chế độ scan">
           <i class="material-icons">stop</i>
-          Dừng kiểm
+          Dừng
         </button>
       </div>
     </div>

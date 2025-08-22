@@ -38,6 +38,56 @@
   font-family: Arial, sans-serif; 
 }
 
+// Batch Filter Indicator
+.batch-filter-indicator {
+  margin-top: 8px;
+  
+  .filter-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+    color: white;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+    
+    .material-icons {
+      font-size: 18px;
+    }
+    
+    strong {
+      font-weight: 600;
+      color: #fff3e0;
+    }
+    
+    .clear-filter-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+      }
+      
+      .material-icons {
+        font-size: 16px;
+      }
+    }
+  }
+}
+
 .excel-body { 
   overflow: auto; 
   flex: 1; 
@@ -2313,6 +2363,128 @@
     
     .toggle-text {
       user-select: none;
+    }
+  }
+}
+
+// New styles for direct input interface
+.employee-input-section {
+  margin-bottom: 20px;
+  
+  label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .employee-input {
+    width: 200px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-right: 10px;
+    font-size: 14px;
+    text-transform: uppercase; // Tự động viết hoa hiển thị
+    
+    &:disabled {
+      background-color: #f5f5f5;
+      color: #666;
+    }
+  }
+
+  .uppercase-input {
+    font-weight: 500;
+    letter-spacing: 0.5px; // Tăng khoảng cách giữa các ký tự để dễ đọc
+  }
+  
+  .save-btn {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    
+    &:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    
+    &:hover:not(:disabled) {
+      background-color: #45a049;
+    }
+    
+    i {
+      margin-right: 5px;
+    }
+  }
+}
+
+.employee-status {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #e8f5e8;
+  border-radius: 4px;
+  
+  i.success {
+    color: #4CAF50;
+    margin-right: 10px;
+  }
+  
+  span {
+    color: #333;
+    font-weight: 500;
+  }
+}
+
+.batch-selection-section {
+  margin-bottom: 20px;
+  
+  label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .batch-select {
+    width: 300px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+    
+    &:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+  }
+}
+
+.start-inspection-section {
+  margin-bottom: 20px;
+  
+  .start-inspection-btn {
+    padding: 12px 24px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    
+    &:hover {
+      background-color: #1976D2;
+    }
+    
+    i {
+      margin-right: 8px;
     }
   }
 }

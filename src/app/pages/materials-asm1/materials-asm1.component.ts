@@ -1383,11 +1383,21 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Get standard packing from catalog
   getStandardPacking(materialCode: string): number {
+    console.log(`🔍 Getting Standard Packing for ${materialCode}`);
+    console.log(`📋 Catalog cache size: ${this.catalogCache.size}`);
+    console.log(`📋 Catalog loaded: ${this.catalogLoaded}`);
+    
     if (this.catalogCache.has(materialCode)) {
       const catalogItem = this.catalogCache.get(materialCode);
-      return catalogItem?.standardPacking || 0;
+      console.log(`✅ Found in catalog:`, catalogItem);
+      const result = catalogItem?.standardPacking || 0;
+      console.log(`📦 Standard Packing result: ${result}`);
+      return result;
+    } else {
+      console.log(`❌ Material ${materialCode} NOT found in catalog cache`);
+      console.log(`📋 Available catalog keys:`, Array.from(this.catalogCache.keys()));
+      return 0;
     }
-    return 0;
   }
 
   // Helper method to check if Rolls/Bags is valid for QR printing
