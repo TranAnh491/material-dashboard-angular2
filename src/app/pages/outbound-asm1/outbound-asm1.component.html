@@ -73,11 +73,7 @@
               Làm sạch dữ liệu
             </a>
             
-            <!-- Debug Inventory Stock -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugMaterialStock('B017008', 'KZPO0625/0105'); closeDropdown()">
-              <i class="material-icons">search</i>
-              Kiểm tra B017008 từ Inventory
-            </a>
+            <!-- REMOVED: Debug Inventory Stock - Không cần tính stock để scan nhanh -->
           </div>
         </div>
         
@@ -106,10 +102,7 @@
         <span class="factory-badge asm1-badge">ASM1</span>
         
         <!-- Negative stock counter -->
-        <div class="negative-stock-counter" *ngIf="getNegativeStockCount() > 0">
-          <i class="material-icons">warning</i>
-          <span>{{ getNegativeStockCount() }} mã có tồn kho âm</span>
-        </div>
+        <!-- REMOVED: Negative stock counter - Không cần tính stock để scan nhanh -->
       </div>
     </div>
     <div class="loading-container" *ngIf="isLoading">
@@ -138,8 +131,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index"
-              [class.negative-stock]="getMaterialStock(material) < 0">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
             <td class="factory-cell factory-asm1">ASM1</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
             <td class="code-cell">
