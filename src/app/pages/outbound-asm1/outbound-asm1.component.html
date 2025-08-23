@@ -96,6 +96,28 @@
                  (change)="onDateRangeChange()"
                  class="date-input"
                  title="Đến ngày">
+          
+          <!-- Toggle for hiding previous day's scan history -->
+          <div class="history-toggle">
+            <label class="toggle-label">
+              <input type="checkbox" 
+                     [(ngModel)]="hidePreviousDayHistory"
+                     (change)="toggleHidePreviousDayHistory()"
+                     class="toggle-checkbox">
+              <span class="toggle-text">
+                <i class="material-icons">{{ hidePreviousDayHistory ? 'visibility_off' : 'visibility' }}</i>
+                {{ hidePreviousDayHistory ? 'Ẩn lịch sử cũ' : 'Hiện tất cả' }}
+              </span>
+            </label>
+          </div>
+          
+          <!-- Reset to today button -->
+          <button class="today-btn" 
+                  (click)="resetToToday()"
+                  title="Reset về ngày hôm nay">
+            <i class="material-icons">today</i>
+            Hôm nay
+          </button>
         </div>
 
         <!-- Factory Badge -->
@@ -121,10 +143,10 @@
           <tr>
             <th>Factory</th>
             <th>#</th>
+            <th>Ngày xuất</th>
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
-
             <th>Mã nhân viên</th>
             <th>Lệnh sản xuất</th>
             <th>Xóa</th>
@@ -134,6 +156,7 @@
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
             <td class="factory-cell factory-asm1">ASM1</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
+            <td class="date-cell">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
             <td class="code-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.materialCode" (change)="updateMaterial(material)">
             </td>
@@ -143,7 +166,6 @@
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
             </td>
-
             <td class="employee-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="ASP1234">
             </td>

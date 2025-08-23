@@ -409,7 +409,89 @@
       color: #6c757d;
       font-size: 13px; // Giảm font-size từ 14px xuống 13px
     }
-  }
+    
+    // History toggle styling
+    .history-toggle {
+      margin-left: 12px;
+      
+      .toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        user-select: none;
+        
+        .toggle-checkbox {
+          display: none;
+        }
+        
+        .toggle-text {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          background: #f8f9fa;
+          border: 1px solid #dee2e6;
+          border-radius: 20px;
+          font-size: 12px;
+          color: #6c757d;
+          transition: all 0.2s ease;
+          
+          i {
+            font-size: 14px;
+            color: #ff6b35;
+          }
+          
+          &:hover {
+            background: #e9ecef;
+            border-color: #ff6b35;
+          }
+        }
+        
+                 .toggle-checkbox:checked + .toggle-text {
+           background: #ff6b35;
+           color: white;
+           border-color: #ff6b35;
+           
+           i {
+             color: white;
+           }
+         }
+       }
+     }
+     
+     // Today button styling
+     .today-btn {
+       display: flex;
+       align-items: center;
+       gap: 6px;
+       padding: 6px 12px;
+       background: #28a745;
+       border: 1px solid #28a745;
+       border-radius: 20px;
+       font-size: 12px;
+       color: white;
+       cursor: pointer;
+       transition: all 0.2s ease;
+       font-family: Arial, sans-serif;
+       font-weight: 500;
+       
+       i {
+         font-size: 14px;
+         color: white;
+       }
+       
+       &:hover {
+         background: #218838;
+         border-color: #1e7e34;
+         transform: translateY(-1px);
+       }
+       
+       &:active {
+         transform: translateY(0);
+       }
+     }
+   }
 }
 
 // Dropdown styling
@@ -474,6 +556,17 @@
       &:hover {
         background-color: #f8f9fa;
         color: #ff6b35;
+      }
+      
+      &.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        color: #6c757d;
+        
+        &:hover {
+          background-color: transparent;
+          color: #6c757d;
+        }
       }
       
       i {

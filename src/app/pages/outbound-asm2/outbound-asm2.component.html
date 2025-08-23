@@ -97,11 +97,7 @@
         <!-- Factory Badge -->
         <span class="factory-badge asm2-badge">ASM2</span>
         
-        <!-- Negative stock counter -->
-        <div class="negative-stock-counter" *ngIf="getNegativeStockCount() > 0">
-          <i class="material-icons">warning</i>
-          <span>{{ getNegativeStockCount() }} mã có tồn kho âm</span>
-        </div>
+        <!-- REMOVED: Negative stock counter - không còn cần thiết
       </div>
     </div>
     <div class="loading-container" *ngIf="isLoading">
@@ -123,7 +119,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
-            <th>Tồn kho</th>
+            <!-- REMOVED: Tồn kho - không còn cần thiết
             <th>Thời gian bắt đầu</th>
             <th>Thời gian thực hiện</th>
             <th>Mã nhân viên</th>
@@ -132,8 +128,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index"
-              [class.negative-stock]="getMaterialStock(material) < 0">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
             <td class="factory-cell factory-asm2">ASM2</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
             <td class="code-cell">
@@ -145,16 +140,8 @@
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
             </td>
-            <td class="stock-cell" 
-                [class.negative-stock]="getMaterialStock(material) < 0"
-                [title]="'Tồn kho: ' + getMaterialStock(material) + ' (Nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exportQuantity || 0) + ')'">
-              <span class="stock-value" [class.negative]="getMaterialStock(material) < 0">
-                {{ getMaterialStock(material) }}
-              </span>
-            </td>
-            <td class="date-cell">
-              <input type="datetime-local" class="date-input" [value]="material.exportDate ? material.exportDate.toISOString().slice(0, 16) : ''" (change)="onExportDateChange($event, material)">
-            </td>
+            <!-- REMOVED: Tồn kho - không còn cần thiết
+            <!-- REMOVED: Ngày xuất - không còn cần thiết
             <td class="duration-cell">
               <span class="duration-display">{{ calculateDuration(material) }}</span>
             </td>

@@ -70,6 +70,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   endDate: string = '';
   showOnlyToday: boolean = true;
   
+  // Auto-hide previous day's scan history
+  hidePreviousDayHistory: boolean = true;
+  
   // Dropdown management
   isDropdownOpen: boolean = false;
   
@@ -101,8 +104,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.startDate = today.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
     this.showOnlyToday = true;
+    this.hidePreviousDayHistory = true;
     
-    console.log('📅 Date range set to:', { startDate: this.startDate, endDate: this.endDate, showOnlyToday: this.showOnlyToday });
+    console.log('📅 Date range set to:', { startDate: this.startDate, endDate: this.endDate, showOnlyToday: this.showOnlyToday, hidePreviousDayHistory: this.hidePreviousDayHistory });
   }
   
   onDateRangeChange(): void {
@@ -112,7 +116,30 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     const today = new Date().toISOString().split('T')[0];
     this.showOnlyToday = (this.startDate === today && this.endDate === today);
     
+    // Auto-hide previous day's history when user selects today
+    if (this.showOnlyToday) {
+      this.hidePreviousDayHistory = true;
+      console.log('📅 User selected today, automatically hiding previous day\'s history');
+    }
+    
     // Reload materials with new date filter
+    this.loadMaterials();
+  }
+  
+  // Toggle auto-hide previous day's scan history
+  toggleHidePreviousDayHistory(): void {
+    this.hidePreviousDayHistory = !this.hidePreviousDayHistory;
+    console.log(`📅 Auto-hide previous day's scan history: ${this.hidePreviousDayHistory ? 'ON' : 'OFF'}`);
+    this.loadMaterials();
+  }
+  
+  // Reset to today's date
+  resetToToday(): void {
+    const today = new Date();
+    this.startDate = today.toISOString().split('T')[0];
+    this.endDate = today.toISOString().split('T')[0];
+    this.hidePreviousDayHistory = true;
+    console.log('📅 Reset to today\'s date and hide previous day\'s history');
     this.loadMaterials();
   }
   
@@ -194,6 +221,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.materials = allMaterials
           .filter(material => material.factory === 'ASM1')
           .filter(material => {
+            // Auto-hide previous day's scan history
+            if (this.hidePreviousDayHistory) {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0); // Start of today
+              
+              const exportDate = new Date(material.exportDate);
+              exportDate.setHours(0, 0, 0, 0); // Start of export date
+              
+              // Hide records from previous days
+              if (exportDate < today) {
+                return false;
+              }
+            }
+            
             // Filter by date range if specified
             if (this.startDate && this.endDate) {
               const exportDate = material.exportDate.toISOString().split('T')[0];
@@ -220,6 +261,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         });
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
+        
+        // Log filter information
+        if (this.hidePreviousDayHistory) {
+          console.log(`📅 Previous day's scan history is hidden`);
+        }
+        console.log(`🔍 Filter applied: ${this.materials.length}/${allMaterials.filter(m => m.factory === 'ASM1').length} ASM1 records shown`);
         
         this.filteredMaterials = [...this.materials];
         this.updatePagination();

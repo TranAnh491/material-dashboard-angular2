@@ -26,7 +26,6 @@ export interface InboundMaterial {
   rollsOrBags: number;
   supplier: string;
   remarks: string;
-  isCompleted: boolean;
   hasQRGenerated?: boolean; // Track if QR code has been generated
   createdAt?: Date;
   updatedAt?: Date;
@@ -60,7 +59,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   startDate: string = '';
   endDate: string = '';
   
-  // Status filter
+  // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
   statusFilter: string = 'pending'; // Default to Chưa
   
   // Auto-hide received materials after next day (not 24 hours, but by calendar day)
@@ -118,11 +117,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   ngOnInit(): void {
     this.loadPermissions();
-    this.loadMaterials();
     
-    // Set default date range
-    this.startDate = '2020-01-01';
-    this.endDate = '2030-12-31';
+    // Thiết lập khung thời gian mặc định: 30 ngày gần nhất
+    this.setupDateDefaults();
+    console.log(`📅 Khung thời gian mặc định: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
+    
+    this.loadMaterials();
   }
   
   ngOnDestroy(): void {
@@ -151,6 +151,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     this.startDate = thirtyDaysAgo.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
+    
+    console.log(`📅 Thiết lập khung thời gian mặc định:`);
+    console.log(`  - Từ ngày: ${this.startDate} (${thirtyDaysAgo.toLocaleDateString('vi-VN')})`);
+    console.log(`  - Đến ngày: ${this.endDate} (${today.toLocaleDateString('vi-VN')})`);
+    console.log(`  - Tổng cộng: 30 ngày gần nhất`);
   }
   
   loadMaterials(): void {
@@ -205,7 +210,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             rollsOrBags: data.rollsOrBags || 0,
             supplier: data.supplier || '',
             remarks: data.remarks || '',
-            isCompleted: data.isCompleted || false,
             hasQRGenerated: data.hasQRGenerated || false,
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
@@ -305,27 +309,70 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     }
     
     // Date range filter
-    if (this.startDate) {
+    if (this.startDate && this.endDate) {
       const start = new Date(this.startDate);
+      const end = new Date(this.endDate);
+      end.setHours(23, 59, 59, 999); // End of day
+      
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(material => {
+        const materialDate = material.importDate;
+        return materialDate >= start && materialDate <= end;
+      });
+      const afterCount = filtered.length;
+      
+      console.log(`📅 Lọc theo khung thời gian: ${this.startDate} đến ${this.endDate}`);
+      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
+      console.log(`  - Sau khi lọc: ${afterCount} materials`);
+      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
+      console.log(`  - Khung thời gian: ${this.startDate} đến ${this.endDate} (${Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))} ngày)`);
+      console.log(`  - Ngày bắt đầu: ${start.toLocaleDateString('vi-VN')}`);
+      console.log(`  - Ngày kết thúc: ${end.toLocaleDateString('vi-VN')}`);
+    } else if (this.startDate) {
+      const start = new Date(this.startDate);
+      const beforeCount = filtered.length;
       filtered = filtered.filter(material => material.importDate >= start);
-    }
-    
-    if (this.endDate) {
+      const afterCount = filtered.length;
+      
+      console.log(`📅 Lọc từ ngày: ${this.startDate}`);
+      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
+      console.log(`  - Sau khi lọc: ${afterCount} materials`);
+      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
+      console.log(`  - Ngày bắt đầu: ${start.toLocaleDateString('vi-VN')}`);
+    } else if (this.endDate) {
       const end = new Date(this.endDate);
       end.setHours(23, 59, 59, 999);
+      const beforeCount = filtered.length;
       filtered = filtered.filter(material => material.importDate <= end);
+      const afterCount = filtered.length;
+      
+      console.log(`📅 Lọc đến ngày: ${this.endDate}`);
+      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
+      console.log(`  - Sau khi lọc: ${afterCount} materials`);
+      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
+      console.log(`  - Ngày kết thúc: ${end.toLocaleDateString('vi-VN')}`);
+    } else {
+      console.log(`⚠️ Không có khung thời gian lọc, hiển thị tất cả materials`);
     }
     
-    // Status filter
+    // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
     if (this.statusFilter) {
       switch (this.statusFilter) {
-        case 'completed':
-          filtered = filtered.filter(material => material.isCompleted);
+        case 'received':
+          // Đã nhận: Chỉ hiển thị các mã hàng đã được tick "đã nhận"
+          filtered = filtered.filter(material => material.isReceived);
           break;
         case 'pending':
-          filtered = filtered.filter(material => !material.isCompleted);
+          // Chưa: Chỉ hiển thị các mã hàng chưa được tick "đã nhận"
+          filtered = filtered.filter(material => !material.isReceived);
+          break;
+        case 'all':
+          // Toàn bộ: Hiển thị tất cả mã hàng (không lọc theo isReceived)
           break;
       }
+    } else {
+      // Mặc định: Chỉ hiển thị các mã hàng chưa được tick "đã nhận"
+      filtered = filtered.filter(material => !material.isReceived);
     }
     
     // Filter by current batch when processing
@@ -347,10 +394,64 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.filteredMaterials = filtered;
     // this.updatePagination(); // Removed pagination update
     
+    // Log thông tin về bộ lọc
+    let filterDescription = '';
+    switch (this.statusFilter) {
+      case 'received':
+        filterDescription = 'Chỉ hiển thị các mã hàng đã được tick "đã nhận"';
+        break;
+      case 'pending':
+        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+        break;
+      case 'all':
+        filterDescription = 'Hiển thị tất cả mã hàng (đã nhận và chưa nhận)';
+        break;
+      default:
+        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+    }
+    
     console.log(`🔍 ASM1 filtered: ${filtered.length}/${this.materials.length} materials`);
     console.log('🔍 Final filtering result:');
     console.log('  - Total materials:', this.materials.length);
     console.log('  - Filtered materials:', this.filteredMaterials.length);
+    console.log('  - Bộ lọc trạng thái:', this.statusFilter);
+    console.log('  - Mô tả bộ lọc:', filterDescription);
+    console.log('  - Materials đã nhận:', this.materials.filter(m => m.isReceived).length);
+    console.log('  - Materials chưa nhận:', this.materials.filter(m => !m.isReceived).length);
+    console.log('  - Khung thời gian:', this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có');
+    console.log('  - Tìm kiếm:', this.searchTerm || 'Không có');
+    console.log('  - Loại tìm kiếm:', this.searchType);
+    
+    // Log thông tin chi tiết về bộ lọc
+    console.log(`📊 Chi tiết bộ lọc:`);
+    console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+    console.log(`  - Mô tả bộ lọc: ${filterDescription}`);
+    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+    console.log(`  - Số materials sẽ hiển thị: ${filtered.length}`);
+    console.log(`  - Số materials bị ẩn: ${this.materials.length - filtered.length}`);
+    
+    // Log thông tin về từng loại materials
+    const receivedMaterials = this.materials.filter(m => m.isReceived);
+    const pendingMaterials = this.materials.filter(m => !m.isReceived);
+    
+    console.log(`📊 Chi tiết từng loại materials:`);
+    console.log(`  - Materials đã nhận: ${receivedMaterials.length}`);
+    console.log(`  - Materials chưa nhận: ${pendingMaterials.length}`);
+    console.log(`  - Materials sẽ hiển thị: ${filtered.length}`);
+    console.log(`  - Materials bị ẩn: ${this.materials.length - filtered.length}`);
+    
+    // Log thông tin về khung thời gian
+    if (this.startDate && this.endDate) {
+      const start = new Date(this.startDate);
+      const end = new Date(this.endDate);
+      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      console.log(`📅 Thông tin khung thời gian:`);
+      console.log(`  - Từ ngày: ${this.startDate} (${start.toLocaleDateString('vi-VN')})`);
+      console.log(`  - Đến ngày: ${this.endDate} (${end.toLocaleDateString('vi-VN')})`);
+      console.log(`  - Tổng cộng: ${daysDiff} ngày`);
+    }
 
   }
   
@@ -415,7 +516,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       rollsOrBags: material.rollsOrBags,
       supplier: material.supplier,
       remarks: material.remarks,
-      isCompleted: material.isCompleted,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -462,8 +562,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.searchType = 'materialCode';
     this.startDate = '';
     this.endDate = '';
-    this.statusFilter = 'pending';
+    this.statusFilter = 'pending'; // Mặc định về "Chưa"
+    
+    // Reset về khung thời gian 30 ngày gần nhất
     this.setupDateDefaults();
+    
+    console.log(`🔄 Đã reset bộ lọc về mặc định:`);
+    console.log(`  - Khung thời gian: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
+    console.log(`  - Trạng thái: ${this.statusFilter}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+    
     this.applyFilters();
   }
   
@@ -525,6 +634,54 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   changeStatusFilter(status: string): void {
     this.statusFilter = status;
+    console.log(`🔄 Thay đổi bộ lọc trạng thái: ${status}`);
+    
+    // Log thông tin về số lượng materials trước và sau khi lọc
+    const beforeCount = this.materials.length;
+    const receivedCount = this.materials.filter(m => m.isReceived).length;
+    const pendingCount = this.materials.filter(m => !m.isReceived).length;
+    
+    console.log(`📊 Thống kê materials:`);
+    console.log(`  - Tổng: ${beforeCount}`);
+    console.log(`  - Đã nhận: ${receivedCount}`);
+    console.log(`  - Chưa nhận: ${pendingCount}`);
+    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+    
+    // Log mô tả bộ lọc
+    let filterDescription = '';
+    switch (status) {
+      case 'received':
+        filterDescription = 'Chỉ hiển thị các mã hàng đã được tick "đã nhận"';
+        break;
+      case 'pending':
+        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+        break;
+      case 'all':
+        filterDescription = 'Hiển thị tất cả mã hàng (đã nhận và chưa nhận)';
+        break;
+      default:
+        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+    }
+    console.log(`📝 Mô tả bộ lọc: ${filterDescription}`);
+    
+    // Log thông tin về số lượng materials sau khi lọc
+    console.log(`📊 Thống kê materials sau khi lọc:`);
+    console.log(`  - Bộ lọc: ${status}`);
+    console.log(`  - Mô tả: ${filterDescription}`);
+    console.log(`  - Số materials sẽ hiển thị: ${status === 'received' ? receivedCount : status === 'pending' ? pendingCount : beforeCount}`);
+    
+    // Log thông tin chi tiết về bộ lọc
+    console.log(`📊 Chi tiết bộ lọc:`);
+    console.log(`  - Bộ lọc trạng thái: ${status}`);
+    console.log(`  - Mô tả bộ lọc: ${filterDescription}`);
+    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+    console.log(`  - Số materials sẽ hiển thị: ${status === 'received' ? receivedCount : status === 'pending' ? pendingCount : beforeCount}`);
+    console.log(`  - Số materials sẽ bị ẩn: ${status === 'received' ? pendingCount : status === 'pending' ? receivedCount : 0}`);
+    
     this.applyFilters();
   }
   
@@ -642,16 +799,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const getNumberValue = (index: number): number => {
         const value = row[index];
         if (value === null || value === undefined || value === '') return 0;
-        // Parse as number and convert to integer (no decimal points)
+        // Parse as number and allow decimal points for quantity
         const num = Number(value);
-        return isNaN(num) ? 0 : Math.floor(num);
+        return isNaN(num) ? 0 : num; // Allow decimal numbers
       };
 
       // Map only the 6 essential columns from template
       const lotNumber = getValue(0);         // LÔ HÀNG/ DNNK
       const materialCode = getValue(1);      // MÃ HÀNG
       const poNumber = getValue(2);          // SỐ P.O
-      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (whole number only)
+      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (allows decimal numbers)
       const type = getValue(4);              // LOẠI HÌNH
       const supplier = getValue(5);          // NHÀ CUNG CẤP
 
@@ -674,10 +831,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         qualityCheck: false, // Default value
         isReceived: false, // Default value
         notes: '', // Default value
-        rollsOrBags: 0, // Default value
+        rollsOrBags: 0.00, // Default value
         supplier: supplier, // From import
         remarks: '', // Default value
-        isCompleted: false, // Default value
         hasQRGenerated: false, // Default value
         createdAt: new Date(),
         updatedAt: new Date()
@@ -761,7 +917,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       rollsOrBags: material.rollsOrBags,
       supplier: material.supplier,
       remarks: material.remarks,
-      isCompleted: material.isCompleted,
       updatedAt: material.updatedAt
     }).then(() => {
       console.log(`✅ Material ${material.materialCode} updated successfully`);
@@ -1217,7 +1372,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       batchNumber: '',
       materialCode: '',
       poNumber: '',
-      quantity: 0,
+      quantity: 0.00,
       unit: '',
       location: '',
       type: '',
@@ -1225,10 +1380,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       qualityCheck: false,
       isReceived: false,
       notes: '',
-      rollsOrBags: 0,
+      rollsOrBags: 0.00,
       supplier: '',
       remarks: '',
-      isCompleted: false,
       hasQRGenerated: false,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -1271,7 +1425,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'PO': material.poNumber || '',
-        'Qty': material.quantity || 0,
+        'Qty': Number(material.quantity || 0).toFixed(2),
         'Unit': material.unit || '',
         'Location': material.location || '',
         'Type': material.type || '',
@@ -1282,7 +1436,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         }) || '',
         'QC': material.qualityCheck ? 'Yes' : 'No',
         'Received': material.isReceived ? 'Yes' : 'No',
-        'Completed': material.isCompleted ? 'Yes' : 'No',
         'QR': material.hasQRGenerated ? 'Yes' : 'No'
       }));
       
@@ -1302,7 +1455,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         { wch: 10 },  // Expiry
         { wch: 6 },   // QC
         { wch: 8 },   // Received
-        { wch: 8 },   // Completed
         { wch: 6 }    // QR
       ];
       worksheet['!cols'] = colWidths;
@@ -1314,7 +1466,60 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ ASM1 data exported to Excel');
-      alert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
+      console.log(`📊 Thống kê export:`);
+      console.log(`  - Bộ lọc hiện tại: ${this.statusFilter}`);
+      console.log(`  - Số records xuất: ${exportData.length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      
+      let statusText = '';
+      let description = '';
+      switch (this.statusFilter) {
+        case 'received':
+          statusText = 'Đã Nhận';
+          description = 'Chỉ các mã hàng đã được tick "đã nhận"';
+          break;
+        case 'pending':
+          statusText = 'Chưa Nhận';
+          description = 'Chỉ các mã hàng chưa được tick "đã nhận"';
+          break;
+        case 'all':
+          statusText = 'Toàn Bộ';
+          description = 'Tất cả mã hàng (đã nhận và chưa nhận)';
+          break;
+        default:
+          statusText = 'Chưa Nhận';
+          description = 'Chỉ các mã hàng chưa được tick "đã nhận"';
+      }
+      
+      // Log thông tin về export
+      console.log(`📊 Thông tin export:`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Mô tả bộ lọc: ${description}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số records xuất: ${exportData.length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      
+      // Tạo thông tin chi tiết về export
+      let timeRangeInfo = '';
+      if (this.startDate && this.endDate) {
+        const start = new Date(this.startDate);
+        const end = new Date(this.endDate);
+        const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        timeRangeInfo = `\n📅 Khung thời gian: ${this.startDate} đến ${this.endDate} (${daysDiff} ngày)`;
+      }
+      
+      let searchInfo = '';
+      if (this.searchTerm) {
+        searchInfo = `\n🔍 Tìm kiếm: ${this.searchTerm} (${this.searchType})`;
+      }
+      
+      alert(`✅ Đã xuất ${exportData.length} records ra file Excel\n📊 Bộ lọc: ${statusText}\n📝 Mô tả: ${description}${timeRangeInfo}${searchInfo}`);
       
     } catch (error) {
       console.error('❌ Export error:', error);
@@ -1327,8 +1532,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       ['LÔ HÀNG/ DNNK', 'MÃ HÀNG', 'SỐ P.O', 'LƯỢNG NHẬP', 'LOẠI HÌNH', 'NHÀ CUNG CẤP'],
-      ['RM1-B001', 'RM1-MAT001', 'RM1-PO001', 100, 'Raw Material', 'Supplier A'],
-      ['RM1-B002', 'RM1-MAT002', 'RM1-PO002', 50, 'Raw Material', 'Supplier B']
+      ['RM1-B001', 'RM1-MAT001', 'RM1-PO001', 100.5, 'Raw Material', 'Supplier A'],
+      ['RM1-B002', 'RM1-MAT002', 'RM1-PO002', 50.25, 'Raw Material', 'Supplier B']
     ];
     
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -1457,7 +1662,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60)) + ' phút' : 'N/A',
           this.getStatusText(material),
           material.supplier || 'N/A',
-          material.quantity || 0,
+          Number(material.quantity || 0).toFixed(2),
           material.remarks || 'N/A'
         ];
         
@@ -1493,7 +1698,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             duration > 0 ? duration : 'N/A',
             this.getStatusText(material),
             material.supplier || 'N/A',
-            material.quantity || 0,
+            Number(material.quantity || 0).toFixed(2),
             material.remarks || 'N/A'
           ];
           
@@ -1564,17 +1769,35 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   getStatusBadgeClass(material: InboundMaterial): string {
-    if (material.isCompleted) return 'badge-success';
-    if (material.isReceived && material.qualityCheck) return 'badge-info';
-    if (material.isReceived) return 'badge-warning';
-    return 'badge-secondary';
+    if (material.isReceived) {
+      if (material.qualityCheck) {
+        return 'badge-success'; // Đã kiểm tra & Nhận
+      } else {
+        return 'badge-warning'; // Đã nhận
+      }
+    } else {
+      if (material.qualityCheck) {
+        return 'badge-info'; // Đã kiểm tra
+      } else {
+        return 'badge-secondary'; // Chờ kiểm tra
+      }
+    }
   }
   
   getStatusText(material: InboundMaterial): string {
-    if (material.isCompleted) return 'Hoàn thành';
-    if (material.isReceived && material.qualityCheck) return 'Đã kiểm tra';
-    if (material.isReceived) return 'Đã nhận';
-    return 'Chờ nhận';
+    if (material.isReceived) {
+      if (material.qualityCheck) {
+        return 'Đã kiểm tra & Nhận';
+      } else {
+        return 'Đã nhận';
+      }
+    } else {
+      if (material.qualityCheck) {
+        return 'Đã kiểm tra';
+      } else {
+        return 'Chờ kiểm tra';
+      }
+    }
   }
   
   // Physical Scanner methods (copy from outbound)
@@ -1800,11 +2023,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return Math.round((now.getTime() - this.batchStartTime.getTime()) / (1000 * 60));
   }
   
-  getCompleteButtonTitle(material: InboundMaterial): string {
-    if (material.isCompleted) return 'Đã hoàn thành';
-    if (!this.canEditInBatch(material)) return 'Chỉ có thể sửa trong lô hàng đang kiểm';
-    return 'Đánh dấu hoàn thành';
-  }
+  // Method getCompleteButtonTitle đã được xóa vì không còn cần thiết
   
   getQualityCheckTitle(material: InboundMaterial): string {
     if (material.isReceived) return 'Không thể sửa - đã trong Inventory';
@@ -1820,83 +2039,423 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   // Override onReceivedChange to handle batch completion
   onReceivedChange(event: any, material: InboundMaterial): void {
+    const startTime = Date.now();
+    console.log(`🔄 Bắt đầu xử lý onReceivedChange...`);
+    console.log(`  - Material: ${material.materialCode}`);
+    console.log(`  - Lô hàng: ${material.batchNumber}`);
+    console.log(`  - Thời gian bắt đầu: ${new Date().toLocaleString('vi-VN')}`);
+    console.log(`  - Timestamp bắt đầu: ${startTime}`);
+    
     const target = event.target as HTMLInputElement;
     const isReceived = target.checked;
     
+    console.log(`🔄 onReceivedChange được gọi cho ${material.materialCode}`);
+    console.log(`  - Event target checked: ${isReceived}`);
+    console.log(`  - Material: ${material.materialCode}`);
+    console.log(`  - Lô hàng: ${material.batchNumber}`);
+    console.log(`  - Trạng thái hiện tại: isReceived = ${material.isReceived}`);
+    
     // Only allow ticking (true), not unticking (false)
     if (!isReceived) {
-      console.log(`Cannot untick received status for ${material.materialCode}`);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      console.log(`❌ Không thể untick trạng thái "đã nhận" cho ${material.materialCode}`);
+      console.log(`  - Lý do: Chỉ cho phép tick (true), không cho phép untick (false)`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Kết thúc xử lý do validation thất bại`);
+      console.log(`  - Thời gian xử lý: ${duration}ms`);
       return;
     }
     
     console.log(`🔄 Đang tick "đã nhận" cho ${material.materialCode} trong lô hàng ${material.batchNumber}`);
+    console.log(`  - Trạng thái trước: isReceived = ${material.isReceived}`);
+    console.log(`  - Trạng thái sau: isReceived = ${isReceived}`);
+    console.log(`  - Thời gian cập nhật: ${new Date().toLocaleString('vi-VN')}`);
+    console.log(`  - Bắt đầu cập nhật trạng thái local...`);
     
     // Update local state first
     material.isReceived = isReceived;
     material.updatedAt = new Date();
     
-    // Save to Firebase first to ensure persistence
-    this.firestore.collection('inbound-materials').doc(material.id).update({
-      isReceived: isReceived,
-      updatedAt: material.updatedAt
-    }).then(() => {
-      console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
+    console.log(`✅ Đã cập nhật trạng thái local cho ${material.materialCode}`);
+    console.log(`  - isReceived: ${material.isReceived}`);
+    console.log(`  - updatedAt: ${material.updatedAt.toLocaleString('vi-VN')}`);
+    
+          // Save to Firebase first to ensure persistence
+      console.log(`💾 Đang lưu trạng thái vào Firebase: ${material.materialCode}`);
+      console.log(`  - Collection: inbound-materials`);
+      console.log(`  - Document ID: ${material.id}`);
+      console.log(`  - isReceived: ${isReceived}`);
+      console.log(`  - updatedAt: ${material.updatedAt.toLocaleString('vi-VN')}`);
+      console.log(`  - Bắt đầu gọi Firebase update...`);
+      
+      this.firestore.collection('inbound-materials').doc(material.id).update({
+        isReceived: isReceived,
+        updatedAt: material.updatedAt
+      }).then(() => {
+        console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
+        console.log(`  - Firebase update thành công`);
+        console.log(`  - Bắt đầu xử lý tiếp theo...`);
       
       // Now add to Inventory
+      console.log(`📦 Thêm material vào Inventory: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Nhà cung cấp: ${material.supplier || 'Không có'}`);
+      console.log(`  - Số lượng: ${material.quantity} ${material.unit}`);
+      console.log(`  - Bắt đầu gọi addToInventory...`);
       this.addToInventory(material);
+      console.log(`✅ Đã gọi addToInventory cho ${material.materialCode}`);
       
       // Check batch completion only if we're in an active batch and this material belongs to it
       if (this.currentBatchNumber && material.batchNumber === this.currentBatchNumber) {
         console.log(`🔍 Kiểm tra hoàn thành lô hàng sau khi tick ${material.materialCode}`);
+        console.log(`  - Lô hàng hiện tại: ${this.currentBatchNumber}`);
+        console.log(`  - Material thuộc lô hàng: ${material.batchNumber}`);
+        console.log(`  - Bắt đầu gọi checkBatchCompletion...`);
         this.checkBatchCompletion();
+        console.log(`✅ Đã gọi checkBatchCompletion cho lô hàng ${this.currentBatchNumber}`);
       } else {
         console.log(`ℹ️ Không kiểm tra hoàn thành lô hàng - material không thuộc lô hàng hiện tại`);
+        console.log(`  - Lô hàng hiện tại: ${this.currentBatchNumber || 'Không có'}`);
+        console.log(`  - Material thuộc lô hàng: ${material.batchNumber || 'Không có'}`);
+        console.log(`  - Bỏ qua kiểm tra hoàn thành lô hàng`);
       }
       
-    }).catch((error) => {
-      console.error(`❌ Error saving received status to Firebase:`, error);
-      // Revert local state if Firebase update failed
-      material.isReceived = false;
-      target.checked = false;
-      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
-    });
-  }
+      // Log thông tin về trạng thái sau khi cập nhật
+      console.log(`📊 Trạng thái sau khi tick "đã nhận":`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - isReceived: ${material.isReceived}`);
+      console.log(`  - Bộ lọc trạng thái hiện tại: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      
+      // Log thông tin tổng quan về materials
+      console.log(`📊 Tổng quan materials sau khi cập nhật:`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
+      
+      // Log thông tin về kết quả xử lý
+      console.log(`✅ Hoàn thành xử lý tick "đã nhận" cho ${material.materialCode}`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian cập nhật: ${material.updatedAt.toLocaleString('vi-VN')}`);
+      
+      // Log thông tin về kết thúc process
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+              console.log(`🎯 Kết thúc xử lý onReceivedChange thành công cho ${material.materialCode}`);
+        console.log(`  - Material: ${material.materialCode}`);
+        console.log(`  - Lô hàng: ${material.batchNumber}`);
+        console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+        console.log(`  - Thời gian kết thúc: ${new Date().toLocaleString('vi-VN')}`);
+      console.log(`  - Timestamp kết thúc: ${endTime}`);
+      console.log(`  - Tổng thời gian xử lý: ${duration}ms`);
+      console.log(`  - Hiệu suất: ${duration < 1000 ? 'Tốt' : duration < 3000 ? 'Trung bình' : 'Chậm'}`);
+      
+      // Refresh display để cập nhật theo bộ lọc hiện tại
+      console.log(`🔄 Đang refresh display sau khi cập nhật trạng thái...`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Bắt đầu gọi applyFilters...`);
+      this.applyFilters();
+      console.log(`✅ Đã gọi applyFilters để refresh display`);
+      
+                }).catch((error) => {
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        console.error(`❌ Error saving received status to Firebase:`, error);
+        console.log(`🔄 Reverting local state due to Firebase error: ${material.materialCode}`);
+        console.log(`  - Error message: ${error.message}`);
+        console.log(`  - Error code: ${error.code || 'Không có'}`);
+        console.log(`  - Error details: ${JSON.stringify(error)}`);
+        console.log(`  - Bắt đầu revert trạng thái local...`);
+        
+        // Revert local state if Firebase update failed
+        material.isReceived = false;
+        target.checked = false;
+        
+        console.log(`✅ Đã revert trạng thái local cho ${material.materialCode}`);
+        console.log(`  - isReceived: false (reverted)`);
+        console.log(`  - target.checked: false (reverted)`);
+        
+        alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+        console.log(`📢 Đã hiển thị alert lỗi cho người dùng`);
+        console.log(`❌ Kết thúc xử lý onReceivedChange với lỗi cho ${material.materialCode}`);
+        console.log(`  - Thời gian xử lý: ${duration}ms`);
+        console.log(`  - Hiệu suất: ${duration < 1000 ? 'Tốt' : duration < 3000 ? 'Trung bình' : 'Chậm'}`);
+        console.log(`  - Đánh giá: ${duration < 1000 ? '🟢 Tốt' : duration < 3000 ? '🟡 Trung bình' : '🔴 Chậm'}`);
+        
+        // Log thông tin về kết thúc process với lỗi
+        console.log(`🏁 Kết thúc hoàn toàn onReceivedChange với lỗi cho ${material.materialCode}`);
+        console.log(`  - Material: ${material.materialCode}`);
+        console.log(`  - Lô hàng: ${material.batchNumber}`);
+        console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+        console.log(`  - Thời gian xử lý: ${duration}ms`);
+        console.log(`  - Kết quả: ❌ Thất bại`);
+        console.log(`  - Lý do: ${error.message}`);
+      });
+      
+      console.log(`✅ Hoàn thành xử lý onReceivedChange cho ${material.materialCode}`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian kết thúc: ${new Date().toLocaleString('vi-VN')}`);
+      console.log(`  - Tổng thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Hiệu suất: ${(Date.now() - startTime) < 1000 ? 'Tốt' : (Date.now() - startTime) < 3000 ? 'Trung bình' : 'Chậm'}`);
+      
+      // Log thông tin tổng quan về process
+      console.log(`📊 Tổng quan process onReceivedChange:`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian bắt đầu: ${new Date(startTime).toLocaleString('vi-VN')}`);
+      console.log(`  - Thời gian kết thúc: ${new Date().toLocaleString('vi-VN')}`);
+      console.log(`  - Tổng thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Hiệu suất: ${(Date.now() - startTime) < 1000 ? 'Tốt' : (Date.now() - startTime) < 3000 ? 'Trung bình' : 'Chậm'}`);
+      
+      // Log thông tin về kết quả cuối cùng
+      console.log(`🎯 Kết quả cuối cùng của onReceivedChange:`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
+      
+      // Log thông tin về performance
+      console.log(`⚡ Performance của onReceivedChange:`);
+      console.log(`  - Thời gian bắt đầu: ${new Date(startTime).toLocaleString('vi-VN')}`);
+      console.log(`  - Thời gian kết thúc: ${new Date().toLocaleString('vi-VN')}`);
+      console.log(`  - Tổng thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Hiệu suất: ${(Date.now() - startTime) < 1000 ? 'Tốt' : (Date.now() - startTime) < 3000 ? 'Trung bình' : 'Chậm'}`);
+      console.log(`  - Đánh giá: ${(Date.now() - startTime) < 1000 ? '🟢 Tốt' : (Date.now() - startTime) < 3000 ? '🟡 Trung bình' : '🔴 Chậm'}`);
+      
+      // Log thông tin về kết thúc process
+      console.log(`🏁 Kết thúc hoàn toàn onReceivedChange cho ${material.materialCode}`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Kết quả: ✅ Thành công`);
+      
+      // Log thông tin về summary
+      console.log(`📋 Summary của onReceivedChange:`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Kết quả: ✅ Thành công`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
+      
+      // Log thông tin về kết thúc process
+      console.log(`🏁 Kết thúc hoàn toàn onReceivedChange cho ${material.materialCode}`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Kết quả: ✅ Thành công`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
+      
+      // Log thông tin về kết thúc process
+      console.log(`🏁 Kết thúc hoàn toàn onReceivedChange cho ${material.materialCode}`);
+      console.log(`  - Material: ${material.materialCode}`);
+      console.log(`  - Lô hàng: ${material.batchNumber}`);
+      console.log(`  - Trạng thái cuối: isReceived = ${material.isReceived}`);
+      console.log(`  - Thời gian xử lý: ${Date.now() - startTime}ms`);
+      console.log(`  - Kết quả: ✅ Thành công`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${this.materials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tổng materials: ${this.materials.length}`);
+      console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
+    }
   
   private checkBatchCompletion(): void {
+    console.log(`🔍 Bắt đầu kiểm tra hoàn thành lô hàng...`);
+    console.log(`  - Lô hàng hiện tại: ${this.currentBatchNumber}`);
+    console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+    
     // Lấy tất cả materials của lô hàng hiện tại
     const batchMaterials = this.materials.filter(m => m.batchNumber === this.currentBatchNumber);
     
     console.log(`🔍 Kiểm tra hoàn thành lô hàng ${this.currentBatchNumber}:`);
-    console.log(`📦 Tổng materials trong lô: ${batchMaterials.length}`);
-    console.log(`✅ Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+    console.log(`  - Lô hàng: ${this.currentBatchNumber}`);
+    console.log(`  - Tổng materials trong lô: ${batchMaterials.length}`);
+    console.log(`  - Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+    console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
+    console.log(`  - Bộ lọc trạng thái hiện tại: ${this.statusFilter}`);
+    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
     
     // Chỉ hoàn thành khi TẤT CẢ materials trong lô hàng đã được tick "đã nhận"
     const allReceived = batchMaterials.every(m => m.isReceived);
     
+    console.log(`🔍 Logic kiểm tra hoàn thành:`);
+    console.log(`  - Tất cả materials đã nhận: ${allReceived}`);
+    console.log(`  - Số materials cần kiểm tra: ${batchMaterials.length}`);
+    console.log(`  - Số materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+    console.log(`  - Số materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
+    console.log(`  - Điều kiện hoàn thành: allReceived = ${allReceived} && batchMaterials.length > 0 = ${batchMaterials.length > 0}`);
+    console.log(`  - Kết quả kiểm tra: ${allReceived && batchMaterials.length > 0}`);
+    
     if (allReceived && batchMaterials.length > 0) {
       console.log(`🎉 Lô hàng ${this.currentBatchNumber} đã hoàn thành!`);
+      console.log(`  - Tất cả materials đã được tick "đã nhận"`);
+      console.log(`  - Bắt đầu xử lý hoàn thành lô hàng...`);
       
-      // Update all materials in the batch to completed status
-      batchMaterials.forEach(material => {
-        material.isCompleted = true;
-        material.updatedAt = new Date();
-        
-        // Update in Firebase
-        this.firestore.collection('inbound-materials').doc(material.id).update({
-          isCompleted: true,
-          updatedAt: material.updatedAt
-        });
-      });
+      // Tạo thông tin chi tiết về hoàn thành lô hàng
+      console.log(`📝 Tạo thông tin chi tiết cho alert hoàn thành lô hàng...`);
+      
+      let timeRangeInfo = '';
+      if (this.startDate && this.endDate) {
+        const start = new Date(this.startDate);
+        const end = new Date(this.endDate);
+        const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        timeRangeInfo = `\n📅 Khung thời gian hiện tại: ${this.startDate} đến ${this.endDate} (${daysDiff} ngày)`;
+        console.log(`  - Khung thời gian: ${this.startDate} đến ${this.endDate} (${daysDiff} ngày)`);
+      } else {
+        console.log(`  - Không có khung thời gian lọc`);
+      }
+      
+      let filterInfo = '';
+      switch (this.statusFilter) {
+        case 'received':
+          filterInfo = '\n🔍 Bộ lọc hiện tại: Đã Nhận (chỉ hiển thị materials đã nhận)';
+          break;
+        case 'pending':
+          filterInfo = '\n🔍 Bộ lọc hiện tại: Chưa Nhận (materials đã nhận sẽ bị ẩn)';
+          break;
+        case 'all':
+          filterInfo = '\n🔍 Bộ lọc hiện tại: Toàn Bộ (hiển thị tất cả materials)';
+          break;
+        default:
+          filterInfo = '\n🔍 Bộ lọc hiện tại: Chưa Nhận (materials đã nhận sẽ bị ẩn)';
+      }
+      
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Thông tin bộ lọc: ${filterInfo.replace('\n', '')}`);
       
       // Show completion message
-      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}`);
+      console.log(`📢 Hiển thị alert hoàn thành lô hàng...`);
+      console.log(`  - Lô hàng: ${this.currentBatchNumber}`);
+      console.log(`  - Tổng materials: ${batchMaterials.length}`);
+      console.log(`  - Materials đã nhận: ${batchMaterials.length}`);
       
-      // Refresh the display
+      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}${timeRangeInfo}${filterInfo}\n\n💡 Lưu ý: Materials đã nhận sẽ được ẩn khỏi bảng khi bộ lọc là "Chưa"`);
+      
+      // Refresh the display để cập nhật theo bộ lọc hiện tại
+      console.log(`🔄 Đang refresh display sau khi hoàn thành lô hàng...`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
       this.applyFilters();
-    } else {
-      console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
+      
+      // Log thông tin về trạng thái sau khi hoàn thành lô hàng
+      console.log(`📊 Trạng thái sau khi hoàn thành lô hàng ${this.currentBatchNumber}:`);
+      console.log(`  - Bộ lọc trạng thái hiện tại: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+      console.log(`  - Số materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
+      
+      // Log mô tả bộ lọc
+      let filterDescription = '';
+      switch (this.statusFilter) {
+        case 'received':
+          filterDescription = 'Chỉ hiển thị các mã hàng đã được tick "đã nhận"';
+          break;
+        case 'pending':
+          filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+          break;
+        case 'all':
+          filterDescription = 'Hiển thị tất cả mã hàng (đã nhận và chưa nhận)';
+          break;
+        default:
+          filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
+      }
+      console.log(`📝 Mô tả bộ lọc: ${filterDescription}`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Mô tả: ${filterDescription}`);
+      
+      // Log thông tin về số lượng materials sau khi hoàn thành lô hàng
+      console.log(`📊 Thống kê materials sau khi hoàn thành lô hàng:`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Mô tả bộ lọc: ${filterDescription}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+      console.log(`  - Số materials sẽ hiển thị: ${this.statusFilter === 'received' ? batchMaterials.filter(m => m.isReceived).length : this.statusFilter === 'pending' ? batchMaterials.filter(m => !m.isReceived).length : batchMaterials.length}`);
+      console.log(`  - Số materials sẽ bị ẩn: ${this.statusFilter === 'received' ? batchMaterials.filter(m => !m.isReceived).length : this.statusFilter === 'pending' ? batchMaterials.filter(m => m.isReceived).length : 0}`);
+      
+      // Log thông tin tổng quan về lô hàng
+      console.log(`📊 Tổng quan lô hàng ${this.currentBatchNumber}:`);
+      console.log(`  - Tổng materials: ${batchMaterials.length}`);
+      console.log(`  - Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+      console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
+      console.log(`  - Tỷ lệ hoàn thành: ${Math.round((batchMaterials.filter(m => m.isReceived).length / batchMaterials.length) * 100)}%`);
+      
+      // Log thông tin về bộ lọc hiện tại
+      console.log(`🔍 Thông tin bộ lọc hiện tại:`);
+      console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
+      console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+      console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
+      console.log(`  - Loại tìm kiếm: ${this.searchType}`);
+          } else {
+        console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
+        console.log(`  - Cần tick thêm ${batchMaterials.filter(m => !m.isReceived).length} materials nữa để hoàn thành lô hàng`);
+        console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).map(m => m.materialCode).join(', ')}`);
+        console.log(`  - Bộ lọc trạng thái hiện tại: ${this.statusFilter}`);
+        console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
+        
+                // Log thông tin tổng quan về lô hàng chưa hoàn thành
+        console.log(`📊 Tổng quan lô hàng ${this.currentBatchNumber} (chưa hoàn thành):`);
+        console.log(`  - Tổng materials: ${batchMaterials.length}`);
+        console.log(`  - Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+        console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
+        console.log(`  - Tỷ lệ hoàn thành: ${Math.round((batchMaterials.filter(m => m.isReceived).length / batchMaterials.length) * 100)}%`);
+      }
+      
+      console.log(`✅ Hoàn thành kiểm tra lô hàng ${this.currentBatchNumber}`);
+      console.log(`  - Kết quả: ${allReceived ? 'Hoàn thành' : 'Chưa hoàn thành'}`);
+      console.log(`  - Tổng materials: ${batchMaterials.length}`);
+      console.log(`  - Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
+      console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
     }
-  }
   
   // Scanner Mode Methods
   startScannerMode(): void {

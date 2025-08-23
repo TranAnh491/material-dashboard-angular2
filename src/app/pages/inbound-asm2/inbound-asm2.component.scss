@@ -526,6 +526,23 @@
   width: 100%; 
   padding: 4px 6px; 
   border-radius: 0; 
+  
+  // Special styling for number inputs to handle decimals better
+  &[type="number"] {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    
+    // Remove spinner arrows for better decimal input
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    &[type=number] {
+      -moz-appearance: textfield;
+    }
+  }
 }
 
 .editable-input:focus { 
@@ -974,8 +991,8 @@
   }
   
   .number-cell {
-    min-width: 70px;
-    width: 70px;
+    min-width: 90px;
+    width: 90px;
   }
   
   .location-cell {

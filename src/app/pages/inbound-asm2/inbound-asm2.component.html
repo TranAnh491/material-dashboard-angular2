@@ -249,6 +249,8 @@
                      class="editable-input" 
                      [(ngModel)]="material.quantity" 
                      (change)="updateMaterial(material)"
+                     step="0.01"
+                     min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số lượng'">
             </td>
@@ -297,6 +299,7 @@
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
                      (change)="updateMaterial(material)"
+                     step="0.01"
                      min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị'">

@@ -75,8 +75,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Dropdown management
   isDropdownOpen: boolean = false;
   
-  // Inventory materials for stock calculation
-  inventoryMaterials: any[] = [];
+  // REMOVED: inventoryMaterials - Không cần tính stock để scan nhanh
   
   constructor(
     private firestore: AngularFirestore,
@@ -89,7 +88,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('🏭 Outbound ASM2 component initialized');
     this.setupDefaultDateRange();
     this.loadMaterials();
-    this.loadInventoryMaterials(); // Load inventory để tính tồn kho
+    // REMOVED: loadInventoryMaterials() - Không cần tính stock để scan nhanh
     
     // Add click outside listener to close dropdown
     document.addEventListener('click', this.onDocumentClick.bind(this));
@@ -281,41 +280,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('✅ New outbound record created with ID:', docRef.id);
   }
 
-  // Load inventory materials để lấy số tồn kho chính xác
-  loadInventoryMaterials(): void {
-    console.log('📦 Loading ASM2 inventory materials for stock calculation with real-time listener...');
-    
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', this.selectedFactory)
-         .limit(1000)
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        this.inventoryMaterials = snapshot.map(doc => {
-          const data = doc.payload.doc.data() as any;
-          return {
-            id: doc.payload.doc.id,
-            materialCode: data.materialCode || '',
-            poNumber: data.poNumber || '',
-            quantity: data.quantity || 0,
-            unit: data.unit || '',
-            exported: data.exported || 0, // Add exported field
-            stock: data.stock || 0 // Add stock field
-          };
-        });
-        
-        console.log(`✅ Real-time update: Loaded ${this.inventoryMaterials.length} inventory materials for stock calculation`);
-        
-        // Force change detection to update stock display
-        this.cdr.detectChanges();
-      },
-      error: (error) => {
-        console.error('❌ Error loading inventory materials:', error);
-        console.log('⚠️ Will use fallback calculation method');
-      }
-    });
-  }
+  // REMOVED: loadInventoryMaterials() - Không cần tính stock để scan nhanh
   
   updatePagination(): void {
     this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
@@ -921,7 +886,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       
       // Update inventory stock
       console.log('📦 Starting inventory update...');
-      await this.updateInventoryStock(this.lastScannedData.materialCode, this.lastScannedData.poNumber, this.exportQuantity);
+      await this.updateInventoryExported(this.lastScannedData.materialCode, this.lastScannedData.poNumber, this.exportQuantity);
       console.log('✅ Inventory updated successfully');
       
       // Store data for success message
@@ -989,8 +954,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       await this.firestore.collection('outbound-materials').add(outboundRecord);
       console.log('✅ Outbound record created');
       
-      // Update inventory stock for ASM2
-      await this.updateInventoryStock(this.lastScannedData.materialCode, this.lastScannedData.poNumber, this.exportQuantity);
+      // Cập nhật cột "đã xuất" trong inventory
+      console.log('📦 Updating inventory exported quantity...');
+      await this.updateInventoryExported(this.lastScannedData.materialCode, this.lastScannedData.poNumber, this.exportQuantity);
+      console.log('✅ Inventory exported quantity updated successfully');
       
       // Reload data and reset scanner
       this.loadMaterials();
@@ -1005,103 +972,78 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
   
-  private async updateInventoryStock(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
+  /**
+   * Cập nhật cột "đã xuất" trong inventory khi quét outbound - LOGIC THÔNG MINH
+   * Tìm record có cùng materialCode + poNumber và cộng dồn vào cột exported
+   * KHÔNG BAO GIỜ reset về 0 - luôn cộng dồn vào số hiện tại (kể cả khi user sửa tay)
+   */
+  private async updateInventoryExported(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
     try {
-      console.log(`📦 Updating inventory stock for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
+      console.log(`🧠 SMART UPDATE: Updating inventory exported for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
       
-      // First, try to find by materialCode and factory
-      let inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+      // Tìm tất cả inventory items có cùng material code và PO (ASM2 only)
+      const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
         ref.where('materialCode', '==', materialCode)
+           .where('poNumber', '==', poNumber)
            .where('factory', '==', 'ASM2')
-           .limit(10)
+           .limit(50)
       ).get().toPromise();
-      
-      let inventoryDoc = null;
-      let inventoryData = null;
-      
-      if (inventoryQuery && !inventoryQuery.empty) {
-        // If multiple items found, try to match by PO number
-        if (inventoryQuery.docs.length > 1) {
-          console.log(`🔍 Found ${inventoryQuery.docs.length} inventory items for ${materialCode}, searching for PO match...`);
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            if (data.poNumber === poNumber) {
-              inventoryDoc = doc;
-              inventoryData = data;
-              console.log('✅ Found matching inventory item by PO:', data);
-              break;
-            }
-          }
-        } else {
-          // Single item found
-          inventoryDoc = inventoryQuery.docs[0];
-          inventoryData = inventoryDoc.data();
-          console.log('✅ Found single inventory item:', inventoryData);
-        }
-      }
-      
-      // If still no match, try broader search
-      if (!inventoryDoc) {
-        console.log('🔍 Trying broader inventory search...');
-        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('materialCode', '==', materialCode)
-             .limit(20)
-        ).get().toPromise();
+
+      if (!inventoryQuery || inventoryQuery.empty) {
+        console.log(`⚠️ Không tìm thấy inventory record cho ${materialCode} - ${poNumber}`);
+        console.log(`💡 Tạo mới inventory record với exported = ${exportQuantity}`);
         
-        if (inventoryQuery && !inventoryQuery.empty) {
-          console.log(`🔍 Found ${inventoryQuery.docs.length} inventory items across all factories`);
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            console.log(`  - Factory: ${data.factory}, PO: ${data.poNumber}, Stock: ${data.stock}`);
-          }
-          
-          // Use first ASM2 item or first available item
-          for (const doc of inventoryQuery.docs) {
-            const data = doc.data() as any;
-            if (data.factory === 'ASM2') {
-              inventoryDoc = doc;
-              inventoryData = data;
-              console.log('✅ Using ASM2 inventory item:', data);
-              break;
-            }
-          }
-          
-          if (!inventoryDoc && inventoryQuery.docs.length > 0) {
-            inventoryDoc = inventoryQuery.docs[0];
-            inventoryData = inventoryDoc.data() as any;
-            console.log('⚠️ Using first available inventory item (not ASM2):', inventoryData);
-          }
-        }
+        // Tạo mới inventory record nếu không tìm thấy
+        await this.createNewInventoryRecord(materialCode, poNumber, exportQuantity);
+        return;
       }
-      
-      if (!inventoryDoc || !inventoryData) {
-        throw new Error(`Không tìm thấy ${materialCode} trong inventory. Vui lòng kiểm tra dữ liệu inventory.`);
+
+      console.log(`📊 Tìm thấy ${inventoryQuery.docs.length} inventory records cần cập nhật`);
+
+      // Cập nhật từng record - LUÔN CỘNG DỒN
+      const batch = this.firestore.firestore.batch();
+      let totalUpdated = 0;
+      let totalExportedBefore = 0;
+      let totalExportedAfter = 0;
+
+      for (const doc of inventoryQuery.docs) {
+        const data = doc.data() as any;
+        const currentExported = Number(data.exported) || 0;
+        const newExported = currentExported + exportQuantity;
+        
+        totalExportedBefore += currentExported;
+        totalExportedAfter += newExported;
+
+        console.log(`  🧠 SMART UPDATE ${doc.id}:`);
+        console.log(`    - Exported hiện tại: ${currentExported}`);
+        console.log(`    - Số lượng mới: +${exportQuantity}`);
+        console.log(`    - Exported sau cập nhật: ${newExported}`);
+        console.log(`    - Ghi chú: ${data.notes || 'N/A'}`);
+
+        // Cập nhật với metadata chi tiết
+        batch.update(doc.ref, {
+          exported: newExported,
+          lastExportDate: new Date(),
+          lastUpdated: new Date(),
+          lastExportQuantity: exportQuantity, // Số lượng xuất lần cuối
+          exportHistory: this.updateExportHistory(data.exportHistory || [], exportQuantity), // Lịch sử xuất
+          notes: this.updateInventoryNotes(data.notes || '', exportQuantity, currentExported, newExported)
+        });
+
+        totalUpdated++;
       }
+
+      // Commit batch update
+      await batch.commit();
       
-      const currentStock = inventoryData.stock || 0;
-      const currentExported = inventoryData.exported || 0;
-      
-      console.log(`📊 Current inventory: Stock: ${currentStock}, Already Exported: ${currentExported}`);
-      
-      if (currentStock < exportQuantity) {
-        throw new Error(`Không đủ tồn kho! Hiện có: ${currentStock}, muốn xuất: ${exportQuantity}`);
-      }
-      
-      // Update inventory
-      const newStock = currentStock - exportQuantity;
-      const newExported = currentExported + exportQuantity;
-      
-      await this.firestore.collection('inventory-materials').doc(inventoryDoc.id).update({
-        stock: newStock,
-        exported: newExported,
-        updatedAt: new Date()
-      });
-      
-      console.log(`✅ Inventory updated: Stock: ${currentStock} → ${newStock}, Exported: ${currentExported} → ${newExported}`);
-      
+      console.log(`✅ SMART UPDATE hoàn tất: ${totalUpdated} inventory records`);
+      console.log(`📊 Tổng exported trước: ${totalExportedBefore} → Sau: ${totalExportedAfter}`);
+      console.log(`📦 Số lượng mới được cộng: +${exportQuantity} cho ${materialCode}-${poNumber}`);
+      console.log(`🧠 LOGIC: Luôn cộng dồn, không bao giờ reset về 0!`);
+
     } catch (error) {
-      console.error('❌ Error updating inventory stock:', error);
-      throw error;
+      console.error('❌ Error trong SMART UPDATE inventory exported:', error);
+      // Không throw error để không block quá trình scan
     }
   }
   
@@ -1308,7 +1250,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       
       // ⚠️ QUAN TRỌNG: Cập nhật inventory stock để trừ số lượng
       console.log('📦 Starting inventory update for batch material...');
-      await this.updateInventoryStock(materialData.materialCode, materialData.poNumber, materialData.quantity);
+      await this.updateInventoryExported(materialData.materialCode, materialData.poNumber, materialData.quantity);
       console.log('✅ Inventory updated for batch material');
       
       // No alert needed - just log to console for silent operation
@@ -1521,42 +1463,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
 
-  // Get current stock for a material from Inventory collection (VLOOKUP style + SUM)
-  getMaterialStock(material: OutboundMaterial): number {
-    // Tìm tất cả dòng có cùng mã + PO trong Inventory
-    const matchingInventoryItems = this.inventoryMaterials.filter(inv =>
-      inv.materialCode === material.materialCode &&
-      inv.poNumber === material.poNumber
-    );
-
-    if (matchingInventoryItems.length > 0) {
-      // Cộng tổng tất cả stock của cùng mã + PO
-      const totalStock = matchingInventoryItems.reduce((sum, item) => {
-        return sum + (Number(item.stock) || 0);
-      }, 0);
-      
-      console.log(`📊 Stock calculation for ${material.materialCode} - ${material.poNumber}:`);
-      console.log(`  - Found ${matchingInventoryItems.length} inventory items`);
-      console.log(`  - Individual stocks:`, matchingInventoryItems.map(item => item.stock));
-      console.log(`  - Total stock: ${totalStock}`);
-      
-      return totalStock;
-    }
-
-    // Nếu không tìm thấy trong inventory thì hiển thị 0
-    console.log(`❌ No inventory found for ${material.materialCode} - ${material.poNumber}`);
-    return 0;
-  }
-
-  // Get count of materials with negative stock
-  getNegativeStockCount(): number {
-    return this.materials.filter(material => this.getMaterialStock(material) < 0).length;
-  }
-
-  // Get count of materials with negative inventory (legacy function)
-  getNegativeInventoryCount(): number {
-    return this.getNegativeStockCount();
-  }
+  // REMOVED: Các method tính stock không còn cần thiết để scan nhanh
 
   // Manual barcode entry
   onManualScannerInput(): void {
@@ -1672,5 +1579,70 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       this.isEmployeeIdScanned = false;
       this.focusEmployeeInput();
     }
+  }
+
+  /**
+   * Tạo mới inventory record nếu không tìm thấy
+   */
+  private async createNewInventoryRecord(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
+    try {
+      const newInventoryRecord = {
+        factory: 'ASM2',
+        materialCode: materialCode,
+        poNumber: poNumber,
+        quantity: 0, // Chưa có số lượng nhập
+        exported: exportQuantity, // Số lượng đã xuất
+        unit: 'KG',
+        location: 'ASM2',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastExportDate: new Date(),
+        lastUpdated: new Date(),
+        lastExportQuantity: exportQuantity,
+        exportHistory: [{
+          date: new Date(),
+          quantity: exportQuantity,
+          source: 'outbound-scan',
+          notes: 'Tạo mới từ outbound scan'
+        }],
+        notes: `Tạo mới từ outbound scan - Xuất: ${exportQuantity}`
+      };
+
+      await this.firestore.collection('inventory-materials').add(newInventoryRecord);
+      console.log(`✅ Tạo mới inventory record: ${materialCode}-${poNumber} với exported = ${exportQuantity}`);
+      
+    } catch (error) {
+      console.error('❌ Error tạo mới inventory record:', error);
+    }
+  }
+
+  /**
+   * Cập nhật lịch sử xuất hàng
+   */
+  private updateExportHistory(history: any[], newExportQuantity: number): any[] {
+    const newEntry = {
+      date: new Date(),
+      quantity: newExportQuantity,
+      source: 'outbound-scan',
+      timestamp: Date.now()
+    };
+    
+    // Giữ tối đa 20 entries gần nhất
+    const updatedHistory = [newEntry, ...history].slice(0, 20);
+    return updatedHistory;
+  }
+
+  /**
+   * Cập nhật ghi chú inventory với thông tin xuất hàng
+   */
+  private updateInventoryNotes(currentNotes: string, newExportQuantity: number, oldExported: number, newExported: number): string {
+    const timestamp = new Date().toLocaleString('vi-VN');
+    const newNote = `[${timestamp}] Outbound scan: +${newExportQuantity} (${oldExported} → ${newExported})`;
+    
+    // Giữ ghi chú cũ và thêm ghi chú mới
+    const updatedNotes = currentNotes ? `${currentNotes}\n${newNote}` : newNote;
+    
+    // Giới hạn độ dài ghi chú để tránh quá dài
+    return updatedNotes.length > 500 ? updatedNotes.substring(0, 500) + '...' : updatedNotes;
   }
 }

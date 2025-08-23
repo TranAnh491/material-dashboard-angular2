@@ -104,6 +104,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   ) {}
 
   ngOnInit(): void {
+    console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
+    
     // Load catalog first for material names mapping
     this.loadCatalogFromFirebase().then(() => {
       console.log('📚 ASM1 Catalog loaded, inventory ready for search');
@@ -114,6 +116,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.loadInventoryAndSetupSearch();
     
     console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
+    console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
   }
 
   ngAfterViewInit(): void {
@@ -824,9 +827,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Load permissions
   loadPermissions(): void {
+    console.log('🔍 DEBUG: loadPermissions called');
+    
     this.tabPermissionService.canAccessTab('materials-asm1')
       .pipe(takeUntil(this.destroy$))
       .subscribe(canAccess => {
+        console.log(`🔍 DEBUG: Tab permission result for 'materials-asm1': ${canAccess}`);
+        
         // Set basic permissions based on tab access
         this.canView = canAccess;
         this.canEdit = canAccess;
@@ -1367,7 +1374,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Update methods for editing
   updateExported(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
+    console.log(`🔍 DEBUG: updateExported called for ${material.materialCode}`);
+    console.log(`🔍 DEBUG: canEdit = ${this.canEdit}`);
+    console.log(`🔍 DEBUG: material.exported = ${material.exported}`);
+    
+    if (!this.canEdit) {
+      console.log(`❌ DEBUG: Permission denied - canEdit = ${this.canEdit}`);
+      return;
+    }
     
     console.log(`🔄 Updating exported quantity for ${material.materialCode}: ${material.exported}`);
     
@@ -1421,11 +1435,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Update material in Firebase
   private updateMaterialInFirebase(material: InventoryMaterial): void {
-    if (!material.id) return;
+    console.log(`🔍 DEBUG: updateMaterialInFirebase called for ${material.materialCode}`);
+    console.log(`🔍 DEBUG: material.id = ${material.id}`);
+    
+    if (!material.id) {
+      console.log(`❌ DEBUG: No material ID - cannot save to Firebase`);
+      return;
+    }
     
     material.updatedAt = new Date();
     
     console.log(`💾 Saving to Firebase: ${material.materialCode} - Exported: ${material.exported}`);
+    console.log(`🔍 DEBUG: Full material object:`, material);
     
     // Prepare update data, only include defined values
     const updateData: any = {
@@ -1442,6 +1463,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (material.standardPacking !== undefined && material.standardPacking !== null) {
       updateData.standardPacking = material.standardPacking;
     }
+    
+    console.log(`🔍 DEBUG: Update data to Firebase:`, updateData);
     
     this.firestore.collection('inventory-materials').doc(material.id).update(updateData).then(() => {
       console.log(`✅ ASM1 Material updated successfully: ${material.materialCode}`);
@@ -2019,5 +2042,68 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.error('❌ Export error:', error);
       alert('Lỗi export: ' + error.message);
     }
+  }
+
+  // Test method để kiểm tra quyền truy cập
+  testPermissions(): void {
+    console.log('🔍 DEBUG: Testing permissions...');
+    console.log('🔍 DEBUG: Current permissions:', {
+      canView: this.canView,
+      canEdit: this.canEdit,
+      canExport: this.canExport,
+      canDelete: this.canDelete
+    });
+    
+    // Test factory access
+    this.factoryAccessService.getCurrentUserFactoryAccess().subscribe(factoryAccess => {
+      console.log('🔍 DEBUG: Factory access:', factoryAccess);
+    });
+    
+    // Test tab permissions
+    this.tabPermissionService.canAccessTab('materials-asm1').subscribe(canAccess => {
+      console.log('🔍 DEBUG: Tab permission for materials-asm1:', canAccess);
+    });
+  }
+
+  // Kiểm tra lịch sử xuất của material
+  checkExportHistory(material: InventoryMaterial): void {
+    console.log(`🔍 DEBUG: Checking export history for ${material.materialCode} - PO: ${material.poNumber}`);
+    console.log(`📊 Material details:`, {
+      id: material.id,
+      quantity: material.quantity,
+      exported: material.exported,
+      calculatedStock: this.calculateCurrentStock(material),
+      location: material.location
+    });
+
+    // Kiểm tra trong collection outbound-materials
+    this.firestore.collection('outbound-materials', ref => 
+      ref.where('materialCode', '==', material.materialCode)
+         .where('poNumber', '==', material.poNumber)
+         .where('factory', '==', 'ASM1')
+         .orderBy('exportDate', 'desc')
+         .limit(10)
+    ).get().subscribe(snapshot => {
+      console.log(`📦 Found ${snapshot.docs.length} outbound records for ${material.materialCode} - ${material.poNumber}`);
+      
+      snapshot.docs.forEach((doc, index) => {
+        const data = doc.data() as any;
+        console.log(`  ${index + 1}. Export: ${data.exportQuantity} on ${data.exportDate?.toDate?.() || data.exportDate}`);
+      });
+    });
+
+    // Kiểm tra trong collection inventory-materials
+    this.firestore.collection('inventory-materials', ref => 
+      ref.where('materialCode', '==', material.materialCode)
+         .where('poNumber', '==', material.poNumber)
+         .where('factory', '==', 'ASM1')
+    ).get().subscribe(snapshot => {
+      console.log(`📋 Found ${snapshot.docs.length} inventory records for ${material.materialCode} - ${material.poNumber}`);
+      
+      snapshot.docs.forEach((doc, index) => {
+        const data = doc.data() as any;
+        console.log(`  ${index + 1}. ID: ${doc.id}, Exported: ${data.exported}, Stock: ${data.stock}, Updated: ${data.updatedAt?.toDate?.() || data.updatedAt}`);
+      });
+    });
   }
 }

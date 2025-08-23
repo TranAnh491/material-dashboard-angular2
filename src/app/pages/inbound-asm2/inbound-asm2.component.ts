@@ -634,16 +634,16 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       const getNumberValue = (index: number): number => {
         const value = row[index];
         if (value === null || value === undefined || value === '') return 0;
-        // Parse as number and convert to integer (no decimal points)
+        // Parse as number and allow decimal points for quantity
         const num = Number(value);
-        return isNaN(num) ? 0 : Math.floor(num);
+        return isNaN(num) ? 0 : num; // Allow decimal numbers
       };
 
       // Map only the 6 essential columns from template
       const lotNumber = getValue(0);         // LÔ HÀNG/ DNNK
       const materialCode = getValue(1);      // MÃ HÀNG
       const poNumber = getValue(2);          // SỐ P.O
-      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (whole number only)
+      const quantity = getNumberValue(3);    // LƯỢNG NHẬP (allows decimal numbers)
       const type = getValue(4);              // LOẠI HÌNH
       const supplier = getValue(5);          // NHÀ CUNG CẤP
 
@@ -1304,8 +1304,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       ['LÔ HÀNG/ DNNK', 'MÃ HÀNG', 'SỐ P.O', 'LƯỢNG NHẬP', 'LOẠI HÌNH', 'NHÀ CUNG CẤP'],
-      ['RM2-B001', 'RM2-MAT001', 'RM2-PO001', 100, 'Raw Material', 'Supplier A'],
-      ['RM2-B002', 'RM2-MAT002', 'RM2-PO002', 50, 'Raw Material', 'Supplier B']
+      ['RM2-B001', 'RM2-MAT001', 'RM2-PO001', 100.5, 'Raw Material', 'Supplier A'],
+      ['RM2-B002', 'RM2-MAT002', 'RM2-PO002', 50.25, 'Raw Material', 'Supplier B']
     ];
     
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);

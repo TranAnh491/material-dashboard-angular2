@@ -4,7 +4,7 @@
     <!-- Excel-like Header -->
     <div class="excel-header">
       <h4>📤 Outbound Materials</h4>
-      <p>Lịch sử xuất hàng từ kho</p>
+      <p>Lịch sử xuất hàng từ kho - Tự động ẩn lịch sử cũ mỗi ngày mới</p>
     </div>
 
     <!-- Excel-like Actions -->
@@ -56,6 +56,12 @@
               <i class="material-icons">refresh</i>
               Làm mới dữ liệu
             </a></li>
+            <li><a class="dropdown-item" href="#" (click)="cleanupPreviousDayRecords()" 
+                   [class.disabled]="!hidePreviousDayHistory"
+                   title="{{ hidePreviousDayHistory ? 'Xóa dữ liệu ngày hôm qua' : 'Chỉ có thể xóa khi đã ẩn lịch sử cũ' }}">
+              <i class="material-icons">cleaning_services</i>
+              Xóa dữ liệu cũ
+            </a></li>
           </ul>
         </div>
         
@@ -96,6 +102,28 @@
                [(ngModel)]="endDate"
                (change)="applyDateRangeFilter()"
                class="date-input">
+        
+        <!-- Toggle for hiding previous day's scan history -->
+        <div class="history-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" 
+                   [(ngModel)]="hidePreviousDayHistory"
+                   (change)="toggleHidePreviousDayHistory()"
+                   class="toggle-checkbox">
+            <span class="toggle-text">
+              <i class="material-icons">{{ hidePreviousDayHistory ? 'visibility_off' : 'visibility' }}</i>
+              {{ hidePreviousDayHistory ? 'Ẩn lịch sử cũ' : 'Hiện tất cả' }}
+            </span>
+          </label>
+        </div>
+        
+        <!-- Reset to today button -->
+        <button class="today-btn" 
+                (click)="resetToToday()"
+                title="Reset về ngày hôm nay">
+          <i class="material-icons">today</i>
+          Hôm nay
+        </button>
       </div>
     </div>
 

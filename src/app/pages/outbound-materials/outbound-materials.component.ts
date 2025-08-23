@@ -43,6 +43,9 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   endDate: Date = new Date();
   
+  // Auto-hide previous day's scan history
+  hidePreviousDayHistory: boolean = true;
+  
   // Loading state
   isLoading = false;
   
@@ -61,11 +64,45 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.setupDefaultDateRange();
     this.loadOutboundMaterialsFromFirebase();
     this.cleanupOldRecords(); // Clean up records older than 6 months
     
     // Load factory access and set default factory
     this.loadFactoryAccess();
+    
+    // Set up daily auto-update for date range
+    this.setupDailyAutoUpdate();
+  }
+  
+  // Setup default date range to today only
+  private setupDefaultDateRange(): void {
+    const today = new Date();
+    this.startDate = today;
+    this.endDate = today;
+    console.log('📅 Default date range set to today only');
+  }
+  
+  // Setup daily auto-update for date range
+  private setupDailyAutoUpdate(): void {
+    // Check if it's a new day and update date range accordingly
+    const today = new Date();
+    const currentDate = today.toDateString();
+    
+    // If it's a new day, update the date range
+    if (this.startDate.toDateString() !== currentDate) {
+      this.startDate = today;
+      this.endDate = today;
+      console.log('📅 New day detected, updated date range to today');
+      
+      // Reapply filters to hide previous day's history
+      if (this.hidePreviousDayHistory) {
+        this.applyFilters();
+        console.log('📅 Previous day\'s scan history automatically hidden');
+      }
+    }
+    
+    console.log('📅 Daily auto-update setup completed');
   }
 
   ngOnDestroy(): void {
@@ -372,6 +409,20 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         if (!matchesSearch) return false;
       }
       
+      // Auto-hide previous day's scan history
+      if (this.hidePreviousDayHistory) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Start of today
+        
+        const exportDate = new Date(material.exportDate);
+        exportDate.setHours(0, 0, 0, 0); // Start of export date
+        
+        // Hide records from previous days
+        if (exportDate < today) {
+          return false;
+        }
+      }
+      
       // Filter by date range
       if (this.startDate && this.endDate) {
         const exportDate = new Date(material.exportDate);
@@ -389,6 +440,12 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
     
     // Sort by export date (newest first)
     this.filteredOutbound.sort((a, b) => new Date(b.exportDate).getTime() - new Date(a.exportDate).getTime());
+    
+    // Log filter results
+    console.log(`🔍 Filter applied: ${this.filteredOutbound.length}/${this.outboundMaterials.length} records shown`);
+    if (this.hidePreviousDayHistory) {
+      console.log(`📅 Previous day's scan history is hidden`);
+    }
   }
 
   // Search change handler
@@ -399,6 +456,35 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
 
   // Date range filter
   applyDateRangeFilter(): void {
+    // Check if user selected today's date
+    const today = new Date();
+    const startDate = new Date(this.startDate);
+    const endDate = new Date(this.endDate);
+    
+    // If user selects today, automatically hide previous day's history
+    if (startDate.toDateString() === today.toDateString() && 
+        endDate.toDateString() === today.toDateString()) {
+      this.hidePreviousDayHistory = true;
+      console.log('📅 User selected today, automatically hiding previous day\'s history');
+    }
+    
+    this.applyFilters();
+  }
+  
+  // Toggle auto-hide previous day's scan history
+  toggleHidePreviousDayHistory(): void {
+    this.hidePreviousDayHistory = !this.hidePreviousDayHistory;
+    console.log(`📅 Auto-hide previous day's scan history: ${this.hidePreviousDayHistory ? 'ON' : 'OFF'}`);
+    this.applyFilters();
+  }
+  
+  // Reset to today's date
+  resetToToday(): void {
+    const today = new Date();
+    this.startDate = today;
+    this.endDate = today;
+    this.hidePreviousDayHistory = true;
+    console.log('📅 Reset to today\'s date and hide previous day\'s history');
     this.applyFilters();
   }
 
@@ -445,6 +531,44 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
         });
       } else {
         console.log('No old records to clean up');
+      }
+    });
+  }
+  
+  // Clean up previous day's records (optional - more aggressive cleanup)
+  cleanupPreviousDayRecords(): void {
+    if (!this.hidePreviousDayHistory) {
+      console.log('⚠️ Cannot cleanup previous day records when history is visible');
+      return;
+    }
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+    
+    console.log('🧹 Cleaning up previous day\'s outbound records:', yesterday);
+    
+    this.firestore.collection('outbound-materials', ref => 
+      ref.where('exportDate', '<', yesterday)
+    ).get().subscribe(snapshot => {
+      const batch = this.firestore.firestore.batch();
+      let deletedCount = 0;
+      
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        deletedCount++;
+      });
+      
+      if (deletedCount > 0) {
+        batch.commit().then(() => {
+          console.log(`🧹 Deleted ${deletedCount} previous day outbound records`);
+          // Reload materials after cleanup
+          this.loadOutboundMaterialsFromFirebase();
+        }).catch(error => {
+          console.error('Error cleaning up previous day records:', error);
+        });
+      } else {
+        console.log('🧹 No previous day records to clean up');
       }
     });
   }

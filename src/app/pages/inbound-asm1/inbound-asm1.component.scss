@@ -670,8 +670,8 @@ iframe {
   }
   
   .number-cell {
-    min-width: 80px;
-    width: 80px;
+    min-width: 90px;
+    width: 90px;
   }
   
   .batch-cell {
@@ -798,6 +798,23 @@ iframe {
     outline: none;
     border: none;
     background: #e8e8e8;
+  }
+  
+  // Special styling for number inputs to handle decimals better
+  &[type="number"] {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    
+    // Remove spinner arrows for better decimal input
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    &[type=number] {
+      -moz-appearance: textfield;
+    }
   }
 }
 
@@ -1390,15 +1407,9 @@ iframe {
   }
 }
 
-// Completed row styling
-.completed-row {
-  background-color: #fef3c7 !important;
-  
-  .status-cell input[type="checkbox"] {
-    background-color: #f59e0b;
-    border-color: #f59e0b;
-  }
-}
+
+
+
 
 // Responsive adjustments
 @media (max-width: 1200px) {

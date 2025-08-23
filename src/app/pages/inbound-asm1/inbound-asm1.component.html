@@ -3,7 +3,7 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>�� INBOUND ASM1</h4>
+      <h4><i class="material-icons">inbox</i> INBOUND ASM1</h4>
       
       <!-- Batch Filter Indicator -->
       <div class="batch-filter-indicator" *ngIf="currentBatchNumber && currentBatchNumber.trim() !== ''">
@@ -127,7 +127,8 @@
                     [(ngModel)]="statusFilter" 
                     (change)="changeStatusFilter($event.target.value)">
               <option value="pending">Chưa</option>
-              <option value="completed">Hoàn Thành</option>
+              <option value="received">Đã Nhận</option>
+              <option value="all">Toàn Bộ</option>
             </select>
           </div>
           
@@ -206,7 +207,7 @@
             <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
             <!-- <th class="employee-cell">MSNV</th> -->
             <!-- <th class="time-cell">THỜI GIAN</th> -->
-            <th class="action-cell">HOÀN THÀNH</th>
+            <!-- Cột HOÀN THÀNH đã được xóa vì không có chức năng -->
             <th class="action-cell">XÓA</th>
             <th class="action-cell">QR</th>
           </tr>
@@ -214,7 +215,7 @@
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index" 
               [class.received-row]="material.isReceived"
-              [class.completed-row]="material.isCompleted">
+                              >
             <td class="factory-cell factory-asm1">
               ASM1
             </td>
@@ -251,6 +252,8 @@
                      class="editable-input" 
                      [(ngModel)]="material.quantity" 
                      (change)="updateMaterial(material)"
+                     step="0.01"
+                     min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số lượng'">
             </td>
@@ -299,6 +302,7 @@
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
                      (change)="updateMaterial(material)"
+                     step="0.01"
                      min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị'">
@@ -333,14 +337,7 @@
              <td class="time-cell">
                <span class="time-display">{{ getTimeDisplay(material) }}</span>
              </td> -->
-             <td class="status-cell">
-               <button class="action-btn complete-btn" 
-                       (click)="material.isCompleted = true; updateMaterial(material)" 
-                       [disabled]="material.isCompleted || !canEditMaterials || !canEditInBatch(material)"
-                       [title]="getCompleteButtonTitle(material)">
-                 <i class="material-icons">check_circle</i>
-               </button>
-             </td>
+             <!-- Cột HOÀN THÀNH đã được xóa vì không có chức năng -->
             <td class="status-cell">
               <button class="action-btn delete-btn" 
                       (click)="deleteMaterial(material)" 
