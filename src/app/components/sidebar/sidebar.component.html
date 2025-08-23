@@ -22,7 +22,7 @@
         <ul class="nav">
           <li routerLinkActive="active" *ngFor="let child of menuItem.children" class="nav-item">
             <a class="nav-link" [routerLink]="[child.path]">
-              <i class="material-icons" style="font-size: 1rem; margin-right: 10px;">{{child.icon}}</i>
+              <span class="child-icon">{{child.icon}}</span>
               <span class="sidebar-normal">{{child.title}}</span>
             </a>
           </li>

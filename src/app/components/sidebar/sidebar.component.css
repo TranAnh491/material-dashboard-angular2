@@ -116,7 +116,7 @@
   align-items: center;
   min-height: 44px;
   padding: 0 22px;
-  font-size: 1.04em;
+  font-size: 0.85em; /* Reduced font size for all tabs */
   color: #26334d;
   border-radius: 11px;
   text-decoration: none;
@@ -126,24 +126,64 @@
   cursor: pointer;
 }
 
-.nav > li > a:hover,
-.nav > li > a.active {
-  background: #fff3e0;
-  color: #ff9800;
-  box-shadow: 0 1px 6px rgba(255, 152, 0, 0.3);
+/* Special styling for ASM1 RM parent tab to match child font size */
+.nav > li.asm1-rm-parent > a {
+  font-size: 0.85em !important; /* Same font size as child tabs */
+}
+
+.nav > li.asm1-rm-parent > a p {
+  font-size: 0.85em !important; /* Ensure the text inside also has the same size */
+}
+
+.nav > li.asm1-rm-parent > a .material-icons {
+  font-size: 18px !important; /* Smaller icon size to match smaller text */
+  min-width: 22px !important; /* Adjust width accordingly */
+}
+
+/* Special styling for ASM2 RM parent tab to match child font size */
+.nav > li.asm2-rm-parent > a {
+  font-size: 0.85em !important; /* Same font size as child tabs */
+}
+
+.nav > li.asm2-rm-parent > a p {
+  font-size: 0.85em !important; /* Ensure the text inside also has the same size */
+}
+
+.nav > li.asm2-rm-parent > a .material-icons {
+  font-size: 18px !important; /* Smaller icon size to match smaller text */
+  min-width: 22px !important; /* Adjust width accordingly */
+}
+
+.nav > li > a:hover {
+  background: #00bcd4; /* Blue background for hover state */
+  color: #ffffff; /* White text for better contrast */
+  box-shadow: 0 1px 6px rgba(0, 188, 212, 0.3);
+}
+
+.nav > li > a.active,
+.nav > li.active > a,
+.nav > li.nav-item.active > a {
+  background: #00bcd4 !important; /* Blue background for active state - must persist */
+  color: #ffffff !important; /* White text for better contrast */
+  box-shadow: 0 1px 6px rgba(0, 188, 212, 0.3) !important;
 }
 
 .nav > li > a .material-icons {
   margin-right: 14px;
-  font-size: 23px;
-  min-width: 28px;
+  font-size: 18px; /* Reduced icon size for all tabs */
+  min-width: 22px; /* Adjusted width accordingly */
   color: #5d6c88;
   transition: color 0.18s;
 }
 
-.nav > li > a.active .material-icons,
 .nav > li > a:hover .material-icons {
-  color: #ff9800;
+  color: #ffffff; /* White icon color for hover state */
+}
+
+.nav > li > a.active .material-icons,
+.nav > li.active > a .material-icons,
+.nav > li.nav-item.active > a .material-icons {
+  color: #ffffff !important; /* White icon color for active state - must persist */
 }
 
 .nav > li > a span {
@@ -158,7 +198,18 @@
   font-size: 20px;
   margin-left: auto;
   color: #a1b1d1;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, color 0.18s ease;
+  cursor: pointer;
+}
+
+.nav > li > a:hover .expand-icon {
+  color: #ffffff; /* White arrow color for hover state */
+}
+
+.nav > li > a.active .expand-icon,
+.nav > li.active > a .expand-icon,
+.nav > li.nav-item.active > a .expand-icon {
+  color: #ffffff !important; /* White arrow color for active state - must persist */
 }
 
 .nav .expand-icon.rotated {
@@ -168,6 +219,7 @@
 .nav > li > a p {
   flex-grow: 1;
   margin: 0;
+  font-size: 0.85em; /* Ensure text inside also has the same size */
 }
 
 .nav > li > a .caret {
@@ -261,33 +313,67 @@
 /* Styling for submenu items (children tabs) */
 .collapse .nav li a {
   font-size: 0.85em !important; /* Smaller text than parent */
-  padding: 4px 15px 4px 35px !important; /* Reduced padding with extra left padding for indentation */
+  padding: 4px 15px 4px 22px !important; /* Same left padding as parent, no indentation */
+  display: flex !important;
+  align-items: center !important;
+  padding-left: 22px !important; /* Align with parent icon, not parent text */
+  position: relative !important;
 }
 
-.collapse .nav li a .material-icons {
-  font-size: 16px !important; /* Smaller icon than parent (parent is 23px) */
-  margin-right: 8px !important; /* Reduced margin */
+.collapse .nav li a .child-icon {
+  font-size: 14px !important; /* Size for text abbreviations */
+  margin-right: 14px !important; /* Same margin as parent icon */
+  font-weight: bold !important; /* Make abbreviations bold */
+  color: #8ba1be !important; /* Default color for child icons */
+  min-width: 22px !important; /* Match parent icon width */
+  text-align: center !important; /* Center the text */
+  display: inline-block !important;
+  flex-shrink: 0 !important; /* Prevent shrinking */
+  margin-left: 0 !important; /* Ensure no left margin */
+  position: absolute !important; /* Position absolutely */
+  left: 22px !important; /* Align exactly with parent icon */
+  margin-right: 14px !important; /* Same margin as parent icon */
 }
 
 .collapse .nav li a .sidebar-normal {
   font-size: 0.85em !important; /* Ensure text is smaller */
+  flex: 1 !important; /* Take remaining space */
+  margin-left: 42px !important; /* Space for child-icon (28px) + margin-right (14px) */
 }
 
-/* Orange styling for submenu active/hover */
-.collapse .nav li a:hover,
-.collapse .nav li a.active {
-  background: #fff3e0 !important;
-  color: #ff9800 !important;
+/* Blue styling for submenu active/hover */
+.collapse .nav li a:hover {
+  background: #00bcd4 !important; /* Blue background for hover state */
+  color: #ffffff !important; /* White text for better contrast */
 }
 
-.collapse .nav li a:hover .material-icons,
-.collapse .nav li a.active .material-icons {
-  color: #ff9800 !important;
+.collapse .nav li a.active,
+.collapse .nav li.active > a,
+.collapse .nav li.nav-item.active > a {
+  background: #00bcd4 !important; /* Blue background for active state - must persist */
+  color: #ffffff !important; /* White text for better contrast */
+}
+
+.collapse .nav li a:hover .child-icon {
+  color: #ffffff !important; /* White icon color for hover state */
+}
+
+.collapse .nav li a.active .child-icon,
+.collapse .nav li.active > a .child-icon,
+.collapse .nav li.nav-item.active > a .child-icon {
+  color: #ffffff !important; /* White icon color for active state - must persist */
 }
 
 /* Reduce spacing in submenu */
 .collapse .nav li {
   margin-bottom: 1px !important;
+  margin-left: 0 !important; /* Ensure no left margin for alignment */
+}
+
+.collapse .nav {
+  margin-left: 0 !important; /* Ensure submenu container has no left margin */
+  padding-left: 0 !important; /* Ensure submenu container has no left padding */
+  width: 100% !important; /* Ensure full width */
 }
 
 .collapse {

@@ -10,13 +10,29 @@ export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'inventory_2', class: '' },
-  { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'inventory_2', class: '' },
-  { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'inventory_2', class: '' },
-  { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'inventory_2', class: '' },
-  { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', class: '' },
-  { path: '/inventory-overview-asm1', title: 'RM1 Inventory Overview', icon: 'visibility', class: '' },
-  { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', class: '' },
+  { 
+    path: '', 
+    title: 'ASM1 RM', 
+    icon: 'inventory', 
+    class: 'asm1-rm-parent',
+    children: [
+      { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'IB', class: '' },
+      { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'OB', class: '' },
+      { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'IV', class: '' },
+      { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' }
+    ]
+  },
+  { 
+    path: '', 
+    title: 'ASM2 RM', 
+    icon: 'inventory', 
+    class: 'asm2-rm-parent',
+    children: [
+      { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'IB', class: '' },
+      { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'OB', class: '' },
+      { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' }
+    ]
+  },
   { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
   { path: '/label', title: 'Label', icon: 'label', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
