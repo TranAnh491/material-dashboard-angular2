@@ -42,6 +42,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { SharedModule } from '../../shared/shared.module';
+import { InventoryOverviewASM1Module } from '../../pages/inventory-overview-asm1/inventory-overview-asm1.module';
 
 // Các component materials mới
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
@@ -100,7 +101,8 @@ import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-in
     MatChipsModule,
     MatSlideToggleModule,
     DragDropModule,
-    SharedModule
+    SharedModule,
+    InventoryOverviewASM1Module
   ],
   declarations: [
     DashboardComponent,

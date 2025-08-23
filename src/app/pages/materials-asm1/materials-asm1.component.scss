@@ -15,6 +15,63 @@
   }
 }
 
+// Styling for read-only exported column
+.readonly-cell {
+  background-color: #f8f9fa !important;
+  color: #495057 !important;
+  font-weight: 500;
+  text-align: center;
+  border: 1px solid #dee2e6;
+  padding: 8px 12px;
+  min-width: 120px;
+  
+  &:hover {
+    background-color: #e9ecef !important;
+  }
+}
+
+// Styling for XT column to match exported column width
+.xt-column {
+  min-width: 120px;
+  width: 120px;
+}
+
+// Styling for new buttons (kept for backward compatibility)
+.sync-outbound-btn {
+  margin-left: 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  }
+}
+
+.sync-outbound-all-btn {
+  background: linear-gradient(135deg, #28a745, #20c997) !important;
+  color: white !important;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+  
+  &:hover {
+    background: linear-gradient(135deg, #218838, #1ea080) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(40, 167, 69, 0.3);
+  }
+}
+
 // ASM1 minimal white/black theme
 .excel-header h4 {
   color: #000000; // Pure black text
@@ -448,15 +505,39 @@
   }
 }
 
+// Cột Loại Hình - kích thước bằng cột Vị trí
+.type-cell {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  text-align: center;
+  padding: 4px 6px;
+  font-weight: 500;
+}
+
 // Horizontal Layout Styles - Copy from inbound
 .action-controls-horizontal {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 16px;
+  padding: 12px 16px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   flex-wrap: wrap;
+  
+  // Đảm bảo negative-stock-counter-box hiển thị đẹp ở vị trí mới
+  .negative-stock-counter-box {
+    order: 1; // Đặt thứ tự hiển thị
+    flex-shrink: 0; // Không cho phép co lại
+  }
+  
+  .more-btn {
+    order: 2; // Đặt thứ tự hiển thị
+  }
+  
+  .total-counter-box {
+    order: 3; // Đặt thứ tự hiển thị
+  }
 }
 
 // More Button styling
@@ -464,25 +545,29 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: #6b7280;
   color: white;
   border: none;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s;
-  height: 32px; // Fixed height to match filter buttons
+  transition: all 0.3s ease;
+  height: 36px; // Đồng bộ với các button khác
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 4px rgba(107, 114, 128, 0.2);
   
   &:hover {
     background: #4b5563;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(107, 114, 128, 0.3);
   }
   
   i {
-    font-size: 16px;
+    font-size: 18px;
   }
 }
 
@@ -492,25 +577,63 @@
 .total-counter-box {
   background: #ffffff;
   color: #000000;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
   min-width: 140px;
   text-align: center;
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 36px; // Đồng bộ với negative-stock-counter-box
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
   
   i {
-    font-size: 16px;
+    font-size: 18px;
     color: #000000;
   }
   
   span {
     white-space: nowrap;
     font-weight: 600;
+  }
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  // Clickable state
+  &.clickable {
+    cursor: pointer;
+    
+    &:hover {
+      background: #f8f9fa;
+      border-color: #3b82f6;
+    }
+    
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  }
+  
+  // Active filter state (showing only negative stock)
+  &.active-filter {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1e40af;
+    
+    i {
+      color: #1e40af;
+    }
+    
+    &:hover {
+      background: #bfdbfe;
+    }
   }
 }
 
@@ -687,28 +810,31 @@
 
 }
 
-// Negative stock counter box
+// Negative stock counter box - Di chuyển lên trên cùng để lấp đầy khoảng trống header
 .negative-stock-counter-box {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: #fef3c7; // Light yellow background
   color: #92400e; // Dark orange text
   border: 1px solid #f59e0b; // Orange border
-  border-radius: 4px;
-  font-weight: 500;
-  font-size: 12px;
-  height: 32px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  height: 36px;
   transition: all 0.3s ease;
+  margin-right: 12px;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
   
   i {
-    font-size: 16px;
+    font-size: 18px;
     color: #f59e0b; // Orange icon
   }
   
   span {
     white-space: nowrap;
+    font-weight: 600;
   }
   
   // When there are negative stocks
@@ -716,9 +842,19 @@
     background: #ffebee; // Light red background
     color: #d32f2f; // Dark red text
     border-color: #f44336; // Red border
+    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
     
     i {
       color: #f44336; // Red icon
+    }
+  }
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+    
+    &.has-negative {
+      box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
     }
   }
 }
@@ -803,16 +939,28 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
   
   &:hover {
     background: #f5f5f5;
+    transform: translateY(-1px);
   }
+}
+
+
+
+// Scan button specific styling
+.scan-change-btn {
+  color: #2196F3;
+  font-weight: 600;
   
-  i {
-    font-size: 18px;
-    color: #666;
+  &:hover {
+    background: #e3f2fd;
+    color: #1976d2;
   }
 }
 

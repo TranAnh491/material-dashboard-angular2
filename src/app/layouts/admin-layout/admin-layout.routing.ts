@@ -23,6 +23,7 @@ import { OutboundMaterialsComponent } from '../../pages/outbound-materials/outbo
 
 import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
 import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
+import { InventoryOverviewASM1Component } from '../../pages/inventory-overview-asm1/inventory-overview-asm1.component';
 import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
 import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.component';
 import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
@@ -49,6 +50,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard] },
   { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard] },
   { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard] },
+  { path: 'inventory-overview-asm1', component: InventoryOverviewASM1Component, canActivate: [AuthGuard] },
   { path: 'inbound-asm1',         component: InboundASM1Component, canActivate: [AuthGuard] },
   { path: 'inbound-asm2',         component: InboundASM2Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },

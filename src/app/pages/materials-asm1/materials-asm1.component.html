@@ -62,10 +62,19 @@
           </div>
         </div>
         
-
+        <!-- Negative Stock Counter Box - Di chuyển lên trên cùng -->
+        <div class="negative-stock-counter-box" 
+             [class.has-negative]="(negativeStockCount$ | async) > 0"
+             [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+          <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+          <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
+        </div>
         
-        <!-- Total Counter Box -->
-        <div class="total-counter-box">
+        <!-- Total Counter Box - Clickable to filter negative stock -->
+        <div class="total-counter-box clickable" 
+             (click)="toggleNegativeStockFilter()"
+             [class.active-filter]="showOnlyNegativeStock"
+             [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
           <i class="material-icons">inventory_2</i>
           <span>Tổng: {{ filteredInventory.length }} mã</span>
         </div>
@@ -130,28 +139,18 @@
           Refresh
         </button>
 
-        <!-- Test Permissions Button -->
-        <button class="test-btn" (click)="testPermissions()" style="background: #ff9800; color: white; margin-left: 10px;">
-          <i class="material-icons">bug_report</i>
-          Test Permissions
-        </button>
-          <button class="sync-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound ASM1">
+
+                    <button class="sync-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound ASM1">
             <i class="material-icons">sync</i>
-            Sync
           </button>
+
           <button class="reset-btn" (click)="resetZeroStock()" title="Xóa hàng có tồn kho = 0">
             <i class="material-icons">restart_alt</i>
             Reset
           </button>
+          
 
-        </div>
-        
-        <!-- Negative Stock Counter Box -->
-        <div class="negative-stock-counter-box" 
-             [class.has-negative]="getNegativeStockCount() > 0"
-             [title]="getNegativeStockCount() > 0 ? 'Có ' + getNegativeStockCount() + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
-          <i class="material-icons">{{ getNegativeStockCount() > 0 ? 'warning' : 'check_circle' }}</i>
-          <span>{{ getNegativeStockCount() > 0 ? 'Mã âm: ' + getNegativeStockCount() : 'Tồn kho OK' }}</span>
+
         </div>
         
         <!-- Catalog Ready Icon -->
@@ -182,10 +181,11 @@
             <th>Mã hàng</th>
             <th>PO</th>
             <th>Số lượng</th>
-            <th>Đã xuất</th>
-            <th>Tồn kho</th>
+            <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
+            <th title="Số lượng cần xuất (nhập tay)">XT</th>
+            <th title="Tồn kho = Số lượng - Đã xuất - XT">Tồn kho</th>
             <th>Vị trí</th>
-            <th>Thay đổi vị trí</th>
+            <th>Change</th>
             <th>Loại Hình</th>
 
             <th>Rolls/Bags</th>
@@ -212,26 +212,24 @@
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
-            <!-- Cột "Đã xuất" - Luôn có thể chỉnh sửa (giống cột "Vị trí") -->
-            <td class="number-cell">
+            <!-- Cột "Đã xuất" - Tự động lấy từ RM1 outbound và lưu trữ vĩnh viễn -->
+            <td class="number-cell readonly-cell" 
+                [title]="'Số lượng đã xuất từ RM1 outbound: ' + (material.exported || 0) + '\nTự động cập nhật và lưu trữ vĩnh viễn\nKể cả khi xóa dòng xuất ở outbound cũng không ảnh hưởng'">
+              {{formatNumber(material.exported || 0)}}
+            </td>
+                        <!-- Cột "XT" - Số lượng cần xuất (nhập tay) -->
+            <td class="number-cell xt-column">
               <input type="number" 
                      class="editable-cell" 
-                     [(ngModel)]="material.exported" 
-                     (change)="updateExported(material)" 
-                     min="0"
-                     step="0.1"
-                     placeholder="Nhập số lượng đã xuất">
-              <button class="check-history-btn" 
-                      (click)="checkExportHistory(material)" 
-                      title="Kiểm tra lịch sử xuất"
-                      style="background: #2196F3; color: white; font-size: 10px; padding: 2px 4px; margin-top: 2px;">
-                <i class="material-icons" style="font-size: 12px;">history</i>
-                Check
-              </button>
+                     [(ngModel)]="material.xt" 
+                     (change)="updateXT(material)" 
+                     min="0" 
+                     step="0.1" 
+                     placeholder="Nhập số lượng XT">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
-                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' = ' + calculateCurrentStock(material)">
+                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
             <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
@@ -245,11 +243,10 @@
               <button class="scan-change-btn" 
                       (click)="scanLocationQR(material)"
                       title="Scan QR để thay đổi vị trí">
-                <i class="material-icons">qr_code_scanner</i>
                 Scan
               </button>
             </td>
-            <td>
+            <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
 

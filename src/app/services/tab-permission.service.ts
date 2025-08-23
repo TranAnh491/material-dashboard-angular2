@@ -104,7 +104,8 @@ export class TabPermissionService {
       
       // Inventory tabs
       'materials-asm1': factoryAccess.canAccessASM1 !== false,
-      'materials-asm2': factoryAccess.canAccessASM2 !== false
+      'materials-asm2': factoryAccess.canAccessASM2 !== false,
+      'inventory-overview-asm1': factoryAccess.canAccessASM1 !== false
     };
 
     return { ...basePermissions, ...factoryPermissions };
@@ -182,6 +183,7 @@ export class TabPermissionService {
     // Inventory tabs
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
+    { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
     
     // Manage Inventory tab
     { key: 'manage-inventory', name: 'Manage Inventory' },

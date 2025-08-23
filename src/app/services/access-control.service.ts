@@ -47,7 +47,8 @@ export class AccessControlService {
     const factoryTabs = [
       'inbound-asm1', 'inbound-asm2',
       'outbound-asm1', 'outbound-asm2',
-      'materials-asm1', 'materials-asm2'
+      'materials-asm1', 'materials-asm2',
+      'inventory-overview-asm1'
     ];
     return factoryTabs.includes(tabKey);
   }

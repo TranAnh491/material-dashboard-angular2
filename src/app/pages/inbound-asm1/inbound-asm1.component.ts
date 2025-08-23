@@ -2082,7 +2082,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     console.log(`  - isReceived: ${material.isReceived}`);
     console.log(`  - updatedAt: ${material.updatedAt.toLocaleString('vi-VN')}`);
     
-          // Save to Firebase first to ensure persistence
+    // Save to Firebase first to ensure persistence
       console.log(`💾 Đang lưu trạng thái vào Firebase: ${material.materialCode}`);
       console.log(`  - Collection: inbound-materials`);
       console.log(`  - Document ID: ${material.id}`);
@@ -2090,11 +2090,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - updatedAt: ${material.updatedAt.toLocaleString('vi-VN')}`);
       console.log(`  - Bắt đầu gọi Firebase update...`);
       
-      this.firestore.collection('inbound-materials').doc(material.id).update({
-        isReceived: isReceived,
-        updatedAt: material.updatedAt
-      }).then(() => {
-        console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
+    this.firestore.collection('inbound-materials').doc(material.id).update({
+      isReceived: isReceived,
+      updatedAt: material.updatedAt
+    }).then(() => {
+      console.log(`✅ Received status saved to Firebase for ${material.materialCode}`);
         console.log(`  - Firebase update thành công`);
         console.log(`  - Bắt đầu xử lý tiếp theo...`);
       
@@ -2168,25 +2168,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       this.applyFilters();
       console.log(`✅ Đã gọi applyFilters để refresh display`);
       
-                }).catch((error) => {
+    }).catch((error) => {
         const endTime = Date.now();
         const duration = endTime - startTime;
-        console.error(`❌ Error saving received status to Firebase:`, error);
+      console.error(`❌ Error saving received status to Firebase:`, error);
         console.log(`🔄 Reverting local state due to Firebase error: ${material.materialCode}`);
         console.log(`  - Error message: ${error.message}`);
         console.log(`  - Error code: ${error.code || 'Không có'}`);
         console.log(`  - Error details: ${JSON.stringify(error)}`);
         console.log(`  - Bắt đầu revert trạng thái local...`);
         
-        // Revert local state if Firebase update failed
-        material.isReceived = false;
-        target.checked = false;
+      // Revert local state if Firebase update failed
+      material.isReceived = false;
+      target.checked = false;
         
         console.log(`✅ Đã revert trạng thái local cho ${material.materialCode}`);
         console.log(`  - isReceived: false (reverted)`);
         console.log(`  - target.checked: false (reverted)`);
         
-        alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
         console.log(`📢 Đã hiển thị alert lỗi cho người dùng`);
         console.log(`❌ Kết thúc xử lý onReceivedChange với lỗi cho ${material.materialCode}`);
         console.log(`  - Thời gian xử lý: ${duration}ms`);
@@ -2298,7 +2298,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - Số materials chưa nhận: ${this.materials.filter(m => !m.isReceived).length}`);
       console.log(`  - Tổng materials: ${this.materials.length}`);
       console.log(`  - Tỷ lệ đã nhận: ${Math.round((this.materials.filter(m => m.isReceived).length / this.materials.length) * 100)}%`);
-    }
+  }
   
   private checkBatchCompletion(): void {
     console.log(`🔍 Bắt đầu kiểm tra hoàn thành lô hàng...`);
@@ -2435,8 +2435,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
       console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
       console.log(`  - Loại tìm kiếm: ${this.searchType}`);
-          } else {
-        console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
+    } else {
+      console.log(`⏳ Lô hàng ${this.currentBatchNumber} chưa hoàn thành: ${batchMaterials.filter(m => m.isReceived).length}/${batchMaterials.length}`);
         console.log(`  - Cần tick thêm ${batchMaterials.filter(m => !m.isReceived).length} materials nữa để hoàn thành lô hàng`);
         console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).map(m => m.materialCode).join(', ')}`);
         console.log(`  - Bộ lọc trạng thái hiện tại: ${this.statusFilter}`);
@@ -2455,7 +2455,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - Tổng materials: ${batchMaterials.length}`);
       console.log(`  - Materials đã nhận: ${batchMaterials.filter(m => m.isReceived).length}`);
       console.log(`  - Materials chưa nhận: ${batchMaterials.filter(m => !m.isReceived).length}`);
-    }
+  }
   
   // Scanner Mode Methods
   startScannerMode(): void {
