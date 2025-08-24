@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
 import { ROUTES } from '../../routes/sidebar-routes';
 import { FilteredRoutesService } from '../../services/filtered-routes.service';
 import { NotificationService } from '../../services/notification.service';
@@ -19,6 +20,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
+    private router: Router,
     private filteredRoutesService: FilteredRoutesService,
     private notificationService: NotificationService
   ) {}
@@ -56,5 +58,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   toggleSubMenu(menuItem) {
     menuItem.expanded = !menuItem.expanded;
+  }
+
+  hasActiveChild(menuItem: any): boolean {
+    if (!menuItem.children) return false;
+    return menuItem.children.some(child => {
+      return this.router.url === child.path;
+    });
   }
 }

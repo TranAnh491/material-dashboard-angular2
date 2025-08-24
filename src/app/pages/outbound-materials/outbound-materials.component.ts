@@ -15,7 +15,7 @@ export interface OutboundMaterial {
   unit: string;
   exportQuantity: number;
   exportDate: Date;
-  location: string;
+  location: string; // Vị trí xuất hàng (bắt buộc)
   exportedBy: string;
   scanMethod?: string; // 'QR_SCAN' or 'MANUAL'
   createdAt?: Date;
@@ -54,6 +54,12 @@ export class OutboundMaterialsComponent implements OnInit, OnDestroy {
   scanCount = 0;
   successfulScans = 0;
   errorScans = 0;
+  
+  // 🔧 LOGIC MỚI: Quản lý quá trình scan với vị trí
+  currentScanStep: 'batch' | 'material' | 'location' = 'batch';
+  currentBatchData: { workOrder: string; employeeId: string } | null = null;
+  currentMaterialData: { materialCode: string; poNumber: string; quantity: number } | null = null;
+  currentLocation: string = '';
   
   private destroy$ = new Subject<void>();
 

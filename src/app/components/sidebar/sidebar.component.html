@@ -13,7 +13,8 @@
       <a class="nav-link" 
          [routerLink]="menuItem.children ? null : [menuItem.path]" 
          (click)="menuItem.children && toggleSubMenu(menuItem)"
-         [class.settings-notification]="menuItem.path === '/settings' && hasNewUsers">
+         [class.settings-notification]="menuItem.path === '/settings' && hasNewUsers"
+         [class.has-active-child]="hasActiveChild(menuItem)">
         <i class="material-icons">{{menuItem.icon}}</i>
         <p>{{menuItem.title}}</p>
         <i class="material-icons expand-icon" *ngIf="menuItem.children" [class.rotated]="menuItem.expanded">keyboard_arrow_down</i>

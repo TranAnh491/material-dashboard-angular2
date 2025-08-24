@@ -53,6 +53,23 @@
 .custom-input { height: 40px; padding: 8px 12px; border: 2px solid #ff9800; background: #ffffff; color: #000000; font-size: 14px; border-radius: 6px; min-width: 200px; }
 .editable-input, .editable-select { border: none; background: #f8f8f8; font-family: Arial, sans-serif; font-size: 10px; color: #000000; width: 100%; padding: 4px 6px; }
 .editable-input:focus, .editable-select:focus { outline: none; background: #e8e8e8; }
+
+// 🔧 LOGIC MỚI: Styling cho cột vị trí
+.location-cell {
+  min-width: 120px;
+  max-width: 150px;
+  
+  .editable-input {
+    text-align: center;
+    font-weight: 500;
+    
+    &::placeholder {
+      color: #999;
+      font-style: italic;
+      font-size: 9px;
+    }
+  }
+}
 .date-cell { background: #f8f9fa; padding: 4px 6px; text-align: center; font-size: 10px; color: #666; min-width: 100px; border-right: 1px solid #dee2e6; }
 .action-btn { background: #ffffff; border: 1px solid #000000; color: #000000; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
 .action-btn:hover { background: #f5f5f5; }

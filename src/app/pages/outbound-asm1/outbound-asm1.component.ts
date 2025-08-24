@@ -65,6 +65,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
   
+  // 🔧 LOGIC MỚI: Quản lý quá trình scan với vị trí
+  // - Bước 1: Scan lệnh sản xuất và mã nhân viên
+  // - Bước 2: Scan vị trí TRƯỚC (chỉ khi cần)
+  // - Bước 3: Scan mã hàng (Material + PO + Quantity) - có thể scan liên tục
+  // - Bước 4: Chỉ scan vị trí mới khi chuyển sang mã hàng/PO khác
+  currentScanStep: 'batch' | 'location' | 'material' = 'batch';
+  currentLocation: string = '';
+  isLocationInputMode: boolean = false;
+  isWaitingForMaterial: boolean = false;
+  
+  // 🔧 LOGIC MỚI: Theo dõi mã hàng và PO hiện tại để quyết định có cần scan vị trí mới không
+  currentMaterialCode: string = '';
+  currentPONumber: string = '';
+  
   // Date Range properties
   startDate: string = '';
   endDate: string = '';
@@ -1036,6 +1050,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.batchEmployeeId = '';
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
+    
+    // 🔧 LOGIC MỚI: Reset các trạng thái scan vị trí
+    this.currentLocation = '';
+    this.isWaitingForMaterial = false;
+    this.currentScanStep = 'batch';
+    this.isLocationInputMode = false;
+    
+    // 🔧 LOGIC MỚI: Reset mã hàng và PO hiện tại
+    this.currentMaterialCode = '';
+    this.currentPONumber = '';
+    
     this.scannerBuffer = '';
     this.focusScannerInput();
     console.log('✅ Batch scanning mode activated');
@@ -1048,6 +1073,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.batchEmployeeId = '';
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
+    
+    // 🔧 LOGIC MỚI: Reset các trạng thái scan vị trí
+    this.currentLocation = '';
+    this.isWaitingForMaterial = false;
+    this.currentScanStep = 'batch';
+    this.isLocationInputMode = false;
+    
+    // 🔧 LOGIC MỚI: Reset mã hàng và PO hiện tại
+    this.currentMaterialCode = '';
+    this.currentPONumber = '';
+    
     this.scannerBuffer = '';
     console.log('✅ Batch scanning mode deactivated');
   }
@@ -1073,9 +1109,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
-    // If both production order and employee ID are scanned, process as material
+    // 🔧 LOGIC MỚI: Nếu đã scan lệnh sản xuất và mã nhân viên, xử lý theo logic mới
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-      this.processBatchMaterialScan(scannedData);
+      // Kiểm tra xem có phải mã hàng không
+      if (this.isMaterialData(scannedData)) {
+        this.processBatchMaterialScan(scannedData);
+      } else {
+        // Nếu không phải mã hàng, xử lý như vị trí
+        this.processLocationInput(scannedData);
+      }
     } else {
       // Show what's still needed - chỉ log console, không alert
       if (!this.isProductionOrderScanned) {
@@ -1141,6 +1183,51 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
+  // 🔧 LOGIC MỚI: Kiểm tra xem dữ liệu scan có phải là mã hàng không
+  private isMaterialData(scannedData: string): boolean {
+    // Kiểm tra các pattern của mã hàng
+    if (scannedData.includes('|') || scannedData.includes(',') || scannedData.includes(' ')) {
+      return true; // Có dấu phân cách - có thể là mã hàng
+    }
+    
+    // Kiểm tra pattern mã hàng: letter + 6+ digits (e.g., B024039, A002009)
+    const materialCodeMatch = scannedData.match(/[A-Z]\d{6,}/);
+    if (materialCodeMatch) {
+      return true; // Có pattern mã hàng
+    }
+    
+    // Kiểm tra xem có phải là mã hàng hiện tại không (để scan liên tục)
+    if (this.currentMaterialCode && this.currentPONumber) {
+      // Nếu đã có mã hàng và PO, kiểm tra xem có phải cùng loại không
+      if (scannedData.includes(this.currentMaterialCode) || scannedData.includes(this.currentPONumber)) {
+        return true; // Có thể là scan liên tục cùng mã hàng
+      }
+    }
+    
+    return false; // Không phải mã hàng, xử lý như vị trí
+  }
+
+  // 🔧 LOGIC MỚI: Kiểm tra xem có cần scan vị trí mới không
+  private checkIfNeedNewLocation(materialCode: string, poNumber: string): boolean {
+    // Nếu chưa có mã hàng và PO nào, cần scan vị trí
+    if (!this.currentMaterialCode || !this.currentPONumber) {
+      console.log('📍 Lần đầu scan - cần scan vị trí');
+      return true;
+    }
+    
+    // Nếu mã hàng hoặc PO khác với hiện tại, cần scan vị trí mới
+    if (materialCode !== this.currentMaterialCode || poNumber !== this.currentPONumber) {
+      console.log('📍 Mã hàng hoặc PO thay đổi - cần scan vị trí mới');
+      console.log('📍 Từ:', { materialCode: this.currentMaterialCode, poNumber: this.currentPONumber });
+      console.log('📍 Thành:', { materialCode, poNumber });
+      return true;
+    }
+    
+    // Nếu cùng mã hàng và PO, không cần scan vị trí mới
+    console.log('📍 Cùng mã hàng và PO - sử dụng vị trí hiện tại');
+    return false;
+  }
+
   // Process production order scan
   private processProductionOrderScan(scannedData: string): void {
     try {
@@ -1168,6 +1255,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
+  // 🔧 LOGIC MỚI: Xử lý scan mã hàng và lưu ngay với vị trí đã có
   private processBatchMaterialScan(scannedData: string): void {
     try {
       // Kiểm tra xem đã scan mã nhân viên chưa
@@ -1249,8 +1337,42 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         quantity = 1;
       }
       
-      // Lưu thẳng vào database thay vì lưu vào batch array
-      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity);
+      // 🔧 LOGIC MỚI: Kiểm tra xem có cần scan vị trí mới không
+      const needNewLocation = this.checkIfNeedNewLocation(materialCode, poNumber);
+      
+      if (needNewLocation) {
+        // Cần scan vị trí mới
+        console.log('📍 Cần scan vị trí mới cho mã hàng/PO mới:', { materialCode, poNumber });
+        console.log('📍 Vui lòng scan hoặc nhập tay vị trí trước khi tiếp tục');
+        
+        // Lưu thông tin mã hàng mới để chờ vị trí
+        this.currentMaterialCode = materialCode;
+        this.currentPONumber = poNumber;
+        this.isWaitingForMaterial = true;
+        this.currentScanStep = 'location';
+        
+        // Hiển thị hướng dẫn
+        this.showLocationInputGuide('NEW_MATERIAL');
+        return;
+      }
+      
+      // 🔧 LOGIC MỚI: Sử dụng vị trí hiện tại hoặc "N/A" nếu không có
+      const locationToUse = this.currentLocation || 'N/A';
+      console.log('📍 Sử dụng vị trí:', locationToUse, 'cho mã hàng:', { materialCode, poNumber, quantity });
+      
+      // Lưu vào database
+      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, locationToUse);
+      
+      // Cập nhật mã hàng và PO hiện tại
+      this.currentMaterialCode = materialCode;
+      this.currentPONumber = poNumber;
+      
+      console.log('✅ Đã lưu xong, có thể scan liên tục cùng mã hàng/PO hoặc scan mã hàng/PO mới');
+      
+      // Auto-focus cho scan tiếp theo
+      setTimeout(() => {
+        this.focusScannerInput();
+      }, 100);
       
     } catch (error) {
       console.error('❌ Error processing material scan:', error);
@@ -1258,8 +1380,70 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
+  // 🔧 LOGIC MỚI: Hiển thị hướng dẫn scan mã hàng sau khi đã có vị trí (chỉ log console, không popup)
+  private showLocationInputGuide(location: string): void {
+    if (location === 'NEW_MATERIAL') {
+      console.log('📍 === HƯỚNG DẪN SCAN VỊ TRÍ MỚI ===');
+      console.log('📍 Bước 1: Đã scan mã hàng/PO mới');
+      console.log('📍 Bước 2: Vui lòng scan hoặc nhập tay vị trí cho mã hàng/PO này');
+      console.log('📍 Bước 3: Sau khi có vị trí, hệ thống sẽ lưu và có thể scan liên tục');
+      console.log('📍 === KẾT THÚC HƯỚNG DẪN ===');
+      
+      console.log('📍 Vui lòng scan hoặc nhập tay vị trí cho mã hàng/PO mới');
+    } else {
+      console.log('📍 === HƯỚNG DẪN SCAN MÃ HÀNG ===');
+      console.log('📍 Bước 1: Đã scan vị trí thành công:', location);
+      console.log('📍 Bước 2: Vui lòng scan mã hàng (Material + PO + Quantity)');
+      console.log('📍 Bước 3: Sau khi scan mã hàng, hệ thống sẽ lưu và có thể scan liên tục');
+      console.log('📍 === KẾT THÚC HƯỚNG DẪN ===');
+      
+      // Bỏ popup - chỉ log console để scan liên tục nhanh hơn
+      console.log(`📍 Vị trí: ${location} - Vui lòng scan mã hàng tiếp theo`);
+    }
+  }
+
+  // 🔧 LOGIC MỚI: Xử lý nhập vị trí
+  private processLocationInput(location: string): void {
+    // Chuẩn hóa vị trí (không phân biệt chữ hoa/thường)
+    const normalizedLocation = location.trim().toUpperCase();
+    
+    console.log('📍 Xử lý vị trí:', normalizedLocation);
+    
+    // Lưu vị trí
+    this.currentLocation = normalizedLocation;
+    
+    // Nếu đang chờ scan mã hàng mới, xử lý ngay
+    if (this.isWaitingForMaterial && this.currentMaterialCode && this.currentPONumber) {
+      console.log('📍 Đã có vị trí, xử lý mã hàng đang chờ:', { 
+        materialCode: this.currentMaterialCode, 
+        poNumber: this.currentPONumber, 
+        location: normalizedLocation 
+      });
+      
+      // Xử lý mã hàng đang chờ với vị trí mới
+      this.processBatchMaterialScan(`${this.currentMaterialCode}|${this.currentPONumber}|1`);
+      
+      // Reset trạng thái chờ
+      this.isWaitingForMaterial = false;
+      this.currentScanStep = 'material';
+    } else {
+      // Chuyển sang chế độ scan mã hàng
+      this.currentScanStep = 'material';
+      console.log('📍 Đã lưu vị trí:', normalizedLocation);
+      console.log('📍 Bây giờ vui lòng scan mã hàng (Material + PO + Quantity)');
+      
+      // Hiển thị hướng dẫn cho user
+      this.showLocationInputGuide(normalizedLocation);
+    }
+    
+    // Auto-focus cho scan tiếp theo
+    setTimeout(() => {
+      this.focusScannerInput();
+    }, 100);
+  }
+
   // Lưu mã hàng trực tiếp vào database
-  private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number): Promise<void> {
+  private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number, location: string = 'Unknown'): Promise<void> {
     try {
       console.log('💾 Saving material directly to database:', { materialCode, poNumber, quantity });
       
@@ -1267,11 +1451,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         factory: 'ASM1',
         materialCode: materialCode,
         poNumber: poNumber,
+        location: location, // 🔧 Sử dụng vị trí được nhập
         quantity: quantity,
         unit: 'KG', // Default unit
         exportQuantity: quantity,
         exportDate: new Date(),
-        location: 'ASM1',
         exportedBy: this.batchEmployeeId,
         productionOrder: this.batchProductionOrder,
         employeeId: this.batchEmployeeId,
@@ -1401,8 +1585,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       inputElement.value = '';
     }
     
-    // If in batch mode, process with batch logic
+    // 🔧 LOGIC MỚI: Xử lý scan theo từng bước
     if (this.isBatchScanningMode) {
+      // Xử lý scan bình thường (batch logic) - logic mới sẽ tự động xử lý vị trí/mã hàng
       this.processBatchScanInput(cleanData);
       
       // Auto-focus for next scan in batch mode

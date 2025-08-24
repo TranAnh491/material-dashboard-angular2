@@ -147,6 +147,7 @@
             <th>Mã hàng</th>
             <th>Số PO</th>
             <th>Xuất</th>
+            <th>Vị trí</th>
             <th>Mã nhân viên</th>
             <th>Lệnh sản xuất</th>
             <th>Xóa</th>
@@ -165,6 +166,9 @@
             </td>
             <td class="number-cell">
               <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
+            </td>
+            <td class="location-cell">
+              <input type="text" class="editable-input" [(ngModel)]="material.location" (change)="updateMaterial(material)" placeholder="Nhập vị trí">
             </td>
             <td class="employee-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="ASP1234">

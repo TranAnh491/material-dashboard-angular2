@@ -53,6 +53,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Fixed factory for ASM1
   readonly FACTORY = 'ASM1';
   
+  // 🔧 LOGIC MỚI: Tránh nhân đôi số lượng xuất từ Outbound
+  // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN VỊ TRÍ CỤ THỂ
+  // - Outbound RM1 cần scan/nhập: Material + PO + Location
+  // - Hệ thống sẽ tìm đúng dòng có vị trí tương ứng và trừ số lượng xuất
+  // - KHÔNG còn bị nhân đôi khi cùng Material + PO có nhiều vị trí khác nhau
+  
   // Data properties
   inventoryMaterials: InventoryMaterial[] = [];
   filteredInventory: InventoryMaterial[] = [];
@@ -1552,10 +1558,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return stock;
   }
 
-  // Get exported quantity from RM1 outbound based on material code and PO
-  async getExportedQuantityFromOutbound(materialCode: string, poNumber: string): Promise<number> {
+  // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO + Location
+  // - Trước đây: Chỉ query theo Material + PO → Lấy tất cả outbound records
+  // - Bây giờ: Thêm điều kiện Location → Chỉ lấy outbound records của vị trí cụ thể
+  // - Kết quả: Số lượng xuất chính xác cho từng dòng Inventory
+  // - Tránh được lỗi nhân đôi khi cùng Material + PO có nhiều vị trí
+  async getExportedQuantityFromOutbound(materialCode: string, poNumber: string, location: string): Promise<number> {
     try {
-      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber}`);
+      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber} - Location: ${location}`);
       
       const outboundRef = this.firestore.collection('outbound-materials');
       const snapshot = await outboundRef
@@ -1563,6 +1573,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         .where('factory', '==', 'ASM1')
         .where('materialCode', '==', materialCode)
         .where('poNumber', '==', poNumber)
+        .where('location', '==', location) // Thêm điều kiện vị trí để tránh nhân đôi
         .get();
 
       if (!snapshot.empty) {
@@ -1572,26 +1583,30 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           totalExported += (data.exportQuantity || 0);
         });
         
-        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber}: ${totalExported}`);
+        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber} - Location ${location}: ${totalExported}`);
         return totalExported;
       } else {
-        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
+        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber} - Location ${location}`);
         return 0;
       }
     } catch (error) {
-      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber}:`, error);
+      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber} - Location ${location}:`, error);
       return 0;
     }
   }
 
-  // Update exported quantity from outbound data and save permanently
+  // 🔧 UPDATE LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo VỊ TRÍ CỤ THỂ
+  // - Trước đây: Chỉ dựa vào Material + PO → Bị nhân đôi khi có nhiều vị trí
+  // - Bây giờ: Dựa vào Material + PO + Location → Chính xác cho từng vị trí
+  // - Mỗi dòng Inventory sẽ được cập nhật số lượng xuất riêng biệt
+  // - Tránh được lỗi nhân đôi số lượng xuất
   async updateExportedFromOutbound(material: InventoryMaterial): Promise<void> {
     try {
-      const exportedQuantity = await this.getExportedQuantityFromOutbound(material.materialCode, material.poNumber);
+      const exportedQuantity = await this.getExportedQuantityFromOutbound(material.materialCode, material.poNumber, material.location);
       
       if (material.exported !== exportedQuantity) {
         material.exported = exportedQuantity;
-        console.log(`📊 Updated exported quantity for ${material.materialCode} - PO ${material.poNumber}: ${exportedQuantity}`);
+        console.log(`📊 Updated exported quantity for ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}: ${exportedQuantity}`);
         
         // Update exported field directly in Firebase to preserve the value permanently
         // This ensures the exported quantity is preserved even if outbound records are deleted
@@ -1600,11 +1615,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             exported: exportedQuantity,
             updatedAt: new Date()
           });
-          console.log(`💾 Exported quantity saved permanently to Firebase for ${material.materialCode}`);
+          console.log(`💾 Exported quantity saved permanently to Firebase for ${material.materialCode} - Location ${material.location}`);
         }
       }
     } catch (error) {
-      console.error(`❌ Error updating exported quantity for ${material.materialCode}:`, error);
+      console.error(`❌ Error updating exported quantity for ${material.materialCode} - Location ${material.location}:`, error);
     }
   }
 
@@ -1641,7 +1656,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           await this.updateExportedFromOutbound(material);
           updatedCount++;
         } catch (error) {
-          console.error(`❌ Error auto-updating ${material.materialCode} - PO ${material.poNumber}:`, error);
+          console.error(`❌ Error auto-updating ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
           errorCount++;
         }
       }
@@ -1672,7 +1687,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           await this.updateExportedFromOutbound(material);
           updatedCount++;
         } catch (error) {
-          console.error(`❌ Error auto-updating search result ${material.materialCode} - PO ${material.poNumber}:`, error);
+          console.error(`❌ Error auto-updating search result ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
           errorCount++;
         }
       }
@@ -1697,7 +1712,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           await this.updateExportedFromOutbound(material);
           updatedCount++;
         } catch (error) {
-          console.error(`❌ Error syncing ${material.materialCode} - PO ${material.poNumber}:`, error);
+          console.error(`❌ Error syncing ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
           errorCount++;
         }
       }
@@ -2325,7 +2340,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Kiểm tra lịch sử xuất của material
   checkExportHistory(material: InventoryMaterial): void {
-    console.log(`🔍 DEBUG: Checking export history for ${material.materialCode} - PO: ${material.poNumber}`);
+    console.log(`🔍 DEBUG: Checking export history for ${material.materialCode} - PO: ${material.poNumber} - Location: ${material.location}`);
     console.log(`📊 Material details:`, {
       id: material.id,
       quantity: material.quantity,
@@ -2335,19 +2350,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       location: material.location
     });
 
-    // Kiểm tra trong collection outbound-materials
+    // Kiểm tra trong collection outbound-materials - CHỈ LẤY THEO VỊ TRÍ CỤ THỂ
     this.firestore.collection('outbound-materials', ref => 
       ref.where('materialCode', '==', material.materialCode)
          .where('poNumber', '==', material.poNumber)
+         .where('location', '==', material.location) // Thêm điều kiện vị trí để tránh nhân đôi
          .where('factory', '==', 'ASM1')
          .orderBy('exportDate', 'desc')
          .limit(10)
     ).get().subscribe(snapshot => {
-      console.log(`📦 Found ${snapshot.docs.length} outbound records for ${material.materialCode} - ${material.poNumber}`);
+      console.log(`📦 Found ${snapshot.docs.length} outbound records for ${material.materialCode} - ${material.poNumber} - Location ${material.location}`);
       
       snapshot.docs.forEach((doc, index) => {
         const data = doc.data() as any;
-        console.log(`  ${index + 1}. Export: ${data.exportQuantity} on ${data.exportDate?.toDate?.() || data.exportDate}`);
+        console.log(`  ${index + 1}. Export: ${data.exportQuantity} from Location ${data.location} on ${data.exportDate?.toDate?.() || data.exportDate}`);
       });
     });
 
@@ -2361,7 +2377,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       snapshot.docs.forEach((doc, index) => {
         const data = doc.data() as any;
-        console.log(`  ${index + 1}. ID: ${doc.id}, Exported: ${data.exported}, Stock: ${data.stock}, Updated: ${data.updatedAt?.toDate?.() || data.updatedAt}`);
+        console.log(`  ${index + 1}. ID: ${doc.id}, Location: ${data.location}, Exported: ${data.exported}, Stock: ${data.stock}, Updated: ${data.updatedAt?.toDate?.() || data.updatedAt}`);
       });
     });
   }

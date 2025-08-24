@@ -160,12 +160,20 @@
   box-shadow: 0 1px 6px rgba(0, 188, 212, 0.3);
 }
 
-.nav > li > a.active,
-.nav > li.active > a,
-.nav > li.nav-item.active > a {
+/* Active tab gets blue color, but parent with active child should not */
+.nav > li > a.active:not(.has-active-child),
+.nav > li.active > a:not(.has-active-child),
+.nav > li.nav-item.active > a:not(.has-active-child) {
   background: #00bcd4 !important; /* Blue background for active state - must persist */
   color: #ffffff !important; /* White text for better contrast */
   box-shadow: 0 1px 6px rgba(0, 188, 212, 0.3) !important;
+}
+
+/* Parent tab should not be blue when child is active - this overrides active state */
+.nav > li > a.has-active-child {
+  background: transparent !important;
+  color: #26334d !important;
+  box-shadow: none !important;
 }
 
 .nav > li > a .material-icons {
@@ -180,10 +188,16 @@
   color: #ffffff; /* White icon color for hover state */
 }
 
-.nav > li > a.active .material-icons,
-.nav > li.active > a .material-icons,
-.nav > li.nav-item.active > a .material-icons {
+/* Active tab icon gets white color, but parent with active child should not */
+.nav > li > a.active:not(.has-active-child) .material-icons,
+.nav > li.active > a:not(.has-active-child) .material-icons,
+.nav > li.nav-item.active > a:not(.has-active-child) .material-icons {
   color: #ffffff !important; /* White icon color for active state - must persist */
+}
+
+/* Parent tab icon should not be white when child is active */
+.nav > li > a.has-active-child .material-icons {
+  color: #5d6c88 !important; /* Default icon color */
 }
 
 .nav > li > a span {
@@ -206,10 +220,16 @@
   color: #ffffff; /* White arrow color for hover state */
 }
 
-.nav > li > a.active .expand-icon,
-.nav > li.active > a .expand-icon,
-.nav > li.nav-item.active > a .expand-icon {
+/* Active tab arrow gets white color, but parent with active child should not */
+.nav > li > a.active:not(.has-active-child) .expand-icon,
+.nav > li.active > a:not(.has-active-child) .expand-icon,
+.nav > li.nav-item.active > a:not(.has-active-child) .expand-icon {
   color: #ffffff !important; /* White arrow color for active state - must persist */
+}
+
+/* Parent tab arrow should not be white when child is active */
+.nav > li > a.has-active-child .expand-icon {
+  color: #a1b1d1 !important; /* Default arrow color */
 }
 
 .nav .expand-icon.rotated {
@@ -265,7 +285,7 @@
 
 .sub-menu li > a.active .material-icons,
 .sub-menu li > a:hover .material-icons {
-  color: #ff9800;
+ color: #ff9800;
 }
 
 .logo {
@@ -347,6 +367,7 @@
   color: #ffffff !important; /* White text for better contrast */
 }
 
+/* Child tabs get blue color when active */
 .collapse .nav li a.active,
 .collapse .nav li.active > a,
 .collapse .nav li.nav-item.active > a {
@@ -358,6 +379,7 @@
   color: #ffffff !important; /* White icon color for hover state */
 }
 
+/* Child tab icons get white color when active */
 .collapse .nav li a.active .child-icon,
 .collapse .nav li.active > a .child-icon,
 .collapse .nav li.nav-item.active > a .child-icon {
