@@ -53,11 +53,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Fixed factory for ASM1
   readonly FACTORY = 'ASM1';
   
-  // 🔧 LOGIC MỚI: Tránh nhân đôi số lượng xuất từ Outbound
-  // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN VỊ TRÍ CỤ THỂ
-  // - Outbound RM1 cần scan/nhập: Material + PO + Location
-  // - Hệ thống sẽ tìm đúng dòng có vị trí tương ứng và trừ số lượng xuất
-  // - KHÔNG còn bị nhân đôi khi cùng Material + PO có nhiều vị trí khác nhau
+  // 🔧 LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
+  // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN Material + PO
+  // - Outbound RM1 scan/nhập: Material + PO (không còn vị trí)
+  // - Hệ thống sẽ tìm tất cả outbound records có cùng Material + PO và cộng dồn
+  // - KHÔNG còn bị lỗi số âm sai khi search
   
   // Data properties
   inventoryMaterials: InventoryMaterial[] = [];
@@ -1558,14 +1558,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return stock;
   }
 
-  // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO + Location
-  // - Trước đây: Chỉ query theo Material + PO → Lấy tất cả outbound records
-  // - Bây giờ: Thêm điều kiện Location → Chỉ lấy outbound records của vị trí cụ thể
-  // - Kết quả: Số lượng xuất chính xác cho từng dòng Inventory
-  // - Tránh được lỗi nhân đôi khi cùng Material + PO có nhiều vị trí
+  // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO (không còn vị trí)
+  // - Trước đây: Query theo Material + PO + Location → Bị lỗi khi Outbound không có vị trí
+  // - Bây giờ: Chỉ query theo Material + PO → Lấy tất cả outbound records
+  // - Kết quả: Số lượng xuất chính xác cho từng Material + PO
+  // - Không còn bị lỗi số âm sai khi search
   async getExportedQuantityFromOutbound(materialCode: string, poNumber: string, location: string): Promise<number> {
     try {
-      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber} - Location: ${location}`);
+      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber}`);
       
       const outboundRef = this.firestore.collection('outbound-materials');
       const snapshot = await outboundRef
@@ -1573,7 +1573,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         .where('factory', '==', 'ASM1')
         .where('materialCode', '==', materialCode)
         .where('poNumber', '==', poNumber)
-        .where('location', '==', location) // Thêm điều kiện vị trí để tránh nhân đôi
         .get();
 
       if (!snapshot.empty) {
@@ -1583,23 +1582,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           totalExported += (data.exportQuantity || 0);
         });
         
-        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber} - Location ${location}: ${totalExported}`);
+        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber}: ${totalExported}`);
         return totalExported;
       } else {
-        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber} - Location ${location}`);
+        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
         return 0;
       }
     } catch (error) {
-      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber} - Location ${location}:`, error);
+      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber}:`, error);
       return 0;
     }
   }
 
-  // 🔧 UPDATE LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo VỊ TRÍ CỤ THỂ
-  // - Trước đây: Chỉ dựa vào Material + PO → Bị nhân đôi khi có nhiều vị trí
-  // - Bây giờ: Dựa vào Material + PO + Location → Chính xác cho từng vị trí
-  // - Mỗi dòng Inventory sẽ được cập nhật số lượng xuất riêng biệt
-  // - Tránh được lỗi nhân đôi số lượng xuất
+  // 🔧 UPDATE LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
+  // - Trước đây: Dựa vào Material + PO + Location → Bị lỗi khi Outbound không có vị trí
+  // - Bây giờ: Chỉ dựa vào Material + PO → Lấy tất cả outbound records
+  // - Kết quả: Số lượng xuất chính xác cho từng Material + PO
+  // - Không còn bị lỗi số âm sai khi search
   async updateExportedFromOutbound(material: InventoryMaterial): Promise<void> {
     try {
       const exportedQuantity = await this.getExportedQuantityFromOutbound(material.materialCode, material.poNumber, material.location);
