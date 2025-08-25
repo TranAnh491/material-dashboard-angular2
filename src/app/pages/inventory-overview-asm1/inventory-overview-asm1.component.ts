@@ -145,6 +145,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   }
 
   // Load inventory overview data
+  // QUAN TRỌNG: Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo RM1 Inventory Overview 
+  // hiển thị chính xác những gì có trong RM1 Inventory (không dư, không thiếu)
   private async loadInventoryOverview(): Promise<void> {
     // Remove permission check for debugging
     // if (!this.hasAccess) return;
@@ -156,116 +158,121 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       // Load LinkQ file history first
       await this.loadLinkQFileHistory();
       
-      // Try different collection names - prioritize materials-asm1 for RM1 inventory
-       const collectionsToTry = ['materials-asm1', 'materials', 'inventory-materials'];
-      let materialsSnapshot: any = null;
-      let collectionName = '';
+      // Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo không bỏ sót mã hàng nào
+      // Giống như logic trong RM1 Inventory để đảm bảo tính nhất quán
+      const collectionsToTry = ['materials-asm1', 'materials', 'inventory-materials'];
+      let allMaterialsData: any[] = [];
+      let collectionNames: string[] = [];
       
-             for (const colName of collectionsToTry) {
-         try {
-           console.log(`🔍 Trying collection: ${colName}`);
-           const snapshot = await this.firestore.collection(colName).ref.get();
-           if (snapshot.size > 0) {
-             materialsSnapshot = snapshot;
-             collectionName = colName;
-             console.log(`✅ Found data in collection: ${colName} (${snapshot.size} documents)`);
-             
-             // If we found materials-asm1, use it directly
-             if (colName === 'materials-asm1') {
-               console.log('🎯 Using materials-asm1 collection for RM1 inventory');
-               break;
-             }
-             // Otherwise continue searching for better collection
-           }
-         } catch (err) {
-           console.log(`❌ Collection ${colName} not accessible:`, err);
-         }
-       }
+      console.log('🔍 Lấy dữ liệu từ tất cả các collection để đảm bảo không bỏ sót...');
       
-             if (!materialsSnapshot) {
-         console.error('❌ No accessible collection found');
-         this.inventoryItems = [];
-         this.filteredItems = [];
-         return;
-       }
-       
-       // If we're using materials-asm1, also try to get outbound data for exported calculation
-       let outboundSnapshot: any = null;
-       if (collectionName === 'materials-asm1') {
-         try {
-           console.log('🔍 Getting outbound data for exported calculation...');
-           outboundSnapshot = await this.firestore.collection('outbound-materials').ref.get();
-           console.log(`📊 Found ${outboundSnapshot.size} outbound documents`);
-         } catch (err) {
-           console.log('⚠️ Could not get outbound data:', err);
-         }
-       }
+      for (const colName of collectionsToTry) {
+        try {
+          console.log(`🔍 Đang kiểm tra collection: ${colName}`);
+          const snapshot = await this.firestore.collection(colName).ref.get();
+          if (snapshot.size > 0) {
+            console.log(`✅ Tìm thấy ${snapshot.size} documents trong collection: ${colName}`);
+            collectionNames.push(colName);
+            
+            // Lấy tất cả dữ liệu từ collection này
+            snapshot.forEach(doc => {
+              const data = doc.data() as any;
+              // Thêm thông tin về nguồn dữ liệu để debug
+              data._sourceCollection = colName;
+              allMaterialsData.push(data);
+            });
+          } else {
+            console.log(`ℹ️ Collection ${colName} rỗng hoặc không có dữ liệu`);
+          }
+        } catch (err) {
+          console.log(`❌ Không thể truy cập collection ${colName}:`, err);
+        }
+      }
       
-      console.log(`📊 Processing ${materialsSnapshot.size} documents from collection: ${collectionName}`);
+      if (allMaterialsData.length === 0) {
+        console.error('❌ Không tìm thấy dữ liệu từ bất kỳ collection nào');
+        this.inventoryItems = [];
+        this.filteredItems = [];
+        return;
+      }
+      
+      console.log(`📊 Tổng cộng: ${allMaterialsData.length} documents từ ${collectionNames.length} collections: ${collectionNames.join(', ')}`);
+      
+      // Lấy outbound data cho tất cả các collection
+      let outboundSnapshot: any = null;
+      try {
+        console.log('🔍 Lấy dữ liệu outbound cho tất cả các collection...');
+        outboundSnapshot = await this.firestore.collection('outbound-materials').ref.get();
+        console.log(`📊 Tìm thấy ${outboundSnapshot.size} outbound documents`);
+      } catch (err) {
+        console.log('⚠️ Không thể lấy dữ liệu outbound:', err);
+      }
+      
+      // Xử lý dữ liệu từ TẤT CẢ các collection để đảm bảo không bỏ sót mã hàng nào
+      // Điều này đảm bảo RM1 Inventory Overview hiển thị chính xác những gì có trong RM1 Inventory
+      console.log(`📊 Xử lý ${allMaterialsData.length} documents từ ${collectionNames.length} collections`);
       
       const items: InventoryOverviewItem[] = [];
       
-      materialsSnapshot.forEach(doc => {
-        const data = doc.data() as any;
+      // Xử lý từng document từ tất cả các collection
+      allMaterialsData.forEach((data, index) => {
+        // Log first few documents for debugging
+        if (items.length < 3) {
+          console.log(`🔍 Document ${items.length + 1} (từ ${data._sourceCollection}):`, {
+            materialCode: data.materialCode,
+            poNumber: data.poNumber,
+            po: data.po,
+            purchaseOrder: data.purchaseOrder,
+            orderNumber: data.orderNumber,
+            order: data.order,
+            quantity: data.quantity,
+            qty: data.qty,
+            amount: data.amount,
+            total: data.total,
+            stock: data.stock,
+            exported: data.exported,
+            exportQuantity: data.exportQuantity,
+            outbound: data.outbound,
+            shipped: data.shipped,
+            used: data.used,
+            xt: data.xt,
+            xtQuantity: data.xtQuantity,
+            extra: data.extra,
+            additional: data.additional,
+            location: data.location,
+            type: data.type,
+            // Log all available fields
+            allFields: Object.keys(data)
+          });
+        }
         
-                 // Log first few documents for debugging
-         if (items.length < 3) {
-           console.log(`🔍 Document ${items.length + 1}:`, {
-             id: doc.id,
-             materialCode: data.materialCode,
-             poNumber: data.poNumber,
-             po: data.po,
-             purchaseOrder: data.purchaseOrder,
-             orderNumber: data.orderNumber,
-             order: data.order,
-             quantity: data.quantity,
-             qty: data.qty,
-             amount: data.amount,
-             total: data.total,
-             stock: data.stock,
-             exported: data.exported,
-             exportQuantity: data.exportQuantity,
-             outbound: data.outbound,
-             shipped: data.shipped,
-             used: data.used,
-             xt: data.xt,
-             xtQuantity: data.xtQuantity,
-             extra: data.extra,
-             additional: data.additional,
-             location: data.location,
-             type: data.type,
-             // Log all available fields
-             allFields: Object.keys(data)
-           });
-         }
+        // Xử lý PO number - ưu tiên fields của collection tương ứng
+        let poNumber = '';
+        if (data._sourceCollection === 'materials-asm1') {
+          poNumber = data.po || data.poNumber || data.purchaseOrder || data.orderNumber || data.order || '';
+        } else {
+          poNumber = data.poNumber || data.po || data.purchaseOrder || data.orderNumber || data.order || '';
+        }
         
-                        // Try different field names for PO - prioritize materials-asm1 fields
-         let poNumber = '';
-         if (collectionName === 'materials-asm1') {
-           poNumber = data.po || data.poNumber || data.purchaseOrder || data.orderNumber || data.order || '';
-         } else {
-           poNumber = data.poNumber || data.po || data.purchaseOrder || data.orderNumber || data.order || '';
-         }
-         
-         // Calculate current stock - prioritize materials-asm1 fields
-         let quantity = 0;
-         let exported = 0;
-         let xt = 0;
-         
-         if (collectionName === 'materials-asm1') {
-           quantity = data.quantity || data.qty || 0;
-           exported = data.exported || data.exportQuantity || 0;
-           xt = data.xt || data.xtQuantity || 0;
-         } else {
-           quantity = data.quantity || data.qty || data.amount || data.total || data.stock || 0;
-           exported = data.exported || data.exportQuantity || data.outbound || data.shipped || data.used || 0;
-           xt = data.xt || data.xtQuantity || data.extra || data.additional || 0;
-         }
+        // Tính toán current stock - ưu tiên fields của collection tương ứng
+        let quantity = 0;
+        let exported = 0;
+        let xt = 0;
+        
+        if (data._sourceCollection === 'materials-asm1') {
+          quantity = data.quantity || data.qty || 0;
+          exported = data.exported || data.exportQuantity || 0;
+          xt = data.xt || data.xtQuantity || 0;
+        } else {
+          quantity = data.quantity || data.qty || data.amount || data.total || data.stock || 0;
+          exported = data.exported || data.exportQuantity || data.outbound || data.shipped || data.used || 0;
+          xt = data.xt || data.xtQuantity || data.extra || data.additional || 0;
+        }
         
         const currentStock = quantity - exported - xt;
         
         items.push({
-          id: doc.id,
+          id: `${data._sourceCollection}_${index}_${data.materialCode}`, // Tạo ID duy nhất
           materialCode: data.materialCode || '',
           poNumber: poNumber,
           quantity: quantity,

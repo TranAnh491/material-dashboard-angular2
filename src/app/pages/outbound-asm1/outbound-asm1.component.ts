@@ -65,19 +65,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
   
-  // 🔧 LOGIC MỚI: Quản lý quá trình scan với vị trí
+  // 🔧 LOGIC MỚI: Quản lý quá trình scan đơn giản
   // - Bước 1: Scan lệnh sản xuất và mã nhân viên
-  // - Bước 2: Scan vị trí TRƯỚC (chỉ khi cần)
-  // - Bước 3: Scan mã hàng (Material + PO + Quantity) - có thể scan liên tục
-  // - Bước 4: Chỉ scan vị trí mới khi chuyển sang mã hàng/PO khác
-  currentScanStep: 'batch' | 'location' | 'material' = 'batch';
-  currentLocation: string = '';
-  isLocationInputMode: boolean = false;
+  // - Bước 2: Scan mã hàng (Material + PO + Quantity) - có thể scan liên tục
+  currentScanStep: 'batch' | 'material' = 'batch';
   isWaitingForMaterial: boolean = false;
-  
-  // 🔧 LOGIC MỚI: Theo dõi mã hàng và PO hiện tại để quyết định có cần scan vị trí mới không
-  currentMaterialCode: string = '';
-  currentPONumber: string = '';
   
   // Date Range properties
   startDate: string = '';
@@ -421,36 +413,34 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log('📊 Exporting ASM1 outbound data to Excel...');
       
              // Optimize data for smaller file size
-       const exportData = this.filteredMaterials.map(material => ({
-         'Factory': material.factory || 'ASM1',
-         'Material': material.materialCode || '',
-         'PO': material.poNumber || '',
-         'Qty': material.quantity || 0,
-         'Unit': material.unit || '',
-         'Export Qty': material.exportQuantity || 0,
-         'Ngày xuất': material.exportDate ? material.exportDate.toLocaleString('vi-VN') : '',
-         'Location': material.location || '',
-         'Employee ID': material.employeeId || '',
-         'Production Order': material.productionOrder || '',
-         'Method': material.scanMethod || 'MANUAL'
-       }));
+               const exportData = this.filteredMaterials.map(material => ({
+          'Factory': material.factory || 'ASM1',
+          'Material': material.materialCode || '',
+          'PO': material.poNumber || '',
+          'Qty': material.quantity || 0,
+          'Unit': material.unit || '',
+          'Export Qty': material.exportQuantity || 0,
+          'Ngày xuất': material.exportDate ? material.exportDate.toLocaleString('vi-VN') : '',
+          'Employee ID': material.employeeId || '',
+          'Production Order': material.productionOrder || '',
+          'Method': material.scanMethod || 'MANUAL'
+        }));
       
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       
-             // Set column widths for better readability
-       const colWidths = [
-         { wch: 8 },   // Factory
-         { wch: 15 },  // Material
-         { wch: 12 },  // PO
-         { wch: 8 },   // Qty
-         { wch: 6 },   // Unit
-         { wch: 10 },  // Export Qty
-         { wch: 18 },  // Ngày xuất
-         { wch: 12 },  // Location
-         { wch: 12 },  // Employee ID
-         { wch: 18 },  // Production Order
-         { wch: 8 }    // Method
-       ];
+                     // Set column widths for better readability
+        const colWidths = [
+          { wch: 8 },   // Factory
+          { wch: 15 },  // Material
+          { wch: 12 },  // PO
+          { wch: 8 },   // Qty
+          { wch: 6 },   // Unit
+          { wch: 10 },  // Export Qty
+          { wch: 18 },  // Ngày xuất
+          { wch: 12 },  // Employee ID
+          { wch: 18 },  // Production Order
+          { wch: 8 }    // Method
+        ];
       worksheet['!cols'] = colWidths;
       
       const workbook = XLSX.utils.book_new();
@@ -543,32 +533,31 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         // Sort by date
         filteredData.sort((a, b) => a.exportDate.getTime() - b.exportDate.getTime());
         
-        // Export to Excel
-        const exportData = filteredData.map(item => ({
-          'Factory': item.factory,
-          'Material': item.materialCode,
-          'PO': item.poNumber,
-          'Qty': item.quantity,
-          'Unit': item.unit,
-          'Export Qty': item.exportQuantity,
-          'Date': item.exportDate.toLocaleDateString('vi-VN', {
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit'
-          }),
-          'Location': item.location,
-          'Employee ID': item.employeeId || '',
-          'Production Order': item.productionOrder || '',
-          'Method': item.scanMethod
-        }));
+                 // Export to Excel
+         const exportData = filteredData.map(item => ({
+           'Factory': item.factory,
+           'Material': item.materialCode,
+           'PO': item.poNumber,
+           'Qty': item.quantity,
+           'Unit': item.unit,
+           'Export Qty': item.exportQuantity,
+           'Date': item.exportDate.toLocaleDateString('vi-VN', {
+             day: '2-digit',
+             month: '2-digit',
+             year: '2-digit'
+           }),
+           'Employee ID': item.employeeId || '',
+           'Production Order': item.productionOrder || '',
+           'Method': item.scanMethod
+         }));
         
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         
-        // Set column widths
-        const colWidths = [
-          { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 8 }, { wch: 6 },
-          { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 8 }
-        ];
+                 // Set column widths
+         const colWidths = [
+           { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 8 }, { wch: 6 },
+           { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 8 }
+         ];
         worksheet['!cols'] = colWidths;
         
         const workbook = XLSX.utils.book_new();
@@ -615,26 +604,25 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         return;
       }
       
-      // Backup old data to Excel
-      const oldData = oldDataQuery.docs.map(doc => {
-        const data = doc.data() as any;
-        return {
-          'ID': doc.id,
-          'Factory': data.factory,
-          'Material Code': data.materialCode,
-          'PO Number': data.poNumber,
-          'Quantity': data.quantity,
-          'Unit': data.unit,
-          'Export Quantity': data.exportQuantity,
-          'Export Date': data.exportDate?.toDate().toLocaleDateString('vi-VN') || '',
-          'Location': data.location,
-          'Exported By': data.exportedBy,
-          'Employee ID': data.employeeId || '',
-          'Production Order': data.productionOrder || '',
-          'Scan Method': data.scanMethod,
-          'Notes': data.notes
-        };
-      });
+             // Backup old data to Excel
+       const oldData = oldDataQuery.docs.map(doc => {
+         const data = doc.data() as any;
+         return {
+           'ID': doc.id,
+           'Factory': data.factory,
+           'Material Code': data.materialCode,
+           'PO Number': data.poNumber,
+           'Quantity': data.quantity,
+           'Unit': data.unit,
+           'Export Quantity': data.exportQuantity,
+           'Export Date': data.exportDate?.toDate().toLocaleDateString('vi-VN') || '',
+           'Exported By': data.exportedBy,
+           'Employee ID': data.employeeId || '',
+           'Production Order': data.productionOrder || '',
+           'Scan Method': data.scanMethod,
+           'Notes': data.notes
+         };
+       });
       
       // Save backup
       const worksheet = XLSX.utils.json_to_sheet(oldData);
@@ -1051,15 +1039,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
     
-    // 🔧 LOGIC MỚI: Reset các trạng thái scan vị trí
-    this.currentLocation = '';
+    // 🔧 LOGIC MỚI: Reset các trạng thái scan
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
-    this.isLocationInputMode = false;
-    
-    // 🔧 LOGIC MỚI: Reset mã hàng và PO hiện tại
-    this.currentMaterialCode = '';
-    this.currentPONumber = '';
     
     this.scannerBuffer = '';
     this.focusScannerInput();
@@ -1074,15 +1056,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isProductionOrderScanned = false;
     this.isEmployeeIdScanned = false;
     
-    // 🔧 LOGIC MỚI: Reset các trạng thái scan vị trí
-    this.currentLocation = '';
+    // 🔧 LOGIC MỚI: Reset các trạng thái scan
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
-    this.isLocationInputMode = false;
-    
-    // 🔧 LOGIC MỚI: Reset mã hàng và PO hiện tại
-    this.currentMaterialCode = '';
-    this.currentPONumber = '';
     
     this.scannerBuffer = '';
     console.log('✅ Batch scanning mode deactivated');
@@ -1109,15 +1085,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
-    // 🔧 LOGIC MỚI: Nếu đã scan lệnh sản xuất và mã nhân viên, xử lý theo logic mới
+    // 🔧 LOGIC MỚI: Nếu đã scan lệnh sản xuất và mã nhân viên, xử lý mã hàng
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-      // Kiểm tra xem có phải mã hàng không
-      if (this.isMaterialData(scannedData)) {
-        this.processBatchMaterialScan(scannedData);
-      } else {
-        // Nếu không phải mã hàng, xử lý như vị trí
-        this.processLocationInput(scannedData);
-      }
+      // Xử lý mã hàng trực tiếp
+      this.processBatchMaterialScan(scannedData);
     } else {
       // Show what's still needed - chỉ log console, không alert
       if (!this.isProductionOrderScanned) {
@@ -1183,50 +1154,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // 🔧 LOGIC MỚI: Kiểm tra xem dữ liệu scan có phải là mã hàng không
-  private isMaterialData(scannedData: string): boolean {
-    // Kiểm tra các pattern của mã hàng
-    if (scannedData.includes('|') || scannedData.includes(',') || scannedData.includes(' ')) {
-      return true; // Có dấu phân cách - có thể là mã hàng
-    }
-    
-    // Kiểm tra pattern mã hàng: letter + 6+ digits (e.g., B024039, A002009)
-    const materialCodeMatch = scannedData.match(/[A-Z]\d{6,}/);
-    if (materialCodeMatch) {
-      return true; // Có pattern mã hàng
-    }
-    
-    // Kiểm tra xem có phải là mã hàng hiện tại không (để scan liên tục)
-    if (this.currentMaterialCode && this.currentPONumber) {
-      // Nếu đã có mã hàng và PO, kiểm tra xem có phải cùng loại không
-      if (scannedData.includes(this.currentMaterialCode) || scannedData.includes(this.currentPONumber)) {
-        return true; // Có thể là scan liên tục cùng mã hàng
-      }
-    }
-    
-    return false; // Không phải mã hàng, xử lý như vị trí
-  }
 
-  // 🔧 LOGIC MỚI: Kiểm tra xem có cần scan vị trí mới không
-  private checkIfNeedNewLocation(materialCode: string, poNumber: string): boolean {
-    // Nếu chưa có mã hàng và PO nào, cần scan vị trí
-    if (!this.currentMaterialCode || !this.currentPONumber) {
-      console.log('📍 Lần đầu scan - cần scan vị trí');
-      return true;
-    }
-    
-    // Nếu mã hàng hoặc PO khác với hiện tại, cần scan vị trí mới
-    if (materialCode !== this.currentMaterialCode || poNumber !== this.currentPONumber) {
-      console.log('📍 Mã hàng hoặc PO thay đổi - cần scan vị trí mới');
-      console.log('📍 Từ:', { materialCode: this.currentMaterialCode, poNumber: this.currentPONumber });
-      console.log('📍 Thành:', { materialCode, poNumber });
-      return true;
-    }
-    
-    // Nếu cùng mã hàng và PO, không cần scan vị trí mới
-    console.log('📍 Cùng mã hàng và PO - sử dụng vị trí hiện tại');
-    return false;
-  }
 
   // Process production order scan
   private processProductionOrderScan(scannedData: string): void {
@@ -1255,13 +1183,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // 🔧 LOGIC MỚI: Xử lý scan mã hàng và lưu ngay với vị trí đã có
+  // 🔧 LOGIC MỚI: Xử lý scan mã hàng đơn giản (không có vị trí)
   private processBatchMaterialScan(scannedData: string): void {
     try {
       // Kiểm tra xem đã scan mã nhân viên chưa
       if (!this.isEmployeeIdScanned) {
         console.log('⚠️ Phải scan mã nhân viên trước khi scan mã hàng!');
-        // Bỏ alert - chỉ log console
         return;
       }
       
@@ -1337,37 +1264,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         quantity = 1;
       }
       
-      // 🔧 LOGIC MỚI: Kiểm tra xem có cần scan vị trí mới không
-      const needNewLocation = this.checkIfNeedNewLocation(materialCode, poNumber);
+      // 🔧 LOGIC MỚI: Lưu trực tiếp vào database với vị trí "N/A"
+      console.log('📍 Lưu mã hàng với vị trí N/A:', { materialCode, poNumber, quantity });
       
-      if (needNewLocation) {
-        // Cần scan vị trí mới
-        console.log('📍 Cần scan vị trí mới cho mã hàng/PO mới:', { materialCode, poNumber });
-        console.log('📍 Vui lòng scan hoặc nhập tay vị trí trước khi tiếp tục');
-        
-        // Lưu thông tin mã hàng mới để chờ vị trí
-        this.currentMaterialCode = materialCode;
-        this.currentPONumber = poNumber;
-        this.isWaitingForMaterial = true;
-        this.currentScanStep = 'location';
-        
-        // Hiển thị hướng dẫn
-        this.showLocationInputGuide('NEW_MATERIAL');
-        return;
-      }
+      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, 'N/A');
       
-      // 🔧 LOGIC MỚI: Sử dụng vị trí hiện tại hoặc "N/A" nếu không có
-      const locationToUse = this.currentLocation || 'N/A';
-      console.log('📍 Sử dụng vị trí:', locationToUse, 'cho mã hàng:', { materialCode, poNumber, quantity });
-      
-      // Lưu vào database
-      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, locationToUse);
-      
-      // Cập nhật mã hàng và PO hiện tại
-      this.currentMaterialCode = materialCode;
-      this.currentPONumber = poNumber;
-      
-      console.log('✅ Đã lưu xong, có thể scan liên tục cùng mã hàng/PO hoặc scan mã hàng/PO mới');
+      console.log('✅ Đã lưu xong, có thể scan liên tục');
       
       // Auto-focus cho scan tiếp theo
       setTimeout(() => {
@@ -1380,67 +1282,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // 🔧 LOGIC MỚI: Hiển thị hướng dẫn scan mã hàng sau khi đã có vị trí (chỉ log console, không popup)
-  private showLocationInputGuide(location: string): void {
-    if (location === 'NEW_MATERIAL') {
-      console.log('📍 === HƯỚNG DẪN SCAN VỊ TRÍ MỚI ===');
-      console.log('📍 Bước 1: Đã scan mã hàng/PO mới');
-      console.log('📍 Bước 2: Vui lòng scan hoặc nhập tay vị trí cho mã hàng/PO này');
-      console.log('📍 Bước 3: Sau khi có vị trí, hệ thống sẽ lưu và có thể scan liên tục');
-      console.log('📍 === KẾT THÚC HƯỚNG DẪN ===');
-      
-      console.log('📍 Vui lòng scan hoặc nhập tay vị trí cho mã hàng/PO mới');
-    } else {
-      console.log('📍 === HƯỚNG DẪN SCAN MÃ HÀNG ===');
-      console.log('📍 Bước 1: Đã scan vị trí thành công:', location);
-      console.log('📍 Bước 2: Vui lòng scan mã hàng (Material + PO + Quantity)');
-      console.log('📍 Bước 3: Sau khi scan mã hàng, hệ thống sẽ lưu và có thể scan liên tục');
-      console.log('📍 === KẾT THÚC HƯỚNG DẪN ===');
-      
-      // Bỏ popup - chỉ log console để scan liên tục nhanh hơn
-      console.log(`📍 Vị trí: ${location} - Vui lòng scan mã hàng tiếp theo`);
-    }
-  }
 
-  // 🔧 LOGIC MỚI: Xử lý nhập vị trí
-  private processLocationInput(location: string): void {
-    // Chuẩn hóa vị trí (không phân biệt chữ hoa/thường)
-    const normalizedLocation = location.trim().toUpperCase();
-    
-    console.log('📍 Xử lý vị trí:', normalizedLocation);
-    
-    // Lưu vị trí
-    this.currentLocation = normalizedLocation;
-    
-    // Nếu đang chờ scan mã hàng mới, xử lý ngay
-    if (this.isWaitingForMaterial && this.currentMaterialCode && this.currentPONumber) {
-      console.log('📍 Đã có vị trí, xử lý mã hàng đang chờ:', { 
-        materialCode: this.currentMaterialCode, 
-        poNumber: this.currentPONumber, 
-        location: normalizedLocation 
-      });
-      
-      // Xử lý mã hàng đang chờ với vị trí mới
-      this.processBatchMaterialScan(`${this.currentMaterialCode}|${this.currentPONumber}|1`);
-      
-      // Reset trạng thái chờ
-      this.isWaitingForMaterial = false;
-      this.currentScanStep = 'material';
-    } else {
-      // Chuyển sang chế độ scan mã hàng
-      this.currentScanStep = 'material';
-      console.log('📍 Đã lưu vị trí:', normalizedLocation);
-      console.log('📍 Bây giờ vui lòng scan mã hàng (Material + PO + Quantity)');
-      
-      // Hiển thị hướng dẫn cho user
-      this.showLocationInputGuide(normalizedLocation);
-    }
-    
-    // Auto-focus cho scan tiếp theo
-    setTimeout(() => {
-      this.focusScannerInput();
-    }, 100);
-  }
+
+
 
   // Lưu mã hàng trực tiếp vào database
   private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number, location: string = 'Unknown'): Promise<void> {
