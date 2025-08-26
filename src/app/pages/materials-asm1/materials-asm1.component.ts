@@ -86,6 +86,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private negativeStockSubject = new BehaviorSubject<number>(0);
   public negativeStockCount$ = this.negativeStockSubject.asObservable();
   
+  // Total stock tracking
+  private totalStockSubject = new BehaviorSubject<number>(0);
+  public totalStockCount$ = this.totalStockSubject.asObservable();
+  
   // Negative stock filter state
   showOnlyNegativeStock = false;
   
@@ -131,7 +135,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Load inventory data and setup search after data is loaded
     this.loadInventoryAndSetupSearch();
     
-    // Initialize negative stock count
+    // Initialize negative stock count and total stock count
     this.updateNegativeStockCount();
     
     console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
@@ -1595,6 +1599,22 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return stock;
   }
 
+  // Calculate total stock for all filtered materials
+  getTotalStock(): number {
+    if (!this.filteredInventory || this.filteredInventory.length === 0) {
+      return 0;
+    }
+    
+    const totalStock = this.filteredInventory.reduce((sum, material) => {
+      return sum + this.calculateCurrentStock(material);
+    }, 0);
+    
+    // Update the BehaviorSubject for reactive updates
+    this.totalStockSubject.next(totalStock);
+    
+    return totalStock;
+  }
+
   // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO (không còn vị trí)
   // - Trước đây: Query theo Material + PO + Location → Bị lỗi khi Outbound không có vị trí
   // - Bây giờ: Chỉ query theo Material + PO → Lấy tất cả outbound records
@@ -1954,6 +1974,24 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private updateNegativeStockCount(): void {
     const count = this.getNegativeStockCount();
     console.log(`📊 Negative stock count updated: ${count}`);
+    
+    // Also update total stock count
+    this.updateTotalStockCount();
+  }
+  
+  // Update total stock count for real-time display
+  private updateTotalStockCount(): void {
+    if (!this.filteredInventory || this.filteredInventory.length === 0) {
+      this.totalStockSubject.next(0);
+      return;
+    }
+    
+    const totalStock = this.filteredInventory.reduce((sum, material) => {
+      return sum + this.calculateCurrentStock(material);
+    }, 0);
+    
+    this.totalStockSubject.next(totalStock);
+    console.log(`📊 Total stock count updated: ${totalStock}`);
   }
 
 

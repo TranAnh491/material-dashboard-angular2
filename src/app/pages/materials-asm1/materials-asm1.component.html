@@ -79,6 +79,13 @@
           <span>Tổng: {{ filteredInventory.length }} mã</span>
         </div>
         
+        <!-- Total Stock Counter Box - Hiển thị tổng số tồn kho -->
+        <div class="total-stock-counter-box" 
+             [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
+          <i class="material-icons">assessment</i>
+          <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+        </div>
+        
         <!-- Search Type Selector -->
         <div class="search-type-selector">
           <div class="dropdown">

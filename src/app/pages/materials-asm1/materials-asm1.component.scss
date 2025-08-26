@@ -561,6 +561,10 @@
   .total-counter-box {
     order: 3; // Đặt thứ tự hiển thị
   }
+  
+  .total-stock-counter-box {
+    order: 4; // Đặt thứ tự hiển thị
+  }
 }
 
 // More Button styling
@@ -657,6 +661,41 @@
     &:hover {
       background: #bfdbfe;
     }
+  }
+}
+
+// Total stock counter box styling
+.total-stock-counter-box {
+  background: #ffffff;
+  color: #000000;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px; // Đồng bộ với các box khác
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  flex-shrink: 0; // Không cho phép co lại
+  
+  i {
+    font-size: 18px;
+    color: #000000;
+  }
+  
+  span {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   }
 }
 
