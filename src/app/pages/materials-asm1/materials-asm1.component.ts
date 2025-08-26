@@ -22,7 +22,7 @@ export interface InventoryMaterial {
   materialCode: string;
   materialName?: string;
   poNumber: string;
-  openingStock: number; // Tồn đầu - nhập tay được
+  openingStock: number | null; // Tồn đầu - nhập tay được, có thể null
   quantity: number;
   unit: string;
   exported?: number;
@@ -183,7 +183,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
-              openingStock: data.openingStock || data.stock || 0, // Initialize openingStock field
+              openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
               xt: data.xt || 0 // Initialize XT field for old materials
             };
             
@@ -570,7 +570,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
-            openingStock: data.openingStock || data.stock || 0, // Initialize openingStock field
+            openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
             xt: data.xt || 0 // Initialize XT field for search results
           };
           
@@ -800,7 +800,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       if (consolidatedMap.has(key)) {
         // Same material + PO + location - merge quantities
         const existing = consolidatedMap.get(key)!;
-        existing.openingStock += material.openingStock;
+        // Xử lý openingStock có thể null
+        const existingOpeningStock = existing.openingStock !== null ? existing.openingStock : 0;
+        const materialOpeningStock = material.openingStock !== null ? material.openingStock : 0;
+        existing.openingStock = existingOpeningStock + materialOpeningStock;
         existing.quantity += material.quantity;
         existing.stock = (existing.stock || 0) + (material.stock || 0);
         existing.exported = (existing.exported || 0) + (material.exported || 0);
@@ -853,7 +856,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         const locations = materials.map(m => m.location).join('; ');
         
         // Combine quantities
-        baseMaterial.openingStock = materials.reduce((sum, m) => sum + (m.openingStock || 0), 0);
+        // Combine quantities - xử lý openingStock có thể null
+        const totalOpeningStock = materials.reduce((sum, m) => {
+          const stock = m.openingStock !== null ? m.openingStock : 0;
+          return sum + stock;
+        }, 0);
+        baseMaterial.openingStock = totalOpeningStock > 0 ? totalOpeningStock : null;
         baseMaterial.quantity = materials.reduce((sum, m) => sum + m.quantity, 0);
         baseMaterial.stock = materials.reduce((sum, m) => sum + (m.stock || 0), 0);
         baseMaterial.exported = materials.reduce((sum, m) => sum + (m.exported || 0), 0);
@@ -1528,7 +1536,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Prepare update data, only include defined values
     // Note: exported field is not included here as it's auto-updated from outbound
     const updateData: any = {
-      openingStock: material.openingStock,
+      openingStock: material.openingStock, // Có thể là null
       xt: material.xt,
       location: material.location,
       type: material.type,
@@ -1582,7 +1590,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Calculate current stock for display
   calculateCurrentStock(material: InventoryMaterial): number {
-    const stock = (material.openingStock || 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
+    const openingStockValue = material.openingStock !== null ? material.openingStock : 0;
+    const stock = openingStockValue + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
     return stock;
   }
 
@@ -1811,14 +1820,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Update opening stock quantity
   async updateOpeningStock(material: InventoryMaterial): Promise<void> {
     try {
-      console.log(`📝 Updating opening stock for ${material.materialCode} - PO ${material.poNumber}: ${material.openingStock}`);
+      const openingStockDisplay = material.openingStock !== null ? material.openingStock : 'trống';
+      console.log(`📝 Updating opening stock for ${material.materialCode} - PO ${material.poNumber}: ${openingStockDisplay}`);
       
       // Update in Firebase
       this.updateMaterialInFirebase(material);
       
       // Recalculate stock
       const newStock = this.calculateCurrentStock(material);
-      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${material.openingStock} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt})`);
+      const openingStockValue = material.openingStock !== null ? material.openingStock : 0;
+      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${openingStockValue} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt})`);
       
       // Update negative stock count for real-time display
       this.updateNegativeStockCount();
@@ -2463,12 +2474,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         'Material': material.materialCode || '',
         'Name': material.materialName || '',
         'PO': material.poNumber || '',
-        'Opening Stock': material.openingStock || 0,
+        'Opening Stock': material.openingStock !== null ? material.openingStock : '',
         'Qty': material.quantity || 0,
         'Unit': material.unit || '',
         'Exported': material.exported || 0,
         'XT': material.xt || 0,
-        'Stock': (material.openingStock || 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0),
+        'Stock': (material.openingStock !== null ? material.openingStock : 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0),
         'Location': material.location || '',
         'Type': material.type || '',
         'Expiry': material.expiryDate?.toLocaleDateString('vi-VN', {

@@ -505,7 +505,7 @@
   }
 }
 
-// Giao diện phẳng cho cột Tồn đầu
+// Giao diện phẳng cho cột Tồn đầu - giống hệt cột Vị trí
 .opening-stock-input {
   border: none !important;
   background: transparent !important;
@@ -1259,6 +1259,32 @@
     min-width: 113px !important;
     max-width: 113px !important;
     text-align: center;
+  }
+  
+  // Cột Tồn đầu - giao diện giống hệt cột Vị trí
+  th:nth-child(6), // Cột "Tồn đầu"
+  td:nth-child(6) {
+    .opening-stock-input {
+      border: none !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      padding: 4px 6px !important;
+      font-size: 12px !important;
+      text-align: center !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      
+      &:focus {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: #f8f9fa !important;
+      }
+      
+      &:hover {
+        background: #f8f9fa !important;
+      }
+    }
   }
 }
 

@@ -216,8 +216,9 @@
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <input type="number" 
-                     class="editable-cell opening-stock-input" 
-                     [(ngModel)]="material.openingStock" 
+                     class="opening-stock-input" 
+                     [ngModel]="material.openingStock || ''"
+                     (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
                      (change)="updateOpeningStock(material)" 
                      min="0" 
                      step="0.1" 
