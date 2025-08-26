@@ -22,6 +22,7 @@ export interface InventoryMaterial {
   materialCode: string;
   materialName?: string;
   poNumber: string;
+  openingStock: number; // Tồn đầu - nhập tay được
   quantity: number;
   unit: string;
   exported?: number;
@@ -40,6 +41,7 @@ export interface InventoryMaterial {
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
+  fifo?: number; // Thứ tự ưu tiên xuất hàng (1 = cũ nhất, 2 = mới hơn, ...)
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -181,6 +183,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+              openingStock: data.openingStock || data.stock || 0, // Initialize openingStock field
               xt: data.xt || 0 // Initialize XT field for old materials
             };
             
@@ -567,6 +570,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+            openingStock: data.openingStock || data.stock || 0, // Initialize openingStock field
             xt: data.xt || 0 // Initialize XT field for search results
           };
           
@@ -662,10 +666,31 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return this.comparePOFIFO(a.poNumber, b.poNumber);
     });
     
+    // Assign FIFO numbers after sorting
+    this.assignFIFONumbers();
+    
     console.log('✅ Inventory sorted by FIFO successfully');
     
     // Update negative stock count after sorting
     this.updateNegativeStockCount();
+  }
+
+  // Assign FIFO numbers to materials after sorting
+  private assignFIFONumbers(): void {
+    let currentMaterialCode = '';
+    let currentFifo = 1;
+    
+    this.filteredInventory.forEach(material => {
+      if (material.materialCode !== currentMaterialCode) {
+        // New material code, reset FIFO counter
+        currentMaterialCode = material.materialCode;
+        currentFifo = 1;
+      }
+      material.fifo = currentFifo;
+      currentFifo++;
+    });
+    
+    console.log(`🔢 FIFO numbers assigned: ${this.filteredInventory.filter(m => m.fifo).length} items`);
   }
 
   // Compare PO numbers for FIFO sorting (older first) - FIXED LOGIC
@@ -775,6 +800,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       if (consolidatedMap.has(key)) {
         // Same material + PO + location - merge quantities
         const existing = consolidatedMap.get(key)!;
+        existing.openingStock += material.openingStock;
         existing.quantity += material.quantity;
         existing.stock = (existing.stock || 0) + (material.stock || 0);
         existing.exported = (existing.exported || 0) + (material.exported || 0);
@@ -827,6 +853,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         const locations = materials.map(m => m.location).join('; ');
         
         // Combine quantities
+        baseMaterial.openingStock = materials.reduce((sum, m) => sum + (m.openingStock || 0), 0);
         baseMaterial.quantity = materials.reduce((sum, m) => sum + m.quantity, 0);
         baseMaterial.stock = materials.reduce((sum, m) => sum + (m.stock || 0), 0);
         baseMaterial.exported = materials.reduce((sum, m) => sum + (m.exported || 0), 0);
@@ -1501,6 +1528,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Prepare update data, only include defined values
     // Note: exported field is not included here as it's auto-updated from outbound
     const updateData: any = {
+      openingStock: material.openingStock,
       xt: material.xt,
       location: material.location,
       type: material.type,
@@ -1554,7 +1582,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Calculate current stock for display
   calculateCurrentStock(material: InventoryMaterial): number {
-    const stock = (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
+    const stock = (material.openingStock || 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
     return stock;
   }
 
@@ -1594,6 +1622,52 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  // 🔧 LOGIC FIFO MỚI: Lấy số lượng xuất từ Outbound theo FIFO (Material + PO)
+  // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
+  // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
+  // - Tránh tồn kho âm ở các dòng sau
+  async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
+    try {
+      console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber}`);
+      
+      const outboundRef = this.firestore.collection('outbound-materials');
+      const snapshot = await outboundRef
+        .ref
+        .where('factory', '==', 'ASM1')
+        .where('materialCode', '==', materialCode)
+        .where('poNumber', '==', poNumber)
+        .orderBy('exportDate', 'asc') // Sắp xếp theo thời gian xuất (cũ nhất trước)
+        .get();
+
+      if (!snapshot.empty) {
+        let totalExported = 0;
+        const outboundRecords: any[] = [];
+        
+        snapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const exportQuantity = data.exportQuantity || 0;
+          totalExported += exportQuantity;
+          
+          outboundRecords.push({
+            id: doc.id,
+            exportQuantity: exportQuantity,
+            exportDate: data.exportDate,
+            location: data.location || 'N/A'
+          });
+        });
+        
+        console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}: ${totalExported} (${outboundRecords.length} records)`);
+        return { totalExported, outboundRecords };
+      } else {
+        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
+        return { totalExported: 0, outboundRecords: [] };
+      }
+    } catch (error) {
+      console.error(`❌ Error getting exported quantity with FIFO for ${materialCode} - PO ${poNumber}:`, error);
+      return { totalExported: 0, outboundRecords: [] };
+    }
+  }
+
   // 🔧 UPDATE LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
   // - Trước đây: Dựa vào Material + PO + Location → Bị lỗi khi Outbound không có vị trí
   // - Bây giờ: Chỉ dựa vào Material + PO → Lấy tất cả outbound records
@@ -1622,6 +1696,98 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  // 🔧 UPDATE LOGIC FIFO MỚI: Cập nhật số lượng xuất từ Outbound theo FIFO
+  // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
+  // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
+  // - Tránh tồn kho âm ở các dòng sau
+  async updateExportedFromOutboundFIFO(material: InventoryMaterial): Promise<void> {
+    try {
+      console.log(`🔄 Updating exported quantity with FIFO logic for ${material.materialCode} - PO ${material.poNumber}`);
+      
+      // Lấy thông tin outbound với logic FIFO
+      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(material.materialCode, material.poNumber);
+      
+      if (totalExported === 0) {
+        // Không có outbound, giữ nguyên số lượng đã xuất hiện tại
+        console.log(`📊 No outbound records for ${material.materialCode} - PO ${material.poNumber}, keeping current exported: ${material.exported}`);
+        return;
+      }
+
+      // Tìm tất cả dòng inventory cùng Material + PO, sắp xếp theo FIFO
+      const allInventoryItems = this.inventoryMaterials.filter(item => 
+        item.materialCode === material.materialCode && 
+        item.poNumber === material.poNumber
+      ).sort((a, b) => (a.fifo || 0) - (b.fifo || 0));
+
+      if (allInventoryItems.length === 0) {
+        console.warn(`⚠️ No inventory items found for ${material.materialCode} - PO ${material.poNumber}`);
+        return;
+      }
+
+      console.log(`📊 Found ${allInventoryItems.length} inventory items for ${material.materialCode} - PO ${material.poNumber}, total outbound: ${totalExported}`);
+
+      // Phân bổ số lượng xuất theo FIFO - CỘNG DỒN thay vì ghi đè
+      let remainingExported = totalExported;
+      const updatedItems: InventoryMaterial[] = [];
+
+      for (const item of allInventoryItems) {
+        if (remainingExported <= 0) break;
+
+        const availableStock = this.calculateCurrentStock(item);
+        if (availableStock <= 0) continue; // Skip items with no stock
+
+        // Tính số lượng xuất cho dòng này - CỘNG DỒN với số đã có
+        const currentExported = item.exported || 0;
+        const maxCanExport = availableStock + currentExported; // Có thể xuất tối đa = stock hiện tại + đã xuất
+        const exportedFromThisItem = Math.min(remainingExported, maxCanExport);
+        
+        // Cập nhật số lượng xuất cho dòng này - CỘNG DỒN
+        const newTotalExported = currentExported + exportedFromThisItem;
+        
+        if (item.exported !== newTotalExported) {
+          item.exported = newTotalExported;
+          updatedItems.push(item);
+          console.log(`📦 FIFO ${item.fifo}: ${material.materialCode} - PO ${item.poNumber} - Exported: ${currentExported} → ${newTotalExported}, Stock: ${this.calculateCurrentStock(item)}`);
+        }
+
+        remainingExported -= exportedFromThisItem;
+      }
+
+      // Cập nhật tất cả items đã thay đổi vào Firebase
+      if (updatedItems.length > 0) {
+        await Promise.all(updatedItems.map(item => 
+          this.updateExportedInFirebase(item, item.exported)
+        ));
+        console.log(`✅ Updated ${updatedItems.length} inventory items with FIFO logic`);
+      }
+
+      // Cập nhật material hiện tại
+      const currentItem = allInventoryItems.find(item => item.id === material.id);
+      if (currentItem) {
+        material.exported = currentItem.exported;
+        console.log(`📊 Updated current material exported quantity: ${material.exported}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error updating exported quantity with FIFO for ${material.materialCode} - PO ${material.poNumber}:`, error);
+    }
+  }
+
+  // Helper method để cập nhật exported quantity vào Firebase
+  private async updateExportedInFirebase(material: InventoryMaterial, exportedQuantity: number): Promise<void> {
+    if (!material.id) return;
+    
+    try {
+      await this.firestore.collection('inventory-materials').doc(material.id).update({
+        exported: exportedQuantity,
+        updatedAt: new Date()
+      });
+      console.log(`💾 Exported quantity saved to Firebase: ${material.materialCode} - PO ${material.poNumber} = ${exportedQuantity}`);
+    } catch (error) {
+      console.error(`❌ Error saving exported quantity to Firebase: ${material.materialCode} - PO ${material.poNumber}:`, error);
+    }
+  }
+
   // Update XT (planned export) quantity
   async updateXT(material: InventoryMaterial): Promise<void> {
     try {
@@ -1632,7 +1798,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Recalculate stock
       const newStock = this.calculateCurrentStock(material);
-      console.log(`📊 New stock calculated: ${newStock} (Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt})`);
+      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${material.openingStock} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt})`);
       
       // Update negative stock count for real-time display
       this.updateNegativeStockCount();
@@ -1642,10 +1808,30 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  // Update opening stock quantity
+  async updateOpeningStock(material: InventoryMaterial): Promise<void> {
+    try {
+      console.log(`📝 Updating opening stock for ${material.materialCode} - PO ${material.poNumber}: ${material.openingStock}`);
+      
+      // Update in Firebase
+      this.updateMaterialInFirebase(material);
+      
+      // Recalculate stock
+      const newStock = this.calculateCurrentStock(material);
+      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${material.openingStock} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt})`);
+      
+      // Update negative stock count for real-time display
+      this.updateNegativeStockCount();
+      
+    } catch (error) {
+      console.error(`❌ Error updating opening stock for ${material.materialCode}:`, error);
+    }
+  }
+
   // Auto-update all exported quantities from RM1 outbound (silent, no user interaction)
   private async autoUpdateAllExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Auto-updating exported quantities from RM1 outbound...');
+      console.log('🔄 Auto-updating exported quantities from RM1 outbound with safe logic...');
       
       let updatedCount = 0;
       let errorCount = 0;
@@ -1660,7 +1846,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Auto-update completed: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Auto-update completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
       // Refresh the display
       this.filteredInventory = [...this.inventoryMaterials];
@@ -1676,7 +1862,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Auto-update exported quantities for search results only
   private async autoUpdateSearchResultsExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Auto-updating exported quantities for search results...');
+      console.log('🔄 Auto-updating exported quantities for search results with safe logic...');
       
       let updatedCount = 0;
       let errorCount = 0;
@@ -1691,7 +1877,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Search results auto-update completed: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Search results auto-update completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
     } catch (error) {
       console.error('❌ Error during search results auto-update:', error);
@@ -1701,7 +1887,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Sync all exported quantities from RM1 outbound (manual sync - kept for backward compatibility)
   async syncAllExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound...');
+      console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound with safe logic...');
       
       let updatedCount = 0;
       let errorCount = 0;
@@ -1716,7 +1902,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Manual sync completed: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Manual sync completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
       // Refresh the display
       this.filteredInventory = [...this.inventoryMaterials];
@@ -2277,11 +2463,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         'Material': material.materialCode || '',
         'Name': material.materialName || '',
         'PO': material.poNumber || '',
+        'Opening Stock': material.openingStock || 0,
         'Qty': material.quantity || 0,
         'Unit': material.unit || '',
         'Exported': material.exported || 0,
         'XT': material.xt || 0,
-        'Stock': (material.quantity || 0) - (material.exported || 0) - (material.xt || 0),
+        'Stock': (material.openingStock || 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0),
         'Location': material.location || '',
         'Type': material.type || '',
         'Expiry': material.expiryDate?.toLocaleDateString('vi-VN', {
@@ -2305,6 +2492,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         { wch: 15 },  // Material
         { wch: 20 },  // Name
         { wch: 12 },  // PO
+        { wch: 12 },  // Opening Stock
         { wch: 8 },   // Qty
         { wch: 6 },   // Unit
         { wch: 8 },   // Exported
@@ -2379,5 +2567,77 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         console.log(`  ${index + 1}. ID: ${doc.id}, Location: ${data.location}, Exported: ${data.exported}, Stock: ${data.stock}, Updated: ${data.updatedAt?.toDate?.() || data.updatedAt}`);
       });
     });
+  }
+
+  // Handle outbound operation following FIFO principle
+  // This method would be called when processing outbound materials
+  processOutboundByFIFO(materialCode: string, outboundQuantity: number): { success: boolean; message: string; affectedPOs: string[] } {
+    console.log(`🚚 Processing outbound for ${materialCode}: ${outboundQuantity} units with FIFO logic`);
+    
+    // Find all items for this material code, sorted by FIFO (oldest first)
+    const materialItems = this.filteredInventory
+      .filter(item => item.materialCode === materialCode)
+      .sort((a, b) => (a.fifo || 0) - (b.fifo || 0));
+    
+    if (materialItems.length === 0) {
+      return { 
+        success: false, 
+        message: `Không tìm thấy mã hàng ${materialCode} trong kho`,
+        affectedPOs: []
+      };
+    }
+    
+    console.log(`📊 Found ${materialItems.length} inventory items for ${materialCode}, processing with FIFO logic`);
+    
+    let remainingQuantity = outboundQuantity;
+    const affectedPOs: string[] = [];
+    
+    // Process outbound following FIFO principle - CỘNG DỒN thay vì ghi đè
+    for (const item of materialItems) {
+      if (remainingQuantity <= 0) break;
+      
+      const availableStock = this.calculateCurrentStock(item);
+      if (availableStock <= 0) {
+        console.log(`⚠️ Skipping FIFO ${item.fifo} - PO ${item.poNumber}: No available stock (${availableStock})`);
+        continue; // Skip items with no stock
+      }
+      
+      const outboundFromThisItem = Math.min(remainingQuantity, availableStock);
+      
+      // Update the item's exported quantity - CỘNG DỒN
+      const oldExported = item.exported || 0;
+      item.exported = oldExported + outboundFromThisItem;
+      
+      remainingQuantity -= outboundFromThisItem;
+      affectedPOs.push(item.poNumber);
+      
+      console.log(`📦 FIFO ${item.fifo} - PO ${item.poNumber}: Xuất ${outboundFromThisItem} units, Exported: ${oldExported} → ${item.exported}, Còn lại: ${this.calculateCurrentStock(item)}`);
+      
+      // Update Firebase immediately for this item
+      this.updateExportedInFirebase(item, item.exported);
+    }
+    
+    if (remainingQuantity > 0) {
+      console.warn(`⚠️ Không đủ tồn kho cho ${materialCode}. Còn thiếu: ${remainingQuantity} units`);
+      return {
+        success: false,
+        message: `Không đủ tồn kho. Còn thiếu: ${remainingQuantity} units`,
+        affectedPOs
+      };
+    }
+    
+    // Re-sort and update display
+    this.sortInventoryFIFO();
+    
+    // Update negative stock count
+    this.updateNegativeStockCount();
+    
+    console.log(`✅ Outbound processed successfully with FIFO logic for ${materialCode}. Affected PO(s): ${affectedPOs.join(', ')}`);
+    
+    return {
+      success: true,
+      message: `Xuất hàng thành công theo FIFO: ${outboundQuantity} units`,
+      affectedPOs
+    };
   }
 }

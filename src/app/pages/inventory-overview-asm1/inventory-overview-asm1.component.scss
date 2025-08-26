@@ -548,17 +548,15 @@
 
 // Table Cell Styles
 .material-code-cell {
-  font-weight: 600;
-  color: #2c3e50;
-  width: 113px; // 3cm - Mã hàng
+  width: 113px; // 3cm
   min-width: 113px;
   max-width: 113px;
+  font-weight: 500;
+  color: #333;
 }
 
 .po-cell {
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  width: 113px; // 3cm - PO
+  width: 113px; // 3cm
   min-width: 113px;
   max-width: 113px;
 }

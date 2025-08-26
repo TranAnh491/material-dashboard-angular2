@@ -505,6 +505,29 @@
   }
 }
 
+// Giao diện phẳng cho cột Tồn đầu
+.opening-stock-input {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 4px 6px !important;
+  font-size: 12px !important;
+  text-align: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  
+  &:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #f8f9fa !important;
+  }
+  
+  &:hover {
+    background: #f8f9fa !important;
+  }
+}
+
 // Cột Loại Hình - kích thước bằng cột Vị trí
 .type-cell {
   width: 80px !important;
@@ -1181,11 +1204,11 @@
   }
   
   // Thu nhỏ kích thước các cột cụ thể
-  th:nth-child(6), // Cột "Đã xuất"
-  td:nth-child(6) {
-    width: 80px;
-    min-width: 80px;
-    max-width: 80px;
+  th:nth-child(8), // Cột "Đã xuất" (sau khi thêm Tồn đầu)
+  td:nth-child(8) {
+    width: 113px; // Bằng chiều rộng cột Mã hàng
+    min-width: 113px;
+    max-width: 113px;
     
     // Style giống cột "Vị trí" - luôn có thể chỉnh sửa
     .editable-cell {
@@ -1210,18 +1233,32 @@
     }
   }
   
-  th:nth-child(9), // Cột "Loại Hình"
-  td:nth-child(9) {
+  th:nth-child(11), // Cột "Loại Hình" (sau khi thêm Tồn đầu)
+  td:nth-child(11) {
     width: 80px;
     min-width: 80px;
     max-width: 80px;
   }
   
-  th:nth-child(8), // Cột "Vị trí"
-  td:nth-child(8) {
+  th:nth-child(10), // Cột "Vị trí" (sau khi thêm Tồn đầu)
+  td:nth-child(10) {
     width: 120px;
     min-width: 120px;
     max-width: 120px;
+  }
+
+  // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
+  th:nth-child(6), // Cột "Tồn đầu"
+  td:nth-child(6),
+  th:nth-child(7), // Cột "NK"
+  td:nth-child(7),
+  th:nth-child(8), // Cột "Đã xuất"
+  td:nth-child(8),
+  th:nth-child(9) { // Cột "Tồn kho"
+    width: 113px !important; // Bằng chiều rộng cột Mã hàng
+    min-width: 113px !important;
+    max-width: 113px !important;
+    text-align: center;
   }
 }
 
@@ -1240,4 +1277,20 @@
     color: #dc3545 !important;
   }
 }
+
+// FIFO column styling
+.fifo-cell {
+  background-color: #e3f2fd;
+  font-weight: 600;
+  text-align: center;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  min-width: 60px;
+  width: 60px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+
 

@@ -281,7 +281,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           location: data.location || '',
           type: data.type || '',
           currentStock: currentStock,
-          isNegative: currentStock < 0
+          isNegative: currentStock < 0,
+          // fifo: index + 1 // Assign FIFO based on index
         });
       });
       
@@ -406,12 +407,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         existing.currentStock += item.currentStock;
         existing.isNegative = existing.currentStock < 0;
         
-        // For LinkQ data, use the first occurrence (they should be the same for same material)
+        // Update LinkQ data if available
         if (item.linkQStock !== undefined) {
           existing.linkQStock = item.linkQStock;
-          existing.stockDifference = existing.currentStock - existing.linkQStock;
-          // Chỉ tính lệch khi >= 1 hoặc <= -1 (bỏ qua các chênh lệch nhỏ từ -1 đến 1)
-          existing.hasDifference = existing.stockDifference >= 1 || existing.stockDifference <= -1;
+          existing.stockDifference = item.stockDifference;
+          existing.hasDifference = item.hasDifference;
         }
       } else {
         // Create new grouped item
@@ -435,13 +435,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       }
     });
     
-    const groupedItems = Array.from(groupedMap.values());
-    
-    // Sort by material code
-    groupedItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
-    
-    console.log(`📊 Grouped by material code: ${items.length} → ${groupedItems.length} items`);
-    return groupedItems;
+    return Array.from(groupedMap.values());
   }
 
   // Apply filters
@@ -530,86 +524,62 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   }
 
   // Export to Excel
-  async exportToExcel(): Promise<void> {
-    if (this.isExporting) return;
-    
-    this.isExporting = true;
-    console.log('📊 Exporting to Excel...');
-    
+  exportToExcel(): void {
+    if (this.filteredItems.length === 0) {
+      console.warn('⚠️ No data to export');
+      return;
+    }
+
     try {
-      let exportData;
+      console.log('📊 Exporting to Excel...');
       
-      if (this.groupByType === 'material') {
-        // Export grouped by material code
-        exportData = this.filteredItems.map((item, index) => ({
-          'Mã hàng': item.materialCode,
-          'Tồn kho': item.currentStock,
-          ...(this.isLinkQDataLoaded && {
-            'LinkQ': item.linkQStock !== undefined ? item.linkQStock : '',
-            'Chênh lệch': item.stockDifference !== undefined ? item.stockDifference : ''
-          })
-        }));
-      } else {
-        // Export by PO (original format)
-        exportData = this.filteredItems.map((item, index) => ({
-          'Mã hàng': item.materialCode,
-          'PO': item.poNumber,
-          'Tồn kho': item.currentStock,
-          ...(this.isLinkQDataLoaded && {
-            'LinkQ': item.linkQStock !== undefined ? item.linkQStock : '',
-            'Chênh lệch': item.stockDifference !== undefined ? item.stockDifference : ''
-          })
-        }));
-      }
-      
-      const worksheet: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
-      const workbook: XLSX.WorkBook = { Sheets: { 'data': worksheet }, SheetNames: ['data'] };
-      
-      // Set column widths based on view type
-      let colWidths;
-      if (this.groupByType === 'material') {
-        colWidths = [
-          { wch: 15 },  // Mã hàng
-          { wch: 12 }   // Tồn kho
-        ];
+      // Prepare data for export
+      const exportData = this.filteredItems.map(item => {
+        const row: any = {
+          'Mã hàng': item.materialCode
+        };
         
-        // Add LinkQ columns if data is loaded
-        if (this.isLinkQDataLoaded) {
-          colWidths.push(
-            { wch: 12 },  // LinkQ
-            { wch: 15 }   // Chênh lệch
-          );
+        if (this.groupByType === 'po') {
+          row['PO'] = item.poNumber;
         }
-      } else {
-        colWidths = [
-          { wch: 15 },  // Mã hàng
-          { wch: 20 },  // PO
-          { wch: 12 }   // Tồn kho
-        ];
         
-        // Add LinkQ columns if data is loaded
+        row['Tồn kho'] = item.currentStock;
+        
         if (this.isLinkQDataLoaded) {
-          colWidths.push(
-            { wch: 12 },  // LinkQ
-            { wch: 15 }   // Chênh lệch
-          );
+          row['LinkQ'] = item.linkQStock !== undefined ? item.linkQStock : '-';
+          row['So Sánh'] = item.stockDifference !== undefined ? item.stockDifference : '-';
         }
-      }
-      worksheet['!cols'] = colWidths;
-      
-      // Generate filename with view type
+        
+        return row;
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Auto-size columns
+      const colWidths = [
+        { wch: 15 }, // Mã hàng
+        ...(this.groupByType === 'po' ? [{ wch: 15 }] : []), // PO (if applicable)
+        { wch: 12 }, // Tồn kho
+        ...(this.isLinkQDataLoaded ? [{ wch: 12 }, { wch: 12 }] : []) // LinkQ, So Sánh (if applicable)
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      const sheetName = this.groupByType === 'po' ? 'RM1_Inventory_PO' : 'RM1_Inventory_Material';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      // Generate filename
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const viewType = this.groupByType === 'material' ? 'Material' : 'PO';
-      const filename = `RM1_Inventory_Overview_${viewType}_${timestamp}.xlsx`;
+      const filename = `${sheetName}_${timestamp}.xlsx`;
+
+      // Save file
+      XLSX.writeFile(wb, filename);
       
-      XLSX.writeFile(workbook, filename);
-      console.log(`✅ Exported ${exportData.length} items to ${filename} (${viewType} view)`);
-      
+      console.log(`✅ Excel exported successfully: ${filename}`);
     } catch (error) {
       console.error('❌ Error exporting to Excel:', error);
-    } finally {
-      this.isExporting = false;
-      this.cdr.detectChanges();
     }
   }
 

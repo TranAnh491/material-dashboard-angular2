@@ -178,12 +178,14 @@
           <tr>
             <th>Factory</th>
             <th>STT</th>
+            <th>FIFO</th>
             <th>Mã hàng</th>
             <th>PO</th>
-            <th>Số lượng</th>
+            <th>Tồn đầu</th>
+            <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Số lượng cần xuất (nhập tay)">XT</th>
-            <th title="Tồn kho = Số lượng - Đã xuất - XT">Tồn kho</th>
+            <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
             <th>Vị trí</th>
             <th>Change</th>
             <th>Loại Hình</th>
@@ -204,6 +206,7 @@
               ASM1
             </td>
             <td class="row-header">{{i + 1}}</td>
+            <td class="fifo-cell">{{material.fifo || '-'}}</td>
             <td class="code-cell material-code-cell" 
                 [class.duplicate-cell]="material.isDuplicate"
                 [class.duplicate-code]="material.isDuplicate"
@@ -211,6 +214,15 @@
               {{material.materialCode}}
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
+              <input type="number" 
+                     class="editable-cell opening-stock-input" 
+                     [(ngModel)]="material.openingStock" 
+                     (change)="updateOpeningStock(material)" 
+                     min="0" 
+                     step="0.1" 
+                     placeholder="Nhập tồn đầu">
+            </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
             <!-- Cột "Đã xuất" - Tự động lấy từ RM1 outbound và lưu trữ vĩnh viễn -->
             <td class="number-cell readonly-cell" 
