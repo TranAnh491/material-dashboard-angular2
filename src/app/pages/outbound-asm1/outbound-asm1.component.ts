@@ -214,7 +214,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportedBy: data.exportedBy || '',
                          employeeId: data.employeeId || '', // Fix: properly map employeeId
              productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
-             
+             importDate: data.importDate || null, // Thêm mapping cho importDate
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -784,6 +784,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         console.log('✅ Parsed QR data (pipe format):', this.lastScannedData);
         if (this.lastScannedData.importDate) {
           console.log('📅 Import date from QR:', this.lastScannedData.importDate);
+          console.log('📅 Import date type:', typeof this.lastScannedData.importDate);
+          console.log('📅 Import date length:', this.lastScannedData.importDate.length);
         }
         
         // Set default export quantity to full quantity
@@ -1509,13 +1511,49 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         
         // Lọc thêm theo ngày nhập nếu có thể
         if (inventoryQuery && !inventoryQuery.empty) {
+          console.log(`🔍 Lọc ${inventoryQuery.docs.length} inventory records theo ngày nhập: ${importDate}`);
+          
           const filteredDocs = inventoryQuery.docs.filter(doc => {
             const data = doc.data() as any;
             const docImportDate = data.importDate;
+            console.log(`  📅 Record ${doc.id}: importDate = ${docImportDate}`);
+            
             if (docImportDate) {
-              const docDate = docImportDate.toDate ? docImportDate.toDate().toISOString().split('T')[0] : docImportDate;
-              return docDate === importDate;
+              let docDate: string;
+              
+              // Xử lý các format ngày khác nhau
+              if (docImportDate.toDate) {
+                // Firebase Timestamp
+                docDate = docImportDate.toDate().toISOString().split('T')[0];
+              } else if (docImportDate instanceof Date) {
+                // Date object
+                docDate = docImportDate.toISOString().split('T')[0];
+              } else if (typeof docImportDate === 'string') {
+                // String date - có thể là "2025-08-26" hoặc "26/08/2025"
+                if (docImportDate.includes('-')) {
+                  // Format "2025-08-26"
+                  docDate = docImportDate;
+                } else if (docImportDate.includes('/')) {
+                  // Format "26/08/2025" - convert sang "2025-08-26"
+                  const parts = docImportDate.split('/');
+                  if (parts.length === 3) {
+                    docDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                  } else {
+                    docDate = docImportDate;
+                  }
+                } else {
+                  docDate = docImportDate;
+                }
+              } else {
+                docDate = String(docImportDate);
+              }
+              
+              const isMatch = docDate === importDate;
+              console.log(`    - Doc date: ${docDate}, Import date: ${importDate}, Match: ${isMatch}`);
+              console.log(`    - Original docImportDate type: ${typeof docImportDate}, value: ${docImportDate}`);
+              return isMatch;
             }
+            console.log(`    - No importDate field`);
             return false; // Chỉ xử lý record có ngày nhập
           });
           
@@ -1529,6 +1567,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             };
           } else {
             console.log(`⚠️ Không tìm thấy inventory record có cùng ngày nhập: ${importDate}`);
+            console.log(`💡 Sẽ tìm tất cả records để fallback`);
             // Fallback: tìm tất cả records không có ngày nhập
             inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
               ref.where('materialCode', '==', materialCode)
