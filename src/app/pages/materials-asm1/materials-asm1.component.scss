@@ -36,6 +36,22 @@
   width: 120px;
 }
 
+// Styling for date column (Ngày nhập)
+.date-cell {
+  min-width: 100px;
+  width: 100px;
+  text-align: center;
+  font-size: 12px;
+  color: #495057;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  padding: 6px 8px;
+  
+  &:hover {
+    background-color: #e9ecef;
+  }
+}
+
 // Styling for new buttons (kept for backward compatibility)
 .sync-outbound-btn {
   margin-left: 4px;
@@ -870,6 +886,8 @@
   }
   
 
+  
+
 }
 
 // Negative stock counter box - Di chuyển lên trên cùng để lấp đầy khoảng trống header
@@ -1272,28 +1290,28 @@
     }
   }
   
-  th:nth-child(11), // Cột "Loại Hình" (sau khi thêm Tồn đầu)
-  td:nth-child(11) {
+  th:nth-child(10), // Cột "Loại Hình" (sau khi xóa FIFO)
+  td:nth-child(10) {
     width: 80px;
     min-width: 80px;
     max-width: 80px;
   }
   
-  th:nth-child(10), // Cột "Vị trí" (sau khi thêm Tồn đầu)
-  td:nth-child(10) {
+  th:nth-child(9), // Cột "Vị trí" (sau khi xóa FIFO)
+  td:nth-child(9) {
     width: 120px;
     min-width: 120px;
     max-width: 120px;
   }
 
   // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
-  th:nth-child(6), // Cột "Tồn đầu"
+  th:nth-child(5), // Cột "Tồn đầu" (sau khi xóa FIFO)
+  td:nth-child(5),
+  th:nth-child(6), // Cột "NK" (sau khi xóa FIFO)
   td:nth-child(6),
-  th:nth-child(7), // Cột "NK"
+  th:nth-child(7), // Cột "Đã xuất" (sau khi xóa FIFO)
   td:nth-child(7),
-  th:nth-child(8), // Cột "Đã xuất"
-  td:nth-child(8),
-  th:nth-child(9) { // Cột "Tồn kho"
+  th:nth-child(8) { // Cột "Tồn kho" (sau khi xóa FIFO)
     width: 113px !important; // Bằng chiều rộng cột Mã hàng
     min-width: 113px !important;
     max-width: 113px !important;
@@ -1301,8 +1319,8 @@
   }
   
   // Cột Tồn đầu - giao diện giống hệt cột Vị trí
-  th:nth-child(6), // Cột "Tồn đầu"
-  td:nth-child(6) {
+  th:nth-child(5), // Cột "Tồn đầu" (sau khi xóa FIFO)
+  td:nth-child(5) {
     .opening-stock-input {
       border: none !important;
       background: transparent !important;
@@ -1343,19 +1361,7 @@
   }
 }
 
-// FIFO column styling
-.fifo-cell {
-  background-color: #e3f2fd;
-  font-weight: 600;
-  text-align: center;
-  color: #1976d2;
-  border: 1px solid #bbdefb;
-  border-radius: 4px;
-  min-width: 60px;
-  width: 60px;
-  padding: 4px 8px;
-  font-size: 12px;
-}
+
 
 
 

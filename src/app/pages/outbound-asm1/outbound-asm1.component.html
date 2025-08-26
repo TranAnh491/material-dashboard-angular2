@@ -146,6 +146,7 @@
             <th>Ngày xuất</th>
             <th>Mã hàng</th>
                                   <th>Số PO</th>
+                      <th>Ngày nhập</th>
                       <th>Xuất</th>
                       <th>Mã nhân viên</th>
                       <th>Lệnh sản xuất</th>
@@ -162,6 +163,9 @@
             </td>
             <td class="po-cell">
               <input type="text" class="editable-input" [(ngModel)]="material.poNumber" (change)="updateMaterial(material)">
+            </td>
+            <td class="import-date-cell">
+              {{material.importDate ? (material.importDate | date:'dd/MM/yyyy') : 'N/A'}}
             </td>
                                 <td class="number-cell">
                       <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">

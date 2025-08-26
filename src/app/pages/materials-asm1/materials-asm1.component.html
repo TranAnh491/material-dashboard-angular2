@@ -59,6 +59,15 @@
               <i class="material-icons">assessment</i>
               Download FIFO Report ASM1
             </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="loadInventoryFromFirebase()">
+              <i class="material-icons">cloud_download</i>
+              Load toàn bộ inventory
+            </a>
+            <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="consolidateAllInventory()">
+              <i class="material-icons">merge_type</i>
+              Gộp dòng trùng lặp
+            </a>
           </div>
         </div>
         
@@ -157,6 +166,8 @@
           </button>
           
 
+          
+
 
         </div>
         
@@ -185,9 +196,10 @@
           <tr>
             <th>Factory</th>
             <th>STT</th>
-            <th>FIFO</th>
+
             <th>Mã hàng</th>
             <th>PO</th>
+            <th>Ngày nhập</th>
             <th>Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
@@ -213,7 +225,7 @@
               ASM1
             </td>
             <td class="row-header">{{i + 1}}</td>
-            <td class="fifo-cell">{{material.fifo || '-'}}</td>
+
             <td class="code-cell material-code-cell" 
                 [class.duplicate-cell]="material.isDuplicate"
                 [class.duplicate-code]="material.isDuplicate"
@@ -221,6 +233,9 @@
               {{material.materialCode}}
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
+            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
+              {{material.importDate ? (material.importDate | date:'dd/MM/yyyy') : 'N/A'}}
+            </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <input type="number" 
                      class="opening-stock-input" 

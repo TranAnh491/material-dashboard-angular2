@@ -26,6 +26,7 @@ export interface OutboundMaterial {
   updatedAt?: Date;
   productionOrder?: string; // Lệnh sản xuất
   employeeId?: string; // Mã nhân viên
+  importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
 
 }
 
@@ -769,16 +770,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing scanned QR data:', decodedText);
       
-      // Parse QR data format: "MaterialCode|PONumber|Quantity"
+      // Parse QR data format: "MaterialCode|PONumber|Quantity|ImportDate" (new format with date)
+      // or "MaterialCode|PONumber|Quantity" (old format for backward compatibility)
       const parts = decodedText.split('|');
       if (parts.length >= 3) {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
-          quantity: parseInt(parts[2]) || 0
+          quantity: parseInt(parts[2]) || 0,
+          importDate: parts.length >= 4 ? parts[3].trim() : null // Ngày nhập từ QR code
         };
         
         console.log('✅ Parsed QR data (pipe format):', this.lastScannedData);
+        if (this.lastScannedData.importDate) {
+          console.log('📅 Import date from QR:', this.lastScannedData.importDate);
+        }
         
         // Set default export quantity to full quantity
         this.exportQuantity = this.lastScannedData.quantity;
@@ -908,6 +914,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       productionOrder: '', // Empty for manual scans
       scanMethod: 'QR_SCANNER',
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
+      importDate: this.lastScannedData.importDate || null, // Lưu ngày nhập từ QR code
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -979,7 +986,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       // Cập nhật cột "đã xuất" trong inventory
       console.log('📦 Updating inventory exported quantity...');
-      await this.updateInventoryExported(this.lastScannedData.materialCode, this.lastScannedData.poNumber, this.exportQuantity);
+      await this.updateInventoryExported(
+        this.lastScannedData.materialCode, 
+        this.lastScannedData.poNumber, 
+        this.exportQuantity,
+        this.lastScannedData.importDate // Truyền ngày nhập từ QR code
+      );
       console.log('✅ Inventory exported quantity updated successfully');
       
       // Store data for success message
@@ -1475,17 +1487,66 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
    * Tìm record có cùng materialCode + poNumber và cộng dồn vào cột exported
    * KHÔNG BAO GIỜ reset về 0 - luôn cộng dồn vào số hiện tại (kể cả khi user sửa tay)
    */
-  private async updateInventoryExported(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
+  private async updateInventoryExported(materialCode: string, poNumber: string, exportQuantity: number, importDate?: string): Promise<void> {
     try {
       console.log(`🧠 SMART UPDATE: Updating inventory exported for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
+      if (importDate) {
+        console.log(`📅 Import date from QR: ${importDate} - Sẽ tìm inventory record có cùng ngày nhập`);
+      }
       
       // Tìm tất cả inventory items có cùng material code và PO (ASM1 only)
-      const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('materialCode', '==', materialCode)
-           .where('poNumber', '==', poNumber)
-           .where('factory', '==', 'ASM1')
-           .limit(50)
-      ).get().toPromise();
+      let inventoryQuery;
+      
+      if (importDate) {
+        // Nếu có ngày nhập từ QR, tìm inventory record có cùng ngày nhập để so sánh chính xác
+        console.log(`🔍 Tìm inventory record với ngày nhập: ${importDate}`);
+        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .where('factory', '==', 'ASM1')
+             .limit(50)
+        ).get().toPromise();
+        
+        // Lọc thêm theo ngày nhập nếu có thể
+        if (inventoryQuery && !inventoryQuery.empty) {
+          const filteredDocs = inventoryQuery.docs.filter(doc => {
+            const data = doc.data() as any;
+            const docImportDate = data.importDate;
+            if (docImportDate) {
+              const docDate = docImportDate.toDate ? docImportDate.toDate().toISOString().split('T')[0] : docImportDate;
+              return docDate === importDate;
+            }
+            return false; // Chỉ xử lý record có ngày nhập
+          });
+          
+          if (filteredDocs.length > 0) {
+            console.log(`✅ Tìm thấy ${filteredDocs.length} inventory records có cùng ngày nhập: ${importDate}`);
+            // Tạo query result mới với filtered docs
+            inventoryQuery = {
+              ...inventoryQuery,
+              docs: filteredDocs,
+              empty: filteredDocs.length === 0
+            };
+          } else {
+            console.log(`⚠️ Không tìm thấy inventory record có cùng ngày nhập: ${importDate}`);
+            // Fallback: tìm tất cả records không có ngày nhập
+            inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('materialCode', '==', materialCode)
+                 .where('poNumber', '==', poNumber)
+                 .where('factory', '==', 'ASM1')
+                 .limit(50)
+            ).get().toPromise();
+          }
+        }
+      } else {
+        // Không có ngày nhập - tìm tất cả records như cũ
+        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .where('factory', '==', 'ASM1')
+             .limit(50)
+        ).get().toPromise();
+      }
 
       if (!inventoryQuery || inventoryQuery.empty) {
         console.log(`⚠️ Không tìm thấy inventory record cho ${materialCode} - ${poNumber}`);

@@ -561,6 +561,34 @@
   max-width: 113px;
 }
 
+.opening-stock-cell {
+  width: 113px; // 3cm
+  min-width: 113px;
+  max-width: 113px;
+  text-align: center;
+}
+
+.quantity-cell {
+  width: 113px; // 3cm
+  min-width: 113px;
+  max-width: 113px;
+  text-align: center;
+}
+
+.exported-cell {
+  width: 113px; // 3cm
+  min-width: 113px;
+  max-width: 113px;
+  text-align: center;
+}
+
+.xt-cell {
+  width: 113px; // 3cm
+  min-width: 113px;
+  max-width: 113px;
+  text-align: center;
+}
+
 .stock-cell {
   text-align: right;
   font-family: 'Courier New', monospace;

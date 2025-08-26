@@ -160,6 +160,10 @@
         <tr>
           <th>Mã hàng</th>
           <th *ngIf="groupByType === 'po'">PO</th>
+          <th *ngIf="groupByType === 'po'">Tồn đầu</th>
+          <th *ngIf="groupByType === 'po'">NK</th>
+          <th *ngIf="groupByType === 'po'">Đã xuất</th>
+          <th *ngIf="groupByType === 'po'">XT</th>
           <th>Tồn kho</th>
           <th *ngIf="isLinkQDataLoaded">LinkQ</th>
           <th *ngIf="isLinkQDataLoaded">So Sánh</th>
@@ -169,6 +173,10 @@
         <tr *ngFor="let item of paginatedItems; trackBy: trackByItem" [class.negative-row]="item.isNegative">
           <td class="material-code-cell">{{ item.materialCode }}</td>
           <td *ngIf="groupByType === 'po'" class="po-cell">{{ item.poNumber }}</td>
+          <td *ngIf="groupByType === 'po'" class="opening-stock-cell">{{ item.openingStock | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="quantity-cell">{{ item.quantity | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="exported-cell">{{ item.exported | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="xt-cell">{{ item.xt | number:'1.0-3' }}</td>
           <td class="stock-cell" [class.negative-stock]="item.isNegative">
             {{ item.currentStock | number:'1.0-3' }}
           </td>

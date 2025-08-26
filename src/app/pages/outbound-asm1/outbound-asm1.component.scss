@@ -57,6 +57,22 @@
 // 🔧 LOGIC MỚI: Styling cho cột vị trí
 
 .date-cell { background: #f8f9fa; padding: 4px 6px; text-align: center; font-size: 10px; color: #666; min-width: 100px; border-right: 1px solid #dee2e6; }
+
+// Styling for import date column (Ngày nhập)
+.import-date-cell { 
+  background: #f0f8ff; 
+  padding: 4px 6px; 
+  text-align: center; 
+  font-size: 10px; 
+  color: #1976d2; 
+  min-width: 90px; 
+  border-right: 1px solid #dee2e6;
+  font-weight: 500;
+  
+  &:hover {
+    background: #e3f2fd;
+  }
+}
 .action-btn { background: #ffffff; border: 1px solid #000000; color: #000000; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
 .action-btn:hover { background: #f5f5f5; }
 .pagination-container { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; }

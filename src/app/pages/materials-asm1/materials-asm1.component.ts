@@ -41,7 +41,7 @@ export interface InventoryMaterial {
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
-  fifo?: number; // Thứ tự ưu tiên xuất hàng (1 = cũ nhất, 2 = mới hơn, ...)
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -166,7 +166,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   // Load inventory data from Firebase - ONLY ASM1
-  loadInventoryFromFirebase(): void {
+  async loadInventoryFromFirebase(): Promise<void> {
     console.log('📦 Loading ASM1 inventory from Firebase...');
     this.isLoading = true;
     
@@ -205,21 +205,37 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // Set filteredInventory to show all loaded items initially
         this.filteredInventory = [...this.inventoryMaterials];
         
-        // Bỏ gộp inventory tự động - để Outbound xử lý thông minh
-        // this.consolidateInventoryData();
+        // Gộp dòng trùng lặp TRƯỚC KHI xử lý outbound
+        console.log('🔄 Consolidating duplicate materials...');
         
-        // Sắp xếp FIFO: Material Code -> PO (oldest first)
-        this.sortInventoryFIFO();
+        // Kiểm tra xem có dòng trùng lặp không
+        const materialPoMap = new Map<string, InventoryMaterial[]>();
+        this.inventoryMaterials.forEach(material => {
+          const key = `${material.materialCode}_${material.poNumber}`;
+          if (!materialPoMap.has(key)) {
+            materialPoMap.set(key, []);
+          }
+          materialPoMap.get(key)!.push(material);
+        });
         
-        // Mark duplicates for display (không cần gộp nữa)
-        this.markDuplicates();
+        const duplicateGroups = Array.from(materialPoMap.values()).filter(group => group.length > 1);
         
-        // Tự động cập nhật số lượng xuất từ outbound cho tất cả materials
-        this.autoUpdateAllExportedFromOutbound();
-        
-        this.isLoading = false;
-        
-        console.log(`✅ Loaded ${this.inventoryMaterials.length} ASM1 inventory items`);
+        if (duplicateGroups.length > 0) {
+          console.log(`⚠️ Found ${duplicateGroups.length} duplicate groups, auto-consolidating...`);
+          
+          // Gộp dòng tự động khi load toàn bộ inventory
+          this.autoConsolidateOnLoad().then(() => {
+            // Tiếp tục xử lý sau khi gộp xong
+            this.continueAfterConsolidation();
+          });
+        } else {
+          console.log('✅ No duplicate groups found, proceeding with normal flow...');
+          // Gộp dòng bình thường (chỉ local)
+          this.consolidateInventoryData();
+          
+          // Tiếp tục xử lý
+          this.continueAfterConsolidation();
+        }
       }, error => {
         console.error('Error loading ASM1 inventory:', error);
         this.isLoading = false;
@@ -591,6 +607,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
         
+        // KHÔNG gộp dòng khi search - chỉ gộp khi bấm nút "Gộp dòng trùng lặp"
+        // this.consolidateInventoryData();
+        
         // Sắp xếp FIFO: Material Code -> PO (oldest first)
         this.sortInventoryFIFO();
         
@@ -670,8 +689,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return this.comparePOFIFO(a.poNumber, b.poNumber);
     });
     
-    // Assign FIFO numbers after sorting
-    this.assignFIFONumbers();
+
     
     console.log('✅ Inventory sorted by FIFO successfully');
     
@@ -679,23 +697,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
-  // Assign FIFO numbers to materials after sorting
-  private assignFIFONumbers(): void {
-    let currentMaterialCode = '';
-    let currentFifo = 1;
-    
-    this.filteredInventory.forEach(material => {
-      if (material.materialCode !== currentMaterialCode) {
-        // New material code, reset FIFO counter
-        currentMaterialCode = material.materialCode;
-        currentFifo = 1;
-      }
-      material.fifo = currentFifo;
-      currentFifo++;
-    });
-    
-    console.log(`🔢 FIFO numbers assigned: ${this.filteredInventory.filter(m => m.fifo).length} items`);
-  }
+
 
   // Compare PO numbers for FIFO sorting (older first) - FIXED LOGIC
   private comparePOFIFO(poA: string, poB: string): number {
@@ -791,76 +793,48 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
-  // Consolidate inventory data by material code + PO + location
+  // Consolidate inventory data by material code + PO (gộp tất cả dòng có cùng mã hàng và PO)
   consolidateInventoryData(): void {
-    console.log('🔄 Starting inventory data consolidation...');
-    
-    const consolidatedMap = new Map<string, InventoryMaterial>();
-    
-    this.inventoryMaterials.forEach(material => {
-      // Create key: materialCode + PO + location
-      const key = `${material.materialCode}_${material.poNumber}_${material.location}`;
+    try {
+      console.log('🔄 Starting inventory data consolidation by Material + PO...');
       
-      if (consolidatedMap.has(key)) {
-        // Same material + PO + location - merge quantities
-        const existing = consolidatedMap.get(key)!;
-        // Xử lý openingStock có thể null
-        const existingOpeningStock = existing.openingStock !== null ? existing.openingStock : 0;
-        const materialOpeningStock = material.openingStock !== null ? material.openingStock : 0;
-        existing.openingStock = existingOpeningStock + materialOpeningStock;
-        existing.quantity += material.quantity;
-        existing.stock = (existing.stock || 0) + (material.stock || 0);
-        existing.exported = (existing.exported || 0) + (material.exported || 0);
-        existing.xt = (existing.xt || 0) + (material.xt || 0);
-        
-        // Keep earliest import date and latest expiry date
-        if (material.importDate < existing.importDate) {
-          existing.importDate = material.importDate;
-        }
-        if (material.expiryDate > existing.expiryDate) {
-          existing.expiryDate = material.expiryDate;
-        }
-        
-        // Merge other fields
-        existing.notes = existing.notes ? `${existing.notes}; ${material.notes}` : material.notes;
-        existing.remarks = existing.remarks ? `${existing.remarks}; ${material.remarks}` : material.remarks;
-        existing.supplier = existing.supplier ? `${existing.supplier}; ${material.supplier}` : material.supplier;
-        
-        console.log(`🔄 Merged duplicate: ${material.materialCode} - PO: ${material.poNumber} - Location: ${material.location}`);
-        
-      } else {
-        // New unique combination - add to map
-        consolidatedMap.set(key, { ...material });
+      if (!this.inventoryMaterials || this.inventoryMaterials.length === 0) {
+        console.log('⚠️ No inventory materials to consolidate');
+        return;
       }
-    });
+      
+      console.log(`📊 Input: ${this.inventoryMaterials.length} materials to process`);
     
-    // Now handle same material + PO but different locations
+    // Group materials by Material + PO
     const materialPoMap = new Map<string, InventoryMaterial[]>();
     
-    consolidatedMap.forEach((material, key) => {
-      const materialPoKey = `${material.materialCode}_${material.poNumber}`;
+    this.inventoryMaterials.forEach(material => {
+      const key = `${material.materialCode}_${material.poNumber}`;
       
-      if (!materialPoMap.has(materialPoKey)) {
-        materialPoMap.set(materialPoKey, []);
+      if (!materialPoMap.has(key)) {
+        materialPoMap.set(key, []);
       }
-      materialPoMap.get(materialPoKey)!.push(material);
+      materialPoMap.get(key)!.push(material);
     });
+    
+    console.log(`📊 Found ${materialPoMap.size} unique Material+PO combinations from ${this.inventoryMaterials.length} total items`);
     
     // Final consolidation map
     const finalConsolidatedMap = new Map<string, InventoryMaterial>();
     
     materialPoMap.forEach((materials, materialPoKey) => {
       if (materials.length === 1) {
-        // Single location - keep as is
+        // Single item - keep as is
         const material = materials[0];
         finalConsolidatedMap.set(materialPoKey, material);
+        console.log(`✅ Single item: ${material.materialCode} - PO ${material.poNumber} - Location: ${material.location}`);
       } else {
-        // Multiple locations - merge into one row with combined location info
+        // Multiple items - merge into one row
+        console.log(`🔄 Consolidating ${materials.length} items for ${materialPoKey}`);
+        
         const baseMaterial = { ...materials[0] };
-        const locations = materials.map(m => m.location).join('; ');
         
         // Combine quantities
-        // Combine quantities - xử lý openingStock có thể null
         const totalOpeningStock = materials.reduce((sum, m) => {
           const stock = m.openingStock !== null ? m.openingStock : 0;
           return sum + stock;
@@ -871,8 +845,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         baseMaterial.exported = materials.reduce((sum, m) => sum + (m.exported || 0), 0);
         baseMaterial.xt = materials.reduce((sum, m) => sum + (m.xt || 0), 0);
         
-        // Combine location field
-        baseMaterial.location = locations;
+        // Combine location field - gộp tất cả vị trí khác nhau
+        const uniqueLocations = [...new Set(materials.map(m => m.location).filter(loc => loc))];
+        baseMaterial.location = uniqueLocations.join('; ');
+        
+        // Combine type field - gộp tất cả loại hình khác nhau
+        const uniqueTypes = [...new Set(materials.map(m => m.type).filter(type => type))];
+        baseMaterial.type = uniqueTypes.join('; ');
         
         // Keep earliest import date and latest expiry date
         baseMaterial.importDate = new Date(Math.min(...materials.map(m => m.importDate.getTime())));
@@ -882,10 +861,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         baseMaterial.notes = materials.map(m => m.notes).filter(n => n).join('; ');
         baseMaterial.remarks = materials.map(m => m.remarks).filter(r => r).join('; ');
         baseMaterial.supplier = materials.map(m => m.supplier).filter(s => s).join('; ');
+        baseMaterial.rollsOrBags = materials.map(m => m.rollsOrBags).filter(r => r).join('; ');
         
         finalConsolidatedMap.set(materialPoKey, baseMaterial);
         
-        console.log(`🔄 Consolidated multi-location: ${baseMaterial.materialCode} - PO: ${baseMaterial.poNumber} - Locations: ${locations}`);
+        console.log(`✅ Consolidated: ${baseMaterial.materialCode} - PO: ${baseMaterial.poNumber}`);
+        console.log(`  📍 Locations: ${baseMaterial.location}`);
+        console.log(`  🏷️ Types: ${baseMaterial.type}`);
+        console.log(`  📦 Total Quantity: ${baseMaterial.quantity}`);
+        console.log(`  📤 Total Exported: ${baseMaterial.exported}`);
       }
     });
     
@@ -902,7 +886,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Show consolidation message
     const reducedCount = originalCount - this.inventoryMaterials.length;
     if (reducedCount > 0) {
-      this.consolidationMessage = `✅ Đã gộp ${reducedCount} dòng dữ liệu trùng lặp. Từ ${originalCount} → ${this.inventoryMaterials.length} dòng.`;
+      this.consolidationMessage = `✅ Đã gộp ${reducedCount} dòng dữ liệu trùng lặp theo Material+PO. Từ ${originalCount} → ${this.inventoryMaterials.length} dòng.`;
       this.showConsolidationMessage = true;
       
       // Auto-hide message after 5 seconds
@@ -921,6 +905,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     // Mark duplicates after consolidation
     this.markDuplicates();
+    
+    } catch (error) {
+      console.error('❌ Error during consolidation:', error);
+    }
   }
 
   // Load permissions
@@ -989,7 +977,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           this.showImportResults(result);
           
           // Reload inventory data
-          this.loadInventoryFromFirebase();
+          await this.loadInventoryFromFirebase();
           
         } catch (error) {
           console.error('Import error:', error);
@@ -1071,8 +1059,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.isDropdownOpen = !this.isDropdownOpen;
   }
 
-  refreshInventory(): void {
-    this.loadInventoryFromFirebase();
+  async refreshInventory(): Promise<void> {
+    await this.loadInventoryFromFirebase();
   }
 
   stopScanning(): void {
@@ -1458,11 +1446,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   //   this.showCompleted = !this.showCompleted;
   // }
 
-  syncFromInbound(): void {
+  async syncFromInbound(): Promise<void> {
     console.log('🔄 Syncing inventory data from Firebase...');
     
     // Reload inventory data from Firebase
-    this.loadInventoryFromFirebase();
+    await this.loadInventoryFromFirebase();
     
     // Reload catalog data
     this.loadCatalogFromFirebase();
@@ -1674,7 +1662,27 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         
         snapshot.forEach(doc => {
           const data = doc.data() as any;
-          const exportQuantity = data.exportQuantity || 0;
+          // Thử nhiều field names khác nhau để tìm số lượng xuất
+          let exportQuantity = 0;
+          
+          // Kiểm tra từng field name có thể có
+          if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
+            exportQuantity = data.exportQuantity;
+          } else if (data.exported !== undefined && data.exported !== null) {
+            exportQuantity = data.exported;
+          } else if (data.quantity !== undefined && data.quantity !== null) {
+            exportQuantity = data.quantity;
+          } else if (data.amount !== undefined && data.amount !== null) {
+            exportQuantity = data.amount;
+          } else if (data.qty !== undefined && data.qty !== null) {
+            exportQuantity = data.qty;
+          }
+          
+          // Đảm bảo exportQuantity là số
+          if (typeof exportQuantity === 'string') {
+            exportQuantity = parseFloat(exportQuantity) || 0;
+          }
+          
           totalExported += exportQuantity;
           
           outboundRecords.push({
@@ -1683,6 +1691,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             exportDate: data.exportDate,
             location: data.location || 'N/A'
           });
+          
+          console.log(`🔍 Debug: Outbound record - ID: ${doc.id}, Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${exportQuantity}`);
         });
         
         console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}: ${totalExported} (${outboundRecords.length} records)`);
@@ -1697,108 +1707,31 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // 🔧 UPDATE LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
-  // - Trước đây: Dựa vào Material + PO + Location → Bị lỗi khi Outbound không có vị trí
-  // - Bây giờ: Chỉ dựa vào Material + PO → Lấy tất cả outbound records
-  // - Kết quả: Số lượng xuất chính xác cho từng Material + PO
-  // - Không còn bị lỗi số âm sai khi search
-  async updateExportedFromOutbound(material: InventoryMaterial): Promise<void> {
-    try {
-      const exportedQuantity = await this.getExportedQuantityFromOutbound(material.materialCode, material.poNumber, material.location);
-      
-      if (material.exported !== exportedQuantity) {
-        material.exported = exportedQuantity;
-        console.log(`📊 Updated exported quantity for ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}: ${exportedQuantity}`);
-        
-        // Update exported field directly in Firebase to preserve the value permanently
-        // This ensures the exported quantity is preserved even if outbound records are deleted
-        if (material.id) {
-          await this.firestore.collection('inventory-materials').doc(material.id).update({
-            exported: exportedQuantity,
-            updatedAt: new Date()
-          });
-          console.log(`💾 Exported quantity saved permanently to Firebase for ${material.materialCode} - Location ${material.location}`);
-        }
-      }
-    } catch (error) {
-      console.error(`❌ Error updating exported quantity for ${material.materialCode} - Location ${material.location}:`, error);
-    }
-  }
 
-  // 🔧 UPDATE LOGIC FIFO MỚI: Cập nhật số lượng xuất từ Outbound theo FIFO
-  // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
-  // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
-  // - Tránh tồn kho âm ở các dòng sau
+
+  // 🔧 UPDATE LOGIC ĐƠN GIẢN: Cập nhật số lượng xuất từ Outbound
+  // - Lấy tổng số lượng xuất từ outbound theo Material + PO
+  // - Cập nhật trực tiếp vào inventory
   async updateExportedFromOutboundFIFO(material: InventoryMaterial): Promise<void> {
     try {
-      console.log(`🔄 Updating exported quantity with FIFO logic for ${material.materialCode} - PO ${material.poNumber}`);
+      console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
       
-      // Lấy thông tin outbound với logic FIFO
+      // Lấy thông tin outbound
       const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(material.materialCode, material.poNumber);
       
-      if (totalExported === 0) {
-        // Không có outbound, giữ nguyên số lượng đã xuất hiện tại
-        console.log(`📊 No outbound records for ${material.materialCode} - PO ${material.poNumber}, keeping current exported: ${material.exported}`);
-        return;
-      }
-
-      // Tìm tất cả dòng inventory cùng Material + PO, sắp xếp theo FIFO
-      const allInventoryItems = this.inventoryMaterials.filter(item => 
-        item.materialCode === material.materialCode && 
-        item.poNumber === material.poNumber
-      ).sort((a, b) => (a.fifo || 0) - (b.fifo || 0));
-
-      if (allInventoryItems.length === 0) {
-        console.warn(`⚠️ No inventory items found for ${material.materialCode} - PO ${material.poNumber}`);
-        return;
-      }
-
-      console.log(`📊 Found ${allInventoryItems.length} inventory items for ${material.materialCode} - PO ${material.poNumber}, total outbound: ${totalExported}`);
-
-      // Phân bổ số lượng xuất theo FIFO - CỘNG DỒN thay vì ghi đè
-      let remainingExported = totalExported;
-      const updatedItems: InventoryMaterial[] = [];
-
-      for (const item of allInventoryItems) {
-        if (remainingExported <= 0) break;
-
-        const availableStock = this.calculateCurrentStock(item);
-        if (availableStock <= 0) continue; // Skip items with no stock
-
-        // Tính số lượng xuất cho dòng này - CỘNG DỒN với số đã có
-        const currentExported = item.exported || 0;
-        const maxCanExport = availableStock + currentExported; // Có thể xuất tối đa = stock hiện tại + đã xuất
-        const exportedFromThisItem = Math.min(remainingExported, maxCanExport);
-        
-        // Cập nhật số lượng xuất cho dòng này - CỘNG DỒN
-        const newTotalExported = currentExported + exportedFromThisItem;
-        
-        if (item.exported !== newTotalExported) {
-          item.exported = newTotalExported;
-          updatedItems.push(item);
-          console.log(`📦 FIFO ${item.fifo}: ${material.materialCode} - PO ${item.poNumber} - Exported: ${currentExported} → ${newTotalExported}, Stock: ${this.calculateCurrentStock(item)}`);
-        }
-
-        remainingExported -= exportedFromThisItem;
-      }
-
-      // Cập nhật tất cả items đã thay đổi vào Firebase
-      if (updatedItems.length > 0) {
-        await Promise.all(updatedItems.map(item => 
-          this.updateExportedInFirebase(item, item.exported)
-        ));
-        console.log(`✅ Updated ${updatedItems.length} inventory items with FIFO logic`);
-      }
-
-      // Cập nhật material hiện tại
-      const currentItem = allInventoryItems.find(item => item.id === material.id);
-      if (currentItem) {
-        material.exported = currentItem.exported;
-        console.log(`📊 Updated current material exported quantity: ${material.exported}`);
+      console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
+      
+      // Cập nhật số lượng xuất trực tiếp
+      if (material.exported !== totalExported) {
+        material.exported = totalExported;
+        await this.updateExportedInFirebase(material, totalExported);
+        console.log(`📊 Updated exported quantity: ${material.exported} → ${totalExported}`);
+      } else {
+        console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
       }
 
     } catch (error) {
-      console.error(`❌ Error updating exported quantity with FIFO for ${material.materialCode} - PO ${material.poNumber}:`, error);
+      console.error(`❌ Error updating exported quantity for ${material.materialCode} - PO ${material.poNumber}:`, error);
     }
   }
 
@@ -1814,6 +1747,448 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.log(`💾 Exported quantity saved to Firebase: ${material.materialCode} - PO ${material.poNumber} = ${exportedQuantity}`);
     } catch (error) {
       console.error(`❌ Error saving exported quantity to Firebase: ${material.materialCode} - PO ${material.poNumber}:`, error);
+    }
+  }
+  
+  // Test method để kiểm tra logic FIFO
+  async testFIFOLogic(materialCode: string, poNumber: string): Promise<void> {
+    try {
+      console.log(`🧪 Testing FIFO logic for ${materialCode} - PO ${poNumber}`);
+      
+      // Tìm tất cả dòng inventory cùng Material + PO
+      const allInventoryItems = this.inventoryMaterials.filter(item => 
+        item.materialCode === materialCode && 
+        item.poNumber === poNumber
+      );
+      
+      if (allInventoryItems.length === 0) {
+        console.log(`⚠️ No inventory items found for ${materialCode} - PO ${poNumber}`);
+        return;
+      }
+      
+      console.log(`📊 Found ${allInventoryItems.length} inventory items:`);
+      allInventoryItems.forEach(item => {
+        const availableStock = (item.openingStock || 0) + item.quantity - (item.xt || 0);
+        console.log(`  Item: Stock=${availableStock}, Exported=${item.exported || 0}, Current=${this.calculateCurrentStock(item)}`);
+      });
+      
+      // Lấy thông tin outbound
+      const { totalExported } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
+      console.log(`📦 Total outbound: ${totalExported}`);
+      
+      // Mô phỏng phân bổ FIFO
+      let remainingExported = totalExported;
+      console.log(`🔄 FIFO Distribution Simulation:`);
+      
+      for (const item of allInventoryItems) {
+        if (remainingExported <= 0) break;
+        
+        const availableStock = (item.openingStock || 0) + item.quantity - (item.xt || 0);
+        if (availableStock <= 0) {
+          console.log(`  Item: Skip (no stock)`);
+          continue;
+        }
+        
+        const exportedFromThisItem = Math.min(remainingExported, availableStock);
+        console.log(`  Item: Export ${exportedFromThisItem} from ${availableStock} available, Remaining: ${remainingExported - exportedFromThisItem}`);
+        
+        remainingExported -= exportedFromThisItem;
+      }
+      
+      console.log(`✅ FIFO test completed for ${materialCode} - PO ${poNumber}`);
+      
+    } catch (error) {
+      console.error(`❌ Error testing FIFO logic for ${materialCode} - PO ${poNumber}:`, error);
+    }
+  }
+
+  // Test method để kiểm tra dữ liệu outbound
+  async testOutboundData(): Promise<void> {
+    try {
+      console.log('🔍 Testing outbound data...');
+      
+      // Kiểm tra collection outbound-materials
+      const outboundSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(10)
+        .get();
+      
+      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
+      
+      if (!outboundSnapshot.empty) {
+        outboundSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          console.log(`📦 Outbound: ${data.materialCode} - PO: ${data.poNumber} - Quantity: ${data.exportQuantity || data.exported || data.quantity || 'N/A'} - Date: ${data.exportDate}`);
+        });
+      } else {
+        console.log('⚠️ No outbound records found for ASM1');
+        
+        // Kiểm tra xem có collection nào khác không
+        console.log('🔍 Checking other possible collections...');
+        const collections = ['outbound', 'exports', 'shipments', 'materials-out'];
+        
+        for (const collectionName of collections) {
+          try {
+            const snapshot = await this.firestore.collection(collectionName).ref.limit(1).get();
+            if (snapshot && !snapshot.empty) {
+              console.log(`✅ Found collection: ${collectionName} with ${snapshot.size} documents`);
+              const sampleDoc = snapshot.docs[0].data() as any;
+              console.log(`📋 Sample document fields:`, Object.keys(sampleDoc));
+            }
+          } catch (e) {
+            console.log(`❌ Collection ${collectionName} not found`);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error testing outbound data:', error);
+    }
+  }
+
+  // Test method để kiểm tra link outbound-inventory
+  async testOutboundInventoryLink(materialCode: string, poNumber: string): Promise<void> {
+    try {
+      console.log(`🔗 Testing outbound-inventory link for ${materialCode} - PO ${poNumber}`);
+      
+      // 1. Kiểm tra dữ liệu outbound
+      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
+      console.log(`📦 Outbound data: ${totalExported} units from ${outboundRecords.length} records`);
+      
+      // 2. Kiểm tra dữ liệu inventory
+      const inventoryItems = this.inventoryMaterials.filter(item => 
+        item.materialCode === materialCode && 
+        item.poNumber === poNumber
+      );
+      console.log(`📋 Inventory items: ${inventoryItems.length} found`);
+      
+      inventoryItems.forEach((item, index) => {
+        console.log(`  ${index + 1}. ID: ${item.id}, Location: ${item.location}, Exported: ${item.exported}, Stock: ${this.calculateCurrentStock(item)}`);
+      });
+      
+      // 3. So sánh
+      const totalInventoryExported = inventoryItems.reduce((sum, item) => sum + (item.exported || 0), 0);
+      console.log(`🔍 Comparison: Outbound total = ${totalExported}, Inventory total = ${totalInventoryExported}`);
+      
+      if (totalExported === totalInventoryExported) {
+        console.log(`✅ Link is working correctly!`);
+      } else {
+        console.log(`⚠️ Link mismatch! Need to sync.`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error testing outbound-inventory link:`, error);
+    }
+  }
+
+  // Tạo dữ liệu test outbound nếu không có
+  async createTestOutboundData(): Promise<void> {
+    try {
+      console.log('🧪 Creating test outbound data...');
+      
+      // Kiểm tra xem có dữ liệu outbound nào không
+      const existingSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(1)
+        .get();
+      
+      if (!existingSnapshot.empty) {
+        console.log('✅ Outbound data already exists, no need to create test data');
+        return;
+      }
+      
+      // Tạo dữ liệu test cho mã hàng B024052
+      const testData = [
+        {
+          factory: 'ASM1',
+          materialCode: 'B024052',
+          poNumber: 'KZP00525/0207',
+          exportQuantity: 5,
+          exportDate: new Date(),
+          location: 'A1',
+          notes: 'Test data - Auto generated'
+        },
+        {
+          factory: 'ASM1',
+          materialCode: 'B024052',
+          poNumber: 'KZP00625/0070',
+          exportQuantity: 3,
+          exportDate: new Date(),
+          location: 'B2',
+          notes: 'Test data - Auto generated'
+        }
+      ];
+      
+      // Thêm vào Firebase
+      for (const data of testData) {
+        await this.firestore.collection('outbound-materials').add(data);
+        console.log(`✅ Created test outbound record: ${data.materialCode} - PO ${data.poNumber} - Quantity: ${data.exportQuantity}`);
+      }
+      
+      console.log('✅ Test outbound data created successfully!');
+      
+      // Refresh dữ liệu
+      setTimeout(() => {
+        this.autoUpdateAllExportedFromOutbound();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Error creating test outbound data:', error);
+    }
+  }
+
+  // Cập nhật display sau khi sync để tránh mất dữ liệu
+  private updateDisplayAfterSync(): void {
+    try {
+      console.log('🔄 Updating display after sync...');
+      
+      // Đảm bảo dữ liệu exported được giữ nguyên
+      this.filteredInventory = this.filteredInventory.map(item => {
+        const originalItem = this.inventoryMaterials.find(m => m.id === item.id);
+        if (originalItem && originalItem.exported !== undefined) {
+          item.exported = originalItem.exported;
+        }
+        return item;
+      });
+      
+      // Cập nhật counters
+      this.updateNegativeStockCount();
+      this.updateTotalStockCount();
+      
+      console.log('✅ Display updated after sync');
+      
+    } catch (error) {
+      console.error('❌ Error updating display after sync:', error);
+    }
+  }
+
+  // Auto-fix và test toàn bộ hệ thống
+  async autoFixAndTest(): Promise<void> {
+    try {
+      console.log('🔧 Starting auto-fix and test process...');
+      
+      // 1. Kiểm tra dữ liệu outbound
+      console.log('📋 Step 1: Checking outbound data...');
+      await this.testOutboundData();
+      
+      // 2. Tạo dữ liệu test nếu cần
+      console.log('📋 Step 2: Creating test data if needed...');
+      await this.createTestOutboundData();
+      
+      // 3. Sync dữ liệu từ outbound
+      console.log('📋 Step 3: Syncing data from outbound...');
+      await this.syncAllExportedFromOutbound();
+      
+      // 4. Test link cụ thể
+      console.log('📋 Step 4: Testing specific links...');
+      if (this.inventoryMaterials.length > 0) {
+        const firstMaterial = this.inventoryMaterials[0];
+        await this.testOutboundInventoryLink(firstMaterial.materialCode, firstMaterial.poNumber);
+      }
+      
+      console.log('✅ Auto-fix and test process completed!');
+      
+    } catch (error) {
+      console.error('❌ Error during auto-fix and test:', error);
+    }
+  }
+
+  // Fix cả 2 vấn đề: gộp dòng và hiển thị số lượng xuất
+  async fixInventoryIssues(): Promise<void> {
+    try {
+      console.log('🔧 Fixing inventory issues...');
+      
+      // 1. Kiểm tra trạng thái hiện tại
+      console.log(`📊 Current state: ${this.inventoryMaterials.length} materials, ${this.filteredInventory.length} filtered`);
+      
+      // 2. Gộp dòng trùng lặp (mã hàng + PO)
+      console.log('🔄 Step 1: Consolidating duplicate materials...');
+      const beforeCount = this.inventoryMaterials.length;
+      this.consolidateInventoryData();
+      const afterCount = this.inventoryMaterials.length;
+      console.log(`✅ Consolidation: ${beforeCount} → ${afterCount} items`);
+      
+      // 3. Tạo dữ liệu test outbound nếu cần
+      console.log('🔄 Step 2: Creating test outbound data...');
+      await this.createTestOutboundData();
+      
+      // 4. Sync số lượng xuất từ outbound
+      console.log('🔄 Step 3: Syncing exported quantities...');
+      await this.syncAllExportedFromOutbound();
+      
+      // 5. Kiểm tra kết quả
+      console.log('🔄 Step 4: Checking results...');
+      this.inventoryMaterials.forEach((material, index) => {
+        console.log(`${index + 1}. ${material.materialCode} - PO: ${material.poNumber} - Exported: ${material.exported} - Stock: ${this.calculateCurrentStock(material)}`);
+      });
+      
+      // 6. Cập nhật display
+      this.filteredInventory = [...this.inventoryMaterials];
+      this.updateNegativeStockCount();
+      
+      console.log('✅ Inventory issues fixed!');
+      
+    } catch (error) {
+      console.error('❌ Error fixing inventory issues:', error);
+    }
+  }
+
+  // Kiểm tra trạng thái gộp dòng
+  checkConsolidationStatus(): void {
+    try {
+      console.log('🔍 Checking consolidation status...');
+      
+      // Kiểm tra dữ liệu hiện tại
+      const materialPoMap = new Map<string, InventoryMaterial[]>();
+      
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (!materialPoMap.has(key)) {
+          materialPoMap.set(key, []);
+        }
+        materialPoMap.get(key)!.push(material);
+      });
+      
+      // Hiển thị thống kê
+      console.log(`📊 Total materials: ${this.inventoryMaterials.length}`);
+      console.log(`📊 Unique Material+PO combinations: ${materialPoMap.size}`);
+      
+      // Hiển thị các dòng trùng lặp
+      materialPoMap.forEach((materials, key) => {
+        if (materials.length > 1) {
+          console.log(`⚠️ Duplicate found: ${key} (${materials.length} items)`);
+          materials.forEach((material, index) => {
+            console.log(`  ${index + 1}. ID: ${material.id}, Location: ${material.location}, Type: ${material.type}, Quantity: ${material.quantity}, Exported: ${material.exported}`);
+          });
+        }
+      });
+      
+      // Kiểm tra số lượng xuất
+      const materialsWithExported = this.inventoryMaterials.filter(m => m.exported && m.exported > 0);
+      console.log(`📦 Materials with exported quantities: ${materialsWithExported.length}`);
+      
+      if (materialsWithExported.length > 0) {
+        materialsWithExported.forEach(material => {
+          console.log(`  📦 ${material.materialCode} - PO ${material.poNumber}: Exported = ${material.exported}`);
+        });
+      } else {
+        console.log('⚠️ No materials have exported quantities!');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking consolidation status:', error);
+    }
+  }
+
+  // Gộp dòng ngay lập tức
+  forceConsolidateNow(): void {
+    try {
+      console.log('🚀 Force consolidating inventory data now...');
+      
+      const beforeCount = this.inventoryMaterials.length;
+      console.log(`📊 Before consolidation: ${beforeCount} items`);
+      
+      // Gộp dòng
+      this.consolidateInventoryData();
+      
+      const afterCount = this.inventoryMaterials.length;
+      console.log(`📊 After consolidation: ${afterCount} items`);
+      console.log(`✅ Reduced by: ${beforeCount - afterCount} items`);
+      
+      // Cập nhật display
+      this.filteredInventory = [...this.inventoryMaterials];
+      this.updateNegativeStockCount();
+      
+      console.log('✅ Force consolidation completed!');
+      
+    } catch (error) {
+      console.error('❌ Error during force consolidation:', error);
+    }
+  }
+
+  // Test gộp dòng đơn giản
+  simpleConsolidate(): void {
+    try {
+      console.log('🔧 Simple consolidation test...');
+      
+      if (!this.inventoryMaterials || this.inventoryMaterials.length === 0) {
+        console.log('⚠️ No materials to consolidate');
+        return;
+      }
+      
+      // Tạo map theo Material + PO
+      const map = new Map<string, InventoryMaterial>();
+      
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        
+        if (map.has(key)) {
+          // Gộp với dòng hiện có
+          const existing = map.get(key)!;
+          existing.quantity += material.quantity;
+          existing.exported = (existing.exported || 0) + (material.exported || 0);
+          existing.xt = (existing.xt || 0) + (material.xt || 0);
+          
+          // Gộp vị trí và loại hình
+          if (material.location && material.location !== existing.location) {
+            existing.location = `${existing.location}; ${material.location}`;
+          }
+          if (material.type && material.type !== existing.type) {
+            existing.type = `${existing.type}; ${material.type}`;
+          }
+          
+          console.log(`🔄 Merged: ${material.materialCode} - PO ${material.poNumber}`);
+        } else {
+          // Dòng mới
+          map.set(key, { ...material });
+        }
+      });
+      
+      // Cập nhật dữ liệu
+      const beforeCount = this.inventoryMaterials.length;
+      this.inventoryMaterials = Array.from(map.values());
+      this.filteredInventory = [...this.inventoryMaterials];
+      
+      console.log(`✅ Simple consolidation: ${beforeCount} → ${this.inventoryMaterials.length} items`);
+      
+    } catch (error) {
+      console.error('❌ Error in simple consolidation:', error);
+    }
+  }
+
+  // Gộp dòng thủ công khi cần thiết (không tự động gộp)
+  async manualConsolidateData(): Promise<void> {
+    try {
+      console.log('🔄 Manual consolidation started...');
+      
+      // Lưu dữ liệu exported trước khi gộp
+      const exportedData = new Map<string, number>();
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (material.exported && material.exported > 0) {
+          exportedData.set(key, material.exported);
+        }
+      });
+      
+      // Gộp dòng
+      this.consolidateInventoryData();
+      
+      // Khôi phục dữ liệu exported sau khi gộp
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (exportedData.has(key)) {
+          material.exported = exportedData.get(key)!;
+          // Cập nhật Firebase
+          this.updateExportedInFirebase(material, material.exported);
+        }
+      });
+      
+      console.log('✅ Manual consolidation completed with exported data preserved!');
+      
+    } catch (error) {
+      console.error('❌ Error during manual consolidation:', error);
     }
   }
 
@@ -1862,14 +2237,32 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Auto-update all exported quantities from RM1 outbound (silent, no user interaction)
   private async autoUpdateAllExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Auto-updating exported quantities from RM1 outbound with safe logic...');
+      console.log('🔄 Auto-updating exported quantities from RM1 outbound with FIFO logic...');
+      
+      // Debug: Kiểm tra dữ liệu outbound trước
+      console.log('🔍 Debug: Checking outbound data...');
+      const outboundSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(5)
+        .get();
+      
+      console.log(`🔍 Debug: Found ${outboundSnapshot.size} outbound records for ASM1`);
+      if (!outboundSnapshot.empty) {
+        outboundSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          console.log(`🔍 Debug: Outbound record - Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${data.exportQuantity || data.exported || data.quantity || 'N/A'}`);
+        });
+      }
       
       let updatedCount = 0;
       let errorCount = 0;
       
       for (const material of this.inventoryMaterials) {
         try {
-          await this.updateExportedFromOutbound(material);
+          console.log(`🔍 Debug: Processing material ${material.materialCode} - PO ${material.poNumber}, current exported: ${material.exported}`);
+          await this.updateExportedFromOutboundFIFO(material);
+          console.log(`🔍 Debug: After update - exported: ${material.exported}`);
           updatedCount++;
         } catch (error) {
           console.error(`❌ Error auto-updating ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
@@ -1877,10 +2270,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Auto-update completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Auto-update completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
       // Refresh the display
       this.filteredInventory = [...this.inventoryMaterials];
+      
+      // KHÔNG gộp dòng sau khi cập nhật exported để tránh mất dữ liệu
+      // this.consolidateInventoryData();
       
       // Sắp xếp FIFO sau khi cập nhật
       this.sortInventoryFIFO();
@@ -1893,14 +2289,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Auto-update exported quantities for search results only
   private async autoUpdateSearchResultsExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Auto-updating exported quantities for search results with safe logic...');
+      console.log('🔄 Auto-updating exported quantities for search results with FIFO logic...');
       
       let updatedCount = 0;
       let errorCount = 0;
       
       for (const material of this.filteredInventory) {
         try {
-          await this.updateExportedFromOutbound(material);
+          await this.updateExportedFromOutboundFIFO(material);
           updatedCount++;
         } catch (error) {
           console.error(`❌ Error auto-updating search result ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
@@ -1908,7 +2304,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Search results auto-update completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Search results auto-update completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
     } catch (error) {
       console.error('❌ Error during search results auto-update:', error);
@@ -1918,14 +2314,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Sync all exported quantities from RM1 outbound (manual sync - kept for backward compatibility)
   async syncAllExportedFromOutbound(): Promise<void> {
     try {
-      console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound with safe logic...');
+      console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound with FIFO logic...');
       
       let updatedCount = 0;
       let errorCount = 0;
       
       for (const material of this.inventoryMaterials) {
         try {
-          await this.updateExportedFromOutbound(material);
+          await this.updateExportedFromOutboundFIFO(material);
           updatedCount++;
         } catch (error) {
           console.error(`❌ Error syncing ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
@@ -1933,10 +2329,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Manual sync completed with safe logic: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`✅ Manual sync completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
       // Refresh the display
       this.filteredInventory = [...this.inventoryMaterials];
+      
+      // KHÔNG gộp dòng sau khi đồng bộ để tránh mất dữ liệu exported
+      // this.consolidateInventoryData();
       
       // Sắp xếp FIFO sau khi đồng bộ
       this.sortInventoryFIFO();
@@ -2141,6 +2540,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       });
       
       // Generate QR codes based on quantity per unit
+      // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (YYYY-MM-DD)
+      // Sử dụng importDate nếu có, nếu không thì dùng ngày hiện tại
       const qrCodes = [];
       
       // Add full units
@@ -2149,7 +2550,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate ? material.importDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}`
         });
       }
       
@@ -2159,7 +2560,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate ? material.importDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}`
         });
       }
 
@@ -2301,7 +2702,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM1`);
 
       // Reload inventory data
-      this.loadInventoryFromFirebase();
+      await this.loadInventoryFromFirebase();
 
     } catch (error) {
       console.error('❌ Error during ASM1 reset:', error);
@@ -2490,6 +2891,397 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels`);
   }
 
+  // Gộp dòng tự động khi load toàn bộ inventory
+  private async autoConsolidateOnLoad(): Promise<void> {
+    try {
+      console.log('🔄 Auto-consolidating duplicate materials on load...');
+      
+      // Sử dụng dữ liệu hiện tại
+      const currentData = this.inventoryMaterials;
+      const originalCount = currentData.length;
+      const materialPoMap = new Map<string, InventoryMaterial[]>();
+      
+      currentData.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (!materialPoMap.has(key)) {
+          materialPoMap.set(key, []);
+        }
+        materialPoMap.get(key)!.push(material);
+      });
+      
+      const duplicateGroups = Array.from(materialPoMap.values()).filter(group => group.length > 1);
+      const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + group.length, 0);
+      
+      if (duplicateGroups.length === 0) {
+        console.log('✅ No duplicates to consolidate');
+        return;
+      }
+      
+      console.log(`📊 Found ${duplicateGroups.length} duplicate groups with ${totalDuplicates} total items`);
+      
+      // Thực hiện gộp dòng
+      const consolidatedMaterials: InventoryMaterial[] = [];
+      const materialsToDelete: string[] = [];
+      
+      // Xử lý từng nhóm trùng lặp
+      for (const group of duplicateGroups) {
+        if (group.length === 1) continue;
+        
+        const baseMaterial = { ...group[0] };
+        
+        // Gộp quantities
+        const totalOpeningStock = group.reduce((sum, m) => {
+          const stock = m.openingStock !== null ? m.openingStock : 0;
+          return sum + stock;
+        }, 0);
+        baseMaterial.openingStock = totalOpeningStock > 0 ? totalOpeningStock : null;
+        baseMaterial.quantity = group.reduce((sum, m) => sum + m.quantity, 0);
+        baseMaterial.stock = group.reduce((sum, m) => sum + (m.stock || 0), 0);
+        baseMaterial.exported = group.reduce((sum, m) => sum + (m.exported || 0), 0);
+        baseMaterial.xt = group.reduce((sum, m) => sum + (m.xt || 0), 0);
+        
+        // Gộp location field
+        const uniqueLocations = [...new Set(group.map(m => m.location).filter(loc => loc))];
+        baseMaterial.location = uniqueLocations.join('; ');
+        
+        // Gộp type field
+        const uniqueTypes = [...new Set(group.map(m => m.type).filter(type => type))];
+        baseMaterial.type = uniqueTypes.join('; ');
+        
+        // Keep earliest import date and latest expiry date
+        baseMaterial.importDate = new Date(Math.min(...group.map(m => m.importDate.getTime())));
+        baseMaterial.expiryDate = new Date(Math.max(...group.map(m => m.expiryDate.getTime())));
+        
+        // Merge other fields
+        baseMaterial.notes = group.map(m => m.notes).filter(n => n).join('; ');
+        baseMaterial.remarks = group.map(m => m.remarks).filter(r => r).join('; ');
+        baseMaterial.supplier = group.map(m => m.supplier).filter(s => s).join('; ');
+        baseMaterial.rollsOrBags = group.map(m => m.rollsOrBags).filter(r => r).join('; ');
+        
+        // Giữ lại ID của item đầu tiên để update
+        if (baseMaterial.id) {
+          // Thêm các item khác vào danh sách xóa
+          for (let i = 1; i < group.length; i++) {
+            if (group[i].id) {
+              materialsToDelete.push(group[i].id);
+            }
+          }
+        }
+        
+        // Cập nhật thời gian
+        baseMaterial.updatedAt = new Date();
+        
+        consolidatedMaterials.push(baseMaterial);
+        console.log(`✅ Auto-consolidated: ${baseMaterial.materialCode} - PO ${baseMaterial.poNumber}`);
+      }
+      
+      // Thêm các item không trùng lặp
+      materialPoMap.forEach((group, key) => {
+        if (group.length === 1) {
+          consolidatedMaterials.push(group[0]);
+        }
+      });
+      
+      // Lưu vào Firebase
+      console.log(`💾 Saving auto-consolidated materials to Firebase...`);
+      
+      // Update các item đã gộp
+      for (const material of consolidatedMaterials) {
+        if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}`)!.length > 1) {
+          await this.firestore.collection('inventory-materials').doc(material.id).update({
+            openingStock: material.openingStock,
+            quantity: material.quantity,
+            stock: material.stock,
+            exported: material.exported,
+            xt: material.xt,
+            location: material.location,
+            type: material.type,
+            importDate: material.importDate,
+            expiryDate: material.expiryDate,
+            notes: material.notes,
+            remarks: material.remarks,
+            supplier: material.supplier,
+            rollsOrBags: material.rollsOrBags,
+            updatedAt: material.updatedAt
+          });
+          console.log(`✅ Auto-updated: ${material.materialCode} - PO ${material.poNumber}`);
+        }
+      }
+      
+      // Xóa các item trùng lặp
+      if (materialsToDelete.length > 0) {
+        console.log(`🗑️ Auto-deleting ${materialsToDelete.length} duplicate items...`);
+        
+        // Xóa theo batch
+        const batchSize = 500;
+        for (let i = 0; i < materialsToDelete.length; i += batchSize) {
+          const batch = this.firestore.firestore.batch();
+          const currentBatch = materialsToDelete.slice(i, i + batchSize);
+          
+          currentBatch.forEach(id => {
+            const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
+            batch.delete(docRef);
+          });
+          
+          await batch.commit();
+          console.log(`✅ Auto-deleted batch ${Math.floor(i/batchSize) + 1}: ${currentBatch.length} items`);
+        }
+      }
+      
+      // Cập nhật local data
+      this.inventoryMaterials = consolidatedMaterials;
+      this.filteredInventory = [...this.inventoryMaterials];
+      
+      const finalCount = this.inventoryMaterials.length;
+      const reducedCount = originalCount - finalCount;
+      
+      console.log(`✅ Auto-consolidation completed: ${originalCount} → ${finalCount} items (reduced by ${reducedCount})`);
+      
+      // Hiển thị thông báo cho user
+      if (reducedCount > 0) {
+        this.consolidationMessage = `✅ Đã tự động gộp ${reducedCount} dòng trùng lặp khi load inventory. Từ ${originalCount} → ${finalCount} dòng.`;
+        this.showConsolidationMessage = true;
+        
+        // Auto-hide message after 8 seconds
+        setTimeout(() => {
+          this.showConsolidationMessage = false;
+        }, 8000);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error during auto-consolidation:', error);
+      // Không hiển thị error cho user vì đây là auto-process
+    }
+  }
+
+  // Tiếp tục xử lý sau khi gộp dòng
+  private continueAfterConsolidation(): void {
+    // Sắp xếp FIFO: Material Code -> PO (oldest first)
+    this.sortInventoryFIFO();
+    
+    // Mark duplicates for display
+    this.markDuplicates();
+    
+    // Tự động cập nhật số lượng xuất từ outbound cho tất cả materials
+    console.log('🔄 Updating exported quantities from outbound...');
+    this.autoUpdateAllExportedFromOutbound();
+    
+    this.isLoading = false;
+    
+    console.log(`✅ Loaded ${this.inventoryMaterials.length} ASM1 inventory items`);
+  }
+
+  // Gộp toàn bộ dòng trùng lặp và lưu vào Firebase
+  async consolidateAllInventory(): Promise<void> {
+    try {
+      // Hiển thị thống kê trước khi gộp
+      const originalCount = this.inventoryMaterials.length;
+      const materialPoMap = new Map<string, InventoryMaterial[]>();
+      
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (!materialPoMap.has(key)) {
+          materialPoMap.set(key, []);
+        }
+        materialPoMap.get(key)!.push(material);
+      });
+      
+      const duplicateGroups = Array.from(materialPoMap.values()).filter(group => group.length > 1);
+      const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + group.length, 0);
+      
+      if (duplicateGroups.length === 0) {
+        alert('✅ Không có dòng trùng lặp nào để gộp!');
+        return;
+      }
+      
+      // Xác định loại dữ liệu
+      const dataType = this.filteredInventory.length > 0 && this.filteredInventory.length < this.inventoryMaterials.length ? 
+        'kết quả search' : 'toàn bộ inventory';
+      
+      // Hiển thị thông tin chi tiết
+      let details = `📊 THÔNG TIN GỘP DÒNG:\n\n`;
+      details += `• Loại dữ liệu: ${dataType}\n`;
+      details += `• Tổng dòng hiện tại: ${originalCount}\n`;
+      details += `• Số nhóm trùng lặp: ${duplicateGroups.length}\n`;
+      details += `• Tổng dòng sẽ được gộp: ${totalDuplicates - duplicateGroups.length}\n`;
+      details += `• Dòng còn lại sau gộp: ${originalCount - (totalDuplicates - duplicateGroups.length)}\n\n`;
+      
+      details += `📋 CHI TIẾT CÁC NHÓM TRÙNG LẶP:\n`;
+      duplicateGroups.forEach((group, index) => {
+        const material = group[0];
+        details += `${index + 1}. ${material.materialCode} - PO: ${material.poNumber} (${group.length} dòng)\n`;
+      });
+      
+      // Xác nhận gộp
+      const confirmMessage = details + `\n⚠️ CẢNH BÁO: Hành động này sẽ:\n` +
+        `• Gộp tất cả dòng trùng lặp theo Material+PO trong ${dataType}\n` +
+        `• Lưu trực tiếp vào Firebase\n` +
+        `• KHÔNG THỂ HOÀN TÁC\n\n` +
+        `Bạn có muốn tiếp tục không?`;
+      
+      if (!confirm(confirmMessage)) {
+        console.log('❌ User cancelled consolidation');
+        return;
+      }
+      
+      // Xác nhận lần thứ 2
+      const finalConfirm = confirm(`🚨 XÁC NHẬN CUỐI CÙNG:\n\n` +
+        `Bạn có chắc chắn muốn gộp ${totalDuplicates - duplicateGroups.length} dòng trùng lặp ` +
+        `và lưu vào Firebase?\n\n` +
+        `Hành động này KHÔNG THỂ HOÀN TÁC!`);
+      
+      if (!finalConfirm) {
+        console.log('❌ User cancelled final confirmation');
+        return;
+      }
+      
+      console.log(`🚀 Starting consolidation of ${duplicateGroups.length} duplicate groups...`);
+      
+      // Show loading
+      this.isLoading = true;
+      
+      // Thực hiện gộp dòng
+      const consolidatedMaterials: InventoryMaterial[] = [];
+      const materialsToDelete: string[] = [];
+      
+      // Xử lý từng nhóm trùng lặp
+      for (const group of duplicateGroups) {
+        if (group.length === 1) continue; // Bỏ qua nhóm chỉ có 1 item
+        
+        const baseMaterial = { ...group[0] };
+        
+        // Gộp quantities
+        const totalOpeningStock = group.reduce((sum, m) => {
+          const stock = m.openingStock !== null ? m.openingStock : 0;
+          return sum + stock;
+        }, 0);
+        baseMaterial.openingStock = totalOpeningStock > 0 ? totalOpeningStock : null;
+        baseMaterial.quantity = group.reduce((sum, m) => sum + m.quantity, 0);
+        baseMaterial.stock = group.reduce((sum, m) => sum + (m.stock || 0), 0);
+        baseMaterial.exported = group.reduce((sum, m) => sum + (m.exported || 0), 0);
+        baseMaterial.xt = group.reduce((sum, m) => sum + (m.xt || 0), 0);
+        
+        // Gộp location field
+        const uniqueLocations = [...new Set(group.map(m => m.location).filter(loc => loc))];
+        baseMaterial.location = uniqueLocations.join('; ');
+        
+        // Gộp type field
+        const uniqueTypes = [...new Set(group.map(m => m.type).filter(type => type))];
+        baseMaterial.type = uniqueTypes.join('; ');
+        
+        // Keep earliest import date and latest expiry date
+        baseMaterial.importDate = new Date(Math.min(...group.map(m => m.importDate.getTime())));
+        baseMaterial.expiryDate = new Date(Math.max(...group.map(m => m.expiryDate.getTime())));
+        
+        // Merge other fields
+        baseMaterial.notes = group.map(m => m.notes).filter(n => n).join('; ');
+        baseMaterial.remarks = group.map(m => m.remarks).filter(r => r).join('; ');
+        baseMaterial.supplier = group.map(m => m.supplier).filter(s => s).join('; ');
+        baseMaterial.rollsOrBags = group.map(m => m.rollsOrBags).filter(r => r).join('; ');
+        
+        // Giữ lại ID của item đầu tiên để update
+        if (baseMaterial.id) {
+          // Thêm các item khác vào danh sách xóa
+          for (let i = 1; i < group.length; i++) {
+            if (group[i].id) {
+              materialsToDelete.push(group[i].id);
+            }
+          }
+        }
+        
+        // Cập nhật thời gian
+        baseMaterial.updatedAt = new Date();
+        
+        consolidatedMaterials.push(baseMaterial);
+        console.log(`✅ Consolidated: ${baseMaterial.materialCode} - PO ${baseMaterial.poNumber}`);
+      }
+      
+      // Thêm các item không trùng lặp
+      materialPoMap.forEach((group, key) => {
+        if (group.length === 1) {
+          consolidatedMaterials.push(group[0]);
+        }
+      });
+      
+      // Lưu vào Firebase
+      console.log(`💾 Saving consolidated materials to Firebase...`);
+      
+      // Update các item đã gộp
+      for (const material of consolidatedMaterials) {
+        if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}`)!.length > 1) {
+          // Đây là item đã gộp, cần update
+          await this.firestore.collection('inventory-materials').doc(material.id).update({
+            openingStock: material.openingStock,
+            quantity: material.quantity,
+            stock: material.stock,
+            exported: material.exported,
+            xt: material.xt,
+            location: material.location,
+            type: material.type,
+            importDate: material.importDate,
+            expiryDate: material.expiryDate,
+            notes: material.notes,
+            remarks: material.remarks,
+            supplier: material.supplier,
+            rollsOrBags: material.rollsOrBags,
+            updatedAt: material.updatedAt
+          });
+          console.log(`✅ Updated: ${material.materialCode} - PO ${material.poNumber}`);
+        }
+      }
+      
+      // Xóa các item trùng lặp
+      if (materialsToDelete.length > 0) {
+        console.log(`🗑️ Deleting ${materialsToDelete.length} duplicate items...`);
+        
+        // Xóa theo batch (Firestore limit: 500 operations per batch)
+        const batchSize = 500;
+        for (let i = 0; i < materialsToDelete.length; i += batchSize) {
+          const batch = this.firestore.firestore.batch();
+          const currentBatch = materialsToDelete.slice(i, i + batchSize);
+          
+          currentBatch.forEach(id => {
+            const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
+            batch.delete(docRef);
+          });
+          
+          await batch.commit();
+          console.log(`✅ Deleted batch ${Math.floor(i/batchSize) + 1}: ${currentBatch.length} items`);
+        }
+      }
+      
+      // Cập nhật local data
+      this.inventoryMaterials = consolidatedMaterials;
+      this.filteredInventory = [...this.inventoryMaterials];
+      
+      // Sort và mark duplicates
+      this.sortInventoryFIFO();
+      this.markDuplicates();
+      this.updateNegativeStockCount();
+      
+      // Hiển thị kết quả
+      const finalCount = this.inventoryMaterials.length;
+      const reducedCount = originalCount - finalCount;
+      
+      alert(`✅ GỘP DÒNG HOÀN TẤT!\n\n` +
+        `📊 Kết quả:\n` +
+        `• Tổng dòng trước: ${originalCount}\n` +
+        `• Tổng dòng sau: ${finalCount}\n` +
+        `• Đã gộp: ${reducedCount} dòng\n` +
+        `• Số nhóm xử lý: ${duplicateGroups.length}\n\n` +
+        `💾 Dữ liệu đã được lưu vào Firebase!\n` +
+        `⚠️ Hành động này không thể hoàn tác.`);
+      
+      console.log(`✅ Consolidation completed: ${originalCount} → ${finalCount} items`);
+      
+    } catch (error) {
+      console.error('❌ Error during consolidation:', error);
+      alert(`❌ Lỗi khi gộp dòng: ${error.message}\n\nVui lòng thử lại!`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
   // Export inventory data to Excel
   exportToExcel(): void {
     if (!this.canExport) {
@@ -2618,75 +3410,5 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
-  // Handle outbound operation following FIFO principle
-  // This method would be called when processing outbound materials
-  processOutboundByFIFO(materialCode: string, outboundQuantity: number): { success: boolean; message: string; affectedPOs: string[] } {
-    console.log(`🚚 Processing outbound for ${materialCode}: ${outboundQuantity} units with FIFO logic`);
-    
-    // Find all items for this material code, sorted by FIFO (oldest first)
-    const materialItems = this.filteredInventory
-      .filter(item => item.materialCode === materialCode)
-      .sort((a, b) => (a.fifo || 0) - (b.fifo || 0));
-    
-    if (materialItems.length === 0) {
-      return { 
-        success: false, 
-        message: `Không tìm thấy mã hàng ${materialCode} trong kho`,
-        affectedPOs: []
-      };
-    }
-    
-    console.log(`📊 Found ${materialItems.length} inventory items for ${materialCode}, processing with FIFO logic`);
-    
-    let remainingQuantity = outboundQuantity;
-    const affectedPOs: string[] = [];
-    
-    // Process outbound following FIFO principle - CỘNG DỒN thay vì ghi đè
-    for (const item of materialItems) {
-      if (remainingQuantity <= 0) break;
-      
-      const availableStock = this.calculateCurrentStock(item);
-      if (availableStock <= 0) {
-        console.log(`⚠️ Skipping FIFO ${item.fifo} - PO ${item.poNumber}: No available stock (${availableStock})`);
-        continue; // Skip items with no stock
-      }
-      
-      const outboundFromThisItem = Math.min(remainingQuantity, availableStock);
-      
-      // Update the item's exported quantity - CỘNG DỒN
-      const oldExported = item.exported || 0;
-      item.exported = oldExported + outboundFromThisItem;
-      
-      remainingQuantity -= outboundFromThisItem;
-      affectedPOs.push(item.poNumber);
-      
-      console.log(`📦 FIFO ${item.fifo} - PO ${item.poNumber}: Xuất ${outboundFromThisItem} units, Exported: ${oldExported} → ${item.exported}, Còn lại: ${this.calculateCurrentStock(item)}`);
-      
-      // Update Firebase immediately for this item
-      this.updateExportedInFirebase(item, item.exported);
-    }
-    
-    if (remainingQuantity > 0) {
-      console.warn(`⚠️ Không đủ tồn kho cho ${materialCode}. Còn thiếu: ${remainingQuantity} units`);
-      return {
-        success: false,
-        message: `Không đủ tồn kho. Còn thiếu: ${remainingQuantity} units`,
-        affectedPOs
-      };
-    }
-    
-    // Re-sort and update display
-    this.sortInventoryFIFO();
-    
-    // Update negative stock count
-    this.updateNegativeStockCount();
-    
-    console.log(`✅ Outbound processed successfully with FIFO logic for ${materialCode}. Affected PO(s): ${affectedPOs.join(', ')}`);
-    
-    return {
-      success: true,
-      message: `Xuất hàng thành công theo FIFO: ${outboundQuantity} units`,
-      affectedPOs
-    };
-  }
+
 }

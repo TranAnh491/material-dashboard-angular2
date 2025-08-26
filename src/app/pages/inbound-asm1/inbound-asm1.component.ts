@@ -1092,8 +1092,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const fullUnits = Math.floor(totalQuantity / rollsOrBags);
       const remainingQuantity = totalQuantity % rollsOrBags;
       
-      // Generate QR codes based on quantity per unit
-      const qrCodes = [];
+              // Generate QR codes based on quantity per unit
+        // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (YYYY-MM-DD)
+        const qrCodes = [];
       
       // Add full units
       for (let i = 0; i < fullUnits; i++) {
@@ -1101,7 +1102,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate.toISOString().split('T')[0]}`
         });
       }
       
@@ -1111,7 +1112,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate.toISOString().split('T')[0]}`
         });
       }
 
@@ -1312,6 +1313,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                         <div>
                           <div class="info-row">Mã: ${qr.materialCode}</div>
                           <div class="info-row">PO: ${qr.poNumber}</div>
+                          <div class="info-row">Ngày: ${qr.qrData.split('|')[3]}</div>
                           <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
                         </div>
                         <div>
