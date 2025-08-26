@@ -93,6 +93,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Negative stock filter state
   showOnlyNegativeStock = false;
   
+  // Export column lock state
+  isExportColumnUnlocked = false;
+  
   // Dropdown state
   isDropdownOpen = false;
   
@@ -927,7 +930,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         this.canDelete = canAccess;
         // this.canEditHSD = canAccess; // Removed - HSD column deleted
         
-        // Lưu ý: Cột "Đã xuất" luôn có thể chỉnh sửa (giống cột "Vị trí")
+        // Reset export column lock if user doesn't have delete permission
+        if (!this.canDelete && this.isExportColumnUnlocked) {
+          this.isExportColumnUnlocked = false;
+          console.log('🔒 Export column automatically locked due to insufficient permissions');
+        }
+        
+        // Lưu ý: Cột "Đã xuất" chỉ có thể chỉnh sửa khi user có quyền Xóa và đã mở khóa
         // không phụ thuộc vào canExport permission
         
         console.log('🔑 ASM1 Permissions loaded:', {
@@ -935,6 +944,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           canEdit: this.canEdit,
           canExport: this.canExport,
           canDelete: this.canDelete,
+          isExportColumnUnlocked: this.isExportColumnUnlocked,
           // canEditHSD: this.canEditHSD // Removed - HSD column deleted
         });
       });
@@ -1648,13 +1658,26 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber}`);
       
       const outboundRef = this.firestore.collection('outbound-materials');
-      const snapshot = await outboundRef
-        .ref
-        .where('factory', '==', 'ASM1')
-        .where('materialCode', '==', materialCode)
-        .where('poNumber', '==', poNumber)
-        .orderBy('exportDate', 'asc') // Sắp xếp theo thời gian xuất (cũ nhất trước)
-        .get();
+      // Thử tìm với orderBy trước, nếu lỗi thì tìm không có orderBy
+      let snapshot;
+      try {
+        snapshot = await outboundRef
+          .ref
+          .where('factory', '==', 'ASM1')
+          .where('materialCode', '==', materialCode)
+          .where('poNumber', '==', poNumber)
+          .orderBy('exportDate', 'asc') // Sắp xếp theo thời gian xuất (cũ nhất trước)
+          .get();
+      } catch (orderByError) {
+        console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
+        // Fallback: tìm không có orderBy
+        snapshot = await outboundRef
+          .ref
+          .where('factory', '==', 'ASM1')
+          .where('materialCode', '==', materialCode)
+          .where('poNumber', '==', poNumber)
+          .get();
+      }
 
       if (!snapshot.empty) {
         let totalExported = 0;
@@ -1696,9 +1719,50 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         });
         
         console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}: ${totalExported} (${outboundRecords.length} records)`);
+        
+        // Debug: Log chi tiết từng record và raw data
+        console.log(`📋 Detailed outbound records:`);
+        outboundRecords.forEach((record, index) => {
+          console.log(`  ${index + 1}. ID: ${record.id}, Quantity: ${record.exportQuantity}, Date: ${record.exportDate}, Location: ${record.location}`);
+        });
+        
+        // Debug: Log raw data từ snapshot để kiểm tra field names
+        console.log(`🔍 Raw snapshot data for debugging:`);
+        snapshot.forEach(doc => {
+          const rawData = doc.data();
+          console.log(`  Doc ${doc.id}:`, {
+            materialCode: rawData.materialCode,
+            poNumber: rawData.poNumber,
+            exportQuantity: rawData.exportQuantity,
+            exported: rawData.exported,
+            quantity: rawData.quantity,
+            exportDate: rawData.exportDate,
+            factory: rawData.factory
+          });
+        });
+        
         return { totalExported, outboundRecords };
       } else {
         console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
+        
+        // Debug: Kiểm tra xem có records nào với material code này không
+        const debugSnapshot = await outboundRef
+          .ref
+          .where('factory', '==', 'ASM1')
+          .where('materialCode', '==', materialCode)
+          .limit(5)
+          .get();
+        
+        if (!debugSnapshot.empty) {
+          console.log(`🔍 Found ${debugSnapshot.size} outbound records with material code ${materialCode}, but PO numbers don't match:`);
+          debugSnapshot.forEach(doc => {
+            const data = doc.data() as any;
+            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Material: "${data.materialCode}" (type: ${typeof data.materialCode})`);
+          });
+        } else {
+          console.log(`⚠️ No outbound records found at all for material code ${materialCode}`);
+        }
+        
         return { totalExported: 0, outboundRecords: [] };
       }
     } catch (error) {
@@ -1721,13 +1785,48 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
       
-      // Cập nhật số lượng xuất trực tiếp
-      if (material.exported !== totalExported) {
-        material.exported = totalExported;
-        await this.updateExportedInFirebase(material, totalExported);
-        console.log(`📊 Updated exported quantity: ${material.exported} → ${totalExported}`);
+      // Debug chi tiết: Kiểm tra từng outbound record
+      if (outboundRecords.length > 0) {
+        console.log(`📋 Outbound records found:`);
+        outboundRecords.forEach((record, index) => {
+          console.log(`  ${index + 1}. Material: ${record.materialCode}, PO: ${record.poNumber}, Quantity: ${record.exportQuantity || record.quantity}, Date: ${record.exportDate}`);
+        });
       } else {
-        console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
+        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber}`);
+        console.log(`💡 Checking if outbound records exist with different criteria...`);
+        
+        // Kiểm tra tất cả outbound records có material code này
+        const allOutboundQuery = await this.firestore.collection('outbound-materials')
+          .ref
+          .where('factory', '==', 'ASM1')
+          .where('materialCode', '==', material.materialCode)
+          .limit(10)
+          .get();
+        
+        if (!allOutboundQuery.empty) {
+          console.log(`📋 Found ${allOutboundQuery.size} outbound records with material code ${material.materialCode}:`);
+          allOutboundQuery.forEach(doc => {
+            const data = doc.data() as any;
+            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Quantity: ${data.exportQuantity || data.quantity}`);
+          });
+        } else {
+          console.log(`⚠️ No outbound records found at all for material code ${material.materialCode}`);
+        }
+      }
+      
+      // Cập nhật số lượng xuất trực tiếp - CHỈ CẬP NHẬT NẾU TÌM THẤY OUTBOUND RECORDS
+      if (outboundRecords.length > 0) {
+        if (material.exported !== totalExported) {
+          material.exported = totalExported;
+          await this.updateExportedInFirebase(material, totalExported);
+          console.log(`📊 Updated exported quantity: ${material.exported} → ${totalExported}`);
+        } else {
+          console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
+        }
+      } else {
+        // KHÔNG TÌM THẤY OUTBOUND RECORDS - GIỮ NGUYÊN GIÁ TRỊ EXPORTED HIỆN TẠI
+        console.log(`⚠️ No outbound records found - Keeping current exported: ${material.exported}`);
+        console.log(`💡 This prevents overwriting exported quantity to 0 when outbound data is missing`);
       }
 
     } catch (error) {
@@ -2234,6 +2333,60 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  // Update exported amount (when unlocked) - Chỉ cho phép user có quyền Xóa
+  async updateExportedAmount(material: InventoryMaterial): Promise<void> {
+    // Kiểm tra quyền và trạng thái mở khóa
+    if (!this.canDelete) {
+      console.error('❌ User does not have delete permission to update exported amount');
+      return;
+    }
+    
+    if (!this.isExportColumnUnlocked) {
+      console.error('❌ Export column is locked. Cannot update exported amount');
+      return;
+    }
+    
+    try {
+      console.log(`📝 Updating exported amount for ${material.materialCode} - PO ${material.poNumber}: ${material.exported} (by user with delete permission)`);
+      
+      // Update in Firebase
+      this.updateMaterialInFirebase(material);
+      
+      // Recalculate stock
+      const newStock = this.calculateCurrentStock(material);
+      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${material.openingStock || 0} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt || 0})`);
+      
+      // Update negative stock count for real-time display
+      this.updateNegativeStockCount();
+      
+    } catch (error) {
+      console.error(`❌ Error updating exported amount for ${material.materialCode}:`, error);
+    }
+  }
+
+  // Toggle export column lock/unlock - Chỉ cho phép user có quyền Xóa
+  toggleExportColumnLock(): void {
+    // Kiểm tra quyền trước khi cho phép mở khóa
+    if (!this.canDelete) {
+      console.error('❌ User does not have delete permission to unlock export column');
+      return;
+    }
+    
+    this.isExportColumnUnlocked = !this.isExportColumnUnlocked;
+    console.log(`🔓 Export column ${this.isExportColumnUnlocked ? 'unlocked' : 'locked'} by user with delete permission`);
+    
+    if (this.isExportColumnUnlocked) {
+      console.log('⚠️ WARNING: Export column is now editable. Changes will affect stock calculations.');
+    } else {
+      console.log('🔒 Export column is now locked. Changes are disabled.');
+    }
+  }
+
+  // Check if user can edit export column (has delete permission and column is unlocked)
+  canEditExportColumn(): boolean {
+    return this.canDelete && this.isExportColumnUnlocked;
+  }
+
   // Auto-update all exported quantities from RM1 outbound (silent, no user interaction)
   private async autoUpdateAllExportedFromOutbound(): Promise<void> {
     try {
@@ -2544,13 +2697,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Sử dụng importDate nếu có, nếu không thì dùng ngày hiện tại
       const qrCodes = [];
       
+      // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
+      const batchNumber = material.importDate ? 
+        material.importDate.toLocaleDateString('en-GB').split('/').join('') : 
+        new Date().toLocaleDateString('en-GB').split('/').join('');
+      
       // Add full units
       for (let i = 0; i < fullUnits; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate ? material.importDate.toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
         });
       }
       
@@ -2560,7 +2718,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate ? material.importDate.toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
         });
       }
 

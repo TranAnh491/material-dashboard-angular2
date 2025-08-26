@@ -1097,12 +1097,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         const qrCodes = [];
       
       // Add full units
+      // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
+      const batchNumber = material.importDate.toLocaleDateString('en-GB').split('/').join('');
+      
       for (let i = 0; i < fullUnits; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate.toLocaleDateString('en-GB')}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
         });
       }
       
@@ -1112,7 +1115,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate.toLocaleDateString('en-GB')}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
         });
       }
 

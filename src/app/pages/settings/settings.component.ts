@@ -42,16 +42,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },
     
-    // Inbound tabs
+    // ASM1 RM tabs
     { key: 'inbound-asm1', name: 'RM1 Inbound' },
-    { key: 'inbound-asm2', name: 'RM2 Inbound' },
-    
-    // Outbound tabs
     { key: 'outbound-asm1', name: 'RM1 Outbound' },
-    { key: 'outbound-asm2', name: 'RM2 Outbound' },
-    
-    // Inventory tabs
     { key: 'materials-asm1', name: 'RM1 Inventory' },
+    { key: 'inventory-overview-asm1', name: 'RM1 Overview' },
+    
+    // ASM2 RM tabs
+    { key: 'inbound-asm2', name: 'RM2 Inbound' },
+    { key: 'outbound-asm2', name: 'RM2 Outbound' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     
     // Other tabs
@@ -63,7 +62,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'layout', name: 'Layout' },
     { key: 'checklist', name: 'Safety & Quality' },
     { key: 'equipment', name: 'Training' },
-    { key: 'task', name: 'Flow Work' },
     { key: 'settings', name: 'Settings' }
   ];
   // Firebase user tab permissions

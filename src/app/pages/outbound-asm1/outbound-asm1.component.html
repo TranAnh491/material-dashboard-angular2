@@ -68,6 +68,10 @@
               <i class="material-icons">description</i>
               Tải báo cáo
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadMonthlyHistory(); closeDropdown()">
+              <i class="material-icons">calendar_month</i>
+              Tải theo tháng
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
               <i class="material-icons">cleaning_services</i>
               Làm sạch dữ liệu
@@ -146,7 +150,7 @@
             <th>Ngày xuất</th>
             <th>Mã hàng</th>
                                   <th>Số PO</th>
-                      <th>Ngày nhập</th>
+                      <th>Batch</th>
                       <th>Xuất</th>
                       <th>Mã nhân viên</th>
                       <th>Lệnh sản xuất</th>
@@ -158,23 +162,23 @@
             <td class="factory-cell factory-asm1">ASM1</td>
             <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
             <td class="date-cell">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
-            <td class="code-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.materialCode" (change)="updateMaterial(material)">
+                        <td class="code-cell readonly-cell">
+              {{material.materialCode}}
             </td>
-            <td class="po-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.poNumber" (change)="updateMaterial(material)">
+            <td class="po-cell readonly-cell">
+              {{material.poNumber}}
             </td>
-            <td class="import-date-cell">
-              {{material.importDate ? (material.importDate | date:'dd/MM/yyyy') : 'N/A'}}
+            <td class="import-date-cell readonly-cell">
+              {{material.importDate || 'N/A'}}
             </td>
-                                <td class="number-cell">
-                      <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
-                    </td>
-                    <td class="employee-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="ASP1234">
+            <td class="number-cell readonly-cell">
+              {{material.exportQuantity}}
             </td>
-            <td class="production-order-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.productionOrder" (change)="updateMaterial(material)" placeholder="KZLSX12345678">
+            <td class="employee-cell readonly-cell">
+              {{material.employeeId || 'N/A'}}
+            </td>
+            <td class="production-order-cell readonly-cell">
+              {{material.productionOrder || 'N/A'}}
             </td>
             <td class="action-cell">
               <button class="action-btn delete-btn" (click)="deleteMaterial(material)">

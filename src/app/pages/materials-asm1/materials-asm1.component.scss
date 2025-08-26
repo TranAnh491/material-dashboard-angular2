@@ -41,7 +41,7 @@
   min-width: 100px;
   width: 100px;
   text-align: center;
-  font-size: 12px;
+  font-size: 13px !important;
   color: #495057;
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
@@ -95,13 +95,13 @@
   -webkit-background-clip: unset;
   -webkit-text-fill-color: unset;
   background-clip: unset;
-  font-weight: 600;
+  font-weight: normal !important;
 }
 
 .factory-asm1 {
   background: #ffffff !important; // White background
   color: #000000 !important; // Pure black text
-  font-weight: 600 !important;
+  font-weight: normal !important;
   border-left: 2px solid #000000 !important;
 }
 
@@ -487,14 +487,14 @@
   padding: 4px 6px;
   
   .standard-packing-value {
-    font-weight: 600;
+    font-weight: normal !important;
     color: #1976d2;
     padding: 4px 8px;
     background: #e3f2fd;
     border-radius: 4px;
     display: inline-block;
     min-width: 40px;
-    font-size: 11px;
+    font-size: 13px !important;
   }
 }
 
@@ -504,7 +504,7 @@
   background: transparent !important;
   border-radius: 0 !important;
   padding: 4px 6px !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
   text-align: center !important;
   width: 100% !important;
   box-sizing: border-box !important;
@@ -519,6 +519,35 @@
   &:hover {
     background: #f8f9fa !important;
   }
+}
+
+// Đảm bảo cột Vị trí có độ rộng đúng - không bị ghi đè
+td:nth-child(11) {
+  width: 70px !important;
+  min-width: 70px !important;
+  max-width: 70px !important;
+}
+
+th:nth-child(11) {
+  width: 70px !important;
+  min-width: 70px !important;
+  max-width: 70px !important;
+}
+
+// CSS mạnh nhất để đảm bảo cột Vị trí không bị ghi đè
+.excel-table td:nth-child(11),
+.excel-table th:nth-child(11) {
+  width: 70px !important;
+  min-width: 70px !important;
+  max-width: 70px !important;
+}
+
+// CSS cho input trong cột Vị trí
+.excel-table td:nth-child(11) .location-input,
+.excel-table td:nth-child(11) .editable-cell {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 // Giao diện phẳng cho cột Tồn đầu - giống hệt cột Vị trí
@@ -551,7 +580,7 @@
   max-width: 80px !important;
   text-align: center;
   padding: 4px 6px;
-  font-weight: 500;
+  font-weight: normal !important;
 }
 
 // Horizontal Layout Styles - Copy from inbound
@@ -687,8 +716,8 @@
   padding: 8px 16px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13px !important;
+  font-weight: normal !important;
   min-width: 160px;
   text-align: center;
   display: flex;
@@ -700,18 +729,89 @@
   flex-shrink: 0; // Không cho phép co lại
   
   i {
-    font-size: 18px;
+    font-size: 13px !important;
     color: #000000;
   }
   
   span {
     white-space: nowrap;
-    font-weight: 600;
+    font-weight: normal !important;
   }
   
   &:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Export lock box styling
+.export-lock-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  .export-lock-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #6b7280;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px !important;
+    font-weight: normal !important;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    height: 36px;
+    
+    i {
+      font-size: 16px;
+      color: white;
+    }
+    
+    span {
+      white-space: nowrap;
+    }
+    
+    &:hover {
+      background: #4b5563;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    // Unlocked state
+    &.unlocked {
+      background: #10b981;
+      
+      &:hover {
+        background: #059669;
+      }
+    }
+  }
+}
+
+// Editable export cell styling
+.editable-export-cell {
+  .export-input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    font-size: 13px !important;
+    text-align: center;
+    background: #fff;
+    transition: all 0.2s ease;
+    
+    &:focus {
+      outline: none;
+      border-color: #0056b3;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    
+    &:hover {
+      border-color: #0056b3;
+    }
   }
 }
 
@@ -723,7 +823,7 @@
     padding: 6px 10px;
     border: 1px solid #d1d5db;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 13px !important;
     width: 200px;
     background: white;
     height: 32px;
@@ -736,7 +836,7 @@
     
     &::placeholder {
       color: #9ca3af;
-      font-size: 11px;
+      font-size: 13px !important;
     }
   }
   
@@ -805,7 +905,7 @@
     background: #ffffff;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px !important;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -835,7 +935,7 @@
     
     .dropdown-item {
       padding: 8px 12px;
-      font-size: 12px;
+      font-size: 13px !important;
       color: #000000;
       display: flex;
       align-items: center;
@@ -846,7 +946,7 @@
       }
       
       i {
-        font-size: 14px;
+        font-size: 13px !important;
       }
     }
   }
@@ -866,7 +966,7 @@
     background: #ffffff;
     color: #000000;
     font-weight: 500;
-    font-size: 12px;
+    font-size: 13px !important;
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -891,67 +991,67 @@
 }
 
 // Negative stock counter box - Di chuyển lên trên cùng để lấp đầy khoảng trống header
-.negative-stock-counter-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #fef3c7; // Light yellow background
-  color: #92400e; // Dark orange text
-  border: 1px solid #f59e0b; // Orange border
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 13px;
-  height: 36px;
-  transition: all 0.3s ease;
-  margin-right: 12px;
-  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
-  
-  i {
-    font-size: 18px;
-    color: #f59e0b; // Orange icon
-  }
-  
-  span {
-    white-space: nowrap;
-    font-weight: 600;
-  }
-  
-  // When there are negative stocks
-  &.has-negative {
-    background: #ffebee; // Light red background
-    color: #d32f2f; // Dark red text
-    border-color: #f44336; // Red border
-    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+    .negative-stock-counter-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #fef3c7; // Light yellow background
+    color: #92400e; // Dark orange text
+    border: 1px solid #f59e0b; // Orange border
+    border-radius: 6px;
+    font-weight: normal !important;
+    font-size: 13px !important;
+    height: 36px;
+    transition: all 0.3s ease;
+    margin-right: 12px;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
     
     i {
-      color: #f44336; // Red icon
+      font-size: 13px !important;
+      color: #f59e0b; // Orange icon
     }
-  }
-  
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
     
+    span {
+      white-space: nowrap;
+      font-weight: normal !important;
+    }
+    
+    // When there are negative stocks
     &.has-negative {
-      box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+      background: #ffebee; // Light red background
+      color: #d32f2f; // Dark red text
+      border-color: #f44336; // Red border
+      box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+      
+      i {
+        color: #f44336; // Red icon
+      }
+    }
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+      
+      &.has-negative {
+        box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+      }
     }
   }
-}
 
 // Catalog ready icon
-.catalog-ready-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  
-  i {
-    font-size: 20px;
-    color: #10b981;
+  .catalog-ready-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    
+    i {
+      font-size: 13px !important;
+      color: #10b981;
+    }
   }
-}
 
 // Dropdown menu styling
 .dropdown {
@@ -971,7 +1071,7 @@
     
     .dropdown-item {
       padding: 8px 16px;
-      font-size: 14px;
+      font-size: 13px !important;
       color: #000000;
       display: flex;
       align-items: center;
@@ -984,7 +1084,7 @@
       }
       
       i {
-        font-size: 18px;
+        font-size: 13px !important;
         color: #000000;
       }
     }
@@ -1237,7 +1337,7 @@
       border: 1px solid #e0e0e0; // Viền xám nhạt thay vì đen
       padding: 12px 8px;
       text-align: center;
-      font-weight: 600;
+      font-weight: normal !important;
       position: sticky;
       top: 0;
     }
@@ -1257,6 +1357,9 @@
       border: 1px solid #e0e0e0;
       padding: 8px;
       text-align: center;
+      font-size: 13px !important;
+      font-weight: normal !important;
+      font-family: inherit;
     }
   }
   
@@ -1273,7 +1376,7 @@
       padding: 4px 6px;
       border: 1px solid #ccc;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px !important;
       text-align: center;
       background: #fff;
       transition: all 0.2s ease;
@@ -1297,11 +1400,11 @@
     max-width: 80px;
   }
   
-  th:nth-child(9), // Cột "Vị trí" (sau khi xóa FIFO)
-  td:nth-child(9) {
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
+  th:nth-child(11), // Cột "Vị trí" (cột thứ 11)
+  td:nth-child(11) {
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
   }
 
   // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
@@ -1326,7 +1429,7 @@
       background: transparent !important;
       border-radius: 0 !important;
       padding: 4px 6px !important;
-      font-size: 12px !important;
+      font-size: 13px !important;
       text-align: center !important;
       width: 100% !important;
       box-sizing: border-box !important;
@@ -1346,20 +1449,20 @@
 }
 
 // Danger item styling for delete all button
-.dropdown-item.danger-item {
-  color: #dc3545 !important;
-  border-left: 3px solid #dc3545 !important;
-  font-weight: 600;
-  
-  &:hover {
-    background-color: #f8d7da !important;
-    color: #721c24 !important;
-  }
-  
-  i {
+  .dropdown-item.danger-item {
     color: #dc3545 !important;
+    border-left: 3px solid #dc3545 !important;
+    font-weight: normal !important;
+    
+    &:hover {
+      background-color: #f8d7da !important;
+      color: #721c24 !important;
+    }
+    
+    i {
+      color: #dc3545 !important;
+    }
   }
-}
 
 
 

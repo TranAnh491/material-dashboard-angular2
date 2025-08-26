@@ -582,6 +582,105 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       alert('Lỗi tải báo cáo: ' + error.message);
     }
   }
+
+  // Download monthly history - Tải lịch sử outbound theo tháng
+  async downloadMonthlyHistory(): Promise<void> {
+    try {
+      // Hiện popup chọn tháng
+      const monthYear = prompt(
+        'Chọn tháng để tải lịch sử outbound:\n' +
+        'Nhập theo định dạng YYYY-MM (ví dụ: 2024-12)',
+        new Date().toISOString().slice(0, 7) // Mặc định tháng hiện tại
+      );
+      
+      if (!monthYear) return;
+      
+      // Validate format YYYY-MM
+      if (!/^\d{4}-\d{2}$/.test(monthYear)) {
+        alert('❌ Định dạng không đúng! Vui lòng nhập theo định dạng YYYY-MM (ví dụ: 2024-12)');
+        return;
+      }
+      
+      const [year, month] = monthYear.split('-');
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1); // Ngày đầu tháng
+      const endDate = new Date(parseInt(year), parseInt(month), 0); // Ngày cuối tháng
+      
+      console.log('📅 Downloading monthly history for:', monthYear, 'from', startDate, 'to', endDate);
+      
+      // Query data theo tháng
+      const querySnapshot = await this.firestore.collection('outbound-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+           .where('exportDate', '>=', startDate)
+           .where('exportDate', '<=', endDate)
+           .orderBy('exportDate', 'desc')
+      ).get().toPromise();
+      
+      if (!querySnapshot || querySnapshot.empty) {
+        alert(`📭 Không có dữ liệu outbound ASM1 trong tháng ${monthYear}`);
+        return;
+      }
+      
+      // Chuyển đổi dữ liệu để export
+      const exportData = querySnapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          'Factory': data.factory || 'ASM1',
+          'Material Code': data.materialCode || '',
+          'PO Number': data.poNumber || '',
+          'Batch': data.importDate || 'N/A',
+          'Export Quantity': data.exportQuantity || 0,
+          'Unit': data.unit || '',
+          'Export Date': data.exportDate?.toDate().toLocaleDateString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) || '',
+          'Employee ID': data.employeeId || '',
+          'Production Order': data.productionOrder || '',
+          'Scan Method': data.scanMethod || 'MANUAL',
+          'Notes': data.notes || ''
+        };
+      });
+      
+      // Tạo file Excel
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 8 },   // Factory
+        { wch: 15 },  // Material Code
+        { wch: 15 },  // PO Number
+        { wch: 12 },  // Batch
+        { wch: 12 },  // Export Quantity
+        { wch: 8 },   // Unit
+        { wch: 20 },  // Export Date
+        { wch: 12 },  // Employee ID
+        { wch: 20 },  // Production Order
+        { wch: 12 },  // Scan Method
+        { wch: 20 }   // Notes
+      ];
+      worksheet['!cols'] = colWidths;
+      
+      // Tạo workbook và export
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Monthly_History');
+      
+      const fileName = `ASM1_Outbound_History_${monthYear}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log(`✅ Monthly history exported: ${fileName}`);
+      alert(`✅ Đã tải lịch sử outbound tháng ${monthYear}!\n\n` +
+            `📁 File: ${fileName}\n` +
+            `📊 Số lượng records: ${exportData.length}\n` +
+            `📅 Từ: ${startDate.toLocaleDateString('vi-VN')} đến ${endDate.toLocaleDateString('vi-VN')}`);
+      
+    } catch (error) {
+      console.error('❌ Error downloading monthly history:', error);
+      alert('❌ Lỗi tải lịch sử theo tháng: ' + error.message);
+    }
+  }
   
   // Cleanup old data (move to archive or delete)
   async cleanupData(): Promise<void> {
@@ -781,16 +880,24 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing scanned QR data:', decodedText);
       
-      // Đơn giản: Parse QR data format "MaterialCode|PONumber|Quantity|ImportDate"
-      const parts = decodedText.split('|');
+      // Đơn giản: Parse QR data format "MaterialCode|PONumber|Quantity|BatchNumber"
+      // Xử lý dấu cách và format không đúng
+      let cleanText = decodedText.trim();
+      
+      // Loại bỏ dấu cách trước dấu |
+      cleanText = cleanText.replace(/\s*\|\s*/g, '|');
+      
+      const parts = cleanText.split('|');
       if (parts.length >= 3) {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
           quantity: parseInt(parts[2]) || 0,
-          importDate: parts.length >= 4 ? parts[3].trim() : null
+          importDate: parts.length >= 4 ? parts[3].trim() : null // Bây giờ là batch number: 26082025
         };
         
+        console.log('🔍 Original text:', decodedText);
+        console.log('🔍 Cleaned text:', cleanText);
         console.log('🔍 Parsed data:', this.lastScannedData);
         
         // Set default export quantity to full quantity
@@ -924,7 +1031,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       productionOrder: '', // Empty for manual scans
       scanMethod: 'QR_SCANNER',
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
-      importDate: this.lastScannedData.importDate || null, // Lưu ngày nhập từ QR code
+      importDate: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1010,7 +1117,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.lastScannedData.materialCode, 
         this.lastScannedData.poNumber, 
         this.exportQuantity,
-        this.lastScannedData.importDate // Truyền ngày nhập từ QR code
+        this.lastScannedData.importDate // Truyền batch number từ QR code (ví dụ: 26082025)
       );
       console.log('✅ Inventory exported quantity updated successfully');
       
@@ -1231,17 +1338,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       let quantity = 1;
       let importDate: string | null = null;
       
-      // Pattern 1: Format "MaterialCode|PONumber|Quantity|ImportDate" (dấu |)
+      // Pattern 1: Format "MaterialCode|PONumber|Quantity|BatchNumber" (dấu |)
       if (scannedData.includes('|')) {
-        const parts = scannedData.split('|');
+        // Xử lý dấu cách và format không đúng
+        let cleanData = scannedData.trim();
+        cleanData = cleanData.replace(/\s*\|\s*/g, '|');
+        
+        const parts = cleanData.split('|');
         if (parts.length >= 3) {
           materialCode = parts[0].trim();
           poNumber = parts[1].trim();
           quantity = parseInt(parts[2]) || 1;
           
-          // Đơn giản: lấy phần thứ 4 làm ngày nhập
+          // Đơn giản: lấy phần thứ 4 làm batch number
           if (parts.length >= 4) {
-            importDate = parts[3].trim();
+            importDate = parts[3].trim(); // Ví dụ: 26082025
           }
         }
       }
@@ -1527,23 +1638,77 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         console.log(`📅 Import date from QR: ${importDate} - Sẽ tìm inventory record có cùng ngày nhập`);
       }
       
-      // Tìm tất cả inventory items có cùng material code và PO (ASM1 only)
+      // Tìm tất cả inventory items có cùng material code, PO và batch number (ASM1 only)
       let inventoryQuery;
       
-            // Đơn giản: Tìm tất cả inventory items có cùng material code và PO
-      inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+      console.log(`🔍 Tìm inventory với: Material=${materialCode}, PO=${poNumber}, Batch=${importDate}, Factory=ASM1`);
+      
+      // Sử dụng batch number để matching chính xác
+      if (importDate) {
+        // Tìm theo material code, PO và batch number
+        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .where('factory', '==', 'ASM1')
+             .limit(50)
+        ).get().toPromise();
+        
+        // Nếu không tìm thấy, thử tìm theo material code và batch number (bỏ qua PO)
+        if (!inventoryQuery || inventoryQuery.empty) {
+          console.log(`🔍 Không tìm thấy theo PO, thử tìm theo batch number...`);
+          inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('materialCode', '==', materialCode)
+               .where('factory', '==', 'ASM1')
+               .limit(100)
+          ).get().toPromise();
+          
+          // Filter theo batch number
+          if (inventoryQuery && !inventoryQuery.empty) {
+            const filteredDocs = inventoryQuery.docs.filter(doc => {
+              const data = doc.data() as any;
+              const inventoryBatch = data.importDate ? 
+                data.importDate.toLocaleDateString('en-GB').split('/').join('') : 
+                null;
+              return inventoryBatch === importDate;
+            });
+            
+            if (filteredDocs.length > 0) {
+              console.log(`🔍 Tìm thấy ${filteredDocs.length} records theo batch number ${importDate}`);
+              inventoryQuery = { docs: filteredDocs, empty: false } as any;
+            }
+          }
+        }
+      } else {
+        // Fallback: Tìm theo material code và PO (không có batch number)
+        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .where('factory', '==', 'ASM1')
+             .limit(50)
+        ).get().toPromise();
+      }
+      
+      // Debug: Kiểm tra tất cả inventory records có material code này
+      const allInventoryQuery = await this.firestore.collection('inventory-materials', ref =>
         ref.where('materialCode', '==', materialCode)
-           .where('poNumber', '==', poNumber)
            .where('factory', '==', 'ASM1')
-           .limit(50)
+           .limit(100)
       ).get().toPromise();
+      
+      if (allInventoryQuery && !allInventoryQuery.empty) {
+        console.log(`🔍 Tìm thấy ${allInventoryQuery.docs.length} inventory records có material code ${materialCode}:`);
+        allInventoryQuery.docs.forEach((doc, index) => {
+          const data = doc.data() as any;
+          console.log(`  ${index + 1}. PO: "${data.poNumber}" (type: ${typeof data.poNumber})`);
+        });
+      }
 
       if (!inventoryQuery || inventoryQuery.empty) {
         console.log(`⚠️ Không tìm thấy inventory record cho ${materialCode} - ${poNumber}`);
         console.log(`💡 Tạo mới inventory record với exported = ${exportQuantity}`);
         
         // Tạo mới inventory record nếu không tìm thấy
-        await this.createNewInventoryRecord(materialCode, poNumber, exportQuantity);
+        await this.createNewInventoryRecord(materialCode, poNumber, exportQuantity, importDate);
         return;
       }
 
@@ -1599,8 +1764,23 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   /**
    * Tạo mới inventory record nếu không tìm thấy
    */
-  private async createNewInventoryRecord(materialCode: string, poNumber: string, exportQuantity: number): Promise<void> {
+  private async createNewInventoryRecord(materialCode: string, poNumber: string, exportQuantity: number, importDate?: string): Promise<void> {
     try {
+      // Chuyển batch number thành Date object nếu có
+      let importDateObj: Date | null = null;
+      if (importDate) {
+        try {
+          // Parse batch number: 26082025 -> 26/08/2025 -> Date
+          const day = importDate.substring(0, 2);
+          const month = importDate.substring(2, 4);
+          const year = importDate.substring(4, 8);
+          importDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          console.log(`📅 Chuyển batch ${importDate} thành ngày: ${importDateObj.toLocaleDateString('en-GB')}`);
+        } catch (error) {
+          console.warn(`⚠️ Không thể parse batch number ${importDate}:`, error);
+        }
+      }
+      
       const newInventoryRecord = {
         factory: 'ASM1',
         materialCode: materialCode,
@@ -1609,6 +1789,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         exported: exportQuantity, // Số lượng đã xuất
         unit: 'KG',
         location: 'ASM1',
+        importDate: importDateObj, // Lưu batch number dưới dạng Date
         createdAt: new Date(),
         updatedAt: new Date(),
         lastExportDate: new Date(),
@@ -1618,9 +1799,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           date: new Date(),
           quantity: exportQuantity,
           source: 'outbound-scan',
-          notes: 'Tạo mới từ outbound scan'
+          notes: `Tạo mới từ outbound scan - Batch: ${importDate || 'N/A'}`
         }],
-        notes: `Tạo mới từ outbound scan - Xuất: ${exportQuantity}`
+        notes: `Tạo mới từ outbound scan - Xuất: ${exportQuantity} - Batch: ${importDate || 'N/A'}`
       };
 
       await this.firestore.collection('inventory-materials').add(newInventoryRecord);

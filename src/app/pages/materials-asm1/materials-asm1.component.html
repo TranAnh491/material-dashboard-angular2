@@ -95,6 +95,19 @@
           <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
         </div>
         
+        <!-- Lock/Unlock Button for Export Column - Chỉ hiển thị cho user có quyền Xóa -->
+        <div class="export-lock-box" 
+             *ngIf="canDelete"
+             [class.unlocked]="isExportColumnUnlocked"
+             [title]="isExportColumnUnlocked ? 'Click để khóa cột Đã xuất' : 'Click để mở khóa cột Đã xuất'">
+          <button class="export-lock-btn" 
+                  (click)="toggleExportColumnLock()"
+                  [class.unlocked]="isExportColumnUnlocked">
+            <i class="material-icons">{{ isExportColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+            <span>{{ isExportColumnUnlocked ? 'Đã mở khóa' : 'Mở khóa' }}</span>
+          </button>
+        </div>
+        
         <!-- Search Type Selector -->
         <div class="search-type-selector">
           <div class="dropdown">
@@ -199,7 +212,7 @@
 
             <th>Mã hàng</th>
             <th>PO</th>
-            <th>Ngày nhập</th>
+                            <th>Batch</th>
             <th>Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
@@ -234,7 +247,7 @@
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
-              {{material.importDate ? (material.importDate | date:'dd/MM/yyyy') : 'N/A'}}
+              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <input type="number" 
@@ -244,13 +257,27 @@
                      (change)="updateOpeningStock(material)" 
                      min="0" 
                      step="0.1" 
-                     placeholder="Nhập tồn đầu">
+                     [placeholder]="material.openingStock ? '' : 'Nhập tồn đầu'">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
-            <!-- Cột "Đã xuất" - Tự động lấy từ RM1 outbound và lưu trữ vĩnh viễn -->
-            <td class="number-cell readonly-cell" 
-                [title]="'Số lượng đã xuất từ RM1 outbound: ' + (material.exported || 0) + '\nTự động cập nhật và lưu trữ vĩnh viễn\nKể cả khi xóa dòng xuất ở outbound cũng không ảnh hưởng'">
-              {{formatNumber(material.exported || 0)}}
+            <!-- Cột "Đã xuất" - Có thể edit khi mở khóa -->
+            <td class="number-cell" 
+                [class.readonly-cell]="!isExportColumnUnlocked"
+                [class.editable-export-cell]="isExportColumnUnlocked"
+                [title]="isExportColumnUnlocked ? 'Click để sửa số lượng đã xuất' : 'Số lượng đã xuất từ RM1 outbound: ' + (material.exported || 0) + '\nTự động cập nhật và lưu trữ vĩnh viễn\nKể cả khi xóa dòng xuất ở outbound cũng không ảnh hưởng'">
+              <ng-container *ngIf="!isExportColumnUnlocked">
+                {{formatNumber(material.exported || 0)}}
+              </ng-container>
+              <ng-container *ngIf="isExportColumnUnlocked">
+                <input type="number" 
+                       class="export-input" 
+                       [ngModel]="material.exported || 0"
+                       (ngModelChange)="material.exported = $event === '' ? 0 : +$event"
+                       (change)="updateExportedAmount(material)"
+                       min="0" 
+                       step="0.1"
+                       placeholder="0">
+              </ng-container>
             </td>
                         <!-- Cột "XT" - Số lượng cần xuất (nhập tay) -->
             <td class="number-cell xt-column">
@@ -291,7 +318,7 @@
                      [(ngModel)]="material.rollsOrBags" 
                      (change)="updateMaterial(material)" 
                      min="0" 
-                     placeholder="Rolls/Bags">
+                     [placeholder]="material.rollsOrBags ? '' : 'Rolls/Bags'">
             </td>
             <td class="notes-cell">
               <input type="text" 
