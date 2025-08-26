@@ -2540,7 +2540,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       });
       
       // Generate QR codes based on quantity per unit
-      // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (YYYY-MM-DD)
+      // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (DD/MM/YYYY)
       // Sử dụng importDate nếu có, nếu không thì dùng ngày hiện tại
       const qrCodes = [];
       
@@ -2550,7 +2550,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate ? material.importDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate ? material.importDate.toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`
         });
       }
       
@@ -2560,7 +2560,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate ? material.importDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate ? material.importDate.toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`
         });
       }
 

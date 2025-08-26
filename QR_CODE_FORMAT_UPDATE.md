@@ -11,7 +11,7 @@ Mã hàng|PO|Số đơn vị
 
 ### Format Mới
 ```
-Mã hàng|PO|Số đơn vị|Ngày (YYYY-MM-DD)
+Mã hàng|PO|Số đơn vị|Ngày (DD/MM/YYYY)
 ```
 
 ## Ví Dụ
@@ -23,7 +23,7 @@ B018694|PO123|100
 
 **Bây giờ:**
 ```
-B018694|PO123|100|2024-01-15
+B018694|PO123|100|26/08/2025
 ```
 
 ## Các Component Đã Được Cập Nhật

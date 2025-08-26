@@ -1093,7 +1093,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const remainingQuantity = totalQuantity % rollsOrBags;
       
               // Generate QR codes based on quantity per unit
-        // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (YYYY-MM-DD)
+        // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (DD/MM/YYYY)
         const qrCodes = [];
       
       // Add full units
@@ -1102,7 +1102,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate.toISOString().split('T')[0]}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${material.importDate.toLocaleDateString('en-GB')}`
         });
       }
       
@@ -1112,7 +1112,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate.toISOString().split('T')[0]}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${material.importDate.toLocaleDateString('en-GB')}`
         });
       }
 

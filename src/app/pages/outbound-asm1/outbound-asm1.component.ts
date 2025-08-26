@@ -201,7 +201,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         const allMaterials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
           console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}`);
-          return {
+          console.log(`📅 Doc ${doc.payload.doc.id} importDate:`, data.importDate);
+          console.log(`📅 Doc ${doc.payload.doc.id} importDate type:`, typeof data.importDate);
+          
+          const material = {
             id: doc.payload.doc.id,
             factory: data.factory || 'ASM1',
             materialCode: data.materialCode || '',
@@ -220,6 +223,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
           } as OutboundMaterial;
+          
+          console.log(`📅 Mapped material importDate:`, material.importDate);
+          return material;
         });
         
         console.log(`🏭 All materials before filter: ${allMaterials.length}`);
@@ -767,6 +773,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   }
   
   private onScanSuccess(decodedText: string): void {
+    console.log('🔍 === ON SCAN SUCCESS START ===');
+    console.log('🔍 Input decodedText:', decodedText);
+    console.log('🔍 Input type:', typeof decodedText);
+    console.log('🔍 Input length:', decodedText.length);
+    
     try {
       console.log('🔍 Processing scanned QR data:', decodedText);
       
@@ -786,6 +797,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           console.log('📅 Import date from QR:', this.lastScannedData.importDate);
           console.log('📅 Import date type:', typeof this.lastScannedData.importDate);
           console.log('📅 Import date length:', this.lastScannedData.importDate.length);
+        } else {
+          console.log('❌ KHÔNG CÓ importDate trong lastScannedData!');
+          console.log('❌ lastScannedData:', JSON.stringify(this.lastScannedData, null, 2));
         }
         
         // Set default export quantity to full quantity
@@ -855,6 +869,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log('✅ Export quantity set to:', this.exportQuantity);
       
       // Auto-export immediately after successful scan
+      console.log('🔍 Calling autoExportScannedMaterial...');
       this.autoExportScannedMaterial();
       
     } catch (error) {
@@ -862,6 +877,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.error('❌ Raw QR data was:', decodedText);
       alert(`QR code không hợp lệ: ${error.message}\n\nDữ liệu quét được: ${decodedText}\n\nVui lòng quét QR code từ hệ thống hoặc kiểm tra format.`);
     }
+    
+    console.log('🔍 === ON SCAN SUCCESS END ===');
   }
   
   // Consolidate outbound records by ALL 4 fields: material code + PO + employee ID + production order (LSX)
@@ -922,11 +939,19 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     };
     
     console.log('📝 Creating new outbound record:', outboundRecord);
+    console.log('📅 Import date in outbound record:', outboundRecord.importDate);
+    console.log('📅 Import date type in outbound record:', typeof outboundRecord.importDate);
     
     // Add to outbound collection
     console.log('🔥 Adding to Firebase collection: outbound-materials');
     const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
     console.log('✅ New outbound record created with ID:', docRef.id);
+    
+    // Verify data was saved correctly
+    const savedDoc = await docRef.get();
+    const savedData = savedDoc.data() as any;
+    console.log('📅 Saved importDate in database:', savedData?.importDate);
+    console.log('📅 Saved importDate type in database:', typeof savedData?.importDate);
   }
 
   // Auto-export method that runs immediately after scan
@@ -1211,15 +1236,24 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       let materialCode = '';
       let poNumber = '';
       let quantity = 1;
+      let importDate: string | null = null;
       
-      // Pattern 1: Format "MaterialCode|PONumber|Quantity" (dấu |)
+      // Pattern 1: Format "MaterialCode|PONumber|Quantity|ImportDate" (dấu |)
       if (scannedData.includes('|')) {
         const parts = scannedData.split('|');
         if (parts.length >= 3) {
           materialCode = parts[0].trim();
           poNumber = parts[1].trim();
           quantity = parseInt(parts[2]) || 1;
-          console.log('✅ Parsed pipe format:', { materialCode, poNumber, quantity });
+          
+          // Parse ngày nhập nếu có (phần thứ 4)
+          let importDate = null;
+          if (parts.length >= 4) {
+            importDate = parts[3].trim();
+            console.log('✅ Parsed pipe format with import date:', { materialCode, poNumber, quantity, importDate });
+          } else {
+            console.log('✅ Parsed pipe format:', { materialCode, poNumber, quantity });
+          }
         }
       }
       // Pattern 2: Format "MaterialCode,PONumber,Quantity" (dấu phẩy)
@@ -1279,9 +1313,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }
       
       // 🔧 LOGIC MỚI: Lưu trực tiếp vào database với vị trí "N/A"
-      console.log('📍 Lưu mã hàng với vị trí N/A:', { materialCode, poNumber, quantity });
+      console.log('📍 Lưu mã hàng với vị trí N/A:', { materialCode, poNumber, quantity, importDate });
       
-      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, 'N/A');
+      this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, 'N/A', importDate);
       
       console.log('✅ Đã lưu xong, có thể scan liên tục');
       
@@ -1301,7 +1335,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
 
   // Lưu mã hàng trực tiếp vào database
-  private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number, location: string = 'Unknown'): Promise<void> {
+  private async saveMaterialDirectlyToDatabase(materialCode: string, poNumber: string, quantity: number, location: string = 'Unknown', importDate?: string): Promise<void> {
     try {
       console.log('💾 Saving material directly to database:', { materialCode, poNumber, quantity });
       
@@ -1319,6 +1353,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         employeeId: this.batchEmployeeId,
         scanMethod: 'Direct Scanner',
         notes: `Direct scan - ${this.batchProductionOrder}`,
+        importDate: importDate || null, // Thêm ngày nhập từ QR code
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1329,7 +1364,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       // Cập nhật cột "đã xuất" trong inventory
       console.log('📦 Updating inventory exported quantity...');
-      await this.updateInventoryExported(materialCode, poNumber, quantity);
+      await this.updateInventoryExported(materialCode, poNumber, quantity, importDate);
       console.log('✅ Inventory exported quantity updated successfully');
       
       // Bỏ alert - chỉ log console để scan liên tục
@@ -1414,6 +1449,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private processScannerInput(scannedData: string): void {
     if (!scannedData.trim()) return;
     
+    console.log('🔍 === PROCESS SCANNER INPUT START ===');
+    console.log('🔍 Raw scanned data:', scannedData);
+    console.log('🔍 Raw data length:', scannedData.length);
+    
     // Clean the scanned data - remove common scanner artifacts
     let cleanData = scannedData.trim();
     
@@ -1454,6 +1493,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }, 100);
     } else {
       // Process the scanned data (same as camera scan)
+      console.log('🔍 Calling onScanSuccess with cleanData:', cleanData);
       this.onScanSuccess(cleanData);
       
       // Keep input focused for next scan
@@ -1461,6 +1501,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.focusScannerInput();
       }
     }
+    
+    console.log('🔍 === PROCESS SCANNER INPUT END ===');
   }
 
   // REMOVED: getMaterialStock() - Không cần tính stock để scan nhanh
@@ -1513,7 +1555,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         if (inventoryQuery && !inventoryQuery.empty) {
           console.log(`🔍 Lọc ${inventoryQuery.docs.length} inventory records theo ngày nhập: ${importDate}`);
           
-          const filteredDocs = inventoryQuery.docs.filter(doc => {
+                    const filteredDocs = inventoryQuery.docs.filter(doc => {
             const data = doc.data() as any;
             const docImportDate = data.importDate;
             console.log(`  📅 Record ${doc.id}: importDate = ${docImportDate}`);
@@ -1523,27 +1565,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
               
               // Xử lý các format ngày khác nhau
               if (docImportDate.toDate) {
-                // Firebase Timestamp
-                docDate = docImportDate.toDate().toISOString().split('T')[0];
+                // Firebase Timestamp - convert sang dd/mm/yyyy
+                const date = docImportDate.toDate();
+                docDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
               } else if (docImportDate instanceof Date) {
-                // Date object
-                docDate = docImportDate.toISOString().split('T')[0];
+                // Date object - convert sang dd/mm/yyyy
+                const date = docImportDate;
+                docDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
               } else if (typeof docImportDate === 'string') {
-                // String date - có thể là "2025-08-26" hoặc "26/08/2025"
-                if (docImportDate.includes('-')) {
-                  // Format "2025-08-26"
-                  docDate = docImportDate;
-                } else if (docImportDate.includes('/')) {
-                  // Format "26/08/2025" - convert sang "2025-08-26"
-                  const parts = docImportDate.split('/');
-                  if (parts.length === 3) {
-                    docDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                  } else {
-                    docDate = docImportDate;
-                  }
-                } else {
-                  docDate = docImportDate;
-                }
+                // String date - giữ nguyên format
+                docDate = docImportDate;
               } else {
                 docDate = String(docImportDate);
               }
