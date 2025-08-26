@@ -781,26 +781,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing scanned QR data:', decodedText);
       
-      // Parse QR data format: "MaterialCode|PONumber|Quantity|ImportDate" (new format with date)
-      // or "MaterialCode|PONumber|Quantity" (old format for backward compatibility)
+      // Đơn giản: Parse QR data format "MaterialCode|PONumber|Quantity|ImportDate"
       const parts = decodedText.split('|');
       if (parts.length >= 3) {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
           quantity: parseInt(parts[2]) || 0,
-          importDate: parts.length >= 4 ? parts[3].trim() : null // Ngày nhập từ QR code
+          importDate: parts.length >= 4 ? parts[3].trim() : null
         };
         
-        console.log('✅ Parsed QR data (pipe format):', this.lastScannedData);
-        if (this.lastScannedData.importDate) {
-          console.log('📅 Import date from QR:', this.lastScannedData.importDate);
-          console.log('📅 Import date type:', typeof this.lastScannedData.importDate);
-          console.log('📅 Import date length:', this.lastScannedData.importDate.length);
-        } else {
-          console.log('❌ KHÔNG CÓ importDate trong lastScannedData!');
-          console.log('❌ lastScannedData:', JSON.stringify(this.lastScannedData, null, 2));
-        }
+        console.log('🔍 Parsed data:', this.lastScannedData);
         
         // Set default export quantity to full quantity
         this.exportQuantity = this.lastScannedData.quantity;
@@ -937,6 +928,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    
+    console.log('🔍 Saving outbound record with importDate:', outboundRecord.importDate);
     
     console.log('📝 Creating new outbound record:', outboundRecord);
     console.log('📅 Import date in outbound record:', outboundRecord.importDate);
@@ -1246,13 +1239,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           poNumber = parts[1].trim();
           quantity = parseInt(parts[2]) || 1;
           
-          // Parse ngày nhập nếu có (phần thứ 4)
-          let importDate = null;
+          // Đơn giản: lấy phần thứ 4 làm ngày nhập
           if (parts.length >= 4) {
             importDate = parts[3].trim();
-            console.log('✅ Parsed pipe format with import date:', { materialCode, poNumber, quantity, importDate });
-          } else {
-            console.log('✅ Parsed pipe format:', { materialCode, poNumber, quantity });
           }
         }
       }
@@ -1541,82 +1530,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // Tìm tất cả inventory items có cùng material code và PO (ASM1 only)
       let inventoryQuery;
       
-      if (importDate) {
-        // Nếu có ngày nhập từ QR, tìm inventory record có cùng ngày nhập để so sánh chính xác
-        console.log(`🔍 Tìm inventory record với ngày nhập: ${importDate}`);
-        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('materialCode', '==', materialCode)
-             .where('poNumber', '==', poNumber)
-             .where('factory', '==', 'ASM1')
-             .limit(50)
-        ).get().toPromise();
-        
-        // Lọc thêm theo ngày nhập nếu có thể
-        if (inventoryQuery && !inventoryQuery.empty) {
-          console.log(`🔍 Lọc ${inventoryQuery.docs.length} inventory records theo ngày nhập: ${importDate}`);
-          
-                    const filteredDocs = inventoryQuery.docs.filter(doc => {
-            const data = doc.data() as any;
-            const docImportDate = data.importDate;
-            console.log(`  📅 Record ${doc.id}: importDate = ${docImportDate}`);
-            
-            if (docImportDate) {
-              let docDate: string;
-              
-              // Xử lý các format ngày khác nhau
-              if (docImportDate.toDate) {
-                // Firebase Timestamp - convert sang dd/mm/yyyy
-                const date = docImportDate.toDate();
-                docDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-              } else if (docImportDate instanceof Date) {
-                // Date object - convert sang dd/mm/yyyy
-                const date = docImportDate;
-                docDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-              } else if (typeof docImportDate === 'string') {
-                // String date - giữ nguyên format
-                docDate = docImportDate;
-              } else {
-                docDate = String(docImportDate);
-              }
-              
-              const isMatch = docDate === importDate;
-              console.log(`    - Doc date: ${docDate}, Import date: ${importDate}, Match: ${isMatch}`);
-              console.log(`    - Original docImportDate type: ${typeof docImportDate}, value: ${docImportDate}`);
-              return isMatch;
-            }
-            console.log(`    - No importDate field`);
-            return false; // Chỉ xử lý record có ngày nhập
-          });
-          
-          if (filteredDocs.length > 0) {
-            console.log(`✅ Tìm thấy ${filteredDocs.length} inventory records có cùng ngày nhập: ${importDate}`);
-            // Tạo query result mới với filtered docs
-            inventoryQuery = {
-              ...inventoryQuery,
-              docs: filteredDocs,
-              empty: filteredDocs.length === 0
-            };
-          } else {
-            console.log(`⚠️ Không tìm thấy inventory record có cùng ngày nhập: ${importDate}`);
-            console.log(`💡 Sẽ tìm tất cả records để fallback`);
-            // Fallback: tìm tất cả records không có ngày nhập
-            inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('materialCode', '==', materialCode)
-                 .where('poNumber', '==', poNumber)
-                 .where('factory', '==', 'ASM1')
-                 .limit(50)
-            ).get().toPromise();
-          }
-        }
-      } else {
-        // Không có ngày nhập - tìm tất cả records như cũ
-        inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('materialCode', '==', materialCode)
-             .where('poNumber', '==', poNumber)
-             .where('factory', '==', 'ASM1')
-             .limit(50)
-        ).get().toPromise();
-      }
+            // Đơn giản: Tìm tất cả inventory items có cùng material code và PO
+      inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('materialCode', '==', materialCode)
+           .where('poNumber', '==', poNumber)
+           .where('factory', '==', 'ASM1')
+           .limit(50)
+      ).get().toPromise();
 
       if (!inventoryQuery || inventoryQuery.empty) {
         console.log(`⚠️ Không tìm thấy inventory record cho ${materialCode} - ${poNumber}`);
