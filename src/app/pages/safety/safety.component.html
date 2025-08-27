@@ -45,6 +45,11 @@
               Reset Safety Levels
             </a>
             <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="migrateOldData()">
+              <i class="material-icons">sync</i>
+              Migrate Old Data
+            </a>
+            <div class="dropdown-divider"></div>
             <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
               <i class="material-icons">add_circle</i>
               Initialize Sample Data
@@ -58,15 +63,6 @@
           <span>Tổng: {{ filteredMaterials.length }} mã</span>
         </div>
         
-        <!-- Factory Filter -->
-        <div class="factory-filter">
-          <select [(ngModel)]="selectedFactory" (change)="onFactoryChange()" class="factory-select">
-            <option *ngFor="let factory of availableFactories" [value]="factory">
-              {{ factory }}
-            </option>
-          </select>
-        </div>
-        
         <!-- Search Type Selector -->
         <div class="search-type-selector">
           <div class="dropdown">
@@ -75,17 +71,13 @@
                     data-toggle="dropdown" 
                     aria-haspopup="true" 
                     aria-expanded="false">
-              <i class="material-icons">{{searchType === 'material' ? 'inventory' : 'factory'}}</i>
-              {{searchType === 'material' ? 'Mã' : 'Factory'}}
+              <i class="material-icons">inventory</i>
+              Mã
             </button>
             <div class="dropdown-menu">
               <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
                 <i class="material-icons">inventory</i>
                 Mã
-              </a>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('factory')">
-                <i class="material-icons">factory</i>
-                Factory
               </a>
             </div>
           </div>
@@ -168,8 +160,9 @@
                <li>Scan tem có định dạng: <code>RB018694 150</code> hoặc <code>R123456 200</code></li>
                <li>Trong đó: <code>B018694</code> hoặc <code>R123456</code> là mã hàng (7 ký tự), <code>150</code> hoặc <code>200</code> là số lượng</li>
                <li>Mã hàng bắt đầu bằng <strong>R</strong> hoặc <strong>B</strong> + 6 số (tổng 7 ký tự)</li>
-               <li>Số lượng sẽ được cộng dồn nếu mã hàng đã tồn tại</li>
-               <li>Cột Safety có thể chỉnh sửa bằng cách click vào dropdown</li>
+               <li>Số lượng sẽ được cộng dồn vào cột tương ứng (ASM1 hoặc ASM2) nếu mã hàng đã tồn tại</li>
+               <li>Cột Safety hiển thị tổng của ASM1 và ASM2, có thể chỉnh sửa bằng cách click vào input</li>
+               <li>Cột Tình Trạng so sánh Tổng với Safety Level</li>
              </ul>
            </div>
           
@@ -226,20 +219,18 @@
        <table class="excel-table">
          <thead>
            <tr>
-             <th>Factory</th>
              <th>Ngày Scan</th>
              <th>Mã hàng</th>
-             <th>Số Lượng Thực Tế</th>
-             <th>Safety Level</th>
+             <th>Lượng ASM1</th>
+             <th>Lượng ASM2</th>
+             <th>Tổng</th>
+             <th>Safety</th>
              <th>Tình Trạng</th>
-             <th>Xóa SL</th>
+             <th>Xóa</th>
            </tr>
          </thead>
          <tbody>
            <tr *ngFor="let material of filteredMaterials; trackBy: trackByFn; let i = index">
-             <td class="factory-cell factory-{{material.factory.toLowerCase()}}">
-               {{material.factory}}
-             </td>
              <td class="date-cell">
                {{formatDate(material.scanDate)}}
              </td>
@@ -247,7 +238,13 @@
                {{material.materialCode}}
              </td>
              <td class="number-cell">
-               {{material.actualQuantity}}
+               {{material.quantityASM1}}
+             </td>
+             <td class="number-cell">
+               {{material.quantityASM2}}
+             </td>
+             <td class="number-cell total-cell">
+               {{material.totalQuantity}}
              </td>
              <td class="safety-cell">
                <input type="number" 
@@ -263,9 +260,9 @@
                </span>
              </td>
              <td class="delete-cell">
-                       <button class="delete-btn" 
-                (click)="deleteMaterial(material)" 
-                title="Xóa số lượng thực tế của {{material.materialCode}} (giữ nguyên mã hàng và safety level)">
+               <button class="delete-btn" 
+                       (click)="deleteMaterial(material)" 
+                       title="Xóa số lượng thực tế của {{material.materialCode}} (giữ nguyên mã hàng và safety level)">
                  <i class="material-icons">delete</i>
                </button>
              </td>
@@ -286,7 +283,6 @@
              <div class="suggestion-tags">
                <span class="suggestion-tag" (click)="searchTerm = 'B018694'; onSearchInput({target: {value: 'B018694'}})">B018694</span>
                <span class="suggestion-tag" (click)="searchTerm = 'R123456'; onSearchInput({target: {value: 'R123456'}})">R123456</span>
-               <span class="suggestion-tag" (click)="searchTerm = 'ASM1'; onSearchInput({target: {value: 'ASM1'}})">ASM1</span>
                <span class="suggestion-tag" (click)="searchTerm = 'Safety'; onSearchInput({target: {value: 'Safety'}})">Safety</span>
              </div>
            </div>
@@ -295,7 +291,7 @@
           <div class="quick-stats">
             <div class="stat-item">
               <i class="material-icons">factory</i>
-              <span>Multi Factory</span>
+              <span>ASM1 + ASM2</span>
             </div>
             <div class="stat-item">
               <i class="material-icons">inventory</i>
@@ -322,7 +318,6 @@
             <ul>
               <li>Kiểm tra chính tả</li>
               <li>Thử tìm kiếm với ít ký tự hơn</li>
-              <li>Kiểm tra factory filter</li>
               <li>Thử tìm kiếm theo material code</li>
             </ul>
           </div>

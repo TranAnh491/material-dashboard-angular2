@@ -808,11 +808,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       console.log(`📊 Input: ${this.inventoryMaterials.length} materials to process`);
     
-    // Group materials by Material + PO
+    // Group materials by Material + PO + Batch
     const materialPoMap = new Map<string, InventoryMaterial[]>();
     
     this.inventoryMaterials.forEach(material => {
-      const key = `${material.materialCode}_${material.poNumber}`;
+      const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
       
       if (!materialPoMap.has(key)) {
         materialPoMap.set(key, []);
@@ -820,7 +820,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       materialPoMap.get(key)!.push(material);
     });
     
-    console.log(`📊 Found ${materialPoMap.size} unique Material+PO combinations from ${this.inventoryMaterials.length} total items`);
+    console.log(`📊 Found ${materialPoMap.size} unique Material+PO+Batch combinations from ${this.inventoryMaterials.length} total items`);
     
     // Final consolidation map
     const finalConsolidatedMap = new Map<string, InventoryMaterial>();
@@ -830,7 +830,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // Single item - keep as is
         const material = materials[0];
         finalConsolidatedMap.set(materialPoKey, material);
-        console.log(`✅ Single item: ${material.materialCode} - PO ${material.poNumber} - Location: ${material.location}`);
+        console.log(`✅ Single item: ${material.materialCode} - PO ${material.poNumber} - Batch: ${material.batchNumber || 'NO_BATCH'} - Location: ${material.location}`);
       } else {
         // Multiple items - merge into one row
         console.log(`🔄 Consolidating ${materials.length} items for ${materialPoKey}`);
@@ -868,9 +868,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         
         finalConsolidatedMap.set(materialPoKey, baseMaterial);
         
-        console.log(`✅ Consolidated: ${baseMaterial.materialCode} - PO: ${baseMaterial.poNumber}`);
-        console.log(`  📍 Locations: ${baseMaterial.location}`);
-        console.log(`  🏷️ Types: ${baseMaterial.type}`);
+        console.log(`✅ Consolidated: ${baseMaterial.materialCode} - PO: ${baseMaterial.poNumber} - Batch: ${baseMaterial.batchNumber || 'NO_BATCH'}`);
+        console.log(`  📍 Location: ${baseMaterial.location} (from first row)`);
+        console.log(`  🏷️ Type: ${baseMaterial.type} (from first row)`);
         console.log(`  📦 Total Quantity: ${baseMaterial.quantity}`);
         console.log(`  📤 Total Exported: ${baseMaterial.exported}`);
       }
@@ -2242,7 +2242,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const materialPoMap = new Map<string, InventoryMaterial[]>();
       
       this.inventoryMaterials.forEach(material => {
-        const key = `${material.materialCode}_${material.poNumber}`;
+        // Gộp theo Mã hàng + PO + Batch
+        const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
         if (!materialPoMap.has(key)) {
           materialPoMap.set(key, []);
         }
@@ -2251,7 +2252,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Hiển thị thống kê
       console.log(`📊 Total materials: ${this.inventoryMaterials.length}`);
-      console.log(`📊 Unique Material+PO combinations: ${materialPoMap.size}`);
+      console.log(`📊 Unique Material+PO+Batch combinations: ${materialPoMap.size}`);
       
       // Hiển thị các dòng trùng lặp
       materialPoMap.forEach((materials, key) => {
@@ -2316,31 +2317,35 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       
-      // Tạo map theo Material + PO
+      console.log(`📊 Input: ${this.inventoryMaterials.length} materials`);
+      
+      // Tạo map theo Material + PO + Batch
       const map = new Map<string, InventoryMaterial>();
       
-      this.inventoryMaterials.forEach(material => {
-        const key = `${material.materialCode}_${material.poNumber}`;
+      this.inventoryMaterials.forEach((material, index) => {
+        const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
+        
+        console.log(`🔍 Row ${index + 1}: ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'} - Key: ${key}`);
         
         if (map.has(key)) {
           // Gộp với dòng hiện có
           const existing = map.get(key)!;
+          console.log(`🔄 Found duplicate! Merging with existing row...`);
+          console.log(`  Existing: Quantity=${existing.quantity}, Exported=${existing.exported}`);
+          console.log(`  New: Quantity=${material.quantity}, Exported=${material.exported}`);
+          
           existing.quantity += material.quantity;
           existing.exported = (existing.exported || 0) + (material.exported || 0);
           existing.xt = (existing.xt || 0) + (material.xt || 0);
           
-          // Gộp vị trí và loại hình
-          if (material.location && material.location !== existing.location) {
-            existing.location = `${existing.location}; ${material.location}`;
-          }
-          if (material.type && material.type !== existing.type) {
-            existing.type = `${existing.type}; ${material.type}`;
-          }
+          // Vị trí và loại hình lấy từ dòng đầu tiên (không gộp)
+          // existing.location và existing.type giữ nguyên từ dòng đầu tiên
           
-          console.log(`🔄 Merged: ${material.materialCode} - PO ${material.poNumber}`);
+          console.log(`✅ After merge: Quantity=${existing.quantity}, Exported=${existing.exported}`);
         } else {
           // Dòng mới
           map.set(key, { ...material });
+          console.log(`✅ New row added to map`);
         }
       });
       
@@ -2351,8 +2356,63 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       console.log(`✅ Simple consolidation: ${beforeCount} → ${this.inventoryMaterials.length} items`);
       
+      // Hiển thị kết quả gộp
+      console.log(`📊 Final consolidated data:`);
+      this.inventoryMaterials.forEach((material, index) => {
+        console.log(`  ${index + 1}. ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'} - Quantity: ${material.quantity}`);
+      });
+      
     } catch (error) {
       console.error('❌ Error in simple consolidation:', error);
+    }
+  }
+
+  // Test gộp dòng cụ thể cho B001430
+  testB001430Consolidation(): void {
+    try {
+      console.log('🧪 Testing B001430 consolidation specifically...');
+      
+      if (!this.inventoryMaterials || this.inventoryMaterials.length === 0) {
+        console.log('⚠️ No materials to test');
+        return;
+      }
+      
+      // Tìm tất cả dòng B001430
+      const b001430Rows = this.inventoryMaterials.filter(m => m.materialCode === 'B001430');
+      console.log(`📊 Found ${b001430Rows.length} rows with B001430`);
+      
+      b001430Rows.forEach((row, index) => {
+        console.log(`  Row ${index + 1}: PO=${row.poNumber}, Batch=${row.batchNumber}, NK=${row.quantity}, Location=${row.location}`);
+      });
+      
+      // Tìm dòng trùng lặp theo PO + Batch
+      const poBatchMap = new Map<string, InventoryMaterial[]>();
+      
+      b001430Rows.forEach(row => {
+        const key = `${row.poNumber}_${row.batchNumber || 'NO_BATCH'}`;
+        if (!poBatchMap.has(key)) {
+          poBatchMap.set(key, []);
+        }
+        poBatchMap.get(key)!.push(row);
+      });
+      
+      console.log(`📊 PO+Batch combinations for B001430:`);
+      poBatchMap.forEach((rows, key) => {
+        console.log(`  ${key}: ${rows.length} rows`);
+        if (rows.length > 1) {
+          console.log(`    ⚠️ DUPLICATE FOUND! ${rows.length} rows with same PO+Batch`);
+          rows.forEach((row, index) => {
+            console.log(`      ${index + 1}. NK=${row.quantity}, Location=${row.location}`);
+          });
+        }
+      });
+      
+      // Thực hiện gộp test
+      console.log(`🔄 Testing consolidation for B001430...`);
+      this.simpleConsolidate();
+      
+    } catch (error) {
+      console.error('❌ Error in B001430 test:', error);
     }
   }
 
@@ -3340,7 +3400,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const materialPoMap = new Map<string, InventoryMaterial[]>();
       
       this.inventoryMaterials.forEach(material => {
-        const key = `${material.materialCode}_${material.poNumber}`;
+        // Gộp theo Mã hàng + PO + Batch
+        const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
         if (!materialPoMap.has(key)) {
           materialPoMap.set(key, []);
         }
@@ -3368,9 +3429,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       details += `• Dòng còn lại sau gộp: ${originalCount - (totalDuplicates - duplicateGroups.length)}\n\n`;
       
       details += `📋 CHI TIẾT CÁC NHÓM TRÙNG LẶP:\n`;
+      details += `🔍 Gộp theo: Mã hàng + PO + Batch\n\n`;
       duplicateGroups.forEach((group, index) => {
         const material = group[0];
-        details += `${index + 1}. ${material.materialCode} - PO: ${material.poNumber} (${group.length} dòng)\n`;
+        details += `${index + 1}. ${material.materialCode} - PO: ${material.poNumber} - Batch: ${material.batchNumber || 'NO_BATCH'} (${group.length} dòng)\n`;
       });
       
       // Xác nhận gộp
@@ -3469,7 +3531,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Update các item đã gộp
       for (const material of consolidatedMaterials) {
-        if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}`)!.length > 1) {
+        if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`)!.length > 1) {
           // Đây là item đã gộp, cần update
           await this.firestore.collection('inventory-materials').doc(material.id).update({
             openingStock: material.openingStock,
@@ -3487,7 +3549,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             rollsOrBags: material.rollsOrBags,
             updatedAt: material.updatedAt
           });
-          console.log(`✅ Updated: ${material.materialCode} - PO ${material.poNumber}`);
+          console.log(`✅ Updated: ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'}`);
         }
       }
       

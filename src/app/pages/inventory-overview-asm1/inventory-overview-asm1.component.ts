@@ -198,6 +198,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       // Xử lý từng document từ collection inventory-materials
       let itemIndex = 0;
+      let validItemsCount = 0;
+      let invalidItemsCount = 0;
+      
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
         
@@ -217,8 +220,27 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           });
         }
         
-        // Sử dụng đúng field names từ collection inventory-materials
+        // 🔍 FILTER: Loại bỏ dữ liệu scan sai
+        const materialCode = data.materialCode || '';
         const poNumber = data.poNumber || '';
+        
+        // Kiểm tra mã hàng hợp lệ (không phải số đơn giản như "25")
+        if (!this.isValidMaterialCode(materialCode)) {
+          console.log(`⚠️ Skipping invalid material code: "${materialCode}" (PO: ${poNumber})`);
+          invalidItemsCount++;
+          itemIndex++;
+          return; // Bỏ qua dòng này
+        }
+        
+        // Kiểm tra PO hợp lệ
+        if (!this.isValidPONumber(poNumber)) {
+          console.log(`⚠️ Skipping invalid PO: "${poNumber}" (Material: ${materialCode})`);
+          invalidItemsCount++;
+          itemIndex++;
+          return; // Bỏ qua dòng này
+        }
+        
+        // Sử dụng đúng field names từ collection inventory-materials
         const quantity = data.quantity || 0;
         const openingStock = data.openingStock || 0;
         const exported = data.exported || 0;
@@ -229,7 +251,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         
         items.push({
           id: doc.id, // Sử dụng ID thật từ Firebase
-          materialCode: data.materialCode || '',
+          materialCode: materialCode,
           poNumber: poNumber,
           quantity: quantity,
           openingStock: openingStock, // Thêm openingStock
@@ -241,8 +263,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           isNegative: currentStock < 0,
         });
         
+        validItemsCount++;
         itemIndex++;
       });
+      
+      console.log(`✅ Filtered results: ${validItemsCount} valid items, ${invalidItemsCount} invalid items skipped`);
       
       // Sort by material code then PO (FIFO)
       items.sort((a, b) => {
@@ -400,42 +425,69 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
 
   // Apply filters
   applyFilters(): void {
-    let filtered = [...this.inventoryItems];
+    console.log('🔍 Starting applyFilters...');
+    console.log(`📊 Inventory items: ${this.inventoryItems.length}, LinkQ loaded: ${this.isLinkQDataLoaded}`);
+    
+    // 🔧 SỬA LỖI: Tạo deep copy để không làm mất dữ liệu LinkQ
+    let filtered = this.inventoryItems.map(item => {
+      const copy = { ...item };
+      // Đảm bảo dữ liệu LinkQ được copy đúng
+      copy.linkQStock = item.linkQStock;
+      copy.stockDifference = item.stockDifference;
+      copy.hasDifference = item.hasDifference;
+      return copy;
+    });
     
     // Filter by current filter mode
     switch (this.currentFilterMode) {
       case 'negative':
         filtered = filtered.filter(item => item.isNegative);
+        console.log(`🔍 Negative filter: ${filtered.length} items`);
         break;
       case 'linkq-difference':
         if (this.isLinkQDataLoaded) {
           filtered = filtered.filter(item => item.hasDifference);
+          console.log(`🔍 LinkQ difference filter: ${filtered.length} items`);
+        } else {
+          console.log('⚠️ LinkQ data not loaded, cannot filter by differences');
         }
         break;
       default:
         // 'all' - no additional filtering
+        console.log(`🔍 All items filter: ${filtered.length} items`);
         break;
     }
     
     // Filter by search term
     if (this.searchTerm.trim()) {
       const searchLower = this.searchTerm.toLowerCase();
+      const beforeSearch = filtered.length;
       filtered = filtered.filter(item => 
         item.materialCode.toLowerCase().includes(searchLower) ||
         item.poNumber.toLowerCase().includes(searchLower)
       );
+      console.log(`🔍 Search filter: ${beforeSearch} → ${filtered.length} items`);
     }
     
     // Group data based on groupByType
     if (this.groupByType === 'material') {
+      const beforeGroup = filtered.length;
       filtered = this.groupByMaterialCode(filtered);
+      console.log(`🔍 Material grouping: ${beforeGroup} → ${filtered.length} items`);
     }
     // If groupByType === 'po', keep original structure (no grouping needed)
     
     this.filteredItems = filtered;
     this.currentPage = 1; // Reset to first page
     
-    console.log(`🔍 Applied filters: ${filtered.length} items shown (Filter mode: ${this.currentFilterMode}, Group by: ${this.groupByType})`);
+    // 🔧 SỬA LỖI: Kiểm tra dữ liệu LinkQ sau khi filter
+    const itemsWithLinkQ = filtered.filter(item => item.linkQStock !== undefined).length;
+    const itemsWithDifference = filtered.filter(item => item.hasDifference).length;
+    
+    console.log(`✅ Applied filters: ${filtered.length} items shown`);
+    console.log(`📊 LinkQ data preserved: ${itemsWithLinkQ} items have LinkQ data`);
+    console.log(`📊 Items with differences: ${itemsWithDifference} items`);
+    console.log(`🔍 Filter mode: ${this.currentFilterMode}, Group by: ${this.groupByType}`);
   }
 
   // Clear search
@@ -547,6 +599,32 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   refreshData(): void {
     console.log('🔄 Manually refreshing inventory overview data...');
     this.loadInventoryOverview();
+  }
+
+  // 🔧 Force refresh LinkQ data (fix cho dữ liệu bị mất)
+  forceRefreshLinkQData(): void {
+    try {
+      console.log('🔄 Force refreshing LinkQ data...');
+      
+      if (this.linkQFiles.length === 0) {
+        console.log('⚠️ No LinkQ files available');
+        return;
+      }
+      
+      // Load lại dữ liệu LinkQ từ file gần nhất
+      this.autoLoadMostRecentLinkQData().then(() => {
+        // Update stock comparison
+        this.updateStockComparison();
+        
+        // Apply filters để refresh display
+        this.applyFilters();
+        
+        console.log('✅ LinkQ data force refreshed successfully');
+      });
+      
+    } catch (error) {
+      console.error('❌ Error force refreshing LinkQ data:', error);
+    }
   }
   
   // Auto refresh data every 30 seconds to keep in sync with RM1 Inventory
@@ -897,18 +975,47 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
 
   // Update stock comparison between current system and LinkQ
   private updateStockComparison(): void {
+    console.log('🔍 Starting stock comparison update...');
+    console.log(`📊 LinkQ data size: ${this.linkQData.size}`);
+    
+    let updatedCount = 0;
+    let differenceCount = 0;
+    
     this.inventoryItems.forEach(item => {
-      const linkQStock = this.linkQData.get(item.materialCode) || 0;
-      item.linkQStock = linkQStock;
-      item.stockDifference = item.currentStock - linkQStock;
-      // Chỉ tính lệch khi >= 1 hoặc <= -1 (bỏ qua các chênh lệch nhỏ từ -1 đến 1)
-      item.hasDifference = item.stockDifference >= 1 || item.stockDifference <= -1;
+      const linkQStock = this.linkQData.get(item.materialCode);
+      
+      // Kiểm tra nếu có dữ liệu LinkQ
+      if (linkQStock !== undefined) {
+        item.linkQStock = linkQStock;
+        item.stockDifference = item.currentStock - linkQStock;
+        
+        // 🔧 SỬA LỖI SO SÁNH: Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
+        // Bỏ qua các chênh lệch nhỏ từ -0.99 đến 0.99
+        const absDifference = Math.abs(item.stockDifference);
+        item.hasDifference = absDifference >= 1;
+        
+        if (item.hasDifference) {
+          differenceCount++;
+        }
+        
+        updatedCount++;
+        
+        // Log debug cho một số items đầu tiên
+        if (updatedCount <= 5) {
+          console.log(`🔍 ${item.materialCode}: Current=${item.currentStock}, LinkQ=${linkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
+        }
+      } else {
+        // Không có dữ liệu LinkQ
+        item.linkQStock = undefined;
+        item.stockDifference = undefined;
+        item.hasDifference = undefined;
+      }
     });
     
-    // Update filtered items as well
-    this.applyFilters();
+    console.log(`✅ Stock comparison updated: ${updatedCount} items processed, ${differenceCount} items have differences`);
     
-    console.log('🔍 Stock comparison updated with LinkQ data');
+    // 🔧 SỬA LỖI: KHÔNG gọi applyFilters() ở đây để tránh mất dữ liệu LinkQ
+    // this.applyFilters(); // Commented out to prevent data loss
   }
 
   // Get status badge class
@@ -943,8 +1050,30 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     console.log('negativeStockCount:', this.negativeStockCount);
     console.log('totalItemsCount:', this.totalItemsCount);
     
+    // 🔍 DEBUG LinkQ data
+    console.log('🔍 === LINKQ DEBUG ===');
+    console.log('isLinkQDataLoaded:', this.isLinkQDataLoaded);
+    console.log('linkQData.size:', this.linkQData.size);
+    console.log('currentLinkQFileId:', this.currentLinkQFileId);
+    
     if (this.inventoryItems.length > 0) {
       console.log('First 3 items:', this.inventoryItems.slice(0, 3));
+      
+      // Kiểm tra dữ liệu LinkQ trong items
+      const itemsWithLinkQ = this.inventoryItems.filter(item => item.linkQStock !== undefined);
+      console.log(`Items with LinkQ data: ${itemsWithLinkQ.length}`);
+      
+      if (itemsWithLinkQ.length > 0) {
+        console.log('Sample items with LinkQ:', itemsWithLinkQ.slice(0, 3));
+      }
+      
+      // Kiểm tra items có difference
+      const itemsWithDifference = this.inventoryItems.filter(item => item.hasDifference);
+      console.log(`Items with differences: ${itemsWithDifference.length}`);
+      
+      if (itemsWithDifference.length > 0) {
+        console.log('Sample items with differences:', itemsWithDifference.slice(0, 3));
+      }
     }
     
     console.log('=== END DEBUG ===');
@@ -1109,5 +1238,51 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     }
   }
 
-     
+  // 🔍 Kiểm tra mã hàng hợp lệ (loại bỏ dữ liệu scan sai)
+  private isValidMaterialCode(materialCode: string): boolean {
+    if (!materialCode || materialCode.trim() === '') {
+      return false;
+    }
+    
+    // Loại bỏ mã hàng chỉ có số đơn giản (như "25", "123", "999")
+    if (/^\d{1,3}$/.test(materialCode.trim())) {
+      return false;
+    }
+    
+    // Loại bỏ mã hàng quá ngắn (dưới 4 ký tự)
+    if (materialCode.trim().length < 4) {
+      return false;
+    }
+    
+    // Loại bỏ mã hàng chỉ có ký tự đặc biệt
+    if (/^[^a-zA-Z0-9]*$/.test(materialCode.trim())) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  // 🔍 Kiểm tra PO hợp lệ
+  private isValidPONumber(poNumber: string): boolean {
+    if (!poNumber || poNumber.trim() === '') {
+      return false;
+    }
+    
+    // Loại bỏ PO chỉ có số đơn giản
+    if (/^\d{1,5}$/.test(poNumber.trim())) {
+      return false;
+    }
+    
+    // Loại bỏ PO quá ngắn (dưới 3 ký tự)
+    if (poNumber.trim().length < 3) {
+      return false;
+    }
+    
+    // Loại bỏ PO chỉ có ký tự đặc biệt
+    if (/^[^a-zA-Z0-9]*$/.test(poNumber.trim())) {
+      return false;
+    }
+    
+    return true;
+  }
 }

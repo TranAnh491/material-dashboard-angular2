@@ -10,10 +10,11 @@ import { SafetyService } from '../../services/safety.service';
 
 export interface SafetyMaterial {
   id?: string;
-  factory: string;
-  scanDate: Date;
   materialCode: string;
-  actualQuantity: number;
+  scanDate: Date;
+  quantityASM1: number;
+  quantityASM2: number;
+  totalQuantity: number;
   safety: number;
   status: string;
   createdAt?: Date;
@@ -22,7 +23,6 @@ export interface SafetyMaterial {
 
 // Add new interface for import data
 export interface SafetyImportData {
-  factory: string;
   materialCode: string;
   safety: number;
 }
@@ -42,16 +42,12 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Search and filter
   searchTerm = '';
-  searchType: 'material' | 'factory' = 'material';
+  searchType: 'material' = 'material';
   private searchSubject = new Subject<string>();
   
   // Total counter
   private totalCountSubject = new BehaviorSubject<number>(0);
   public totalCount$ = this.totalCountSubject.asObservable();
-  
-  // Factory filter
-  selectedFactory = 'ALL';
-  availableFactories: string[] = ['ALL', 'ASM1', 'ASM2', 'FGS'];
   
   // Scan mode
   isScanMode = false;
@@ -59,15 +55,6 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Scan date
   scanDate = new Date();
-  
-  // Safety categories - REMOVED
-  // safetyCategories = [
-  //   { value: 1, label: '1 - Rất thấp' },
-  //   { value: 2, label: '2 - Thấp' },
-  //   { value: 3, label: '3 - Trung bình' },
-  //   { value: 4, label: '4 - Cao' },
-  //   { value: 5, label: '5 - Rất cao' }
-  // ];
   
   // Permission
   canDelete = false;
@@ -161,15 +148,8 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
           updatedAt: material.updatedAt ? new Date(material.updatedAt) : new Date()
         }));
         
-        // Sắp xếp theo Factory (ASM1 trước, ASM2 sau) và sau đó theo mã hàng
+        // Sắp xếp theo mã hàng
         this.safetyMaterials.sort((a, b) => {
-          // Đầu tiên sắp xếp theo Factory: ASM1 trước, ASM2 sau
-          if (a.factory !== b.factory) {
-            if (a.factory === 'ASM1') return -1;
-            if (b.factory === 'ASM1') return 1;
-            return a.factory.localeCompare(b.factory);
-          }
-          // Nếu Factory giống nhau, sắp xếp theo mã hàng
           return a.materialCode.localeCompare(b.materialCode);
         });
         
@@ -180,8 +160,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         console.log('📊 Loaded safety materials:', this.safetyMaterials.length);
         console.log('📅 Sample scan dates:', this.safetyMaterials.slice(0, 3).map(m => ({
           code: m.materialCode,
-          scanDate: this.formatDate(m.scanDate),
-          factory: m.factory
+          scanDate: this.formatDate(m.scanDate)
         })));
       });
     } catch (error) {
@@ -221,19 +200,13 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         const searchLower = term.toLowerCase();
         return (
           material.materialCode.toLowerCase().includes(searchLower) ||
-          material.factory.toLowerCase().includes(searchLower) ||
           material.safety.toString().includes(searchLower) ||
           material.status.toLowerCase().includes(searchLower)
         );
       });
       
-      // Sắp xếp kết quả tìm kiếm theo thứ tự: Factory (ASM1 trước, ASM2 sau) rồi theo mã hàng
+      // Sắp xếp kết quả tìm kiếm theo mã hàng
       this.filteredMaterials.sort((a, b) => {
-        if (a.factory !== b.factory) {
-          if (a.factory === 'ASM1') return -1;
-          if (b.factory === 'ASM1') return 1;
-          return a.factory.localeCompare(b.factory);
-        }
         return a.materialCode.localeCompare(b.materialCode);
       });
     }
@@ -247,7 +220,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     this.updateTotalCount();
   }
 
-  changeSearchType(type: 'material' | 'factory') {
+  changeSearchType(type: 'material') {
     this.searchType = type;
     this.searchTerm = '';
     this.filteredMaterials = [...this.safetyMaterials];
@@ -256,18 +229,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onFactoryChange() {
-    if (this.selectedFactory === 'ALL') {
-      this.filteredMaterials = [...this.safetyMaterials];
-      this.updateTotalCount();
-    } else {
-      this.safetyService.getSafetyMaterialsByFactory(this.selectedFactory).subscribe(materials => {
-        // Sắp xếp materials theo mã hàng khi filter theo factory
-        this.filteredMaterials = materials.sort((a, b) => 
-          a.materialCode.localeCompare(b.materialCode)
-        );
-        this.updateTotalCount();
-      });
-    }
+    // Không còn filter theo factory, hiển thị tất cả
+    this.filteredMaterials = [...this.safetyMaterials];
+    this.updateTotalCount();
   }
 
   refreshData() {
@@ -286,11 +250,12 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   exportToExcel() {
     try {
       const exportData = this.filteredMaterials.map(material => ({
-        'Factory': material.factory,
         'Ngày Scan': this.formatDate(material.scanDate),
         'Mã hàng': material.materialCode,
-        'Số Lượng Thực Tế': material.actualQuantity,
-        'Safety Level': material.safety,
+        'Lượng ASM1': material.quantityASM1,
+        'Lượng ASM2': material.quantityASM2,
+        'Tổng': material.totalQuantity,
+        'Safety': material.safety,
         'Tình Trạng (%)': this.getStatusText(material),
         'Phần Trăm Tồn Kho': this.getStatusPercentage(material)
       }));
@@ -436,10 +401,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('⚠️ Scan date was null, set to current date:', this.formatDate(this.scanDate));
     }
     
-    // Check if material already exists for this factory and scan date
+    // Check if material already exists for this scan date
     const existingMaterial = this.safetyMaterials.find(
       m => m.materialCode === materialCode && 
-           m.factory === this.scanFactory && 
            this.isSameDate(m.scanDate, this.scanDate)
     );
 
@@ -448,36 +412,45 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('📅 Current scan date (ISO):', this.scanDate.toISOString());
     console.log('📊 Available materials:', this.safetyMaterials.map(m => ({
       code: m.materialCode,
-      factory: m.factory,
       scanDate: this.formatDate(m.scanDate),
       scanDateISO: m.scanDate ? m.scanDate.toISOString() : 'null',
-      quantity: m.actualQuantity
+      quantityASM1: m.quantityASM1,
+      quantityASM2: m.quantityASM2,
+      totalQuantity: m.totalQuantity
     })));
 
     if (existingMaterial) {
-      // Update existing material - add quantity
-      const oldQuantity = existingMaterial.actualQuantity;
-      const newQuantity = oldQuantity + quantity;
-      
-      console.log(`🔄 Updating existing material: ${materialCode} - ${oldQuantity} + ${quantity} = ${newQuantity}`);
-      
-      this.safetyService.updateSafetyMaterial(existingMaterial.id!, {
-        actualQuantity: newQuantity,
+      // Update existing material - add quantity to appropriate factory
+      let updateData: Partial<SafetyMaterial> = {
         updatedAt: new Date()
-      }).then(() => {
-        console.log(`✅ Successfully updated ${materialCode} quantity: ${oldQuantity} + ${quantity} = ${newQuantity}`);
-        // Refresh data to show updated quantity
+      };
+      
+      if (this.scanFactory === 'ASM1') {
+        const newQuantityASM1 = existingMaterial.quantityASM1 + quantity;
+        updateData.quantityASM1 = newQuantityASM1;
+        updateData.totalQuantity = newQuantityASM1 + existingMaterial.quantityASM2;
+        console.log(`🔄 Updating ASM1 quantity: ${existingMaterial.quantityASM1} + ${quantity} = ${newQuantityASM1}`);
+      } else if (this.scanFactory === 'ASM2') {
+        const newQuantityASM2 = existingMaterial.quantityASM2 + quantity;
+        updateData.quantityASM2 = newQuantityASM2;
+        updateData.totalQuantity = existingMaterial.quantityASM1 + newQuantityASM2;
+        console.log(`🔄 Updating ASM2 quantity: ${existingMaterial.quantityASM2} + ${quantity} = ${newQuantityASM2}`);
+      }
+      
+      this.safetyService.updateSafetyMaterial(existingMaterial.id!, updateData).then(() => {
+        console.log(`✅ Successfully updated ${materialCode} quantity for ${this.scanFactory}`);
         this.refreshData();
       }).catch(error => {
         console.error('❌ Error updating material:', error);
       });
     } else {
-      // Add new material - ALWAYS with safety = 0 (no safety level set)
+      // Add new material
       const newMaterial: Omit<SafetyMaterial, 'id'> = {
-        factory: this.scanFactory,
         scanDate: this.scanDate,
         materialCode: materialCode,
-        actualQuantity: quantity,
+        quantityASM1: this.scanFactory === 'ASM1' ? quantity : 0,
+        quantityASM2: this.scanFactory === 'ASM2' ? quantity : 0,
+        totalQuantity: quantity,
         safety: 0, // ALWAYS 0 for new scanned materials - no safety level until imported
         status: 'Active'
       };
@@ -485,8 +458,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`➕ Adding new material:`, newMaterial);
 
       this.safetyService.addSafetyMaterial(newMaterial).then(() => {
-        console.log(`✅ Successfully added new material: ${materialCode} with quantity ${quantity} and safety = 0`);
-        // Refresh data to show new material
+        console.log(`✅ Successfully added new material: ${materialCode} with quantity ${quantity} for ${this.scanFactory}`);
         this.refreshData();
       }).catch(error => {
         console.error('❌ Error adding material:', error);
@@ -592,10 +564,11 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('📊 Total materials loaded:', this.safetyMaterials.length);
     console.log('📊 Materials with scan dates:', this.safetyMaterials.map(m => ({
       code: m.materialCode,
-      factory: m.factory,
       scanDate: this.formatDate(m.scanDate),
       scanDateISO: m.scanDate ? m.scanDate.toISOString() : 'null',
-      quantity: m.actualQuantity
+      quantityASM1: m.quantityASM1,
+      quantityASM2: m.quantityASM2,
+      totalQuantity: m.totalQuantity
     })));
   }
 
@@ -604,7 +577,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     if (confirm(`Bạn có chắc muốn xóa số lượng thực tế của ${material.materialCode}? Mã hàng và Safety Level sẽ được giữ nguyên.`)) {
       // Thay vì xóa hoàn toàn, chỉ reset số lượng thực tế về 0
       this.safetyService.updateSafetyMaterial(material.id!, {
-        actualQuantity: 0,
+        quantityASM1: 0,
+        quantityASM2: 0,
+        totalQuantity: 0,
         updatedAt: new Date()
       }).then(() => {
         console.log(`✅ Đã xóa số lượng thực tế của ${material.materialCode}, giữ nguyên mã hàng và safety level`);
@@ -645,19 +620,17 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       
       // Process import data - ensure proper parsing
       const importData: SafetyImportData[] = jsonData.map((row: any) => {
-        const factory = row['Factory'] || row['factory'] || row['Nhà máy'];
         const materialCode = row['Mã hàng'] || row['materialCode'] || row['Material Code'];
         const safety = parseInt(row['Safety'] || row['safety'] || row['Safety Level']) || 0;
         
-        console.log(`📊 Parsing row: Factory=${factory}, Code=${materialCode}, Safety=${safety}`);
+        console.log(`📊 Parsing row: Code=${materialCode}, Safety=${safety}`);
         
         return {
-          factory: factory,
           materialCode: materialCode,
           safety: safety
         };
       }).filter(item => {
-        const isValid = item.factory && item.materialCode && item.safety > 0;
+        const isValid = item.materialCode && item.safety > 0;
         if (!isValid) {
           console.log(`⚠️ Skipping invalid row:`, item);
         }
@@ -708,11 +681,11 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       // Then, update only materials that exist in import file
       for (const item of importData) {
         try {
-          console.log(`🔄 Processing import item: ${item.materialCode} (${item.factory}) - Safety: ${item.safety}`);
+          console.log(`🔄 Processing import item: ${item.materialCode} - Safety: ${item.safety}`);
           
           // Find existing material with same factory and material code
           const existingMaterial = this.safetyMaterials.find(
-            m => m.factory === item.factory && m.materialCode === item.materialCode
+            m => m.materialCode === item.materialCode
           );
           
           if (existingMaterial) {
@@ -728,10 +701,11 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
             // Create new material with safety level from import
             console.log(`🔄 Creating new material: ${item.materialCode}`);
             const newMaterial: Omit<SafetyMaterial, 'id'> = {
-              factory: item.factory,
               scanDate: new Date(),
               materialCode: item.materialCode,
-              actualQuantity: 0,
+              quantityASM1: 0,
+              quantityASM2: 0,
+              totalQuantity: 0,
               safety: item.safety,
               status: 'Active'
             };
@@ -763,28 +737,28 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   // Verify imported safety levels
   verifyImportedSafetyLevels() {
     console.log('🔍 VERIFYING IMPORTED SAFETY LEVELS:');
-    console.log('📊 Total materials:', this.safetyMaterials.length);
+    console.log('�� Total materials:', this.safetyMaterials.length);
     
     const materialsWithSafety = this.safetyMaterials.filter(m => m.safety > 0);
     const materialsWithoutSafety = this.safetyMaterials.filter(m => m.safety === 0);
     
     console.log('✅ Materials WITH safety levels:', materialsWithSafety.length);
     materialsWithSafety.forEach(m => {
-      console.log(`  - ${m.materialCode} (${m.factory}): Safety = ${m.safety}`);
+      console.log(`  - ${m.materialCode}: Safety = ${m.safety}`);
     });
     
     console.log('❌ Materials WITHOUT safety levels:', materialsWithoutSafety.length);
     materialsWithoutSafety.forEach(m => {
-      console.log(`  - ${m.materialCode} (${m.factory}): Safety = ${m.safety}`);
+      console.log(`  - ${m.materialCode}: Safety = ${m.safety}`);
     });
     
     this.showScanFeedback('success', `Kiểm tra: ${materialsWithSafety.length} có safety, ${materialsWithoutSafety.length} không có`);
   }
 
-  // Calculate status percentage based on actual quantity vs safety level
+  // Calculate status percentage based on total quantity vs safety level
   getStatusPercentage(material: SafetyMaterial): number {
     if (material.safety <= 0) return 0;
-    return Math.round((material.actualQuantity / material.safety) * 100);
+    return Math.round((material.totalQuantity / material.safety) * 100);
   }
 
   // Get status class based on percentage
@@ -816,10 +790,10 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   // Download sample Excel template for import
   downloadSampleTemplate() {
     const sampleData = [
-      { 'Factory': 'ASM1', 'Mã hàng': 'R123456', 'Safety': 100 },
-      { 'Factory': 'ASM1', 'Mã hàng': 'B018694', 'Safety': 150 },
-      { 'Factory': 'ASM2', 'Mã hàng': 'R789012', 'Safety': 200 },
-      { 'Factory': 'ASM2', 'Mã hàng': 'B345678', 'Safety': 120 }
+      { 'Mã hàng': 'R123456', 'Safety': 100 },
+      { 'Mã hàng': 'B018694', 'Safety': 150 },
+      { 'Mã hàng': 'R789012', 'Safety': 200 },
+      { 'Mã hàng': 'B345678', 'Safety': 120 }
     ];
 
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(sampleData);
@@ -848,6 +822,24 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       }).catch(error => {
         console.error('❌ Lỗi khi reset Safety Level:', error);
         this.showScanFeedback('error', 'Lỗi khi reset Safety Level');
+      }).finally(() => {
+        this.isLoading = false;
+      });
+    }
+  }
+
+  // Migrate old data from factory-based structure to new structure
+  migrateOldData() {
+    if (confirm('Bạn có chắc muốn migrate dữ liệu cũ từ cấu trúc factory sang cấu trúc mới? Điều này sẽ gộp các dòng trùng lặp mã hàng.')) {
+      this.isLoading = true;
+      
+      this.safetyService.migrateOldData().then(() => {
+        console.log('✅ Đã migrate dữ liệu cũ thành công');
+        this.showScanFeedback('success', 'Đã migrate dữ liệu cũ thành công');
+        this.refreshData();
+      }).catch(error => {
+        console.error('❌ Lỗi khi migrate dữ liệu:', error);
+        this.showScanFeedback('error', 'Lỗi khi migrate dữ liệu: ' + error.message);
       }).finally(() => {
         this.isLoading = false;
       });
