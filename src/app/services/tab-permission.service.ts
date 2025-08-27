@@ -108,6 +108,9 @@ export class TabPermissionService {
       'materials-asm2': factoryAccess.canAccessASM2 !== false,
       'inventory-overview-asm1': factoryAccess.canAccessASM1 !== false,
       
+      // Location tab - cho phép truy cập nếu có quyền truy cập ASM1
+      'location': factoryAccess.canAccessASM1 !== false,
+      
       // Safety tab - cho phép truy cập nếu có quyền truy cập bất kỳ nhà máy nào
       'safety': factoryAccess.canAccessASM1 !== false || factoryAccess.canAccessASM2 !== false
     };
@@ -188,6 +191,9 @@ export class TabPermissionService {
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
+    
+    // Location tab
+    { key: 'location', name: 'Location' },
     
     // Manage Inventory tab
     { key: 'manage-inventory', name: 'Manage Inventory' },

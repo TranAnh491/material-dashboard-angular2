@@ -11,13 +11,28 @@ export class SafetyService {
 
   constructor(private firestore: AngularFirestore) { }
 
+  // Helper method to convert Firestore data to SafetyMaterial
+  private convertFirestoreData(data: any, id: string): SafetyMaterial {
+    return {
+      id,
+      factory: data.factory,
+      scanDate: data.scanDate ? data.scanDate.toDate() : new Date(),
+      materialCode: data.materialCode,
+      actualQuantity: data.actualQuantity || 0,
+      safety: data.safety && data.safety > 0 ? data.safety : 0, // Only use safety if > 0, otherwise 0
+      status: data.status || 'Active',
+      createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+      updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+    };
+  }
+
   // Get all safety materials
   getSafetyMaterials(): Observable<SafetyMaterial[]> {
     return this.firestore.collection('safety').snapshotChanges().pipe(
       map(actions => actions.map(a => {
-        const data = a.payload.doc.data() as SafetyMaterial;
+        const data = a.payload.doc.data() as any;
         const id = a.payload.doc.id;
-        return { id, ...data };
+        return this.convertFirestoreData(data, id);
       }))
     );
   }
@@ -33,6 +48,7 @@ export class SafetyService {
     const newMaterial: SafetyMaterial = {
       ...material,
       id,
+      safety: material.safety && material.safety > 0 ? material.safety : 0, // Ensure safety is 0 if not positive
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -45,7 +61,17 @@ export class SafetyService {
       ...material,
       updatedAt: new Date()
     };
-    return this.firestore.doc(`safety/${id}`).update(updateData);
+    
+    console.log(`🔄 Updating safety material ${id}:`, updateData);
+    
+    return this.firestore.doc(`safety/${id}`).update(updateData)
+      .then(() => {
+        console.log(`✅ Successfully updated safety material ${id}`);
+      })
+      .catch((error) => {
+        console.error(`❌ Error updating safety material ${id}:`, error);
+        throw error;
+      });
   }
 
   // Delete safety material
@@ -60,9 +86,9 @@ export class SafetyService {
          .where('materialCode', '<=', query + '\uf8ff')
     ).snapshotChanges().pipe(
       map(actions => actions.map(a => {
-        const data = a.payload.doc.data() as SafetyMaterial;
+        const data = a.payload.doc.data() as any;
         const id = a.payload.doc.id;
-        return { id, ...data };
+        return this.convertFirestoreData(data, id);
       }))
     );
   }
@@ -77,9 +103,9 @@ export class SafetyService {
       ref.where('factory', '==', factory)
     ).snapshotChanges().pipe(
       map(actions => actions.map(a => {
-        const data = a.payload.doc.data() as SafetyMaterial;
+        const data = a.payload.doc.data() as any;
         const id = a.payload.doc.id;
-        return { id, ...data };
+        return this.convertFirestoreData(data, id);
       }))
     );
   }
@@ -93,7 +119,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'B018694',
         actualQuantity: 150,
-        safety: 4,
+        safety: 0, // Sample safety level
         status: 'Active'
       },
       {
@@ -101,7 +127,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'R123456',
         actualQuantity: 200,
-        safety: 3,
+        safety: 0, // Sample safety level
         status: 'Active'
       },
       {
@@ -109,7 +135,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'B789012',
         actualQuantity: 100,
-        safety: 2,
+        safety: 0, // Sample safety level
         status: 'Pending'
       },
       {
@@ -117,7 +143,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'R345678',
         actualQuantity: 300,
-        safety: 5,
+        safety: 0, // Sample safety level
         status: 'Active'
       },
       {
@@ -125,7 +151,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'B901234',
         actualQuantity: 250,
-        safety: 3,
+        safety: 0, // Sample safety level
         status: 'Review'
       },
       {
@@ -133,7 +159,7 @@ export class SafetyService {
         scanDate: today,
         materialCode: 'R567890',
         actualQuantity: 180,
-        safety: 2,
+        safety: 0, // Sample safety level
         status: 'Active'
       }
     ];

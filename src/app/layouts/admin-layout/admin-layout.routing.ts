@@ -55,6 +55,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-asm2',         component: InboundASM2Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard] },
+  { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard] },
   { path: 'fg',                   component: TableListComponent, canActivate: [AuthGuard] },
 
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },

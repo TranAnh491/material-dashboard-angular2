@@ -60,14 +60,14 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   // Scan date
   scanDate = new Date();
   
-  // Safety categories
-  safetyCategories = [
-    { value: 1, label: '1 - Rất thấp' },
-    { value: 2, label: '2 - Thấp' },
-    { value: 3, label: '3 - Trung bình' },
-    { value: 4, label: '4 - Cao' },
-    { value: 5, label: '5 - Rất cao' }
-  ];
+  // Safety categories - REMOVED
+  // safetyCategories = [
+  //   { value: 1, label: '1 - Rất thấp' },
+  //   { value: 2, label: '2 - Thấp' },
+  //   { value: 3, label: '3 - Trung bình' },
+  //   { value: 4, label: '4 - Cao' },
+  //   { value: 5, label: '5 - Rất cao' }
+  // ];
   
   // Permission
   canDelete = false;
@@ -153,10 +153,24 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       // Subscribe to safety materials from service
       this.safetyService.getSafetyMaterials().subscribe(materials => {
-        this.safetyMaterials = materials;
+        // Ensure scanDate is properly converted to Date objects
+        this.safetyMaterials = materials.map(material => ({
+          ...material,
+          scanDate: material.scanDate ? new Date(material.scanDate) : new Date(),
+          createdAt: material.createdAt ? new Date(material.createdAt) : new Date(),
+          updatedAt: material.updatedAt ? new Date(material.updatedAt) : new Date()
+        }));
+        
         this.filteredMaterials = [...this.safetyMaterials];
         this.updateTotalCount();
         this.isLoading = false;
+        
+        console.log('📊 Loaded safety materials:', this.safetyMaterials.length);
+        console.log('📅 Sample scan dates:', this.safetyMaterials.slice(0, 3).map(m => ({
+          code: m.materialCode,
+          scanDate: this.formatDate(m.scanDate),
+          factory: m.factory
+        })));
       });
     } catch (error) {
       console.error('Error loading safety data:', error);
@@ -270,7 +284,16 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
      this.scanFactory = factory;
      // Tự động set ngày hiện tại khi bắt đầu scan
      this.scanDate = new Date();
-     console.log(`Started scan mode for ${factory} on ${this.formatDate(this.scanDate)}`);
+     
+     // Clear any existing scan buffer
+     this.scanBuffer = '';
+     if (this.scanTimeout) {
+       clearTimeout(this.scanTimeout);
+     }
+     
+     console.log(`🚀 Started scan mode for ${factory} on ${this.formatDate(this.scanDate)}`);
+     console.log('📅 Current scan date:', this.scanDate);
+     console.log('📅 Current scan date (ISO):', this.scanDate.toISOString());
    }
 
   stopScanMode() {
@@ -308,6 +331,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     // Set timeout to process scan data after 100ms of no input
     this.scanTimeout = setTimeout(() => {
       if (this.scanBuffer.trim()) {
+        console.log('🔍 Processing scan buffer:', this.scanBuffer.trim());
         this.processScannedData(this.scanBuffer.trim());
         this.scanBuffer = '';
       }
@@ -317,11 +341,13 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   // Process scanned data from tem format: Rxxxxxx yyyy or Bxxxxxx yyyy
   processScannedData(scannedText: string) {
     if (!this.isScanMode || !this.scanFactory) {
-      console.log('Not in scan mode');
+      console.log('❌ Not in scan mode or no factory selected');
       return;
     }
 
-    console.log('Processing scanned data:', scannedText);
+    console.log('🔍 Processing scanned data:', scannedText);
+    console.log('🏭 Current scan factory:', this.scanFactory);
+    console.log('📅 Current scan date:', this.formatDate(this.scanDate));
 
     // Parse tem format: Rxxxxxx yyyy or Bxxxxxx yyyy (where xxxxxx is 6 digits)
     const match = scannedText.match(/^([RB])(\d{6})\s+(\d+)$/);
@@ -332,15 +358,16 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       
       if (quantity > 0) {
         const materialCode = prefix + digits; // Full 7-character code
+        console.log(`✅ Parsed scan data: ${materialCode} - ${quantity}`);
         this.addOrUpdateScannedMaterial(materialCode, quantity);
         // Show success feedback
         this.showScanFeedback('success', `Đã scan: ${materialCode} - ${quantity}`);
       } else {
-        console.log('Invalid quantity:', quantity);
+        console.log('❌ Invalid quantity:', quantity);
         this.showScanFeedback('error', 'Số lượng không hợp lệ');
       }
     } else {
-      console.log('Invalid tem format:', scannedText);
+      console.log('❌ Invalid tem format:', scannedText);
       this.showScanFeedback('error', 'Định dạng tem không đúng: Rxxxxxx yyyy hoặc Bxxxxxx yyyy (x là 6 số)');
     }
   }
@@ -374,6 +401,14 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private addOrUpdateScannedMaterial(materialCode: string, quantity: number) {
+    console.log(`🔍 Processing scan: ${materialCode} - ${quantity} for ${this.scanFactory} on ${this.formatDate(this.scanDate)}`);
+    
+    // Ensure scan date is properly set
+    if (!this.scanDate) {
+      this.scanDate = new Date();
+      console.log('⚠️ Scan date was null, set to current date:', this.formatDate(this.scanDate));
+    }
+    
     // Check if material already exists for this factory and scan date
     const existingMaterial = this.safetyMaterials.find(
       m => m.materialCode === materialCode && 
@@ -381,59 +416,122 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
            this.isSameDate(m.scanDate, this.scanDate)
     );
 
+    console.log('🔍 Existing material found:', existingMaterial);
+    console.log('📅 Current scan date:', this.scanDate);
+    console.log('📅 Current scan date (ISO):', this.scanDate.toISOString());
+    console.log('📊 Available materials:', this.safetyMaterials.map(m => ({
+      code: m.materialCode,
+      factory: m.factory,
+      scanDate: this.formatDate(m.scanDate),
+      scanDateISO: m.scanDate ? m.scanDate.toISOString() : 'null',
+      quantity: m.actualQuantity
+    })));
+
     if (existingMaterial) {
       // Update existing material - add quantity
-      const newQuantity = existingMaterial.actualQuantity + quantity;
+      const oldQuantity = existingMaterial.actualQuantity;
+      const newQuantity = oldQuantity + quantity;
+      
+      console.log(`🔄 Updating existing material: ${materialCode} - ${oldQuantity} + ${quantity} = ${newQuantity}`);
+      
       this.safetyService.updateSafetyMaterial(existingMaterial.id!, {
         actualQuantity: newQuantity,
         updatedAt: new Date()
       }).then(() => {
-        console.log(`Updated ${materialCode} quantity: ${existingMaterial.actualQuantity} + ${quantity} = ${newQuantity}`);
+        console.log(`✅ Successfully updated ${materialCode} quantity: ${oldQuantity} + ${quantity} = ${newQuantity}`);
+        // Refresh data to show updated quantity
+        this.refreshData();
       }).catch(error => {
-        console.error('Error updating material:', error);
+        console.error('❌ Error updating material:', error);
       });
     } else {
-      // Add new material
+      // Add new material - ALWAYS with safety = 0 (no safety level set)
       const newMaterial: Omit<SafetyMaterial, 'id'> = {
         factory: this.scanFactory,
         scanDate: this.scanDate,
         materialCode: materialCode,
         actualQuantity: quantity,
-        safety: 3, // Default safety level (trung bình)
+        safety: 0, // ALWAYS 0 for new scanned materials - no safety level until imported
         status: 'Active'
       };
 
+      console.log(`➕ Adding new material:`, newMaterial);
+
       this.safetyService.addSafetyMaterial(newMaterial).then(() => {
-        console.log(`Added new material: ${materialCode} with quantity ${quantity}`);
+        console.log(`✅ Successfully added new material: ${materialCode} with quantity ${quantity} and safety = 0`);
+        // Refresh data to show new material
+        this.refreshData();
       }).catch(error => {
-        console.error('Error adding material:', error);
+        console.error('❌ Error adding material:', error);
       });
     }
   }
 
   // Helper method to check if two dates are the same day
   private isSameDate(date1: Date, date2: Date): boolean {
+    if (!date1 || !date2) {
+      console.log('⚠️ One of the dates is null/undefined:', { date1, date2 });
+      return false;
+    }
+    
     const d1 = new Date(date1);
     const d2 = new Date(date2);
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate();
+    
+    // Check if dates are valid
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+      console.log('⚠️ One of the dates is invalid:', { date1, date2, d1, d2 });
+      return false;
+    }
+    
+    // Normalize to start of day for comparison
+    const d1Normalized = new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+    const d2Normalized = new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+    
+    const isSame = d1Normalized.getTime() === d2Normalized.getTime();
+    
+    console.log('📅 Date comparison:', {
+      date1: this.formatDate(date1),
+      date2: this.formatDate(date2),
+      d1Normalized: d1Normalized.toISOString(),
+      d2Normalized: d2Normalized.toISOString(),
+      isSame
+    });
+    
+    return isSame;
   }
 
   // Helper method to format date for display
   formatDate(date: Date): string {
-    if (!date) return '';
-    const d = new Date(date);
-    return d.toLocaleDateString('vi-VN');
+    if (!date) {
+      console.log('⚠️ formatDate: date is null/undefined');
+      return 'N/A';
+    }
+    
+    try {
+      const d = new Date(date);
+      
+      // Check if date is valid
+      if (isNaN(d.getTime())) {
+        console.log('⚠️ formatDate: invalid date:', date);
+        return 'Invalid Date';
+      }
+      
+      return d.toLocaleDateString('vi-VN');
+    } catch (error) {
+      console.error('❌ Error formatting date:', error, date);
+      return 'Error';
+    }
   }
 
   // Manual input for safety column
-  updateSafety(material: SafetyMaterial, safety: number) {
+  updateSafety(material: SafetyMaterial, safety: string | number) {
+    const safetyValue = safety === null || safety === undefined || safety === '' ? 0 : Number(safety);
     this.safetyService.updateSafetyMaterial(material.id!, {
-      safety: safety,
+      safety: safetyValue,
       updatedAt: new Date()
     }).then(() => {
-      console.log(`Updated safety for ${material.materialCode}: ${safety}`);
+      console.log(`Updated safety for ${material.materialCode}: ${safetyValue}`);
+      this.refreshData();
     }).catch(error => {
       console.error('Error updating safety:', error);
     });
@@ -444,11 +542,34 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     const testInput = document.querySelector('.test-input') as HTMLInputElement;
     if (testInput && testInput.value.trim()) {
       const testValue = testInput.value.trim();
+      console.log('🧪 Test scan with value:', testValue);
       this.processScannedData(testValue);
       testInput.value = '';
     } else {
-      console.log('Test input is empty or not found');
+      console.log('❌ Test input is empty or not found');
     }
+  }
+
+  // Test scan with specific values for debugging
+  testScanWithValue(value: string) {
+    console.log('🧪 Test scan with specific value:', value);
+    this.processScannedData(value);
+  }
+
+  // Debug scan date and materials
+  debugScanInfo() {
+    console.log('🔍 DEBUG SCAN INFO:');
+    console.log('📅 Current scan date:', this.scanDate);
+    console.log('📅 Current scan date (ISO):', this.scanDate ? this.scanDate.toISOString() : 'null');
+    console.log('🏭 Current scan factory:', this.scanFactory);
+    console.log('📊 Total materials loaded:', this.safetyMaterials.length);
+    console.log('📊 Materials with scan dates:', this.safetyMaterials.map(m => ({
+      code: m.materialCode,
+      factory: m.factory,
+      scanDate: this.formatDate(m.scanDate),
+      scanDateISO: m.scanDate ? m.scanDate.toISOString() : 'null',
+      quantity: m.actualQuantity
+    })));
   }
 
   // Delete material
@@ -487,22 +608,45 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
       
-      // Process import data
-      const importData: SafetyImportData[] = jsonData.map((row: any) => ({
-        factory: row['Factory'] || row['factory'],
-        materialCode: row['Mã hàng'] || row['materialCode'],
-        safety: parseInt(row['Safety'] || row['safety']) || 3
-      })).filter(item => item.factory && item.materialCode);
+      console.log('📁 Import file data:', jsonData);
+      
+      // Process import data - ensure proper parsing
+      const importData: SafetyImportData[] = jsonData.map((row: any) => {
+        const factory = row['Factory'] || row['factory'] || row['Nhà máy'];
+        const materialCode = row['Mã hàng'] || row['materialCode'] || row['Material Code'];
+        const safety = parseInt(row['Safety'] || row['safety'] || row['Safety Level']) || 0;
+        
+        console.log(`📊 Parsing row: Factory=${factory}, Code=${materialCode}, Safety=${safety}`);
+        
+        return {
+          factory: factory,
+          materialCode: materialCode,
+          safety: safety
+        };
+      }).filter(item => {
+        const isValid = item.factory && item.materialCode && item.safety > 0;
+        if (!isValid) {
+          console.log(`⚠️ Skipping invalid row:`, item);
+        }
+        return isValid;
+      });
+      
+      console.log('✅ Valid import data:', importData);
+      
+      if (importData.length === 0) {
+        this.showScanFeedback('error', 'Không có dữ liệu hợp lệ trong file import');
+        return;
+      }
       
       // Update safety levels
       await this.updateSafetyLevelsFromImport(importData);
       
-      this.showScanFeedback('success', `Đã import ${importData.length} safety levels`);
+      this.showScanFeedback('success', `Đã import ${importData.length} safety levels thành công`);
       this.refreshData();
       
     } catch (error) {
-      console.error('Error importing file:', error);
-      this.showScanFeedback('error', 'Lỗi khi import file');
+      console.error('❌ Error importing file:', error);
+      this.showScanFeedback('error', 'Lỗi khi import file: ' + error.message);
     } finally {
       this.isImporting = false;
       this.importProgress = 0;
@@ -511,41 +655,97 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async updateSafetyLevelsFromImport(importData: SafetyImportData[]) {
     let updatedCount = 0;
+    let errorCount = 0;
     
-    for (const item of importData) {
-      try {
-        // Find existing material with same factory and material code
-        const existingMaterial = this.safetyMaterials.find(
-          m => m.factory === item.factory && m.materialCode === item.materialCode
-        );
-        
-        if (existingMaterial) {
-          // Update existing material's safety level
-          await this.safetyService.updateSafetyMaterial(existingMaterial.id!, {
-            safety: item.safety,
-            updatedAt: new Date()
-          });
-          updatedCount++;
-        } else {
-          // Create new material with default values
-          const newMaterial: Omit<SafetyMaterial, 'id'> = {
-            factory: item.factory,
-            scanDate: new Date(),
-            materialCode: item.materialCode,
-            actualQuantity: 0,
-            safety: item.safety,
-            status: 'Active'
-          };
-          await this.safetyService.addSafetyMaterial(newMaterial);
-          updatedCount++;
+    console.log('🔄 Starting import process for', importData.length, 'items');
+    
+    try {
+      // First, reset ALL existing materials' safety to 0
+      console.log('🔄 Resetting all existing safety levels to 0...');
+      const resetPromises = this.safetyMaterials.map(material => 
+        this.safetyService.updateSafetyMaterial(material.id!, {
+          safety: 0,
+          updatedAt: new Date()
+        })
+      );
+      
+      await Promise.all(resetPromises);
+      console.log('✅ Đã reset tất cả Safety Level về 0');
+      
+      // Then, update only materials that exist in import file
+      for (const item of importData) {
+        try {
+          console.log(`🔄 Processing import item: ${item.materialCode} (${item.factory}) - Safety: ${item.safety}`);
+          
+          // Find existing material with same factory and material code
+          const existingMaterial = this.safetyMaterials.find(
+            m => m.factory === item.factory && m.materialCode === item.materialCode
+          );
+          
+          if (existingMaterial) {
+            // Update existing material's safety level from import
+            console.log(`🔄 Updating existing material: ${item.materialCode}`);
+            await this.safetyService.updateSafetyMaterial(existingMaterial.id!, {
+              safety: item.safety,
+              updatedAt: new Date()
+            });
+            updatedCount++;
+            console.log(`✅ Updated safety for ${item.materialCode}: ${item.safety}`);
+          } else {
+            // Create new material with safety level from import
+            console.log(`🔄 Creating new material: ${item.materialCode}`);
+            const newMaterial: Omit<SafetyMaterial, 'id'> = {
+              factory: item.factory,
+              scanDate: new Date(),
+              materialCode: item.materialCode,
+              actualQuantity: 0,
+              safety: item.safety,
+              status: 'Active'
+            };
+            await this.safetyService.addSafetyMaterial(newMaterial);
+            updatedCount++;
+            console.log(`✅ Created new material ${item.materialCode} with safety: ${item.safety}`);
+          }
+          
+          this.importProgress = (updatedCount / importData.length) * 100;
+          
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Error processing ${item.materialCode}:`, error);
         }
-        
-        this.importProgress = (updatedCount / importData.length) * 100;
-        
-      } catch (error) {
-        console.error(`Error updating material ${item.materialCode}:`, error);
       }
+      
+      console.log(`✅ Import completed: ${updatedCount} materials updated, ${errorCount} errors`);
+      
+      if (errorCount > 0) {
+        this.showScanFeedback('error', `Import hoàn thành với ${errorCount} lỗi. Vui lòng kiểm tra console.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Critical error during import:', error);
+      throw error;
     }
+  }
+
+  // Verify imported safety levels
+  verifyImportedSafetyLevels() {
+    console.log('🔍 VERIFYING IMPORTED SAFETY LEVELS:');
+    console.log('📊 Total materials:', this.safetyMaterials.length);
+    
+    const materialsWithSafety = this.safetyMaterials.filter(m => m.safety > 0);
+    const materialsWithoutSafety = this.safetyMaterials.filter(m => m.safety === 0);
+    
+    console.log('✅ Materials WITH safety levels:', materialsWithSafety.length);
+    materialsWithSafety.forEach(m => {
+      console.log(`  - ${m.materialCode} (${m.factory}): Safety = ${m.safety}`);
+    });
+    
+    console.log('❌ Materials WITHOUT safety levels:', materialsWithoutSafety.length);
+    materialsWithoutSafety.forEach(m => {
+      console.log(`  - ${m.materialCode} (${m.factory}): Safety = ${m.safety}`);
+    });
+    
+    this.showScanFeedback('success', `Kiểm tra: ${materialsWithSafety.length} có safety, ${materialsWithoutSafety.length} không có`);
   }
 
   // Calculate status percentage based on actual quantity vs safety level
@@ -594,5 +794,30 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     XLSX.utils.book_append_sheet(wb, ws, 'Safety Template');
     
     XLSX.writeFile(wb, 'Safety_Import_Template.xlsx');
+  }
+
+  // Reset all safety levels to 0 (to fix existing data)
+  resetAllSafetyLevels() {
+    if (confirm('Bạn có chắc muốn reset tất cả Safety Level về 0? Điều này sẽ xóa tất cả safety levels hiện tại.')) {
+      this.isLoading = true;
+      
+      const updatePromises = this.safetyMaterials.map(material => 
+        this.safetyService.updateSafetyMaterial(material.id!, {
+          safety: 0,
+          updatedAt: new Date()
+        })
+      );
+      
+      Promise.all(updatePromises).then(() => {
+        console.log('✅ Đã reset tất cả Safety Level về 0');
+        this.showScanFeedback('success', 'Đã reset tất cả Safety Level về 0');
+        this.refreshData();
+      }).catch(error => {
+        console.error('❌ Lỗi khi reset Safety Level:', error);
+        this.showScanFeedback('error', 'Lỗi khi reset Safety Level');
+      }).finally(() => {
+        this.isLoading = false;
+      });
+    }
   }
 }

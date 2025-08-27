@@ -1,0 +1,238 @@
+<div class="main-content">
+  <!-- Excel-like Container -->
+  <div class="excel-container">
+    <!-- Report Title -->
+    <div class="excel-header">
+      <h4>📍 LOCATION MANAGEMENT</h4>
+    </div>
+    
+    <!-- Excel Actions -->
+    <div class="excel-actions">
+      <div class="action-controls-horizontal">
+        <!-- More Button with Dropdown -->
+        <div class="dropdown">
+          <button class="more-btn" (click)="toggleDropdown($event)">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" [class.show]="isDropdownOpen">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+              <i class="material-icons">file_download</i>
+              Export to Excel
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
+              <i class="material-icons">add_circle</i>
+              Initialize Sample Data
+            </a>
+          </div>
+        </div>
+        
+        <!-- Total Counter Box -->
+        <div class="total-counter-box">
+          <i class="material-icons">location_on</i>
+          <span>Tổng: {{ filteredItems.length }} vị trí</span>
+        </div>
+        
+        <!-- Search Box -->
+        <div class="search-box">
+          <input type="text"
+                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
+          
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
+          <!-- Search warning -->
+          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 2">
+            <i class="material-icons">info</i>
+            Cần ít nhất 2 ký tự
+          </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
+            <i class="material-icons">refresh</i>
+            Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add New Item Form -->
+    <div class="add-item-form">
+      <h5>➕ Thêm Vị Trí Mới</h5>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newViTri">Vị Trí:</label>
+          <input type="text" 
+                 id="newViTri"
+                 [(ngModel)]="newItem.viTri" 
+                 class="form-input"
+                 placeholder="VD: A1-01, B2-03">
+        </div>
+        
+        <div class="form-group">
+          <button class="add-btn" (click)="addLocationItem()" title="Thêm vị trí mới">
+            <i class="material-icons">add</i>
+            Thêm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="loading-container" *ngIf="isLoading">
+      <div class="loading-spinner">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải dữ liệu Location...</span>
+      </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="table-container" *ngIf="!isLoading">
+      <!-- Table -->
+      <table class="excel-table">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Vị Trí</th>
+            <th>QR Code</th>
+            <th>Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of filteredItems; trackBy: trackByFn; let i = index">
+            <!-- STT Column -->
+            <td class="stt-cell">
+              <ng-container *ngIf="editingItem?.id !== item.id; else editStt">
+                {{ item.stt }}
+              </ng-container>
+              <ng-template #editStt>
+                <input type="number" 
+                       [(ngModel)]="editingItem.stt" 
+                       class="edit-input"
+                       min="1">
+              </ng-template>
+            </td>
+            
+            <!-- Vị Trí Column -->
+            <td class="vitri-cell">
+              <ng-container *ngIf="editingItem?.id !== item.id; else editViTri">
+                {{ item.viTri }}
+              </ng-container>
+              <ng-template #editViTri>
+                <input type="text" 
+                       [(ngModel)]="editingItem.viTri" 
+                       class="edit-input"
+                       placeholder="Nhập vị trí">
+              </ng-template>
+            </td>
+            
+                         <!-- QR Code Column -->
+             <td class="qr-cell">
+               <button class="qr-btn" 
+                       (click)="printQRCode(item)"
+                       title="Tạo QR code cho {{item.viTri}}"
+                       *ngIf="editingItem?.id !== item.id">
+                 <i class="material-icons">qr_code</i>
+               </button>
+             </td>
+            
+            <!-- Actions Column -->
+            <td class="actions-cell">
+              <ng-container *ngIf="editingItem?.id !== item.id; else editActions">
+                <button class="edit-btn" 
+                        (click)="editLocationItem(item)"
+                        title="Sửa {{item.viTri}}">
+                  <i class="material-icons">edit</i>
+                </button>
+                <button class="delete-btn" 
+                        (click)="deleteLocationItem(item)"
+                        title="Xóa {{item.viTri}}"
+                        *ngIf="canDelete">
+                  <i class="material-icons">delete</i>
+                </button>
+              </ng-container>
+              <ng-template #editActions>
+                <button class="save-btn" 
+                        (click)="saveEditedItem()"
+                        title="Lưu thay đổi">
+                  <i class="material-icons">save</i>
+                </button>
+                <button class="cancel-btn" 
+                        (click)="cancelEdit()"
+                        title="Hủy bỏ">
+                  <i class="material-icons">cancel</i>
+                </button>
+              </ng-template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Empty State -->
+      <div class="empty-state" *ngIf="!searchTerm && filteredItems.length === 0 && !isLoading">
+        <div class="empty-state-content">
+          <i class="material-icons">location_off</i>
+          <h3>📍 Chưa có vị trí nào</h3>
+          <p>Hãy thêm vị trí mới để bắt đầu quản lý</p>
+          
+          <!-- Quick Stats -->
+          <div class="quick-stats">
+            <div class="stat-item">
+              <i class="material-icons">add_location</i>
+              <span>Thêm Vị Trí</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">qr_code</i>
+              <span>QR Tự Động</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">print</i>
+              <span>In Tem QR</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No Search Results -->
+      <div class="no-results" *ngIf="searchTerm && filteredItems.length === 0 && !isLoading">
+        <div class="no-results-content">
+          <i class="material-icons">search_off</i>
+          <h4>🔍 Không tìm thấy kết quả</h4>
+          <p>Không tìm thấy vị trí nào cho "<strong>{{searchTerm}}</strong>"</p>
+          
+          <!-- Search Tips -->
+          <div class="search-tips">
+            <h6>💡 Mẹo tìm kiếm:</h6>
+            <ul>
+              <li>Kiểm tra chính tả</li>
+              <li>Thử tìm kiếm với ít ký tự hơn</li>
+              <li>Thử tìm kiếm theo STT hoặc vị trí</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-state" *ngIf="isLoading">
+        <div class="loading-content">
+          <i class="material-icons rotating">sync</i>
+          <h4>🔍 Đang tìm kiếm...</h4>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Location</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

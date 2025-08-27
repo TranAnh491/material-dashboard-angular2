@@ -35,6 +35,16 @@
               Import Safety Levels
             </a>
             <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="verifyImportedSafetyLevels()">
+              <i class="material-icons">verified</i>
+              Verify Import
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="resetAllSafetyLevels()">
+              <i class="material-icons">restore</i>
+              Reset Safety Levels
+            </a>
+            <div class="dropdown-divider"></div>
             <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
               <i class="material-icons">add_circle</i>
               Initialize Sample Data
@@ -173,6 +183,30 @@
                      (click)="testScan()">
                Test Scan
              </button>
+             
+             <!-- Quick test buttons for debugging -->
+             <div class="quick-test-buttons">
+               <button class="quick-test-btn" 
+                       (click)="testScanWithValue('RB018694 150')"
+                       title="Test scan B018694 with 150">
+                 Test: B018694 150
+               </button>
+               <button class="quick-test-btn" 
+                       (click)="testScanWithValue('R123456 200')"
+                       title="Test scan R123456 with 200">
+                 Test: R123456 200
+               </button>
+               <button class="quick-test-btn" 
+                       (click)="testScanWithValue('RB018694 100')"
+                       title="Test scan B018694 again with 100 (should add to existing)">
+                 Test: B018694 100 (+)
+               </button>
+               <button class="quick-test-btn debug-btn" 
+                       (click)="debugScanInfo()"
+                       title="Debug scan information">
+                 🐛 Debug Info
+               </button>
+             </div>
            </div>
         </div>
       </div>
@@ -196,7 +230,7 @@
              <th>Ngày Scan</th>
              <th>Mã hàng</th>
              <th>Số Lượng Thực Tế</th>
-             <th>Safety</th>
+             <th>Safety Level</th>
              <th>Tình Trạng</th>
              <th>Xóa</th>
            </tr>
@@ -216,14 +250,12 @@
                {{material.actualQuantity}}
              </td>
              <td class="safety-cell">
-               <select class="safety-select" 
-                       [value]="material.safety"
-                       (change)="updateSafety(material, $event.target.value)">
-                 <option *ngFor="let category of safetyCategories" 
-                         [value]="category.value">
-                   {{category.label}}
-                 </option>
-               </select>
+               <input type="number" 
+                      class="safety-input" 
+                      [value]="material.safety === 0 ? '' : material.safety"
+                      (change)="updateSafety(material, $event.target.value)"
+                      placeholder="Nhập số lượng"
+                      min="0">
              </td>
              <td class="status-cell">
                <span class="badge" [class]="getStatusClass(material)">
