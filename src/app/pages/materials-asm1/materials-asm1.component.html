@@ -108,6 +108,8 @@
           </button>
         </div>
         
+
+        
         <!-- Search Type Selector -->
         <div class="search-type-selector">
           <div class="dropdown">
@@ -270,10 +272,11 @@
               </ng-container>
               <ng-container *ngIf="isExportColumnUnlocked">
                 <input type="number" 
-                       class="export-input" 
-                       [ngModel]="material.exported || 0"
-                       (ngModelChange)="material.exported = $event === '' ? 0 : +$event"
+                       class="editable-input" 
+                       [(ngModel)]="material.exported"
                        (change)="updateExportedAmount(material)"
+                       (blur)="updateExportedAmount(material)"
+                       (keyup.enter)="updateExportedAmount(material)"
                        min="0" 
                        step="0.1"
                        placeholder="0">

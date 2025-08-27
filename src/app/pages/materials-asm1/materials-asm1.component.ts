@@ -1532,21 +1532,44 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     material.updatedAt = new Date();
     
-    console.log(`💾 Saving to Firebase: ${material.materialCode} - XT: ${material.xt || 0} (Exported is auto-updated from outbound)`);
+    console.log(`💾 Saving to Firebase: ${material.materialCode} - Exported: ${material.exported || 0} - XT: ${material.xt || 0}`);
     console.log(`🔍 DEBUG: Full material object:`, material);
     
     // Prepare update data, only include defined values
-    // Note: exported field is not included here as it's auto-updated from outbound
+    // Note: exported field is included when user manually updates it
     const updateData: any = {
-      openingStock: material.openingStock, // Có thể là null
-      xt: material.xt,
-      location: material.location,
-      type: material.type,
-      rollsOrBags: material.rollsOrBags,
-      remarks: material.remarks,
-      expiryDate: material.expiryDate,
+      exported: material.exported || 0, // Đảm bảo exported luôn có giá trị
       updatedAt: material.updatedAt
     };
+    
+    // Chỉ thêm các field có giá trị
+    if (material.openingStock !== undefined && material.openingStock !== null) {
+      updateData.openingStock = material.openingStock;
+    }
+    
+    if (material.xt !== undefined && material.xt !== null) {
+      updateData.xt = material.xt;
+    }
+    
+    if (material.location) {
+      updateData.location = material.location;
+    }
+    
+    if (material.type) {
+      updateData.type = material.type;
+    }
+    
+    if (material.rollsOrBags !== undefined && material.rollsOrBags !== null) {
+      updateData.rollsOrBags = material.rollsOrBags;
+    }
+    
+    if (material.remarks) {
+      updateData.remarks = material.remarks;
+    }
+    
+    if (material.expiryDate) {
+      updateData.expiryDate = material.expiryDate;
+    }
     
     // Only add standardPacking if it has a valid value
     if (material.standardPacking !== undefined && material.standardPacking !== null) {
@@ -1649,35 +1672,90 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // 🔧 LOGIC FIFO MỚI: Lấy số lượng xuất từ Outbound theo FIFO (Material + PO)
+  // 🔧 LOGIC FIFO MỚI: Lấy số lượng xuất từ Outbound theo FIFO (Material + PO + Batch)
   // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
   // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
   // - Tránh tồn kho âm ở các dòng sau
-  async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
+  // - QUAN TRỌNG: Phải match theo Material + PO + Batch để tránh nhận sai dữ liệu
+  async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string, batch?: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
     try {
       console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber}`);
       
       const outboundRef = this.firestore.collection('outbound-materials');
-      // Thử tìm với orderBy trước, nếu lỗi thì tìm không có orderBy
+      
+      // QUAN TRỌNG: Query theo Material + PO + Batch để tránh nhận sai dữ liệu
       let snapshot;
       try {
-        snapshot = await outboundRef
-          .ref
-          .where('factory', '==', 'ASM1')
-          .where('materialCode', '==', materialCode)
-          .where('poNumber', '==', poNumber)
-          .orderBy('exportDate', 'asc') // Sắp xếp theo thời gian xuất (cũ nhất trước)
-          .get();
-      } catch (orderByError) {
-        console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
-        // Fallback: tìm không có orderBy
-        snapshot = await outboundRef
-          .ref
-          .where('factory', '==', 'ASM1')
-          .where('materialCode', '==', materialCode)
-          .where('poNumber', '==', poNumber)
-          .get();
-      }
+        if (batch) {
+          // Nếu có batch, query theo Material + PO + Batch
+          console.log(`🔍 Querying with batch: ${materialCode} - PO: ${poNumber} - Batch: ${batch}`);
+          
+          // Thử query với field 'batch' trước
+          try {
+            snapshot = await outboundRef
+              .ref
+              .where('factory', '==', 'ASM1')
+              .where('materialCode', '==', materialCode)
+              .where('poNumber', '==', poNumber)
+              .where('batch', '==', batch)
+              .orderBy('exportDate', 'asc')
+              .get();
+          } catch (batchError) {
+            console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
+            // Fallback: thử với field 'batchNumber'
+            snapshot = await outboundRef
+              .ref
+              .where('factory', '==', 'ASM1')
+              .where('materialCode', '==', materialCode)
+              .where('poNumber', '==', poNumber)
+              .where('batchNumber', '==', batch)
+              .orderBy('exportDate', 'asc')
+              .get();
+          }
+        } else {
+          // Nếu không có batch, query theo Material + PO (fallback)
+          console.log(`⚠️ No batch provided, querying without batch: ${materialCode} - PO: ${poNumber}`);
+          snapshot = await outboundRef
+            .ref
+            .where('factory', '==', 'ASM1')
+            .where('materialCode', '==', materialCode)
+            .where('poNumber', '==', poNumber)
+            .orderBy('exportDate', 'asc')
+            .get();
+        }
+              } catch (orderByError) {
+          console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
+          // Fallback: tìm không có orderBy
+          if (batch) {
+            // Thử query với field 'batch' trước
+            try {
+              snapshot = await outboundRef
+                .ref
+                .where('factory', '==', 'ASM1')
+                .where('materialCode', '==', materialCode)
+                .where('poNumber', '==', poNumber)
+                .where('batch', '==', batch)
+                .get();
+            } catch (batchError) {
+              console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
+              // Fallback: thử với field 'batchNumber'
+              snapshot = await outboundRef
+                .ref
+                .where('factory', '==', 'ASM1')
+                .where('materialCode', '==', materialCode)
+                .where('poNumber', '==', poNumber)
+                .where('batchNumber', '==', batch)
+                .get();
+            }
+          } else {
+            snapshot = await outboundRef
+              .ref
+              .where('factory', '==', 'ASM1')
+              .where('materialCode', '==', materialCode)
+              .where('poNumber', '==', poNumber)
+              .get();
+          }
+        }
 
       if (!snapshot.empty) {
         let totalExported = 0;
@@ -1718,7 +1796,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`🔍 Debug: Outbound record - ID: ${doc.id}, Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${exportQuantity}`);
         });
         
-        console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}: ${totalExported} (${outboundRecords.length} records)`);
+        const batchInfo = batch ? ` - Batch: ${batch}` : '';
+        console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}${batchInfo}: ${totalExported} (${outboundRecords.length} records)`);
         
         // Debug: Log chi tiết từng record và raw data
         console.log(`📋 Detailed outbound records:`);
@@ -1733,6 +1812,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`  Doc ${doc.id}:`, {
             materialCode: rawData.materialCode,
             poNumber: rawData.poNumber,
+            batch: rawData.batch,
+            batchNumber: rawData.batchNumber, // Kiểm tra cả batch và batchNumber
             exportQuantity: rawData.exportQuantity,
             exported: rawData.exported,
             quantity: rawData.quantity,
@@ -1780,8 +1861,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
       
-      // Lấy thông tin outbound
-      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(material.materialCode, material.poNumber);
+      // Lấy thông tin outbound - QUAN TRỌNG: Truyền batch để tránh nhận sai dữ liệu
+      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
+        material.materialCode, 
+        material.poNumber, 
+        material.batchNumber // Truyền batchNumber để query chính xác
+      );
       
       console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
       
@@ -1836,16 +1921,30 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Helper method để cập nhật exported quantity vào Firebase
   private async updateExportedInFirebase(material: InventoryMaterial, exportedQuantity: number): Promise<void> {
-    if (!material.id) return;
+    console.log(`🔍 updateExportedInFirebase called with:`);
+    console.log(`  - material.id: ${material.id}`);
+    console.log(`  - material.materialCode: ${material.materialCode}`);
+    console.log(`  - material.poNumber: ${material.poNumber}`);
+    console.log(`  - exportedQuantity: ${exportedQuantity}`);
+    
+    if (!material.id) {
+      console.error(`❌ Cannot update: material.id is missing for ${material.materialCode} - PO ${material.poNumber}`);
+      return;
+    }
     
     try {
-      await this.firestore.collection('inventory-materials').doc(material.id).update({
+      console.log(`🔄 Updating Firebase document: inventory-materials/${material.id}`);
+      const updateData = {
         exported: exportedQuantity,
         updatedAt: new Date()
-      });
+      };
+      console.log(`📝 Update data:`, updateData);
+      
+      await this.firestore.collection('inventory-materials').doc(material.id).update(updateData);
       console.log(`💾 Exported quantity saved to Firebase: ${material.materialCode} - PO ${material.poNumber} = ${exportedQuantity}`);
     } catch (error) {
       console.error(`❌ Error saving exported quantity to Firebase: ${material.materialCode} - PO ${material.poNumber}:`, error);
+      console.error(`❌ Full error details:`, error);
     }
   }
   
@@ -1871,7 +1970,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         console.log(`  Item: Stock=${availableStock}, Exported=${item.exported || 0}, Current=${this.calculateCurrentStock(item)}`);
       });
       
-      // Lấy thông tin outbound
+      // Lấy thông tin outbound - Lưu ý: testFIFOLogic không có batch cụ thể nên sẽ query theo Material + PO
       const { totalExported } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
       console.log(`📦 Total outbound: ${totalExported}`);
       
@@ -1951,7 +2050,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       console.log(`🔗 Testing outbound-inventory link for ${materialCode} - PO ${poNumber}`);
       
-      // 1. Kiểm tra dữ liệu outbound
+      // 1. Kiểm tra dữ liệu outbound - Lưu ý: testOutboundInventoryLink không có batch cụ thể nên sẽ query theo Material + PO
       const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
       console.log(`📦 Outbound data: ${totalExported} units from ${outboundRecords.length} records`);
       
@@ -2334,7 +2433,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   // Update exported amount (when unlocked) - Chỉ cho phép user có quyền Xóa
-  async updateExportedAmount(material: InventoryMaterial): Promise<void> {
+  updateExportedAmount(material: InventoryMaterial): void {
+    console.log(`🔍 updateExportedAmount called for: ${material.materialCode} - PO ${material.poNumber}`);
+    console.log(`🔍 Current material.exported value: ${material.exported}`);
+    console.log(`🔍 Current material.id: ${material.id}`);
+    
     // Kiểm tra quyền và trạng thái mở khóa
     if (!this.canDelete) {
       console.error('❌ User does not have delete permission to update exported amount');
@@ -2346,22 +2449,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     
-    try {
-      console.log(`📝 Updating exported amount for ${material.materialCode} - PO ${material.poNumber}: ${material.exported} (by user with delete permission)`);
-      
-      // Update in Firebase
-      this.updateMaterialInFirebase(material);
-      
-      // Recalculate stock
-      const newStock = this.calculateCurrentStock(material);
-      console.log(`📊 New stock calculated: ${newStock} (Opening Stock: ${material.openingStock || 0} + Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt || 0})`);
-      
-      // Update negative stock count for real-time display
-      this.updateNegativeStockCount();
-      
-    } catch (error) {
-      console.error(`❌ Error updating exported amount for ${material.materialCode}:`, error);
+    // Đảm bảo exported có giá trị hợp lệ
+    if (material.exported === null || material.exported === undefined) {
+      material.exported = 0;
     }
+    
+    console.log(`📝 Updating exported amount for ${material.materialCode} - PO ${material.poNumber}: ${material.exported} (by user with delete permission)`);
+    
+    // Update in Firebase - sử dụng updateMaterialInFirebase như ASM2
+    this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
   }
 
   // Toggle export column lock/unlock - Chỉ cho phép user có quyền Xóa
@@ -2386,6 +2485,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   canEditExportColumn(): boolean {
     return this.canDelete && this.isExportColumnUnlocked;
   }
+
+
+
+
 
   // Auto-update all exported quantities from RM1 outbound (silent, no user interaction)
   private async autoUpdateAllExportedFromOutbound(): Promise<void> {

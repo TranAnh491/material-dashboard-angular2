@@ -4,6 +4,14 @@
     <!-- Report Title -->
     <div class="excel-header">
       <h4>📦 INVENTORY ASM2</h4>
+      <!-- Consolidation Status Message -->
+      <div class="consolidation-message" *ngIf="showConsolidationMessage" [class.success]="consolidationMessage.includes('✅')" [class.info]="consolidationMessage.includes('ℹ️')">
+        <i class="material-icons">{{consolidationMessage.includes('✅') ? 'check_circle' : 'info'}}</i>
+        <span>{{ consolidationMessage }}</span>
+        <button class="close-message" (click)="showConsolidationMessage = false">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
       <!-- Catalog Loading Indicator -->
       <div class="catalog-status" *ngIf="isCatalogLoading">
         <i class="material-icons rotating">sync</i>
@@ -22,16 +30,16 @@
           </button>
           <div class="dropdown-menu" [class.show]="isDropdownOpen">
             <a class="dropdown-item" href="javascript:void(0)" (click)="importCatalog()">
-              <i class="material-icons">upload_file</i>
-              Import File Danh mục
+              <i class="material-icons">file_upload</i>
+              Update Standard Packing
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
-              <i class="material-icons">download</i>
-              Tải Template Danh mục
+              <i class="material-icons">description</i>
+              Download Standard Packing Template
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="importCurrentStock()">
-              <i class="material-icons">upload_file</i>
-              Import Tồn kho ASM2
+              <i class="material-icons">file_upload</i>
+              Import Current Stock
             </a>
             <div class="dropdown-divider"></div>
             <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="deleteAllASM2Data()">
@@ -58,6 +66,34 @@
         <div class="total-counter-box">
           <i class="material-icons">inventory_2</i>
           <span>Tổng: {{ filteredInventory.length }} mã</span>
+        </div>
+        
+        <!-- Search Type Selector -->
+        <div class="search-type-selector">
+          <div class="dropdown">
+            <button class="search-type-dropdown" 
+                    type="button" 
+                    data-toggle="dropdown" 
+                    aria-haspopup="true" 
+                    aria-expanded="false">
+              <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+              {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+            </button>
+            <div class="dropdown-menu">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                <i class="material-icons">inventory</i>
+                Mã
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                <i class="material-icons">receipt</i>
+                PO
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                <i class="material-icons">place</i>
+                Vị trí
+              </a>
+            </div>
+          </div>
         </div>
         
         <!-- Search Type Selector -->
@@ -127,6 +163,10 @@
             <i class="material-icons">restart_alt</i>
             Reset
           </button>
+          <button class="consolidate-btn" (click)="consolidateAllInventory()" title="Gộp dòng trùng lặp theo Material+PO">
+            <i class="material-icons">merge_type</i>
+            Gộp dòng
+          </button>
         </div>
         
         <!-- Catalog Ready Icon -->
@@ -154,13 +194,17 @@
           <tr>
             <th>Factory</th>
             <th>STT</th>
+
             <th>Mã hàng</th>
             <th>PO</th>
-            <th>Số lượng</th>
-            <th>Đã xuất</th>
-            <th>Tồn kho</th>
+                            <th>Batch</th>
+            <th>Tồn đầu</th>
+            <th>NK</th>
+            <th title="Số lượng đã xuất từ RM2 outbound (tự động cập nhật)">Đã xuất</th>
+            <th title="Số lượng cần xuất (nhập tay)">XT</th>
+            <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
             <th>Vị trí</th>
-            <th>Thay đổi vị trí</th>
+            <th>Change</th>
             <th>Loại Hình</th>
 
             <th>Rolls/Bags</th>
@@ -186,20 +230,52 @@
               {{material.materialCode}}
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
+            <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
+              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
+            </td>
+            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
+              <input type="number" 
+                     class="opening-stock-input" 
+                     [ngModel]="material.openingStock || ''"
+                     (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
+                     (change)="updateOpeningStock(material)" 
+                     min="0" 
+                     step="0.1" 
+                     [placeholder]="material.openingStock ? '' : 'Nhập tồn đầu'">
+            </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
-            <!-- Cột "Đã xuất" - Luôn có thể chỉnh sửa (giống cột "Vị trí") -->
-            <td class="number-cell">
+            <!-- Cột "Đã xuất" - Có thể edit khi mở khóa -->
+            <td class="number-cell" 
+                [class.readonly-cell]="!isExportColumnUnlocked"
+                [class.editable-export-cell]="isExportColumnUnlocked"
+                [title]="isExportColumnUnlocked ? 'Click để sửa số lượng đã xuất' : 'Số lượng đã xuất từ RM2 outbound: ' + (material.exported || 0) + '\nTự động cập nhật và lưu trữ vĩnh viễn\nKể cả khi xóa dòng xuất ở outbound cũng không ảnh hưởng'">
+              <ng-container *ngIf="!isExportColumnUnlocked">
+                {{formatNumber(material.exported || 0)}}
+              </ng-container>
+              <ng-container *ngIf="isExportColumnUnlocked">
+                <input type="number" 
+                       class="editable-input" 
+                       [ngModel]="material.exported || 0"
+                       (ngModelChange)="material.exported = $event === '' ? 0 : +$event"
+                       (change)="updateExportedAmount(material)"
+                       min="0" 
+                       step="0.1"
+                       placeholder="0">
+              </ng-container>
+            </td>
+                        <!-- Cột "XT" - Số lượng cần xuất (nhập tay) -->
+            <td class="number-cell xt-column">
               <input type="number" 
                      class="editable-cell" 
-                     [(ngModel)]="material.exported" 
-                     (change)="updateExported(material)" 
-                     min="0"
-                     step="0.1"
-                     placeholder="Nhập số lượng đã xuất">
+                     [(ngModel)]="material.xt" 
+                     (change)="updateXT(material)" 
+                     min="0" 
+                     step="0.1" 
+                     placeholder="Nhập số lượng XT">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
-                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' = ' + calculateCurrentStock(material)">
+                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
             <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">

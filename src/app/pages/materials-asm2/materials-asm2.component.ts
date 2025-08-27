@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
@@ -22,9 +22,11 @@ export interface InventoryMaterial {
   materialCode: string;
   materialName?: string;
   poNumber: string;
+  openingStock: number | null; // Tồn đầu - nhập tay được, có thể null
   quantity: number;
   unit: string;
   exported?: number;
+  xt?: number; // Số lượng cần xuất (nhập tay)
   stock?: number;
   location: string;
   type: string;
@@ -39,6 +41,7 @@ export interface InventoryMaterial {
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -52,6 +55,12 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Fixed factory for ASM2
   readonly FACTORY = 'ASM2';
   
+  // 🔧 LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
+  // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN Material + PO
+  // - Outbound RM2 scan/nhập: Material + PO (không còn vị trí)
+  // - Hệ thống sẽ tìm tất cả outbound records có cùng Material + PO và cộng dồn
+  // - KHÔNG còn bị lỗi số âm sai khi search
+  
   // Data properties
   inventoryMaterials: InventoryMaterial[] = [];
   filteredInventory: InventoryMaterial[] = [];
@@ -59,6 +68,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Loading state
   isLoading = false;
   isCatalogLoading = false;
+  
+  // Consolidation status
+  consolidationMessage = '';
+  showConsolidationMessage = false;
   
   // Catalog cache for faster access
   private catalogCache = new Map<string, any>();
@@ -68,6 +81,20 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   searchTerm = '';
   searchType: 'material' | 'po' | 'location' = 'material';
   private searchSubject = new Subject<string>();
+  
+  // Negative stock tracking
+  private negativeStockSubject = new BehaviorSubject<number>(0);
+  public negativeStockCount$ = this.negativeStockSubject.asObservable();
+  
+  // Total stock tracking
+  private totalStockSubject = new BehaviorSubject<number>(0);
+  public totalStockCount$ = this.totalStockSubject.asObservable();
+  
+  // Negative stock filter state
+  showOnlyNegativeStock = false;
+  
+  // Export column lock state
+  isExportColumnUnlocked = false;
   
   // Dropdown state
   isDropdownOpen = false;
@@ -100,6 +127,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   ) {}
 
   ngOnInit(): void {
+    console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
+    
     // Load catalog first for material names mapping
     this.loadCatalogFromFirebase().then(() => {
       console.log('📚 ASM2 Catalog loaded, inventory ready for search');
@@ -109,7 +138,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // Load inventory data and setup search after data is loaded
     this.loadInventoryAndSetupSearch();
     
+    // Initialize negative stock count and total stock count
+    this.updateNegativeStockCount();
+    
     console.log('✅ ASM2 Materials component initialized - Search setup will happen after data loads');
+    console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
   }
 
   ngAfterViewInit(): void {
@@ -341,21 +374,21 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+
+
+
+
   // Clear search and reset to initial state
   clearSearch(): void {
     this.searchTerm = '';
     this.filteredInventory = [];
     this.inventoryMaterials = [];
     
+    // Reset negative stock filter
+    this.showOnlyNegativeStock = false;
+    
     // Return to initial state - no data displayed
     console.log('🧹 ASM2 Search cleared, returning to initial state (no data displayed)');
-  }
-
-  // Change search type
-  changeSearchType(type: 'material' | 'po' | 'location'): void {
-    this.searchType = type;
-    this.searchTerm = ''; // Clear search when changing type
-    this.applyFilters(); // Reapply filters
   }
 
   // Perform search with Search-First approach for ASM2 - IMPROVED VERSION
@@ -468,6 +501,69 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return item.id || index;
   }
 
+  // Get count of materials with negative stock
+  getNegativeStockCount(): number {
+    // Always count from inventoryMaterials (not filteredInventory) to get real total
+    const count = this.inventoryMaterials.filter(material => {
+      const stock = this.calculateCurrentStock(material);
+      return stock < 0;
+    }).length;
+    
+    // Emit new value to BehaviorSubject for real-time updates
+    this.negativeStockSubject.next(count);
+    
+    console.log(`📊 Negative stock count calculated: ${count} from total ${this.inventoryMaterials.length} materials`);
+    
+    return count;
+  }
+
+  // Update negative stock count manually (for real-time updates)
+  private updateNegativeStockCount(): void {
+    const count = this.getNegativeStockCount();
+    console.log(`📊 Negative stock count updated: ${count}`);
+    
+    // Also update total stock count
+    this.updateTotalStockCount();
+  }
+  
+  // Update total stock count for real-time display
+  private updateTotalStockCount(): void {
+    if (!this.filteredInventory || this.filteredInventory.length === 0) {
+      this.totalStockSubject.next(0);
+      return;
+    }
+    
+    const totalStock = this.filteredInventory.reduce((sum, material) => {
+      return sum + this.calculateCurrentStock(material);
+    }, 0);
+    
+    this.totalStockSubject.next(totalStock);
+    console.log(`📊 Total stock count updated: ${totalStock}`);
+  }
+
+  // Calculate current stock for display
+  calculateCurrentStock(material: InventoryMaterial): number {
+    const openingStockValue = material.openingStock !== null ? material.openingStock : 0;
+    const stock = openingStockValue + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
+    return stock;
+  }
+
+  // Calculate total stock for all filtered materials
+  getTotalStock(): number {
+    if (!this.filteredInventory || this.filteredInventory.length === 0) {
+      return 0;
+    }
+    
+    const totalStock = this.filteredInventory.reduce((sum, material) => {
+      return sum + this.calculateCurrentStock(material);
+    }, 0);
+    
+    // Update the BehaviorSubject for reactive updates
+    this.totalStockSubject.next(totalStock);
+    
+    return totalStock;
+  }
+
   // Compare material codes for FIFO sorting
   private compareMaterialCodesFIFO(codeA: string, codeB: string): number {
     if (!codeA || !codeB) return 0;
@@ -532,12 +628,62 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return parsedA.sequence - parsedB.sequence;
   }
 
+  // Sort inventory by FIFO: Material Code -> PO (oldest first)
+  private sortInventoryFIFO(): void {
+    if (!this.filteredInventory || this.filteredInventory.length === 0) return;
+    
+    console.log('🔄 Sorting inventory by FIFO: Material Code -> PO (oldest first)...');
+    
+    this.filteredInventory.sort((a, b) => {
+      // First compare by Material Code (group same materials together)
+      const materialComparison = this.compareMaterialCodesFIFO(a.materialCode, b.materialCode);
+      if (materialComparison !== 0) {
+        return materialComparison;
+      }
+      
+      // If same material code, sort by PO: Year -> Month -> Sequence (oldest first)
+      return this.comparePOFIFO(a.poNumber, b.poNumber);
+    });
+    
+    console.log('✅ Inventory sorted by FIFO successfully');
+    
+    // Update negative stock count after sorting
+    this.updateNegativeStockCount();
+  }
+
   // Status helper methods
   getStatusClass(item: InventoryMaterial): string {
     if (item.isCompleted) return 'status-completed';
     if (item.isDuplicate) return 'status-duplicate';
     if (item.importStatus === 'Import') return 'status-import';
     return 'status-active';
+  }
+
+  // Mark duplicates within ASM2
+  markDuplicates(): void {
+    const poMap = new Map<string, InventoryMaterial[]>();
+    
+    // Group materials by PO
+    this.filteredInventory.forEach(material => {
+      if (!poMap.has(material.poNumber)) {
+        poMap.set(material.poNumber, []);
+      }
+      poMap.get(material.poNumber)!.push(material);
+    });
+    
+    // Mark duplicates
+    poMap.forEach((materials, po) => {
+      if (materials.length > 1) {
+        materials.forEach(material => {
+          material.isDuplicate = true;
+        });
+      } else {
+        materials[0].isDuplicate = false;
+      }
+    });
+    
+    // Update negative stock count after marking duplicates
+    this.updateNegativeStockCount();
   }
 
   getStatusText(item: InventoryMaterial): string {
@@ -565,29 +711,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return location && location.toUpperCase() === 'IQC';
   }
 
-  // Mark duplicates within ASM2
-  markDuplicates(): void {
-    const poMap = new Map<string, InventoryMaterial[]>();
-    
-    // Group materials by PO
-    this.filteredInventory.forEach(material => {
-      if (!poMap.has(material.poNumber)) {
-        poMap.set(material.poNumber, []);
-      }
-      poMap.get(material.poNumber)!.push(material);
-    });
-    
-    // Mark duplicates
-    poMap.forEach((materials, po) => {
-      if (materials.length > 1) {
-        materials.forEach(material => {
-          material.isDuplicate = true;
-        });
-      } else {
-        materials[0].isDuplicate = false;
-      }
-    });
-  }
+
 
   // Load permissions
   loadPermissions(): void {
@@ -764,6 +888,70 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   //   this.showCompleted = !this.showCompleted;
   // }
 
+  // Reset function - Delete items with zero stock
+  async resetZeroStock(): Promise<void> {
+    try {
+      // Find all items with stock = 0
+      const zeroStockItems = this.inventoryMaterials.filter(item => 
+        item.factory === this.FACTORY && this.calculateCurrentStock(item) === 0
+      );
+
+      if (zeroStockItems.length === 0) {
+        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM2');
+        return;
+      }
+
+      // Show confirmation dialog
+      const confirmed = confirm(
+        `🔄 RESET ASM2 INVENTORY\n\n` +
+        `Tìm thấy ${zeroStockItems.length} mã hàng có tồn kho = 0\n\n` +
+        `Bạn có muốn xóa tất cả những mã hàng này không?\n\n` +
+        `⚠️ Hành động này không thể hoàn tác!`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      console.log(`🗑️ Starting reset for ASM2: ${zeroStockItems.length} items to delete`);
+
+      // Delete items in batches
+      const batchSize = 50;
+      let deletedCount = 0;
+
+      for (let i = 0; i < zeroStockItems.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const currentBatch = zeroStockItems.slice(i, i + batchSize);
+
+        currentBatch.forEach(item => {
+          if (item.id) {
+            const docRef = this.firestore.collection('inventory-materials').doc(item.id).ref;
+            batch.delete(docRef);
+          }
+        });
+
+        await batch.commit();
+        deletedCount += currentBatch.length;
+
+        console.log(`✅ ASM2 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockItems.length}`);
+
+        // Small delay between batches
+        if (i + batchSize < zeroStockItems.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM2`);
+
+      // Reload inventory data
+      await this.loadInventoryFromFirebase();
+
+    } catch (error) {
+      console.error('❌ Error during ASM2 reset:', error);
+      alert(`❌ Lỗi khi reset ASM2: ${error.message}`);
+    }
+  }
+
   syncFromInbound(): void {
     console.log('Sync from inbound for ASM2');
   }
@@ -774,19 +962,52 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateMaterialInFirebase(material);
   }
 
+  updateOpeningStock(material: InventoryMaterial): void {
+    if (!this.canEdit) return;
+    this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
+  }
+
   updateLocation(material: InventoryMaterial): void {
     if (!this.canEdit) return;
     this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
   }
 
   updateType(material: InventoryMaterial): void {
     if (!this.canEdit) return;
     this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
   }
 
   updateRollsOrBags(material: InventoryMaterial): void {
     if (!this.canEdit) return;
     this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
+  }
+
+  updateXT(material: InventoryMaterial): void {
+    if (!this.canEdit) return;
+    this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
+  }
+
+  updateExportedAmount(material: InventoryMaterial): void {
+    if (!this.canEdit) return;
+    this.updateMaterialInFirebase(material);
+    
+    // Update negative stock count for real-time display
+    this.updateNegativeStockCount();
   }
 
   // onHSDChange method removed - HSD column deleted
@@ -806,13 +1027,24 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Update material in Firebase
   private updateMaterialInFirebase(material: InventoryMaterial): void {
-    if (!material.id) return;
+    console.log(`🔍 DEBUG: updateMaterialInFirebase called for ${material.materialCode}`);
+    console.log(`🔍 DEBUG: material.id = ${material.id}`);
+    
+    if (!material.id) {
+      console.log(`❌ DEBUG: No material ID - cannot save to Firebase`);
+      return;
+    }
     
     material.updatedAt = new Date();
     
+    console.log(`💾 Saving to Firebase: ${material.materialCode} - XT: ${material.xt || 0} (Exported is auto-updated from outbound)`);
+    console.log(`🔍 DEBUG: Full material object:`, material);
+    
     // Prepare update data, only include defined values
+    // Note: exported field is not included here as it's auto-updated from outbound
     const updateData: any = {
-      exported: material.exported,
+      openingStock: material.openingStock, // Có thể là null
+      xt: material.xt,
       location: material.location,
       type: material.type,
       rollsOrBags: material.rollsOrBags,
@@ -826,18 +1058,44 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       updateData.standardPacking = material.standardPacking;
     }
     
+    console.log(`🔍 DEBUG: Update data to Firebase:`, updateData);
+    
     this.firestore.collection('inventory-materials').doc(material.id).update(updateData).then(() => {
-      console.log('✅ ASM2 Material updated successfully');
+      console.log(`✅ ASM2 Material updated successfully: ${material.materialCode}`);
+      console.log(`📊 Stock updated: ${this.calculateCurrentStock(material)} (Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt || 0})`);
+      
+      // Update negative stock count for real-time display
+      this.updateNegativeStockCount();
+      
+      // Show success message to user
+      this.showUpdateSuccessMessage(material);
+      
     }).catch(error => {
-      console.error('❌ Error updating ASM2 material:', error);
+      console.error(`❌ Error updating ASM2 material ${material.materialCode}:`, error);
+      
+      // Show error message to user
+      this.showUpdateErrorMessage(material, error);
     });
   }
 
-  // Calculate current stock for display
-  calculateCurrentStock(material: InventoryMaterial): number {
-    const stock = (material.quantity || 0) - (material.exported || 0);
-    return stock;
+  // Show success message when update is successful
+  private showUpdateSuccessMessage(material: InventoryMaterial): void {
+    const stock = this.calculateCurrentStock(material);
+    console.log(`🎉 Update successful! ${material.materialCode} - New stock: ${stock}`);
+    
+    // You can add a toast notification here if needed
+    // For now, just log to console
   }
+
+  // Show error message when update fails
+  private showUpdateErrorMessage(material: InventoryMaterial, error: any): void {
+    console.error(`💥 Update failed for ${material.materialCode}:`, error.message);
+    
+    // You can add an error toast notification here if needed
+    // For now, just log to console
+  }
+
+
 
   // Format numbers with thousand separators
   formatNumber(value: any): string {
@@ -874,6 +1132,516 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       return this.catalogCache.get(materialCode)!.unit;
     }
     return 'PCS';
+  }
+
+  // Get standard packing from catalog
+  getStandardPacking(materialCode: string): string {
+    if (this.catalogCache.has(materialCode)) {
+      const catalogItem = this.catalogCache.get(materialCode)!;
+      return catalogItem.standardPacking ? catalogItem.standardPacking.toString() : 'N/A';
+    }
+    return 'N/A';
+  }
+
+  // Check if rolls or bags is valid for QR generation
+  isRollsOrBagsValid(material: InventoryMaterial): boolean {
+    return material.rollsOrBags && 
+           material.rollsOrBags.toString().trim() !== '' && 
+           parseFloat(material.rollsOrBags.toString()) > 0;
+  }
+
+  // Change search type (material, po, location)
+  changeSearchType(searchType: 'material' | 'po' | 'location'): void {
+    this.searchType = searchType;
+    console.log(`🔍 ASM2 Search type changed to: ${searchType}`);
+    
+    // Clear current search results when changing search type
+    if (this.searchTerm) {
+      this.clearSearch();
+    }
+  }
+
+  // Print QR code for material
+  async printQRCode(material: InventoryMaterial): Promise<void> {
+    try {
+      if (!this.isRollsOrBagsValid(material)) {
+        alert('❌ Không thể in QR - thiếu Rolls/Bags');
+        return;
+      }
+
+      // Generate QR code data
+      const qrData = {
+        materialCode: material.materialCode,
+        poNumber: material.poNumber,
+        quantity: material.rollsOrBags,
+        factory: this.FACTORY,
+        timestamp: new Date().toISOString()
+      };
+
+      // Generate QR code
+      const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData));
+      
+      // Create print window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+        return;
+      }
+
+      // Generate print content
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>QR Label - ASM2 - ${material.materialCode}</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px;
+                text-align: center;
+              }
+              .qr-container { 
+                display: flex; 
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+              }
+              .qr-code { 
+                width: 200px; 
+                height: 200px; 
+              }
+              .material-info {
+                font-size: 14px;
+                line-height: 1.4;
+              }
+              .material-code {
+                font-weight: bold;
+                font-size: 16px;
+              }
+              .po-number {
+                color: #666;
+              }
+              .quantity {
+                font-weight: bold;
+                color: #333;
+              }
+              @media print {
+                body { margin: 0; }
+                .qr-container { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="qr-container">
+              <img src="${qrCodeDataUrl}" alt="QR Code" class="qr-code">
+              <div class="material-info">
+                <div class="material-code">${material.materialCode}</div>
+                <div class="po-number">PO: ${material.poNumber}</div>
+                <div class="quantity">Qty: ${material.rollsOrBags}</div>
+                <div>Factory: ${this.FACTORY}</div>
+                <div>${new Date().toLocaleDateString('vi-VN')}</div>
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(() => window.close(), 1000);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+      
+    } catch (error) {
+      console.error('❌ Error generating QR code:', error);
+      alert('❌ Lỗi khi tạo QR code: ' + error.message);
+    }
+  }
+
+  // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO (không còn vị trí)
+  // - Trước đây: Query theo Material + PO + Location → Bị lỗi khi Outbound không có vị trí
+  // - Bây giờ: Chỉ query theo Material + PO → Lấy tất cả outbound records
+  // - Kết quả: Số lượng xuất chính xác cho từng Material + PO
+  // - Không còn bị lỗi số âm sai khi search
+  async getExportedQuantityFromOutbound(materialCode: string, poNumber: string, location: string): Promise<number> {
+    try {
+      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber}`);
+      
+      const outboundRef = this.firestore.collection('outbound-materials');
+      const snapshot = await outboundRef
+        .ref
+        .where('factory', '==', 'ASM2')
+        .where('materialCode', '==', materialCode)
+        .where('poNumber', '==', poNumber)
+        .get();
+
+      if (!snapshot.empty) {
+        let totalExported = 0;
+        snapshot.forEach(doc => {
+          const data = doc.data() as any;
+          totalExported += (data.exportQuantity || 0);
+        });
+        
+        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber}: ${totalExported}`);
+        return totalExported;
+      } else {
+        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
+        return 0;
+      }
+    } catch (error) {
+      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber}:`, error);
+      return 0;
+    }
+  }
+
+  // 🔧 LOGIC FIFO MỚI: Lấy số lượng xuất từ Outbound theo FIFO (Material + PO)
+  // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
+  // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
+  // - Tránh tồn kho âm ở các dòng sau
+  async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
+    try {
+      console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber}`);
+      
+      const outboundRef = this.firestore.collection('outbound-materials');
+      // Thử tìm với orderBy trước, nếu lỗi thì tìm không có orderBy
+      let snapshot;
+      try {
+        snapshot = await outboundRef
+          .ref
+          .where('factory', '==', 'ASM2')
+          .where('materialCode', '==', materialCode)
+          .where('poNumber', '==', poNumber)
+          .orderBy('exportDate', 'asc') // Sắp xếp theo thời gian xuất (cũ nhất trước)
+          .get();
+      } catch (orderByError) {
+        console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
+        // Fallback: tìm không có orderBy
+        snapshot = await outboundRef
+          .ref
+          .where('factory', '==', 'ASM2')
+          .where('materialCode', '==', poNumber)
+          .get();
+      }
+
+      if (!snapshot.empty) {
+        let totalExported = 0;
+        const outboundRecords: any[] = [];
+        
+        snapshot.forEach(doc => {
+          const data = doc.data() as any;
+          // Thử nhiều field names khác nhau để tìm số lượng xuất
+          let exportQuantity = 0;
+          
+          // Kiểm tra từng field name có thể có
+          if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
+            exportQuantity = data.exportQuantity;
+          } else if (data.exported !== undefined && data.exported !== null) {
+            exportQuantity = data.exported;
+          } else if (data.quantity !== undefined && data.quantity !== null) {
+            exportQuantity = data.quantity;
+          } else if (data.amount !== undefined && data.amount !== null) {
+            exportQuantity = data.amount;
+          } else if (data.qty !== undefined && data.qty !== null) {
+            exportQuantity = data.qty;
+          }
+          
+          // Đảm bảo exportQuantity là số
+          if (typeof exportQuantity === 'string') {
+            exportQuantity = parseFloat(exportQuantity) || 0;
+          }
+          
+          totalExported += exportQuantity;
+          
+          outboundRecords.push({
+            id: doc.id,
+            exportQuantity: exportQuantity,
+            exportDate: data.exportDate,
+            location: data.location || 'N/A'
+          });
+          
+          console.log(`🔍 Debug: Outbound record - ID: ${doc.id}, Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${exportQuantity}`);
+        });
+        
+        console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}: ${totalExported} (${outboundRecords.length} records)`);
+        
+        return { totalExported, outboundRecords };
+      } else {
+        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
+        return { totalExported: 0, outboundRecords: [] };
+      }
+    } catch (error) {
+      console.error(`❌ Error getting exported quantity with FIFO for ${materialCode} - PO ${poNumber}:`, error);
+      return { totalExported: 0, outboundRecords: [] };
+    }
+  }
+
+  // 🔧 UPDATE LOGIC ĐƠN GIẢN: Cập nhật số lượng xuất từ Outbound
+  // - Lấy tổng số lượng xuất từ outbound theo Material + PO
+  // - Cập nhật trực tiếp vào inventory
+  async updateExportedFromOutboundFIFO(material: InventoryMaterial): Promise<void> {
+    try {
+      console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
+      
+      // Lấy thông tin outbound
+      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(material.materialCode, material.poNumber);
+      
+      console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
+      
+      // Cập nhật số lượng xuất trực tiếp - CHỈ CẬP NHẬT NẾU TÌM THẤY OUTBOUND RECORDS
+      if (outboundRecords.length > 0) {
+        if (material.exported !== totalExported) {
+          material.exported = totalExported;
+          await this.updateExportedInFirebase(material, totalExported);
+          console.log(`📊 Updated exported quantity: ${material.exported} → ${totalExported}`);
+        } else {
+          console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
+        }
+      } else {
+        // KHÔNG TÌM THẤY OUTBOUND RECORDS - GIỮ NGUYÊN GIÁ TRỊ EXPORTED HIỆN TẠI
+        console.log(`⚠️ No outbound records found - Keeping current exported: ${material.exported}`);
+        console.log(`💡 This prevents overwriting exported quantity to 0 when outbound data is missing`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error updating exported quantity for ${material.materialCode} - PO ${material.poNumber}:`, error);
+    }
+  }
+
+  // Helper method để cập nhật exported quantity vào Firebase
+  private async updateExportedInFirebase(material: InventoryMaterial, exportedQuantity: number): Promise<void> {
+    if (!material.id) return;
+    
+    try {
+      await this.firestore.collection('inventory-materials').doc(material.id).update({
+        exported: exportedQuantity,
+        updatedAt: new Date()
+      });
+      console.log(`💾 Exported quantity saved to Firebase: ${material.materialCode} - PO ${material.poNumber} = ${exportedQuantity}`);
+    } catch (error) {
+      console.error(`❌ Error saving exported quantity to Firebase: ${material.materialCode} - PO ${material.poNumber}:`, error);
+    }
+  }
+
+  // Gộp toàn bộ dòng trùng lặp và lưu vào Firebase
+  async consolidateAllInventory(): Promise<void> {
+    try {
+      // Hiển thị thống kê trước khi gộp
+      const originalCount = this.inventoryMaterials.length;
+      const materialPoMap = new Map<string, InventoryMaterial[]>();
+      
+      this.inventoryMaterials.forEach(material => {
+        const key = `${material.materialCode}_${material.poNumber}`;
+        if (!materialPoMap.has(key)) {
+          materialPoMap.set(key, []);
+        }
+        materialPoMap.get(key)!.push(material);
+      });
+      
+      const duplicateGroups = Array.from(materialPoMap.values()).filter(group => group.length > 1);
+      const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + group.length, 0);
+      
+      if (duplicateGroups.length === 0) {
+        alert('✅ Không có dòng trùng lặp nào để gộp!');
+        return;
+      }
+      
+      // Xác định loại dữ liệu
+      const dataType = this.filteredInventory.length > 0 && this.filteredInventory.length < this.inventoryMaterials.length ? 
+        'kết quả search' : 'toàn bộ inventory';
+      
+      // Hiển thị thông tin chi tiết
+      let details = `📊 THÔNG TIN GỘP DÒNG:\n\n`;
+      details += `• Loại dữ liệu: ${dataType}\n`;
+      details += `• Tổng dòng hiện tại: ${originalCount}\n`;
+      details += `• Số nhóm trùng lặp: ${duplicateGroups.length}\n`;
+      details += `• Tổng dòng sẽ được gộp: ${totalDuplicates - duplicateGroups.length}\n`;
+      details += `• Dòng còn lại sau gộp: ${originalCount - (totalDuplicates - duplicateGroups.length)}\n\n`;
+      
+      details += `📋 CHI TIẾT CÁC NHÓM TRÙNG LẶP:\n`;
+      duplicateGroups.forEach((group, index) => {
+        const material = group[0];
+        details += `${index + 1}. ${material.materialCode} - PO: ${material.poNumber} (${group.length} dòng)\n`;
+      });
+      
+      // Xác nhận gộp
+      const confirmMessage = details + `\n⚠️ CẢNH BÁO: Hành động này sẽ:\n` +
+        `• Gộp tất cả dòng trùng lặp theo Material+PO trong ${dataType}\n` +
+        `• Lưu trực tiếp vào Firebase\n` +
+        `• KHÔNG THỂ HOÀN TÁC\n\n` +
+        `Bạn có muốn tiếp tục không?`;
+      
+      if (!confirm(confirmMessage)) {
+        console.log('❌ User cancelled consolidation');
+        return;
+      }
+      
+      // Xác nhận lần thứ 2
+      const finalConfirm = confirm(`🚨 XÁC NHẬN CUỐI CÙNG:\n\n` +
+        `Bạn có chắc chắn muốn gộp ${totalDuplicates - duplicateGroups.length} dòng trùng lặp ` +
+        `và lưu vào Firebase?\n\n` +
+        `Hành động này KHÔNG THỂ HOÀN TÁC!`);
+      
+      if (!finalConfirm) {
+        console.log('❌ User cancelled final confirmation');
+        return;
+      }
+      
+      console.log(`🚀 Starting consolidation of ${duplicateGroups.length} duplicate groups...`);
+      
+      // Show loading
+      this.isLoading = true;
+      
+      // Thực hiện gộp dòng
+      const consolidatedMaterials: InventoryMaterial[] = [];
+      const materialsToDelete: string[] = [];
+      
+      // Xử lý từng nhóm trùng lặp
+      for (const group of duplicateGroups) {
+        if (group.length === 1) continue; // Bỏ qua nhóm chỉ có 1 item
+        
+        const baseMaterial = { ...group[0] };
+        
+        // Gộp quantities
+        const totalOpeningStock = group.reduce((sum, m) => {
+          const stock = m.openingStock !== null ? m.openingStock : 0;
+          return sum + stock;
+        }, 0);
+        baseMaterial.openingStock = totalOpeningStock > 0 ? totalOpeningStock : null;
+        baseMaterial.quantity = group.reduce((sum, m) => sum + m.quantity, 0);
+        baseMaterial.stock = group.reduce((sum, m) => sum + (m.stock || 0), 0);
+        baseMaterial.exported = group.reduce((sum, m) => sum + (m.exported || 0), 0);
+        baseMaterial.xt = group.reduce((sum, m) => sum + (m.xt || 0), 0);
+        
+        // Gộp location field - gộp tất cả vị trí khác nhau
+        const uniqueLocations = [...new Set(group.map(m => m.location).filter(loc => loc))];
+        baseMaterial.location = uniqueLocations.join('; ');
+        
+        // Gộp type field - gộp tất cả loại hình khác nhau
+        const uniqueTypes = [...new Set(group.map(m => m.type).filter(type => type))];
+        baseMaterial.type = uniqueTypes.join('; ');
+        
+        // Keep earliest import date and latest expiry date
+        baseMaterial.importDate = new Date(Math.min(...group.map(m => m.importDate.getTime())));
+        baseMaterial.expiryDate = new Date(Math.max(...group.map(m => m.expiryDate.getTime())));
+        
+        // Merge other fields
+        baseMaterial.notes = group.map(m => m.notes).filter(n => n).join('; ');
+        baseMaterial.remarks = group.map(m => m.remarks).filter(r => r).join('; ');
+        baseMaterial.supplier = group.map(m => m.supplier).filter(s => s).join('; ');
+        baseMaterial.rollsOrBags = group.map(m => m.rollsOrBags).filter(r => r).join('; ');
+        
+        // Giữ lại ID của item đầu tiên để update
+        if (baseMaterial.id) {
+          // Thêm các item khác vào danh sách xóa
+          for (let i = 1; i < group.length; i++) {
+            if (group[i].id) {
+              materialsToDelete.push(group[i].id);
+            }
+          }
+        }
+        
+        // Cập nhật thời gian
+        baseMaterial.updatedAt = new Date();
+        
+        consolidatedMaterials.push(baseMaterial);
+        console.log(`✅ Consolidated: ${baseMaterial.materialCode} - PO ${baseMaterial.poNumber}`);
+      }
+      
+      // Thêm các item không trùng lặp
+      materialPoMap.forEach((group, key) => {
+        if (group.length === 1) {
+          consolidatedMaterials.push(group[0]);
+        }
+      });
+      
+      // Lưu vào Firebase
+      console.log(`💾 Saving consolidated materials to Firebase...`);
+      
+      // Update các item đã gộp
+      for (const material of consolidatedMaterials) {
+        if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}`)!.length > 1) {
+          await this.firestore.collection('inventory-materials').doc(material.id).update({
+            openingStock: material.openingStock,
+            quantity: material.quantity,
+            stock: material.stock,
+            exported: material.exported,
+            xt: material.xt,
+            location: material.location,
+            type: material.type,
+            importDate: material.importDate,
+            expiryDate: material.expiryDate,
+            notes: material.notes,
+            remarks: material.remarks,
+            supplier: material.supplier,
+            rollsOrBags: material.rollsOrBags,
+            updatedAt: material.updatedAt
+          });
+          console.log(`✅ Updated: ${material.materialCode} - PO ${material.poNumber}`);
+        }
+      }
+      
+      // Xóa các item trùng lặp
+      if (materialsToDelete.length > 0) {
+        console.log(`🗑️ Deleting ${materialsToDelete.length} duplicate items...`);
+        
+        // Xóa theo batch
+        const batchSize = 500;
+        for (let i = 0; i < materialsToDelete.length; i += batchSize) {
+          const batch = this.firestore.firestore.batch();
+          const currentBatch = materialsToDelete.slice(i, i + batchSize);
+          
+          currentBatch.forEach(id => {
+            const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
+            batch.delete(docRef);
+          });
+          
+          await batch.commit();
+          console.log(`✅ Deleted batch ${Math.floor(i/batchSize) + 1}: ${currentBatch.length} items`);
+        }
+      }
+      
+      // Cập nhật local data
+      this.inventoryMaterials = consolidatedMaterials;
+      this.filteredInventory = [...this.inventoryMaterials];
+      
+      const finalCount = this.inventoryMaterials.length;
+      const reducedCount = originalCount - finalCount;
+      
+      console.log(`✅ Consolidation completed: ${originalCount} → ${finalCount} items (reduced by ${reducedCount})`);
+      
+      // Hiển thị thông báo cho user
+      if (reducedCount > 0) {
+        this.consolidationMessage = `✅ Đã gộp ${reducedCount} dòng dữ liệu trùng lặp theo Material+PO. Từ ${originalCount} → ${finalCount} dòng.`;
+        this.showConsolidationMessage = true;
+        
+        // Auto-hide message after 5 seconds
+        setTimeout(() => {
+          this.showConsolidationMessage = false;
+        }, 5000);
+      } else {
+        this.consolidationMessage = 'ℹ️ Không có dữ liệu trùng lặp để gộp.';
+        this.showConsolidationMessage = true;
+        
+        // Auto-hide message after 3 seconds
+        setTimeout(() => {
+          this.showConsolidationMessage = false;
+        }, 3000);
+      }
+      
+      // Mark duplicates after consolidation
+      this.markDuplicates();
+      
+      // Sắp xếp FIFO sau khi gộp dữ liệu
+      this.sortInventoryFIFO();
+      
+    } catch (error) {
+      console.error('❌ Error during consolidation:', error);
+      alert(`❌ Lỗi khi gộp dòng: ${error.message}`);
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   // Import catalog from Excel
@@ -1061,54 +1829,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // Reset zero stock items
-  resetZeroStock(): void {
-    if (!this.canDelete) {
-      alert('❌ Bạn không có quyền thực hiện hành động này');
-        return;
-      }
 
-    const zeroStockItems = this.filteredInventory.filter(item => 
-      this.calculateCurrentStock(item) <= 0
-    );
-
-    if (zeroStockItems.length === 0) {
-      alert('✅ Không có items nào có tồn kho ≤ 0');
-      return;
-    }
-
-    if (confirm(`⚠️ Xác nhận xóa ${zeroStockItems.length} items có tồn kho ≤ 0?\n\nHành động này KHÔNG THỂ HOÀN TÁC!`)) {
-      try {
-        // Delete zero stock items
-        const batch = this.firestore.firestore.batch();
-        zeroStockItems.forEach(item => {
-          if (item.id) {
-            const docRef = this.firestore.collection('inventory-materials').doc(item.id).ref;
-            batch.delete(docRef);
-          }
-        });
-
-        batch.commit().then(() => {
-          // Remove from local arrays
-          this.inventoryMaterials = this.inventoryMaterials.filter(item => 
-            this.calculateCurrentStock(item) > 0
-          );
-          this.filteredInventory = this.filteredInventory.filter(item => 
-            this.calculateCurrentStock(item) > 0
-          );
-          
-          alert(`✅ Đã xóa ${zeroStockItems.length} items có tồn kho ≤ 0`);
-        }).catch(error => {
-          console.error('❌ Error deleting zero stock items:', error);
-          alert(`❌ Lỗi khi xóa items: ${error}`);
-        });
-        
-      } catch (error) {
-        console.error('❌ Error preparing batch delete:', error);
-        alert(`❌ Lỗi khi chuẩn bị xóa: ${error}`);
-      }
-    }
-  }
 
   // Delete single inventory item
   async deleteInventoryItem(material: InventoryMaterial): Promise<void> {
@@ -1144,7 +1865,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     } catch (error) {
         console.error('❌ Error deleting ASM2 inventory item:', error);
         alert(`❌ Lỗi khi xóa item: ${error}`);
+      }
     }
   }
-}
 }
