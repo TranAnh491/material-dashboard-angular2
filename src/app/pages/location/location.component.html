@@ -78,8 +78,24 @@
           <input type="text" 
                  id="newViTri"
                  [(ngModel)]="newItem.viTri" 
+                 (input)="onViTriInputChange($event)"
+                 [class.valid]="newItem.viTri && validateViTriInput(newItem.viTri)"
+                 [class.invalid]="newItem.viTri && !validateViTriInput(newItem.viTri)"
                  class="form-input"
-                 placeholder="VD: A1-01, B2-03">
+                 placeholder="VD: A1-01, B2-03"
+                 maxlength="20"
+                 title="Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)">
+          <div class="validation-message" 
+               [class.error]="newItem.viTri && !validateViTriInput(newItem.viTri)"
+               [class.success]="newItem.viTri && validateViTriInput(newItem.viTri)"
+               *ngIf="newItem.viTri">
+            <span *ngIf="!validateViTriInput(newItem.viTri)">
+              ⚠️ Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)
+            </span>
+            <span *ngIf="validateViTriInput(newItem.viTri)">
+              ✅ Định dạng hợp lệ
+            </span>
+          </div>
         </div>
         
         <div class="form-group">
@@ -134,8 +150,24 @@
               <ng-template #editViTri>
                 <input type="text" 
                        [(ngModel)]="editingItem.viTri" 
+                       (input)="onViTriInputChange($event, true)"
+                       [class.valid]="editingItem.viTri && validateViTriInput(editingItem.viTri)"
+                       [class.invalid]="editingItem.viTri && !validateViTriInput(editingItem.viTri)"
                        class="edit-input"
-                       placeholder="Nhập vị trí">
+                       placeholder="Nhập vị trí"
+                       maxlength="20"
+                       title="Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)">
+                <div class="validation-message" 
+                     [class.error]="editingItem.viTri && !validateViTriInput(editingItem.viTri)"
+                     [class.success]="editingItem.viTri && validateViTriInput(editingItem.viTri)"
+                     *ngIf="editingItem.viTri">
+                  <span *ngIf="!validateViTriInput(editingItem.viTri)">
+                    ⚠️ Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)
+                  </span>
+                  <span *ngIf="validateViTriInput(editingItem.viTri)">
+                    ✅ Định dạng hợp lệ
+                  </span>
+                </div>
               </ng-template>
             </td>
             

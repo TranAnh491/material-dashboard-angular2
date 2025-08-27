@@ -232,7 +232,7 @@
              <th>Số Lượng Thực Tế</th>
              <th>Safety Level</th>
              <th>Tình Trạng</th>
-             <th>Xóa</th>
+             <th>Xóa SL</th>
            </tr>
          </thead>
          <tbody>
@@ -263,9 +263,9 @@
                </span>
              </td>
              <td class="delete-cell">
-               <button class="delete-btn" 
-                       (click)="deleteMaterial(material)"
-                       title="Xóa {{material.materialCode}}">
+                       <button class="delete-btn" 
+                (click)="deleteMaterial(material)" 
+                title="Xóa số lượng thực tế của {{material.materialCode}} (giữ nguyên mã hàng và safety level)">
                  <i class="material-icons">delete</i>
                </button>
              </td>

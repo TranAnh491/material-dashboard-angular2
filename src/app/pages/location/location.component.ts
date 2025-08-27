@@ -205,10 +205,53 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return viTri.toUpperCase();
   }
 
+  // Format and validate viTri input
+  formatViTriInput(input: string): string {
+    if (!input) return '';
+    
+    // Remove all spaces and convert to uppercase
+    let formatted = input.replace(/\s/g, '').toUpperCase();
+    
+    // Only allow letters, numbers, dots, and hyphens
+    formatted = formatted.replace(/[^A-Z0-9.-]/g, '');
+    
+    return formatted;
+  }
+
+  // Validate viTri input
+  validateViTriInput(input: string): boolean {
+    if (!input) return false;
+    
+    // Check if contains only allowed characters
+    const allowedPattern = /^[A-Z0-9.-]+$/;
+    return allowedPattern.test(input);
+  }
+
+  // Handle viTri input change
+  onViTriInputChange(event: any, isEditing: boolean = false) {
+    const input = event.target.value;
+    const formatted = this.formatViTriInput(input);
+    
+    if (isEditing && this.editingItem) {
+      this.editingItem.viTri = formatted;
+    } else {
+      this.newItem.viTri = formatted;
+    }
+    
+    // Update the input value to show formatted result
+    event.target.value = formatted;
+  }
+
   // Add new location item
   addLocationItem() {
     if (!this.newItem.viTri) {
       alert('Vui lòng nhập Vị Trí');
+      return;
+    }
+
+    // Validate viTri format
+    if (!this.validateViTriInput(this.newItem.viTri)) {
+      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
       return;
     }
 
@@ -245,6 +288,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!this.editingItem.viTri) {
       alert('Vui lòng nhập Vị Trí');
+      return;
+    }
+
+    // Validate viTri format
+    if (!this.validateViTriInput(this.editingItem.viTri)) {
+      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
       return;
     }
 

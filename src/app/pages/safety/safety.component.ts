@@ -161,6 +161,18 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
           updatedAt: material.updatedAt ? new Date(material.updatedAt) : new Date()
         }));
         
+        // Sắp xếp theo Factory (ASM1 trước, ASM2 sau) và sau đó theo mã hàng
+        this.safetyMaterials.sort((a, b) => {
+          // Đầu tiên sắp xếp theo Factory: ASM1 trước, ASM2 sau
+          if (a.factory !== b.factory) {
+            if (a.factory === 'ASM1') return -1;
+            if (b.factory === 'ASM1') return 1;
+            return a.factory.localeCompare(b.factory);
+          }
+          // Nếu Factory giống nhau, sắp xếp theo mã hàng
+          return a.materialCode.localeCompare(b.materialCode);
+        });
+        
         this.filteredMaterials = [...this.safetyMaterials];
         this.updateTotalCount();
         this.isLoading = false;
@@ -214,6 +226,16 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
           material.status.toLowerCase().includes(searchLower)
         );
       });
+      
+      // Sắp xếp kết quả tìm kiếm theo thứ tự: Factory (ASM1 trước, ASM2 sau) rồi theo mã hàng
+      this.filteredMaterials.sort((a, b) => {
+        if (a.factory !== b.factory) {
+          if (a.factory === 'ASM1') return -1;
+          if (b.factory === 'ASM1') return 1;
+          return a.factory.localeCompare(b.factory);
+        }
+        return a.materialCode.localeCompare(b.materialCode);
+      });
     }
     this.updateTotalCount();
   }
@@ -221,6 +243,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   clearSearch() {
     this.searchTerm = '';
     this.filteredMaterials = [...this.safetyMaterials];
+    // Đảm bảo thứ tự sắp xếp được giữ nguyên
     this.updateTotalCount();
   }
 
@@ -228,6 +251,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     this.searchType = type;
     this.searchTerm = '';
     this.filteredMaterials = [...this.safetyMaterials];
+    // Thứ tự sắp xếp đã được giữ nguyên từ safetyMaterials
     this.updateTotalCount();
   }
 
@@ -237,7 +261,10 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       this.updateTotalCount();
     } else {
       this.safetyService.getSafetyMaterialsByFactory(this.selectedFactory).subscribe(materials => {
-        this.filteredMaterials = materials;
+        // Sắp xếp materials theo mã hàng khi filter theo factory
+        this.filteredMaterials = materials.sort((a, b) => 
+          a.materialCode.localeCompare(b.materialCode)
+        );
         this.updateTotalCount();
       });
     }
@@ -572,14 +599,20 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     })));
   }
 
-  // Delete material
+  // Delete material - chỉ xóa số lượng thực tế, giữ nguyên mã hàng và safety level
   deleteMaterial(material: SafetyMaterial) {
-    if (confirm(`Bạn có chắc muốn xóa ${material.materialCode}?`)) {
-      this.safetyService.deleteSafetyMaterial(material.id!).then(() => {
-        console.log(`Deleted material: ${material.materialCode}`);
+    if (confirm(`Bạn có chắc muốn xóa số lượng thực tế của ${material.materialCode}? Mã hàng và Safety Level sẽ được giữ nguyên.`)) {
+      // Thay vì xóa hoàn toàn, chỉ reset số lượng thực tế về 0
+      this.safetyService.updateSafetyMaterial(material.id!, {
+        actualQuantity: 0,
+        updatedAt: new Date()
+      }).then(() => {
+        console.log(`✅ Đã xóa số lượng thực tế của ${material.materialCode}, giữ nguyên mã hàng và safety level`);
+        this.showScanFeedback('success', `Đã xóa số lượng thực tế của ${material.materialCode}`);
         this.refreshData();
       }).catch(error => {
-        console.error('Error deleting material:', error);
+        console.error('❌ Lỗi khi xóa số lượng thực tế:', error);
+        this.showScanFeedback('error', 'Lỗi khi xóa số lượng thực tế');
       });
     }
   }
