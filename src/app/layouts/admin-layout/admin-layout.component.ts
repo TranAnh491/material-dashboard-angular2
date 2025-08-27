@@ -180,4 +180,16 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
       return bool;
   }
 
+  // Handle factory changes from navbar
+  onFactoryChanged(factory: string): void {
+    console.log('Factory changed in admin layout:', factory);
+    // Store the factory selection in localStorage
+    localStorage.setItem('selectedFactory', factory);
+    
+    // Broadcast the change to all components
+    window.dispatchEvent(new CustomEvent('factoryChanged', { 
+      detail: { factory: factory } 
+    }));
+  }
+
 }

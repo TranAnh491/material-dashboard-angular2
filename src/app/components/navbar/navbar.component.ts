@@ -1,4 +1,4 @@
-import { Component, OnInit, ElementRef, OnDestroy } from '@angular/core';
+import { Component, OnInit, ElementRef, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { ROUTES } from '../../routes/sidebar-routes';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router } from '@angular/router';
@@ -25,6 +25,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
     public currentUser: User | null = null;
     private userSubscription: Subscription;
     public selectedFactory: string = 'ASM1'; // Default to ASM1
+
+    @Output() factoryChanged = new EventEmitter<string>();
 
     constructor(
       location: Location,  
@@ -216,6 +218,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       // Emit event hoặc lưu vào localStorage để các component khác có thể sử dụng
       localStorage.setItem('selectedFactory', factory);
       console.log('Selected factory:', factory);
+      
+      // Emit event to notify other components
+      this.factoryChanged.emit(factory);
+      
       // Có thể thêm logic để thông báo cho các component khác biết factory đã thay đổi
     }
 

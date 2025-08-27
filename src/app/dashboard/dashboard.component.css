@@ -66,6 +66,44 @@
   background: #fff;
 }
 
+/* Empty cells styling */
+.workorder-status-table td:empty::before {
+  content: "—";
+  color: #ccc;
+  font-style: italic;
+}
+
+.workorder-status-table td:empty {
+  color: #ccc;
+  font-style: italic;
+}
+
+/* Dash character styling */
+.workorder-status-table td:contains('—') {
+  color: #ccc !important;
+  font-style: italic;
+}
+
+.workorder-status-table td {
+  color: #000 !important;
+}
+
+.workorder-status-table td:has-text('—') {
+  color: #ccc !important;
+  font-style: italic;
+}
+
+/* CSS classes for cell styling */
+.workorder-status-table .empty-cell {
+  color: #ccc !important;
+  font-style: italic;
+}
+
+.workorder-status-table .has-value {
+  color: #000 !important;
+  font-weight: 500;
+}
+
 /* 💼 Custom header: Work Order Status */
 .custom-card-header {
   padding: 18px 22px 10px 22px;

@@ -4,7 +4,7 @@
         <div class="sidebar-background"></div>
     </div>
     <div class="main-panel">
-        <app-navbar *ngIf="shouldShowNavbar()"></app-navbar>
+        <app-navbar *ngIf="shouldShowNavbar()" (factoryChanged)="onFactoryChanged($event)"></app-navbar>
         <div class="content-area">
             <router-outlet></router-outlet>
         </div>
