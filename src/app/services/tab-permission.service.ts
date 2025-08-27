@@ -73,6 +73,7 @@ export class TabPermissionService {
       'find': true,
       'layout': true,
       'checklist': true,
+      'safety': true,
       'equipment': true,
       'task': true,
       'settings': true,
@@ -105,7 +106,10 @@ export class TabPermissionService {
       // Inventory tabs
       'materials-asm1': factoryAccess.canAccessASM1 !== false,
       'materials-asm2': factoryAccess.canAccessASM2 !== false,
-      'inventory-overview-asm1': factoryAccess.canAccessASM1 !== false
+      'inventory-overview-asm1': factoryAccess.canAccessASM1 !== false,
+      
+      // Safety tab - cho phép truy cập nếu có quyền truy cập bất kỳ nhà máy nào
+      'safety': factoryAccess.canAccessASM1 !== false || factoryAccess.canAccessASM2 !== false
     };
 
     return { ...basePermissions, ...factoryPermissions };
@@ -196,6 +200,7 @@ export class TabPermissionService {
     { key: 'find', name: 'Find' },
     { key: 'layout', name: 'Layout' },
     { key: 'checklist', name: 'Safety & Quality' },
+    { key: 'safety', name: 'Safety' },
     { key: 'equipment', name: 'Training' },
     { key: 'task', name: 'Flow Work' },
     { key: 'settings', name: 'Settings' }

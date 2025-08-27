@@ -41,6 +41,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/find', title: 'Find', icon: 'search', class: '' },
   { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
+  { path: '/safety', title: 'Safety', icon: 'security', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
   { path: '/settings', title: 'Settings', icon: 'settings', class: '' }
 ]; 

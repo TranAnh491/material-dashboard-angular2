@@ -1,0 +1,310 @@
+<div class="main-content">
+  <!-- Excel-like Container -->
+  <div class="excel-container">
+    <!-- Report Title -->
+    <div class="excel-header">
+      <h4>🛡️ SAFETY INVENTORY</h4>
+      <div class="scan-mode-indicator" *ngIf="isScanMode">
+        <i class="material-icons">qr_code_scanner</i>
+        <span>Đang scan cho {{scanFactory}}</span>
+      </div>
+    </div>
+    
+    <!-- Excel Actions -->
+    <div class="excel-actions">
+      <div class="action-controls-horizontal">
+        <!-- More Button with Dropdown -->
+        <div class="dropdown">
+          <button class="more-btn" (click)="toggleDropdown($event)">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" [class.show]="isDropdownOpen">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+              <i class="material-icons">file_download</i>
+              Export to Excel
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadSampleTemplate()">
+              <i class="material-icons">description</i>
+              Download Template
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importSafetyLevels()">
+              <i class="material-icons">file_upload</i>
+              Import Safety Levels
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
+              <i class="material-icons">add_circle</i>
+              Initialize Sample Data
+            </a>
+          </div>
+        </div>
+        
+        <!-- Total Counter Box -->
+        <div class="total-counter-box">
+          <i class="material-icons">inventory_2</i>
+          <span>Tổng: {{ filteredMaterials.length }} mã</span>
+        </div>
+        
+        <!-- Factory Filter -->
+        <div class="factory-filter">
+          <select [(ngModel)]="selectedFactory" (change)="onFactoryChange()" class="factory-select">
+            <option *ngFor="let factory of availableFactories" [value]="factory">
+              {{ factory }}
+            </option>
+          </select>
+        </div>
+        
+        <!-- Search Type Selector -->
+        <div class="search-type-selector">
+          <div class="dropdown">
+            <button class="search-type-dropdown" 
+                    type="button" 
+                    data-toggle="dropdown" 
+                    aria-haspopup="true" 
+                    aria-expanded="false">
+              <i class="material-icons">{{searchType === 'material' ? 'inventory' : 'factory'}}</i>
+              {{searchType === 'material' ? 'Mã' : 'Factory'}}
+            </button>
+            <div class="dropdown-menu">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                <i class="material-icons">inventory</i>
+                Mã
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('factory')">
+                <i class="material-icons">factory</i>
+                Factory
+              </a>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Search Box -->
+        <div class="search-box">
+          <input type="text"
+                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
+          
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
+          <!-- Search warning -->
+          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+            <i class="material-icons">info</i>
+            Cần ít nhất 3 ký tự
+          </div>
+        </div>
+        
+                 <!-- Action Buttons -->
+         <div class="action-buttons">
+           <!-- Scan Mode Buttons -->
+           <div class="scan-buttons" *ngIf="!isScanMode">
+             <button class="scan-btn scan-asm1" (click)="startScanMode('ASM1')" title="Bắt đầu scan cho ASM1">
+               <i class="material-icons">qr_code_scanner</i>
+               ASM1
+             </button>
+             <button class="scan-btn scan-asm2" (click)="startScanMode('ASM2')" title="Bắt đầu scan cho ASM2">
+               <i class="material-icons">qr_code_scanner</i>
+               ASM2
+             </button>
+           </div>
+           
+           <!-- Stop Scan Button -->
+           <div class="scan-buttons" *ngIf="isScanMode">
+             <button class="stop-scan-btn" (click)="stopScanMode()" title="Dừng chế độ scan">
+               <i class="material-icons">stop</i>
+               Dừng Scan ({{scanFactory}})
+             </button>
+           </div>
+           
+           
+            
+            <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Safety">
+              <i class="material-icons">refresh</i>
+              Refresh
+            </button>
+         </div>
+         
+         <!-- Import Progress Indicator -->
+         <div class="import-progress" *ngIf="isImporting">
+           <div class="progress-bar">
+             <div class="progress-fill" [style.width.%]="importProgress"></div>
+           </div>
+           <span class="progress-text">Đang import: {{importProgress}}%</span>
+         </div>
+        
+        <!-- Scan Status and Test Input -->
+        <div class="scan-status" *ngIf="isScanMode">
+                     <div class="scan-info">
+             <i class="material-icons">qr_code_scanner</i>
+             <span>Đang scan cho <strong>{{scanFactory}}</strong> - Định dạng tem: <code>Rxxxxxx yyyy</code> hoặc <code>Bxxxxxx yyyy</code></span>
+           </div>
+          
+                     <div class="scan-instructions">
+             <p><strong>Hướng dẫn:</strong></p>
+             <ul>
+               <li>Bấm nút <strong>ASM1</strong> hoặc <strong>ASM2</strong> để bắt đầu scan</li>
+               <li>Scan tem có định dạng: <code>RB018694 150</code> hoặc <code>R123456 200</code></li>
+               <li>Trong đó: <code>B018694</code> hoặc <code>R123456</code> là mã hàng (7 ký tự), <code>150</code> hoặc <code>200</code> là số lượng</li>
+               <li>Mã hàng bắt đầu bằng <strong>R</strong> hoặc <strong>B</strong> + 6 số (tổng 7 ký tự)</li>
+               <li>Số lượng sẽ được cộng dồn nếu mã hàng đã tồn tại</li>
+               <li>Cột Safety có thể chỉnh sửa bằng cách click vào dropdown</li>
+             </ul>
+           </div>
+          
+                     <!-- Test input for development -->
+           <div class="test-scan-input">
+             <input type="text" 
+                    placeholder="Nhập tem để test (VD: RB018694 150 hoặc R123456 200)" 
+                    class="test-input"
+                    (keyup.enter)="processScannedData($event.target.value); $event.target.value = ''">
+             <button class="test-scan-btn" 
+                     (click)="testScan()">
+               Test Scan
+             </button>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="loading-container" *ngIf="isLoading">
+      <div class="loading-spinner">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải dữ liệu Safety...</span>
+      </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="table-container" *ngIf="!isLoading">
+             <!-- Table -->
+       <table class="excel-table">
+         <thead>
+           <tr>
+             <th>Factory</th>
+             <th>Ngày Scan</th>
+             <th>Mã hàng</th>
+             <th>Số Lượng Thực Tế</th>
+             <th>Safety</th>
+             <th>Tình Trạng</th>
+             <th>Xóa</th>
+           </tr>
+         </thead>
+         <tbody>
+           <tr *ngFor="let material of filteredMaterials; trackBy: trackByFn; let i = index">
+             <td class="factory-cell factory-{{material.factory.toLowerCase()}}">
+               {{material.factory}}
+             </td>
+             <td class="date-cell">
+               {{formatDate(material.scanDate)}}
+             </td>
+             <td class="code-cell material-code-cell">
+               {{material.materialCode}}
+             </td>
+             <td class="number-cell">
+               {{material.actualQuantity}}
+             </td>
+             <td class="safety-cell">
+               <select class="safety-select" 
+                       [value]="material.safety"
+                       (change)="updateSafety(material, $event.target.value)">
+                 <option *ngFor="let category of safetyCategories" 
+                         [value]="category.value">
+                   {{category.label}}
+                 </option>
+               </select>
+             </td>
+             <td class="status-cell">
+               <span class="badge" [class]="getStatusClass(material)">
+                 {{ getStatusText(material) }}
+               </span>
+             </td>
+             <td class="delete-cell">
+               <button class="delete-btn" 
+                       (click)="deleteMaterial(material)"
+                       title="Xóa {{material.materialCode}}">
+                 <i class="material-icons">delete</i>
+               </button>
+             </td>
+           </tr>
+         </tbody>
+       </table>
+
+      <!-- Empty State - Search First Approach -->
+      <div class="empty-state" *ngIf="!searchTerm && filteredMaterials.length === 0 && !isLoading">
+        <div class="empty-state-content">
+          <i class="material-icons">search</i>
+          <h3>🔍 Tìm kiếm Safety Inventory</h3>
+          <p>Nhập từ khóa để tìm kiếm materials trong Safety inventory</p>
+          
+                     <!-- Search Suggestions -->
+           <div class="search-suggestions">
+             <h5>💡 Gợi ý tìm kiếm:</h5>
+             <div class="suggestion-tags">
+               <span class="suggestion-tag" (click)="searchTerm = 'B018694'; onSearchInput({target: {value: 'B018694'}})">B018694</span>
+               <span class="suggestion-tag" (click)="searchTerm = 'R123456'; onSearchInput({target: {value: 'R123456'}})">R123456</span>
+               <span class="suggestion-tag" (click)="searchTerm = 'ASM1'; onSearchInput({target: {value: 'ASM1'}})">ASM1</span>
+               <span class="suggestion-tag" (click)="searchTerm = 'Safety'; onSearchInput({target: {value: 'Safety'}})">Safety</span>
+             </div>
+           </div>
+          
+          <!-- Quick Stats -->
+          <div class="quick-stats">
+            <div class="stat-item">
+              <i class="material-icons">factory</i>
+              <span>Multi Factory</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">inventory</i>
+              <span>Real-time Search</span>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">speed</i>
+              <span>Fast Loading</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No Search Results -->
+      <div class="no-results" *ngIf="searchTerm && filteredMaterials.length === 0 && !isLoading">
+        <div class="no-results-content">
+          <i class="material-icons">search_off</i>
+          <h4>🔍 Không tìm thấy kết quả</h4>
+          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong Safety inventory</p>
+          
+          <!-- Search Tips -->
+          <div class="search-tips">
+            <h6>💡 Mẹo tìm kiếm:</h6>
+            <ul>
+              <li>Kiểm tra chính tả</li>
+              <li>Thử tìm kiếm với ít ký tự hơn</li>
+              <li>Kiểm tra factory filter</li>
+              <li>Thử tìm kiếm theo material code</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-state" *ngIf="isLoading">
+        <div class="loading-content">
+          <i class="material-icons rotating">sync</i>
+          <h4>🔍 Đang tìm kiếm...</h4>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Safety inventory</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

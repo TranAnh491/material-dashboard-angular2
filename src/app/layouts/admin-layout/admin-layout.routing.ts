@@ -60,6 +60,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },
   { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
+  { path: 'safety',               loadChildren: () => import('../../pages/safety/safety.module').then(m => m.SafetyModule), canActivate: [AuthGuard] },
   { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard] },
   { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard] },
   { path: 'index',                component: IndexComponent, canActivate: [AuthGuard] },
