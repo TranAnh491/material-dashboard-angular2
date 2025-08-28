@@ -23,6 +23,28 @@
       font-weight: 600;
       color: #000000 !important;
       font-family: Arial, sans-serif;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  // Table header styling - Đảm bảo tiêu đề cột không xuống dòng
+  .excel-table {
+    thead {
+      th {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        font-weight: bold !important;
+        font-size: 10px !important;
+        color: #000000 !important;
+        background: #ffffff !important;
+        border: 1px solid #000000 !important;
+        padding: 8px 4px !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+      }
     }
   }
 

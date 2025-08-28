@@ -79,28 +79,28 @@
         
         <!-- Status Indicators -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; margin-right: 0;">
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('IQC')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             🔍 IQC: {{getIQCItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('Late')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ⏰ Late: {{getLateItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('Pass')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ✅ Pass: {{getPassItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('NG')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ❌ NG: {{getNGItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
-            ⏳ Pending: {{getPendingItemsCount()}}
+          <div (click)="filterByStatus('Chờ in')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
+            ⏳ Chờ in: {{getPendingItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('Chờ bản vẽ')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             📐 Chờ bản vẽ: {{getChoBanVeItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="filterByStatus('Chờ Template')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             🎨 Chờ Template: {{getChoTemplateItemsCount()}}
           </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
+          <div (click)="clearStatusFilter()" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             📊 Total: {{getNotDoneItemsCount()}}
           </div>
         </div>
@@ -142,26 +142,26 @@
           <table class="excel-table" style="border: 2px solid #000000;">
             <thead class="sticky-header">
               <tr>
-                <th>Năm</th>
-                <th>Tháng</th>
-                <th>STT</th>
-                <th style="min-width: 120px;">Size Phôi</th>
-                <th style="min-width: 60px;">Gấp</th>
-                <th>Mã tem</th>
-                <th>Số lượng yêu cầu</th>
-                <th>Số lượng phôi</th>
-                <th>Mã Hàng</th>
-                <th>Lệnh sản xuất</th>
-                <th>Khách hàng</th>
-                <th>Ngày nhận kế hoạch</th>
-                <th>YY</th>
-                <th>WW</th>
-                <th>Line nhận</th>
-                <th style="min-width: 100px;">Người in</th>
-                <th style="min-width: 120px;">Tình trạng</th>
-                <th style="min-width: 140px;">Thời gian</th>
-                <th style="min-width: 150px;">Ghi chú</th>
-                <th>Xóa</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Năm</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Tháng</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">STT</th>
+                <th style="min-width: 80px; font-size: 10px; color: #000000; font-weight: bold;">Size Phôi</th>
+                <th style="min-width: 60px; font-size: 10px; color: #000000; font-weight: bold;">Gấp</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã tem</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng Tem</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng phôi</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã Hàng</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lệnh sản xuất</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Khách hàng</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Ngày nhận kế hoạch</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">YY</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">WW</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Line nhận</th>
+                <th style="min-width: 100px; font-size: 10px; color: #000000; font-weight: bold;">Người in</th>
+                <th style="min-width: 120px; font-size: 10px; color: #000000; font-weight: bold;">Tình trạng</th>
+                <th style="min-width: 140px; font-size: 10px; color: #000000; font-weight: bold;">Thời gian</th>
+                <th style="min-width: 150px; font-size: 10px; color: #000000; font-weight: bold;">Ghi chú</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">Xóa</th>
               </tr>
             </thead>
             <tbody>
@@ -226,7 +226,7 @@
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
-                    <option value="Pending">Pending</option>
+                    <option value="Chờ in">Chờ in</option>
                     <option value="Chờ bản vẽ">Chờ bản vẽ</option>
                     <option value="Chờ Template">Chờ Template</option>
                     <option value="Chờ in">Chờ in</option>

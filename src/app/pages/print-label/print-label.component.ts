@@ -26,7 +26,7 @@ interface ScheduleItem {
   ghiChu?: string;
   isUrgent?: boolean; // Đánh dấu gấp
   labelComparison?: {
-    comparisonResult?: 'Pass' | 'Fail' | 'Pending' | 'Completed';
+    comparisonResult?: 'Pass' | 'Fail' | 'Chờ in' | 'Completed';
     comparedAt?: Date;
     matchPercentage?: number;
     mismatchDetails?: string[];
@@ -254,7 +254,7 @@ export class PrintLabelComponent implements OnInit {
           ww: row[12]?.toString() || '',
           lineNhan: row[13]?.toString() || '',
           nguoiIn: row[14]?.toString() || '',
-          tinhTrang: row[15]?.toString() || '',
+          tinhTrang: row[15]?.toString() || 'Chờ in',
             statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
           banVe: row[16]?.toString() || '',
             ghiChu: row[17]?.toString() || '',
@@ -665,10 +665,10 @@ export class PrintLabelComponent implements OnInit {
   createExcelTemplate(): void {
     // Create template data
     const templateData = [
-      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhãn', 'Người in', 'Tình trạng', 'Bản vẽ', 'Ghi chú'],
+      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Lượng Tem', 'Lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhận', 'Người in', 'Tình trạng', 'Bản vẽ', 'Ghi chú'],
       ['2025', '01', '001', '40x20', 'TM001', '1000', '100', 'MH001', 'LSX001', 'ABC Corp', '15/01/2025', '25', '03', 'Line A', 'Tuấn', 'Chờ in', 'Có', 'Sample data'],
-      ['2025', '01', '002', '40x25', 'TM002', '500', '50', 'MH002', 'LSX002', 'XYZ Ltd', '20/01/2025', '25', '04', 'Line B', 'Tình', 'Đã in', 'Có', 'Sample data'],
-      ['2025', '01', '003', '40x20', 'TM003', '2000', '200', 'MH003', 'LSX003', 'DEF Inc', '25/01/2025', '25', '04', 'Line C', 'Hưng', 'Done', 'Chưa có', 'Sample data']
+      ['2025', '01', '002', '40x25', 'TM002', '500', '50', 'MH002', 'LSX002', 'XYZ Ltd', '20/01/2025', '25', '04', 'Line B', 'Tình', 'Chờ in', 'Có', 'Sample data'],
+      ['2025', '01', '003', '40x20', 'TM003', '2000', '200', 'MH003', 'LSX003', 'DEF Inc', '25/01/2025', '25', '04', 'Line C', 'Hưng', 'Chờ in', 'Chưa có', 'Sample data']
     ];
 
     // Create workbook
@@ -755,7 +755,7 @@ export class PrintLabelComponent implements OnInit {
     }
 
     const exportData = [
-      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Số lượng yêu cầu', 'Số lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhãn', 'Người in', 'Tình trạng', 'Bản vẽ', 'Ghi chú'],
+      ['Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã tem', 'Lượng Tem', 'Lượng phôi', 'Mã Hàng', 'Lệnh sản xuất', 'Khách hàng', 'Ngày nhận kế hoạch', 'YY', 'WW', 'Line nhận', 'Người in', 'Tình trạng', 'Bản vẽ', 'Ghi chú'],
       ...monthlyData.map(item => [
         item.nam || '',
         item.thang || '',
@@ -851,7 +851,7 @@ export class PrintLabelComponent implements OnInit {
       ['IQC', this.getIQCItemsCount(), `${((this.getIQCItemsCount() / currentData.length) * 100).toFixed(1)}%`],
       ['Pass', this.getPassItemsCount(), `${((this.getPassItemsCount() / currentData.length) * 100).toFixed(1)}%`],
       ['NG', this.getNGItemsCount(), `${((this.getNGItemsCount() / currentData.length) * 100).toFixed(1)}%`],
-      ['Pending', this.getPendingItemsCount(), `${((this.getPendingItemsCount() / currentData.length) * 100).toFixed(1)}%`],
+      ['Chờ in', this.getPendingItemsCount(), `${((this.getPendingItemsCount() / currentData.length) * 100).toFixed(1)}%`],
       ['Chờ bản vẽ', this.getChoBanVeItemsCount(), `${((this.getChoBanVeItemsCount() / currentData.length) * 100).toFixed(1)}%`],
       ['Chờ Template', this.getChoTemplateItemsCount(), `${((this.getChoTemplateItemsCount() / currentData.length) * 100).toFixed(1)}%`],
       ['Chờ in', currentData.filter(item => item.tinhTrang === 'Chờ in').length, `${((currentData.filter(item => item.tinhTrang === 'Chờ in').length / currentData.length) * 100).toFixed(1)}%`],
@@ -2180,7 +2180,7 @@ export class PrintLabelComponent implements OnInit {
             if (!item.labelComparison) {
               item.labelComparison = {
                 photoUrl: '',
-                comparisonResult: 'Pending',
+                comparisonResult: 'Chờ in',
                 comparedAt: new Date(),
                 matchPercentage: 0,
                 mismatchDetails: [],
@@ -2954,7 +2954,7 @@ export class PrintLabelComponent implements OnInit {
       maHang: item.maHang || '',
       khachHang: item.khachHang || '',
       photoUrl: item.labelComparison.photoUrl || '',
-      comparisonResult: item.labelComparison.comparisonResult || 'Pending',
+              comparisonResult: item.labelComparison.comparisonResult || 'Chờ in',
       matchPercentage: item.labelComparison.matchPercentage || 0,
       comparedAt: item.labelComparison.comparedAt || new Date(),
       mismatchDetails: item.labelComparison.mismatchDetails || [],
@@ -3341,7 +3341,7 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to get Pending items count
   getPendingItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Pending').length;
+    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ in').length;
   }
 
   // Add function to get Chờ bản vẽ items count
@@ -4203,29 +4203,7 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
-  // Add function to get display data based on filter
-  getDisplayScheduleData(): ScheduleItem[] {
-    let displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
-    
-    // Ẩn các dòng có tình trạng "Done" (trừ khi showCompletedItems = true)
-    if (!this.showCompletedItems) {
-      displayData = displayData.filter(item => item.tinhTrang !== 'Done');
-    }
-    
-    // Sort: urgent items first, then by STT
-    displayData.sort((a, b) => {
-      // First priority: urgent items go to the top
-      if (a.isUrgent && !b.isUrgent) return -1;
-      if (!a.isUrgent && b.isUrgent) return 1;
-      
-      // Second priority: by STT (numerical order)
-      const sttA = parseInt(a.stt || '0') || 0;
-      const sttB = parseInt(b.stt || '0') || 0;
-      return sttA - sttB;
-    });
-    
-    return displayData;
-  }
+
 
 
 
@@ -5607,5 +5585,107 @@ Gửi tự động từ hệ thống quản lý tem.
       console.error('❌ Error in auto-handling document size limit:', error);
       // Don't show alert to user, just log the error
     }
+  }
+
+  // Status filter functionality
+  currentStatusFilter: string | null = null;
+
+  // Filter by specific status
+  filterByStatus(status: string): void {
+    console.log(`🔍 Filtering by status: ${status}`);
+    
+    if (this.currentStatusFilter === status) {
+      // If clicking the same status, clear the filter
+      this.clearStatusFilter();
+    } else {
+      // Set new status filter
+      this.currentStatusFilter = status;
+      
+      // Show filter indicator
+      const message = `🔍 Đang lọc: ${status}\n\n📊 Hiển thị ${this.getFilteredDataByStatus(status).length} items có tình trạng "${status}"\n\n💡 Click vào box "Total" để xóa bộ lọc`;
+      alert(message);
+    }
+  }
+
+  // Clear status filter
+  clearStatusFilter(): void {
+    console.log('🔄 Clearing status filter');
+    this.currentStatusFilter = null;
+    alert('🔄 Đã xóa bộ lọc tình trạng\n\n📊 Hiển thị tất cả items');
+  }
+
+  // Get filtered data by status
+  getFilteredDataByStatus(status: string): ScheduleItem[] {
+    if (status === 'Late') {
+      // Special handling for Late items
+      return this.scheduleData.filter(item => {
+        if (item.tinhTrang === 'Done') return false;
+        
+        if (item.ngayNhanKeHoach) {
+          try {
+            let dueDate: Date;
+            
+            if (item.ngayNhanKeHoach && typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+              dueDate = (item.ngayNhanKeHoach as any).toDate();
+            } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach.includes('/')) {
+              const parts = item.ngayNhanKeHoach.split('/');
+              if (parts.length === 3) {
+                const day = parseInt(parts[0]);
+                const month = parseInt(parts[1]) - 1;
+                const year = parseInt(parts[2]);
+                dueDate = new Date(year, month, day);
+              } else {
+                dueDate = new Date(item.ngayNhanKeHoach as any);
+              }
+            } else {
+              dueDate = new Date(item.ngayNhanKeHoach as any);
+            }
+            
+            if (isNaN(dueDate.getTime())) return false;
+            
+            dueDate.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            return dueDate < today;
+          } catch (error) {
+            return false;
+          }
+        }
+        return false;
+      });
+    } else {
+      // Filter by exact status match
+      return this.scheduleData.filter(item => item.tinhTrang === status);
+    }
+  }
+
+  // Override getDisplayScheduleData to include status filtering
+  getDisplayScheduleData(): ScheduleItem[] {
+    let displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
+    
+    // Apply status filter if active
+    if (this.currentStatusFilter) {
+      displayData = this.getFilteredDataByStatus(this.currentStatusFilter);
+    }
+    
+    // Ẩn các dòng có tình trạng "Done" (trừ khi showCompletedItems = true)
+    if (!this.showCompletedItems) {
+      displayData = displayData.filter(item => item.tinhTrang !== 'Done');
+    }
+    
+    // Sort: urgent items first, then by STT
+    displayData.sort((a, b) => {
+      // First priority: urgent items go to the top
+      if (a.isUrgent && !b.isUrgent) return -1;
+      if (!a.isUrgent && b.isUrgent) return 1;
+      
+      // Second priority: by STT (numerical order)
+      const sttA = parseInt(a.stt || '0') || 0;
+      const sttB = parseInt(b.stt || '0') || 0;
+      return sttA - sttB;
+    });
+    
+    return displayData;
   }
 } 
