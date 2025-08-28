@@ -33,6 +33,9 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
 import { MaterialsTestComponent } from '../../pages/materials-test/materials-test.component';
 import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
+import { FgInComponent } from '../../pages/fg-in/fg-in.component';
+import { FgOutComponent } from '../../pages/fg-out/fg-out.component';
+import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
@@ -56,7 +59,9 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard] },
-  { path: 'fg',                   component: TableListComponent, canActivate: [AuthGuard] },
+  { path: 'fg-in',                component: FgInComponent, canActivate: [AuthGuard] },
+  { path: 'fg-out',               component: FgOutComponent, canActivate: [AuthGuard] },
+  { path: 'fg-inventory',         component: FgInventoryComponent, canActivate: [AuthGuard] },
 
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },
   { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },

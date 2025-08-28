@@ -349,7 +349,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       case 'negative':
         return 'Chỉ mã âm';
       case 'linkq-difference':
-        return 'Chỉ mã lệch LinkQ';
+        return 'Chỉ mã lệch LinkQ (≠0)';
       default:
         return 'Tất cả';
     }
@@ -369,11 +369,20 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
 
   // Set group by type
   setGroupByType(type: 'po' | 'material'): void {
+    console.log(`🔄 Changing group by type from ${this.groupByType} to ${type}`);
+    
     this.groupByType = type;
     this.isGroupByDropdownOpen = false;
     this.isMoreActionsDropdownOpen = false; // Close more actions dropdown too
+    
+    // 🔧 SỬA LỖI: Nếu có LinkQ data và chuyển sang group by material, 
+    // cần đảm bảo comparison được tính toán lại
+    if (this.isLinkQDataLoaded && type === 'material') {
+      console.log('🔍 LinkQ data detected, will recalculate comparison for material grouping');
+    }
+    
     this.applyFilters();
-    console.log(`🔄 Changed group by type to: ${type}`);
+    console.log(`✅ Changed group by type to: ${type}`);
   }
 
   // Group data by material code (sum up quantities, clear PO)
@@ -389,13 +398,20 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         existing.exported += item.exported;
         existing.xt += item.xt;
         existing.currentStock += item.currentStock;
+        
+        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho sau khi cộng dồn
+        existing.currentStock = Math.round(existing.currentStock);
         existing.isNegative = existing.currentStock < 0;
         
-        // Update LinkQ data if available
+        // 🔧 SỬA LỖI: Không copy stockDifference và hasDifference từ item cũ
+        // Sẽ tính toán lại dựa trên currentStock mới
         if (item.linkQStock !== undefined) {
           existing.linkQStock = item.linkQStock;
-          existing.stockDifference = item.stockDifference;
-          existing.hasDifference = item.hasDifference;
+          // Tính toán lại stockDifference dựa trên currentStock mới
+          existing.stockDifference = existing.currentStock - existing.linkQStock;
+          // Kiểm tra lại hasDifference
+          const absDifference = Math.abs(existing.stockDifference);
+          existing.hasDifference = absDifference >= 1;
         }
       } else {
         // Create new grouped item
@@ -420,7 +436,47 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       }
     });
     
-    return Array.from(groupedMap.values());
+    // 🔧 SỬA LỖI: Sau khi group, cần tính toán lại tất cả LinkQ comparison
+    const groupedItems = Array.from(groupedMap.values());
+    this.recalculateLinkQComparisonForGroupedItems(groupedItems);
+    
+    return groupedItems;
+  }
+
+  // Recalculate LinkQ comparison for grouped items
+  private recalculateLinkQComparisonForGroupedItems(groupedItems: InventoryOverviewItem[]): void {
+    console.log('🔍 Recalculating LinkQ comparison for grouped items...');
+    
+    let updatedCount = 0;
+    let differenceCount = 0;
+    
+    groupedItems.forEach(item => {
+      if (item.linkQStock !== undefined) {
+        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
+        const roundedCurrentStock = Math.round(item.currentStock);
+        const roundedLinkQStock = Math.round(item.linkQStock);
+        
+        // Tính toán lại stockDifference dựa trên currentStock mới (đã được cộng dồn)
+        item.stockDifference = roundedCurrentStock - roundedLinkQStock;
+        
+        // Kiểm tra lại hasDifference
+        const absDifference = Math.abs(item.stockDifference);
+        item.hasDifference = absDifference >= 1;
+        
+        if (item.hasDifference) {
+          differenceCount++;
+        }
+        
+        updatedCount++;
+        
+        // Log debug cho một số items đầu tiên
+        if (updatedCount <= 5) {
+          console.log(`🔍 Grouped ${item.materialCode}: Current=${item.currentStock}→${roundedCurrentStock}, LinkQ=${item.linkQStock}→${roundedLinkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
+        }
+      }
+    });
+    
+    console.log(`✅ LinkQ comparison recalculated for grouped items: ${updatedCount} items processed, ${differenceCount} items have differences`);
   }
 
   // Apply filters
@@ -446,8 +502,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         break;
       case 'linkq-difference':
         if (this.isLinkQDataLoaded) {
-          filtered = filtered.filter(item => item.hasDifference);
-          console.log(`🔍 LinkQ difference filter: ${filtered.length} items`);
+          // 🔧 ẨN CÁC DÒNG BẰNG 0: Lọc bỏ các dòng có stockDifference = 0
+          filtered = filtered.filter(item => item.hasDifference && item.stockDifference !== 0);
+          console.log(`🔍 LinkQ difference filter (excluding zero differences): ${filtered.length} items`);
         } else {
           console.log('⚠️ LinkQ data not loaded, cannot filter by differences');
         }
@@ -474,6 +531,12 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       const beforeGroup = filtered.length;
       filtered = this.groupByMaterialCode(filtered);
       console.log(`🔍 Material grouping: ${beforeGroup} → ${filtered.length} items`);
+      
+      // 🔧 SỬA LỖI: Sau khi group by material, cần đảm bảo LinkQ comparison được tính toán lại
+      if (this.isLinkQDataLoaded) {
+        console.log('🔍 LinkQ data detected after material grouping, ensuring comparison is up-to-date');
+        // Method groupByMaterialCode đã tự động gọi recalculateLinkQComparisonForGroupedItems
+      }
     }
     // If groupByType === 'po', keep original structure (no grouping needed)
     
@@ -597,8 +660,52 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
 
   // Refresh data
   refreshData(): void {
-    console.log('🔄 Manually refreshing inventory overview data...');
-    this.loadInventoryOverview();
+    console.log('🔄 Manual refresh requested');
+    
+    // If LinkQ data is loaded, ask user if they want to refresh
+    if (this.isLinkQDataLoaded) {
+      const shouldRefresh = confirm(
+        '⚠️ Bạn đang có dữ liệu LinkQ để so sánh.\n\n' +
+        'Nếu refresh, dữ liệu LinkQ sẽ bị mất và bạn cần load lại.\n\n' +
+        'Bạn có chắc muốn refresh không?\n\n' +
+        '• Nhấn OK để refresh (mất dữ liệu LinkQ)\n' +
+        '• Nhấn Cancel để giữ nguyên dữ liệu LinkQ'
+      );
+      
+      if (shouldRefresh) {
+        // Clear LinkQ data and refresh
+        this.clearLinkQData();
+        this.loadInventoryOverview();
+      } else {
+        console.log('⏸️ User cancelled refresh to preserve LinkQ data');
+      }
+    } else {
+      // No LinkQ data, safe to refresh
+      this.loadInventoryOverview();
+    }
+  }
+
+  // Clear LinkQ data
+  private clearLinkQData(): void {
+    console.log('🗑️ Clearing LinkQ data...');
+    this.linkQData.clear();
+    this.isLinkQDataLoaded = false;
+    this.currentLinkQFileId = null;
+    
+    // Clear LinkQ data from all items
+    this.inventoryItems.forEach(item => {
+      item.linkQStock = undefined;
+      item.stockDifference = undefined;
+      item.hasDifference = undefined;
+    });
+    
+    this.filteredItems.forEach(item => {
+      item.linkQStock = undefined;
+      item.stockDifference = undefined;
+      item.hasDifference = undefined;
+    });
+    
+    console.log('✅ LinkQ data cleared');
   }
 
   // 🔧 Force refresh LinkQ data (fix cho dữ liệu bị mất)
@@ -613,8 +720,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       // Load lại dữ liệu LinkQ từ file gần nhất
       this.autoLoadMostRecentLinkQData().then(() => {
-        // Update stock comparison
-        this.updateStockComparison();
+        // Update stock comparison silently to avoid page reload
+        this.updateStockComparisonSilently();
         
         // Apply filters để refresh display
         this.applyFilters();
@@ -626,13 +733,72 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       console.error('❌ Error force refreshing LinkQ data:', error);
     }
   }
+
+  // Refresh LinkQ data without losing current data
+  refreshLinkQDataOnly(): void {
+    try {
+      console.log('🔄 Refreshing LinkQ data only...');
+      
+      if (this.linkQFiles.length === 0) {
+        console.log('⚠️ No LinkQ files available');
+        return;
+      }
+      
+      // Load lại dữ liệu LinkQ từ file gần nhất
+      this.autoLoadMostRecentLinkQData().then(() => {
+        // Update stock comparison silently to avoid page reload
+        this.updateStockComparisonSilently();
+        
+        // Apply filters để refresh display
+        this.applyFilters();
+        
+        console.log('✅ LinkQ data refreshed successfully without losing current data');
+      });
+      
+    } catch (error) {
+      console.error('❌ Error refreshing LinkQ data:', error);
+    }
+  }
+
+  // Recalculate LinkQ comparison for current view (useful when switching between PO and Material views)
+  recalculateLinkQComparison(): void {
+    try {
+      console.log('🔍 Manually recalculating LinkQ comparison...');
+      
+      if (!this.isLinkQDataLoaded) {
+        console.log('⚠️ No LinkQ data loaded, nothing to recalculate');
+        return;
+      }
+      
+      if (this.groupByType === 'material') {
+        // Nếu đang group by material, cần recalculate cho grouped items
+        this.recalculateLinkQComparisonForGroupedItems(this.filteredItems);
+      } else {
+        // Nếu đang group by PO, sử dụng method thông thường
+        this.updateStockComparisonSilently();
+      }
+      
+      // Apply filters để refresh display
+      this.applyFilters();
+      
+      console.log('✅ LinkQ comparison recalculated successfully');
+      
+    } catch (error) {
+      console.error('❌ Error recalculating LinkQ comparison:', error);
+    }
+  }
   
   // Auto refresh data every 30 seconds to keep in sync with RM1 Inventory
   private startAutoRefresh(): void {
     setInterval(() => {
       if (!this.isLoading) {
         console.log('🔄 Auto-refreshing inventory overview data...');
-        this.loadInventoryOverview();
+        // Only auto-refresh if no LinkQ data is loaded to avoid interrupting user work
+        if (!this.isLinkQDataLoaded) {
+          this.loadInventoryOverview();
+        } else {
+          console.log('⏸️ Skipping auto-refresh while LinkQ data is loaded to avoid interrupting user work');
+        }
       }
     }, 30000); // 30 seconds
   }
@@ -660,11 +826,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           // Process LinkQ data
           await this.processLinkQData(data, file.name);
           
-          // Update stock comparison
-          this.updateStockComparison();
+          // Update stock comparison silently to avoid page reload
+          this.updateStockComparisonSilently();
           
           // Show success message
-          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Dữ liệu cũ đã được ghi đè hoàn toàn\n🔍 Hệ thống sẽ so sánh với tồn kho hiện tại`);
+          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Dữ liệu cũ đã được ghi đè hoàn toàn\n🔍 Hệ thống sẽ so sánh với tồn kho hiện tại\n\n📊 Lưu ý: Tất cả số liệu đều được làm tròn thành số chẵn để so sánh chính xác`);
           
         } catch (error) {
           console.error('❌ Error importing LinkQ data:', error);
@@ -922,7 +1088,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
                             '';
         
         // Try multiple possible column names for stock/quantity
-        const stock = parseFloat(row['Tồn kho'] || 
+        let stock = parseFloat(row['Tồn kho'] || 
                                 row['stock'] || 
                                 row['Stock'] || 
                                 row['Số lượng'] || 
@@ -935,6 +1101,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
                                 row['Inventory'] ||
                                 row['Balance'] ||
                                 '0') || 0;
+        
+        // 🔧 LÀM TRÒN SỐ: Làm tròn số từ file LinkQ thành số chẵn
+        stock = Math.round(stock);
         
         if (materialCode && materialCode.toString().trim() !== '') {
           const trimmedCode = materialCode.toString().trim();
@@ -986,8 +1155,12 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       // Kiểm tra nếu có dữ liệu LinkQ
       if (linkQStock !== undefined) {
-        item.linkQStock = linkQStock;
-        item.stockDifference = item.currentStock - linkQStock;
+        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
+        const roundedCurrentStock = Math.round(item.currentStock);
+        const roundedLinkQStock = Math.round(linkQStock);
+        
+        item.linkQStock = roundedLinkQStock;
+        item.stockDifference = roundedCurrentStock - roundedLinkQStock;
         
         // 🔧 SỬA LỖI SO SÁNH: Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
         // Bỏ qua các chênh lệch nhỏ từ -0.99 đến 0.99
@@ -1002,7 +1175,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         
         // Log debug cho một số items đầu tiên
         if (updatedCount <= 5) {
-          console.log(`🔍 ${item.materialCode}: Current=${item.currentStock}, LinkQ=${linkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
+          console.log(`🔍 ${item.materialCode}: Current=${item.currentStock}→${roundedCurrentStock}, LinkQ=${linkQStock}→${roundedLinkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
         }
       } else {
         // Không có dữ liệu LinkQ
@@ -1016,6 +1189,52 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     
     // 🔧 SỬA LỖI: KHÔNG gọi applyFilters() ở đây để tránh mất dữ liệu LinkQ
     // this.applyFilters(); // Commented out to prevent data loss
+  }
+
+  // Update stock comparison silently without triggering page reload
+  private updateStockComparisonSilently(): void {
+    console.log('🔍 Starting silent stock comparison update...');
+    console.log(`📊 LinkQ data size: ${this.linkQData.size}`);
+    
+    let updatedCount = 0;
+    let differenceCount = 0;
+    
+    // Update both inventoryItems and filteredItems to maintain consistency
+    [this.inventoryItems, this.filteredItems].forEach(itemsArray => {
+      itemsArray.forEach(item => {
+        const linkQStock = this.linkQData.get(item.materialCode);
+        
+        // Kiểm tra nếu có dữ liệu LinkQ
+        if (linkQStock !== undefined) {
+          // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
+          const roundedCurrentStock = Math.round(item.currentStock);
+          const roundedLinkQStock = Math.round(linkQStock);
+          
+          item.linkQStock = roundedLinkQStock;
+          item.stockDifference = roundedCurrentStock - roundedLinkQStock;
+          
+          // Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
+          const absDifference = Math.abs(item.stockDifference);
+          item.hasDifference = absDifference >= 1;
+          
+          if (item.hasDifference) {
+            differenceCount++;
+          }
+          
+          updatedCount++;
+        } else {
+          // Không có dữ liệu LinkQ
+          item.linkQStock = undefined;
+          item.stockDifference = undefined;
+          item.hasDifference = undefined;
+        }
+      });
+    });
+    
+    console.log(`✅ Silent stock comparison updated: ${updatedCount} items processed, ${differenceCount} items have differences`);
+    
+    // Force change detection without reloading data
+    this.cdr.detectChanges();
   }
 
   // Get status badge class
@@ -1130,8 +1349,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // Mark as loaded
         this.isLinkQDataLoaded = true;
         
-        // Update stock comparison
-        this.updateStockComparison();
+        // Update stock comparison silently to avoid page reload
+        this.updateStockComparisonSilently();
         
         console.log(`✅ Auto-loaded ${this.linkQData.size} LinkQ items from ${mostRecentFile.fileName}`);
         console.log(`📊 Current file: ${mostRecentFile.fileName} (${mostRecentFile.processedItems} items)`);
@@ -1196,8 +1415,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // Mark as loaded
         this.isLinkQDataLoaded = true;
         
-        // Update stock comparison
-        this.updateStockComparison();
+        // Update stock comparison WITHOUT reloading the page
+        this.updateStockComparisonSilently();
         
         // Show success message
         alert(`✅ Đã load lại dữ liệu LinkQ từ file: ${fileInfo.fileName}\n\n📊 Thông tin file:\n• Tổng items: ${fileInfo.totalItems}\n• Xử lý thành công: ${fileInfo.processedItems}\n• Bỏ qua: ${fileInfo.skippedItems}\n• Ngày upload: ${fileInfo.uploadDate.toLocaleDateString('vi-VN')}\n\n🔄 Đã khôi phục ${this.linkQData.size} mã hàng để so sánh`);

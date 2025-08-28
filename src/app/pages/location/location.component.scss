@@ -11,18 +11,18 @@
 
 .excel-container {
   background: #ffffff;
-  border: 1px solid #d0d0d0;
+  border: 2px solid #000000;
   border-radius: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
 .excel-header {
-  background: #f8f9fa;
+  background: #ffffff;
   color: #000000;
   padding: 15px 20px;
   text-align: center;
-  border-bottom: 1px solid #d0d0d0;
+  border-bottom: 2px solid #000000;
   
   h4 {
     margin: 0;
@@ -34,7 +34,7 @@
 
 .excel-actions {
   padding: 15px 20px;
-  border-bottom: 1px solid #d0d0d0;
+  border-bottom: 2px solid #000000;
   background-color: #ffffff;
 }
 
@@ -50,7 +50,7 @@
   
   .more-btn {
     background: #ffffff;
-    border: 1px solid #d0d0d0;
+    border: 2px solid #000000;
     padding: 6px 12px;
     border-radius: 3px;
     cursor: pointer;
@@ -62,7 +62,7 @@
     
     &:hover {
       background: #f8f9fa;
-      border-color: #a0a0a0;
+      border-color: #000000;
     }
   }
   
@@ -71,7 +71,7 @@
     top: 100%;
     left: 0;
     background: #ffffff;
-    border: 1px solid #d0d0d0;
+    border: 2px solid #000000;
     border-radius: 3px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     min-width: 180px;
@@ -87,7 +87,7 @@
       padding: 8px 12px;
       text-decoration: none;
       color: #000000;
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid #000000;
       font-size: 11px;
       
       &:hover {
@@ -105,15 +105,15 @@
     }
     
     .dropdown-divider {
-      height: 1px;
-      background: #e0e0e0;
+      height: 2px;
+      background: #000000;
       margin: 4px 0;
     }
   }
 }
 
 .total-counter-box {
-  background: #f8f9fa;
+  background: #ffffff;
   color: #000000;
   padding: 6px 12px;
   border-radius: 3px;
@@ -121,7 +121,7 @@
   align-items: center;
   gap: 6px;
   font-weight: normal;
-  border: 1px solid #d0d0d0;
+  border: 2px solid #000000;
   font-size: 11px;
   
   i {
@@ -137,7 +137,7 @@
   .search-input {
     width: 100%;
     padding: 6px 35px 6px 10px;
-    border: 1px solid #d0d0d0;
+    border: 2px solid #000000;
     border-radius: 3px;
     font-size: 11px;
     color: #000000;
@@ -187,7 +187,7 @@
     align-items: center;
     gap: 4px;
     z-index: 1000;
-    border: 1px solid #ffeaa7;
+    border: 2px solid #000000;
   }
 }
 
@@ -199,7 +199,7 @@
   .refresh-btn {
     background: #ffffff;
     color: #000000;
-    border: 1px solid #d0d0d0;
+    border: 2px solid #000000;
     padding: 6px 12px;
     border-radius: 3px;
     cursor: pointer;
@@ -211,7 +211,7 @@
     
     &:hover {
       background: #f8f9fa;
-      border-color: #a0a0a0;
+      border-color: #000000;
     }
   }
 }
@@ -219,8 +219,8 @@
 // Add New Item Form
 .add-item-form {
   padding: 15px 20px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #d0d0d0;
+  background: #ffffff;
+  border-bottom: 2px solid #000000;
   
   h5 {
     margin: 0 0 12px 0;
@@ -249,7 +249,7 @@
     
     .form-input {
       padding: 6px 10px;
-      border: 1px solid #d0d0d0;
+      border: 2px solid #000000;
       border-radius: 3px;
       font-size: 11px;
       color: #000000;
@@ -271,7 +271,7 @@
     .add-btn {
       background: #000000;
       color: #ffffff;
-      border: 1px solid #000000;
+      border: 2px solid #000000;
       padding: 6px 12px;
       border-radius: 3px;
       cursor: pointer;
@@ -325,18 +325,18 @@
   th, td {
     padding: 8px 10px;
     text-align: left;
-    border-bottom: 1px solid #e0e0e0;
-    border-right: 1px solid #f0f0f0;
+    border-bottom: 2px solid #000000;
+    border-right: 2px solid #000000;
   }
   
   th {
-    background: #f8f9fa;
+    background: #ffffff;
     font-weight: 600;
     color: #000000;
     position: sticky;
     top: 0;
     z-index: 10;
-    border-bottom: 2px solid #d0d0d0;
+    border-bottom: 2px solid #000000;
     font-size: 11px;
   }
   
@@ -376,7 +376,7 @@
   
   .qr-btn {
     background: none;
-    border: none;
+    border: 2px solid #000000;
     cursor: pointer;
     padding: 6px 12px;
     border-radius: 4px;
@@ -408,7 +408,7 @@
     font-weight: normal;
     transition: all 0.2s;
     margin: 0 2px;
-    border: 1px solid #d0d0d0;
+    border: 2px solid #000000;
     
     i {
       font-size: 14px;
@@ -421,7 +421,7 @@
     
     &:hover {
       background: #f8f9fa;
-      border-color: #a0a0a0;
+      border-color: #000000;
     }
   }
   
@@ -431,7 +431,7 @@
     
     &:hover {
       background: #f8f9fa;
-      border-color: #a0a0a0;
+      border-color: #000000;
     }
   }
   
@@ -451,7 +451,7 @@
     
     &:hover {
       background: #f8f9fa;
-      border-color: #a0a0a0;
+      border-color: #000000;
     }
   }
 }
@@ -459,7 +459,7 @@
 // Edit Input Styles
 .edit-input {
   padding: 4px 6px;
-  border: 1px solid #000000;
+  border: 2px solid #000000;
   border-radius: 2px;
   font-size: 10px;
   color: #000000;

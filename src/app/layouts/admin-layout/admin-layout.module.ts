@@ -72,6 +72,9 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
 import { IndexComponent } from '../../pages/index/index.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-inventory.component';
+import { FgInComponent } from '../../pages/fg-in/fg-in.component';
+import { FgOutComponent } from '../../pages/fg-out/fg-out.component';
+import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.component';
 
 @NgModule({
   imports: [
@@ -138,7 +141,10 @@ import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-in
     SettingsComponent,
     PrintLabelComponent,
     IndexComponent,
-    ManageInventoryComponent
+    ManageInventoryComponent,
+    FgInComponent,
+    FgOutComponent,
+    FgInventoryComponent
   ],
   providers: [
     GoogleSheetService,

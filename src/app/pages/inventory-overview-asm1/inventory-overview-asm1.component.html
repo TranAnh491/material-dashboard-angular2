@@ -1,8 +1,8 @@
 <div class="inventory-overview-container">
   <!-- Header -->
   <div class="header">
-    <h4><i class="material-icons">inventory</i> RM1 INVENTORY OVERVIEW</h4>
-    <p class="subtitle">Xem toàn bộ tồn kho RM1 - Giao diện Excel</p>
+    <h4>RM1 INVENTORY OVERVIEW</h4>
+    <p class="subtitle">Xem toàn bộ tồn kho RM1</p>
   </div>
 
   <!-- Control Bar -->
@@ -82,6 +82,18 @@
             <i class="material-icons">file_download</i>
             Export Excel
           </a>
+          
+          <!-- Refresh LinkQ Data Only -->
+          <a class="dropdown-item" href="javascript:void(0)" (click)="refreshLinkQDataOnly()" *ngIf="isLinkQDataLoaded">
+            <i class="material-icons">refresh</i>
+            Refresh LinkQ Data
+          </a>
+          
+          <!-- Recalculate LinkQ Comparison -->
+          <a class="dropdown-item" href="javascript:void(0)" (click)="recalculateLinkQComparison()" *ngIf="isLinkQDataLoaded">
+            <i class="material-icons">calculate</i>
+            Recalculate Comparison
+          </a>
         </div>
       </div>
       
@@ -144,6 +156,24 @@
     <div class="summary-item">
       <span class="label">Đang hiển thị:</span>
       <span class="value">{{ filteredItems.length }} mã</span>
+    </div>
+    
+    <!-- Auto-refresh status -->
+    <div class="summary-item" *ngIf="isLinkQDataLoaded" style="color: #666; font-style: italic;">
+      <span class="label">Auto-refresh:</span>
+      <span class="value">Tạm dừng</span>
+    </div>
+    
+    <!-- Comparison status -->
+    <div class="summary-item" *ngIf="isLinkQDataLoaded && groupByType === 'material'" style="color: #ff6b35; font-weight: bold;">
+      <span class="label">⚠️ Comparison:</span>
+      <span class="value">Đã tính toán lại</span>
+    </div>
+    
+    <!-- Rounding info -->
+    <div class="summary-item" *ngIf="isLinkQDataLoaded" style="color: #666; font-style: italic;">
+      <span class="label">📊 Rounding:</span>
+      <span class="value">Số chẵn</span>
     </div>
   </div>
 

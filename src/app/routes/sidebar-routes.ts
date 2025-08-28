@@ -33,7 +33,17 @@ export const ROUTES: RouteInfo[] = [
       { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' }
     ]
   },
-  { path: '/fg', title: 'Finished Goods', icon: 'check_circle_outline', class: ''},
+  { 
+    path: '', 
+    title: 'ASM1 FG', 
+    icon: 'check_circle_outline', 
+    class: 'asm1-fg-parent',
+    children: [
+      { path: '/fg-in', title: 'FG In', icon: 'IB', class: '' },
+      { path: '/fg-out', title: 'FG Out', icon: 'OB', class: '' },
+      { path: '/fg-inventory', title: 'FG Inventory', icon: 'IV', class: '' }
+    ]
+  },
   { path: '/label', title: 'Label', icon: 'label', class: '' },
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
   { path: '/safety', title: 'Safety', icon: 'security', class: '' },

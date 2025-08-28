@@ -32,16 +32,16 @@
               Status hiện tại
             </a>
             <div class="dropdown-divider"></div>
-            <a class="dropdown-item text-info" href="javascript:void(0)" (click)="showDeleteCompletedConfirmDialog(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteCompletedConfirmDialog(); $event.preventDefault()">
               <i class="material-icons">delete_sweep</i>
               Xóa tất cả các mã đã hoàn thành
             </a>
-            <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="showDeleteConfirmDialog(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteConfirmDialog(); $event.preventDefault()">
               <i class="material-icons">cleaning_services</i>
               Xóa dữ liệu
             </a>
 
-            <a class="dropdown-item text-info" href="javascript:void(0)" (click)="resetToLast30Days(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="resetToLast30Days(); $event.preventDefault()">
               <i class="material-icons">restore</i>
               Reset về 30 ngày gần nhất
             </a>
@@ -49,7 +49,7 @@
               <i class="material-icons">filter_list</i>
               Lọc theo tháng
             </a>
-            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="showFreshImportConfirmDialog(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showFreshImportConfirmDialog(); $event.preventDefault()">
               <i class="material-icons">refresh</i>
               Xóa dữ liệu cũ, import lại
             </a>
@@ -79,28 +79,28 @@
         
         <!-- Status Indicators -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; margin-right: 0;">
-          <div style="background: #fce4ec; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #e91e63; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             🔍 IQC: {{getIQCItemsCount()}}
           </div>
-          <div style="background: #ff5722; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: white; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             ⏰ Late: {{getLateItemsCount()}}
           </div>
-          <div style="background: #e8f5e8; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #2e7d32; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             ✅ Pass: {{getPassItemsCount()}}
           </div>
-          <div style="background: #ffebee; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #c62828; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             ❌ NG: {{getNGItemsCount()}}
           </div>
-          <div style="background: #fff8e1; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #f57f17; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             ⏳ Pending: {{getPendingItemsCount()}}
           </div>
-          <div style="background: #e3f2fd; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #1976d2; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             📐 Chờ bản vẽ: {{getChoBanVeItemsCount()}}
           </div>
-          <div style="background: #f3e5f5; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #7b1fa2; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             🎨 Chờ Template: {{getChoTemplateItemsCount()}}
           </div>
-          <div style="background: #fff3e0; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #ef6c00; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
             📊 Total: {{getNotDoneItemsCount()}}
           </div>
         </div>
@@ -129,7 +129,7 @@
         </div>
         <div class="dialog-footer">
           <button class="btn btn-secondary" (click)="closeDeleteDialog()">Hủy</button>
-          <button class="btn btn-danger" (click)="confirmDelete()" [disabled]="!deleteCode || !deletePassword">Xóa</button>
+          <button class="btn" (click)="confirmDelete()" [disabled]="!deleteCode || !deletePassword" style="background: #ffffff; color: #000000; border: 2px solid #000000;">Xóa</button>
         </div>
       </div>
     </div>
@@ -168,7 +168,7 @@
               <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
               <tr *ngIf="showCompletedItems || (!item.isCompleted && item.tinhTrang !== 'Done')"
                   [class.completed-row]="item.isCompleted"
-                  [style.background]="item.isCompleted ? '#e8f5e8' : (i % 2 === 0 ? '#f5f5f5' : 'white')"
+                  [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 2px solid #000000;">
               <td style="border: 1px solid #000000;">{{item.nam || ''}}</td>
@@ -177,13 +177,13 @@
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
-                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn size</option>
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
                   </select>
-                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 13px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000; text-align: center;">
                   <button mat-icon-button color="warning"
@@ -191,9 +191,9 @@
                           matTooltip="Đánh dấu gấp"
                           *ngIf="!item.isUrgent"
                           style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer;">
-                      <mat-icon style="font-size: 24px; width: 24px; height: 24px; color: #ff9800;">priority_high</mat-icon>
+                      <mat-icon style="font-size: 13px; width: 13px; height: 13px; color: #000000;">priority_high</mat-icon>
                   </button>
-                  <span *ngIf="item.isUrgent" style="color: #ff5722; font-size: 17.5px; display: block; text-align: center;">🔥</span>
+                  <span *ngIf="item.isUrgent" style="color: #000000; font-size: 13px; display: block; text-align: center;">🔥</span>
               </td>
               <td style="border: 1px solid #000000;">{{item.maTem || ''}}</td>
               <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
@@ -208,7 +208,7 @@
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
-                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
+                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option value="Tuấn">Tuấn</option>
@@ -220,10 +220,10 @@
                     <option value="Phúc">Phúc</option>
                     <option value="Tú">Tú</option>
                   </select>
-                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 13px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000;">
-                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 10px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Pending">Pending</option>
@@ -236,7 +236,7 @@
                     <option value="Done">Done</option>
                   </select>
               </td>
-              <td style="border: 1px solid #000000; text-align: center; font-size: 11px; color: #666;">
+              <td style="border: 1px solid #000000; text-align: center; font-size: 13px; color: #000000;">
                   <span class="status-time">
                       {{ item.statusUpdateTime | date:'dd/MM/yyyy HH:mm' }}
                   </span>
@@ -250,7 +250,7 @@
                     (blur)="onNoteBlur(item, $event)"
                     (keypress)="onNoteKeyPress($event, item)"
                     (input)="onNoteChange(item)"
-                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 12px; text-align: center; outline: none; transition: all 0.3s ease; color: #000;"
+                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 13px; text-align: center; outline: none; transition: all 0.3s ease; color: #000;"
                     onmouseover="this.style.background='#f0f8ff'" 
                     onmouseout="this.style.background='transparent'" 
                     onfocus="this.style.background='#e6f3ff'" 

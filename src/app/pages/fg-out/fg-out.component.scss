@@ -1,0 +1,44 @@
+.main-content {
+  padding: 20px;
+  
+  .excel-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    
+    .excel-header {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+      
+      h4 {
+        margin: 0;
+        font-weight: 600;
+      }
+    }
+    
+    .content-placeholder {
+      padding: 60px 20px;
+      text-align: center;
+      
+      .placeholder-content {
+        i {
+          font-size: 64px;
+          color: #f093fb;
+          margin-bottom: 20px;
+        }
+        
+        h3 {
+          color: #333;
+          margin-bottom: 10px;
+        }
+        
+        p {
+          color: #666;
+          font-size: 16px;
+        }
+      }
+    }
+  }
+}
