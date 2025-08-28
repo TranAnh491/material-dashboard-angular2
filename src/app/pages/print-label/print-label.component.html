@@ -171,9 +171,9 @@
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 2px solid #000000;">
-              <td style="border: 1px solid #000000;">{{item.nam || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.thang || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.stt || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.stt || ''}}</td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
@@ -183,7 +183,7 @@
                     <option value="40x20">40x20</option>
                     <option value="40x25">40x25</option>
                   </select>
-                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 13px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000; text-align: center;">
                   <button mat-icon-button color="warning"
@@ -193,18 +193,18 @@
                           style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer;">
                       <mat-icon style="font-size: 13px; width: 13px; height: 13px; color: #000000;">priority_high</mat-icon>
                   </button>
-                  <span *ngIf="item.isUrgent" style="color: #000000; font-size: 13px; display: block; text-align: center;">🔥</span>
+                  <span *ngIf="item.isUrgent" style="color: #000000; font-size: 10px; display: block; text-align: center;">🔥</span>
               </td>
-              <td style="border: 1px solid #000000;">{{item.maTem || ''}}</td>
-              <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
-              <td style="border: 1px solid #000000;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
-              <td style="border: 1px solid #000000;">{{item.maHang || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.lenhSanXuat || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.khachHang || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.ngayNhanKeHoach || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.yy || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.ww || ''}}</td>
-              <td style="border: 1px solid #000000;">{{item.lineNhan || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maTem || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maHang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lenhSanXuat || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.khachHang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ngayNhanKeHoach || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.yy || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ww || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lineNhan || ''}}</td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
@@ -220,7 +220,7 @@
                     <option value="Phúc">Phúc</option>
                     <option value="Tú">Tú</option>
                   </select>
-                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 13px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
+                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
@@ -236,7 +236,7 @@
                     <option value="Done">Done</option>
                   </select>
               </td>
-              <td style="border: 1px solid #000000; text-align: center; font-size: 13px; color: #000000;">
+              <td style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000;">
                   <span class="status-time">
                       {{ item.statusUpdateTime | date:'dd/MM/yyyy HH:mm' }}
                   </span>
@@ -250,7 +250,7 @@
                     (blur)="onNoteBlur(item, $event)"
                     (keypress)="onNoteKeyPress($event, item)"
                     (input)="onNoteChange(item)"
-                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 13px; text-align: center; outline: none; transition: all 0.3s ease; color: #000;"
+                    style="width: 100%; padding: 4px 6px; border: none; background: transparent; font-size: 10px; text-align: center; outline: none; transition: all 0.3s ease; color: #000;"
                     onmouseover="this.style.background='#f0f8ff'" 
                     onmouseout="this.style.background='transparent'" 
                     onfocus="this.style.background='#e6f3ff'" 

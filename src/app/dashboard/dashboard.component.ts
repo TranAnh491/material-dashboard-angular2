@@ -304,15 +304,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private createCharts() {
-    // Keep existing chart creation logic
+    // Cập nhật dữ liệu thực tế cho 3 box chart
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    const matAccuracy = [95, 92, 88, 94, 91, 93];
-    const fgAccuracy = [98, 96, 94, 97, 95, 96];
-    const fgTurnover = [12, 15, 18, 14, 16, 13];
+    const matAccuracy = [99.76, 99.86, 99.85, 99.88, 99.9, 99.93];
+    const fgAccuracy = [100, 100, 100, 100, 100, 100];
+    const fgTurnover = [0.8, 0.88, 1.21, 1.33, 1.14, 1.48];
 
-    this.createChart('dailySalesChart', '% Materials Accuracy', months, matAccuracy, '#4caf50');
-    this.createChart('websiteViewsChart', '% Finished Goods Accuracy', months, fgAccuracy, '#ff9800');
-    this.createChart('completedTasksChart', 'Inventory Turnover', months, fgTurnover, '#2196f3');
+    this.createChart('dailySalesChart', 'Materials Accuracy (%)', months, matAccuracy, '#4caf50');
+    this.createChart('websiteViewsChart', 'Finished Goods Accuracy (%)', months, fgAccuracy, '#ff9800');
+    this.createChart('completedTasksChart', 'FGs Inventory Turnover', months, fgTurnover, '#2196f3');
   }
 
   // Method to handle factory selection changes

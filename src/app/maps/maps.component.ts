@@ -1,6 +1,7 @@
 import { Component, OnInit, ViewChild, ElementRef, Renderer2 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
 
 interface ItemDetail {
   location: string;
@@ -31,7 +32,8 @@ export class MapsComponent implements OnInit {
   constructor(
     private http: HttpClient,
     private sanitizer: DomSanitizer,
-    private renderer: Renderer2
+    private renderer: Renderer2,
+    private firestore: AngularFirestore
   ) {}
 
   ngOnInit() {
@@ -40,22 +42,34 @@ export class MapsComponent implements OnInit {
   }
 
   private loadItemLocations() {
-    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzyU7xVxyjixJfOgPCA1smMtVfcLXyKDLPrNz2T6fiLrreHX8CQsArJgQ6LSR5pTviZGA/exec';
-    this.http.get<any[]>(sheetUrl).subscribe(data => {
-      console.log('--- Raw Data From Google Sheet: ---', data);
+    // Lấy dữ liệu từ RM1 inventory collection
+    this.firestore.collection('rm1-inventory').valueChanges().subscribe(data => {
+      console.log('--- Raw Data From RM1 Inventory: ---', data);
       this.itemLocations = this.parseLocationData(data);
       console.log('--- Parsed Item Locations: ---', this.itemLocations);
+      
+      // Log một số ví dụ về vị trí để debug
+      const sampleLocations = Object.entries(this.itemLocations).slice(0, 5);
+      console.log('--- Sample Item Locations (first 5): ---', sampleLocations);
+      
       this.dataLoaded = true;
+    }, error => {
+      console.error('Error loading RM1 inventory data:', error);
+      this.searchMessage = 'Lỗi khi tải dữ liệu từ RM1 inventory.';
     });
   }
 
   private parseLocationData(data: any[]): LocationInfo {
     const locations: LocationInfo = {};
     for (const row of data) {
-      const itemCode = row.code ? String(row.code).trim().toUpperCase() : '';
-      const location = row.location ? String(row.location).trim().toUpperCase() : '';
-      const po = row.name ? String(row.name).trim() : 'N/A';
-      const qty = row.qty !== undefined ? row.qty : 'N/A';
+      // Lấy mã hàng từ RM1 inventory
+      const itemCode = row.itemCode || row.code || row.materialCode ? String(row.itemCode || row.code || row.materialCode).trim().toUpperCase() : '';
+      // Lấy vị trí từ RM1 inventory
+      const location = row.location || row.warehouseLocation || row.storageLocation ? String(row.location || row.warehouseLocation || row.storageLocation).trim().toUpperCase() : '';
+      // Lấy thông tin PO hoặc tên item
+      const po = row.po || row.purchaseOrder || row.itemName || row.description ? String(row.po || row.purchaseOrder || row.itemName || row.description).trim() : 'N/A';
+      // Lấy số lượng
+      const qty = row.quantity || row.qty || row.stockQty !== undefined ? row.quantity || row.qty || row.stockQty : 'N/A';
 
       if (itemCode && location) {
         if (!locations[itemCode]) {
@@ -80,10 +94,12 @@ export class MapsComponent implements OnInit {
     const itemDetails = this.itemLocations[itemCodeInput];
 
     if (itemDetails && itemDetails.length > 0) {
+      console.log(`--- Found ${itemDetails.length} locations for item ${itemCodeInput}: ---`, itemDetails);
       const foundLocations = new Set<string>();
       const notFoundLocations = new Set<string>();
       
       itemDetails.forEach(detail => {
+        console.log(`--- Processing location: '${detail.location}' for item ${itemCodeInput} ---`);
         const success = this.highlightElement(detail.location);
         if (success) {
             foundLocations.add(detail.location);
@@ -94,36 +110,47 @@ export class MapsComponent implements OnInit {
 
       let message = '';
       itemDetails.forEach(detail => {
-        message += `${itemCodeInput}. vị trí <strong>${detail.location}</strong>. PO: ${detail.po}, Qty: ${detail.qty}<br>`;
+        const locationPrefix = detail.location.substring(0, 2).toUpperCase();
+        message += `${itemCodeInput} - Vị trí đầy đủ: <strong>${detail.location}</strong> (Layout: ${locationPrefix}) | Thông tin: ${detail.po} | Số lượng: ${detail.qty}<br>`;
       });
 
       if (notFoundLocations.size > 0) {
-          message += `<br>Không tìm thấy khu vực cho: <strong>${Array.from(notFoundLocations).join(', ')}</strong> trên layout.`;
+          const notFoundPrefixes = Array.from(notFoundLocations).map(loc => loc.substring(0, 2).toUpperCase());
+          message += `<br>Không tìm thấy khu vực cho các prefix: <strong>${notFoundPrefixes.join(', ')}</strong> trên layout.`;
       }
       this.searchMessage = message;
 
     } else {
-      this.searchMessage = `Không tìm thấy thông tin vị trí cho mã hàng: ${itemCodeInput}.`;
+      this.searchMessage = `Không tìm thấy thông tin vị trí cho mã hàng <strong>${itemCodeInput}</strong> trong RM1 inventory.`;
     }
   }
 
   private highlightElement(location: string): boolean {
     const locationLower = location.toLowerCase();
 
-    // Find the map key that is the longest prefix of the given location
+    // Lấy 2 ký tự đầu tiên của vị trí để so sánh với layout
+    const locationPrefix = locationLower.substring(0, 2);
+    console.log(`Original location: '${locationLower}', Using prefix: '${locationPrefix}'`);
+
+    // Tìm key trong map có prefix trùng khớp với 2 ký tự đầu tiên
     let bestMatchKey = '';
     for (const key of this.locToCellIdMap.keys()) {
-        if (locationLower.startsWith(key) && key.length > bestMatchKey.length) {
+        // So sánh 2 ký tự đầu tiên của key với 2 ký tự đầu tiên của location
+        const keyPrefix = key.substring(0, 2).toLowerCase();
+        console.log(`Checking key: '${key}' with prefix: '${keyPrefix}' against location prefix: '${locationPrefix}'`);
+        if (locationPrefix === keyPrefix) {
             bestMatchKey = key;
+            console.log(`Found matching key: '${key}' for location prefix: '${locationPrefix}'`);
+            break; // Tìm thấy key đầu tiên trùng khớp thì dừng
         }
     }
 
     if (!bestMatchKey) {
-        console.error(`...no matching prefix found for loc '${locationLower}'.`);
+        console.error(`...no matching prefix found for location '${locationLower}' with prefix '${locationPrefix}'.`);
         return false;
     }
 
-    console.log(`Searching for svgId: '${bestMatchKey}' in map (derived from '${locationLower}')...`);
+    console.log(`Searching for svgId: '${bestMatchKey}' in map (matched prefix: '${locationPrefix}')...`);
     const cellId = this.locToCellIdMap.get(bestMatchKey);
     if (!cellId) {
       console.error(`...cellId not found for loc '${bestMatchKey}'.`);
@@ -181,6 +208,7 @@ export class MapsComponent implements OnInit {
     });
 
     console.log('--- Built loc to cell ID map (DOM Parsing): ---', this.locToCellIdMap);
+    console.log('--- Available location keys in SVG: ---', Array.from(this.locToCellIdMap.keys()));
   }
 
   private loadSvg() {

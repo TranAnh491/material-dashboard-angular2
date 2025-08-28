@@ -3,12 +3,12 @@
     <div class="search-controls">
       <mat-form-field class="code-search-field">
         <input matInput #searchInput 
-               placeholder="{{ dataLoaded ? 'Enter code' : 'Loading...' }}" 
+               placeholder="{{ dataLoaded ? 'Nhập mã hàng RM1...' : 'Đang tải dữ liệu RM1...' }}" 
                (keyup.enter)="search(searchInput.value)"
                (input)="searchInput.value = searchInput.value.toUpperCase()"
                [disabled]="!dataLoaded">
       </mat-form-field>
-      <button mat-raised-button class="btn btn-info search-button" (click)="search(searchInput.value)" [disabled]="!dataLoaded">Search</button>
+      <button mat-raised-button class="btn btn-info search-button" (click)="search(searchInput.value)" [disabled]="!dataLoaded">Tìm kiếm</button>
     </div>
     <h5 *ngIf="searchMessage" [innerHTML]="searchMessage" class="search-message"></h5>
     
