@@ -372,6 +372,52 @@
       border-color: #a0a0a0;
     }
   }
+  
+  .consolidate-btn {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: normal;
+    
+    &:hover {
+      background: #ffeaa7;
+      border-color: #fdcb6e;
+    }
+    
+    i {
+      color: #f39c12;
+    }
+  }
+  
+  .check-duplicates-btn {
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #bbdefb;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: normal;
+    
+    &:hover {
+      background: #bbdefb;
+      border-color: #90caf9;
+    }
+    
+    i {
+      color: #2196f3;
+    }
+  }
 }
 
 // Import Progress

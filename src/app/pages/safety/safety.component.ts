@@ -351,6 +351,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       if (quantity > 0) {
         const materialCode = prefix + digits; // Full 7-character code
         console.log(`✅ Parsed scan data: ${materialCode} - ${quantity}`);
+        console.log(`📝 Lưu ý: Số lượng sẽ được cộng dồn vào dòng có sẵn nếu mã hàng đã tồn tại`);
         this.addOrUpdateScannedMaterial(materialCode, quantity);
         // Show success feedback
         this.showScanFeedback('success', `Đã scan: ${materialCode} - ${quantity}`);
@@ -401,10 +402,18 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('⚠️ Scan date was null, set to current date:', this.formatDate(this.scanDate));
     }
     
-    // Check if material already exists by materialCode (regardless of scan date)
-    const existingMaterial = this.safetyMaterials.find(
+    // Tìm kiếm material theo materialCode để đảm bảo LUÔN cập nhật dòng có sẵn thay vì tạo mới
+    // Đây là logic chính để giải quyết vấn đề: số lượng scan phải nhảy vào dòng có sẵn
+    let existingMaterial = this.safetyMaterials.find(
       m => m.materialCode === materialCode
     );
+
+    if (existingMaterial) {
+      console.log(`✅ Tìm thấy material có sẵn: ${materialCode} - sẽ cập nhật thay vì tạo mới`);
+      console.log(`📊 Số lượng hiện tại: ASM1=${existingMaterial.quantityASM1}, ASM2=${existingMaterial.quantityASM2}`);
+    } else {
+      console.log(`🆕 Không tìm thấy material: ${materialCode} - sẽ tạo mới`);
+    }
 
     console.log('🔍 Existing material found:', existingMaterial);
     console.log('📅 Current scan date:', this.scanDate);
@@ -419,9 +428,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     })));
 
     if (existingMaterial) {
-      // Update existing material - add quantity to appropriate factory and update scan date
+      // Cập nhật dòng có sẵn - thêm số lượng vào factory tương ứng và cập nhật scan date
       let updateData: Partial<SafetyMaterial> = {
-        scanDate: this.scanDate, // Always update to latest scan date
+        scanDate: this.scanDate, // Luôn cập nhật thành ngày scan mới nhất
         updatedAt: new Date()
       };
       
@@ -429,39 +438,39 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         const newQuantityASM1 = existingMaterial.quantityASM1 + quantity;
         updateData.quantityASM1 = newQuantityASM1;
         updateData.totalQuantity = newQuantityASM1 + existingMaterial.quantityASM2;
-        console.log(`🔄 Updating ASM1 quantity: ${existingMaterial.quantityASM1} + ${quantity} = ${newQuantityASM1}`);
+        console.log(`🔄 Cập nhật số lượng ASM1: ${existingMaterial.quantityASM1} + ${quantity} = ${newQuantityASM1}`);
       } else if (this.scanFactory === 'ASM2') {
         const newQuantityASM2 = existingMaterial.quantityASM2 + quantity;
         updateData.quantityASM2 = newQuantityASM2;
         updateData.totalQuantity = existingMaterial.quantityASM1 + newQuantityASM2;
-        console.log(`🔄 Updating ASM2 quantity: ${existingMaterial.quantityASM2} + ${quantity} = ${newQuantityASM2}`);
+        console.log(`🔄 Cập nhật số lượng ASM2: ${existingMaterial.quantityASM2} + ${quantity} = ${newQuantityASM2}`);
       }
       
       this.safetyService.updateSafetyMaterial(existingMaterial.id!, updateData).then(() => {
-        console.log(`✅ Successfully updated ${materialCode} quantity for ${this.scanFactory} and scan date to ${this.formatDate(this.scanDate)}`);
+        console.log(`✅ Đã cập nhật thành công ${materialCode} số lượng cho ${this.scanFactory} và ngày scan thành ${this.formatDate(this.scanDate)}`);
         this.refreshData();
       }).catch(error => {
-        console.error('❌ Error updating material:', error);
+        console.error('❌ Lỗi khi cập nhật material:', error);
       });
     } else {
-      // Add new material
+      // Chỉ tạo material mới khi thực sự không có material nào với mã hàng này
       const newMaterial: Omit<SafetyMaterial, 'id'> = {
         scanDate: this.scanDate,
         materialCode: materialCode,
         quantityASM1: this.scanFactory === 'ASM1' ? quantity : 0,
         quantityASM2: this.scanFactory === 'ASM2' ? quantity : 0,
         totalQuantity: quantity,
-        safety: 0, // ALWAYS 0 for new scanned materials - no safety level until imported
+        safety: 0, // Luôn là 0 cho material mới scan - không có safety level cho đến khi import
         status: 'Active'
       };
 
-      console.log(`➕ Adding new material:`, newMaterial);
+      console.log(`➕ Tạo material mới:`, newMaterial);
 
       this.safetyService.addSafetyMaterial(newMaterial).then(() => {
-        console.log(`✅ Successfully added new material: ${materialCode} with quantity ${quantity} for ${this.scanFactory}`);
+        console.log(`✅ Đã tạo thành công material mới: ${materialCode} với số lượng ${quantity} cho ${this.scanFactory}`);
         this.refreshData();
       }).catch(error => {
-        console.error('❌ Error adding material:', error);
+        console.error('❌ Lỗi khi tạo material:', error);
       });
     }
   }
@@ -590,6 +599,132 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         console.error('❌ Lỗi khi xóa số lượng thực tế:', error);
         this.showScanFeedback('error', 'Lỗi khi xóa số lượng thực tế');
       });
+    }
+  }
+
+  // Kiểm tra và hiển thị thông tin về các dòng trùng lặp
+  checkDuplicateMaterials() {
+    console.log('🔍 Kiểm tra các dòng trùng lặp...');
+    
+    const materialGroups = new Map<string, SafetyMaterial[]>();
+    
+    // Nhóm các material theo materialCode
+    this.safetyMaterials.forEach(material => {
+      if (!materialGroups.has(material.materialCode)) {
+        materialGroups.set(material.materialCode, []);
+      }
+      materialGroups.get(material.materialCode)!.push(material);
+    });
+    
+    let duplicateCount = 0;
+    let totalDuplicates = 0;
+    
+    materialGroups.forEach((materials, materialCode) => {
+      if (materials.length > 1) {
+        duplicateCount++;
+        totalDuplicates += materials.length - 1;
+        console.log(`⚠️ ${materialCode}: ${materials.length} dòng (${materials.length - 1} dòng trùng lặp)`);
+        
+        materials.forEach((material, index) => {
+          console.log(`  ${index + 1}. ID: ${material.id}, ASM1: ${material.quantityASM1}, ASM2: ${material.quantityASM2}, ScanDate: ${this.formatDate(material.scanDate)}`);
+        });
+      }
+    });
+    
+    if (duplicateCount > 0) {
+      const message = `Tìm thấy ${duplicateCount} mã hàng có ${totalDuplicates} dòng trùng lặp. Sử dụng "Gộp Dòng Trùng" để xử lý.`;
+      this.showScanFeedback('error', message);
+      console.log(`⚠️ ${message}`);
+    } else {
+      this.showScanFeedback('success', 'Không có dòng trùng lặp nào');
+      console.log('✅ Không có dòng trùng lặp nào');
+    }
+  }
+
+  // Gộp các dòng trùng lặp theo materialCode để tránh tạo dòng mới
+  consolidateDuplicateMaterials() {
+    console.log('🔄 Bắt đầu gộp các dòng trùng lặp...');
+    
+    const materialGroups = new Map<string, SafetyMaterial[]>();
+    
+    // Nhóm các material theo materialCode
+    this.safetyMaterials.forEach(material => {
+      if (!materialGroups.has(material.materialCode)) {
+        materialGroups.set(material.materialCode, []);
+      }
+      materialGroups.get(material.materialCode)!.push(material);
+    });
+    
+    let consolidatedCount = 0;
+    
+    // Xử lý từng nhóm
+    materialGroups.forEach((materials, materialCode) => {
+      if (materials.length > 1) {
+        console.log(`🔄 Gộp ${materials.length} dòng cho ${materialCode}`);
+        
+        // Sắp xếp theo ngày tạo để giữ dòng cũ nhất
+        materials.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateA - dateB;
+        });
+        
+        const primaryMaterial = materials[0]; // Dòng chính (cũ nhất)
+        const duplicateMaterials = materials.slice(1); // Các dòng trùng lặp
+        
+        // Tính tổng số lượng từ tất cả các dòng
+        let totalQuantityASM1 = 0;
+        let totalQuantityASM2 = 0;
+        let maxSafety = 0;
+        
+        materials.forEach(material => {
+          totalQuantityASM1 += material.quantityASM1 || 0;
+          totalQuantityASM2 += material.quantityASM2 || 0;
+          if (material.safety && material.safety > maxSafety) {
+            maxSafety = material.safety;
+          }
+        });
+        
+        // Cập nhật dòng chính
+        const updateData: Partial<SafetyMaterial> = {
+          quantityASM1: totalQuantityASM1,
+          quantityASM2: totalQuantityASM2,
+          totalQuantity: totalQuantityASM1 + totalQuantityASM2,
+          safety: maxSafety,
+          scanDate: new Date(), // Cập nhật ngày scan mới nhất
+          updatedAt: new Date()
+        };
+        
+        // Cập nhật dòng chính
+        this.safetyService.updateSafetyMaterial(primaryMaterial.id!, updateData).then(() => {
+          console.log(`✅ Đã cập nhật dòng chính ${materialCode} với tổng số lượng: ASM1=${totalQuantityASM1}, ASM2=${totalQuantityASM2}`);
+          
+          // Xóa các dòng trùng lặp
+          const deletePromises = duplicateMaterials.map(material => 
+            this.safetyService.deleteSafetyMaterial(material.id!)
+          );
+          
+          Promise.all(deletePromises).then(() => {
+            console.log(`🗑️ Đã xóa ${duplicateMaterials.length} dòng trùng lặp cho ${materialCode}`);
+            consolidatedCount++;
+            
+            // Refresh data sau khi gộp xong
+            if (consolidatedCount === materialGroups.size) {
+              this.refreshData();
+              this.showScanFeedback('success', `Đã gộp thành công ${consolidatedCount} nhóm material trùng lặp`);
+            }
+          }).catch(error => {
+            console.error(`❌ Lỗi khi xóa dòng trùng lặp cho ${materialCode}:`, error);
+          });
+        }).catch(error => {
+          console.error(`❌ Lỗi khi cập nhật dòng chính cho ${materialCode}:`, error);
+        });
+      }
+    });
+    
+    if (consolidatedCount === 0) {
+      console.log('✅ Không có dòng trùng lặp nào để gộp');
+      this.showScanFeedback('success', 'Không có dòng trùng lặp nào để gộp');
     }
   }
 
