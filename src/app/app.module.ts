@@ -28,6 +28,7 @@ import { environment } from '../environments/environment';
 
 // Components
 import { LoginComponent } from './pages/login/login.component';
+import { FindRm1Component } from './pages/find-rm1/find-rm1.component';
 
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
@@ -65,6 +66,7 @@ import { LoginComponent } from './pages/login/login.component';
     AppComponent,
     AdminLayoutComponent,
     LoginComponent,
+    FindRm1Component,
     // DocumentsComponent removed from here
   ],
   providers: [],

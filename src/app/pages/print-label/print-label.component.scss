@@ -29,6 +29,8 @@
     }
   }
 
+
+
   // Table header styling - Đảm bảo tiêu đề cột không xuống dòng
   .excel-table {
     thead {
@@ -37,7 +39,7 @@
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         font-weight: bold !important;
-        font-size: 10px !important;
+          font-size: 10px !important;
         color: #000000 !important;
         background: #ffffff !important;
         border: 1px solid #000000 !important;
@@ -360,26 +362,26 @@
     border: 2px solid #000000;
     overflow: hidden;
 
-    .label-zone {
-      width: 60mm;
-      height: 40mm;
+      .label-zone {
+        width: 60mm;
+        height: 40mm;
       border: 2pt solid #000000;
       background: rgba(0,0,0,0.05);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 2mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 2mm;
 
-      .label-text {
-        font-size: 10pt;
-        font-weight: bold;
+        .label-text {
+          font-size: 10pt;
+          font-weight: bold;
         color: #000000;
-        text-align: center;
-        text-transform: uppercase;
-        letter-spacing: 0.5pt;
+          text-align: center;
+          text-transform: uppercase;
+          letter-spacing: 0.5pt;
+        }
       }
     }
-  }
 
   // Responsive adjustments
   @media (max-width: 768px) {
@@ -431,13 +433,13 @@ html .print-label-container,
       color: #000000 !important;
       border-bottom: 2px solid #000000 !important;
       font-size: 13px !important;
-      text-align: center !important;
+  text-align: center !important;
     }
 
     tbody td {
       background: #ffffff !important;
       color: #000000 !important;
-      border: 1px solid #000000 !important;
+  border: 1px solid #000000 !important;
       font-size: 13px !important;
     }
 
@@ -466,5 +468,56 @@ html .print-label-container,
   .excel-table td:nth-child(4),
   .excel-table td:nth-child(5) {
     font-size: 11px !important;
+  }
+
+  // CSS MẠNH NHẤT - Ghi đè tất cả text colors
+  .excel-table,
+  .excel-table *,
+  .excel-table td *,
+  .excel-table th *,
+  .excel-table tr * {
+    color: #000000 !important;
+  }
+
+  // Ghi đè tất cả inline styles
+  .excel-table [style*="color"] {
+    color: #000000 !important;
+  }
+
+  // Ghi đè tất cả CSS classes có màu
+  .excel-table .text-primary,
+  .excel-table .text-secondary,
+  .excel-table .text-success,
+  .excel-table .text-danger,
+  .excel-table .text-warning,
+  .excel-table .text-info,
+  .excel-table .text-light,
+  .excel-table .text-dark {
+    color: #000000 !important;
+  }
+
+  // Ghi đè tất cả form elements trong bảng
+  .excel-table input,
+  .excel-table select,
+  .excel-table textarea,
+  .excel-table button {
+    color: #000000 !important;
+    background: #ffffff !important;
+    border: 1px solid #000000 !important;
+  }
+
+  // Ghi đè tất cả icons trong bảng
+  .excel-table mat-icon,
+  .excel-table i,
+  .excel-table .material-icons {
+    color: #000000 !important;
+  }
+
+  // Ghi đè tất cả status badges trong bảng
+  .excel-table .status-badge,
+  .excel-table .badge {
+    color: #000000 !important;
+    background: #ffffff !important;
+    border: 1px solid #000000 !important;
   }
 }

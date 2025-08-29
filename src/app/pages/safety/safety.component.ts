@@ -401,10 +401,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('⚠️ Scan date was null, set to current date:', this.formatDate(this.scanDate));
     }
     
-    // Check if material already exists for this scan date
+    // Check if material already exists by materialCode (regardless of scan date)
     const existingMaterial = this.safetyMaterials.find(
-      m => m.materialCode === materialCode && 
-           this.isSameDate(m.scanDate, this.scanDate)
+      m => m.materialCode === materialCode
     );
 
     console.log('🔍 Existing material found:', existingMaterial);
@@ -420,8 +419,9 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     })));
 
     if (existingMaterial) {
-      // Update existing material - add quantity to appropriate factory
+      // Update existing material - add quantity to appropriate factory and update scan date
       let updateData: Partial<SafetyMaterial> = {
+        scanDate: this.scanDate, // Always update to latest scan date
         updatedAt: new Date()
       };
       
@@ -438,7 +438,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       
       this.safetyService.updateSafetyMaterial(existingMaterial.id!, updateData).then(() => {
-        console.log(`✅ Successfully updated ${materialCode} quantity for ${this.scanFactory}`);
+        console.log(`✅ Successfully updated ${materialCode} quantity for ${this.scanFactory} and scan date to ${this.formatDate(this.scanDate)}`);
         this.refreshData();
       }).catch(error => {
         console.error('❌ Error updating material:', error);
@@ -527,9 +527,10 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     const safetyValue = safety === null || safety === undefined || safety === '' ? 0 : Number(safety);
     this.safetyService.updateSafetyMaterial(material.id!, {
       safety: safetyValue,
+      scanDate: new Date(), // Cập nhật scanDate thành ngày hiện tại khi nhập tay
       updatedAt: new Date()
     }).then(() => {
-      console.log(`Updated safety for ${material.materialCode}: ${safetyValue}`);
+      console.log(`Updated safety for ${material.materialCode}: ${safetyValue} and scan date to ${this.formatDate(new Date())}`);
       this.refreshData();
     }).catch(error => {
       console.error('Error updating safety:', error);

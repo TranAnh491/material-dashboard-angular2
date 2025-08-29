@@ -45,13 +45,14 @@ export const ROUTES: RouteInfo[] = [
     ]
   },
   { path: '/label', title: 'Label', icon: 'label', class: '' },
+  { path: '/find-rm1', title: 'Find RM1', icon: 'search', class: '' },
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
   { path: '/safety', title: 'Safety', icon: 'security', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 
   { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
-  { path: '/find', title: 'Find', icon: 'search', class: '' },
-  { path: '/layout', title: 'Layout', icon: 'grid_view', class: '' },
+  { path: '/find', title: 'Layout', icon: 'search', class: '' },
+  { path: '/layout', title: '3D Map', icon: '3d_rotation', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
   { path: '/settings', title: 'Settings', icon: 'settings', class: '' }

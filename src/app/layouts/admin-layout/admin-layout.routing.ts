@@ -38,6 +38,7 @@ import { FgOutComponent } from '../../pages/fg-out/fg-out.component';
 import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
+import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
@@ -69,6 +70,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'safety',               loadChildren: () => import('../../pages/safety/safety.module').then(m => m.SafetyModule), canActivate: [AuthGuard] },
   { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard] },
   { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard] },
+  { path: 'find-rm1',            component: FindRm1Component, canActivate: [AuthGuard] },
   { path: 'index',                component: IndexComponent, canActivate: [AuthGuard] },
   { path: 'user-profile',         component: UserProfileComponent, canActivate: [AuthGuard] },
   { path: 'table-list',           component: TableListComponent, canActivate: [AuthGuard] },
