@@ -15,13 +15,21 @@
             More
           </button>
           <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="fileInput.click(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="triggerFileImport()">
               <i class="material-icons">file_upload</i>
               Import Excel
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
               <i class="material-icons">download</i>
               Template
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testTemplateImport(); $event.preventDefault()">
+              <i class="material-icons">bug_report</i>
+              Test Import
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="checkFirebaseDataStatus(); $event.preventDefault()">
+              <i class="material-icons">storage</i>
+              Check Firebase Status
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportExcel(); $event.preventDefault()">
               <i class="material-icons">assessment</i>

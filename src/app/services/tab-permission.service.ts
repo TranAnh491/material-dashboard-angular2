@@ -68,6 +68,7 @@ export class TabPermissionService {
       // Other tabs - luôn cho phép
       'fg': true,
       'label': true,
+      'chart': true,
       'index': true,
       'utilization': true,
       'find': true,
@@ -201,6 +202,7 @@ export class TabPermissionService {
     // Other tabs
     { key: 'fg', name: 'Finished Goods' },
     { key: 'label', name: 'Label' },
+    { key: 'chart', name: 'Chart' },
     { key: 'index', name: 'Bonded Report' },
     { key: 'utilization', name: 'Utilization' },
     { key: 'find', name: 'Find' },

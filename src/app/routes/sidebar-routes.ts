@@ -48,6 +48,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/find-rm1', title: 'Find RM1', icon: 'search', class: '' },
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
   { path: '/safety', title: 'Safety', icon: 'security', class: '' },
+  { path: '/chart', title: 'Chart', icon: 'insert_chart', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 
   { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },

@@ -75,6 +75,7 @@ import { ManageInventoryComponent } from '../../pages/manage-inventory/manage-in
 import { FgInComponent } from '../../pages/fg-in/fg-in.component';
 import { FgOutComponent } from '../../pages/fg-out/fg-out.component';
 import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.component';
+import { ChartComponent } from '../../pages/chart/chart.component';
 
 @NgModule({
   imports: [
@@ -144,7 +145,8 @@ import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.comp
     ManageInventoryComponent,
     FgInComponent,
     FgOutComponent,
-    FgInventoryComponent
+    FgInventoryComponent,
+    ChartComponent
   ],
   providers: [
     GoogleSheetService,

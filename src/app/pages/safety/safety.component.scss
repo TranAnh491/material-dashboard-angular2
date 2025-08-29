@@ -134,22 +134,57 @@
   }
 }
 
-.total-counter-box {
-  background: #f8f9fa;
-  color: #000000;
-  padding: 6px 12px;
-  border-radius: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: normal;
-  border: none;
-  font-size: 11px;
-  
-  i {
-    font-size: 14px;
-  }
-}
+ .total-counter-box {
+   background: #f8f9fa;
+   color: #000000;
+   padding: 6px 12px;
+   border-radius: 0;
+   display: flex;
+   align-items: center;
+   gap: 6px;
+   font-weight: normal;
+   border: none;
+   font-size: 11px;
+   
+   i {
+     font-size: 14px;
+   }
+ }
+ 
+ .total-pallet-box {
+   background: #f8f9fa;
+   color: #000000;
+   padding: 6px 12px;
+   border-radius: 0;
+   display: flex;
+   align-items: center;
+   gap: 6px;
+   font-weight: normal;
+   border: none;
+   font-size: 11px;
+   
+   i {
+     font-size: 14px;
+   }
+   
+   &.total-pallet-asm1 {
+     background: #e3f2fd;
+     color: #1565c0;
+     
+     i {
+       color: #2196f3;
+     }
+   }
+   
+   &.total-pallet-asm2 {
+     background: #f3e5f5;
+     color: #7b1fa2;
+     
+     i {
+       color: #9c27b0;
+     }
+   }
+ }
 
 .factory-filter {
   .factory-select {
@@ -411,6 +446,28 @@
     
     i {
       color: #2196f3;
+    }
+  }
+  
+  .reset-btn {
+    background: #ffebee;
+    color: #c62828;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: normal;
+    
+    &:hover {
+      background: #ffcdd2;
+    }
+    
+    i {
+      color: #d32f2f;
     }
   }
 }
@@ -813,48 +870,48 @@
   }
 }
 
-.status-cell {
-  text-align: center;
-  
-  .badge {
-    padding: 3px 6px;
-    border-radius: 0;
-    font-size: 10px;
-    font-weight: normal;
-    text-transform: none;
-    border: 1px solid #000000;
-    
-    &.status-overstock {
-      background-color: #ffffff;
-      color: #000000;
-      border-color: #000000;
-    }
-    
-    &.status-high {
-      background-color: #f8f9fa;
-      color: #000000;
-      border-color: #000000;
-    }
-    
-    &.status-medium {
-      background-color: #f8f9fa;
-      color: #000000;
-      border-color: #000000;
-    }
-    
-    &.status-low {
-      background-color: #f8f9fa;
-      color: #000000;
-      border-color: #000000;
-    }
-    
-    &.status-critical {
-      background-color: #f8f9fa;
-      color: #000000;
-      border-color: #000000;
-    }
-  }
-}
+ .status-cell {
+   text-align: center;
+   
+   .status-icon {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     width: 40px;
+     height: 40px;
+     border-radius: 50%;
+     font-size: 10px;
+     font-weight: 600;
+     color: #ffffff;
+     border: 2px solid #000000;
+     
+     .status-percentage {
+       font-size: 9px;
+       line-height: 1;
+       text-align: center;
+     }
+     
+     &.status-critical {
+       background-color: #dc3545; // Đỏ - dưới 50%
+     }
+     
+     &.status-low {
+       background-color: #fd7e14; // Cam - 51% đến 100%
+     }
+     
+     &.status-medium {
+       background-color: #fd7e14; // Cam - 51% đến 100%
+     }
+     
+     &.status-high {
+       background-color: #28a745; // Xanh - 101% đến 200%
+     }
+     
+     &.status-overstock {
+       background-color: #6f42c1; // Tím - từ 201% trở lên
+     }
+   }
+ }
 
 .empty-state, .no-results, .loading-state {
   padding: 40px 20px;

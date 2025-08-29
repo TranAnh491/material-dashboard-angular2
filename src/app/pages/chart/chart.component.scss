@@ -1,0 +1,447 @@
+// Chart component styles - Modern professional design
+:root {
+  // Color variables for easy theming
+  --c-red: #FEE2E2;
+  --b-red: #EF4444;
+  --c-yellow: #FEF3C7;
+  --b-yellow: #F59E0B;
+  --c-green: #DCFCE7;
+  --b-green: #10B981;
+  --c-gray: #F3F4F6;
+  --b-gray: #9CA3AF;
+  
+  // Dark mode colors
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1f2937;
+    --bg-secondary: #111827;
+    --text-primary: #f9fafb;
+    --text-secondary: #d1d5db;
+    --border-color: #374151;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+  }
+}
+
+.main-content {
+  padding: 20px;
+  background-color: var(--bg-primary);
+  min-height: 100vh;
+  font-size: 14px;
+  font-weight: normal;
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.chart-container {
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px var(--shadow-color);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    box-shadow: 0 8px 30px var(--shadow-color);
+  }
+}
+
+.chart-header {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 16px 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  
+  h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    
+    i {
+      font-size: 18px;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+.safety-stock-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+ .safety-stock-box {
+   padding: 12px 16px; // Reduced padding like Work Order box
+   border: 1px solid var(--border-color);
+   border-radius: 12px; // Reduced border-radius like Work Order
+   max-width: 400px; // Fixed width like Work Order box
+   background: #ffffff; // White background
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); // Similar shadow
+   transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px var(--shadow-color);
+  }
+  
+  .box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+    
+    h5 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      i {
+        font-size: 18px;
+        color: var(--text-secondary);
+      }
+    }
+    
+    .refresh-btn {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 8px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        background: var(--text-primary);
+        color: var(--bg-primary);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+      }
+      
+      &:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+      }
+      
+      i {
+        font-size: 16px;
+      }
+    }
+  }
+}
+
+.weekdays-container {
+  margin-bottom: 20px;
+  
+           .weekdays-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
+      gap: 6px;
+      justify-content: center;
+      max-width: 350px;
+      margin: 0 auto;
+    
+                   .weekday-item {
+        width: 100%;
+        height: 80px; // Reduced height like Work Order box
+        padding: 6px 8px; // Reduced padding
+        border: 2px solid #9CA3AF; // Default gray border
+        border-radius: 8px; // Reduced border-radius
+        text-align: center;
+        background: #ffffff;
+        position: relative;
+        overflow: hidden;
+        color: #374151;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        transition: all 0.3s ease;
+        margin: 2px; // Reduced margin
+       
+       // No hover effect - flat design
+       // &:hover {
+       //   transform: translateY(-2px);
+       //   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+       // }
+       
+       // Status indicator ribbon - removed
+       // &::before {
+       //   content: '';
+       //   position: absolute;
+       //   top: 0;
+       //   left: 0;
+       //   right: 0;
+       //   height: 4px;
+       //   background: #000000;
+       //   opacity: 0.6;
+       //   transition: opacity 0.3s ease;
+       // }
+      
+             // Today marker - removed black dot
+       &::after {
+         content: '';
+         position: absolute;
+         top: 8px;
+         right: 8px;
+         width: 8px;
+         height: 8px;
+         border-radius: 50%;
+         background: #000000;
+         opacity: 0;
+         transition: opacity 0.3s ease;
+         display: none; // Hide the black dot
+       }
+      
+      
+      
+                           // Status states with modern color scheme
+        &.late {
+          background: #FEE2E2; // Light red background
+          border-color: #EF4444; // Red border
+          color: #B91C1C; // Dark red text
+        }
+        
+        &.inventory {
+          background: #FEF3C7; // Light yellow background
+          border-color: #F59E0B; // Yellow border
+          color: #92400E; // Dark yellow text
+        }
+        
+        &.regular {
+          background: #ffffff; // White background
+          border-color: #e0e0e0; // Light gray border
+          color: #424242; // Dark gray text
+        }
+        
+        &.scan-day {
+          background: #e0f2fe; // Light blue background
+          border-color: #0284c7; // Light blue border
+          color: #0369a1; // Light blue text
+        }
+        
+        &.unknown {
+          background: #F3F4F6; // Light gray background
+          border-color: #9CA3AF; // Gray border
+          color: #374151; // Dark gray text
+        }
+      
+      // Today state
+      &.today {
+        border-width: 3px;
+        
+        &::after {
+          opacity: 1;
+        }
+      }
+      
+                          .weekday-name {
+          font-size: 10px; // Reduced for smaller box
+          font-weight: 500;
+          margin-bottom: 4px; // Reduced margin
+          color: #6B7280; // Medium gray
+          text-transform: uppercase;
+          letter-spacing: 0.2px;
+          font-family: "Inter", "Roboto", sans-serif;
+          height: 16px; // Reduced height
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .weekday-day {
+          font-size: 18px; // Reduced for smaller box
+          font-weight: 700;
+          line-height: 1.3;
+          margin-bottom: 2px; // Reduced margin
+          color: #111827; // Near black
+          font-family: "Inter", "Roboto", sans-serif;
+          height: 22px; // Reduced height
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .weekday-month {
+          font-size: 12px; // Reduced for smaller box
+          color: #374151; // Dark gray
+          font-family: "Inter", "Roboto", sans-serif;
+          height: 16px; // Reduced height
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+       
+                .weekday-flag {
+          position: absolute;
+          top: 8px;
+          left: 50%;
+          transform: translateX(-50%);
+          
+          i {
+            font-size: 18px; // Smaller flag icon to fit with weekday name
+            color: #B91C1C; // Dark red color
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+          }
+        }
+        
+                 // Ensure day and month alignment for flag days
+         &.late {
+           .weekday-day,
+           .weekday-month {
+             position: relative;
+             top: 0; // Reset any positioning
+           }
+           
+           // Ensure flag doesn't affect layout
+           .weekday-flag {
+             position: absolute;
+             top: 8px;
+             left: 50%;
+             transform: translateX(-50%);
+             z-index: 1;
+           }
+         }
+    }
+  }
+}
+
+
+
+.chart-content-placeholder {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-primary);
+  
+  .placeholder-content {
+    max-width: 400px;
+    margin: 0 auto;
+    
+    i {
+      font-size: 48px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      opacity: 0.6;
+    }
+    
+    h6 {
+      margin: 0 0 12px 0;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    p {
+      margin: 0;
+      line-height: 1.4;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+// Responsive adjustments for new grid layout
+ @media (max-width: 768px) {
+   .weekdays-container .weekdays-row {
+     grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+     gap: 4px;
+     max-width: 300px;
+   }
+
+  .safety-stock-box .box-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .safety-stock-box {
+    padding: 12px 16px;
+  }
+
+  .weekday-item {
+    height: 100px;
+    padding: 6px 10px;
+    
+    .weekday-name {
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    
+    .weekday-day {
+      font-size: 18px;
+      margin-bottom: 3px;
+    }
+    
+    .weekday-month {
+      font-size: 12px;
+    }
+    
+    .weekday-flag i {
+      font-size: 20px;
+    }
+  }
+}
+
+ @media (max-width: 480px) {
+   .weekdays-container .weekdays-row {
+     grid-template-columns: repeat(auto-fit, minmax(35px, 1fr));
+     gap: 3px;
+     max-width: 250px;
+   }
+
+  .weekday-item {
+    height: 90px;
+    padding: 4px 8px;
+    
+    .weekday-name {
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+    
+    .weekday-day {
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    
+    .weekday-month {
+      font-size: 10px;
+    }
+    
+    .weekday-flag i {
+      font-size: 18px;
+    }
+  }
+
+  .main-content {
+    padding: 12px;
+  }
+
+  .chart-container {
+    border-radius: 12px;
+  }
+}

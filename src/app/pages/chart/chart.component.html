@@ -1,0 +1,50 @@
+<div class="main-content">
+  <div class="chart-container">
+         <!-- Chart Header -->
+     <div class="chart-header">
+       <h4>
+         <i class="material-icons">insert_chart</i>
+         Chart Dashboard
+       </h4>
+     </div>
+     
+     <!-- Safety Stock Level Box -->
+     <div class="safety-stock-container">
+       <div class="safety-stock-box">
+         <div class="box-header">
+           <h5>
+             <i class="material-icons" style="color: #3b82f6;">security</i>
+             Safety Stock Level
+           </h5>
+           <button class="refresh-btn" 
+                   (click)="refreshData()" 
+                   aria-label="Làm mới dữ liệu"
+                   title="Làm mới dữ liệu">
+             <i class="material-icons">refresh</i>
+           </button>
+         </div>
+         
+         <div class="weekdays-container">
+           <div class="weekdays-row">
+             <div *ngFor="let weekday of weekdays; let i = index" 
+                  [class]="getWeekdayClass(weekday)"
+                  class="weekday-item">
+               <div class="weekday-name">{{ weekday.name }}</div>
+               <div class="weekday-day">{{ getDayOfMonth(weekday.date) }}</div>
+               <div class="weekday-month">{{ getMonth(weekday.date) }}</div>
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>
+    
+    <!-- Additional Chart Content Placeholder -->
+    <div class="chart-content-placeholder">
+      <div class="placeholder-content">
+        <i class="material-icons">insert_chart</i>
+        <h6>Chart Dashboard</h6>
+        <p>Tab này hiển thị các biểu đồ và thống kê từ dữ liệu Safety</p>
+      </div>
+    </div>
+  </div>
+</div>

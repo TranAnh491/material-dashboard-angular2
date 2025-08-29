@@ -75,10 +75,20 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   isImporting = false;
   importProgress = 0;
 
-  // Format number with thousands separator
-  formatNumberWithCommas(value: number): string {
-    return value.toLocaleString('en-US');
-  }
+     // Format number with thousands separator
+   formatNumberWithCommas(value: number): string {
+     return value.toLocaleString('en-US');
+   }
+   
+   // Get total pallet count for ASM1
+   getTotalPalletASM1(): number {
+     return this.filteredMaterials.reduce((total, material) => total + material.palletCountASM1, 0);
+   }
+   
+   // Get total pallet count for ASM2
+   getTotalPalletASM2(): number {
+     return this.filteredMaterials.reduce((total, material) => total + material.palletCountASM2, 0);
+   }
 
   constructor(
     private firestore: AngularFirestore,
@@ -1013,27 +1023,25 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
     return Math.round((material.totalQuantity / material.safety) * 100);
   }
 
-  // Get status class based on percentage
-  getStatusClass(material: SafetyMaterial): string {
-    const percentage = this.getStatusPercentage(material);
-    
-    if (percentage >= 100) return 'status-overstock'; // Overstock
-    if (percentage >= 80) return 'status-high'; // High stock
-    if (percentage >= 50) return 'status-medium'; // Medium stock
-    if (percentage >= 20) return 'status-low'; // Low stock
-    return 'status-critical'; // Critical stock
-  }
-
-  // Get status text based on percentage
-  getStatusText(material: SafetyMaterial): string {
-    const percentage = this.getStatusPercentage(material);
-    
-    if (percentage >= 100) return `${percentage}% (Dư thừa)`;
-    if (percentage >= 80) return `${percentage}% (Cao)`;
-    if (percentage >= 50) return `${percentage}% (Trung bình)`;
-    if (percentage >= 20) return `${percentage}% (Thấp)`;
-    return `${percentage}% (Thiếu hụt)`;
-  }
+     // Get status class based on percentage
+   getStatusClass(material: SafetyMaterial): string {
+     const percentage = this.getStatusPercentage(material);
+     
+     if (percentage >= 201) return 'status-overstock'; // Tím - từ 201% trở lên
+     if (percentage >= 101) return 'status-high'; // Xanh - 101% đến 200%
+     if (percentage >= 51) return 'status-medium'; // Cam - 51% đến 100%
+     return 'status-critical'; // Đỏ - dưới 50%
+   }
+   
+   // Get status text based on percentage (giữ lại để tương thích)
+   getStatusText(material: SafetyMaterial): string {
+     const percentage = this.getStatusPercentage(material);
+     
+     if (percentage >= 201) return `${percentage}% (Dư thừa)`;
+     if (percentage >= 101) return `${percentage}% (Cao)`;
+     if (percentage >= 51) return `${percentage}% (Trung bình)`;
+     return `${percentage}% (Thiếu hụt)`;
+   }
 
   trackByFn(index: number, item: SafetyMaterial): string {
     return item.id || index.toString();
@@ -1092,6 +1100,36 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       }).catch(error => {
         console.error('❌ Lỗi khi migrate dữ liệu:', error);
         this.showScanFeedback('error', 'Lỗi khi migrate dữ liệu: ' + error.message);
+      }).finally(() => {
+        this.isLoading = false;
+      });
+    }
+  }
+
+  // Reset quantities ASM1 and ASM2 to 0 for all materials
+  resetQuantities() {
+    if (confirm('Bạn có chắc muốn reset lượng ASM1 và ASM2 về 0 cho tất cả materials? Điều này sẽ xóa tất cả số lượng đã scan hoặc nhập vào.')) {
+      this.isLoading = true;
+      
+      const updatePromises = this.safetyMaterials.map(material => 
+        this.safetyService.updateSafetyMaterial(material.id!, {
+          quantityASM1: 0,
+          quantityASM2: 0,
+          totalQuantity: 0,
+          palletCountASM1: 0,
+          palletCountASM2: 0,
+          totalPalletCount: 0,
+          updatedAt: new Date()
+        })
+      );
+      
+      Promise.all(updatePromises).then(() => {
+        console.log('✅ Đã reset tất cả lượng ASM1 và ASM2 về 0');
+        this.showScanFeedback('success', 'Đã reset tất cả lượng ASM1 và ASM2 về 0');
+        this.refreshData();
+      }).catch(error => {
+        console.error('❌ Lỗi khi reset lượng:', error);
+        this.showScanFeedback('error', 'Lỗi khi reset lượng: ' + error.message);
       }).finally(() => {
         this.isLoading = false;
       });

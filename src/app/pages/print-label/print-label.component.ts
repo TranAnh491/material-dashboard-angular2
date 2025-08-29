@@ -184,6 +184,102 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Print Schedules Functions
+  triggerFileImport(): void {
+    // Trigger the hidden file input
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  }
+
+  // Test method to debug template import
+  testTemplateImport(): void {
+    console.log('🧪 Testing template import...');
+    console.log('🧪 Current scheduleData length:', this.scheduleData ? this.scheduleData.length : 0);
+    console.log('🧪 Sample data:', this.scheduleData ? this.scheduleData[0] : 'No data');
+    
+    // Test with sample data
+    const testData = [
+      ['2025', '01', '001', '40x20', 'TM001', '1000', '100', 'MH001', 'LSX001', 'ABC Corp', '15/01/2025', '25', '03', 'Line A', 'Tuấn', 'Chờ in', 'Có', 'Sample data'],
+      ['2025', '01', '002', '40x25', 'TM002', '500', '50', 'MH002', 'LSX002', 'XYZ Ltd', '20/01/2025', '25', '04', 'Line B', 'Tình', 'Chờ in', 'Có', 'Sample data']
+    ];
+    
+    console.log('🧪 Test data:', testData);
+    
+    // Simulate processing
+    const processedData = testData.map((row: any, index: number) => {
+      const soLuongYeuCau = this.processQuantityField(row[5], 'Số lượng yêu cầu');
+      const soLuongPhoi = this.processQuantityField(row[6], 'Số lượng phôi');
+      
+      return {
+        nam: row[0]?.toString() || '',
+        thang: row[1]?.toString() || '',
+        stt: row[2]?.toString() || '',
+        sizePhoi: row[3]?.toString() || '',
+        maTem: row[4]?.toString() || '',
+        soLuongYeuCau: soLuongYeuCau,
+        soLuongPhoi: soLuongPhoi,
+        maHang: row[7]?.toString() || '',
+        lenhSanXuat: row[8]?.toString() || '',
+        khachHang: row[9]?.toString() || '',
+        ngayNhanKeHoach: this.formatDateValue(row[10]) || '',
+        yy: row[11]?.toString() || '',
+        ww: row[12]?.toString() || '',
+        lineNhan: row[13]?.toString() || '',
+        nguoiIn: row[14]?.toString() || '',
+        tinhTrang: row[15]?.toString() || 'Chờ in',
+        statusUpdateTime: new Date(),
+        banVe: row[16]?.toString() || '',
+        ghiChu: row[17]?.toString() || '',
+        isUrgent: false
+      };
+    });
+    
+    console.log('🧪 Processed test data:', processedData);
+    alert('🧪 Test completed! Check console for details.');
+  }
+
+  // Method to check Firebase data status
+  checkFirebaseDataStatus(): void {
+    console.log('🔍 Checking Firebase data status...');
+    
+    this.firestore.collection('printSchedules').get().toPromise()
+      .then((snapshot: any) => {
+        if (snapshot && !snapshot.empty) {
+          console.log(`📊 Firebase contains ${snapshot.docs.length} documents`);
+          
+          let totalItems = 0;
+          let totalDataFields = 0;
+          
+          snapshot.docs.forEach((doc: any, index: number) => {
+            const data = doc.data();
+            console.log(`📋 Document ${index + 1} (${doc.id}):`, data);
+            
+            if (data.data && Array.isArray(data.data)) {
+              totalDataFields += data.data.length;
+              console.log(`  - Has data field with ${data.data.length} items`);
+            }
+            
+            if (data.maTem) {
+              totalItems += 1;
+              console.log(`  - Individual item: ${data.maTem}`);
+            }
+          });
+          
+          const message = `📊 Firebase Data Status:\n\n📁 Total documents: ${snapshot.docs.length}\n📋 Items in data fields: ${totalDataFields}\n🏷️ Individual items: ${totalItems}\n\n💾 Current local data: ${this.scheduleData ? this.scheduleData.length : 0} items`;
+          
+          console.log(message);
+          alert(message);
+        } else {
+          alert('📊 Firebase is empty - no documents found');
+        }
+      })
+      .catch((error) => {
+        console.error('❌ Error checking Firebase status:', error);
+        alert(`❌ Error checking Firebase: ${error.message}`);
+      });
+  }
+
   onFileSelected(event: any): void {
     const file = event.target.files[0];
     if (file) {
@@ -222,30 +318,52 @@ export class PrintLabelComponent implements OnInit {
         const worksheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[worksheetName];
         
+        console.log('📋 Worksheet names:', workbook.SheetNames);
+        console.log('📋 Selected worksheet:', worksheetName);
+        
         // Convert to JSON array
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log('📊 Raw Excel data:', jsonData);
+        console.log('📊 Data rows count:', jsonData ? jsonData.length : 0);
         
         // Validate Excel structure
         if (!jsonData || jsonData.length < 2) {
-          throw new Error('Excel file is empty or has no data rows');
+          throw new Error(`Excel file is empty or has no data rows. Found: ${jsonData ? jsonData.length : 0} rows`);
+        }
+
+        // Check if this is a template file (only header row)
+        if (jsonData.length === 1) {
+          console.log('📋 Detected template file (only header row)');
+          alert('📋 This appears to be a template file with only headers. Please add data rows and try again.');
+          return;
         }
 
         // Remove header row and convert to ScheduleItem format
         const dataRows = jsonData.slice(1); // Skip header row
+        console.log('📊 Data rows (excluding header):', dataRows);
+        console.log('📊 First data row sample:', dataRows[0]);
+        
         const newScheduleData = dataRows.map((row: any, index: number) => {
+          console.log(`📋 Processing row ${index + 1}:`, row);
+          
+          // Validate row has minimum required data
+          if (!row[4] || !row[4].toString().trim()) {
+            console.warn(`⚠️ Row ${index + 1} missing mã tem, skipping...`);
+            return null;
+          }
+          
           // Process quantity fields to ensure they are even integers
           const soLuongYeuCau = this.processQuantityField(row[5], 'Số lượng yêu cầu');
           const soLuongPhoi = this.processQuantityField(row[6], 'Số lượng phôi');
           
-          return {
+                  const processedRow = {
           nam: row[0]?.toString() || '',
           thang: row[1]?.toString() || '',
-            stt: row[2]?.toString() || '', // STT lấy theo file
+          stt: row[2]?.toString() || '', // STT lấy theo file
           sizePhoi: row[3]?.toString() || '',
           maTem: row[4]?.toString() || '',
-            soLuongYeuCau: soLuongYeuCau,
-            soLuongPhoi: soLuongPhoi,
+          soLuongYeuCau: soLuongYeuCau,
+          soLuongPhoi: soLuongPhoi,
           maHang: row[7]?.toString() || '',
           lenhSanXuat: row[8]?.toString() || '',
           khachHang: row[9]?.toString() || '',
@@ -255,26 +373,45 @@ export class PrintLabelComponent implements OnInit {
           lineNhan: row[13]?.toString() || '',
           nguoiIn: row[14]?.toString() || '',
           tinhTrang: row[15]?.toString() || 'Chờ in',
-            statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
+          statusUpdateTime: new Date(), // Khởi tạo thời gian cập nhật trạng thái
           banVe: row[16]?.toString() || '',
-            ghiChu: row[17]?.toString() || '',
-            isUrgent: false // Mặc định không gấp
-          // Remove labelComparison: undefined - Firebase doesn't allow undefined values
-          };
-        });
+          ghiChu: row[17]?.toString() || '',
+          isUrgent: false, // Mặc định không gấp
+          labelComparison: null // Thay vì undefined, sử dụng null
+        };
+          
+          console.log(`📋 Processed row ${index + 1}:`, processedRow);
+          return processedRow;
+        }).filter(row => row !== null); // Remove null rows
         
         console.log('📋 Processed new schedule data:', newScheduleData.length, 'items');
+        console.log('📋 Sample processed data:', newScheduleData[0]);
         
         // Validate data before saving
         if (newScheduleData.length === 0) {
-          throw new Error('No data found in Excel file');
+          throw new Error('No valid data rows found in Excel file after processing. Please ensure each row has at least a "Mã tem" value.');
         }
+
+        // Clean data to remove any undefined values before saving to Firebase
+        const cleanedData = newScheduleData.map(item => {
+          const cleanedItem: any = {};
+          Object.keys(item).forEach(key => {
+            if (item[key as keyof ScheduleItem] === undefined) {
+              cleanedItem[key] = null; // Replace undefined with null
+            } else {
+              cleanedItem[key] = item[key as keyof ScheduleItem];
+            }
+          });
+          return cleanedItem;
+        });
+
+        console.log('🧹 Cleaned data (replaced undefined with null):', cleanedData.length, 'items');
 
         // Merge with existing data instead of replacing
         const existingData = this.scheduleData || [];
-        const mergedData = [...existingData, ...newScheduleData];
+        const mergedData = [...existingData, ...cleanedData];
         
-        console.log(`📊 Merging data: ${existingData.length} existing + ${newScheduleData.length} new = ${mergedData.length} total`);
+        console.log(`📊 Merging data: ${existingData.length} existing + ${cleanedData.length} new = ${mergedData.length} total`);
         
         // Update the schedule data with merged data
         this.scheduleData = mergedData;
@@ -282,11 +419,15 @@ export class PrintLabelComponent implements OnInit {
         // Save to Firebase 
         this.saveToFirebase(this.scheduleData);
         
-        alert(`✅ Successfully imported ${newScheduleData.length} new records from ${file.name} and merged with ${existingData.length} existing records. Total: ${mergedData.length} records saved to Firebase 🔥`);
+        const message = `✅ Successfully imported ${cleanedData.length} new records from ${file.name} and merged with ${existingData.length} existing records. Total: ${mergedData.length} records saved to Firebase 🔥\n\n📊 Import Summary:\n- File: ${file.name}\n- New records: ${cleanedData.length}\n- Existing records: ${existingData.length}\n- Total after merge: ${mergedData.length}\n- Data cleaned: undefined values replaced with null`;
+        
+        alert(message);
+        console.log('✅ Import completed successfully:', message);
       } catch (error) {
-        console.error('Error reading file:', error);
+        console.error('❌ Error reading file:', error);
+        console.error('❌ Error details:', error.message);
         this.isSaving = false; // Reset saving state on error
-        alert('❌ Error reading Excel file. Please check the format.');
+        alert(`❌ Error reading Excel file: ${error.message}\n\nPlease check the file format and try again.`);
       }
     };
     reader.onerror = (error) => {
@@ -368,6 +509,23 @@ export class PrintLabelComponent implements OnInit {
       alert('❌ Không có dữ liệu để lưu vào Firebase!');
       return;
     }
+
+    // Final cleanup: ensure no undefined values exist before saving to Firebase
+    const finalCleanData = data.map(item => {
+      const cleanItem: any = {};
+      Object.keys(item).forEach(key => {
+        const value = item[key as keyof ScheduleItem];
+        if (value === undefined) {
+          cleanItem[key] = null;
+          console.warn(`⚠️ Found undefined value for field "${key}", replacing with null`);
+        } else {
+          cleanItem[key] = value;
+        }
+      });
+      return cleanItem;
+    });
+
+    console.log('🧹 Final data cleanup completed, saving to Firebase...');
     
     this.isSaving = true;
     
@@ -375,11 +533,11 @@ export class PrintLabelComponent implements OnInit {
     const maxRecordsPerChunk = 50; // Limit to 50 records per chunk to stay under 1MB
     const chunks = [];
     
-    for (let i = 0; i < data.length; i += maxRecordsPerChunk) {
-      chunks.push(data.slice(i, i + maxRecordsPerChunk));
+    for (let i = 0; i < finalCleanData.length; i += maxRecordsPerChunk) {
+      chunks.push(finalCleanData.slice(i, i + maxRecordsPerChunk));
     }
     
-    console.log(`📦 Splitting ${data.length} records into ${chunks.length} chunks of max ${maxRecordsPerChunk} records each`);
+    console.log(`📦 Splitting ${finalCleanData.length} records into ${chunks.length} chunks of max ${maxRecordsPerChunk} records each`);
     
     // Save each chunk as a separate document
     const savePromises = chunks.map((chunk, chunkIndex) => {
@@ -390,7 +548,7 @@ export class PrintLabelComponent implements OnInit {
         chunkIndex: chunkIndex,
         totalChunks: chunks.length,
         recordCount: chunk.length,
-        totalRecords: data.length,
+        totalRecords: finalCleanData.length,
         lastUpdated: new Date()
       };
       
@@ -411,7 +569,7 @@ export class PrintLabelComponent implements OnInit {
         this.firebaseSaved = true;
         this.isSaving = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert(`✅ Đã lưu thành công ${data.length} records vào Firebase!\n\n📦 Chia thành ${chunks.length} chunks để tránh vượt quá giới hạn 1MB`);
+        alert(`✅ Đã lưu thành công ${finalCleanData.length} records vào Firebase!\n\n📦 Chia thành ${chunks.length} chunks để tránh vượt quá giới hạn 1MB\n🧹 Dữ liệu đã được làm sạch (undefined → null)`);
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
@@ -448,75 +606,55 @@ export class PrintLabelComponent implements OnInit {
         this.isLoading = false;
         
         if (scheduleSnapshot && !scheduleSnapshot.empty) {
-          // Load schedule data
-          const latestDoc = scheduleSnapshot.docs[0];
-          const latestData = latestDoc.data();
+          console.log(`📋 Found ${scheduleSnapshot.docs.length} documents in Firebase`);
           
-          if (latestData.data && Array.isArray(latestData.data) && latestData.data.length > 0) {
-            console.log('📋 Loading from latest document data field');
-            this.scheduleData = latestData.data.map((item: any) => {
-              const processedItem = {
-                nam: item.nam || '',
-                thang: item.thang || '',
-                stt: item.stt || '',
-                sizePhoi: item.sizePhoi || '',
-                maTem: item.maTem || '',
-                soLuongYeuCau: item.soLuongYeuCau || '',
-                soLuongPhoi: item.soLuongPhoi || '',
-                maHang: item.maHang || '',
-                lenhSanXuat: item.lenhSanXuat || '',
-                khachHang: item.khachHang || '',
-                ngayNhanKeHoach: item.ngayNhanKeHoach || '',
-                yy: item.yy || '',
-                ww: item.ww || '',
-                lineNhan: item.lineNhan || '',
-                nguoiIn: item.nguoiIn || '',
-                tinhTrang: item.tinhTrang || '',
-                statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
-                banVe: item.banVe || '',
-                ghiChu: item.ghiChu || '',
-
-                isUrgent: item.isUrgent || false,
-                labelComparison: item.labelComparison || undefined
-              };
-              
-              return processedItem;
-            });
-          } else {
-            // Fallback: load from individual documents (old format)
-            console.log('📋 Loading from individual documents (fallback)');
-            this.scheduleData = scheduleSnapshot.docs.map((doc: any) => {
-              const data = doc.data();
-              
-              // Create clean ScheduleItem by removing Firebase-specific fields
-              const scheduleItem: ScheduleItem = {
-                nam: data.nam || '',
-                thang: data.thang || '',
-                stt: data.stt || '',
-                sizePhoi: data.sizePhoi || '',
-                maTem: data.maTem || '',
-                soLuongYeuCau: data.soLuongYeuCau || '',
-                soLuongPhoi: data.soLuongPhoi || '',
-                maHang: data.maHang || '',
-                lenhSanXuat: data.lenhSanXuat || '',
-                khachHang: data.khachHang || '',
-                ngayNhanKeHoach: data.ngayNhanKeHoach || '',
-                yy: data.yy || '',
-                ww: data.ww || '',
-                lineNhan: data.lineNhan || '',
-                nguoiIn: data.nguoiIn || '',
-                tinhTrang: data.tinhTrang || '',
-                statusUpdateTime: data.statusUpdateTime ? new Date(data.statusUpdateTime.toDate ? data.statusUpdateTime.toDate() : data.statusUpdateTime) : new Date(),
-                banVe: data.banVe || '',
-                ghiChu: data.ghiChu || '',
-
-                isUrgent: data.isUrgent || false,
-                labelComparison: data.labelComparison || undefined
-              };
-              
-              return scheduleItem;
-            });
-          }
+          // Load ALL documents and merge their data
+          let allData: any[] = [];
+          
+          scheduleSnapshot.docs.forEach((doc: any, docIndex: number) => {
+            const docData = doc.data();
+            console.log(`📋 Document ${docIndex + 1}:`, docData);
+            
+            if (docData.data && Array.isArray(docData.data) && docData.data.length > 0) {
+              console.log(`📋 Document ${docIndex + 1} has ${docData.data.length} items in data field`);
+              allData = [...allData, ...docData.data];
+            } else if (docData.maTem) {
+              // Fallback: individual document format
+              console.log(`📋 Document ${docIndex + 1} is individual item format`);
+              allData.push(docData);
+            }
+          });
+          
+          console.log(`📋 Total items found across all documents: ${allData.length}`);
+          
+          // Process all loaded data
+          this.scheduleData = allData.map((item: any) => {
+            const processedItem = {
+              nam: item.nam || '',
+              thang: item.thang || '',
+              stt: item.stt || '',
+              sizePhoi: item.sizePhoi || '',
+              maTem: item.maTem || '',
+              soLuongYeuCau: item.soLuongYeuCau || '',
+              soLuongPhoi: item.soLuongPhoi || '',
+              maHang: item.maHang || '',
+              lenhSanXuat: item.lenhSanXuat || '',
+              khachHang: item.khachHang || '',
+              ngayNhanKeHoach: item.ngayNhanKeHoach || '',
+              yy: item.yy || '',
+              ww: item.ww || '',
+              lineNhan: item.lineNhan || '',
+              nguoiIn: item.nguoiIn || '',
+              tinhTrang: item.tinhTrang || '',
+              statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
+              banVe: item.banVe || '',
+              ghiChu: item.ghiChu || '',
+              isUrgent: item.isUrgent || false,
+              labelComparison: item.labelComparison || null
+            };
+            
+            return processedItem;
+          });
           
 
           
@@ -529,6 +667,17 @@ export class PrintLabelComponent implements OnInit {
           
           this.firebaseSaved = this.scheduleData.length > 0;
           console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase`);
+          
+          // Show summary to user
+          if (this.scheduleData.length > 0) {
+            const uniqueMaTem = [...new Set(this.scheduleData.map(item => item.maTem))];
+            console.log(`📊 Summary: ${this.scheduleData.length} total items, ${uniqueMaTem.length} unique mã tem`);
+            
+            // Show alert with summary
+            setTimeout(() => {
+              alert(`📊 Dữ liệu đã được tải từ Firebase:\n\n📋 Tổng số items: ${this.scheduleData.length}\n🏷️ Số mã tem duy nhất: ${uniqueMaTem.length}\n\n✅ Refresh thành công!`);
+            }, 500);
+          }
         } else {
           console.log('🔥 No data found in Firebase');
           this.scheduleData = [];
@@ -3381,29 +3530,29 @@ export class PrintLabelComponent implements OnInit {
       if (item.tinhTrang === 'Done') return false;
       
       // Check if item has a due date
-      if (item.ngayNhanKeHoach) {
+      if (item.ngayNhanKeHoach != null && item.ngayNhanKeHoach !== '') {
         try {
           let dueDate: Date;
           
           // Handle different date formats from Firebase
-          if (item.ngayNhanKeHoach && typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+          if (typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
             // Firestore Timestamp
             dueDate = (item.ngayNhanKeHoach as any).toDate();
-          } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach.includes('/')) {
-            // Handle DD/MM/YYYY format from Excel import
-            const parts = item.ngayNhanKeHoach.split('/');
-            if (parts.length === 3) {
-              const day = parseInt(parts[0]);
-              const month = parseInt(parts[1]) - 1; // Month is 0-indexed
-              const year = parseInt(parts[2]);
-              dueDate = new Date(year, month, day);
+                      } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach!.includes('/')) {
+              // Handle DD/MM/YYYY format from Excel import
+              const parts = item.ngayNhanKeHoach!.split('/');
+              if (parts.length === 3) {
+                const day = parseInt(parts[0]);
+                const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+                const year = parseInt(parts[2]);
+                dueDate = new Date(year, month, day);
+              } else {
+                dueDate = new Date(item.ngayNhanKeHoach!);
+              }
             } else {
-              dueDate = new Date(item.ngayNhanKeHoach as any);
+              // Try to create Date object for other formats
+              dueDate = new Date(item.ngayNhanKeHoach!);
             }
-          } else {
-            // Try to create Date object for other formats
-            dueDate = new Date(item.ngayNhanKeHoach as any);
-          }
           
           // Check if date is valid
           if (isNaN(dueDate.getTime())) {
@@ -5621,11 +5770,11 @@ Gửi tự động từ hệ thống quản lý tem.
       return this.scheduleData.filter(item => {
         if (item.tinhTrang === 'Done') return false;
         
-        if (item.ngayNhanKeHoach) {
+        if (item.ngayNhanKeHoach != null && item.ngayNhanKeHoach !== '') {
           try {
             let dueDate: Date;
             
-            if (item.ngayNhanKeHoach && typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+            if (typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
               dueDate = (item.ngayNhanKeHoach as any).toDate();
             } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach.includes('/')) {
               const parts = item.ngayNhanKeHoach.split('/');
@@ -5635,10 +5784,10 @@ Gửi tự động từ hệ thống quản lý tem.
                 const year = parseInt(parts[2]);
                 dueDate = new Date(year, month, day);
               } else {
-                dueDate = new Date(item.ngayNhanKeHoach as any);
+                dueDate = new Date(item.ngayNhanKeHoach);
               }
             } else {
-              dueDate = new Date(item.ngayNhanKeHoach as any);
+              dueDate = new Date(item.ngayNhanKeHoach);
             }
             
             if (isNaN(dueDate.getTime())) return false;
