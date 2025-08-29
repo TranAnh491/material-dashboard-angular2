@@ -11,10 +11,16 @@ import { SafetyService } from '../../services/safety.service';
 export interface SafetyMaterial {
   id?: string;
   materialCode: string;
+  materialName: string; // Tên hàng - nhập tay
   scanDate: Date;
   quantityASM1: number;
+  palletQuantityASM1: number; // Lượng pallet ASM1 - nhập tay
+  palletCountASM1: number; // Số pallet ASM1 - tự tính
   quantityASM2: number;
+  palletQuantityASM2: number; // Lượng pallet ASM2 - nhập tay
+  palletCountASM2: number; // Số pallet ASM2 - tự tính
   totalQuantity: number;
+  totalPalletCount: number; // Tổng số pallet
   safety: number;
   status: string;
   createdAt?: Date;
@@ -68,6 +74,11 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
   importFile: File | null = null;
   isImporting = false;
   importProgress = 0;
+
+  // Format number with thousands separator
+  formatNumberWithCommas(value: number): string {
+    return value.toLocaleString('en-US');
+  }
 
   constructor(
     private firestore: AngularFirestore,
@@ -252,9 +263,15 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       const exportData = this.filteredMaterials.map(material => ({
         'Ngày Scan': this.formatDate(material.scanDate),
         'Mã hàng': material.materialCode,
+        'Tên hàng': material.materialName,
         'Lượng ASM1': material.quantityASM1,
+        'Lượng Pallet ASM1': material.palletQuantityASM1,
+        'Pallet ASM1': material.palletCountASM1,
         'Lượng ASM2': material.quantityASM2,
+        'Lượng Pallet ASM2': material.palletQuantityASM2,
+        'Pallet ASM2': material.palletCountASM2,
         'Tổng': material.totalQuantity,
+        'Tổng Pallet': material.totalPalletCount,
         'Safety': material.safety,
         'Tình Trạng (%)': this.getStatusText(material),
         'Phần Trăm Tồn Kho': this.getStatusPercentage(material)
@@ -434,17 +451,34 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         updatedAt: new Date()
       };
       
-      if (this.scanFactory === 'ASM1') {
-        const newQuantityASM1 = existingMaterial.quantityASM1 + quantity;
-        updateData.quantityASM1 = newQuantityASM1;
-        updateData.totalQuantity = newQuantityASM1 + existingMaterial.quantityASM2;
-        console.log(`🔄 Cập nhật số lượng ASM1: ${existingMaterial.quantityASM1} + ${quantity} = ${newQuantityASM1}`);
-      } else if (this.scanFactory === 'ASM2') {
-        const newQuantityASM2 = existingMaterial.quantityASM2 + quantity;
-        updateData.quantityASM2 = newQuantityASM2;
-        updateData.totalQuantity = existingMaterial.quantityASM1 + newQuantityASM2;
-        console.log(`🔄 Cập nhật số lượng ASM2: ${existingMaterial.quantityASM2} + ${quantity} = ${newQuantityASM2}`);
-      }
+             if (this.scanFactory === 'ASM1') {
+         const newQuantityASM1 = existingMaterial.quantityASM1 + quantity;
+         updateData.quantityASM1 = newQuantityASM1;
+         updateData.totalQuantity = newQuantityASM1 + existingMaterial.quantityASM2;
+         
+         // Tính toán số pallet ASM1
+         if (existingMaterial.palletQuantityASM1 > 0) {
+           updateData.palletCountASM1 = Math.ceil(newQuantityASM1 / existingMaterial.palletQuantityASM1);
+         }
+         
+         console.log(`🔄 Cập nhật số lượng ASM1: ${existingMaterial.quantityASM1} + ${quantity} = ${newQuantityASM1}`);
+       } else if (this.scanFactory === 'ASM2') {
+         const newQuantityASM2 = existingMaterial.quantityASM2 + quantity;
+         updateData.quantityASM2 = newQuantityASM2;
+         updateData.totalQuantity = existingMaterial.quantityASM1 + newQuantityASM2;
+         
+         // Tính toán số pallet ASM2
+         if (existingMaterial.palletQuantityASM2 > 0) {
+           updateData.palletCountASM2 = Math.ceil(newQuantityASM2 / existingMaterial.palletQuantityASM2);
+         }
+         
+         console.log(`🔄 Cập nhật số lượng ASM2: ${existingMaterial.quantityASM2} + ${quantity} = ${newQuantityASM2}`);
+       }
+       
+       // Tính toán tổng số pallet
+       const totalPalletCount = (updateData.palletCountASM1 || existingMaterial.palletCountASM1 || 0) + 
+                               (updateData.palletCountASM2 || existingMaterial.palletCountASM2 || 0);
+       updateData.totalPalletCount = totalPalletCount;
       
       this.safetyService.updateSafetyMaterial(existingMaterial.id!, updateData).then(() => {
         console.log(`✅ Đã cập nhật thành công ${materialCode} số lượng cho ${this.scanFactory} và ngày scan thành ${this.formatDate(this.scanDate)}`);
@@ -457,9 +491,15 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       const newMaterial: Omit<SafetyMaterial, 'id'> = {
         scanDate: this.scanDate,
         materialCode: materialCode,
+        materialName: '', // Tên hàng - để trống, người dùng nhập sau
         quantityASM1: this.scanFactory === 'ASM1' ? quantity : 0,
+        palletQuantityASM1: 0, // Lượng pallet ASM1 - để trống, người dùng nhập sau
+        palletCountASM1: 0, // Số pallet ASM1 - tự tính
         quantityASM2: this.scanFactory === 'ASM2' ? quantity : 0,
+        palletQuantityASM2: 0, // Lượng pallet ASM2 - để trống, người dùng nhập sau
+        palletCountASM2: 0, // Số pallet ASM2 - tự tính
         totalQuantity: quantity,
+        totalPalletCount: 0, // Tổng số pallet - tự tính
         safety: 0, // Luôn là 0 cho material mới scan - không có safety level cho đến khi import
         status: 'Active'
       };
@@ -529,6 +569,62 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
       console.error('❌ Error formatting date:', error, date);
       return 'Error';
     }
+  }
+
+  // Manual input for material name
+  updateMaterialName(material: SafetyMaterial, name: string) {
+    const materialName = name || '';
+    this.safetyService.updateSafetyMaterial(material.id!, {
+      materialName: materialName,
+      updatedAt: new Date()
+    }).then(() => {
+      console.log(`Updated material name for ${material.materialCode}: ${materialName}`);
+      this.refreshData();
+    }).catch(error => {
+      console.error('Error updating material name:', error);
+    });
+  }
+
+  // Manual input for pallet quantity ASM1
+  updatePalletQuantityASM1(material: SafetyMaterial, palletQuantity: string | number) {
+    const palletQuantityValue = palletQuantity === null || palletQuantity === undefined || palletQuantity === '' ? 0 : Number(palletQuantity);
+    
+    // Tính toán số pallet mới
+    const palletCountASM1 = palletQuantityValue > 0 ? Math.ceil(material.quantityASM1 / palletQuantityValue) : 0;
+    const totalPalletCount = palletCountASM1 + material.palletCountASM2;
+    
+    this.safetyService.updateSafetyMaterial(material.id!, {
+      palletQuantityASM1: palletQuantityValue,
+      palletCountASM1: palletCountASM1,
+      totalPalletCount: totalPalletCount,
+      updatedAt: new Date()
+    }).then(() => {
+      console.log(`Updated pallet quantity ASM1 for ${material.materialCode}: ${palletQuantityValue}, pallet count: ${palletCountASM1}`);
+      this.refreshData();
+    }).catch(error => {
+      console.error('Error updating pallet quantity ASM1:', error);
+    });
+  }
+
+  // Manual input for pallet quantity ASM2
+  updatePalletQuantityASM2(material: SafetyMaterial, palletQuantity: string | number) {
+    const palletQuantityValue = palletQuantity === null || palletQuantity === undefined || palletQuantity === '' ? 0 : Number(palletQuantity);
+    
+    // Tính toán số pallet mới
+    const palletCountASM2 = palletQuantityValue > 0 ? Math.ceil(material.quantityASM2 / palletQuantityValue) : 0;
+    const totalPalletCount = material.palletCountASM1 + palletCountASM2;
+    
+    this.safetyService.updateSafetyMaterial(material.id!, {
+      palletQuantityASM2: palletQuantityValue,
+      palletCountASM2: palletCountASM2,
+      totalPalletCount: totalPalletCount,
+      updatedAt: new Date()
+    }).then(() => {
+      console.log(`Updated pallet quantity ASM2 for ${material.materialCode}: ${palletQuantityValue}, pallet count: ${palletCountASM2}`);
+      this.refreshData();
+    }).catch(error => {
+      console.error('Error updating pallet quantity ASM2:', error);
+    });
   }
 
   // Manual input for safety column
@@ -676,6 +772,7 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
         let totalQuantityASM1 = 0;
         let totalQuantityASM2 = 0;
         let maxSafety = 0;
+        let materialName = '';
         
         materials.forEach(material => {
           totalQuantityASM1 += material.quantityASM1 || 0;
@@ -683,13 +780,26 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
           if (material.safety && material.safety > maxSafety) {
             maxSafety = material.safety;
           }
+          // Lấy tên hàng từ dòng đầu tiên có tên
+          if (!materialName && material.materialName) {
+            materialName = material.materialName;
+          }
         });
+        
+        // Tính toán số pallet
+        const palletCountASM1 = primaryMaterial.palletQuantityASM1 > 0 ? Math.ceil(totalQuantityASM1 / primaryMaterial.palletQuantityASM1) : 0;
+        const palletCountASM2 = primaryMaterial.palletQuantityASM2 > 0 ? Math.ceil(totalQuantityASM2 / primaryMaterial.palletQuantityASM2) : 0;
+        const totalPalletCount = palletCountASM1 + palletCountASM2;
         
         // Cập nhật dòng chính
         const updateData: Partial<SafetyMaterial> = {
+          materialName: materialName,
           quantityASM1: totalQuantityASM1,
           quantityASM2: totalQuantityASM2,
+          palletCountASM1: palletCountASM1,
+          palletCountASM2: palletCountASM2,
           totalQuantity: totalQuantityASM1 + totalQuantityASM2,
+          totalPalletCount: totalPalletCount,
           safety: maxSafety,
           scanDate: new Date(), // Cập nhật ngày scan mới nhất
           updatedAt: new Date()
@@ -839,9 +949,15 @@ export class SafetyComponent implements OnInit, OnDestroy, AfterViewInit {
             const newMaterial: Omit<SafetyMaterial, 'id'> = {
               scanDate: new Date(),
               materialCode: item.materialCode,
+              materialName: '', // Tên hàng - để trống, người dùng nhập sau
               quantityASM1: 0,
+              palletQuantityASM1: 0, // Lượng pallet ASM1 - để trống, người dùng nhập sau
+              palletCountASM1: 0, // Số pallet ASM1 - tự tính
               quantityASM2: 0,
+              palletQuantityASM2: 0, // Lượng pallet ASM2 - để trống, người dùng nhập sau
+              palletCountASM2: 0, // Số pallet ASM2 - tự tính
               totalQuantity: 0,
+              totalPalletCount: 0, // Tổng số pallet - tự tính
               safety: item.safety,
               status: 'Active'
             };

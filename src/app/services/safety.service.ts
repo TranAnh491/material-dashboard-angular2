@@ -17,9 +17,15 @@ export class SafetyService {
       id,
       scanDate: data.scanDate ? data.scanDate.toDate() : new Date(),
       materialCode: data.materialCode,
+      materialName: data.materialName || '', // Tên hàng
       quantityASM1: data.quantityASM1 || 0,
+      palletQuantityASM1: data.palletQuantityASM1 || 0, // Lượng pallet ASM1
+      palletCountASM1: data.palletCountASM1 || 0, // Số pallet ASM1
       quantityASM2: data.quantityASM2 || 0,
+      palletQuantityASM2: data.palletQuantityASM2 || 0, // Lượng pallet ASM2
+      palletCountASM2: data.palletCountASM2 || 0, // Số pallet ASM2
       totalQuantity: data.totalQuantity || 0,
+      totalPalletCount: data.totalPalletCount || 0, // Tổng số pallet
       safety: data.safety && data.safety > 0 ? data.safety : 0, // Only use safety if > 0, otherwise 0
       status: data.status || 'Active',
       createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
@@ -46,10 +52,20 @@ export class SafetyService {
   // Add new safety material
   addSafetyMaterial(material: Omit<SafetyMaterial, 'id'>): Promise<void> {
     const id = this.firestore.createId();
+    
+    // Tính toán số pallet và tổng số lượng
+    const palletCountASM1 = material.palletQuantityASM1 > 0 ? Math.ceil((material.quantityASM1 || 0) / material.palletQuantityASM1) : 0;
+    const palletCountASM2 = material.palletQuantityASM2 > 0 ? Math.ceil((material.quantityASM2 || 0) / material.palletQuantityASM2) : 0;
+    const totalQuantity = (material.quantityASM1 || 0) + (material.quantityASM2 || 0);
+    const totalPalletCount = palletCountASM1 + palletCountASM2;
+    
     const newMaterial: SafetyMaterial = {
       ...material,
       id,
-      totalQuantity: (material.quantityASM1 || 0) + (material.quantityASM2 || 0), // Calculate total
+      palletCountASM1,
+      palletCountASM2,
+      totalQuantity,
+      totalPalletCount,
       safety: material.safety && material.safety > 0 ? material.safety : 0, // Ensure safety is 0 if not positive
       createdAt: new Date(),
       updatedAt: new Date()
@@ -108,54 +124,90 @@ export class SafetyService {
       {
         scanDate: today,
         materialCode: 'B018694',
+        materialName: 'Vật liệu B018694',
         quantityASM1: 150,
+        palletQuantityASM1: 50,
+        palletCountASM1: 3,
         quantityASM2: 0,
+        palletQuantityASM2: 0,
+        palletCountASM2: 0,
         totalQuantity: 150,
+        totalPalletCount: 3,
         safety: 0, // Sample safety level
         status: 'Active'
       },
       {
         scanDate: today,
         materialCode: 'R123456',
+        materialName: 'Vật liệu R123456',
         quantityASM1: 200,
+        palletQuantityASM1: 40,
+        palletCountASM1: 5,
         quantityASM2: 0,
+        palletQuantityASM2: 0,
+        palletCountASM2: 0,
         totalQuantity: 200,
+        totalPalletCount: 5,
         safety: 0, // Sample safety level
         status: 'Active'
       },
       {
         scanDate: today,
         materialCode: 'B789012',
+        materialName: 'Vật liệu B789012',
         quantityASM1: 0,
+        palletQuantityASM1: 0,
+        palletCountASM1: 0,
         quantityASM2: 100,
+        palletQuantityASM2: 25,
+        palletCountASM2: 4,
         totalQuantity: 100,
+        totalPalletCount: 4,
         safety: 0, // Sample safety level
         status: 'Pending'
       },
       {
         scanDate: today,
         materialCode: 'R345678',
+        materialName: 'Vật liệu R345678',
         quantityASM1: 0,
+        palletQuantityASM1: 0,
+        palletCountASM1: 0,
         quantityASM2: 300,
+        palletQuantityASM2: 60,
+        palletCountASM2: 5,
         totalQuantity: 300,
+        totalPalletCount: 5,
         safety: 0, // Sample safety level
         status: 'Active'
       },
       {
         scanDate: today,
         materialCode: 'B901234',
+        materialName: 'Vật liệu B901234',
         quantityASM1: 125,
+        palletQuantityASM1: 25,
+        palletCountASM1: 5,
         quantityASM2: 125,
+        palletQuantityASM2: 25,
+        palletCountASM2: 5,
         totalQuantity: 250,
+        totalPalletCount: 10,
         safety: 0, // Sample safety level
         status: 'Review'
       },
       {
         scanDate: today,
         materialCode: 'R567890',
+        materialName: 'Vật liệu R567890',
         quantityASM1: 90,
+        palletQuantityASM1: 30,
+        palletCountASM1: 3,
         quantityASM2: 90,
+        palletQuantityASM2: 30,
+        palletCountASM2: 3,
         totalQuantity: 180,
+        totalPalletCount: 6,
         safety: 0, // Sample safety level
         status: 'Active'
       }
@@ -252,9 +304,15 @@ export class SafetyService {
           const mergedMaterial: Omit<SafetyMaterial, 'id'> = {
             scanDate: latestScanDate,
             materialCode: materialCode,
+            materialName: '', // Tên hàng - để trống, người dùng nhập sau
             quantityASM1: totalASM1,
+            palletQuantityASM1: 0, // Lượng pallet ASM1 - để trống, người dùng nhập sau
+            palletCountASM1: 0, // Số pallet ASM1 - tự tính
             quantityASM2: totalASM2,
+            palletQuantityASM2: 0, // Lượng pallet ASM2 - để trống, người dùng nhập sau
+            palletCountASM2: 0, // Số pallet ASM2 - tự tính
             totalQuantity: totalASM1 + totalASM2,
+            totalPalletCount: 0, // Tổng số pallet - tự tính
             safety: totalSafety,
             status: latestStatus
           };

@@ -163,18 +163,22 @@
              <span>Đang scan cho <strong>{{scanFactory}}</strong> - Định dạng tem: <code>Rxxxxxx yyyy</code> hoặc <code>Bxxxxxx yyyy</code></span>
            </div>
           
-                     <div class="scan-instructions">
-             <p><strong>Hướng dẫn:</strong></p>
-             <ul>
-               <li>Bấm nút <strong>ASM1</strong> hoặc <strong>ASM2</strong> để bắt đầu scan</li>
-               <li>Scan tem có định dạng: <code>RB018694 150</code> hoặc <code>R123456 200</code></li>
-               <li>Trong đó: <code>B018694</code> hoặc <code>R123456</code> là mã hàng (7 ký tự), <code>150</code> hoặc <code>200</code> là số lượng</li>
-               <li>Mã hàng bắt đầu bằng <strong>R</strong> hoặc <strong>B</strong> + 6 số (tổng 7 ký tự)</li>
-               <li>Số lượng sẽ được cộng dồn vào cột tương ứng (ASM1 hoặc ASM2) nếu mã hàng đã tồn tại</li>
-               <li>Cột Safety hiển thị tổng của ASM1 và ASM2, có thể chỉnh sửa bằng cách click vào input</li>
-               <li>Cột Tình Trạng so sánh Tổng với Safety Level</li>
-             </ul>
-           </div>
+                                           <div class="scan-instructions">
+              <p><strong>Hướng dẫn:</strong></p>
+              <ul>
+                <li>Bấm nút <strong>ASM1</strong> hoặc <strong>ASM2</strong> để bắt đầu scan</li>
+                <li>Scan tem có định dạng: <code>RB018694 150</code> hoặc <code>R123456 200</code></li>
+                <li>Trong đó: <code>B018694</code> hoặc <code>R123456</code> là mã hàng (7 ký tự), <code>150</code> hoặc <code>200</code> là số lượng</li>
+                <li>Mã hàng bắt đầu bằng <strong>R</strong> hoặc <strong>B</strong> + 6 số (tổng 7 ký tự)</li>
+                <li>Số lượng sẽ được cộng dồn vào cột tương ứng (ASM1 hoặc ASM2) nếu mã hàng đã tồn tại</li>
+                <li><strong>Tên hàng:</strong> Nhập tay vào cột "Tên hàng"</li>
+                <li><strong>Lượng Pallet:</strong> Nhập tay số lượng trên mỗi pallet (ASM1 và ASM2 riêng biệt)</li>
+                <li><strong>Số Pallet:</strong> Tự động tính = Lượng ÷ Lượng Pallet (làm tròn lên)</li>
+                <li><strong>Tổng Pallet:</strong> Tổng số pallet của ASM1 + ASM2</li>
+                <li>Cột Safety hiển thị tổng của ASM1 và ASM2, có thể chỉnh sửa bằng cách click vào input</li>
+                <li>Cột Tình Trạng so sánh Tổng với Safety Level</li>
+              </ul>
+            </div>
           
                      <!-- Test input for development -->
            <div class="test-scan-input">
@@ -227,57 +231,97 @@
     <div class="table-container" *ngIf="!isLoading">
              <!-- Table -->
        <table class="excel-table">
-         <thead>
-           <tr>
-             <th>Ngày Scan</th>
-             <th>Mã hàng</th>
-             <th>Lượng ASM1</th>
-             <th>Lượng ASM2</th>
-             <th>Tổng</th>
-             <th>Safety</th>
-             <th>Tình Trạng</th>
-             <th>Xóa</th>
-           </tr>
-         </thead>
-         <tbody>
-           <tr *ngFor="let material of filteredMaterials; trackBy: trackByFn; let i = index">
-             <td class="date-cell">
-               {{formatDate(material.scanDate)}}
-             </td>
-             <td class="code-cell material-code-cell">
-               {{material.materialCode}}
-             </td>
-             <td class="number-cell">
-               {{material.quantityASM1}}
-             </td>
-             <td class="number-cell">
-               {{material.quantityASM2}}
-             </td>
-             <td class="number-cell total-cell">
-               {{material.totalQuantity}}
-             </td>
-             <td class="safety-cell">
-               <input type="number" 
-                      class="safety-input" 
-                      [value]="material.safety === 0 ? '' : material.safety"
-                      (change)="updateSafety(material, $event.target.value)"
-                      placeholder="Nhập số lượng"
-                      min="0">
-             </td>
-             <td class="status-cell">
-               <span class="badge" [class]="getStatusClass(material)">
-                 {{ getStatusText(material) }}
-               </span>
-             </td>
-             <td class="delete-cell">
-               <button class="delete-btn" 
-                       (click)="deleteMaterial(material)" 
-                       title="Xóa số lượng thực tế của {{material.materialCode}} (giữ nguyên mã hàng và safety level)">
-                 <i class="material-icons">delete</i>
-               </button>
-             </td>
-           </tr>
-         </tbody>
+                   <thead>
+            <tr>
+              <th>Ngày Scan</th>
+              <th>Mã hàng</th>
+              <th>Tên hàng</th>
+              <th>Lượng ASM1</th>
+              <th>Lượng Pallet ASM1</th>
+              <th>Pallet ASM1</th>
+              <th>Lượng ASM2</th>
+              <th>Lượng Pallet ASM2</th>
+              <th>Pallet ASM2</th>
+              <th>Tổng</th>
+              <th>Tổng Pallet</th>
+              <th>Safety</th>
+              <th>Tình Trạng</th>
+              <th>Xóa</th>
+            </tr>
+          </thead>
+                   <tbody>
+            <tr *ngFor="let material of filteredMaterials; trackBy: trackByFn; let i = index">
+              <td class="date-cell">
+                {{formatDate(material.scanDate)}}
+              </td>
+              <td class="code-cell material-code-cell">
+                {{material.materialCode}}
+              </td>
+              <td class="name-cell">
+                <input type="text" 
+                       class="name-input" 
+                       [value]="material.materialName"
+                       (change)="updateMaterialName(material, $event.target.value)"
+                       placeholder="Nhập tên hàng">
+              </td>
+              <td class="number-cell">
+                {{formatNumberWithCommas(material.quantityASM1)}}
+              </td>
+              <td class="pallet-quantity-cell">
+                <input type="number" 
+                       class="pallet-quantity-input" 
+                       [value]="material.palletQuantityASM1 === 0 ? '' : material.palletQuantityASM1"
+                       (change)="updatePalletQuantityASM1(material, $event.target.value)"
+                       placeholder="Lượng/pallet"
+                       min="0">
+              </td>
+              <td class="number-cell pallet-count-cell">
+                {{formatNumberWithCommas(material.palletCountASM1)}}
+              </td>
+              <td class="number-cell">
+                {{formatNumberWithCommas(material.quantityASM2)}}
+              </td>
+              <td class="pallet-quantity-cell">
+                <input type="number" 
+                       class="pallet-quantity-input" 
+                       [value]="material.palletQuantityASM2 === 0 ? '' : material.palletQuantityASM2"
+                       (change)="updatePalletQuantityASM2(material, $event.target.value)"
+                       placeholder="Lượng/pallet"
+                       min="0"
+                       step="0.01">
+              </td>
+              <td class="number-cell pallet-count-cell">
+                {{formatNumberWithCommas(material.palletCountASM2)}}
+              </td>
+              <td class="number-cell total-cell">
+                {{formatNumberWithCommas(material.totalQuantity)}}
+              </td>
+              <td class="number-cell total-pallet-cell">
+                {{formatNumberWithCommas(material.totalPalletCount)}}
+              </td>
+              <td class="safety-cell">
+                <input type="number" 
+                       class="safety-input" 
+                       [value]="material.safety === 0 ? '' : material.safety"
+                       (change)="updateSafety(material, $event.target.value)"
+                       placeholder="Nhập số lượng"
+                       min="0"
+                       step="0.01">
+              </td>
+              <td class="status-cell">
+                <span class="badge" [class]="getStatusClass(material)">
+                  {{ getStatusText(material) }}
+                </span>
+              </td>
+              <td class="delete-cell">
+                <button class="delete-btn" 
+                        (click)="deleteMaterial(material)" 
+                        title="Xóa số lượng thực tế của {{material.materialCode}} (giữ nguyên mã hàng và safety level)">
+                  <i class="material-icons">delete</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
        </table>
 
       <!-- Empty State - Search First Approach -->
