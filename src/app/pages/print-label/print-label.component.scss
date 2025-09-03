@@ -5,6 +5,13 @@
   margin: 0 auto;
   background: #ffffff;
   min-height: calc(100vh - 80px);
+  
+  // Ensure sidebar is visible
+  .sidebar {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
 
   // CSS MẠNH NHẤT - Ghi đè tất cả
   * {
@@ -520,4 +527,69 @@ html .print-label-container,
     background: #ffffff !important;
     border: 1px solid #000000 !important;
   }
+}
+
+// Global CSS to ensure sidebar is always visible
+:host ::ng-deep .sidebar {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+:host ::ng-deep .wrapper .sidebar {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+:host ::ng-deep .main-panel {
+  margin-left: 260px !important;
+}
+
+// Ensure layout wrapper is correct
+:host ::ng-deep .wrapper {
+  display: flex !important;
+  min-height: 100vh !important;
+}
+
+// FORCE ALL TEXT IN TABLE TO BE BLACK
+:host ::ng-deep table,
+:host ::ng-deep table *,
+:host ::ng-deep table td,
+:host ::ng-deep table th,
+:host ::ng-deep table tr,
+:host ::ng-deep table td *,
+:host ::ng-deep table th *,
+:host ::ng-deep table tr *,
+:host ::ng-deep .schedules-table,
+:host ::ng-deep .schedules-table *,
+:host ::ng-deep .schedules-table td,
+:host ::ng-deep .schedules-table th,
+:host ::ng-deep .schedules-table tr,
+:host ::ng-deep .schedules-table td *,
+:host ::ng-deep .schedules-table th *,
+:host ::ng-deep .schedules-table tr * {
+  color: #000000 !important;
+}
+
+// Force all form elements in table to have black text
+:host ::ng-deep table input,
+:host ::ng-deep table select,
+:host ::ng-deep table textarea,
+:host ::ng-deep table button,
+:host ::ng-deep .schedules-table input,
+:host ::ng-deep .schedules-table select,
+:host ::ng-deep .schedules-table textarea,
+:host ::ng-deep .schedules-table button {
+  color: #000000 !important;
+}
+
+// Force all spans and divs in table to have black text
+:host ::ng-deep table span,
+:host ::ng-deep table div,
+:host ::ng-deep .schedules-table span,
+:host ::ng-deep .schedules-table div {
+  color: #000000 !important;
 }

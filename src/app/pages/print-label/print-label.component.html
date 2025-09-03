@@ -23,43 +23,32 @@
               <i class="material-icons">download</i>
               Template
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testTemplateImport(); $event.preventDefault()">
-              <i class="material-icons">bug_report</i>
-              Test Import
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteOldDataDialog(); $event.preventDefault()">
+              <i class="material-icons">delete_sweep</i>
+              Xóa dữ liệu cũ
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="checkFirebaseDataStatus(); $event.preventDefault()">
-              <i class="material-icons">storage</i>
-              Check Firebase Status
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportExcel(); $event.preventDefault()">
-              <i class="material-icons">assessment</i>
-              Export
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadStatusReport(); $event.preventDefault()">
-              <i class="material-icons">analytics</i>
-              Status hiện tại
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteCurrentDataDialog(); $event.preventDefault()">
+              <i class="material-icons">cleaning_services</i>
+              Xóa dữ liệu hiện tại
             </a>
             <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteCompletedConfirmDialog(); $event.preventDefault()">
-              <i class="material-icons">delete_sweep</i>
-              Xóa tất cả các mã đã hoàn thành
+            <a class="dropdown-item" href="javascript:void(0)" (click)="checkAndClearFirebaseData(); $event.preventDefault()">
+              <i class="material-icons">delete_forever</i>
+              Kiểm tra & Xóa hết Firebase
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteConfirmDialog(); $event.preventDefault()">
-              <i class="material-icons">cleaning_services</i>
-              Xóa dữ liệu
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testImportFunctionality(); $event.preventDefault()">
+              <i class="material-icons">science</i>
+              Test Import Function
             </a>
-
-            <a class="dropdown-item" href="javascript:void(0)" (click)="resetToLast30Days(); $event.preventDefault()">
-              <i class="material-icons">restore</i>
-              Reset về 30 ngày gần nhất
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testDoneItemsHiding(); $event.preventDefault()">
+              <i class="material-icons">visibility_off</i>
+              Test Done Items Hiding
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="filterByMonth(); $event.preventDefault()">
-              <i class="material-icons">filter_list</i>
-              Lọc theo tháng
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showFreshImportConfirmDialog(); $event.preventDefault()">
-              <i class="material-icons">refresh</i>
-              Xóa dữ liệu cũ, import lại
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testDeleteOldData(); $event.preventDefault()">
+              <i class="material-icons">delete_outline</i>
+              Test Delete Old Data
             </a>
           </div>
   </div>
@@ -349,93 +338,7 @@
     </div>
   </div>
 
-      <!-- A5 Calibration Template Preview -->
-      <div *ngIf="showA5Preview" style="background: white; border: 2px solid #ff5722; border-radius: 8px; padding: 20px; margin-bottom: 20px; text-align: center;">
-        <h5 style="color: #ff5722; margin: 0 0 15px 0;">📄 A5 Calibration Template Preview (1mm Grid)</h5>
-        <div style="width: 100%; max-width: 400px; margin: 0 auto; border: 1px solid #ddd; background: white; padding: 15px; aspect-ratio: 1.414;">
-          <!-- A5 Grid Template with 1mm grid -->
-          <div style="position: relative; width: 100%; height: 100%; background: linear-gradient(90deg, #e0e0e0 1px, transparent 1px), linear-gradient(180deg, #e0e0e0 1px, transparent 1px); background-size: 12px 12px;">
-            
-            <!-- Title -->
-            <div style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 12px;">
-              A5 Calibration Template - 1mm Grid
-        </div>
 
-            <!-- Instructions -->
-            <div style="text-align: center; margin-bottom: 10px; font-size: 8px; color: #666;">
-              Print this template and use for precise measurements
-    </div>
-
-            <!-- Centimeter markers (top) -->
-            <div style="position: absolute; top: 0; left: 0; right: 0; height: 20px; border-top: 2px solid #999;">
-              <div style="position: absolute; left: 0; top: 2px; font-size: 8px;">0</div>
-              <div style="position: absolute; left: 8.33%; top: 2px; font-size: 8px;">1</div>
-              <div style="position: absolute; left: 16.67%; top: 2px; font-size: 8px;">2</div>
-              <div style="position: absolute; left: 25%; top: 2px; font-size: 8px;">3</div>
-              <div style="position: absolute; left: 33.33%; top: 2px; font-size: 8px;">4</div>
-              <div style="position: absolute; left: 41.67%; top: 2px; font-size: 8px;">5</div>
-              <div style="position: absolute; left: 50%; top: 2px; font-size: 8px;">6</div>
-              <div style="position: absolute; left: 58.33%; top: 2px; font-size: 8px;">7</div>
-              <div style="position: absolute; left: 66.67%; top: 2px; font-size: 8px;">8</div>
-              <div style="position: absolute; left: 75%; top: 2px; font-size: 8px;">9</div>
-              <div style="position: absolute; left: 83.33%; top: 2px; font-size: 8px;">10</div>
-              <div style="position: absolute; left: 91.67%; top: 2px; font-size: 8px;">11</div>
-              <div style="position: absolute; right: 0; top: 2px; font-size: 8px;">12</div>
-  </div>
-
-            <!-- Centimeter markers (left) -->
-            <div style="position: absolute; top: 0; bottom: 0; left: 0; width: 20px; border-left: 2px solid #999;">
-              <div style="position: absolute; left: 2px; top: 0; font-size: 8px;">0</div>
-              <div style="position: absolute; left: 2px; top: 5%; font-size: 8px;">1</div>
-              <div style="position: absolute; left: 2px; top: 10%; font-size: 8px;">2</div>
-              <div style="position: absolute; left: 2px; top: 15%; font-size: 8px;">3</div>
-              <div style="position: absolute; left: 2px; top: 20%; font-size: 8px;">4</div>
-              <div style="position: absolute; left: 2px; top: 25%; font-size: 8px;">5</div>
-              <div style="position: absolute; left: 2px; top: 30%; font-size: 8px;">6</div>
-              <div style="position: absolute; left: 2px; top: 35%; font-size: 8px;">7</div>
-              <div style="position: absolute; left: 2px; top: 40%; font-size: 8px;">8</div>
-              <div style="position: absolute; left: 2px; top: 45%; font-size: 8px;">9</div>
-              <div style="position: absolute; left: 2px; top: 50%; font-size: 8px;">10</div>
-              <div style="position: absolute; left: 2px; top: 55%; font-size: 8px;">11</div>
-              <div style="position: absolute; left: 2px; top: 60%; font-size: 8px;">12</div>
-              <div style="position: absolute; left: 2px; top: 65%; font-size: 8px;">13</div>
-              <div style="position: absolute; left: 2px; top: 70%; font-size: 8px;">14</div>
-              <div style="position: absolute; left: 2px; top: 75%; font-size: 8px;">15</div>
-              <div style="position: absolute; left: 2px; top: 80%; font-size: 8px;">16</div>
-              <div style="position: absolute; left: 2px; top: 85%; font-size: 8px;">17</div>
-              <div style="position: absolute; left: 2px; top: 90%; font-size: 8px;">18</div>
-              <div style="position: absolute; left: 2px; top: 95%; font-size: 8px;">19</div>
-              <div style="position: absolute; left: 2px; bottom: 0; font-size: 8px;">20</div>
-        </div>
-        
-            <!-- Font Samples -->
-            <div style="position: absolute; top: 30px; left: 30px; right: 30px; font-size: 8px; color: #333;">
-              <div style="font-size: 8px; margin: 1px 0;">Arial 8pt: Sample Text ABCD 1234</div>
-              <div style="font-size: 10px; margin: 1px 0;">Arial 10pt: Sample Text ABCD 1234</div>
-              <div style="font-size: 12px; margin: 1px 0;">Arial 12pt: Sample Text ABCD 1234</div>
-              <div style="font-size: 14px; margin: 1px 0;">Arial 14pt: Sample Text ABCD 1234</div>
-              <div style="font-size: 16px; margin: 1px 0;">Arial 16pt: Sample Text ABCD 1234</div>
-              <div style="font-size: 18px; margin: 1px 0;">Arial 18pt: Sample Text ABCD 1234</div>
-    </div>
-
-            <!-- Reference line at 5cm from bottom -->
-            <div style="position: absolute; bottom: 60px; left: 30px; right: 30px; height: 2px; background: blue; border-top: 2px dashed blue;"></div>
-            <div style="position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); color: blue; font-weight: bold; font-size: 8px;">5cm from bottom edge</div>
-
-            <!-- Label Placement Area -->
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px dashed red; padding: 15px; background: rgba(255,0,0,0.1); text-align: center; min-width: 100px;">
-              <div style="color: red; font-weight: bold; font-size: 10px;">PLACE LABEL HERE</div>
-              <div style="color: red; font-size: 8px;">Align label edges with red border</div>
-      </div>
-      </div>
-        </div>
-        <button 
-          type="button"
-          (click)="printA5Template()"
-          style="background: #ff5722; color: white; padding: 10px 20px; margin-top: 15px; border: none; border-radius: 5px; cursor: pointer;">
-          Print Template
-        </button>
-      </div>
 
   <style>
     /* Excel-like styles */
