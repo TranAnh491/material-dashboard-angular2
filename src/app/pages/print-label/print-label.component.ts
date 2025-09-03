@@ -569,7 +569,7 @@ export class PrintLabelComponent implements OnInit {
         this.firebaseSaved = true;
         this.isSaving = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert(`✅ Đã lưu thành công ${finalCleanData.length} records vào Firebase!\n\n📦 Chia thành ${chunks.length} chunks để tránh vượt quá giới hạn 1MB\n🧹 Dữ liệu đã được làm sạch (undefined → null)`);
+        console.log(`✅ Đã lưu thành công ${finalCleanData.length} records vào Firebase! Chia thành ${chunks.length} chunks`);
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
@@ -591,66 +591,78 @@ export class PrintLabelComponent implements OnInit {
     console.log('🔥 Loading data from Firebase...');
     this.isLoading = true;
     
-    // Load only the LATEST document (most recent import) for better performance
+    // Load ALL documents to ensure we don't miss any data
     this.firestore.collection('printSchedules', ref => 
-      ref.orderBy('importedAt', 'desc').limit(1)
+      ref.orderBy('importedAt', 'desc')
     ).get().toPromise()
       .then((scheduleSnapshot: any) => {
         this.isLoading = false;
         
         if (scheduleSnapshot && !scheduleSnapshot.empty) {
-          const latestDoc = scheduleSnapshot.docs[0];
-          const docData = latestDoc.data();
-          
-          console.log(`📋 Loading latest document: ${latestDoc.id}`);
+          console.log(`📋 Found ${scheduleSnapshot.docs.length} documents in Firebase`);
           
           let allData: any[] = [];
           
-          if (docData.data && Array.isArray(docData.data) && docData.data.length > 0) {
-            console.log(`📋 Latest document has ${docData.data.length} items`);
-            allData = docData.data;
-          } else if (docData.maTem) {
-            // Fallback: individual document format
-            console.log(`📋 Latest document is individual item format`);
-            allData = [docData];
-          }
+          // Process all documents to get all data
+          scheduleSnapshot.docs.forEach((doc: any, index: number) => {
+            const docData = doc.data();
+            console.log(`📋 Processing document ${index + 1}: ${doc.id}`);
+            
+            if (docData.data && Array.isArray(docData.data) && docData.data.length > 0) {
+              console.log(`📋 Document ${index + 1} has ${docData.data.length} items`);
+              allData = allData.concat(docData.data);
+            } else if (docData.maTem) {
+              // Fallback: individual document format
+              console.log(`📋 Document ${index + 1} is individual item format`);
+              allData.push(docData);
+            }
+          });
           
           console.log(`📋 Total items loaded: ${allData.length}`);
           
+          // Remove duplicates based on maTem (if any)
+          const uniqueData = allData.filter((item, index, self) => 
+            index === self.findIndex(t => t.maTem === item.maTem)
+          );
+          
+          if (uniqueData.length !== allData.length) {
+            console.log(`📋 Removed ${allData.length - uniqueData.length} duplicate items`);
+          }
+          
           // Process loaded data and filter out Done items (for performance)
-          this.scheduleData = allData
+          this.scheduleData = uniqueData
             .filter((item: any) => {
               // Only load items that are NOT Done (for better performance)
               const status = item.tinhTrang ? item.tinhTrang.trim().toLowerCase() : '';
               return status !== 'done';
             })
             .map((item: any) => {
-              const processedItem = {
-                nam: item.nam || '',
-                thang: item.thang || '',
-                stt: item.stt || '',
-                sizePhoi: item.sizePhoi || '',
-                maTem: item.maTem || '',
-                soLuongYeuCau: item.soLuongYeuCau || '',
-                soLuongPhoi: item.soLuongPhoi || '',
-                maHang: item.maHang || '',
-                lenhSanXuat: item.lenhSanXuat || '',
-                khachHang: item.khachHang || '',
-                ngayNhanKeHoach: item.ngayNhanKeHoach || '',
-                yy: item.yy || '',
-                ww: item.ww || '',
-                lineNhan: item.lineNhan || '',
-                nguoiIn: item.nguoiIn || '',
-                tinhTrang: item.tinhTrang || '',
-                statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
-                banVe: item.banVe || '',
-                ghiChu: item.ghiChu || '',
-                isUrgent: item.isUrgent || false,
-                labelComparison: item.labelComparison || null
-              };
-              
-              return processedItem;
-            });
+            const processedItem = {
+              nam: item.nam || '',
+              thang: item.thang || '',
+              stt: item.stt || '',
+              sizePhoi: item.sizePhoi || '',
+              maTem: item.maTem || '',
+              soLuongYeuCau: item.soLuongYeuCau || '',
+              soLuongPhoi: item.soLuongPhoi || '',
+              maHang: item.maHang || '',
+              lenhSanXuat: item.lenhSanXuat || '',
+              khachHang: item.khachHang || '',
+              ngayNhanKeHoach: item.ngayNhanKeHoach || '',
+              yy: item.yy || '',
+              ww: item.ww || '',
+              lineNhan: item.lineNhan || '',
+              nguoiIn: item.nguoiIn || '',
+              tinhTrang: item.tinhTrang || '',
+              statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
+              banVe: item.banVe || '',
+              ghiChu: item.ghiChu || '',
+              isUrgent: item.isUrgent || false,
+              labelComparison: item.labelComparison || null
+            };
+            
+            return processedItem;
+          });
           
 
           
@@ -668,11 +680,6 @@ export class PrintLabelComponent implements OnInit {
           if (this.scheduleData.length > 0) {
             const uniqueMaTem = [...new Set(this.scheduleData.map(item => item.maTem))];
             console.log(`📊 Summary: ${this.scheduleData.length} total items, ${uniqueMaTem.length} unique mã tem`);
-            
-            // Show alert with summary
-            setTimeout(() => {
-              alert(`📊 Dữ liệu đã được tải từ Firebase:\n\n📋 Tổng số items: ${this.scheduleData.length}\n🏷️ Số mã tem duy nhất: ${uniqueMaTem.length}\n\n✅ Refresh thành công!`);
-            }, 500);
           }
         } else {
           console.log('🔥 No data found in Firebase');
@@ -687,7 +694,7 @@ export class PrintLabelComponent implements OnInit {
         this.firebaseSaved = false;
         
         // Show user-friendly error
-        alert('⚠️ Lỗi tải dữ liệu. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.');
+          alert('⚠️ Lỗi tải dữ liệu. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.');
       });
   }
 
@@ -3127,6 +3134,10 @@ export class PrintLabelComponent implements OnInit {
   updateScheduleInFirebase(item: ScheduleItem): void {
     console.log('🔄 Updating schedule in Firebase for item:', item.stt);
     
+    // Invalidate caches when data changes
+    this.statusCountsCache = null;
+    this.displayDataCache = null;
+    
     // Clean the item data to remove undefined values
     const cleanItem = this.cleanScheduleItem(item);
     
@@ -3303,7 +3314,9 @@ export class PrintLabelComponent implements OnInit {
 
   // Refresh display - Load last 30 days data
   refreshDisplay(): void {
-    console.log('🔄 Refreshing display - Loading last 30 days data...');
+    console.log('🔄 Refreshing display - Loading all data...');
+    // Force reload by clearing any flags
+    (window as any).dataCleared = false;
     this.loadDataFromFirebase();
   }
 
@@ -3484,34 +3497,101 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to get Pending items count
   getPendingItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ in').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['Chờ in'] || 0;
   }
 
   // Add function to get Chờ bản vẽ items count
   getChoBanVeItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ bản vẽ').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['Chờ bản vẽ'] || 0;
   }
 
   // Add function to get Chờ Template items count
   getChoTemplateItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ Template').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['Chờ Template'] || 0;
   }
 
   // Get count of items that are NOT done (completed)
   getNotDoneItemsCount(): number {
-    // Normalize status values to handle case variations
-    const normalizedItems = this.scheduleData.map(item => ({
-      ...item,
-      tinhTrang: item.tinhTrang ? item.tinhTrang.trim() : ''
-    }));
+    const counts = this.getCachedStatusCounts();
+    return counts['notDone'] || 0;
+  }
+
+  // Get cached status counts to improve performance
+  private getCachedStatusCounts(): {[key: string]: number} {
+    const now = Date.now();
     
-    const notDoneItems = normalizedItems.filter(item => 
-      item.tinhTrang !== 'Done' && 
-      item.tinhTrang !== 'done' && 
-      item.tinhTrang !== 'DONE'
-    );
+    // Check if cache is still valid
+    if (this.statusCountsCache && (now - this.statusCountsTimestamp) < this.STATUS_CACHE_DURATION) {
+      return this.statusCountsCache;
+    }
     
-    return notDoneItems.length;
+    // Calculate all status counts at once
+    const counts: {[key: string]: number} = {
+      'IQC': 0,
+      'Pass': 0,
+      'NG': 0,
+      'Chờ in': 0,
+      'Chờ bản vẽ': 0,
+      'Chờ Template': 0,
+      'Done': 0,
+      'notDone': 0,
+      'late': 0
+    };
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    this.scheduleData.forEach(item => {
+      const status = item.tinhTrang ? item.tinhTrang.trim() : '';
+      
+      // Count by status
+      if (counts.hasOwnProperty(status)) {
+        counts[status]++;
+      }
+      
+      // Count not done items
+      if (status !== 'Done' && status !== 'done' && status !== 'DONE') {
+        counts['notDone']++;
+      }
+      
+      // Count late items
+      if (item.ngayNhanKeHoach != null && item.ngayNhanKeHoach !== '') {
+        try {
+          let dueDate: Date;
+          
+          if (typeof item.ngayNhanKeHoach === 'object' && item.ngayNhanKeHoach && 'toDate' in item.ngayNhanKeHoach) {
+            dueDate = (item.ngayNhanKeHoach as any).toDate();
+          } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach && item.ngayNhanKeHoach.includes('/')) {
+            const parts = item.ngayNhanKeHoach.split('/');
+            if (parts.length === 3) {
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]) - 1;
+              const year = parseInt(parts[2]);
+              dueDate = new Date(year, month, day);
+            } else {
+              dueDate = new Date(item.ngayNhanKeHoach);
+            }
+          } else {
+            dueDate = new Date(item.ngayNhanKeHoach);
+          }
+          
+          if (dueDate < today && status !== 'Done' && status !== 'done' && status !== 'DONE') {
+            counts['late']++;
+          }
+        } catch (error) {
+          // Ignore date parsing errors
+        }
+      }
+    });
+    
+    // Cache the result
+    this.statusCountsCache = counts;
+    this.statusCountsTimestamp = now;
+    
+    return counts;
   }
 
   // Method to download Done items as Excel file
@@ -3684,79 +3764,8 @@ export class PrintLabelComponent implements OnInit {
 
   // Get late items count (items past due date and not Done)
   getLateItemsCount(): number {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to start of day
-    
-    console.log('🔍 Calculating late items count...');
-    console.log('📅 Today:', today.toISOString().split('T')[0]);
-    console.log('📊 Total items:', this.scheduleData.length);
-    
-    // Debug: Check all items with ngayNhanKeHoach
-    const itemsWithDates = this.scheduleData.filter(item => item.ngayNhanKeHoach);
-    console.log('📅 Items with ngayNhanKeHoach:', itemsWithDates.length);
-    
-    itemsWithDates.forEach(item => {
-      console.log(`📋 Item ${item.maTem}: ngayNhanKeHoach type:`, typeof item.ngayNhanKeHoach, 'value:', item.ngayNhanKeHoach);
-    });
-    
-    const lateItems = this.scheduleData.filter(item => {
-      // Skip if status is Done
-      if (item.tinhTrang === 'Done') return false;
-      
-      // Check if item has a due date
-      if (item.ngayNhanKeHoach != null && item.ngayNhanKeHoach !== '') {
-        try {
-          let dueDate: Date;
-          
-          // Handle different date formats from Firebase
-          if (typeof item.ngayNhanKeHoach === 'object' && item.ngayNhanKeHoach && 'toDate' in item.ngayNhanKeHoach) {
-            // Firestore Timestamp
-            dueDate = (item.ngayNhanKeHoach as any).toDate();
-          } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach && item.ngayNhanKeHoach.includes('/')) {
-              // Handle DD/MM/YYYY format from Excel import
-              const parts = item.ngayNhanKeHoach!.split('/');
-              if (parts.length === 3) {
-                const day = parseInt(parts[0]);
-                const month = parseInt(parts[1]) - 1; // Month is 0-indexed
-                const year = parseInt(parts[2]);
-                dueDate = new Date(year, month, day);
-              } else {
-                dueDate = new Date(item.ngayNhanKeHoach!);
-              }
-            } else {
-              // Try to create Date object for other formats
-              dueDate = new Date(item.ngayNhanKeHoach!);
-            }
-          
-          // Check if date is valid
-          if (isNaN(dueDate.getTime())) {
-            console.warn('⚠️ Invalid date for item:', item.maTem, item.ngayNhanKeHoach);
-            return false;
-          }
-          
-          // Reset time to start of day for comparison
-          dueDate.setHours(0, 0, 0, 0);
-          
-          const isLate = dueDate < today;
-          
-          // Debug log for items with dates
-          if (item.maTem) {
-            console.log(`📋 Item ${item.maTem}: Due date: ${dueDate.toISOString().split('T')[0]}, Is late: ${isLate}`);
-          }
-          
-          // Item is late if due date is before today
-          return isLate;
-        } catch (error) {
-          console.warn('❌ Error processing date for item:', item, error);
-          return false;
-        }
-      }
-      
-      return false;
-    });
-    
-    console.log(`⏰ Found ${lateItems.length} late items`);
-    return lateItems.length;
+    const counts = this.getCachedStatusCounts();
+    return counts['late'] || 0;
   }
 
   // Export photo report to Excel
@@ -4442,17 +4451,20 @@ export class PrintLabelComponent implements OnInit {
 
   // Add function to get IQC items count
   getIQCItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['IQC'] || 0;
   }
 
   // Add function to get Pass items count
   getPassItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Pass').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['Pass'] || 0;
   }
 
   // Add function to get NG items count
   getNGItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
+    const counts = this.getCachedStatusCounts();
+    return counts['NG'] || 0;
   }
 
   // Load user department information
@@ -4973,7 +4985,7 @@ export class PrintLabelComponent implements OnInit {
         console.log('✅ Old Firebase data cleared successfully');
         this.scheduleData = [];
         this.firebaseSaved = false;
-        alert('✅ Đã xóa dữ liệu cũ trong Firebase!');
+        console.log('✅ Đã xóa dữ liệu cũ trong Firebase!');
       })
       .catch((error) => {
         console.error('❌ Error clearing Firebase data:', error);
@@ -5722,7 +5734,7 @@ Gửi tự động từ hệ thống quản lý tem.
     Promise.all(deletePromises)
       .then(() => {
         console.log('✅ All deletion operations completed');
-        alert('✅ Đã xóa hoàn toàn hình khỏi Firebase!');
+        console.log('✅ Đã xóa hoàn toàn hình khỏi Firebase!');
         
         // Force reload after a delay
         setTimeout(() => {
@@ -5917,6 +5929,11 @@ Gửi tự động từ hệ thống quản lý tem.
   private displayDataCache: ScheduleItem[] | null = null;
   private cacheTimestamp: number = 0;
   private readonly CACHE_DURATION = 1000; // 1 second cache
+  
+  // Cache for status counts to improve performance
+  private statusCountsCache: {[key: string]: number} | null = null;
+  private statusCountsTimestamp: number = 0;
+  private readonly STATUS_CACHE_DURATION = 3000; // 3 seconds
 
   // Filter by specific status
   filterByStatus(status: string): void {
@@ -6027,6 +6044,9 @@ Gửi tự động từ hệ thống quản lý tem.
     // Cache the result
     this.displayDataCache = displayData;
     this.cacheTimestamp = now;
+    
+    // Invalidate status counts cache when display data changes
+    this.statusCountsCache = null;
     
     return displayData;
   }
