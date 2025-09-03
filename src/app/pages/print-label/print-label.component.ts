@@ -151,11 +151,11 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
-  importExcelFile(file: File): void {
+  async importExcelFile(file: File): Promise<void> {
     console.log('📁 Importing Excel file:', file.name);
     
     const reader = new FileReader();
-    reader.onload = (e: any) => {
+    reader.onload = async (e: any) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -172,14 +172,13 @@ export class PrintLabelComponent implements OnInit {
           return;
         }
         
-        // Add new data to existing data (append only)
-        const existingData = [...this.scheduleData];
-        this.scheduleData = [...existingData, ...cleanedData];
+        // REPLACE all data (clear existing and add new)
+        this.scheduleData = cleanedData;
         
-        // Save to Firebase (this will add new data)
-        this.saveToFirebase(this.scheduleData);
+        // Save to Firebase (this will replace all data)
+        await this.saveToFirebase(this.scheduleData);
         
-        const message = `✅ Successfully imported ${cleanedData.length} new records from ${file.name} and added to existing ${existingData.length} records. Total: ${this.scheduleData.length} records 🔥`;
+        const message = `✅ Successfully imported ${cleanedData.length} records from ${file.name} and REPLACED all existing data. Total: ${this.scheduleData.length} records 🔥`;
         alert(message);
         
       } catch (error) {
@@ -227,56 +226,104 @@ export class PrintLabelComponent implements OnInit {
     }).filter(item => item.maTem && item.maTem.trim() !== '');
   }
 
-  // Firebase operations
-  saveToFirebase(data: ScheduleItem[]): void {
-    console.log('🔥 Saving data to Firebase...');
+  // Firebase operations - Improved structure like work orders
+  async saveToFirebase(data: ScheduleItem[]): Promise<void> {
+    console.log('🔥 Saving label data to Firebase...');
     
     if (data.length === 0) {
       console.log('No data to save');
       return;
     }
 
-    // Split into chunks to avoid Firebase limits
-    const chunkSize = 100;
-    const chunks = [];
-    for (let i = 0; i < data.length; i += chunkSize) {
-      chunks.push(data.slice(i, i + chunkSize));
-    }
+    try {
+      // FIRST: Delete all existing data
+      console.log('🗑️ Deleting all existing data first...');
+      const existingSnapshot = await this.firestore.collection('print-schedules').get().toPromise();
+      
+      if (existingSnapshot && !existingSnapshot.empty) {
+        const deleteBatch = this.firestore.firestore.batch();
+        existingSnapshot.docs.forEach(doc => {
+          deleteBatch.delete(doc.ref);
+        });
+        await deleteBatch.commit();
+        console.log(`🗑️ Deleted ${existingSnapshot.docs.length} existing documents`);
+      }
 
-    const savePromises = chunks.map(chunk => {
-      const chunkDoc = {
-        data: chunk,
+      // THEN: Add new data with clear structure like work orders
+      console.log('➕ Adding new data with clear structure...');
+      
+      const labelScheduleDoc = {
+        data: data,
         importedAt: new Date(),
-        recordCount: chunk.length,
-        lastUpdated: new Date()
+        month: this.getCurrentMonth(),
+        year: new Date().getFullYear(),
+        recordCount: data.length,
+        lastUpdated: new Date(),
+        importHistory: [
+          {
+            importedAt: new Date(),
+            recordCount: data.length,
+            month: this.getCurrentMonth(),
+            year: new Date().getFullYear(),
+            description: `Import ${data.length} label schedules`
+          }
+        ],
+        // Additional metadata for clarity
+        collectionType: 'print-schedules',
+        version: '1.0',
+        status: 'active'
       };
-      return this.firestore.collection('printSchedules').add(chunkDoc);
-    });
 
-    Promise.all(savePromises)
-      .then(() => {
-        this.firebaseSaved = true;
-        console.log(`✅ Saved ${data.length} records to Firebase in ${chunks.length} chunks`);
-      })
-      .catch(error => {
-        console.error('❌ Error saving to Firebase:', error);
-        alert('❌ Error saving to Firebase: ' + error.message);
+      console.log('📤 Attempting to save label schedule data:', {
+        recordCount: labelScheduleDoc.recordCount,
+        month: labelScheduleDoc.month,
+        year: labelScheduleDoc.year,
+        timestamp: labelScheduleDoc.importedAt
       });
+
+      // Add timeout to Firebase save
+      const savePromise = this.firestore.collection('print-schedules').add(labelScheduleDoc);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
+      );
+
+      await Promise.race([savePromise, timeoutPromise]);
+      
+      this.firebaseSaved = true;
+      console.log(`✅ Saved ${data.length} records to Firebase with clear structure`);
+      alert(`✅ Đã lưu thành công ${data.length} bản ghi vào Firebase!\n\nCấu trúc dữ liệu rõ ràng như work orders.`);
+      
+    } catch (error) {
+      console.error('❌ Error saving to Firebase:', error);
+      alert('❌ Error saving to Firebase: ' + error.message);
+    }
   }
 
   loadDataFromFirebase(): void {
     console.log('🔥 Loading data from Firebase...');
     
-    this.firestore.collection('printSchedules', ref => 
+    // Use the new collection name with clear structure
+    this.firestore.collection('print-schedules', ref => 
       ref.orderBy('importedAt', 'desc')
     ).get().subscribe((querySnapshot) => {
       const allData: ScheduleItem[] = [];
       
+      console.log(`🔍 Found ${querySnapshot.docs.length} documents in print-schedules collection`);
+      
       querySnapshot.forEach((doc) => {
         const data = doc.data() as any;
-        // Try both data structures
+        console.log(`📄 Document ${doc.id}:`, {
+          hasData: !!data.data,
+          dataLength: data.data ? data.data.length : 0,
+          month: data.month,
+          year: data.year,
+          importedAt: data.importedAt,
+          recordCount: data.recordCount,
+          collectionType: data.collectionType
+        });
+        
+        // New clear structure: { data: [...], metadata }
         if (data.data && Array.isArray(data.data)) {
-          // Old structure: { data: [...] }
           const items = data.data
             .filter((item: any) => {
               // Filter out Done items
@@ -285,32 +332,14 @@ export class PrintLabelComponent implements OnInit {
             })
             .map((item: any) => ({
               ...item,
-              isCompleted: false // Since we filtered out Done items
+              isCompleted: false, // Since we filtered out Done items
+              // Add document metadata for tracking
+              documentId: doc.id,
+              importedAt: data.importedAt,
+              month: data.month,
+              year: data.year
             }));
           allData.push(...items);
-        } else if (Array.isArray(data)) {
-          // Direct array structure
-          const items = data
-            .filter((item: any) => {
-              // Filter out Done items
-              const status = item.tinhTrang?.toLowerCase();
-              return status !== 'done' && status !== 'completed';
-            })
-            .map((item: any) => ({
-              ...item,
-              isCompleted: false // Since we filtered out Done items
-            }));
-          allData.push(...items);
-        } else if (data.maTem) {
-          // Single item structure
-          const status = data.tinhTrang?.toLowerCase();
-          if (status !== 'done' && status !== 'completed') {
-            const item = {
-              ...data,
-              isCompleted: false // Since we filtered out Done items
-            };
-            allData.push(item as ScheduleItem);
-          }
         }
       });
       
@@ -323,7 +352,7 @@ export class PrintLabelComponent implements OnInit {
         const uniqueMaTem = [...new Set(this.scheduleData.map(item => item.maTem))];
         console.log(`📊 Summary: ${this.scheduleData.length} total items (Done items excluded), ${uniqueMaTem.length} unique mã tem`);
       } else {
-        console.log('⚠️ No data found in Firebase collection "printSchedules" (after filtering Done items)');
+        console.log('⚠️ No data found in Firebase collection "print-schedules" (after filtering Done items)');
         console.log('🔍 Available documents:', querySnapshot.docs.length);
       }
     }, error => {
@@ -448,8 +477,8 @@ export class PrintLabelComponent implements OnInit {
     try {
       console.log(`🗑️ Deleting data for month ${month}/${year}...`);
       
-      const monthPattern = `${year}-${month.toString().padStart(2, '0')}`;
-      const snapshot = await this.firestore.collection('printSchedules').get().toPromise();
+      // Use new collection name
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
         alert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
@@ -457,25 +486,57 @@ export class PrintLabelComponent implements OnInit {
       }
       
       let deletedCount = 0;
+      let totalItemsDeleted = 0;
       const batch = this.firestore.firestore.batch();
+      const documentsToDelete: any[] = [];
       
       snapshot.forEach((doc: any) => {
         const data = doc.data();
-        if (data['importedAt'] && data['importedAt'].toDate) {
-          const importedAt = data['importedAt'].toDate();
-          const docMonthPattern = `${importedAt.getFullYear()}-${(importedAt.getMonth() + 1).toString().padStart(2, '0')}`;
+        console.log(`🔍 Checking document ${doc.id}:`, {
+          month: data.month,
+          year: data.year,
+          recordCount: data.recordCount
+        });
+        
+        // Check both month/year fields and importedAt field for compatibility
+        if ((data.month === month && data.year === year) || 
+            (data['importedAt'] && data['importedAt'].toDate)) {
           
-          if (docMonthPattern === monthPattern) {
+          if (data['importedAt'] && data['importedAt'].toDate) {
+            const importedAt = data['importedAt'].toDate();
+            const docMonthPattern = `${importedAt.getFullYear()}-${(importedAt.getMonth() + 1).toString().padStart(2, '0')}`;
+            const targetPattern = `${year}-${month.toString().padStart(2, '0')}`;
+            
+            if (docMonthPattern === targetPattern) {
+              batch.delete(doc.ref);
+              deletedCount++;
+              totalItemsDeleted += data.recordCount || 0;
+              documentsToDelete.push({
+                id: doc.id,
+                recordCount: data.recordCount,
+                month: data.month,
+                year: data.year
+              });
+            }
+          } else if (data.month === month && data.year === year) {
             batch.delete(doc.ref);
             deletedCount++;
+            totalItemsDeleted += data.recordCount || 0;
+            documentsToDelete.push({
+              id: doc.id,
+              recordCount: data.recordCount,
+              month: data.month,
+              year: data.year
+            });
           }
         }
       });
       
       if (deletedCount > 0) {
         await batch.commit();
-        console.log(`✅ Deleted ${deletedCount} records for ${month}/${year}`);
-        alert(`✅ Đã xóa ${deletedCount} bản ghi của tháng ${month}/${year}!`);
+        console.log(`✅ Deleted ${deletedCount} documents with ${totalItemsDeleted} total items for ${month}/${year}`);
+        console.log('📄 Deleted documents:', documentsToDelete);
+        alert(`✅ Đã xóa thành công!\n\n- ${deletedCount} documents\n- ${totalItemsDeleted} bản ghi\n- Tháng ${month}/${year}`);
         this.loadDataFromFirebase();
       } else {
         alert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
@@ -491,12 +552,28 @@ export class PrintLabelComponent implements OnInit {
     try {
       console.log('🗑️ Deleting current data and preparing for fresh import...');
       
-      const snapshot = await this.firestore.collection('printSchedules').get().toPromise();
+      // Use new collection name
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
         alert('ℹ️ Không có dữ liệu nào để xóa!');
         return;
       }
+      
+      let totalItems = 0;
+      const documentsToDelete: any[] = [];
+      
+      // Count total items before deletion
+      snapshot.forEach((doc: any) => {
+        const data = doc.data();
+        totalItems += data.recordCount || 0;
+        documentsToDelete.push({
+          id: doc.id,
+          recordCount: data.recordCount,
+          month: data.month,
+          year: data.year
+        });
+      });
       
       const batch = this.firestore.firestore.batch();
       snapshot.forEach((doc: any) => {
@@ -505,8 +582,9 @@ export class PrintLabelComponent implements OnInit {
       
       await batch.commit();
       
-      console.log(`✅ Deleted ${snapshot.size} records`);
-      alert(`✅ Đã xóa ${snapshot.size} bản ghi hiện tại!\n\nBây giờ bạn có thể import dữ liệu mới.`);
+      console.log(`✅ Deleted ${snapshot.docs.length} documents with ${totalItems} total items`);
+      console.log('📄 Deleted documents:', documentsToDelete);
+      alert(`✅ Đã xóa thành công!\n\n- ${snapshot.docs.length} documents\n- ${totalItems} bản ghi\n\nBây giờ bạn có thể import dữ liệu mới.`);
       
       this.scheduleData = [];
       
@@ -521,6 +599,11 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Utility methods
+  getCurrentMonth(): string {
+    const now = new Date();
+    return (now.getMonth() + 1).toString().padStart(2, '0');
+  }
+
   getMonthName(monthKey: string): string {
     const months = {
       '01': 'January', '02': 'February', '03': 'March', '04': 'April',
@@ -775,19 +858,23 @@ export class PrintLabelComponent implements OnInit {
     console.log('🧪 Testing delete old data functionality...');
     
     // First, let's check what data structure we have
-    this.firestore.collection('printSchedules').get().subscribe((querySnapshot) => {
+    this.firestore.collection('print-schedules').get().subscribe((querySnapshot) => {
       console.log('🔍 Current Firebase data structure:');
       console.log(`   - Total documents: ${querySnapshot.docs.length}`);
       
       querySnapshot.docs.forEach((doc, index) => {
         if (index < 3) { // Only show first 3 documents
-          const data = doc.data();
+          const data = doc.data() as any;
           console.log(`   - Document ${index + 1}:`, {
             id: doc.id,
             hasImportedAt: !!data['importedAt'],
             importedAt: data['importedAt'],
             hasData: !!data['data'],
             dataLength: data['data'] ? data['data'].length : 0,
+            month: data.month,
+            year: data.year,
+            recordCount: data.recordCount,
+            collectionType: data.collectionType,
             keys: Object.keys(data)
           });
         }
@@ -816,8 +903,7 @@ export class PrintLabelComponent implements OnInit {
     try {
       console.log(`🧪 Testing delete for month ${month}/${year}...`);
       
-      const monthPattern = `${year}-${month.toString().padStart(2, '0')}`;
-      const snapshot = await this.firestore.collection('printSchedules').get().toPromise();
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
         console.log('🧪 No documents found in Firebase');
@@ -826,44 +912,60 @@ export class PrintLabelComponent implements OnInit {
       }
       
       let wouldDeleteCount = 0;
+      let totalItemsToDelete = 0;
       const wouldDeleteDocs: any[] = [];
       
       snapshot.forEach((doc: any) => {
         const data = doc.data();
         console.log(`🧪 Checking document:`, {
           id: doc.id,
+          month: data.month,
+          year: data.year,
+          recordCount: data.recordCount,
           importedAt: data['importedAt'],
           hasImportedAt: !!data['importedAt']
         });
         
-        if (data['importedAt'] && data['importedAt'].toDate) {
+        // Check both new structure (month/year fields) and old structure (importedAt)
+        let shouldDelete = false;
+        
+        if (data.month === month && data.year === year) {
+          shouldDelete = true;
+        } else if (data['importedAt'] && data['importedAt'].toDate) {
           const importedAt = data['importedAt'].toDate();
           const docMonthPattern = `${importedAt.getFullYear()}-${(importedAt.getMonth() + 1).toString().padStart(2, '0')}`;
+          const targetPattern = `${year}-${month.toString().padStart(2, '0')}`;
           
-          console.log(`🧪 Document ${doc.id}: ${docMonthPattern} vs ${monthPattern}`);
+          console.log(`🧪 Document ${doc.id}: ${docMonthPattern} vs ${targetPattern}`);
           
-          if (docMonthPattern === monthPattern) {
-            wouldDeleteCount++;
-            wouldDeleteDocs.push({
-              id: doc.id,
-              importedAt: importedAt,
-              dataLength: data['data'] ? data['data'].length : 0
-            });
+          if (docMonthPattern === targetPattern) {
+            shouldDelete = true;
           }
-        } else {
-          console.log(`🧪 Document ${doc.id}: No importedAt field or invalid format`);
+        }
+        
+        if (shouldDelete) {
+          wouldDeleteCount++;
+          totalItemsToDelete += data.recordCount || 0;
+          wouldDeleteDocs.push({
+            id: doc.id,
+            month: data.month,
+            year: data.year,
+            recordCount: data.recordCount,
+            importedAt: data['importedAt']
+          });
         }
       });
       
       console.log(`🧪 Test Results:`);
       console.log(`   - Would delete ${wouldDeleteCount} documents`);
+      console.log(`   - Would delete ${totalItemsToDelete} total items`);
       console.log(`   - Documents to delete:`, wouldDeleteDocs);
       
       if (wouldDeleteCount > 0) {
         const confirmDelete = confirm(`🧪 Test Delete Results\n\n` +
-          `Would delete ${wouldDeleteCount} documents for ${month}/${year}:\n\n` +
+          `Would delete ${wouldDeleteCount} documents with ${totalItemsToDelete} total items for ${month}/${year}:\n\n` +
           wouldDeleteDocs.map(doc => 
-            `- ${doc.id}: ${doc.dataLength} items (${doc.importedAt})`
+            `- ${doc.id}: ${doc.recordCount} items (${doc.month}/${doc.year})`
           ).join('\n') + '\n\n' +
           `Do you want to actually delete these documents?`);
         
@@ -871,13 +973,13 @@ export class PrintLabelComponent implements OnInit {
           // Actually delete
           const batch = this.firestore.firestore.batch();
           wouldDeleteDocs.forEach(docInfo => {
-            const docRef = this.firestore.collection('printSchedules').doc(docInfo.id).ref;
+            const docRef = this.firestore.collection('print-schedules').doc(docInfo.id).ref;
             batch.delete(docRef);
           });
           
           await batch.commit();
-          console.log(`✅ Actually deleted ${wouldDeleteCount} documents`);
-          alert(`✅ Actually deleted ${wouldDeleteCount} documents for ${month}/${year}!`);
+          console.log(`✅ Actually deleted ${wouldDeleteCount} documents with ${totalItemsToDelete} items`);
+          alert(`✅ Actually deleted ${wouldDeleteCount} documents with ${totalItemsToDelete} items for ${month}/${year}!`);
           
           // Reload data
           this.loadDataFromFirebase();
@@ -890,8 +992,8 @@ export class PrintLabelComponent implements OnInit {
         alert(`🧪 No documents would be deleted for ${month}/${year}\n\n` +
               `This could mean:\n` +
               `- No data exists for this month\n` +
-              `- Data doesn't have importedAt field\n` +
-              `- importedAt field format is different`);
+              `- Data doesn't have month/year or importedAt fields\n` +
+              `- Field format is different`);
       }
       
     } catch (error) {
@@ -1126,24 +1228,35 @@ export class PrintLabelComponent implements OnInit {
     try {
       console.log('🔍 Checking Firebase data...');
       
-      // Get all documents from printSchedules collection
-      const snapshot = await this.firestore.collection('printSchedules').get().toPromise();
+      // Get all documents from print-schedules collection (new structure)
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
-        console.log('📊 Firebase collection "printSchedules" is empty');
-        alert('📊 Firebase collection "printSchedules" is empty - No data to clear');
+        console.log('📊 Firebase collection "print-schedules" is empty');
+        alert('📊 Firebase collection "print-schedules" is empty - No data to clear');
         return;
       }
 
       console.log(`📊 Found ${snapshot.docs.length} documents in Firebase`);
       
-      // Count total items across all documents
+      // Count total items across all documents with clear structure
       let totalItems = 0;
       let doneItems = 0;
       let notDoneItems = 0;
+      const documentDetails: any[] = [];
       
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
+        const docInfo = {
+          id: doc.id,
+          recordCount: data.recordCount || 0,
+          month: data.month,
+          year: data.year,
+          importedAt: data.importedAt,
+          collectionType: data.collectionType
+        };
+        documentDetails.push(docInfo);
+        
         if (data.data && Array.isArray(data.data)) {
           totalItems += data.data.length;
           data.data.forEach((item: any) => {
@@ -1154,24 +1267,6 @@ export class PrintLabelComponent implements OnInit {
               notDoneItems++;
             }
           });
-        } else if (Array.isArray(data)) {
-          totalItems += data.length;
-          data.forEach((item: any) => {
-            const status = item.tinhTrang?.toLowerCase();
-            if (status === 'done' || status === 'completed') {
-              doneItems++;
-            } else {
-              notDoneItems++;
-            }
-          });
-        } else if (data.maTem) {
-          totalItems++;
-          const status = data.tinhTrang?.toLowerCase();
-          if (status === 'done' || status === 'completed') {
-            doneItems++;
-          } else {
-            notDoneItems++;
-          }
         }
       });
 
@@ -1180,13 +1275,17 @@ export class PrintLabelComponent implements OnInit {
       console.log(`   - Total items: ${totalItems}`);
       console.log(`   - Done items: ${doneItems}`);
       console.log(`   - Not Done items: ${notDoneItems}`);
+      console.log('📄 Document details:', documentDetails);
 
       // Ask for confirmation to clear all data
-      const confirmMessage = `📊 Firebase Data Summary:
+      const confirmMessage = `📊 Firebase Data Summary (Clear Structure):
 - Total documents: ${snapshot.docs.length}
 - Total items: ${totalItems}
 - Done items: ${doneItems}
 - Not Done items: ${notDoneItems}
+
+📄 Documents to delete:
+${documentDetails.map(doc => `- ${doc.id}: ${doc.recordCount} items (${doc.month}/${doc.year})`).join('\n')}
 
 ⚠️ Bạn có chắc chắn muốn XÓA HẾT tất cả dữ liệu này không?
 Hành động này KHÔNG THỂ HOÀN TÁC!`;
