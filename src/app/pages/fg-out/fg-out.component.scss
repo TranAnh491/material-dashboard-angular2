@@ -1,42 +1,928 @@
+// FG Out - Black & White Interface (Speed Optimized)
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 .main-content {
-  padding: 20px;
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+}
+
+// Excel-like table styling - Minimal & Fast
+.excel-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  min-width: 1200px;
+  position: relative;
   
-  .excel-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  thead {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important;
+    background: #000000 !important;
+  }
+  
+  th, td {
+    border: 1px solid #000000;
+    padding: 6px 4px;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: none;
+    max-width: 80px;
+    background: transparent;
+  }
+  
+  th {
+    background: #000000 !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important;
+    border-bottom: 2px solid #000000;
+    padding: 6px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
     
-    .excel-header {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-      padding: 20px;
-      border-radius: 8px 8px 0 0;
+    &.row-header {
+      background: #000000;
+      color: #ffffff;
+      font-size: 11px;
+      text-align: center;
+      width: 40px;
+      min-width: 40px;
+    }
+  }
+  
+  tbody tr {
+    transition: none;
+    background-color: #ffffff;
+    
+    &:nth-child(even) {
+      background-color: #f8f8f8;
+    }
+    
+    &:nth-child(odd) {
+      background-color: #ffffff;
+    }
+    
+    &:hover {
+      background: #e8e8e8;
+    }
+  }
+  
+  td {
+    font-size: 11px;
+    color: #000000;
+    border-color: #000000;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    background-color: transparent;
+    
+    &.row-header {
+      background: transparent;
+      color: #000000;
+      font-size: 11px;
+      text-align: center;
+      font-family: Arial, sans-serif;
+      font-weight: normal;
+      width: 40px;
+      min-width: 40px;
+    }
+    
+    &.date-cell {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: #000000;
+      position: relative;
+      z-index: 1;
+      pointer-events: auto !important;
+      width: 100px;
+      min-width: 100px;
+      max-width: 100px;
       
-      h4 {
-        margin: 0;
-        font-weight: 600;
+      .date-input {
+        pointer-events: auto !important;
+        z-index: 2;
+        position: relative;
+        color: #000000 !important;
+        font-weight: 600 !important;
+        width: 90px !important;
+        
+        &[type="date"]:not(:placeholder-shown) {
+          color: #000000 !important;
+          font-weight: 600 !important;
+        }
+        
+        &::-webkit-datetime-edit-text,
+        &::-webkit-datetime-edit-month-field,
+        &::-webkit-datetime-edit-day-field,
+        &::-webkit-datetime-edit-year-field {
+          color: #000000 !important;
+          font-weight: 600 !important;
+        }
       }
     }
     
-    .content-placeholder {
-      padding: 60px 20px;
+    &.number-cell {
       text-align: center;
+      font-family: Arial, sans-serif;
+      font-weight: normal;
+      color: #000000;
+      font-size: 11px;
+    }
+    
+    &.code-cell {
+      font-weight: 600;
+      color: #000000;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      width: 100px;
+      min-width: 100px;
+    }
+    
+    &.status-cell {
+      text-align: center;
+      width: 50px;
+      min-width: 50px;
       
-      .placeholder-content {
-        i {
-          font-size: 64px;
-          color: #f093fb;
-          margin-bottom: 20px;
+      .mat-icon-button {
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        border-radius: 0;
+        transition: none;
+        
+        &:hover {
+          background: #e8e8e8;
         }
         
-        h3 {
-          color: #333;
+        &[color="warn"]:hover {
+          background: #e8e8e8;
+        }
+        
+        &:disabled {
+          opacity: 0.5;
+        }
+        
+        .mat-icon {
+          font-size: 16px;
+          color: #000000;
+        }
+      }
+    }
+  }
+}
+
+// Excel-like container
+  .excel-container {
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 0;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+    
+    .excel-header {
+    background: #ffffff;
+    border-bottom: 1px solid #000000;
+    padding: 12px 16px;
+    flex-shrink: 0;
+      
+      h4 {
+        margin: 0;
+      font-size: 16px;
+        font-weight: 600;
+      color: #000000;
+      font-family: Arial, sans-serif;
+    }
+  }
+  
+  .excel-body {
+    overflow: auto;
+    flex: 1;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #666666 #ffffff;
+    
+    &::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: #ffffff;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #666666;
+      border-radius: 0;
+      
+      &:hover {
+        background: #000000;
+      }
+    }
+  }
+}
+
+// Excel-like action buttons - Minimal
+.excel-actions {
+  background: #ffffff;
+  border-bottom: 1px solid #000000;
+  
+  .action-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1500 !important;
+  }
+  
+  .custom-btn {
+    height: 32px !important;
+    padding: 6px 12px !important;
+    border: 1px solid #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    
+    &.btn-primary {
+      background: #000000 !important;
+      color: #ffffff !important;
+      
+      &:hover {
+        background: #333333 !important;
+        border-color: #333333 !important;
+      }
+    }
+    gap: 4px !important;
+    transition: none !important;
+    white-space: nowrap !important;
+    min-width: auto !important;
+    
+    .material-icons {
+      font-size: 16px !important;
+      color: #000000 !important;
+    }
+    
+    &:hover {
+      background: #f0f0f0 !important;
+      border-color: #000000 !important;
+      color: #000000 !important;
+    }
+    
+    &:focus, &:active {
+      background: #e0e0e0 !important;
+      border-color: #000000 !important;
+      color: #000000 !important;
+    }
+    
+    &.active {
+      background: #000000 !important;
+      border-color: #000000 !important;
+      color: #ffffff !important;
+      
+      .material-icons {
+        color: #ffffff !important;
+      }
+      
+      &:hover {
+        background: #333333 !important;
+        border-color: #333333 !important;
+      }
+    }
+  }
+  
+  .custom-input {
+    height: 32px !important;
+    padding: 6px 8px !important;
+    border: 1px solid #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12px !important;
+    border-radius: 0 !important;
+    min-width: 150px !important;
+    transition: none !important;
+    
+    &::placeholder {
+      color: #666666 !important;
+    }
+    
+    &:focus {
+      outline: none !important;
+      border-color: #000000 !important;
+      background: #ffffff !important;
+    }
+    
+    &.search-input-uppercase {
+      text-transform: uppercase !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.5px !important;
+      
+      &::placeholder {
+        text-transform: uppercase !important;
+        font-weight: 500 !important;
+        color: #999999 !important;
+      }
+    }
+  }
+}
+
+// Excel-like checkbox styling - Minimal
+mat-checkbox {
+  ::ng-deep .mat-checkbox-frame {
+    border-color: #000000 !important;
+    border-width: 1px !important;
+    border-radius: 0 !important;
+    background-color: #ffffff !important;
+  }
+  
+  ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
+    background-color: #ffffff !important;
+    border-color: #000000 !important;
+  }
+  
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-background,
+  ::ng-deep .mat-checkbox-indeterminate .mat-checkbox-background {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    border: none !important;
+  }
+  
+  ::ng-deep .mat-checkbox-checked .mat-checkbox-checkmark-path,
+  ::ng-deep .mat-checkbox-checkmark-path {
+    stroke: #ffffff !important;
+  }
+  
+  ::ng-deep .mat-checkbox:not(.mat-checkbox-disabled):hover .mat-checkbox-frame {
+    border-color: #000000 !important;
+  }
+  
+  ::ng-deep .mat-checkbox-ripple .mat-ripple-element {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+  }
+}
+
+// Editable location
+.editable-location {
+  cursor: pointer;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  min-height: 16px;
+  text-transform: uppercase;
+  font-weight: 500;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #000000;
+  
+  &:hover {
+    background: #f0f0f0;
+  }
+  
+  &:empty::before {
+    content: 'Click to edit...';
+    color: #666666;
+    font-style: italic;
+    font-size: 11px;
+    text-transform: none;
+  }
+  
+  &:focus {
+    outline: none;
+    background: #ffffff;
+    border: 1px solid #000000;
+  }
+}
+
+// Date input styling - Minimal
+.date-input {
+  border: none;
+  padding: 4px;
+  font-size: 11px;
+  font-family: Arial, sans-serif;
+  background: transparent;
+  text-align: center;
+  width: 100%;
+  border-radius: 0;
+  position: relative;
+  
+  &:focus {
+    outline: none;
+    background: #f0f0f0;
+    border: none;
+  }
+  
+  &::-webkit-calendar-picker-indicator {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3e%3cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: 16px 16px !important;
+    width: 20px !important;
+    height: 20px !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    display: block !important;
+    margin: 0 auto !important;
+    border: none !important;
+    
+    &:hover {
+      opacity: 0.7 !important;
+    }
+  }
+}
+
+// Editable input styling - Minimal
+.editable-input {
+  border: none;
+  background: transparent;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #000000;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 0;
+  
+  &:focus {
+    outline: none;
+    border: none;
+    background: #f0f0f0;
+  }
+  
+  &::placeholder {
+    color: #666666;
+    font-style: italic;
+  }
+}
+
+// Status Select
+.status-select {
+  width: 100%;
+  border: 1px solid #000000;
+  background: #ffffff;
+  color: #000000;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.status-select:focus {
+  outline: 2px solid #000000;
+  border-color: #333333;
+}
+
+// Editable Select
+.editable-select {
+  width: 100%;
+  border: 1px solid #000000;
+  background: #ffffff;
+  color: #000000;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.editable-select:focus {
+  outline: 2px solid #000000;
+  border-color: #333333;
+}
+
+// Number Input
+.number-input {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+// Date Input
+.date-input {
+  font-size: 10px;
+  padding: 1px 2px;
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 2px;
+  margin-right: 2px;
+  opacity: 0.6;
+  filter: invert(1);
+}
+
+.date-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.editable-input-no-border {
+  border: none;
+  background: transparent;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #000000;
+      text-align: center;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 0;
+  
+  &:focus {
+    outline: none;
+    background: #f0f0f0;
+    border: none;
+  }
+}
+
+// Custom Modal Styling - Minimal
+.custom-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  
+  &.show {
+    opacity: 1;
+  }
+  
+  .modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  
+  .modal-container {
+    position: relative;
+    background: #ffffff;
+    border: 1px solid #000000;
+    border-radius: 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    width: 90%;
+    max-height: 90vh;
+    overflow: hidden;
+    transform: scale(0.9);
+    transition: transform 0.2s ease;
+    
+    .show & {
+      transform: scale(1);
+    }
+    
+    .modal-header {
+      background: #000000;
+      color: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      
+      .modal-title {
+        margin: 0;
+          font-size: 16px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        .material-icons {
+          font-size: 20px;
+        }
+      }
+      
+      .close-btn {
+        background: none;
+        border: none;
+        color: #ffffff;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 0;
+        transition: none;
+        
+        &:hover {
+          background: #333333;
+        }
+        
+        .material-icons {
+          font-size: 20px;
+        }
+      }
+    }
+    
+    .modal-body {
+      padding: 20px;
+      
+      .date-inputs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        
+        .input-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          
+          .input-label {
+            font-weight: 600;
+            color: #000000;
+            font-size: 12px;
+          }
+          
+          .date-input {
+            padding: 8px 12px;
+            border: 1px solid #000000;
+            border-radius: 0;
+            font-size: 12px;
+            transition: none;
+            background: #ffffff;
+            
+            &:focus {
+              outline: none;
+              border-color: #000000;
+              background: #ffffff;
+            }
+            
+            &:hover {
+              border-color: #000000;
+        }
+      }
+    }
+  }
+}
+
+    .modal-footer {
+      padding: 16px 20px;
+      background: #f8f8f8;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      
+      .btn {
+        padding: 8px 16px;
+        border-radius: 0;
+        font-weight: 600;
+        font-size: 12px;
+        border: 1px solid #000000;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: none;
+        
+        .material-icons {
+          font-size: 16px;
+        }
+        
+        &.btn-cancel {
+          background: #ffffff;
+          color: #000000;
+          
+          &:hover {
+            background: #f0f0f0;
+          }
+        }
+        
+        &.btn-apply {
+          background: #000000;
+          color: #ffffff;
+          
+          &:hover {
+            background: #333333;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Mobile modal adjustments
+@media (max-width: 768px) {
+  .custom-modal {
+    .modal-container {
+      width: 95%;
+      margin: 20px;
+      
+      .modal-body {
+        padding: 16px;
+        
+        .date-inputs {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+      }
+      
+      .modal-footer {
+        padding: 12px 16px;
+        flex-direction: column;
+        
+        .btn {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    }
+  }
+}
+
+// XTP Modal Styles
+.modal-large {
+  max-width: 800px !important;
+  width: 90% !important;
+}
+
+.xtp-form {
+  .form-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    
+    .input-group {
+      flex: 1;
+    }
+  }
+  
+  .input-group {
+    margin-bottom: 15px;
+    
+    .input-label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #000000;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 2px solid #000000;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #ffffff;
+      color: #000000;
+      
+      &:focus {
+        outline: none;
+        border-color: #333333;
+        box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+      }
+      
+      &::placeholder {
+        color: #666666;
+      }
+    }
+  }
+  
+  .file-upload-section {
+          margin-bottom: 20px;
+    
+    .file-upload-area {
+      border: 2px dashed #000000;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #ffffff;
+      
+      &:hover {
+        border-color: #333333;
+        background: #f8f8f8;
+      }
+      
+      &.has-file {
+        border-color: #28a745;
+        background: #f8fff8;
+      }
+      
+      .upload-placeholder {
+        i {
+          font-size: 48px;
+          color: #666666;
           margin-bottom: 10px;
         }
         
         p {
-          color: #666;
+          margin: 10px 0 5px 0;
+          font-weight: 500;
+          color: #000000;
+        }
+        
+        small {
+          color: #666666;
+        }
+      }
+      
+      .file-selected {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        
+        i {
+          font-size: 24px;
+          color: #28a745;
+        }
+        
+        span {
+          font-weight: 500;
+          color: #000000;
+        }
+        
+        .remove-file {
+          background: none;
+          border: none;
+          color: #dc3545;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 50%;
+          
+          &:hover {
+            background: #f8d7da;
+          }
+          
+          i {
           font-size: 16px;
+        }
+      }
+    }
+  }
+}
+
+  .preview-section {
+    margin-top: 20px;
+    
+    h6 {
+      margin-bottom: 10px;
+      font-weight: 500;
+      color: #000000;
+    }
+    
+    .preview-table {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #000000;
+      border-radius: 4px;
+      
+      .preview-excel-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        
+        th, td {
+          border: 1px solid #000000;
+          padding: 6px 8px;
+          text-align: left;
+          background: #ffffff;
+          color: #000000;
+        }
+        
+        th {
+          background: #f0f0f0;
+          font-weight: bold;
+          position: sticky;
+          top: 0;
+        }
+        
+        tr:hover {
+          background: #f8f8f8;
         }
       }
     }

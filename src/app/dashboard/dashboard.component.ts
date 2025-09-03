@@ -34,6 +34,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrders: WorkOrder[] = [];
   filteredWorkOrders: WorkOrder[] = [];
 
+  // Safety Stock Level data
+  weekdays: any[] = [];
+
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
 
@@ -46,6 +49,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.selectedFactory = savedFactory;
     }
     
+    this.initializeCurrentWeek();
     this.loadDashboardData();
     this.refreshInterval = setInterval(() => this.loadDashboardData(), this.refreshTime);
     
@@ -69,7 +73,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
   }
 
-  createChart(canvasId: string, label: string, labels: string[], data: number[], color: string) {
+  createChart(canvasId: string, label: string, labels: string[], data: number[], color: string, yRange?: { min?: number, max?: number }) {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -104,7 +108,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
         },
         responsive: true,
         scales: {
-          y: { beginAtZero: false }
+          y: { 
+            beginAtZero: false,
+            min: yRange?.min,
+            max: yRange?.max,
+            grid: {
+              display: false // Remove Y-axis grid lines
+            }
+          },
+          x: {
+            grid: {
+              display: false // Remove X-axis grid lines
+            }
+          }
         }
       }
     });
@@ -310,14 +326,91 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const fgAccuracy = [100, 100, 100, 100, 100, 100];
     const fgTurnover = [0.8, 0.88, 1.21, 1.33, 1.14, 1.48];
 
-    this.createChart('dailySalesChart', 'Materials Accuracy (%)', months, matAccuracy, '#4caf50');
+    this.createChart('dailySalesChart', 'Materials Accuracy (%)', months, matAccuracy, '#4caf50', { min: 99, max: 100 });
     this.createChart('websiteViewsChart', 'Finished Goods Accuracy (%)', months, fgAccuracy, '#ff9800');
-    this.createChart('completedTasksChart', 'FGs Inventory Turnover', months, fgTurnover, '#2196f3');
+    this.createChart('completedTasksChart', 'FGs Inventory Turnover', months, fgTurnover, '#2196f3', { min: 0.5, max: 2 });
   }
 
   // Method to handle factory selection changes
   onFactoryChange(factory: string) {
     this.selectedFactory = factory;
     this.loadDashboardData();
+  }
+
+  // Safety Stock Level methods
+  private initializeCurrentWeek() {
+    this.weekdays = [];
+    const today = new Date();
+    
+    // Generate dates for Monday to Saturday (6 days)
+    for (let i = 0; i < 6; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - today.getDay() + 1 + i); // Start from Monday
+      
+      this.weekdays.push({
+        date: date,
+        status: 'regular',
+        isToday: false,
+        hasFlag: false
+      });
+    }
+    
+    this.updateWeekdayColors();
+  }
+
+  private updateWeekdayColors() {
+    const today = new Date();
+    
+    this.weekdays.forEach((weekday, index) => {
+      if (weekday.date) {
+        // Check if it's today
+        weekday.isToday = this.isSameDate(weekday.date, today);
+        
+        // Set status based on day type
+        if (index === 1) { // Tuesday (index 1)
+          weekday.status = 'inventory';
+        } else if (index === 5) { // Saturday (index 5)
+          weekday.status = 'inventory';
+        } else {
+          weekday.status = 'regular';
+        }
+      }
+    });
+  }
+
+  private isSameDate(date1: Date, date2: Date): boolean {
+    return date1.getDate() === date2.getDate() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getFullYear() === date2.getFullYear();
+  }
+
+  getWeekdayClass(weekday: any): string {
+    let classes = 'weekday-item';
+    
+    if (weekday.status === 'inventory') {
+      classes += ' inventory';
+    } else if (weekday.status === 'regular') {
+      classes += ' regular';
+    }
+    
+    if (weekday.isToday) {
+      classes += ' today';
+    }
+    
+    return classes;
+  }
+
+  getWeekdayName(date: Date): string {
+    const days = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    const dayIndex = date.getDay();
+    return days[dayIndex - 1] || days[0];
+  }
+
+  getDayOfMonth(date: Date): string {
+    return date.getDate().toString();
+  }
+
+  getMonth(date: Date): string {
+    return (date.getMonth() + 1).toString().padStart(2, '0');
   }
 }

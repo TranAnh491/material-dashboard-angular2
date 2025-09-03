@@ -1,0 +1,126 @@
+<!-- FG Preparing - Black & White Interface (Speed Optimized) -->
+<div class="main-content">
+  <div class="content-container">
+    
+    <!-- Header -->
+    <div class="header-section">
+      <h2 class="page-title">
+        <i class="material-icons">inventory_2</i>
+        FG Preparing
+      </h2>
+      
+      <div class="action-buttons">
+        <div class="dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="loadMaterialsFromFirebase(); $event.preventDefault()">
+              <i class="material-icons">refresh</i>
+              Refresh
+            </a>
+          </div>
+        </div>
+        
+        <div class="search-box">
+          <input type="text" 
+                 placeholder="Tìm kiếm theo mã TP, Batch, LSX, LOT, Vị trí..." 
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="custom-input search-input-uppercase">
+        </div>
+      </div>
+    </div>
+    
+    <!-- Loading Indicator -->
+    <div *ngIf="isLoading" class="loading-indicator">
+      <i class="material-icons">refresh</i>
+      <span>Đang tải dữ liệu...</span>
+    </div>
+
+    <!-- Excel-like Body -->
+    <div class="excel-body" [style.display]="isLoading ? 'none' : 'block'">
+      <table class="excel-table">
+        <thead>
+          <tr>
+            <th class="row-header">No</th>
+            <th>Batch</th>
+            <th>Mã TP</th>
+            <th>REV</th>
+            <th>LOT</th>
+            <th>LSX</th>
+            <th>Lượng</th>
+            <th>Standard</th>
+            <th>Carton</th>
+            <th>ODD</th>
+            <th>Vị trí</th>
+            <th>Ghi chú</th>
+            <th>Khách</th>
+            <th>Trạng thái</th>
+            <th>Chuẩn bị</th>
+            <th>Xóa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Show message when no results found -->
+          <tr *ngIf="filteredMaterials.length === 0">
+            <td colspan="16" class="text-center" style="padding: 20px; color: #666;">
+              <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
+              <br>
+              Không có dữ liệu
+            </td>
+          </tr>
+          
+          <tr *ngFor="let material of filteredMaterials; let i = index">
+            <td class="row-header">{{i + 1}}</td>
+            <td>{{material.batchNumber}}</td>
+            <td class="code-cell">{{material.materialCode}}</td>
+            <td>{{material.rev}}</td>
+            <td>{{material.lot}}</td>
+            <td>{{material.lsx}}</td>
+            <td class="number-cell">{{formatNumber(material.quantity)}}</td>
+            <td class="number-cell">{{formatNumber(material.standard)}}</td>
+            <td class="number-cell">{{formatNumber(material.carton)}}</td>
+            <td class="number-cell">{{formatNumber(material.odd)}}</td>
+            <td>
+              <div class="editable-location" (click)="editLocation(material)">
+                {{material.location || 'Temporary'}}
+              </div>
+            </td>
+            <td>
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.notes" 
+                     (change)="updateNotes(material)"
+                     placeholder="Nhập ghi chú..."
+                     [disabled]="!canEditMaterial(material)">
+            </td>
+            <td>{{material.customer}}</td>
+            <td class="status-cell">
+              <span [class]="material.isPrepared ? 'status-prepared' : 'status-pending'">
+                {{material.isPrepared ? 'Đã chuẩn bị' : 'Chờ chuẩn bị'}}
+              </span>
+            </td>
+            <td class="status-cell">
+              <button mat-icon-button 
+                      [color]="material.isPrepared ? 'warn' : 'primary'" 
+                      (click)="markAsPrepared(material)" 
+                      [disabled]="material.isPrepared"
+                      matTooltip="{{material.isPrepared ? 'Đã chuẩn bị' : 'Đánh dấu đã chuẩn bị'}}">
+                <mat-icon>{{material.isPrepared ? 'check_circle' : 'radio_button_unchecked'}}</mat-icon>
+              </button>
+            </td>
+            <td class="status-cell">
+              <button mat-icon-button color="warn" (click)="deleteItem(material)" 
+                      matTooltip="Xóa"
+                      *ngIf="hasDeletePermission">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

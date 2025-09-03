@@ -83,6 +83,16 @@
                   (click)="toggleShowCompletedItems()">
             <i class="material-icons">visibility</i>
           </button>
+          
+          <button class="custom-btn" 
+                  (click)="showDoneItemsList()"
+                  title="Tải xuống danh sách các mã đã Done (Excel)">
+            <i class="material-icons">download</i>
+          </button>
+          
+
+          
+
         </div>
         
         <!-- Status Indicators -->
@@ -111,6 +121,7 @@
           <div (click)="clearStatusFilter()" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             📊 Total: {{getNotDoneItemsCount()}}
           </div>
+
         </div>
       </div>
       </div>
@@ -174,14 +185,14 @@
             </thead>
             <tbody>
               <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
-              <tr *ngIf="showCompletedItems || (!item.isCompleted && item.tinhTrang !== 'Done')"
+              <tr *ngIf="showCompletedItems || (!item.isCompleted && item.tinhTrang !== 'Done' && item.tinhTrang !== 'done' && item.tinhTrang !== 'DONE')"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 2px solid #000000;">
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.stt || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{i + 1}}</td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"

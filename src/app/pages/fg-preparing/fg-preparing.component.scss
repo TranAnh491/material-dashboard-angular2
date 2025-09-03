@@ -1,0 +1,312 @@
+// FG Preparing - Black & White Interface (Speed Optimized)
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+// Loading indicator
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+  
+  i {
+    margin-right: 10px;
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.main-content {
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+}
+
+.content-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+// Header Section
+.header-section {
+  background: #ffffff;
+  border-bottom: 2px solid #000000;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: bold;
+  color: #000000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  i {
+    font-size: 28px;
+    color: #000000;
+  }
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+// Search Box
+.search-box {
+  position: relative;
+  
+  input {
+    width: 300px;
+    padding: 8px 12px;
+    border: 2px solid #000000;
+    border-radius: 4px;
+    font-size: 14px;
+    background: #ffffff;
+    color: #000000;
+    
+    &:focus {
+      outline: none;
+      border-color: #333333;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+    }
+    
+    &::placeholder {
+      color: #666666;
+    }
+  }
+}
+
+// Custom Buttons
+.custom-btn {
+  background: #ffffff;
+  border: 2px solid #000000;
+  color: #000000;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f5f5f5;
+    border-color: #333333;
+  }
+  
+  &:active {
+    background: #e0e0e0;
+  }
+  
+  i {
+    font-size: 18px;
+  }
+}
+
+// Dropdown
+.dropdown {
+  position: relative;
+  
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #ffffff;
+    border: 2px solid #000000;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    z-index: 1000;
+    min-width: 200px;
+    padding: 8px 0;
+    
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      color: #000000;
+      text-decoration: none;
+      font-size: 14px;
+      transition: background-color 0.2s ease;
+      
+      &:hover {
+        background: #f5f5f5;
+        color: #000000;
+      }
+      
+      i {
+        font-size: 18px;
+        width: 20px;
+        text-align: center;
+      }
+    }
+  }
+}
+
+// Excel-like Table
+.excel-body {
+  flex: 1;
+  overflow: auto;
+  background: #ffffff;
+}
+
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  font-size: 13px;
+  
+  th, td {
+    border: 1px solid #000000;
+    padding: 8px 6px;
+    text-align: left;
+    vertical-align: middle;
+    background: #ffffff;
+    color: #000000;
+  }
+  
+  th {
+    background: #f0f0f0;
+    font-weight: bold;
+    color: #000000;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 2px solid #000000;
+  }
+  
+  tr:hover {
+    background: #f8f8f8;
+  }
+}
+
+// Cell Types
+.row-header {
+  background: #f0f0f0 !important;
+  font-weight: bold;
+  text-align: center;
+  width: 50px;
+  min-width: 50px;
+}
+
+.code-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #000000;
+  min-width: 120px;
+}
+
+.number-cell {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  min-width: 80px;
+}
+
+.status-cell {
+  text-align: center;
+  min-width: 80px;
+}
+
+// Editable Inputs
+.editable-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #000000;
+  font-size: 13px;
+  padding: 4px;
+  
+  &:focus {
+    outline: 2px solid #000000;
+    background: #ffffff;
+  }
+  
+  &:disabled {
+    background: #f5f5f5;
+    color: #666666;
+    cursor: not-allowed;
+  }
+}
+
+.editable-location {
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background: #f0f0f0;
+  }
+}
+
+// Status Styles
+.status-prepared {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.status-pending {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+// Text Center
+.text-center {
+  text-align: center;
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .header-section {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+  
+  .action-buttons {
+    justify-content: space-between;
+  }
+  
+  .search-box input {
+    width: 100%;
+  }
+  
+  .excel-table {
+    font-size: 11px;
+    
+    th, td {
+      padding: 4px 2px;
+    }
+  }
+}

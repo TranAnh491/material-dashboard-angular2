@@ -33,9 +33,7 @@ import { UtilizationComponent } from '../../pages/utilization/utilization.compon
 import { TemperatureKnowledgeTestComponent } from '../../pages/temperature-knowledge-test/temperature-knowledge-test.component';
 import { MaterialsTestComponent } from '../../pages/materials-test/materials-test.component';
 import { FinishedGoodsTestComponent } from '../../pages/finished-goods-test/finished-goods-test.component';
-import { FgInComponent } from '../../pages/fg-in/fg-in.component';
-import { FgOutComponent } from '../../pages/fg-out/fg-out.component';
-import { FgInventoryComponent } from '../../pages/fg-inventory/fg-inventory.component';
+
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
@@ -61,9 +59,10 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard] },
-  { path: 'fg-in',                component: FgInComponent, canActivate: [AuthGuard] },
-  { path: 'fg-out',               component: FgOutComponent, canActivate: [AuthGuard] },
-  { path: 'fg-inventory',         component: FgInventoryComponent, canActivate: [AuthGuard] },
+  { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard] },
+  { path: 'fg-out',               loadChildren: () => import('../../pages/fg-out/fg-out.module').then(m => m.FgOutModule), canActivate: [AuthGuard] },
+  { path: 'fg-preparing',         loadChildren: () => import('../../pages/fg-preparing/fg-preparing.module').then(m => m.FGPreparingModule), canActivate: [AuthGuard] },
+  { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard] },
 
   { path: 'find',                 component: MapsComponent, canActivate: [AuthGuard] },
   { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },

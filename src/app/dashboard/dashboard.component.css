@@ -431,3 +431,161 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* 📊 KPI Cards Positioning - Close to navbar */
+.main-content {
+  padding-top: 10px !important; /* Reduced top padding to move KPI cards up */
+}
+
+/* KPI Cards Section - Minimal top margin */
+.row.mt-1.mb-4 {
+  margin-top: 0.25rem !important; /* Very small top margin */
+  margin-bottom: 0.25rem !important; /* Reduced to 4px to bring charts closer */
+}
+
+/* Chart Section - Close to KPI cards */
+.chart-section {
+  margin-top: 0 !important; /* No margin to make it very close to KPI cards */
+}
+
+/* Chart title spacing - increase space between icon and title */
+.chart-section .card-title .material-icons {
+  margin-right: 12px !important; /* Increase spacing from 8px to 12px */
+}
+
+/* Materials Accuracy Chart - Remove grid lines, keep axes and chart line */
+#dailySalesChart {
+  /* Remove grid lines */
+  --chartjs-grid-color: transparent !important;
+}
+
+/* Override Chart.js grid lines for Materials Accuracy chart */
+#dailySalesChart canvas {
+  /* This will be applied via JavaScript Chart.js options */
+}
+
+/* Ensure KPI cards are positioned at the top */
+.container-fluid {
+  padding-top: 0;
+}
+
+/* Safety Stock Level Styles */
+.safety-stock-container {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 20px;
+}
+
+.safety-stock-box {
+  padding: 12px 16px;
+  border-radius: 12px;
+  max-width: 400px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.weekdays-container {
+  width: 100%;
+}
+
+.weekdays-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
+  gap: 6px;
+  max-width: 350px;
+}
+
+.weekday-item {
+  height: 80px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  margin: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid;
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.weekday-name {
+  font-size: 10px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+}
+
+.weekday-day {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.weekday-month {
+  font-size: 12px;
+  font-weight: 500;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+}
+
+/* Status classes */
+.weekday-item.inventory {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.weekday-item.regular {
+  background: #ffffff;
+  border-color: #3b82f6;
+  color: #1e40af;
+}
+
+.weekday-item.today {
+  border-width: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .weekdays-row {
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+    gap: 4px;
+    max-width: 300px;
+  }
+  
+  .weekday-item {
+    height: 70px;
+    padding: 4px 6px;
+  }
+  
+  .weekday-name {
+    font-size: 9px;
+    height: 14px;
+  }
+  
+  .weekday-day {
+    font-size: 16px;
+    height: 20px;
+  }
+  
+  .weekday-month {
+    font-size: 11px;
+    height: 14px;
+  }
+}

@@ -1,17 +1,211 @@
 <div class="main-content">
+  <!-- Excel-like Container -->
   <div class="excel-container">
-    <!-- Report Title -->
+    <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📊 FG INVENTORY - ASM1</h4>
+      <h4>📦 FG INVENTORY - Kho thành phẩm</h4>
     </div>
     
-    <!-- Content placeholder -->
-    <div class="content-placeholder">
-      <div class="placeholder-content">
-        <i class="material-icons">assessment</i>
-        <h3>FG Inventory Management</h3>
-        <p>Quản lý tồn kho hàng hóa thành phẩm ASM1</p>
+    <!-- Excel-like Actions -->
+    <div class="excel-actions">
+      <div class="action-controls">
+        <div class="dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            <i class="material-icons">more_vert</i>
+            More
+          </button>
+          <div class="dropdown-menu" aria-labelledby="moreDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
+              <i class="material-icons">file_upload</i>
+              Import
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
+              <i class="material-icons">download</i>
+              Tải Template
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="debugCartonOdd(); $event.preventDefault()">
+              <i class="material-icons">bug_report</i>
+              Debug Carton/ODD
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="forceCalculateTon(); $event.preventDefault()">
+              <i class="material-icons">calculate</i>
+              Tính Tồn
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="checkRawData(); $event.preventDefault()">
+              <i class="material-icons">data_usage</i>
+              Kiểm tra dữ liệu
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="resetAllData(); $event.preventDefault()">
+              <i class="material-icons">delete_sweep</i>
+              Reset về 0
+            </a>
+          </div>
+        </div>
+        
+        <div class="search-box">
+          <input type="text" 
+                 placeholder="Tìm kiếm theo mã TP, Batch, LSX, LOT, Vị trí..." 
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="custom-input search-input-uppercase">
+        </div>
+        
+        <button class="custom-btn" (click)="showTimeRangeDialog = true">
+          <i class="material-icons">schedule</i>
+          Chọn thời gian
+        </button>
+        
+        <button class="custom-btn" (click)="viewAllMaterials()">
+          <i class="material-icons">visibility</i>
+          Xem tất cả
+        </button>
+        
+
       </div>
+    </div>
+    
+    <!-- Loading Indicator -->
+    <div *ngIf="isLoading" class="loading-indicator">
+      <i class="material-icons">refresh</i>
+      <span>Đang tải dữ liệu...</span>
+    </div>
+
+    <!-- Excel-like Body -->
+    <div class="excel-body" [style.display]="isLoading ? 'none' : 'block'">
+      <table class="excel-table">
+        <thead>
+          <tr>
+            <th class="row-header">No</th>
+            <th>Batch</th>
+            <th>Mã TP</th>
+            <th>REV</th>
+            <th>LOT</th>
+            <th>LSX</th>
+            <th>Tồn đầu</th>
+            <th>Nhập</th>
+            <th>Xuất</th>
+            <th>Tồn</th>
+            <th>Carton</th>
+            <th>ODD</th>
+            <th>Vị trí</th>
+            <th>Scan</th>
+            <th>Ghi chú</th>
+            <th>Khách</th>
+            <th>Xóa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Show message when no results found -->
+          <tr *ngIf="filteredMaterials.length === 0">
+            <td colspan="14" class="text-center" style="padding: 20px; color: #666;">
+              <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
+              <br>
+              Không có dữ liệu
+            </td>
+          </tr>
+          
+          <tr *ngFor="let material of filteredMaterials; let i = index">
+
+            <td class="row-header">{{i + 1}}</td>
+            <td>{{material.batchNumber}}</td>
+            <td class="code-cell">{{material.materialCode}}</td>
+            <td>{{material.rev}}</td>
+            <td>{{material.lot}}</td>
+            <td>{{material.lsx}}</td>
+            <td class="number-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.tonDau" 
+                     (change)="updateTon(material)"
+                     [disabled]="!canEditMaterial(material)">
+            </td>
+            <td class="number-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.nhap" 
+                     (change)="updateTon(material)"
+                     [disabled]="!canEditMaterial(material)">
+            </td>
+            <td class="number-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.xuat" 
+                     (change)="updateTon(material)"
+                     [disabled]="!canEditMaterial(material)">
+            </td>
+            <td class="number-cell">{{formatNumber(material.ton)}}</td>
+            <td class="number-cell">{{formatNumber(material.carton)}}</td>
+            <td class="number-cell">{{formatNumber(material.odd)}}</td>
+            <td>
+              <div class="editable-location" (click)="editLocation(material)">
+                {{material.location || 'Temporary'}}
+              </div>
+            </td>
+            <td class="status-cell">
+              <button mat-icon-button color="primary" (click)="scanLocation(material)" 
+                      matTooltip="Scan QR code để đổi vị trí">
+                <mat-icon>qr_code_scanner</mat-icon>
+              </button>
+            </td>
+            <td>
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.notes" 
+                     (change)="updateNotes(material)"
+                     placeholder="Nhập ghi chú..."
+                     [disabled]="!canEditMaterial(material)">
+            </td>
+            <td>{{material.customer}}</td>
+            <td class="status-cell">
+              <button mat-icon-button color="warn" (click)="deleteItem(material)" 
+                      matTooltip="Xóa"
+                      *ngIf="hasDeletePermission">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
+
+<!-- Time Range Dialog -->
+<div class="custom-modal" [class.show]="showTimeRangeDialog" [style.display]="showTimeRangeDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showTimeRangeDialog = false"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">schedule</i>
+        Chọn khung thời gian
+      </h5>
+      <button type="button" class="close-btn" (click)="showTimeRangeDialog = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="date-inputs">
+        <div class="input-group">
+          <label class="input-label">Từ ngày</label>
+          <input type="date" class="date-input" [(ngModel)]="startDate">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Đến ngày</label>
+          <input type="date" class="date-input" [(ngModel)]="endDate">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showTimeRangeDialog = false">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="applyTimeRangeFilter()">
+        <i class="material-icons">check</i>
+        Áp dụng
+      </button>
+    </div>
+  </div>
+</div>
+
+

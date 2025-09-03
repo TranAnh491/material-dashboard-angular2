@@ -589,72 +589,68 @@ export class PrintLabelComponent implements OnInit {
     }
     
     console.log('🔥 Loading data from Firebase...');
-    console.log('🔍 Call stack:', new Error().stack);
     this.isLoading = true;
     
-    // Check if mobile device
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // Load only data from last 30 days by default
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+    // Load only the LATEST document (most recent import) for better performance
     this.firestore.collection('printSchedules', ref => 
-      ref.where('importedAt', '>=', thirtyDaysAgo).orderBy('importedAt', 'desc')
+      ref.orderBy('importedAt', 'desc').limit(1)
     ).get().toPromise()
       .then((scheduleSnapshot: any) => {
         this.isLoading = false;
         
         if (scheduleSnapshot && !scheduleSnapshot.empty) {
-          console.log(`📋 Found ${scheduleSnapshot.docs.length} documents in Firebase`);
+          const latestDoc = scheduleSnapshot.docs[0];
+          const docData = latestDoc.data();
           
-          // Load ALL documents and merge their data
+          console.log(`📋 Loading latest document: ${latestDoc.id}`);
+          
           let allData: any[] = [];
           
-          scheduleSnapshot.docs.forEach((doc: any, docIndex: number) => {
-            const docData = doc.data();
-            console.log(`📋 Document ${docIndex + 1}:`, docData);
-            
-            if (docData.data && Array.isArray(docData.data) && docData.data.length > 0) {
-              console.log(`📋 Document ${docIndex + 1} has ${docData.data.length} items in data field`);
-              allData = [...allData, ...docData.data];
-            } else if (docData.maTem) {
-              // Fallback: individual document format
-              console.log(`📋 Document ${docIndex + 1} is individual item format`);
-              allData.push(docData);
-            }
-          });
+          if (docData.data && Array.isArray(docData.data) && docData.data.length > 0) {
+            console.log(`📋 Latest document has ${docData.data.length} items`);
+            allData = docData.data;
+          } else if (docData.maTem) {
+            // Fallback: individual document format
+            console.log(`📋 Latest document is individual item format`);
+            allData = [docData];
+          }
           
-          console.log(`📋 Total items found across all documents: ${allData.length}`);
+          console.log(`📋 Total items loaded: ${allData.length}`);
           
-          // Process all loaded data
-          this.scheduleData = allData.map((item: any) => {
-            const processedItem = {
-              nam: item.nam || '',
-              thang: item.thang || '',
-              stt: item.stt || '',
-              sizePhoi: item.sizePhoi || '',
-              maTem: item.maTem || '',
-              soLuongYeuCau: item.soLuongYeuCau || '',
-              soLuongPhoi: item.soLuongPhoi || '',
-              maHang: item.maHang || '',
-              lenhSanXuat: item.lenhSanXuat || '',
-              khachHang: item.khachHang || '',
-              ngayNhanKeHoach: item.ngayNhanKeHoach || '',
-              yy: item.yy || '',
-              ww: item.ww || '',
-              lineNhan: item.lineNhan || '',
-              nguoiIn: item.nguoiIn || '',
-              tinhTrang: item.tinhTrang || '',
-              statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
-              banVe: item.banVe || '',
-              ghiChu: item.ghiChu || '',
-              isUrgent: item.isUrgent || false,
-              labelComparison: item.labelComparison || null
-            };
-            
-            return processedItem;
-          });
+          // Process loaded data and filter out Done items (for performance)
+          this.scheduleData = allData
+            .filter((item: any) => {
+              // Only load items that are NOT Done (for better performance)
+              const status = item.tinhTrang ? item.tinhTrang.trim().toLowerCase() : '';
+              return status !== 'done';
+            })
+            .map((item: any) => {
+              const processedItem = {
+                nam: item.nam || '',
+                thang: item.thang || '',
+                stt: item.stt || '',
+                sizePhoi: item.sizePhoi || '',
+                maTem: item.maTem || '',
+                soLuongYeuCau: item.soLuongYeuCau || '',
+                soLuongPhoi: item.soLuongPhoi || '',
+                maHang: item.maHang || '',
+                lenhSanXuat: item.lenhSanXuat || '',
+                khachHang: item.khachHang || '',
+                ngayNhanKeHoach: item.ngayNhanKeHoach || '',
+                yy: item.yy || '',
+                ww: item.ww || '',
+                lineNhan: item.lineNhan || '',
+                nguoiIn: item.nguoiIn || '',
+                tinhTrang: item.tinhTrang || '',
+                statusUpdateTime: item.statusUpdateTime ? new Date(item.statusUpdateTime.toDate ? item.statusUpdateTime.toDate() : item.statusUpdateTime) : new Date(),
+                banVe: item.banVe || '',
+                ghiChu: item.ghiChu || '',
+                isUrgent: item.isUrgent || false,
+                labelComparison: item.labelComparison || null
+              };
+              
+              return processedItem;
+            });
           
 
           
@@ -690,10 +686,8 @@ export class PrintLabelComponent implements OnInit {
         this.scheduleData = [];
         this.firebaseSaved = false;
         
-        // Show user-friendly error on mobile
-        if (isMobile) {
-          alert('⚠️ Lỗi tải dữ liệu. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.');
-        }
+        // Show user-friendly error
+        alert('⚠️ Lỗi tải dữ liệu. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.');
       });
   }
 
@@ -3505,8 +3499,188 @@ export class PrintLabelComponent implements OnInit {
 
   // Get count of items that are NOT done (completed)
   getNotDoneItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang !== 'Done').length;
+    // Normalize status values to handle case variations
+    const normalizedItems = this.scheduleData.map(item => ({
+      ...item,
+      tinhTrang: item.tinhTrang ? item.tinhTrang.trim() : ''
+    }));
+    
+    const notDoneItems = normalizedItems.filter(item => 
+      item.tinhTrang !== 'Done' && 
+      item.tinhTrang !== 'done' && 
+      item.tinhTrang !== 'DONE'
+    );
+    
+    return notDoneItems.length;
   }
+
+  // Method to download Done items as Excel file
+  showDoneItemsList(): void {
+    console.log('🔍 Loading Done items from Firebase...');
+    
+    // Show loading indicator
+    const loadingMessage = '⏳ Đang tải danh sách các mã đã Done...';
+    alert(loadingMessage);
+    
+    // Calculate date 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    
+    console.log('📅 Loading Done items from:', thirtyDaysAgo.toLocaleDateString('vi-VN'));
+    
+    // Load ALL documents from Firebase to find Done items
+    this.firestore.collection('printSchedules', ref => 
+      ref.orderBy('importedAt', 'desc')
+    ).get().toPromise()
+      .then((scheduleSnapshot: any) => {
+        if (scheduleSnapshot && !scheduleSnapshot.empty) {
+          let allDoneItems: any[] = [];
+          
+          // Process all documents
+          scheduleSnapshot.docs.forEach((doc: any) => {
+            const docData = doc.data();
+            const importedAt = docData.importedAt ? docData.importedAt.toDate() : new Date();
+            
+            // Only process documents from last 30 days
+            if (importedAt >= thirtyDaysAgo) {
+              let docItems: any[] = [];
+              
+              if (docData.data && Array.isArray(docData.data)) {
+                docItems = docData.data;
+              } else if (docData.maTem) {
+                docItems = [docData];
+              }
+              
+              // Filter Done items from this document
+              const doneItemsFromDoc = docItems.filter((item: any) => {
+                const status = item.tinhTrang ? item.tinhTrang.trim().toLowerCase() : '';
+                return status === 'done';
+              });
+              
+              allDoneItems = allDoneItems.concat(doneItemsFromDoc);
+            }
+          });
+          
+          console.log('📊 Total Done items found in last 30 days:', allDoneItems.length);
+          
+          if (allDoneItems.length === 0) {
+            alert('📋 Không có mã nào đã Done trong 30 ngày gần nhất!');
+            return;
+          }
+          
+          // Download as Excel file
+          this.downloadDoneItemsAsExcel(allDoneItems);
+          
+        } else {
+          alert('📋 Không tìm thấy dữ liệu trong Firebase!');
+        }
+      })
+      .catch((error) => {
+        console.error('❌ Error loading Done items:', error);
+        alert('❌ Lỗi khi tải danh sách các mã đã Done!');
+      });
+  }
+
+  // Method to download Done items as Excel file
+  downloadDoneItemsAsExcel(doneItems: any[]): void {
+    try {
+      // Import XLSX dynamically
+      import('xlsx').then((XLSX) => {
+        // Prepare data for Excel
+        const excelData = [
+          // Header row
+          [
+            'STT', 'Năm', 'Tháng', 'Size Phôi', 'Mã tem', 'Lượng tem', 'Mã Hàng', 
+            'Lệnh sản xuất', 'Khách hàng', 'Line nhận', 'Người in', 'Tình trạng', 
+            'Thời gian', 'Ghi chú', 'Ngày nhận kế hoạch'
+          ],
+          // Data rows
+          ...doneItems.map((item, index) => [
+            index + 1,
+            item.nam || '',
+            item.thang || '',
+            item.sizePhoi || '',
+            item.maTem || '',
+            item.soLuongYeuCau || '',
+            item.maHang || '',
+            item.lenhSanXuat || '',
+            item.khachHang || '',
+            item.lineNhan || '',
+            item.nguoiIn || '',
+            item.tinhTrang || '',
+            item.thoiGian || '',
+            item.ghiChu || '',
+            item.ngayNhanKeHoach || ''
+          ])
+        ];
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+        // Set column widths
+        const colWidths = [
+          { wch: 5 },   // STT
+          { wch: 8 },   // Năm
+          { wch: 8 },   // Tháng
+          { wch: 12 },  // Size Phôi
+          { wch: 15 },  // Mã tem
+          { wch: 10 },  // Lượng tem
+          { wch: 15 },  // Mã Hàng
+          { wch: 15 },  // Lệnh sản xuất
+          { wch: 15 },  // Khách hàng
+          { wch: 12 },  // Line nhận
+          { wch: 12 },  // Người in
+          { wch: 12 },  // Tình trạng
+          { wch: 15 },  // Thời gian
+          { wch: 20 },  // Ghi chú
+          { wch: 15 }   // Ngày nhận kế hoạch
+        ];
+        ws['!cols'] = colWidths;
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Danh sách Done');
+
+        // Generate filename with current date
+        const currentDate = new Date();
+        const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const filename = `Danh_sach_ma_Done_${dateStr}.xlsx`;
+
+        // Download file
+        XLSX.writeFile(wb, filename);
+
+        console.log(`✅ Downloaded ${doneItems.length} Done items to ${filename}`);
+        alert(`✅ Đã tải xuống ${doneItems.length} mã đã Done!\n📁 File: ${filename}`);
+      });
+    } catch (error) {
+      console.error('❌ Error downloading Excel file:', error);
+      alert('❌ Lỗi khi tạo file Excel!');
+    }
+  }
+
+  // Method to normalize all "Done" statuses to consistent case
+  normalizeDoneStatuses(): void {
+    let fixedCount = 0;
+    
+    this.scheduleData.forEach(item => {
+      if (item.tinhTrang === 'done' || item.tinhTrang === 'DONE') {
+        item.tinhTrang = 'Done';
+        fixedCount++;
+      }
+    });
+    
+    if (fixedCount > 0) {
+      console.log(`🔧 Fixed ${fixedCount} status cases to "Done"`);
+      this.saveToFirebase(this.scheduleData);
+      alert(`✅ Đã sửa ${fixedCount} trạng thái thành "Done" chuẩn!`);
+    } else {
+      console.log('✅ All statuses are already normalized');
+      alert('✅ Tất cả trạng thái đã chuẩn!');
+    }
+  }
+
+
 
   // Get late items count (items past due date and not Done)
   getLateItemsCount(): number {
@@ -3535,10 +3709,10 @@ export class PrintLabelComponent implements OnInit {
           let dueDate: Date;
           
           // Handle different date formats from Firebase
-          if (typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+          if (typeof item.ngayNhanKeHoach === 'object' && item.ngayNhanKeHoach && 'toDate' in item.ngayNhanKeHoach) {
             // Firestore Timestamp
             dueDate = (item.ngayNhanKeHoach as any).toDate();
-                      } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach!.includes('/')) {
+          } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach && item.ngayNhanKeHoach.includes('/')) {
               // Handle DD/MM/YYYY format from Excel import
               const parts = item.ngayNhanKeHoach!.split('/');
               if (parts.length === 3) {
@@ -5738,6 +5912,11 @@ Gửi tự động từ hệ thống quản lý tem.
 
   // Status filter functionality
   currentStatusFilter: string | null = null;
+  
+  // Cache for display data to improve performance
+  private displayDataCache: ScheduleItem[] | null = null;
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_DURATION = 1000; // 1 second cache
 
   // Filter by specific status
   filterByStatus(status: string): void {
@@ -5774,9 +5953,9 @@ Gửi tự động từ hệ thống quản lý tem.
           try {
             let dueDate: Date;
             
-            if (typeof item.ngayNhanKeHoach === 'object' && 'toDate' in item.ngayNhanKeHoach) {
+            if (typeof item.ngayNhanKeHoach === 'object' && item.ngayNhanKeHoach && 'toDate' in item.ngayNhanKeHoach) {
               dueDate = (item.ngayNhanKeHoach as any).toDate();
-            } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach.includes('/')) {
+            } else if (typeof item.ngayNhanKeHoach === 'string' && item.ngayNhanKeHoach && item.ngayNhanKeHoach.includes('/')) {
               const parts = item.ngayNhanKeHoach.split('/');
               if (parts.length === 3) {
                 const day = parseInt(parts[0]);
@@ -5809,8 +5988,15 @@ Gửi tự động từ hệ thống quản lý tem.
     }
   }
 
-  // Override getDisplayScheduleData to include status filtering
+  // Override getDisplayScheduleData to include status filtering with caching
   getDisplayScheduleData(): ScheduleItem[] {
+    const now = Date.now();
+    
+    // Check if cache is still valid
+    if (this.displayDataCache && (now - this.cacheTimestamp) < this.CACHE_DURATION) {
+      return this.displayDataCache;
+    }
+    
     let displayData = this.showCompletedItems ? this.scheduleData : this.getFilteredScheduleData();
     
     // Apply status filter if active
@@ -5820,7 +6006,10 @@ Gửi tự động từ hệ thống quản lý tem.
     
     // Ẩn các dòng có tình trạng "Done" (trừ khi showCompletedItems = true)
     if (!this.showCompletedItems) {
-      displayData = displayData.filter(item => item.tinhTrang !== 'Done');
+      displayData = displayData.filter(item => {
+        const status = item.tinhTrang ? item.tinhTrang.trim() : '';
+        return status !== 'Done' && status !== 'done' && status !== 'DONE';
+      });
     }
     
     // Sort: urgent items first, then by STT
@@ -5834,6 +6023,10 @@ Gửi tự động từ hệ thống quản lý tem.
       const sttB = parseInt(b.stt || '0') || 0;
       return sttA - sttB;
     });
+    
+    // Cache the result
+    this.displayDataCache = displayData;
+    this.cacheTimestamp = now;
     
     return displayData;
   }

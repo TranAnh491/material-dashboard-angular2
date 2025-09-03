@@ -1,7 +1,7 @@
 <div class="main-content">
   <div class="container-fluid">
-    <!-- KPI Cards Section with proper top margin -->
-    <div class="row mt-4 mb-4">
+    <!-- KPI Cards Section - moved up close to navbar -->
+    <div class="row mt-1 mb-4">
       <!-- Work Order -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="card p-3" style="border-radius: 12px; background-color: #e8f5e9;">
@@ -67,20 +67,47 @@
       </div>
     </div>
 
-    <!-- Chart Section -->
-    <div class="row">
+
+
+    <!-- Safety Stock Level - Standalone -->
+    <div class="row mt-3">
+      <div class="col-12">
+        <div class="card" style="border-radius: 12px; background-color: #ffffff;">
+          <div class="card-body">
+            <h4 class="card-title d-flex align-items-center">
+              <i class="material-icons me-2 text-primary">security</i> Safety Stock Level
+            </h4>
+            <div class="safety-stock-container">
+              <div class="safety-stock-box">
+                <div class="weekdays-container">
+                  <div class="weekdays-row">
+                    <div class="weekday-item" *ngFor="let weekday of weekdays; let i = index" [ngClass]="getWeekdayClass(weekday)">
+                      <div class="weekday-name" *ngIf="weekday.date">{{ getWeekdayName(weekday.date) }}</div>
+                      <div class="weekday-day" *ngIf="weekday.date">{{ getDayOfMonth(weekday.date) }}</div>
+                      <div class="weekday-month" *ngIf="weekday.date">{{ getMonth(weekday.date) }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Section - 3 charts in a row -->
+    <div class="row mt-3">
       <div class="col-md-4">
         <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
           <div class="card-body">
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-success" style="background-color: #e8f5e9; padding: 6px; border-radius: 8px;">inventory_2</i> Materials Accuracy
+              <i class="material-icons me-2 text-success">precision_manufacturing</i> Materials Accuracy
             </h4>
             <canvas id="dailySalesChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">access_time</i> Inventory stocktaking monthly
+              <i class="material-icons">inventory</i> Inventory stocktaking monthly
             </div>
           </div>
         </div>
@@ -90,14 +117,13 @@
         <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
           <div class="card-body">
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-warning" style="background-color: #fff3e0; padding: 6px; border-radius: 8px;">inventory</i> Finished Goods Accuracy
+              <i class="material-icons me-2 text-warning">verified</i> Finished Goods Accuracy
             </h4>
             <canvas id="websiteViewsChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
-              <i class="material-icons">access_time</i> Inventory stocktaking monthly
+              <i class="material-icons">inventory</i> Inventory stocktaking monthly
             </div>
           </div>
         </div>
@@ -107,10 +133,9 @@
         <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
           <div class="card-body">
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-info" style="background-color: #e3f2fd; padding: 6px; border-radius: 8px;">autorenew</i> FGs Inventory Turnover
+              <i class="material-icons me-2 text-info">autorenew</i> FGs Inventory Turnover
             </h4>
             <canvas id="completedTasksChart"></canvas>
-            <p class="text-muted mt-2">Data last 6 months</p>
           </div>
           <div class="card-footer">
             <div class="stats">
