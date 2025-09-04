@@ -766,6 +766,39 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
   }
 
+  getDuplicateItemsCount(): number {
+    const duplicateMap = new Map<string, number>();
+    
+    this.scheduleData.forEach(item => {
+      // Tạo key từ các cột cần kiểm tra duplicate
+      const key = [
+        item.sizePhoi || '',
+        item.maTem || '',
+        item.soLuongYeuCau || '',
+        item.soLuongPhoi || '',
+        item.maHang || '',
+        item.lenhSanXuat || '',
+        item.khachHang || '',
+        item.ngayNhanKeHoach || '',
+        item.yy || '',
+        item.ww || '',
+        item.lineNhan || ''
+      ].join('|');
+      
+      duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
+    });
+    
+    // Đếm số lượng key có count > 1 (tức là có duplicate)
+    let duplicateCount = 0;
+    duplicateMap.forEach(count => {
+      if (count > 1) {
+        duplicateCount += count; // Đếm tất cả các bản ghi duplicate (bao gồm cả bản gốc)
+      }
+    });
+    
+    return duplicateCount;
+  }
+
   getLateItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'Late').length;
   }
