@@ -69,24 +69,32 @@
 
 
 
-    <!-- Safety Stock Level - Standalone -->
+    <!-- Safety Stock Level - Copied from Chart tab -->
     <div class="row mt-3">
       <div class="col-12">
-        <div class="card" style="border-radius: 12px; background-color: #ffffff;">
-          <div class="card-body">
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-primary">security</i> Safety Stock Level
-            </h4>
-            <div class="safety-stock-container">
-              <div class="safety-stock-box">
-                <div class="weekdays-container">
-                  <div class="weekdays-row">
-                    <div class="weekday-item" *ngFor="let weekday of weekdays; let i = index" [ngClass]="getWeekdayClass(weekday)">
-                      <div class="weekday-name" *ngIf="weekday.date">{{ getWeekdayName(weekday.date) }}</div>
-                      <div class="weekday-day" *ngIf="weekday.date">{{ getDayOfMonth(weekday.date) }}</div>
-                      <div class="weekday-month" *ngIf="weekday.date">{{ getMonth(weekday.date) }}</div>
-                    </div>
-                  </div>
+        <div class="safety-stock-container">
+          <div class="safety-stock-box">
+            <div class="box-header">
+              <h5>
+                <i class="material-icons" style="color: #3b82f6;">security</i>
+                Safety Stock Level
+              </h5>
+              <button class="refresh-btn" 
+                      (click)="refreshData()" 
+                      aria-label="Làm mới dữ liệu"
+                      title="Làm mới dữ liệu">
+                <i class="material-icons">refresh</i>
+              </button>
+            </div>
+            
+            <div class="weekdays-container">
+              <div class="weekdays-row">
+                <div *ngFor="let weekday of weekdays; let i = index" 
+                     [class]="getWeekdayClass(weekday)"
+                     class="weekday-item">
+                  <div class="weekday-name">{{ weekday.name }}</div>
+                  <div class="weekday-day">{{ getDayOfMonth(weekday.date) }}</div>
+                  <div class="weekday-month">{{ getMonth(weekday.date) }}</div>
                 </div>
               </div>
             </div>
