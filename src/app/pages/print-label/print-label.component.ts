@@ -189,6 +189,63 @@ export class PrintLabelComponent implements OnInit {
     reader.readAsArrayBuffer(file);
   }
 
+  // Helper method to format date values from Excel
+  private formatDateValue(value: any): string {
+    if (!value) return '';
+    
+    console.log('📅 Formatting date value:', { value, type: typeof value, isDate: value instanceof Date });
+    
+    // If it's already a string, return as is
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      console.log('📅 String date:', trimmed);
+      return trimmed;
+    }
+    
+    // If it's a number (Excel serial date), convert to Date
+    if (typeof value === 'number') {
+      // Excel serial date starts from 1900-01-01, but Excel has a bug where 1900 is considered a leap year
+      // So we need to adjust for dates after 1900-02-28
+      const excelEpoch = new Date(1900, 0, 1);
+      const date = new Date(excelEpoch.getTime() + (value - 2) * 24 * 60 * 60 * 1000);
+      const formatted = this.formatDateToString(date);
+      console.log('📅 Excel serial date converted:', { serial: value, date: formatted });
+      return formatted;
+    }
+    
+    // If it's a Date object
+    if (value instanceof Date) {
+      const formatted = this.formatDateToString(value);
+      console.log('📅 Date object converted:', formatted);
+      return formatted;
+    }
+    
+    // Try to parse as date string
+    try {
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        const formatted = this.formatDateToString(date);
+        console.log('📅 Parsed date string:', { original: value, formatted });
+        return formatted;
+      }
+    } catch (error) {
+      console.warn('Could not parse date value:', value, error);
+    }
+    
+    // Fallback to string conversion
+    const fallback = value.toString();
+    console.log('📅 Fallback to string:', fallback);
+    return fallback;
+  }
+  
+  // Helper method to format Date to DD/MM/YYYY string
+  private formatDateToString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+
   private cleanExcelData(data: any[]): ScheduleItem[] {
     const headers = data[0];
     const rows = data.slice(1);
@@ -210,7 +267,7 @@ export class PrintLabelComponent implements OnInit {
           case 'mahang': item.maHang = value?.toString() || ''; break;
           case 'lenhsanxuat': item.lenhSanXuat = value?.toString() || ''; break;
           case 'khachhang': item.khachHang = value?.toString() || ''; break;
-          case 'ngaynhan': item.ngayNhanKeHoach = value?.toString() || ''; break;
+          case 'ngaynhan': item.ngayNhanKeHoach = this.formatDateValue(value); break;
           case 'yy': item.yy = value?.toString() || ''; break;
           case 'ww': item.ww = value?.toString() || ''; break;
           case 'linenhan': item.lineNhan = value?.toString() || ''; break;
@@ -236,28 +293,53 @@ export class PrintLabelComponent implements OnInit {
     }
 
     try {
-      // FIRST: Delete all existing data
-      console.log('🗑️ Deleting all existing data first...');
+      // Load existing data first to merge with new data
+      console.log('📥 Loading existing data to merge...');
       const existingSnapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
+      let existingData: ScheduleItem[] = [];
+      let existingDocId: string | null = null;
+      
       if (existingSnapshot && !existingSnapshot.empty) {
-        const deleteBatch = this.firestore.firestore.batch();
-        existingSnapshot.docs.forEach(doc => {
-          deleteBatch.delete(doc.ref);
-        });
-        await deleteBatch.commit();
-        console.log(`🗑️ Deleted ${existingSnapshot.docs.length} existing documents`);
+        // Get the most recent document
+        const latestDoc = existingSnapshot.docs[0];
+        const docData = latestDoc.data() as any;
+        existingDocId = latestDoc.id;
+        
+        if (docData.data && Array.isArray(docData.data)) {
+          existingData = docData.data;
+          console.log(`📊 Found ${existingData.length} existing records to merge with`);
+        }
       }
 
-      // THEN: Add new data with clear structure like work orders
-      console.log('➕ Adding new data with clear structure...');
+      // Merge existing data with new data
+      console.log('🔄 Merging existing and new data...');
       
+      // Create a map to avoid duplicates based on maTem
+      const existingMap = new Map<string, ScheduleItem>();
+      existingData.forEach(item => {
+        if (item.maTem) {
+          existingMap.set(item.maTem, item);
+        }
+      });
+      
+      // Add new data, updating existing if maTem matches
+      data.forEach(newItem => {
+        if (newItem.maTem) {
+          existingMap.set(newItem.maTem, newItem);
+        }
+      });
+      
+      const mergedData = Array.from(existingMap.values());
+      console.log(`✅ Merged data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
+      
+      // Create the document with merged data
       const labelScheduleDoc = {
-        data: data,
+        data: mergedData,
         importedAt: new Date(),
         month: this.getCurrentMonth(),
         year: new Date().getFullYear(),
-        recordCount: data.length,
+        recordCount: mergedData.length,
         lastUpdated: new Date(),
         importHistory: [
           {
@@ -265,7 +347,7 @@ export class PrintLabelComponent implements OnInit {
             recordCount: data.length,
             month: this.getCurrentMonth(),
             year: new Date().getFullYear(),
-            description: `Import ${data.length} label schedules`
+            description: `Import ${data.length} new label schedules (merged with ${existingData.length} existing)`
           }
         ],
         // Additional metadata for clarity
@@ -274,28 +356,36 @@ export class PrintLabelComponent implements OnInit {
         status: 'active'
       };
 
-      console.log('📤 Attempting to save label schedule data:', {
-        recordCount: labelScheduleDoc.recordCount,
+      console.log('📤 Attempting to save merged label schedule data:', {
+        totalRecords: labelScheduleDoc.recordCount,
+        newRecords: data.length,
+        existingRecords: existingData.length,
         month: labelScheduleDoc.month,
         year: labelScheduleDoc.year,
         timestamp: labelScheduleDoc.importedAt
       });
 
-      // Add timeout to Firebase save
-      const savePromise = this.firestore.collection('print-schedules').add(labelScheduleDoc);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firebase save timeout after 15 seconds')), 15000)
-      );
-
-      await Promise.race([savePromise, timeoutPromise]);
+      // Save or update the document
+      if (existingDocId) {
+        // Update existing document
+        await this.firestore.collection('print-schedules').doc(existingDocId).update(labelScheduleDoc);
+        console.log(`✅ Updated existing document with ${mergedData.length} total records`);
+      } else {
+        // Create new document
+        await this.firestore.collection('print-schedules').add(labelScheduleDoc);
+        console.log(`✅ Created new document with ${mergedData.length} total records`);
+      }
       
       this.firebaseSaved = true;
-      console.log(`✅ Saved ${data.length} records to Firebase with clear structure`);
-      alert(`✅ Đã lưu thành công ${data.length} bản ghi vào Firebase!\n\nCấu trúc dữ liệu rõ ràng như work orders.`);
+      console.log(`✅ Saved ${mergedData.length} total records to Firebase (${data.length} new + ${existingData.length} existing)`);
+      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${mergedData.length} bản ghi\n➕ Mới: ${data.length} bản ghi\n📋 Cũ: ${existingData.length} bản ghi\n\nDữ liệu đã được merge, không bị mất!`);
+      
+      // Reload data from Firebase to display all merged records
+      console.log('🔄 Reloading data from Firebase to display all records...');
+      this.loadDataFromFirebase();
       
     } catch (error) {
       console.error('❌ Error saving to Firebase:', error);
-      alert('❌ Error saving to Firebase: ' + error.message);
     }
   }
 
@@ -326,9 +416,9 @@ export class PrintLabelComponent implements OnInit {
         if (data.data && Array.isArray(data.data)) {
           const items = data.data
             .filter((item: any) => {
-              // Filter out Done items
-              const status = item.tinhTrang?.toLowerCase();
-              return status !== 'done' && status !== 'completed';
+              // Only filter out items that are explicitly marked as done/completed
+              const status = item.tinhTrang?.toLowerCase()?.trim();
+              return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
             })
             .map((item: any) => ({
               ...item,
@@ -347,6 +437,14 @@ export class PrintLabelComponent implements OnInit {
       this.firebaseSaved = this.scheduleData.length > 0;
       console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items filtered out)`);
       console.log('📊 Schedule data sample:', this.scheduleData.slice(0, 3));
+      
+      // Debug: Show status distribution
+      const statusCounts = this.scheduleData.reduce((acc: any, item: any) => {
+        const status = item.tinhTrang || 'Chưa xác định';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('📊 Status distribution:', statusCounts);
       
       if (this.scheduleData.length > 0) {
         const uniqueMaTem = [...new Set(this.scheduleData.map(item => item.maTem))];
@@ -676,9 +774,6 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang === 'Pass').length;
   }
 
-  getNGItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'NG').length;
-  }
 
   getPendingItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'Chờ in').length;
@@ -853,154 +948,6 @@ export class PrintLabelComponent implements OnInit {
     this.showLoginDialog = false;
   }
 
-  // Method to test delete old data functionality
-  testDeleteOldData(): void {
-    console.log('🧪 Testing delete old data functionality...');
-    
-    // First, let's check what data structure we have
-    this.firestore.collection('print-schedules').get().subscribe((querySnapshot) => {
-      console.log('🔍 Current Firebase data structure:');
-      console.log(`   - Total documents: ${querySnapshot.docs.length}`);
-      
-      querySnapshot.docs.forEach((doc, index) => {
-        if (index < 3) { // Only show first 3 documents
-          const data = doc.data() as any;
-          console.log(`   - Document ${index + 1}:`, {
-            id: doc.id,
-            hasImportedAt: !!data['importedAt'],
-            importedAt: data['importedAt'],
-            hasData: !!data['data'],
-            dataLength: data['data'] ? data['data'].length : 0,
-            month: data.month,
-            year: data.year,
-            recordCount: data.recordCount,
-            collectionType: data.collectionType,
-            keys: Object.keys(data)
-          });
-        }
-      });
-      
-      // Test delete for current month
-      const currentDate = new Date();
-      const currentMonth = currentDate.getMonth() + 1;
-      const currentYear = currentDate.getFullYear();
-      
-      console.log(`🧪 Testing delete for current month: ${currentMonth}/${currentYear}`);
-      
-      // Ask user if they want to proceed with test delete
-      const confirmTest = confirm(`🧪 Test Delete Old Data\n\n` +
-        `Found ${querySnapshot.docs.length} documents in Firebase.\n\n` +
-        `Do you want to test delete data for current month ${currentMonth}/${currentYear}?\n\n` +
-        `This will show you what would be deleted without actually deleting.`);
-      
-      if (confirmTest) {
-        this.testDeleteByMonth(currentMonth, currentYear);
-      }
-    });
-  }
-
-  async testDeleteByMonth(month: number, year: number): Promise<void> {
-    try {
-      console.log(`🧪 Testing delete for month ${month}/${year}...`);
-      
-      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
-      
-      if (!snapshot || snapshot.empty) {
-        console.log('🧪 No documents found in Firebase');
-        alert('🧪 No documents found in Firebase');
-        return;
-      }
-      
-      let wouldDeleteCount = 0;
-      let totalItemsToDelete = 0;
-      const wouldDeleteDocs: any[] = [];
-      
-      snapshot.forEach((doc: any) => {
-        const data = doc.data();
-        console.log(`🧪 Checking document:`, {
-          id: doc.id,
-          month: data.month,
-          year: data.year,
-          recordCount: data.recordCount,
-          importedAt: data['importedAt'],
-          hasImportedAt: !!data['importedAt']
-        });
-        
-        // Check both new structure (month/year fields) and old structure (importedAt)
-        let shouldDelete = false;
-        
-        if (data.month === month && data.year === year) {
-          shouldDelete = true;
-        } else if (data['importedAt'] && data['importedAt'].toDate) {
-          const importedAt = data['importedAt'].toDate();
-          const docMonthPattern = `${importedAt.getFullYear()}-${(importedAt.getMonth() + 1).toString().padStart(2, '0')}`;
-          const targetPattern = `${year}-${month.toString().padStart(2, '0')}`;
-          
-          console.log(`🧪 Document ${doc.id}: ${docMonthPattern} vs ${targetPattern}`);
-          
-          if (docMonthPattern === targetPattern) {
-            shouldDelete = true;
-          }
-        }
-        
-        if (shouldDelete) {
-          wouldDeleteCount++;
-          totalItemsToDelete += data.recordCount || 0;
-          wouldDeleteDocs.push({
-            id: doc.id,
-            month: data.month,
-            year: data.year,
-            recordCount: data.recordCount,
-            importedAt: data['importedAt']
-          });
-        }
-      });
-      
-      console.log(`🧪 Test Results:`);
-      console.log(`   - Would delete ${wouldDeleteCount} documents`);
-      console.log(`   - Would delete ${totalItemsToDelete} total items`);
-      console.log(`   - Documents to delete:`, wouldDeleteDocs);
-      
-      if (wouldDeleteCount > 0) {
-        const confirmDelete = confirm(`🧪 Test Delete Results\n\n` +
-          `Would delete ${wouldDeleteCount} documents with ${totalItemsToDelete} total items for ${month}/${year}:\n\n` +
-          wouldDeleteDocs.map(doc => 
-            `- ${doc.id}: ${doc.recordCount} items (${doc.month}/${doc.year})`
-          ).join('\n') + '\n\n' +
-          `Do you want to actually delete these documents?`);
-        
-        if (confirmDelete) {
-          // Actually delete
-          const batch = this.firestore.firestore.batch();
-          wouldDeleteDocs.forEach(docInfo => {
-            const docRef = this.firestore.collection('print-schedules').doc(docInfo.id).ref;
-            batch.delete(docRef);
-          });
-          
-          await batch.commit();
-          console.log(`✅ Actually deleted ${wouldDeleteCount} documents with ${totalItemsToDelete} items`);
-          alert(`✅ Actually deleted ${wouldDeleteCount} documents with ${totalItemsToDelete} items for ${month}/${year}!`);
-          
-          // Reload data
-          this.loadDataFromFirebase();
-        } else {
-          console.log('🧪 Test delete cancelled by user');
-          alert('🧪 Test delete cancelled - no data was actually deleted');
-        }
-      } else {
-        console.log('🧪 No documents would be deleted for this month');
-        alert(`🧪 No documents would be deleted for ${month}/${year}\n\n` +
-              `This could mean:\n` +
-              `- No data exists for this month\n` +
-              `- Data doesn't have month/year or importedAt fields\n` +
-              `- Field format is different`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error in test delete:', error);
-      alert(`❌ Error in test delete: ${error.message}`);
-    }
-  }
 
   // Method to test Done items hiding functionality
   testDoneItemsHiding(): void {

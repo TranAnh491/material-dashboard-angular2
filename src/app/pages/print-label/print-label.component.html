@@ -37,19 +37,6 @@
               <i class="material-icons">delete_forever</i>
               Kiểm tra & Xóa hết Firebase
             </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testImportFunctionality(); $event.preventDefault()">
-              <i class="material-icons">science</i>
-              Test Import Function
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testDoneItemsHiding(); $event.preventDefault()">
-              <i class="material-icons">visibility_off</i>
-              Test Done Items Hiding
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testDeleteOldData(); $event.preventDefault()">
-              <i class="material-icons">delete_outline</i>
-              Test Delete Old Data
-            </a>
           </div>
   </div>
 
@@ -94,9 +81,6 @@
           </div>
           <div (click)="filterByStatus('Pass')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ✅ Pass: {{getPassItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('NG')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            ❌ NG: {{getNGItemsCount()}}
           </div>
           <div (click)="filterByStatus('Chờ in')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ⏳ Chờ in: {{getPendingItemsCount()}}
@@ -240,7 +224,6 @@
                     <option value="Chờ in">Chờ in</option>
                     <option value="Đã in">Đã in</option>
                     <option value="Pass">Pass</option>
-                    <option value="NG">NG</option>
                     <option value="Done">Done</option>
                   </select>
               </td>
