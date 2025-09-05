@@ -37,6 +37,18 @@
               <i class="material-icons">bug_report</i>
               Debug Firebase Data
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="findLostData(); $event.preventDefault()">
+              <i class="material-icons">search</i>
+              Tìm dữ liệu mất
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showAllFirebaseData(); $event.preventDefault()">
+              <i class="material-icons">list</i>
+              Hiển thị tất cả mã
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testBatchGeneration(); $event.preventDefault()">
+              <i class="material-icons">science</i>
+              Test Batch Generation
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="checkAndClearFirebaseData(); $event.preventDefault()">
               <i class="material-icons">delete_forever</i>
               Kiểm tra & Xóa hết Firebase
@@ -70,6 +82,13 @@
             <i class="material-icons">download</i>
           </button>
           
+          <button class="custom-btn" 
+                  (click)="removeDuplicateItems()"
+                  title="Xóa các mã trùng lặp (giữ lại 1 mã)">
+            <i class="material-icons">content_copy</i>
+            Dup
+          </button>
+          
 
           
 
@@ -79,9 +98,6 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; margin-right: 0;">
           <div (click)="filterByStatus('IQC')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             🔍 IQC: {{getIQCItemsCount()}}
-          </div>
-          <div style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000;">
-            🔄 Dup: {{getDuplicateItemsCount()}}
           </div>
           <div (click)="filterByStatus('Late')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
             ⏰ Late: {{getLateItemsCount()}}
@@ -151,9 +167,9 @@
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng Tem</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng phôi</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã Hàng</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lệnh sản xuất</th>
+                <th style="font-size: 13px; color: #000000; font-weight: bold;">Lệnh sản xuất</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Khách hàng</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Ngày nhận kế hoạch</th>
+                <th style="font-size: 13px; color: #000000; font-weight: bold;">Ngày nhận kế hoạch</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">YY</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">WW</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Line nhận</th>
@@ -166,7 +182,7 @@
             </thead>
             <tbody>
               <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
-              <tr *ngIf="showCompletedItems || (!item.isCompleted && item.tinhTrang !== 'Done' && item.tinhTrang !== 'done' && item.tinhTrang !== 'DONE')"
+              <tr *ngIf="!showCompletedItems"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
@@ -196,13 +212,13 @@
                   </button>
                   <span *ngIf="item.isUrgent" style="color: #000000; font-size: 10px; display: block; text-align: center;">🔥</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maTem || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.maTem || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.maHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lenhSanXuat || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.lenhSanXuat || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.khachHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ngayNhanKeHoach || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.ngayNhanKeHoach || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.yy || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.ww || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.lineNhan || ''}}</td>
@@ -238,7 +254,7 @@
               </td>
               <td style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000;">
                   <span class="status-time">
-                      {{ item.statusUpdateTime | date:'dd/MM/yyyy HH:mm' }}
+                      {{ item.statusUpdateTime ? (item.statusUpdateTime | date:'dd/MM/yyyy HH:mm') : '-' }}
                   </span>
               </td>
               <td style="border: 1px solid #000000;">
@@ -269,6 +285,36 @@
                 </button>
               </td>
               </tr>
+              </ng-container>
+              
+              <!-- Done items section -->
+              <ng-container *ngIf="showCompletedItems">
+                <ng-container *ngFor="let item of doneItems; let i = index">
+              <tr style="background: #e8f5e8; border-bottom: 2px solid #000000; opacity: 0.8;">
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.batch || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.stt || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.sizePhoi || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.maTem || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.soLuongYeuCau || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.soLuongPhoi || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maHang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.lenhSanXuat || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.khachHang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.ngayNhanKeHoach || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.yy || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ww || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lineNhan || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nguoiIn || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; background: #4caf50; color: white; font-weight: bold;">{{item.tinhTrang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.banVe || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ghiChu || '-'}}</td>
+              <td style="text-align: center; border: 1px solid #000000; color: #4caf50;">
+                ✅ Done
+              </td>
+              </tr>
+                </ng-container>
               </ng-container>
             </tbody>
           </table>
@@ -351,7 +397,7 @@
     }
     
     .excel-header {
-      background: #ff9800;
+      background: white;
       color: #000;
       padding: 15px 20px;
       text-align: center;

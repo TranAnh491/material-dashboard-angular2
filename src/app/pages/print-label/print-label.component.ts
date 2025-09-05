@@ -67,8 +67,12 @@ export class PrintLabelComponent implements OnInit {
 
   // Search and filter properties
   searchTerm: string = '';
-  showCompletedItems: boolean = true;
+  showCompletedItems: boolean = false; // Mặc định TẮT
   currentStatusFilter: string = '';
+  
+  // Done items properties
+  doneItems: ScheduleItem[] = [];
+  doneItemsLoaded: boolean = false;
 
   // Delete dialog properties
   showDeleteDialog: boolean = false;
@@ -150,6 +154,8 @@ export class PrintLabelComponent implements OnInit {
     if (file) {
       this.importExcelFile(file);
     }
+    // Reset file input để cho phép import cùng file nhiều lần
+    event.target.value = '';
   }
 
   async importExcelFile(file: File): Promise<void> {
@@ -173,13 +179,10 @@ export class PrintLabelComponent implements OnInit {
           return;
         }
         
-        // REPLACE all data (clear existing and add new)
-        this.scheduleData = cleanedData;
+        // Save to Firebase (this will append new data automatically)
+        await this.saveToFirebase(cleanedData);
         
-        // Save to Firebase (this will replace all data)
-        await this.saveToFirebase(this.scheduleData);
-        
-        const message = `✅ Successfully imported ${cleanedData.length} records from ${file.name} and REPLACED all existing data. Total: ${this.scheduleData.length} records 🔥`;
+        const message = `✅ Successfully imported ${cleanedData.length} new records from ${file.name}!\n\n📊 New: ${cleanedData.length} records\n📊 Total: ${this.scheduleData.length} records`;
         alert(message);
         
       } catch (error) {
@@ -247,37 +250,37 @@ export class PrintLabelComponent implements OnInit {
     return `${day}/${month}/${year}`;
   }
 
-  // Generate sequential batch ID (001-999) for import tracking
-  private async generateBatchId(): Promise<string> {
+  // Generate batch ID dựa trên số lần import (tăng dần mỗi lần bấm import)
+  private async generateBatchId(fileContent: any[]): Promise<string> {
     try {
-      // Get the latest batch number from Firebase
-      const snapshot = await this.firestore.collection('print-schedules', ref => 
-        ref.orderBy('batchNumber', 'desc').limit(1)
-      ).get().toPromise();
+      // Lấy batch number cao nhất từ tất cả documents
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
-      let nextBatchNumber = 1;
+      let maxBatchNumber = 0;
       
       if (snapshot && !snapshot.empty) {
-        const latestDoc = snapshot.docs[0];
-        const latestBatchNumber = latestDoc.data()['batchNumber'] || 0;
-        nextBatchNumber = latestBatchNumber + 1;
-        
-        // Reset to 1 if we reach 999
-        if (nextBatchNumber > 999) {
-          nextBatchNumber = 1;
-        }
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const batchNumber = data['batchNumber'] || 0;
+          if (batchNumber > maxBatchNumber) {
+            maxBatchNumber = batchNumber;
+          }
+        });
       }
       
-      const batchId = String(nextBatchNumber).padStart(3, '0');
-      console.log(`🆔 Generated batch ID: ${batchId} (next batch number: ${nextBatchNumber})`);
+      // Tăng lên 1 cho lần import mới
+      const nextBatchNumber = maxBatchNumber + 1;
+      
+      // Reset to 1 if we reach 999
+      const finalBatchNumber = nextBatchNumber > 999 ? 1 : nextBatchNumber;
+      
+      const batchId = String(finalBatchNumber).padStart(3, '0');
+      console.log(`🆔 Generated batch ID: ${batchId} (import #${finalBatchNumber})`);
       return batchId;
       
     } catch (error) {
       console.error('❌ Error generating batch ID:', error);
-      // Fallback to timestamp-based ID if Firebase fails
-      const now = new Date();
-      const timestamp = now.getTime();
-      return String(timestamp).slice(-3).padStart(3, '0');
+      return '001'; // Fallback
     }
   }
 
@@ -286,7 +289,7 @@ export class PrintLabelComponent implements OnInit {
     const rows = data.slice(1);
     
     // Tạo batch ID duy nhất cho lần import này
-    const batchId = await this.generateBatchId();
+    const batchId = await this.generateBatchId(data);
     console.log(`🆔 Generated batch ID for this import: ${batchId}`);
     
     return rows.map((row: any[], index: number) => {
@@ -356,15 +359,15 @@ export class PrintLabelComponent implements OnInit {
         }
       }
 
-      // APPEND new data to existing data (accumulative import)
-      console.log('🔄 Appending new data to existing data...');
+      // APPEND new data to existing data (merge approach)
+      console.log('🔄 Merging new data with existing data...');
       
-      // Simply append new data to existing data
+      // Merge existing data with new data
       const mergedData = [...existingData, ...data];
-      console.log(`✅ Appended data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
+      console.log(`✅ Merged data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
       
-      // Log details about the append
-      console.log('📊 Append details:', {
+      // Log details about the merge
+      console.log('📊 Merge details:', {
         existingCount: existingData.length,
         newCount: data.length,
         totalCount: mergedData.length,
@@ -375,17 +378,38 @@ export class PrintLabelComponent implements OnInit {
         }))
       });
       
+      // TÁCH MÃ DONE RA TRƯỚC KHI LƯU
+      const doneItems = mergedData.filter(item => {
+        const status = item.tinhTrang?.toLowerCase()?.trim();
+        return status === 'done' || status === 'completed' || status === 'hoàn thành';
+      });
+      
+      const notDoneItems = mergedData.filter(item => {
+        const status = item.tinhTrang?.toLowerCase()?.trim();
+        return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+      });
+      
+      console.log(`📊 Separated: ${doneItems.length} Done items, ${notDoneItems.length} not done items`);
+      
+      // Lưu mã Done vào collection riêng
+      if (doneItems.length > 0) {
+        await this.saveDoneItemsToSeparateCollection(doneItems);
+      }
+      
+      // Chỉ lưu mã chưa Done vào collection chính
+      const dataToSave = notDoneItems;
+      
       // Get batch number from the first new item
       const batchNumber = data.length > 0 && data[0].batch ? parseInt(data[0].batch) : 1;
       
-      // Create the document with merged data
+      // Create the document with merged data (only not done items)
       const labelScheduleDoc = {
-        data: mergedData,
+        data: dataToSave,
         batchNumber: batchNumber, // Store batch number for sequential tracking
         importedAt: new Date(),
         month: this.getCurrentMonth(),
         year: new Date().getFullYear(),
-        recordCount: mergedData.length,
+        recordCount: dataToSave.length,
         lastUpdated: new Date(),
         importHistory: [
           {
@@ -407,6 +431,7 @@ export class PrintLabelComponent implements OnInit {
         totalRecords: labelScheduleDoc.recordCount,
         newRecords: data.length,
         existingRecords: existingData.length,
+        doneItemsMoved: doneItems.length,
         month: labelScheduleDoc.month,
         year: labelScheduleDoc.year,
         timestamp: labelScheduleDoc.importedAt
@@ -424,9 +449,9 @@ export class PrintLabelComponent implements OnInit {
       }
       
       this.firebaseSaved = true;
-      console.log(`✅ Saved ${mergedData.length} total records to Firebase (${existingData.length} existing + ${data.length} new) - Batch: ${String(batchNumber).padStart(3, '0')}`);
+      console.log(`✅ Saved ${dataToSave.length} records to Firebase (${doneItems.length} Done items moved to separate collection) - Batch: ${String(batchNumber).padStart(3, '0')}`);
       
-      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${mergedData.length} bản ghi\n➕ Mới: ${data.length} bản ghi (Batch: ${String(batchNumber).padStart(3, '0')})\n📋 Cũ: ${existingData.length} bản ghi\n\nDữ liệu mới đã được cộng dồn vào dữ liệu cũ!`);
+      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${dataToSave.length} bản ghi (Batch: ${String(batchNumber).padStart(3, '0')})\n📦 Mã Done: ${doneItems.length} đã chuyển sang collection riêng\n🔄 Đã thêm: ${data.length} bản ghi mới vào ${existingData.length} bản ghi cũ`);
       
       // Reload data from Firebase to display all merged records
       console.log('🔄 Reloading data from Firebase to display all records...');
@@ -447,6 +472,27 @@ export class PrintLabelComponent implements OnInit {
     }
 
     try {
+      // TÁCH MÃ DONE RA TRƯỚC KHI LƯU
+      const doneItems = data.filter(item => {
+        const status = item.tinhTrang?.toLowerCase()?.trim();
+        return status === 'done' || status === 'completed' || status === 'hoàn thành';
+      });
+      
+      const notDoneItems = data.filter(item => {
+        const status = item.tinhTrang?.toLowerCase()?.trim();
+        return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+      });
+      
+      console.log(`📊 Separated: ${doneItems.length} Done items, ${notDoneItems.length} not done items`);
+      
+      // Lưu mã Done vào collection riêng
+      if (doneItems.length > 0) {
+        await this.saveDoneItemsToSeparateCollection(doneItems);
+      }
+      
+      // Chỉ lưu mã chưa Done vào collection chính
+      const dataToSave = notDoneItems;
+      
       // Get the latest document ID to update
       const snapshot = await this.firestore.collection('print-schedules', ref => 
         ref.orderBy('importedAt', 'desc').limit(1)
@@ -460,23 +506,23 @@ export class PrintLabelComponent implements OnInit {
         const existingData = latestDoc.data() as any;
         const batchNumber = existingData.batchNumber || 1;
         
-        // Create the document with replaced data
+        // Create the document with replaced data (only not done items)
         const labelScheduleDoc = {
-          data: data,
+          data: dataToSave,
           batchNumber: batchNumber,
           importedAt: new Date(),
           month: this.getCurrentMonth(),
           year: new Date().getFullYear(),
-          recordCount: data.length,
+          recordCount: dataToSave.length,
           lastUpdated: new Date(),
           importHistory: [
             {
               importedAt: new Date(),
-              recordCount: data.length,
+              recordCount: dataToSave.length,
               batchNumber: batchNumber,
               month: this.getCurrentMonth(),
               year: new Date().getFullYear(),
-              description: `Updated data (${data.length} records remaining after delete)`
+              description: `Updated data (${dataToSave.length} records remaining, ${doneItems.length} Done items moved to separate collection)`
             }
           ],
           collectionType: 'print-schedules',
@@ -486,10 +532,10 @@ export class PrintLabelComponent implements OnInit {
 
         // Update existing document
         await this.firestore.collection('print-schedules').doc(docId).update(labelScheduleDoc);
-        console.log(`✅ Updated document with ${data.length} records (REPLACE mode)`);
+        console.log(`✅ Updated document with ${dataToSave.length} records (Done items moved to separate collection)`);
         
         this.firebaseSaved = true;
-        console.log(`✅ Saved ${data.length} records to Firebase (REPLACE mode) - Batch: ${String(batchNumber).padStart(3, '0')}`);
+        console.log(`✅ Saved ${dataToSave.length} records to Firebase (REPLACE mode) - Batch: ${String(batchNumber).padStart(3, '0')}`);
         
         // Reload data from Firebase
         this.loadDataFromFirebase();
@@ -540,87 +586,455 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
-  loadDataFromFirebase(): void {
-    console.log('🔥 Loading data from Firebase...');
+  // Tìm và khôi phục dữ liệu cũ
+  async findLostData(): Promise<void> {
+    console.log('🔍 Tìm kiếm dữ liệu cũ đã mất...');
     
-    // Use the new collection name with clear structure
-    this.firestore.collection('print-schedules', ref => 
-      ref.orderBy('importedAt', 'desc')
-    ).get().subscribe((querySnapshot) => {
-      const allData: ScheduleItem[] = [];
+    try {
+      // Kiểm tra tất cả documents trong collection
+      const snapshot = await this.firestore.collection('print-schedules', ref => 
+        ref.orderBy('importedAt', 'desc')
+      ).get().toPromise();
       
-      console.log(`🔍 Found ${querySnapshot.docs.length} documents in print-schedules collection`);
+      console.log(`📊 Tìm thấy ${snapshot.docs.length} documents trong Firebase`);
       
-      querySnapshot.forEach((doc) => {
+      let totalItems = 0;
+      let allItems: ScheduleItem[] = [];
+      let allNotDoneItems: ScheduleItem[] = [];
+      
+      snapshot.docs.forEach((doc, docIndex) => {
         const data = doc.data() as any;
-        console.log(`📄 Document ${doc.id}:`, {
-          hasData: !!data.data,
-          dataLength: data.data ? data.data.length : 0,
+        console.log(`📄 Document ${docIndex + 1} (${doc.id}):`, {
+          recordCount: data.recordCount,
+          batchNumber: data.batchNumber,
+          importedAt: data.importedAt,
           month: data.month,
           year: data.year,
-          importedAt: data.importedAt,
-          recordCount: data.recordCount,
-          collectionType: data.collectionType
+          totalItems: data.data ? data.data.length : 0
         });
         
-        // New clear structure: { data: [...], metadata }
         if (data.data && Array.isArray(data.data)) {
-          const totalItems = data.data.length;
-          const items = data.data
-            .filter((item: any, index: number) => {
-              // Only filter out items that are explicitly marked as done/completed
-              const status = item.tinhTrang?.toLowerCase()?.trim();
-              const isFiltered = status === 'done' || status === 'completed' || status === 'hoàn thành';
-              
-              if (isFiltered) {
-                console.log(`🚫 Filtered out item ${index + 1}/${totalItems}:`, {
-                  maTem: item.maTem,
-                  batch: item.batch,
-                  tinhTrang: item.tinhTrang,
-                  status: status
-                });
-              }
-              
-              return !isFiltered;
-            })
-            .map((item: any) => ({
-              ...item,
-              isCompleted: false, // Since we filtered out Done items
-              // Add document metadata for tracking
-              documentId: doc.id,
-              importedAt: data.importedAt,
-              month: data.month,
-              year: data.year
-            }));
+          totalItems += data.data.length;
+          allItems.push(...data.data);
           
-          console.log(`📊 Document ${doc.id}: ${totalItems} total items, ${items.length} after filtering (${totalItems - items.length} filtered out)`);
-          allData.push(...items);
+          // Lọc mã chưa Done từ tất cả documents
+          const notDoneItems = data.data.filter((item: any) => {
+            const status = item.tinhTrang?.toLowerCase()?.trim();
+            return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+          });
+          
+          allNotDoneItems.push(...notDoneItems);
+          console.log(`📊 Document ${docIndex + 1}: ${data.data.length} total → ${notDoneItems.length} not done`);
         }
       });
       
-      this.scheduleData = allData;
-      this.firebaseSaved = this.scheduleData.length > 0;
-      console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items filtered out)`);
-      console.log('📊 Schedule data sample:', this.scheduleData.slice(0, 3));
+      console.log(`📊 Tổng cộng: ${totalItems} items trong tất cả documents`);
+      console.log(`📊 Mã chưa Done: ${allNotDoneItems.length} items`);
+      console.log(`📊 Dữ liệu hiện tại: ${this.scheduleData.length} items`);
       
-      // Debug: Show status distribution
-      const statusCounts = this.scheduleData.reduce((acc: any, item: any) => {
+      // So sánh với dữ liệu hiện tại (chỉ mã chưa Done)
+      if (allNotDoneItems.length > this.scheduleData.length) {
+        const lostCount = allNotDoneItems.length - this.scheduleData.length;
+        console.log(`⚠️ PHÁT HIỆN: Có ${lostCount} mã chưa Done bị mất!`);
+        
+        // Hiển thị dữ liệu bị mất
+        const lostItems = allNotDoneItems.filter(item => 
+          !this.scheduleData.some(current => 
+            current.maTem === item.maTem && current.batch === item.batch
+          )
+        );
+        
+        console.log(`🔍 Dữ liệu bị mất (${lostItems.length} items):`, lostItems.map(item => ({
+          maTem: item.maTem,
+          batch: item.batch,
+          tinhTrang: item.tinhTrang,
+          khachHang: item.khachHang
+        })));
+        
+        // Hỏi có muốn khôi phục không
+        const confirmRestore = confirm(`🔍 Tìm thấy ${lostCount} mã chưa Done bị mất!\n\n` +
+          `📊 Hiện tại: ${this.scheduleData.length} mã\n` +
+          `📊 Tổng cộng: ${allNotDoneItems.length} mã chưa Done\n` +
+          `📊 Tổng tất cả: ${totalItems} mã (bao gồm Done)\n\n` +
+          `Bạn có muốn khôi phục dữ liệu bị mất không?`);
+        
+        if (confirmRestore) {
+          // Khôi phục dữ liệu (chỉ mã chưa Done)
+          this.scheduleData = allNotDoneItems;
+          await this.saveToFirebaseDirect(this.scheduleData);
+          
+          alert(`✅ Đã khôi phục ${lostCount} mã bị mất!\n\n` +
+                `📊 Tổng cộng: ${this.scheduleData.length} mã chưa Done`);
+        }
+      } else {
+        console.log('✅ Không có dữ liệu chưa Done bị mất');
+        alert(`✅ Không có dữ liệu chưa Done bị mất!\n\n` +
+              `📊 Hiện tại: ${this.scheduleData.length} mã\n` +
+              `📊 Tổng cộng: ${allNotDoneItems.length} mã chưa Done\n` +
+              `📊 Tổng tất cả: ${totalItems} mã (bao gồm Done)`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Lỗi khi tìm kiếm dữ liệu:', error);
+      alert('❌ Lỗi khi tìm kiếm dữ liệu!');
+    }
+  }
+
+  // Hiển thị tất cả mã trong Firebase (bao gồm cả Done)
+  async showAllFirebaseData(): Promise<void> {
+    console.log('🔍 Hiển thị TẤT CẢ mã trong Firebase...');
+    
+    try {
+      // Kiểm tra tất cả documents trong collection
+      const snapshot = await this.firestore.collection('print-schedules', ref => 
+        ref.orderBy('importedAt', 'desc')
+      ).get().toPromise();
+      
+      console.log(`📊 Tìm thấy ${snapshot.docs.length} documents trong Firebase`);
+      
+      let totalItems = 0;
+      let allItems: ScheduleItem[] = [];
+      let doneItems: ScheduleItem[] = [];
+      let notDoneItems: ScheduleItem[] = [];
+      
+      snapshot.docs.forEach((doc, docIndex) => {
+        const data = doc.data() as any;
+        console.log(`📄 Document ${docIndex + 1} (${doc.id}):`, {
+          recordCount: data.recordCount,
+          batchNumber: data.batchNumber,
+          importedAt: data.importedAt,
+          month: data.month,
+          year: data.year,
+          totalItems: data.data ? data.data.length : 0
+        });
+        
+        if (data.data && Array.isArray(data.data)) {
+          totalItems += data.data.length;
+          allItems.push(...data.data);
+          
+          // Phân loại Done và chưa Done
+          data.data.forEach((item: any) => {
+            const status = item.tinhTrang?.toLowerCase()?.trim();
+            if (status === 'done' || status === 'completed' || status === 'hoàn thành') {
+              doneItems.push(item);
+            } else {
+              notDoneItems.push(item);
+            }
+          });
+        }
+      });
+      
+      // Thống kê theo tình trạng
+      const statusCounts = allItems.reduce((acc: any, item: any) => {
         const status = item.tinhTrang || 'Chưa xác định';
         acc[status] = (acc[status] || 0) + 1;
         return acc;
       }, {});
-      console.log('📊 Status distribution:', statusCounts);
       
-      if (this.scheduleData.length > 0) {
-        const uniqueMaTem = [...new Set(this.scheduleData.map(item => item.maTem))];
-        console.log(`📊 Summary: ${this.scheduleData.length} total items (Done items excluded), ${uniqueMaTem.length} unique mã tem`);
-      } else {
-        console.log('⚠️ No data found in Firebase collection "print-schedules" (after filtering Done items)');
-        console.log('🔍 Available documents:', querySnapshot.docs.length);
+      console.log('📊 THỐNG KÊ TỔNG QUAN:');
+      console.log(`📊 Tổng cộng: ${totalItems} mã`);
+      console.log(`📊 Mã Done: ${doneItems.length} mã`);
+      console.log(`📊 Mã chưa Done: ${notDoneItems.length} mã`);
+      console.log(`📊 Hiện tại hiển thị: ${this.scheduleData.length} mã`);
+      
+      console.log('📊 THỐNG KÊ THEO TÌNH TRẠNG:');
+      Object.entries(statusCounts).forEach(([status, count]) => {
+        console.log(`📊 ${status}: ${count} mã`);
+      });
+      
+      console.log('📋 DANH SÁCH TẤT CẢ MÃ:');
+      allItems.forEach((item, index) => {
+        console.log(`${index + 1}. ${item.maTem} | ${item.tinhTrang} | ${item.khachHang} | Batch: ${item.batch}`);
+      });
+      
+      // Hiển thị alert với thống kê
+      const statusList = Object.entries(statusCounts)
+        .map(([status, count]) => `${status}: ${count}`)
+        .join('\n');
+      
+      alert(`📊 TẤT CẢ MÃ TRONG FIREBASE:\n\n` +
+            `📊 Tổng cộng: ${totalItems} mã\n` +
+            `📊 Mã Done: ${doneItems.length} mã\n` +
+            `📊 Mã chưa Done: ${notDoneItems.length} mã\n` +
+            `📊 Hiện tại hiển thị: ${this.scheduleData.length} mã\n\n` +
+            `📊 CHI TIẾT THEO TÌNH TRẠNG:\n${statusList}\n\n` +
+            `💡 Xem Console (F12) để xem danh sách chi tiết!`);
+      
+    } catch (error) {
+      console.error('❌ Lỗi khi tìm kiếm dữ liệu:', error);
+      alert('❌ Lỗi khi tìm kiếm dữ liệu!');
+    }
+  }
+
+  loadDataFromFirebase(): void {
+    console.log('🔥 Loading data from Firebase...');
+    
+    this.firestore.collection('print-schedules', ref => 
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().subscribe((querySnapshot) => {
+      const allData: ScheduleItem[] = [];
+      
+      if (querySnapshot.docs.length > 0) {
+        const latestDoc = querySnapshot.docs[0];
+        const data = latestDoc.data() as any;
+        
+        if (data.data && Array.isArray(data.data)) {
+          // CHỈ LOAD MÃ CHƯA DONE
+          const notDoneItems = data.data.filter((item: any) => {
+            const status = item.tinhTrang?.toLowerCase()?.trim();
+            return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+          });
+          
+          allData.push(...notDoneItems);
+          console.log(`📊 Filtered: ${data.data.length} total → ${notDoneItems.length} not done items`);
+        }
       }
+      
+      this.scheduleData = allData;
+      this.firebaseSaved = this.scheduleData.length > 0;
+      console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items excluded)`);
     }, error => {
       console.error('❌ Error loading from Firebase:', error);
     });
+  }
+
+  // Lưu mã Done vào Firebase riêng
+  async saveDoneItemsToSeparateCollection(doneItems: ScheduleItem[]): Promise<void> {
+    if (doneItems.length === 0) return;
+    
+    try {
+      console.log(`💾 Saving ${doneItems.length} Done items to separate collection...`);
+      
+      const doneData = {
+        data: doneItems,
+        savedAt: new Date(),
+        count: doneItems.length,
+        type: 'completed_items'
+      };
+      
+      await this.firestore.collection('completed-schedules').add(doneData);
+      console.log(`✅ Saved ${doneItems.length} Done items to completed-schedules collection`);
+    } catch (error) {
+      console.error('❌ Error saving Done items:', error);
+    }
+  }
+
+  // Xóa các mã trùng lặp
+  async removeDuplicateItems(): Promise<void> {
+    if (this.scheduleData.length === 0) {
+      alert('Không có dữ liệu để kiểm tra trùng lặp!');
+      return;
+    }
+
+    console.log('🔍 Đang kiểm tra mã trùng lặp...');
+    
+    // Tạo key để so sánh dựa trên các cột được chỉ định
+    const createComparisonKey = (item: ScheduleItem): string => {
+      return [
+        item.sizePhoi || '',
+        item.maTem || '',
+        item.soLuongYeuCau || '',
+        item.soLuongPhoi || '',
+        item.maHang || '',
+        item.lenhSanXuat || '',
+        item.khachHang || '',
+        item.ngayNhanKeHoach || '',
+        item.yy || '',
+        item.ww || '',
+        item.lineNhan || ''
+      ].join('|');
+    };
+
+    // Tìm các mã trùng lặp và giữ lại bản có Batch nhỏ nhất
+    const seen = new Map<string, ScheduleItem>();
+    const duplicates: ScheduleItem[] = [];
+    const uniqueItems: ScheduleItem[] = [];
+
+    this.scheduleData.forEach(item => {
+      const key = createComparisonKey(item);
+      
+      if (seen.has(key)) {
+        // Đây là mã trùng - so sánh Batch number
+        const existingItem = seen.get(key)!;
+        const existingBatch = parseInt(existingItem.batch || '999');
+        const currentBatch = parseInt(item.batch || '999');
+        
+        if (currentBatch < existingBatch) {
+          // Bản hiện tại có Batch nhỏ hơn - thay thế
+          duplicates.push(existingItem);
+          seen.set(key, item);
+          uniqueItems[uniqueItems.indexOf(existingItem)] = item;
+          console.log(`🔄 Thay thế mã trùng: ${item.maTem} (Batch ${existingBatch} → ${currentBatch})`);
+        } else {
+          // Bản hiện tại có Batch lớn hơn - giữ bản cũ
+          duplicates.push(item);
+          console.log(`🔄 Giữ bản cũ: ${item.maTem} (Batch ${currentBatch} > ${existingBatch})`);
+        }
+      } else {
+        // Đây là mã duy nhất
+        seen.set(key, item);
+        uniqueItems.push(item);
+      }
+    });
+
+    if (duplicates.length === 0) {
+      alert('✅ Không có mã trùng lặp nào được tìm thấy!');
+      return;
+    }
+
+    // Xác nhận xóa
+    const confirmMessage = `🔍 Tìm thấy ${duplicates.length} mã trùng lặp!\n\n` +
+      `📊 Tổng mã hiện tại: ${this.scheduleData.length}\n` +
+      `📊 Sau khi xóa: ${uniqueItems.length}\n\n` +
+      `Bạn có chắc chắn muốn xóa các mã trùng lặp?`;
+    
+    if (confirm(confirmMessage)) {
+      // Cập nhật dữ liệu
+      this.scheduleData = uniqueItems;
+      
+      // Lưu vào Firebase (không tách mã Done khi xóa trùng)
+      await this.saveToFirebaseDirect(this.scheduleData);
+      
+      alert(`✅ Đã xóa ${duplicates.length} mã trùng lặp!\n\n` +
+            `📊 Trước: ${this.scheduleData.length + duplicates.length} mã\n` +
+            `📊 Sau: ${this.scheduleData.length} mã`);
+      
+      console.log(`✅ Đã xóa ${duplicates.length} mã trùng lặp, còn lại ${uniqueItems.length} mã duy nhất`);
+    }
+  }
+
+  // Lưu trực tiếp vào Firebase (không tách mã Done)
+  async saveToFirebaseDirect(data: ScheduleItem[]): Promise<void> {
+    console.log('🔥 Saving data directly to Firebase (no Done separation)...');
+    
+    if (data.length === 0) {
+      console.log('No data to save');
+      return;
+    }
+
+    try {
+      // Get the latest document ID to update
+      const snapshot = await this.firestore.collection('print-schedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(1)
+      ).get().toPromise();
+      
+      if (snapshot && !snapshot.empty) {
+        const latestDoc = snapshot.docs[0];
+        const docId = latestDoc.id;
+        
+        // Get batch number from existing data
+        const existingData = latestDoc.data() as any;
+        const batchNumber = existingData.batchNumber || 1;
+        
+        // Create the document with direct data (no Done separation)
+        const labelScheduleDoc = {
+          data: data,
+          batchNumber: batchNumber,
+          importedAt: new Date(),
+          month: this.getCurrentMonth(),
+          year: new Date().getFullYear(),
+          recordCount: data.length,
+          lastUpdated: new Date(),
+          importHistory: [
+            {
+              importedAt: new Date(),
+              recordCount: data.length,
+              batchNumber: batchNumber,
+              month: this.getCurrentMonth(),
+              year: new Date().getFullYear(),
+              description: `Direct update (${data.length} records after duplicate removal)`
+            }
+          ],
+          collectionType: 'print-schedules',
+          version: '1.0',
+          status: 'active'
+        };
+
+        // Update existing document
+        await this.firestore.collection('print-schedules').doc(docId).update(labelScheduleDoc);
+        console.log(`✅ Updated document with ${data.length} records (direct save)`);
+        
+        this.firebaseSaved = true;
+        console.log(`✅ Saved ${data.length} records to Firebase (direct save) - Batch: ${String(batchNumber).padStart(3, '0')}`);
+        
+        // Reload data from Firebase
+        this.loadDataFromFirebase();
+      } else {
+        console.log('No existing document found to update');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error saving to Firebase (direct):', error);
+    }
+  }
+
+  // Test nguyên tắc tạo batch ID
+  async testBatchGeneration(): Promise<void> {
+    console.log('🧪 Testing batch generation logic...');
+    
+    try {
+      // Lấy batch number cao nhất hiện tại
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
+      
+      let maxBatchNumber = 0;
+      let batchCounts: { [key: number]: number } = {};
+      
+      if (snapshot && !snapshot.empty) {
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const batchNumber = data['batchNumber'] || 0;
+          if (batchNumber > maxBatchNumber) {
+            maxBatchNumber = batchNumber;
+          }
+          batchCounts[batchNumber] = (batchCounts[batchNumber] || 0) + 1;
+        });
+      }
+      
+      const nextBatchNumber = maxBatchNumber + 1;
+      const finalBatchNumber = nextBatchNumber > 999 ? 1 : nextBatchNumber;
+      
+      console.log('📊 BATCH GENERATION TEST RESULTS:');
+      console.log(`📊 Current max batch: ${maxBatchNumber}`);
+      console.log(`📊 Next batch will be: ${finalBatchNumber}`);
+      console.log(`📊 Total documents: ${snapshot?.docs.length || 0}`);
+      
+      console.log('📊 Batch distribution:');
+      Object.entries(batchCounts).forEach(([batch, count]) => {
+        console.log(`📊 Batch ${batch}: ${count} documents`);
+      });
+      
+      // Test với dữ liệu giả
+      const testData = [
+        ['Nam', 'Thang', 'MaTem'],
+        ['2025', '9', 'TEST001']
+      ];
+      
+      const testBatch1 = await this.generateBatchId(testData);
+      const testBatch2 = await this.generateBatchId(testData); // Cùng file
+      const testBatch3 = await this.generateBatchId(testData); // Cùng file
+      
+      console.log('🧪 TEST RESULTS:');
+      console.log(`🧪 Same file import 1: Batch ${testBatch1}`);
+      console.log(`🧪 Same file import 2: Batch ${testBatch2}`);
+      console.log(`🧪 Same file import 3: Batch ${testBatch3}`);
+      
+      const isCorrect = testBatch1 !== testBatch2 && testBatch2 !== testBatch3;
+      console.log(`🧪 Logic correct: ${isCorrect ? '✅ YES' : '❌ NO'}`);
+      
+      alert(`🧪 BATCH GENERATION TEST:\n\n` +
+            `📊 Current max batch: ${maxBatchNumber}\n` +
+            `📊 Next batch: ${finalBatchNumber}\n` +
+            `📊 Same file test:\n` +
+            `   - Import 1: ${testBatch1}\n` +
+            `   - Import 2: ${testBatch2}\n` +
+            `   - Import 3: ${testBatch3}\n\n` +
+            `✅ Logic: ${isCorrect ? 'CORRECT' : 'INCORRECT'}\n\n` +
+            `💡 Xem Console (F12) để xem chi tiết!`);
+      
+    } catch (error) {
+      console.error('❌ Error testing batch generation:', error);
+      alert('❌ Lỗi khi test batch generation!');
+    }
   }
 
   // Template download
@@ -940,38 +1354,6 @@ export class PrintLabelComponent implements OnInit {
     return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
   }
 
-  getDuplicateItemsCount(): number {
-    const duplicateMap = new Map<string, number>();
-    
-    this.scheduleData.forEach(item => {
-      // Tạo key từ các cột cần kiểm tra duplicate
-      const key = [
-        item.sizePhoi || '',
-        item.maTem || '',
-        item.soLuongYeuCau || '',
-        item.soLuongPhoi || '',
-        item.maHang || '',
-        item.lenhSanXuat || '',
-        item.khachHang || '',
-        item.ngayNhanKeHoach || '',
-        item.yy || '',
-        item.ww || '',
-        item.lineNhan || ''
-      ].join('|');
-      
-      duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
-    });
-    
-    // Đếm số lượng key có count > 1 (tức là có duplicate)
-    let duplicateCount = 0;
-    duplicateMap.forEach(count => {
-      if (count > 1) {
-        duplicateCount += count; // Đếm tất cả các bản ghi duplicate (bao gồm cả bản gốc)
-      }
-    });
-    
-    return duplicateCount;
-  }
 
   getLateItemsCount(): number {
     return this.scheduleData.filter(item => item.tinhTrang === 'Late').length;
@@ -1011,8 +1393,61 @@ export class PrintLabelComponent implements OnInit {
     this.searchTerm = event.target.value;
   }
 
-  toggleShowCompletedItems(): void {
+  async toggleShowCompletedItems(): Promise<void> {
     this.showCompletedItems = !this.showCompletedItems;
+    
+    // Nếu đang bật hiển thị Done và chưa load Done items
+    if (this.showCompletedItems && !this.doneItemsLoaded) {
+      await this.loadDoneItems();
+    }
+  }
+
+  // Load Done items từ collection riêng
+  async loadDoneItems(): Promise<void> {
+    try {
+      console.log('📦 Loading Done items from completed-schedules collection...');
+      
+      // Load 100 mã Done gần nhất
+      const snapshot = await this.firestore.collection('completed-schedules', ref => 
+        ref.orderBy('savedAt', 'desc').limit(100)
+      ).get().toPromise();
+      
+      const allDoneItems: ScheduleItem[] = [];
+      
+      if (snapshot && !snapshot.empty) {
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          if (data.data && Array.isArray(data.data)) {
+            allDoneItems.push(...data.data);
+          }
+        });
+      }
+      
+      // Sắp xếp theo thời gian lưu gần nhất
+      allDoneItems.sort((a, b) => {
+        const timeA = a.statusUpdateTime || new Date(0);
+        const timeB = b.statusUpdateTime || new Date(0);
+        return timeB.getTime() - timeA.getTime();
+      });
+      
+      // Chỉ lấy 100 mã gần nhất
+      this.doneItems = allDoneItems.slice(0, 100);
+      this.doneItemsLoaded = true;
+      
+      console.log(`📦 Loaded ${this.doneItems.length} Done items (latest 100)`);
+      
+      // Nếu có nhiều hơn 100 mã Done, thông báo
+      if (allDoneItems.length > 100) {
+        const remainingCount = allDoneItems.length - 100;
+        alert(`📦 Đã load 100 mã Done gần nhất!\n\n` +
+              `⚠️ Còn ${remainingCount} mã Done khác.\n` +
+              `💡 Sử dụng nút Download để tải xuống tất cả mã Done (Excel)`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error loading Done items:', error);
+      alert('❌ Lỗi khi load mã Done!');
+    }
   }
 
   refreshDisplay(): void {
@@ -1029,18 +1464,35 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Missing methods for HTML template
-  showDoneItemsList(): void {
+  async showDoneItemsList(): Promise<void> {
     console.log('Show done items list clicked');
     
-    const doneItems = this.scheduleData.filter(item => item.tinhTrang === 'Done');
-    
-    if (doneItems.length === 0) {
-      alert('Không có mã nào đã hoàn thành (Done) để tải xuống!\n\nLưu ý: Tất cả mã có tình trạng "Done" đã được ẩn khỏi danh sách.');
-      return;
-    }
-    
-    const currentMonth = new Date().getMonth() + 1;
-    const monthName = this.getMonthName(currentMonth.toString().padStart(2, '0'));
+    try {
+      // Load tất cả mã Done từ collection riêng
+      const snapshot = await this.firestore.collection('completed-schedules', ref => 
+        ref.orderBy('savedAt', 'desc')
+      ).get().toPromise();
+      
+      const allDoneItems: ScheduleItem[] = [];
+      
+      if (snapshot && !snapshot.empty) {
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          if (data.data && Array.isArray(data.data)) {
+            allDoneItems.push(...data.data);
+          }
+        });
+      }
+      
+      if (allDoneItems.length === 0) {
+        alert('Không có mã Done nào để tải xuống!');
+        return;
+      }
+      
+      const doneItems = allDoneItems;
+      
+      const currentMonth = new Date().getMonth() + 1;
+      const monthName = this.getMonthName(currentMonth.toString().padStart(2, '0'));
     
     const exportData = [
       ['Nam', 'Thang', 'STT', 'SizePhoi', 'MaTem', 'SoLuongYeuCau', 'SoLuongPhoi', 'MaHang', 'LenhSanXuat', 'KhachHang', 'NgayNhan', 'YY', 'WW', 'LineNhan', 'NguoiIn', 'TinhTrang', 'BanVe', 'GhiChu'],
@@ -1080,7 +1532,12 @@ export class PrintLabelComponent implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     
-    alert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
+      alert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
+      
+    } catch (error) {
+      console.error('❌ Error loading Done items for export:', error);
+      alert('❌ Lỗi khi tải xuống mã Done!');
+    }
   }
 
   // Table interaction methods
@@ -1094,7 +1551,7 @@ export class PrintLabelComponent implements OnInit {
     item.statusUpdateTime = new Date();
     
     // Save to Firebase
-    this.saveToFirebase(this.scheduleData);
+    this.saveToFirebaseReplace(this.scheduleData);
   }
 
   deleteItem(item: ScheduleItem): void {
@@ -1102,8 +1559,9 @@ export class PrintLabelComponent implements OnInit {
       const index = this.scheduleData.indexOf(item);
       if (index > -1) {
         this.scheduleData.splice(index, 1);
+        // Sử dụng saveToFirebaseReplace để xóa thật khỏi Firebase
         this.saveToFirebaseReplace(this.scheduleData);
-        console.log(`Deleted item: ${item.maTem}`);
+        console.log(`🗑️ Deleted item: ${item.maTem} from Firebase`);
       }
     }
   }
@@ -1111,6 +1569,7 @@ export class PrintLabelComponent implements OnInit {
   onNoteBlur(item: ScheduleItem, event: any): void {
     console.log('Note blur for item:', item.maTem);
     item.statusUpdateTime = new Date();
+    // Sử dụng saveToFirebaseReplace để cập nhật thật vào Firebase
     this.saveToFirebaseReplace(this.scheduleData);
   }
 
@@ -1118,6 +1577,7 @@ export class PrintLabelComponent implements OnInit {
     if (event.key === 'Enter') {
       console.log('Note saved on Enter for item:', item.maTem);
       item.statusUpdateTime = new Date();
+      // Sử dụng saveToFirebaseReplace để cập nhật thật vào Firebase
       this.saveToFirebaseReplace(this.scheduleData);
       (event.target as HTMLInputElement).blur();
     }

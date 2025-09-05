@@ -242,7 +242,7 @@
               &:nth-child(4) { width: 60px; font-size: 11px; }  // STT
               &:nth-child(5) { width: 80px; font-size: 11px; } // Size Phôi
               &:nth-child(6) { width: 60px; font-size: 11px; }  // Gấp
-              &:nth-child(7) { width: 120px; } // Mã tem
+              &:nth-child(7) { width: 120px; font-size: 12px; font-weight: bold; } // Mã tem
               &:nth-child(8) { width: 70px; }  // Yêu cầu
               &:nth-child(9) { width: 70px; }  // Lượng phôi
               &:nth-child(10) { width: 110px; } // Mã Hàng
@@ -275,7 +275,7 @@
               &:nth-child(4) { width: 60px; font-size: 11px; }  // STT
               &:nth-child(5) { width: 80px; font-size: 11px; } // Size Phôi
               &:nth-child(6) { width: 60px; font-size: 11px; }  // Gấp
-              &:nth-child(7) { width: 120px; } // Mã tem
+              &:nth-child(7) { width: 120px; font-size: 20px; font-weight: bold; } // Mã tem
               &:nth-child(8) { width: 70px; }  // Yêu cầu
               &:nth-child(9) { width: 70px; }  // Lượng phôi
               &:nth-child(10) { width: 110px; } // Mã Hàng
