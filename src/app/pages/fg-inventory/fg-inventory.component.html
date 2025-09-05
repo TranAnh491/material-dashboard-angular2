@@ -78,7 +78,6 @@
             <th class="row-header">No</th>
             <th>Batch</th>
             <th>Mã TP</th>
-            <th>REV</th>
             <th>LOT</th>
             <th>LSX</th>
             <th>Tồn đầu</th>
@@ -97,7 +96,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="14" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="15" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -109,7 +108,6 @@
             <td class="row-header">{{i + 1}}</td>
             <td>{{material.batchNumber}}</td>
             <td class="code-cell">{{material.materialCode}}</td>
-            <td>{{material.rev}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
             <td class="number-cell">

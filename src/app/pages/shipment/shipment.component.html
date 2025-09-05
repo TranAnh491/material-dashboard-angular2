@@ -61,7 +61,7 @@
         
         <button class="custom-btn btn-primary" (click)="showAddShipmentDialog = true">
           <i class="material-icons">add</i>
-          +Shipment
+          Add Shipment
         </button>
         
         <button class="custom-btn" (click)="importFile()">
@@ -79,7 +79,6 @@
             <th class="row-header">No</th>
             <th>Shipment</th>
             <th>Mã TP</th>
-            <th>Rev</th>
             <th>Mã Khách</th>
             <th>Lượng Xuất</th>
             <th>PO Ship</th>
@@ -88,17 +87,17 @@
             <th>FWD</th>
             <th>Push</th>
             <th>Status</th>
-            <th>Ngày CS Y/c</th>
-            <th>Ngày full hàng</th>
-            <th>Thực ship</th>
-            <th>Day Pre</th>
+            <th>CS Date</th>
+            <th>Full Date</th>
+            <th>Dispatch Date</th>
+            <th>Ngày chuẩn bị</th>
             <th>Ghi chú</th>
-            <th>Actions</th>
+            <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="18" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="17" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -120,13 +119,6 @@
                      [(ngModel)]="shipment.materialCode"
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Mã TP">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="shipment.rev"
-                     (change)="updateShipmentInFirebase(shipment)"
-                     placeholder="Rev">
             </td>
             <td>
               <input type="text"
@@ -171,12 +163,11 @@
                 <option value="Road">Road</option>
               </select>
             </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
+            <td class="checkbox-cell">
+              <input type="checkbox"
+                     class="push-checkbox"
                      [(ngModel)]="shipment.push"
-                     (change)="updateShipmentInFirebase(shipment)"
-                     placeholder="Push">
+                     (change)="onPushChange(shipment)">
             </td>
             <td class="status-cell">
               <select class="status-select" [(ngModel)]="shipment.status" (change)="updateShipmentInFirebase(shipment)">
@@ -192,28 +183,28 @@
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.requestDate)"
                      (ngModelChange)="updateDateField(shipment, 'requestDate', $event)"
-                     placeholder="Ngày CS Y/c">
+                     placeholder="CS Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.fullDate)"
                      (ngModelChange)="updateDateField(shipment, 'fullDate', $event)"
-                     placeholder="Ngày full hàng">
+                     placeholder="Full Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.actualShipDate)"
                      (ngModelChange)="updateDateField(shipment, 'actualShipDate', $event)"
-                     placeholder="Thực ship">
+                     placeholder="Dispatch Date">
             </td>
             <td class="number-cell">
               <input type="number"
                      class="editable-input number-input"
                      [(ngModel)]="shipment.dayPre"
                      (change)="updateShipmentInFirebase(shipment)"
-                     placeholder="Day Pre">
+                     placeholder="Ngày chuẩn bị">
             </td>
             <td>
               <input type="text"
@@ -280,7 +271,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">add</i>
-        Thêm Shipment
+        Add Shipment
       </h5>
       <button type="button" class="close-btn" (click)="showAddShipmentDialog = false">
         <i class="material-icons">close</i>
@@ -304,22 +295,15 @@
                    placeholder="Nhập mã TP">
           </div>
           <div class="input-group">
-            <label class="input-label">Rev</label>
-            <input type="text" 
-                   class="form-input" 
-                   [(ngModel)]="newShipment.rev" 
-                   placeholder="Nhập Rev">
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="input-group">
             <label class="input-label">Mã Khách</label>
             <input type="text" 
                    class="form-input" 
                    [(ngModel)]="newShipment.customerCode" 
                    placeholder="Nhập mã khách">
           </div>
+        </div>
+        
+        <div class="form-row">
           <div class="input-group">
             <label class="input-label">Lượng Xuất *</label>
             <input type="number" 
@@ -327,9 +311,6 @@
                    [(ngModel)]="newShipment.quantity" 
                    placeholder="Nhập số lượng">
           </div>
-        </div>
-        
-        <div class="form-row">
           <div class="input-group">
             <label class="input-label">PO Ship</label>
             <input type="text" 
@@ -344,6 +325,9 @@
                    [(ngModel)]="newShipment.carton" 
                    placeholder="Nhập số carton">
           </div>
+        </div>
+        
+        <div class="form-row">
           <div class="input-group">
             <label class="input-label">Odd</label>
             <input type="number" 
@@ -351,9 +335,6 @@
                    [(ngModel)]="newShipment.odd" 
                    placeholder="Nhập số odd">
           </div>
-        </div>
-        
-        <div class="form-row">
           <div class="input-group">
             <label class="input-label">FWD</label>
             <select class="form-input" [(ngModel)]="newShipment.shipMethod">
@@ -365,11 +346,16 @@
           </div>
           <div class="input-group">
             <label class="input-label">Push</label>
-            <input type="text" 
-                   class="form-input" 
-                   [(ngModel)]="newShipment.push" 
-                   placeholder="Nhập thông tin push">
+            <div class="checkbox-container">
+              <input type="checkbox" 
+                     class="form-checkbox" 
+                     [(ngModel)]="newShipment.push">
+              <span class="checkbox-label">Push to FG Out</span>
+            </div>
           </div>
+        </div>
+        
+        <div class="form-row">
           <div class="input-group">
             <label class="input-label">Status</label>
             <select class="form-input" [(ngModel)]="newShipment.status">
@@ -384,13 +370,13 @@
         
         <div class="form-row">
           <div class="input-group">
-            <label class="input-label">Ngày CS Y/c</label>
+            <label class="input-label">CS Date</label>
             <input type="date" 
                    class="form-input" 
                    [(ngModel)]="newShipment.requestDate">
           </div>
           <div class="input-group">
-            <label class="input-label">Ngày full hàng</label>
+            <label class="input-label">Full Date</label>
             <input type="date" 
                    class="form-input" 
                    [(ngModel)]="newShipment.fullDate">
@@ -399,13 +385,13 @@
         
         <div class="form-row">
           <div class="input-group">
-            <label class="input-label">Thực ship</label>
+            <label class="input-label">Dispatch Date</label>
             <input type="date" 
                    class="form-input" 
                    [(ngModel)]="newShipment.actualShipDate">
           </div>
           <div class="input-group">
-            <label class="input-label">Day Pre</label>
+            <label class="input-label">Ngày chuẩn bị</label>
             <input type="number" 
                    class="form-input" 
                    [(ngModel)]="newShipment.dayPre" 
@@ -434,7 +420,7 @@
               (click)="addShipment()"
               [disabled]="!canAddShipment()">
         <i class="material-icons">add</i>
-        Thêm Shipment
+        Add Shipment
       </button>
     </div>
   </div>

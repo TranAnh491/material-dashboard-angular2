@@ -75,6 +75,15 @@
       width: 40px;
       min-width: 40px;
     }
+
+    &.update-header {
+      background: #000000;
+      color: #ffffff;
+      font-size: 11px;
+      text-align: center;
+      width: 60px;
+      min-width: 60px;
+    }
   }
   
   tbody tr {
@@ -111,6 +120,24 @@
       font-weight: normal;
       width: 40px;
       min-width: 40px;
+    }
+
+    &.update-cell {
+      background: transparent;
+      color: #000000;
+      font-size: 11px;
+      text-align: center;
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+      width: 60px;
+      min-width: 60px;
+    }
+
+    &.checkbox-cell {
+      text-align: center;
+      background: transparent;
+      width: 60px;
+      min-width: 60px;
     }
     
     &.date-cell {
@@ -926,5 +953,18 @@ mat-checkbox {
         }
       }
     }
+  }
+}
+
+// Checkbox styling for Push column
+.push-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #000000;
+  
+  &:checked {
+    background-color: #000000;
+    border-color: #000000;
   }
 }

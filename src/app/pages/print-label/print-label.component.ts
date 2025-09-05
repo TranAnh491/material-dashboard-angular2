@@ -5,6 +5,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 
 interface ScheduleItem {
+  batch?: string; // Batch ID để theo dõi các mã hàng import cùng lúc
   nam?: string;
   thang?: string;
   stt?: string;
@@ -164,7 +165,7 @@ export class PrintLabelComponent implements OnInit {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         // Process data
-        const cleanedData = this.cleanExcelData(jsonData);
+        const cleanedData = await this.cleanExcelData(jsonData);
         console.log('📊 Cleaned Excel data:', cleanedData);
         
         if (cleanedData.length === 0) {
@@ -246,17 +247,60 @@ export class PrintLabelComponent implements OnInit {
     return `${day}/${month}/${year}`;
   }
 
-  private cleanExcelData(data: any[]): ScheduleItem[] {
+  // Generate sequential batch ID (001-999) for import tracking
+  private async generateBatchId(): Promise<string> {
+    try {
+      // Get the latest batch number from Firebase
+      const snapshot = await this.firestore.collection('print-schedules', ref => 
+        ref.orderBy('batchNumber', 'desc').limit(1)
+      ).get().toPromise();
+      
+      let nextBatchNumber = 1;
+      
+      if (snapshot && !snapshot.empty) {
+        const latestDoc = snapshot.docs[0];
+        const latestBatchNumber = latestDoc.data()['batchNumber'] || 0;
+        nextBatchNumber = latestBatchNumber + 1;
+        
+        // Reset to 1 if we reach 999
+        if (nextBatchNumber > 999) {
+          nextBatchNumber = 1;
+        }
+      }
+      
+      const batchId = String(nextBatchNumber).padStart(3, '0');
+      console.log(`🆔 Generated batch ID: ${batchId} (next batch number: ${nextBatchNumber})`);
+      return batchId;
+      
+    } catch (error) {
+      console.error('❌ Error generating batch ID:', error);
+      // Fallback to timestamp-based ID if Firebase fails
+      const now = new Date();
+      const timestamp = now.getTime();
+      return String(timestamp).slice(-3).padStart(3, '0');
+    }
+  }
+
+  private async cleanExcelData(data: any[]): Promise<ScheduleItem[]> {
     const headers = data[0];
     const rows = data.slice(1);
     
+    // Tạo batch ID duy nhất cho lần import này
+    const batchId = await this.generateBatchId();
+    console.log(`🆔 Generated batch ID for this import: ${batchId}`);
+    
     return rows.map((row: any[], index: number) => {
       const item: ScheduleItem = {};
+      
+      // Gán batch ID cho tất cả các record trong lần import này
+      item.batch = batchId;
+      
       headers.forEach((header: string, colIndex: number) => {
         const value = row[colIndex];
         const cleanHeader = header?.toString().trim().toLowerCase();
         
         switch (cleanHeader) {
+          case 'batch': item.batch = value?.toString() || batchId; break; // Nếu có cột batch trong Excel thì dùng, không thì dùng auto-generated
           case 'nam': item.nam = value?.toString() || ''; break;
           case 'thang': item.thang = value?.toString() || ''; break;
           case 'stt': item.stt = value?.toString() || ''; break;
@@ -312,30 +356,32 @@ export class PrintLabelComponent implements OnInit {
         }
       }
 
-      // Merge existing data with new data
-      console.log('🔄 Merging existing and new data...');
+      // APPEND new data to existing data (accumulative import)
+      console.log('🔄 Appending new data to existing data...');
       
-      // Create a map to avoid duplicates based on maTem
-      const existingMap = new Map<string, ScheduleItem>();
-      existingData.forEach(item => {
-        if (item.maTem) {
-          existingMap.set(item.maTem, item);
-        }
+      // Simply append new data to existing data
+      const mergedData = [...existingData, ...data];
+      console.log(`✅ Appended data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
+      
+      // Log details about the append
+      console.log('📊 Append details:', {
+        existingCount: existingData.length,
+        newCount: data.length,
+        totalCount: mergedData.length,
+        newItems: data.map(item => ({
+          maTem: item.maTem,
+          batch: item.batch,
+          tinhTrang: item.tinhTrang
+        }))
       });
       
-      // Add new data, updating existing if maTem matches
-      data.forEach(newItem => {
-        if (newItem.maTem) {
-          existingMap.set(newItem.maTem, newItem);
-        }
-      });
-      
-      const mergedData = Array.from(existingMap.values());
-      console.log(`✅ Merged data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
+      // Get batch number from the first new item
+      const batchNumber = data.length > 0 && data[0].batch ? parseInt(data[0].batch) : 1;
       
       // Create the document with merged data
       const labelScheduleDoc = {
         data: mergedData,
+        batchNumber: batchNumber, // Store batch number for sequential tracking
         importedAt: new Date(),
         month: this.getCurrentMonth(),
         year: new Date().getFullYear(),
@@ -345,9 +391,10 @@ export class PrintLabelComponent implements OnInit {
           {
             importedAt: new Date(),
             recordCount: data.length,
+            batchNumber: batchNumber,
             month: this.getCurrentMonth(),
             year: new Date().getFullYear(),
-            description: `Import ${data.length} new label schedules (merged with ${existingData.length} existing)`
+            description: `Import ${data.length} new label schedules (batch ${String(batchNumber).padStart(3, '0')}) - merged with ${existingData.length} existing`
           }
         ],
         // Additional metadata for clarity
@@ -377,8 +424,9 @@ export class PrintLabelComponent implements OnInit {
       }
       
       this.firebaseSaved = true;
-      console.log(`✅ Saved ${mergedData.length} total records to Firebase (${data.length} new + ${existingData.length} existing)`);
-      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${mergedData.length} bản ghi\n➕ Mới: ${data.length} bản ghi\n📋 Cũ: ${existingData.length} bản ghi\n\nDữ liệu đã được merge, không bị mất!`);
+      console.log(`✅ Saved ${mergedData.length} total records to Firebase (${existingData.length} existing + ${data.length} new) - Batch: ${String(batchNumber).padStart(3, '0')}`);
+      
+      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${mergedData.length} bản ghi\n➕ Mới: ${data.length} bản ghi (Batch: ${String(batchNumber).padStart(3, '0')})\n📋 Cũ: ${existingData.length} bản ghi\n\nDữ liệu mới đã được cộng dồn vào dữ liệu cũ!`);
       
       // Reload data from Firebase to display all merged records
       console.log('🔄 Reloading data from Firebase to display all records...');
@@ -386,6 +434,109 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Error saving to Firebase:', error);
+    }
+  }
+
+  // Save to Firebase with REPLACE mode (for delete operations)
+  async saveToFirebaseReplace(data: ScheduleItem[]): Promise<void> {
+    console.log('🔥 Saving label data to Firebase (REPLACE mode)...');
+    
+    if (data.length === 0) {
+      console.log('No data to save');
+      return;
+    }
+
+    try {
+      // Get the latest document ID to update
+      const snapshot = await this.firestore.collection('print-schedules', ref => 
+        ref.orderBy('importedAt', 'desc').limit(1)
+      ).get().toPromise();
+      
+      if (snapshot && !snapshot.empty) {
+        const latestDoc = snapshot.docs[0];
+        const docId = latestDoc.id;
+        
+        // Get batch number from existing data
+        const existingData = latestDoc.data() as any;
+        const batchNumber = existingData.batchNumber || 1;
+        
+        // Create the document with replaced data
+        const labelScheduleDoc = {
+          data: data,
+          batchNumber: batchNumber,
+          importedAt: new Date(),
+          month: this.getCurrentMonth(),
+          year: new Date().getFullYear(),
+          recordCount: data.length,
+          lastUpdated: new Date(),
+          importHistory: [
+            {
+              importedAt: new Date(),
+              recordCount: data.length,
+              batchNumber: batchNumber,
+              month: this.getCurrentMonth(),
+              year: new Date().getFullYear(),
+              description: `Updated data (${data.length} records remaining after delete)`
+            }
+          ],
+          collectionType: 'print-schedules',
+          version: '1.0',
+          status: 'active'
+        };
+
+        // Update existing document
+        await this.firestore.collection('print-schedules').doc(docId).update(labelScheduleDoc);
+        console.log(`✅ Updated document with ${data.length} records (REPLACE mode)`);
+        
+        this.firebaseSaved = true;
+        console.log(`✅ Saved ${data.length} records to Firebase (REPLACE mode) - Batch: ${String(batchNumber).padStart(3, '0')}`);
+        
+        // Reload data from Firebase
+        this.loadDataFromFirebase();
+      } else {
+        console.log('No existing document found to update');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error saving to Firebase (REPLACE mode):', error);
+    }
+  }
+
+  // Debug function to check raw Firebase data
+  async debugFirebaseData(): Promise<void> {
+    console.log('🔍 DEBUG: Checking raw Firebase data...');
+    
+    try {
+      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
+      console.log(`📊 Found ${snapshot.docs.length} documents in Firebase`);
+      
+      snapshot.docs.forEach((doc, docIndex) => {
+        const data = doc.data() as any;
+        console.log(`📄 Document ${docIndex + 1} (${doc.id}):`, {
+          recordCount: data.recordCount,
+          batchNumber: data.batchNumber,
+          importedAt: data.importedAt,
+          month: data.month,
+          year: data.year,
+          totalItems: data.data ? data.data.length : 0
+        });
+        
+        if (data.data && Array.isArray(data.data)) {
+          console.log(`📋 Raw data sample (first 3 items):`, data.data.slice(0, 3));
+          console.log(`📋 Raw data sample (last 3 items):`, data.data.slice(-3));
+          
+          // Check for recent items (last 5)
+          const recentItems = data.data.slice(-5);
+          console.log(`🆕 Recent items (last 5):`, recentItems.map((item: any) => ({
+            maTem: item.maTem,
+            batch: item.batch,
+            tinhTrang: item.tinhTrang,
+            importedAt: item.importedAt || 'no timestamp'
+          })));
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error checking Firebase data:', error);
     }
   }
 
@@ -414,11 +565,23 @@ export class PrintLabelComponent implements OnInit {
         
         // New clear structure: { data: [...], metadata }
         if (data.data && Array.isArray(data.data)) {
+          const totalItems = data.data.length;
           const items = data.data
-            .filter((item: any) => {
+            .filter((item: any, index: number) => {
               // Only filter out items that are explicitly marked as done/completed
               const status = item.tinhTrang?.toLowerCase()?.trim();
-              return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+              const isFiltered = status === 'done' || status === 'completed' || status === 'hoàn thành';
+              
+              if (isFiltered) {
+                console.log(`🚫 Filtered out item ${index + 1}/${totalItems}:`, {
+                  maTem: item.maTem,
+                  batch: item.batch,
+                  tinhTrang: item.tinhTrang,
+                  status: status
+                });
+              }
+              
+              return !isFiltered;
             })
             .map((item: any) => ({
               ...item,
@@ -429,6 +592,8 @@ export class PrintLabelComponent implements OnInit {
               month: data.month,
               year: data.year
             }));
+          
+          console.log(`📊 Document ${doc.id}: ${totalItems} total items, ${items.length} after filtering (${totalItems - items.length} filtered out)`);
           allData.push(...items);
         }
       });
@@ -717,14 +882,23 @@ export class PrintLabelComponent implements OnInit {
     console.log('🔍 Initial data count:', this.scheduleData.length);
     
     if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(item => 
-        item.maTem?.toLowerCase().includes(term) ||
-        item.maHang?.toLowerCase().includes(term) ||
-        item.khachHang?.toLowerCase().includes(term) ||
-        item.nguoiIn?.toLowerCase().includes(term)
-      );
-      console.log('🔍 After search filter:', filtered.length);
+      const term = this.searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(item => {
+        // Tìm kiếm theo batch (3 chữ số) - ưu tiên cao nhất
+        const batchMatch = item.batch?.toLowerCase().includes(term) || 
+                          item.batch?.padStart(3, '0').includes(term) ||
+                          item.batch === term;
+        
+        // Tìm kiếm theo mã tem - ưu tiên cao
+        const maTemMatch = item.maTem?.toLowerCase().includes(term);
+        
+        // Tìm kiếm theo khách hàng - ưu tiên cao
+        const khachHangMatch = item.khachHang?.toLowerCase().includes(term);
+        
+        // Chỉ tìm kiếm theo 3 trường chính: Batch, Mã tem, Khách hàng
+        return batchMatch || maTemMatch || khachHangMatch;
+      });
+      console.log('🔍 After search filter (Batch/Mã tem/Khách hàng):', filtered.length);
     }
     
     if (this.currentStatusFilter) {
@@ -928,7 +1102,7 @@ export class PrintLabelComponent implements OnInit {
       const index = this.scheduleData.indexOf(item);
       if (index > -1) {
         this.scheduleData.splice(index, 1);
-        this.saveToFirebase(this.scheduleData);
+        this.saveToFirebaseReplace(this.scheduleData);
         console.log(`Deleted item: ${item.maTem}`);
       }
     }
@@ -937,14 +1111,14 @@ export class PrintLabelComponent implements OnInit {
   onNoteBlur(item: ScheduleItem, event: any): void {
     console.log('Note blur for item:', item.maTem);
     item.statusUpdateTime = new Date();
-    this.saveToFirebase(this.scheduleData);
+    this.saveToFirebaseReplace(this.scheduleData);
   }
 
   onNoteKeyPress(event: KeyboardEvent, item: ScheduleItem): void {
     if (event.key === 'Enter') {
       console.log('Note saved on Enter for item:', item.maTem);
       item.statusUpdateTime = new Date();
-      this.saveToFirebase(this.scheduleData);
+      this.saveToFirebaseReplace(this.scheduleData);
       (event.target as HTMLInputElement).blur();
     }
   }

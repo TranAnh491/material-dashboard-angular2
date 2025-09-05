@@ -236,26 +236,27 @@
               z-index: 5;
               
               // Column widths dựa theo số thứ tự cột
-              &:nth-child(1) { width: 60px; font-size: 11px; }  // Năm
-              &:nth-child(2) { width: 60px; font-size: 11px; }  // Tháng
-              &:nth-child(3) { width: 60px; font-size: 11px; }  // STT
-              &:nth-child(4) { width: 80px; font-size: 11px; } // Size Phôi
-              &:nth-child(5) { width: 60px; font-size: 11px; }  // Gấp
-              &:nth-child(6) { width: 120px; } // Mã tem
-              &:nth-child(7) { width: 70px; }  // Yêu cầu
-              &:nth-child(8) { width: 70px; }  // Lượng phôi
-              &:nth-child(9) { width: 110px; } // Mã Hàng
-              &:nth-child(10) { width: 110px; } // Lệnh sản xuất
-              &:nth-child(11) { width: 100px; } // Khách hàng
-              &:nth-child(12) { width: 90px; }  // Ngày nhận kế hoạch
-              &:nth-child(13) { width: 50px; }  // YY
-              &:nth-child(14) { width: 50px; }  // WW
-              &:nth-child(15) { width: 50px; }  // Line nhận
-              &:nth-child(16) { width: 100px; } // Người in
-              &:nth-child(17) { width: 120px; } // Tình trạng
-              &:nth-child(18) { width: 140px; } // Thời gian
-              &:nth-child(19) { width: 150px; } // Ghi chú
-              &:nth-child(20) { width: 80px; }  // Xóa
+              &:nth-child(1) { width: 20px; font-size: 11px; }  // Batch
+              &:nth-child(2) { width: 60px; font-size: 11px; }  // Năm
+              &:nth-child(3) { width: 60px; font-size: 11px; }  // Tháng
+              &:nth-child(4) { width: 60px; font-size: 11px; }  // STT
+              &:nth-child(5) { width: 80px; font-size: 11px; } // Size Phôi
+              &:nth-child(6) { width: 60px; font-size: 11px; }  // Gấp
+              &:nth-child(7) { width: 120px; } // Mã tem
+              &:nth-child(8) { width: 70px; }  // Yêu cầu
+              &:nth-child(9) { width: 70px; }  // Lượng phôi
+              &:nth-child(10) { width: 110px; } // Mã Hàng
+              &:nth-child(11) { width: 110px; } // Lệnh sản xuất
+              &:nth-child(12) { width: 100px; } // Khách hàng
+              &:nth-child(13) { width: 90px; }  // Ngày nhận kế hoạch
+              &:nth-child(14) { width: 50px; }  // YY
+              &:nth-child(15) { width: 50px; }  // WW
+              &:nth-child(16) { width: 50px; }  // Line nhận
+              &:nth-child(17) { width: 100px; } // Người in
+              &:nth-child(18) { width: 120px; } // Tình trạng
+              &:nth-child(19) { width: 140px; } // Thời gian
+              &:nth-child(20) { width: 150px; } // Ghi chú
+              &:nth-child(21) { width: 80px; }  // Xóa
             }
 
             .data-cell {
@@ -268,26 +269,27 @@
               color: #000000;
               
               // Column widths dựa theo số thứ tự cột
-              &:nth-child(1) { width: 60px; font-size: 11px; }  // Năm
-              &:nth-child(2) { width: 60px; font-size: 11px; }  // Tháng
-              &:nth-child(3) { width: 60px; font-size: 11px; }  // STT
-              &:nth-child(4) { width: 80px; font-size: 11px; } // Size Phôi
-              &:nth-child(5) { width: 60px; font-size: 11px; }  // Gấp
-              &:nth-child(6) { width: 120px; } // Mã tem
-              &:nth-child(7) { width: 70px; }  // Yêu cầu
-              &:nth-child(8) { width: 70px; }  // Lượng phôi
-              &:nth-child(9) { width: 110px; } // Mã Hàng
-              &:nth-child(10) { width: 110px; } // Lệnh sản xuất
-              &:nth-child(11) { width: 100px; } // Khách hàng
-              &:nth-child(12) { width: 90px; }  // Ngày nhận kế hoạch
-              &:nth-child(13) { width: 50px; }  // YY
-              &:nth-child(14) { width: 50px; }  // WW
-              &:nth-child(15) { width: 50px; }  // Line nhận
-              &:nth-child(16) { width: 100px; } // Người in
-              &:nth-child(17) { width: 120px; } // Tình trạng
-              &:nth-child(18) { width: 140px; } // Thời gian
-              &:nth-child(19) { width: 150px; } // Ghi chú
-              &:nth-child(20) { width: 80px; }  // Xóa
+              &:nth-child(1) { width: 20px; font-size: 11px; }  // Batch
+              &:nth-child(2) { width: 60px; font-size: 11px; }  // Năm
+              &:nth-child(3) { width: 60px; font-size: 11px; }  // Tháng
+              &:nth-child(4) { width: 60px; font-size: 11px; }  // STT
+              &:nth-child(5) { width: 80px; font-size: 11px; } // Size Phôi
+              &:nth-child(6) { width: 60px; font-size: 11px; }  // Gấp
+              &:nth-child(7) { width: 120px; } // Mã tem
+              &:nth-child(8) { width: 70px; }  // Yêu cầu
+              &:nth-child(9) { width: 70px; }  // Lượng phôi
+              &:nth-child(10) { width: 110px; } // Mã Hàng
+              &:nth-child(11) { width: 110px; } // Lệnh sản xuất
+              &:nth-child(12) { width: 100px; } // Khách hàng
+              &:nth-child(13) { width: 90px; }  // Ngày nhận kế hoạch
+              &:nth-child(14) { width: 50px; }  // YY
+              &:nth-child(15) { width: 50px; }  // WW
+              &:nth-child(16) { width: 50px; }  // Line nhận
+              &:nth-child(17) { width: 100px; } // Người in
+              &:nth-child(18) { width: 120px; } // Tình trạng
+              &:nth-child(19) { width: 140px; } // Thời gian
+              &:nth-child(20) { width: 150px; } // Ghi chú
+              &:nth-child(21) { width: 80px; }  // Xóa
             }
 
             .schedule-row {

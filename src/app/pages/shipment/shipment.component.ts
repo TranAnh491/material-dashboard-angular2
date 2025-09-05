@@ -9,14 +9,13 @@ export interface ShipmentItem {
   id?: string;
   shipmentCode: string;
   materialCode: string;
-  rev: string;
   customerCode: string;
   quantity: number;
   poShip: string;
   carton: number;
   odd: number;
   shipMethod: string;
-  push: string;
+  push: boolean;
   status: string;
   requestDate: Date;
   fullDate: Date;
@@ -46,14 +45,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   newShipment: ShipmentItem = {
     shipmentCode: '',
     materialCode: '',
-    rev: '',
     customerCode: '',
     quantity: 0,
     poShip: '',
     carton: 0,
     odd: 0,
     shipMethod: '',
-    push: '',
+    push: false,
     status: 'Chờ soạn',
     requestDate: new Date(),
     fullDate: new Date(),
@@ -93,6 +91,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           return {
             id: id,
             ...data,
+            push: data.push === 'true' || data.push === true || data.push === 1,
             requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : new Date(),
             fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : new Date(),
             actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : new Date()
@@ -188,14 +187,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.newShipment = {
       shipmentCode: '',
       materialCode: '',
-      rev: '',
       customerCode: '',
       quantity: 0,
       poShip: '',
       carton: 0,
       odd: 0,
       shipMethod: '',
-      push: '',
+      push: false,
       status: 'Chờ soạn',
       requestDate: new Date(),
       fullDate: new Date(),
@@ -209,6 +207,141 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   updateNotes(shipment: ShipmentItem): void {
     shipment.updatedAt = new Date();
     this.updateShipmentInFirebase(shipment);
+  }
+
+  // Handle push checkbox change
+  onPushChange(shipment: ShipmentItem): void {
+    shipment.updatedAt = new Date();
+    
+    if (shipment.push) {
+      // When checked, transfer data to FG Out
+      this.transferToFGOut(shipment);
+    }
+    
+    this.updateShipmentInFirebase(shipment);
+  }
+
+  // Transfer shipment data to FG Out
+  private transferToFGOut(shipment: ShipmentItem): void {
+    // First, get FG Inventory data to find Batch, LSX, LOT
+    this.firestore.collection('fg-inventory', ref => 
+      ref.where('materialCode', '==', shipment.materialCode)
+         .orderBy('batchNumber', 'asc') // Get smallest batch first
+    ).get().subscribe((inventorySnapshot) => {
+      
+      if (inventorySnapshot.empty) {
+        alert(`❌ Không tìm thấy dữ liệu trong FG Inventory cho mã TP: ${shipment.materialCode}`);
+        return;
+      }
+
+      // Get the first (smallest batch) inventory item
+      const inventoryItem = inventorySnapshot.docs[0].data() as any;
+      const batchNumber = inventoryItem.batchNumber || '';
+      const lsx = inventoryItem.lsx || '';
+      const lot = inventoryItem.lot || '';
+
+      // Check existing FG Out records for update count
+      this.firestore.collection('fg-out', ref => 
+        ref.where('shipment', '==', shipment.shipmentCode)
+           .where('materialCode', '==', shipment.materialCode)
+      ).get().subscribe((fgOutSnapshot) => {
+        
+        const baseUpdateCount = fgOutSnapshot.size + 1;
+        const fgOutRecords: any[] = [];
+
+        // Calculate carton distribution
+        const totalQuantity = shipment.quantity;
+        const cartonSize = shipment.carton;
+        const oddQuantity = shipment.odd;
+
+        if (cartonSize > 0 && oddQuantity > 0) {
+          // Create two records: full cartons and ODD
+          const fullCartons = Math.floor((totalQuantity - oddQuantity) / cartonSize);
+          const fullCartonQuantity = fullCartons * cartonSize;
+          
+          // Record 1: Full cartons
+          if (fullCartonQuantity > 0) {
+            fgOutRecords.push({
+              shipment: shipment.shipmentCode,
+              materialCode: shipment.materialCode,
+              customerCode: shipment.customerCode,
+              batchNumber: batchNumber,
+              lsx: lsx,
+              lot: lot,
+              quantity: fullCartonQuantity,
+              poShip: shipment.poShip,
+              carton: fullCartons,
+              odd: 0,
+              notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize})`,
+              updateCount: baseUpdateCount,
+              transferredFrom: 'Shipment',
+              transferredAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+          }
+
+          // Record 2: ODD quantity
+          if (oddQuantity > 0) {
+            fgOutRecords.push({
+              shipment: shipment.shipmentCode,
+              materialCode: shipment.materialCode,
+              customerCode: shipment.customerCode,
+              batchNumber: batchNumber,
+              lsx: lsx,
+              lot: lot,
+              quantity: oddQuantity,
+              poShip: shipment.poShip,
+              carton: 0,
+              odd: oddQuantity,
+              notes: `${shipment.notes} (ODD: ${oddQuantity})`,
+              updateCount: baseUpdateCount + (fullCartonQuantity > 0 ? 1 : 0),
+              transferredFrom: 'Shipment',
+              transferredAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+          }
+        } else {
+          // Single record for simple quantity
+          fgOutRecords.push({
+            shipment: shipment.shipmentCode,
+            materialCode: shipment.materialCode,
+            customerCode: shipment.customerCode,
+            batchNumber: batchNumber,
+            lsx: lsx,
+            lot: lot,
+            quantity: totalQuantity,
+            poShip: shipment.poShip,
+            carton: shipment.carton,
+            odd: shipment.odd,
+            notes: shipment.notes,
+            updateCount: baseUpdateCount,
+            transferredFrom: 'Shipment',
+            transferredAt: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+
+        // Save all records to FG Out
+        const savePromises = fgOutRecords.map(record => 
+          this.firestore.collection('fg-out').add(record)
+        );
+
+        Promise.all(savePromises)
+          .then(() => {
+            console.log('✅ Data transferred to FG Out successfully');
+            const recordCount = fgOutRecords.length;
+            const batchInfo = `Batch: ${batchNumber}, LSX: ${lsx}, LOT: ${lot}`;
+            alert(`✅ Dữ liệu đã được chuyển sang FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}`);
+          })
+          .catch((error) => {
+            console.error('❌ Error transferring to FG Out:', error);
+            alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
+          });
+      });
+    });
   }
 
   // Format date for input field (YYYY-MM-DD)
@@ -337,19 +470,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return data.map((row: any, index: number) => ({
       shipmentCode: row['Shipment'] || '',
       materialCode: row['Mã TP'] || '',
-      rev: row['Rev'] || '',
       customerCode: row['Mã Khách'] || '',
       quantity: parseFloat(row['Lượng Xuất']) || 0,
       poShip: row['PO Ship'] || '',
       carton: parseFloat(row['Carton']) || 0,
       odd: parseFloat(row['Odd']) || 0,
       shipMethod: row['FWD'] || '',
-      push: row['Push'] || '',
+      push: row['Push'] === 'true' || row['Push'] === true || row['Push'] === 1,
       status: row['Status'] || 'Chờ soạn',
-      requestDate: this.parseDate(row['Ngày CS Y/c']) || new Date(),
-      fullDate: this.parseDate(row['Ngày full hàng']) || new Date(),
-      actualShipDate: this.parseDate(row['Thực ship']) || new Date(),
-      dayPre: parseFloat(row['Day Pre']) || 0,
+      requestDate: this.parseDate(row['CS Date'] || row['Ngày CS Y/c']) || new Date(),
+      fullDate: this.parseDate(row['Full Date'] || row['Ngày full hàng']) || new Date(),
+      actualShipDate: this.parseDate(row['Dispatch Date'] || row['Thực ship']) || new Date(),
+      dayPre: parseFloat(row['Ngày chuẩn bị'] || row['Day Pre']) || 0,
       notes: row['Ghi chú'] || '',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -397,37 +529,35 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       {
         'Shipment': 'SHIP001',
         'Mã TP': 'P001234',
-        'Rev': 'A',
         'Mã Khách': 'CUST001',
         'Lượng Xuất': 100,
         'PO Ship': 'PO2024001',
         'Carton': 10,
         'Odd': 5,
         'FWD': 'Sea',
-        'Push': 'Push info',
+        'Push': true,
         'Status': 'Chờ soạn',
-        'Ngày CS Y/c': '15/01/2024',
-        'Ngày full hàng': '20/01/2024',
-        'Thực ship': '25/01/2024',
-        'Day Pre': 5,
+        'CS Date': '15/01/2024',
+        'Full Date': '20/01/2024',
+        'Dispatch Date': '25/01/2024',
+        'Ngày chuẩn bị': 5,
         'Ghi chú': 'Standard shipment'
       },
       {
         'Shipment': 'SHIP002',
         'Mã TP': 'P002345',
-        'Rev': 'B',
         'Mã Khách': 'CUST002',
         'Lượng Xuất': 200,
         'PO Ship': 'PO2024002',
         'Carton': 20,
         'Odd': 8,
         'FWD': 'Air',
-        'Push': 'Express push',
+        'Push': false,
         'Status': 'Đang soạn',
-        'Ngày CS Y/c': '16/01/2024',
-        'Ngày full hàng': '21/01/2024',
-        'Thực ship': '26/01/2024',
-        'Day Pre': 3,
+        'CS Date': '16/01/2024',
+        'Full Date': '21/01/2024',
+        'Dispatch Date': '26/01/2024',
+        'Ngày chuẩn bị': 3,
         'Ghi chú': 'Urgent shipment'
       }
     ];
@@ -439,7 +569,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const colWidths = [
       { wch: 12 }, // Shipment
       { wch: 12 }, // Mã TP
-      { wch: 8 },  // Rev
       { wch: 12 }, // Mã Khách
       { wch: 12 }, // Lượng Xuất
       { wch: 12 }, // PO Ship
@@ -448,10 +577,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 8 },  // FWD
       { wch: 12 }, // Push
       { wch: 12 }, // Status
-      { wch: 15 }, // Ngày CS Y/c
-      { wch: 15 }, // Ngày full hàng
-      { wch: 12 }, // Thực ship
-      { wch: 10 }, // Day Pre
+      { wch: 12 }, // CS Date
+      { wch: 12 }, // Full Date
+      { wch: 15 }, // Dispatch Date
+      { wch: 15 }, // Ngày chuẩn bị
       { wch: 20 }  // Ghi chú
     ];
     ws['!cols'] = colWidths;

@@ -15,7 +15,6 @@ export interface FGInventoryItem {
   receivedDate: Date;
   batchNumber: string;
   materialCode: string;
-  rev: string;
   lot: string;
   lsx: string;
   quantity: number;
@@ -143,7 +142,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             batchNumber: data.batchNumber || '',
             materialCode: data.materialCode || data.maTP || '',
-            rev: data.rev || '',
             lot: data.lot || data.Lot || '',
             lsx: data.lsx || data.LSX || '',
             quantity: data.quantity || 0,
@@ -243,8 +241,51 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.deleteMaterial(material);
   }
 
-  // Sort materials by material code (A-Z) then by batch
+  // Helper method to parse LSX for sorting
+  private parseLSXForSorting(lsx: string): { year: number, month: number, sequence: number } {
+    if (!lsx || lsx.length < 9) {
+      return { year: 9999, month: 12, sequence: 9999 }; // Put invalid LSX at the end
+    }
+    
+    // Get last 9 characters: mmyy/xxxx
+    const last9Chars = lsx.slice(-9);
+    const parts = last9Chars.split('/');
+    
+    if (parts.length !== 2) {
+      return { year: 9999, month: 12, sequence: 9999 }; // Invalid format
+    }
+    
+    const mmyy = parts[0]; // MMYY
+    const xxxx = parts[1]; // XXXX
+    
+    if (mmyy.length !== 4 || xxxx.length !== 4) {
+      return { year: 9999, month: 12, sequence: 9999 }; // Invalid format
+    }
+    
+    const month = parseInt(mmyy.substring(0, 2));
+    const year = parseInt(mmyy.substring(2, 4)) + 2000; // Convert YY to full year
+    const sequence = parseInt(xxxx);
+    
+    return { year, month, sequence };
+  }
+
+  // Helper method to parse Batch for sorting
+  private parseBatchForSorting(batch: string): { week: number, sequence: number } {
+    if (!batch || batch.length < 6) {
+      return { week: 9999, sequence: 9999 }; // Put invalid batch at the end
+    }
+    
+    // Format: WWXXXX
+    const week = parseInt(batch.substring(0, 2));
+    const sequence = parseInt(batch.substring(2, 6));
+    
+    return { week, sequence };
+  }
+
+  // Sort materials by material code (A-Z), then LSX, then Batch
   sortMaterials(): void {
+    console.log('🔄 Sorting FG Inventory materials by: Mã hàng (A-Z) → LSX (year, month, sequence) → Batch (week, sequence)');
+    
     this.materials.sort((a, b) => {
       // First sort by material code (A-Z)
       const materialCodeA = a.materialCode.toUpperCase();
@@ -257,22 +298,39 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         return 1;
       }
       
-      // If material codes are the same, sort by batch
-      // Tồn đầu có batch chung là 390000, sẽ được ưu tiên
-      const batchA = a.batchNumber;
-      const batchB = b.batchNumber;
+      // If material codes are the same, sort by LSX
+      const lsxA = this.parseLSXForSorting(a.lsx);
+      const lsxB = this.parseLSXForSorting(b.lsx);
       
-      // Batch 390000 (tồn đầu) comes first
-      if (batchA === '390000' && batchB !== '390000') {
-        return -1;
-      }
-      if (batchA !== '390000' && batchB === '390000') {
-        return 1;
+      // Sort by year (oldest first)
+      if (lsxA.year !== lsxB.year) {
+        return lsxA.year - lsxB.year;
       }
       
-      // For other batches, sort alphabetically
-      return batchA.localeCompare(batchB);
+      // Then by month
+      if (lsxA.month !== lsxB.month) {
+        return lsxA.month - lsxB.month;
+      }
+      
+      // Finally by sequence number
+      if (lsxA.sequence !== lsxB.sequence) {
+        return lsxA.sequence - lsxB.sequence;
+      }
+      
+      // If LSX are the same, sort by Batch
+      const batchA = this.parseBatchForSorting(a.batchNumber);
+      const batchB = this.parseBatchForSorting(b.batchNumber);
+      
+      // Sort by week (oldest first)
+      if (batchA.week !== batchB.week) {
+        return batchA.week - batchB.week;
+      }
+      
+      // Then by sequence number (smallest first)
+      return batchA.sequence - batchB.sequence;
     });
+    
+    console.log(`✅ Sorted ${this.materials.length} FG Inventory materials`);
   }
 
   // Apply search filters
@@ -290,7 +348,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         material.location,
         material.lsx,
         material.lot,
-        material.rev,
         material.ton?.toString(),
         material.notes,
         material.customer // Customer data comes from FG In
@@ -318,7 +375,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       return isInDateRange && isCompletedVisible;
     });
     
-    // Sort filtered materials
+    // Sort filtered materials using the same logic as sortMaterials()
     this.filteredMaterials.sort((a, b) => {
       // First sort by material code (A-Z)
       const materialCodeA = a.materialCode.toUpperCase();
@@ -331,21 +388,36 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         return 1;
       }
       
-      // If material codes are the same, sort by batch
-      // Tồn đầu có batch chung là 390000, sẽ được ưu tiên
-      const batchA = a.batchNumber;
-      const batchB = b.batchNumber;
+      // If material codes are the same, sort by LSX
+      const lsxA = this.parseLSXForSorting(a.lsx);
+      const lsxB = this.parseLSXForSorting(b.lsx);
       
-      // Batch 390000 (tồn đầu) comes first
-      if (batchA === '390000' && batchB !== '390000') {
-        return -1;
-      }
-      if (batchA !== '390000' && batchB === '390000') {
-        return 1;
+      // Sort by year (oldest first)
+      if (lsxA.year !== lsxB.year) {
+        return lsxA.year - lsxB.year;
       }
       
-      // For other batches, sort alphabetically
-      return batchA.localeCompare(batchB);
+      // Then by month
+      if (lsxA.month !== lsxB.month) {
+        return lsxA.month - lsxB.month;
+      }
+      
+      // Finally by sequence number
+      if (lsxA.sequence !== lsxB.sequence) {
+        return lsxA.sequence - lsxB.sequence;
+      }
+      
+      // If LSX are the same, sort by Batch
+      const batchA = this.parseBatchForSorting(a.batchNumber);
+      const batchB = this.parseBatchForSorting(b.batchNumber);
+      
+      // Sort by week (oldest first)
+      if (batchA.week !== batchB.week) {
+        return batchA.week - batchB.week;
+      }
+      
+      // Then by sequence number (smallest first)
+      return batchA.sequence - batchB.sequence;
     });
     
     console.log('FG Inventory search results:', {
@@ -504,24 +576,23 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   private parseExcelData(data: any[]): FGInventoryItem[] {
     return data.map((row: any, index: number) => ({
-      factory: row['Factory'] || 'ASM1',
-      importDate: this.parseDate(row['Ngày']) || new Date(),
+      factory: 'ASM1',
+      importDate: new Date(),
       receivedDate: new Date(),
-      batchNumber: row['Batch'] || '390000', // Mặc định batch tồn đầu
+      batchNumber: row['Batch'] || '',
       materialCode: row['Mã TP'] || '',
-      rev: row['REV'] || '',
       lot: row['LOT'] || '',
       lsx: row['LSX'] || '',
-      quantity: 0, // Không còn sử dụng QTY, để 0
-      standard: parseInt(row['Standard']) || 0,
-      carton: parseInt(row['Carton']) || 0,
-      odd: parseInt(row['ODD']) || 0,
-      tonDau: parseInt(row['Tồn đầu']) || 0,
-      nhap: parseInt(row['Nhập']) || 0,
-      xuat: parseInt(row['Xuất']) || 0,
-      ton: parseInt(row['Tồn']) || 0,
-      location: row['Vị trí'] || 'Temporary',
-      notes: row['Ghi chú'] || '',
+      quantity: 0, // Not used in FG Inventory
+      standard: 0, // Will be calculated from catalog
+      carton: 0, // Will be calculated
+      odd: 0, // Will be calculated
+      tonDau: parseInt(row['Tồn Đầu']) || 0,
+      nhap: 0, // Not in new template - will be set to 0
+      xuat: 0, // Not in new template - will be set to 0
+      ton: parseInt(row['Tồn Đầu']) || 0, // Initial ton = tonDau
+      location: row['Vị Trí'] || 'Temporary',
+      notes: '', // Not in new template
       customer: row['Khách'] || '',
       isReceived: true,
       isCompleted: false,
@@ -571,45 +642,49 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       {
-        'Ngày': '15/01/2024',
-        'Batch': '390000',
-        'Mã TP': 'FG001',
-        'REV': 'REV001',
+        'Batch': '010001',
+        'Mã TP': 'P001234',
         'LOT': 'LOT001',
-        'LSX': 'LSX001',
-        'Tồn đầu': 0,
-        'Nhập': 100,
-        'Xuất': 0,
-        'Tồn': 100,
-        'Vị trí': 'Temporary',
-        'Standard': 50,
-        'Carton': 2,
-        'ODD': 0,
-        'Ghi chú': 'All items received in good condition',
+        'LSX': '0124/0001',
+        'Tồn Đầu': 100,
+        'Vị Trí': 'A1-01',
         'Khách': 'Customer A'
       },
       {
-        'Ngày': '16/01/2024',
-        'Batch': '390000',
-        'Mã TP': 'FG002',
-        'REV': 'REV002',
+        'Batch': '010002',
+        'Mã TP': 'P002345',
         'LOT': 'LOT002',
-        'LSX': 'LSX002',
-        'Tồn đầu': 0,
-        'Nhập': 200,
-        'Xuất': 50,
-        'Tồn': 150,
-        'Vị trí': 'Temporary',
-        'Standard': 25,
-        'Carton': 6,
-        'ODD': 0,
-        'Ghi chú': 'Second batch items',
+        'LSX': '0124/0002',
+        'Tồn Đầu': 200,
+        'Vị Trí': 'A1-02',
         'Khách': 'Customer B'
+      },
+      {
+        'Batch': '020001',
+        'Mã TP': 'P003456',
+        'LOT': 'LOT003',
+        'LSX': '0224/0001',
+        'Tồn Đầu': 150,
+        'Vị Trí': 'B1-01',
+        'Khách': 'Customer C'
       }
     ];
 
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
+    
+    // Set column widths for better readability
+    const colWidths = [
+      { wch: 10 }, // Batch
+      { wch: 12 }, // Mã TP
+      { wch: 10 }, // LOT
+      { wch: 12 }, // LSX
+      { wch: 12 }, // Tồn Đầu
+      { wch: 10 }, // Vị Trí
+      { wch: 15 }  // Khách
+    ];
+    ws['!cols'] = colWidths;
+    
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
     XLSX.writeFile(wb, 'FG_Inventory_Template.xlsx');
   }

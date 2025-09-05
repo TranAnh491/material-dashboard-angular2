@@ -12,20 +12,18 @@ export interface FgOutItem {
   exportDate: Date;
   shipment: string;
   materialCode: string;
-  rev: string;
   customerCode: string;
+  batchNumber: string;
+  lsx: string;
+  lot: string;
   quantity: number;
   poShip: string;
   carton: number;
   odd: number;
-  shipMethod: string;
-  push: string;
-  status: string;
-  requestDate: Date;
-  fullDate: Date;
-  actualShipDate: Date;
-  dayPre: number;
   notes: string;
+  updateCount: number;
+  transferredFrom?: string;
+  transferredAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -101,10 +99,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
           return {
             id: id,
             ...data,
-            exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date(),
-            orderDate: data.orderDate ? new Date(data.orderDate.seconds * 1000) : null,
-            fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
-            shipDate: data.shipDate ? new Date(data.shipDate.seconds * 1000) : null
+            batchNumber: data.batchNumber || '',
+            lsx: data.lsx || '',
+            lot: data.lot || '',
+            updateCount: data.updateCount || 1,
+            exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
           };
         });
         
@@ -120,9 +119,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const updateData = {
         ...material,
         exportDate: material.exportDate,
-        requestDate: material.requestDate,
-        fullDate: material.fullDate,
-        actualShipDate: material.actualShipDate,
         updatedAt: new Date()
       };
       
@@ -168,10 +164,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
           material.materialCode,
           material.shipment,
           material.customerCode,
+          material.batchNumber,
+          material.lsx,
+          material.lot,
           material.poShip,
           material.quantity?.toString(),
-          material.notes,
-          material.status
+          material.notes
         ].filter(Boolean).join(' ').toUpperCase();
         
         if (!searchableText.includes(this.searchTerm)) {
@@ -333,20 +331,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
       exportDate: this.parseDate(row['Ngày xuất']) || new Date(),
       shipment: row['Shipment'] || '',
       materialCode: row['Mã TP'] || '',
-      rev: row['Rev'] || '',
       customerCode: row['Mã Khách'] || '',
+      batchNumber: row['Batch'] || '',
+      lsx: row['LSX'] || '',
+      lot: row['LOT'] || '',
       quantity: parseInt(row['Lượng Xuất']) || 0,
       poShip: row['PO Ship'] || '',
       carton: parseInt(row['Carton']) || 0,
       odd: parseInt(row['Odd']) || 0,
-      shipMethod: '', // Removed FWD
-      push: '', // Removed Push
-      status: row['Status'] || 'Chờ soạn',
-      requestDate: new Date(), // Removed Ngày CS Y/c
-      fullDate: new Date(), // Removed Ngày full hàng
-      actualShipDate: new Date(), // Removed Thực ship
-      dayPre: 0, // Removed Day Pre
       notes: row['Ghi chú'] || '',
+      updateCount: 1, // Default update count for imported data
       createdAt: new Date(),
       updatedAt: new Date()
     }));
@@ -371,9 +365,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const materialData = {
         ...material,
         exportDate: material.exportDate,
-        requestDate: material.requestDate,
-        fullDate: material.fullDate,
-        actualShipDate: material.actualShipDate,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -396,25 +387,27 @@ export class FgOutComponent implements OnInit, OnDestroy {
       {
         'Shipment': 'SHIP001',
         'Mã TP': 'P001234',
-        'Rev': 'A',
         'Mã Khách': 'CUST001',
+        'Batch': '010001',
+        'LSX': '0124/0001',
+        'LOT': 'LOT001',
         'Lượng Xuất': 100,
         'PO Ship': 'PO2024001',
         'Carton': 10,
         'Odd': 5,
-        'Status': 'Chờ soạn',
         'Ghi chú': 'Standard shipment'
       },
       {
         'Shipment': 'SHIP002',
         'Mã TP': 'P002345',
-        'Rev': 'B',
         'Mã Khách': 'CUST002',
+        'Batch': '010002',
+        'LSX': '0124/0002',
+        'LOT': 'LOT002',
         'Lượng Xuất': 200,
         'PO Ship': 'PO2024002',
         'Carton': 20,
         'Odd': 8,
-        'Status': 'Đang soạn',
         'Ghi chú': 'Urgent shipment'
       }
     ];
@@ -426,13 +419,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const colWidths = [
       { wch: 12 }, // Shipment
       { wch: 12 }, // Mã TP
-      { wch: 8 },  // Rev
       { wch: 12 }, // Mã Khách
+      { wch: 10 }, // Batch
+      { wch: 12 }, // LSX
+      { wch: 10 }, // LOT
       { wch: 12 }, // Lượng Xuất
       { wch: 12 }, // PO Ship
       { wch: 10 }, // Carton
       { wch: 8 },  // Odd
-      { wch: 12 }, // Status
       { wch: 20 }  // Ghi chú
     ];
     ws['!cols'] = colWidths;
@@ -572,20 +566,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
       exportDate: new Date(),
       shipment: this.xtpShipment.trim(),
       materialCode: item.materialCode,
-      rev: item.rev || '',
       customerCode: '',
+      batchNumber: '',
+      lsx: '',
+      lot: item.lot || '',
       quantity: item.quantity,
       poShip: this.xtpPXNumber.trim(),
       carton: 0,
       odd: 0,
-      shipMethod: '', // Removed FWD
-      push: '', // Removed Push
-      status: 'Chờ soạn',
-      requestDate: new Date(), // Removed Ngày CS Y/c
-      fullDate: new Date(), // Removed Ngày full hàng
-      actualShipDate: new Date(), // Removed Thực ship
-      dayPre: 0, // Removed Day Pre
       notes: `Imported from XTP - ${this.xtpPXNumber}`,
+      updateCount: 1, // Default update count for XTP imported data
       createdAt: new Date(),
       updatedAt: new Date()
     }));

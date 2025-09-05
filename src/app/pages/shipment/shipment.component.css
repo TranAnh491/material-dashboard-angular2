@@ -194,6 +194,8 @@
   flex: 1;
   overflow: auto;
   background: #ffffff;
+  overflow-x: auto; /* Enable horizontal scrolling */
+  overflow-y: auto; /* Enable vertical scrolling */
 }
 
 .data-table {
@@ -201,11 +203,13 @@
   border-collapse: collapse;
   background: #ffffff;
   font-size: 13px;
+  min-width: 1800px; /* Ensure table has enough width for all columns */
+  table-layout: fixed;
+  border: none; /* Remove all table borders */
 }
 
 .data-table th, .data-table td {
-  border: 1px solid #000000;
-  padding: 8px 6px;
+  padding: 8px 12px; /* Increase horizontal padding for spacing */
   text-align: left;
   vertical-align: middle;
   background: #ffffff;
@@ -213,13 +217,25 @@
 }
 
 .data-table th {
+  border: none; /* Remove all borders from header cells */
   background: #f0f0f0;
   font-weight: bold;
   color: #000000;
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: 2px solid #000000;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  min-width: fit-content;
+}
+
+.data-table td {
+  border: none; /* Remove all borders from content cells */
+}
+
+.data-table tr {
+  border-bottom: 1px solid #f0f0f0; /* Light separator between rows */
 }
 
 .data-table tr:hover {
@@ -240,28 +256,52 @@
   font-weight: bold;
   color: #000000;
   min-width: 120px;
+  width: 120px;
 }
 
 .number-cell {
   text-align: right;
   font-family: 'Courier New', monospace;
   min-width: 80px;
+  width: 80px;
 }
 
 .date-cell {
   text-align: center;
   min-width: 100px;
+  width: 100px;
 }
 
 .status-cell {
   text-align: center;
   min-width: 100px;
+  width: 100px;
 }
 
 .action-cell {
   text-align: center;
   min-width: 80px;
+  width: 80px;
 }
+
+/* Specific column widths for better layout */
+.data-table th:nth-child(1), .data-table td:nth-child(1) { width: 50px; } /* No */
+.data-table th:nth-child(2), .data-table td:nth-child(2) { width: 120px; } /* Shipment */
+.data-table th:nth-child(3), .data-table td:nth-child(3) { width: 120px; } /* Mã TP */
+.data-table th:nth-child(4), .data-table td:nth-child(4) { width: 120px; } /* Mã Khách */
+.data-table th:nth-child(5), .data-table td:nth-child(5) { width: 100px; } /* Lượng Xuất */
+.data-table th:nth-child(6), .data-table td:nth-child(6) { width: 120px; } /* PO Ship */
+.data-table th:nth-child(7), .data-table td:nth-child(7) { width: 80px; } /* Carton */
+.data-table th:nth-child(8), .data-table td:nth-child(8) { width: 80px; } /* Odd */
+.data-table th:nth-child(9), .data-table td:nth-child(9) { width: 80px; } /* FWD */
+.data-table th:nth-child(10), .data-table td:nth-child(10) { width: 80px; } /* Push */
+.data-table th:nth-child(11), .data-table td:nth-child(11) { width: 100px; } /* Status */
+.data-table th:nth-child(12), .data-table td:nth-child(12) { width: 100px; } /* CS Date */
+.data-table th:nth-child(13), .data-table td:nth-child(13) { width: 100px; } /* Full Date */
+.data-table th:nth-child(14), .data-table td:nth-child(14) { width: 120px; } /* Dispatch Date */
+.data-table th:nth-child(15), .data-table td:nth-child(15) { width: 120px; } /* Ngày chuẩn bị */
+.data-table th:nth-child(16), .data-table td:nth-child(16) { width: 150px; } /* Ghi chú */
+.data-table th:nth-child(17), .data-table td:nth-child(17) { width: 80px; } /* Xóa */
 
 /* Status Styles */
 .status-completed {
@@ -297,43 +337,52 @@
   color: #000000;
   font-size: 13px;
   padding: 4px;
+  box-shadow: none;
+  outline: none;
 }
 
 .editable-input:focus {
   outline: 2px solid #000000;
   background: #ffffff;
+  border: 1px solid #000000;
 }
 
 /* Status Select */
 .status-select {
   width: 100%;
-  border: 1px solid #000000;
-  background: #ffffff;
+  border: none;
+  background: transparent;
   color: #000000;
   font-size: 13px;
   padding: 4px;
   border-radius: 2px;
+  outline: none;
+  box-shadow: none;
 }
 
 .status-select:focus {
   outline: 2px solid #000000;
-  border-color: #333333;
+  border: 1px solid #000000;
+  background: #ffffff;
 }
 
 /* Editable Select */
 .editable-select {
   width: 100%;
-  border: 1px solid #000000;
-  background: #ffffff;
+  border: none;
+  background: transparent;
   color: #000000;
   font-size: 13px;
   padding: 4px;
   border-radius: 2px;
+  outline: none;
+  box-shadow: none;
 }
 
 .editable-select:focus {
   outline: 2px solid #000000;
-  border-color: #333333;
+  border: 1px solid #000000;
+  background: #ffffff;
 }
 
 /* Number Input */
@@ -346,6 +395,48 @@
 .date-input {
   font-size: 12px;
   padding: 2px 4px;
+  border: none;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+.date-input:focus {
+  outline: 2px solid #000000;
+  border: 1px solid #000000;
+  background: #ffffff;
+}
+
+/* Checkbox Styles */
+.checkbox-cell {
+  text-align: center;
+  min-width: 80px;
+}
+
+.push-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #000000;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #000000;
+}
+
+.checkbox-label {
+  font-size: 14px;
+  color: #000000;
+  cursor: pointer;
 }
 
 .date-input::-webkit-calendar-picker-indicator {

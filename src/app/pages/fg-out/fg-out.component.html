@@ -58,22 +58,25 @@
         <thead>
           <tr>
             <th class="row-header">No</th>
+            <th class="update-header">Cập nhật</th>
             <th>Shipment</th>
             <th>Mã TP</th>
-            <th>Rev</th>
             <th>Mã Khách</th>
+            <th>Batch</th>
+            <th>LSX</th>
+            <th>LOT</th>
             <th>Lượng Xuất</th>
             <th>PO Ship</th>
             <th>Carton</th>
             <th>Odd</th>
-            <th>Status</th>
             <th>Ghi chú</th>
-            <th>Actions</th>
+            <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index">
             <td class="row-header">{{i + 1}}</td>
+            <td class="update-cell">{{material.updateCount || 1}}</td>
             <td class="code-cell">
               <input type="text"
                      class="editable-input"
@@ -91,16 +94,30 @@
             <td>
               <input type="text"
                      class="editable-input"
-                     [(ngModel)]="material.rev"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Rev">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
                      [(ngModel)]="material.customerCode"
                      (change)="updateMaterialInFirebase(material)"
                      placeholder="Mã Khách">
+            </td>
+            <td class="code-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.batchNumber"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="Batch">
+            </td>
+            <td class="code-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.lsx"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="LSX">
+            </td>
+            <td class="code-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.lot"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="LOT">
             </td>
             <td class="number-cell">
               <input type="number"
@@ -129,15 +146,6 @@
                      [(ngModel)]="material.odd"
                      (change)="updateMaterialInFirebase(material)"
                      placeholder="Odd">
-            </td>
-            <td class="status-cell">
-              <select class="status-select" [(ngModel)]="material.status" (change)="updateMaterialInFirebase(material)">
-                <option value="Chờ soạn">Chờ soạn</option>
-                <option value="Đang soạn">Đang soạn</option>
-                <option value="Đã xong">Đã xong</option>
-                <option value="Đã Ship">Đã Ship</option>
-                <option value="Delay">Delay</option>
-              </select>
             </td>
             <td>
               <input type="text"
