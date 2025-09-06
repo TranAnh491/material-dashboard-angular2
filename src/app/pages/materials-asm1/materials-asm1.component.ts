@@ -41,6 +41,7 @@ export interface InventoryMaterial {
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
+  source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -191,7 +192,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
               openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
-              xt: data.xt || 0 // Initialize XT field for old materials
+              xt: data.xt || 0, // Initialize XT field for old materials
+              source: data.source || 'manual' // Set default source for old materials
             };
             
             // Apply catalog data if available
@@ -801,7 +803,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
             openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
-            xt: data.xt || 0 // Initialize XT field for search results
+            xt: data.xt || 0, // Initialize XT field for search results
+            source: data.source || 'manual' // Set default source for old materials
           };
           
           // Apply catalog data if available
@@ -1019,6 +1022,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const materialPoMap = new Map<string, InventoryMaterial[]>();
     
     this.inventoryMaterials.forEach(material => {
+      // Chỉ gộp dòng không phải từ inbound (source !== 'inbound')
+      if (material.source === 'inbound') {
+        console.log(`⏭️ Skipping inbound material in consolidation: ${material.materialCode} - ${material.poNumber}`);
+        return;
+      }
+      
       const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
       
       if (!materialPoMap.has(key)) {
@@ -1083,9 +1092,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       }
     });
     
+    // Add inbound materials back to the final list (they were skipped during consolidation)
+    const inboundMaterials = this.inventoryMaterials.filter(material => material.source === 'inbound');
+    console.log(`📦 Adding ${inboundMaterials.length} inbound materials back to the list`);
+    
     // Update the inventory data
     const originalCount = this.inventoryMaterials.length;
-    this.inventoryMaterials = Array.from(finalConsolidatedMap.values());
+    this.inventoryMaterials = [...Array.from(finalConsolidatedMap.values()), ...inboundMaterials];
     this.filteredInventory = [...this.inventoryMaterials];
     
     // Sắp xếp FIFO sau khi gộp dữ liệu
@@ -3462,6 +3475,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const materialPoMap = new Map<string, InventoryMaterial[]>();
       
       currentData.forEach(material => {
+        // Chỉ gộp dòng không phải từ inbound (source !== 'inbound')
+        if (material.source === 'inbound') {
+          console.log(`⏭️ Skipping inbound material: ${material.materialCode} - ${material.poNumber}`);
+          return;
+        }
+        
         const key = `${material.materialCode}_${material.poNumber}`;
         if (!materialPoMap.has(key)) {
           materialPoMap.set(key, []);

@@ -722,6 +722,7 @@ export class InboundMaterialsComponent implements OnInit, OnDestroy {
       remarks: material.remarks || '',
       isCompleted: false,
       isDuplicate: false, // Will be checked later
+      source: 'inbound' as const, // Đánh dấu dòng này đến từ inbound
       createdAt: new Date(),
       updatedAt: new Date()
     };
