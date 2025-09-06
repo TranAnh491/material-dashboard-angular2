@@ -826,6 +826,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   async startCameraScanning(): Promise<void> {
     try {
       console.log('🎯 Starting QR scanner for Outbound ASM1...');
+      console.log('📱 Mobile device:', this.isMobile);
+      console.log('📱 Selected scan method:', this.selectedScanMethod);
+      
       this.isScannerLoading = true;
       this.errorMessage = '';
       this.lastScannedData = null;
@@ -833,7 +836,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       // Show modal first, then wait for DOM element
       this.isCameraScanning = true;
+      console.log('📱 Setting isCameraScanning to true');
       this.cdr.detectChanges(); // Force change detection to render modal
+      console.log('📱 Modal should be visible now');
       
       // Wait for DOM element to be available after modal renders
       await this.waitForElement('qr-reader');
@@ -863,6 +868,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       this.isScannerLoading = false;
       console.log('✅ Scanner started successfully');
       
+      // Add a timeout to check if camera is actually working
+      setTimeout(() => {
+        if (this.scanner && this.isCameraScanning) {
+          console.log('📱 Camera should be visible now. If not, check:');
+          console.log('1. Camera permission granted');
+          console.log('2. Using HTTPS (not HTTP)');
+          console.log('3. Camera not used by another app');
+        }
+      }, 2000);
+      
     } catch (error) {
       console.error('❌ Error starting scanner:', error);
       
@@ -891,12 +906,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       let attempts = 0;
       const maxAttempts = 20; // 2 seconds max wait
       
+      console.log('🔍 Waiting for element:', elementId);
+      
       const checkElement = () => {
         const element = document.getElementById(elementId);
+        console.log(`🔍 Attempt ${attempts + 1}: Looking for element "${elementId}", found:`, !!element);
+        
         if (element) {
           console.log('✅ Found element:', elementId);
           resolve();
         } else if (attempts >= maxAttempts) {
+          console.error('❌ Element not found after max attempts:', elementId);
           reject(new Error(`Element with id="${elementId}" not found after ${maxAttempts} attempts`));
         } else {
           attempts++;

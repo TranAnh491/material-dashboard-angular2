@@ -1176,6 +1176,31 @@
       color: #495057;
     }
   }
+  
+  .camera-troubleshooting {
+    margin-top: 12px;
+    padding: 12px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    
+    h6 {
+      color: #856404;
+      font-size: 13px;
+      margin: 0 0 8px 0;
+    }
+    
+    ul {
+      margin: 0;
+      padding-left: 16px;
+      
+      li {
+        font-size: 12px;
+        color: #856404;
+        margin: 2px 0;
+      }
+    }
+  }
 }
 
 .export-form {
