@@ -6,6 +6,9 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
+import { MatDialog } from '@angular/material/dialog';
+import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
 
 export interface OutboundMaterial {
@@ -93,7 +96,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private qrScannerService: QRScannerService,
+    private dialog: MatDialog
   ) {}
   
   ngOnInit(): void {
@@ -822,83 +827,37 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   formatDate(date: Date | null): string { if (!date) return ''; return date.toLocaleDateString('vi-VN'); }
   formatDateTime(date: Date | null): string { if (!date) return ''; return date.toLocaleString('vi-VN'); }
   
-  // Camera QR Scanner methods
-  async startCameraScanning(): Promise<void> {
-    try {
-      console.log('🎯 Starting QR scanner for Outbound ASM1...');
-      console.log('📱 Mobile device:', this.isMobile);
-      console.log('📱 Selected scan method:', this.selectedScanMethod);
+  // Camera QR Scanner methods using QRScannerModalComponent (same as RM1 inventory)
+  startCameraScanning(): void {
+    console.log('🎯 Starting QR scanner for Outbound ASM1...');
+    console.log('📱 Mobile device:', this.isMobile);
+    console.log('📱 Selected scan method:', this.selectedScanMethod);
+    
+    const dialogData: QRScannerData = {
+      title: this.isMobile ? 'Quét QR Code' : 'Quét Mã Nhân Viên',
+      message: this.isMobile ? 'Camera sẽ tự động quét QR code' : 'Camera sẽ tự động quét mã nhân viên',
+      materialCode: undefined
+    };
+
+    const dialogRef = this.dialog.open(QRScannerModalComponent, {
+      width: '500px',
+      maxWidth: '95vw',
+      data: dialogData,
+      disableClose: true, // Prevent accidental close
+      panelClass: 'qr-scanner-dialog'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      console.log('📱 QR Scanner result:', result);
       
-      this.isScannerLoading = true;
-      this.errorMessage = '';
-      this.lastScannedData = null;
-      this.exportQuantity = 0;
-      
-      // Show modal first, then wait for DOM element
-      this.isCameraScanning = true;
-      console.log('📱 Setting isCameraScanning to true');
-      this.cdr.detectChanges(); // Force change detection to render modal
-      console.log('📱 Modal should be visible now');
-      
-      // Wait for DOM element to be available after modal renders
-      await this.waitForElement('qr-reader');
-      
-      // Initialize scanner
-      this.scanner = new Html5Qrcode("qr-reader");
-      
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      };
-      
-      await this.scanner.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          console.log('📱 QR Code scanned:', decodedText);
-          this.onScanSuccess(decodedText);
-        },
-        (errorMessage) => {
-          // Silent error handling for scanning attempts
-        }
-      );
-      
-      // Scanner started successfully
-      this.isScannerLoading = false;
-      console.log('✅ Scanner started successfully');
-      
-      // Add a timeout to check if camera is actually working
-      setTimeout(() => {
-        if (this.scanner && this.isCameraScanning) {
-          console.log('📱 Camera should be visible now. If not, check:');
-          console.log('1. Camera permission granted');
-          console.log('2. Using HTTPS (not HTTP)');
-          console.log('3. Camera not used by another app');
-        }
-      }, 2000);
-      
-    } catch (error) {
-      console.error('❌ Error starting scanner:', error);
-      
-      let errorMsg = 'Không thể khởi động scanner';
-      if (error?.message) {
-        if (error.message.includes('not found')) {
-          errorMsg = 'Không tìm thấy camera hoặc element scanner';
-        } else if (error.message.includes('Permission')) {
-          errorMsg = 'Vui lòng cấp quyền truy cập camera';
-        } else {
-          errorMsg = error.message;
-        }
+      if (result && result.success && result.text) {
+        // Process the scanned data
+        this.onScanSuccess(result.text);
+      } else if (result && result.error) {
+        console.error('❌ QR Scanner error:', result.error);
+        this.errorMessage = 'Lỗi quét QR: ' + result.error;
       }
-      
-      this.errorMessage = 'Lỗi scanner: ' + errorMsg;
-      this.isCameraScanning = false;
-      this.isScannerLoading = false;
-      
-      // Show user alert
-      alert('❌ ' + errorMsg + '\n\nVui lòng:\n1. Cấp quyền camera\n2. Sử dụng HTTPS\n3. Thử lại');
-    }
+    });
   }
   
   private async waitForElement(elementId: string): Promise<void> {
@@ -930,12 +889,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   }
   
   async stopScanning(): Promise<void> {
+    // Stop QRScannerService
+    this.qrScannerService.stopScanning();
+    
+    // Also stop Html5Qrcode if it exists
     if (this.scanner) {
       try {
         await this.scanner.stop();
-        console.log('✅ Camera scanner stopped');
+        console.log('✅ Html5Qrcode scanner stopped');
       } catch (error) {
-        console.error('❌ Error stopping camera scanner:', error);
+        console.error('❌ Error stopping Html5Qrcode scanner:', error);
       }
       this.scanner = null;
     }
@@ -1057,6 +1020,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
     
     console.log('🔍 === ON SCAN SUCCESS END ===');
+  }
+
+  onScanError(error: any): void {
+    console.error('❌ QR scan error:', error);
+    // Don't show error to user for scanning attempts - they're too frequent
   }
   
   // Consolidate outbound records by ALL 4 fields: material code + PO + employee ID + production order (LSX)

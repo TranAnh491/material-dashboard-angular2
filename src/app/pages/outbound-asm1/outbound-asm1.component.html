@@ -229,54 +229,5 @@
     </div>
   </div>
 
-  <!-- QR Scanner Modal for Employee ID -->
-  <div class="qr-scanner-modal" *ngIf="isCameraScanning">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5>
-          <i class="material-icons">qr_code_scanner</i>
-          {{ isMobile ? 'Scan QR Code' : 'Scan Mã Nhân Viên' }}
-        </h5>
-        <button class="close-btn" (click)="stopScanning()">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-      
-      <div class="modal-body">
-        <div class="scanner-container">
-          <div id="qr-reader"></div>
-          <div class="scanner-overlay">
-            <div class="scanner-frame"></div>
-            <div class="scanner-hint">
-              Đặt mã nhân viên vào khung để scan
-            </div>
-          </div>
-        </div>
-        
-        <div class="scanner-info">
-          <h6>{{ isMobile ? 'Hướng dẫn scan QR Code:' : 'Hướng dẫn scan mã nhân viên:' }}</h6>
-          <p *ngIf="!isMobile"><strong>Format:</strong> ASP + 4 chữ số (ví dụ: ASP1234)</p>
-          <p *ngIf="isMobile"><strong>Quét:</strong> Mã QR của hàng hóa hoặc lệnh sản xuất</p>
-          <p><strong>Lưu ý:</strong> Chỉ scan mã nhân viên, không scan mã hàng</p>
-          
-          <div class="camera-troubleshooting" *ngIf="isMobile">
-            <h6>Nếu camera không hiển thị:</h6>
-            <ul>
-              <li>1. Cấp quyền camera cho trình duyệt</li>
-              <li>2. Sử dụng HTTPS thay vì HTTP</li>
-              <li>3. Đóng các ứng dụng khác đang dùng camera</li>
-              <li>4. Thử refresh trang và scan lại</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      
-      <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="stopScanning()">
-          <i class="material-icons">close</i>
-          Đóng
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- QR Scanner Modal is now handled by QRScannerModalComponent -->
 </div>
