@@ -141,6 +141,35 @@
   i {
     color: #333333 !important;
   }
+  
+  // 🚀 OPTIMIZATION: Search progress bar
+  .search-progress {
+    margin-top: 15px;
+    width: 100%;
+    max-width: 300px;
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4caf50, #8bc34a);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+      }
+    }
+    
+    .progress-text {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
+  }
 }
 
 // Message styling minimal
@@ -597,22 +626,57 @@
   border-bottom: 1px solid #e2e8f0;
   flex-wrap: wrap;
   
-  // Đảm bảo negative-stock-counter-box hiển thị đẹp ở vị trí mới
-  .negative-stock-counter-box {
-    order: 1; // Đặt thứ tự hiển thị
-    flex-shrink: 0; // Không cho phép co lại
+  // Mobile menu button
+  .mobile-menu-btn {
+    order: 1;
+    flex-shrink: 0;
   }
   
+  // More button
   .more-btn {
-    order: 2; // Đặt thứ tự hiển thị
+    order: 2;
+    flex-shrink: 0;
+  }
+  
+  // Search sections
+  .mobile-search-section {
+    order: 3;
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .desktop-search-section {
+    order: 3;
+    flex: 1;
+    min-width: 0;
+  }
+  
+  // Counter boxes
+  .negative-stock-counter-box {
+    order: 4;
+    flex-shrink: 0;
   }
   
   .total-counter-box {
-    order: 3; // Đặt thứ tự hiển thị
+    order: 5;
+    flex-shrink: 0;
   }
   
   .total-stock-counter-box {
-    order: 4; // Đặt thứ tự hiển thị
+    order: 6;
+    flex-shrink: 0;
+  }
+  
+  // Action buttons
+  .action-buttons {
+    order: 7;
+    flex-shrink: 0;
+  }
+  
+  // Catalog ready icon
+  .catalog-ready-icon {
+    order: 8;
+    flex-shrink: 0;
   }
 }
 
@@ -1158,19 +1222,245 @@
   color: #333333;
 }
 
-// Responsive design
+// Mobile-first responsive design
 @media (max-width: 768px) {
   .excel-header h4 {
     font-size: 16px;
   }
   
+  .action-controls-horizontal {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .desktop-search-section {
+    display: none;
+  }
+  
+  .mobile-search-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    
+    .search-type-selector {
+      flex-shrink: 0;
+    }
+    
+    .search-box {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+  
+  .mobile-menu-btn {
+    display: block;
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    
+    i {
+      font-size: 20px;
+    }
+  }
+  
+  .desktop-only {
+    display: none !important;
+  }
+  
+  .table-container {
+    display: none;
+  }
+  
+  .mobile-cards-container {
+    display: block;
+    padding: 10px;
+  }
+  
+  .mobile-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    
+    &.duplicate-card {
+      border-left: 4px solid #ffc107;
+    }
+    
+    &.iqc-card {
+      border-left: 4px solid #28a745;
+    }
+  }
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    background: #f8f9fa;
+    
+    .material-info {
+      flex: 1;
+      
+      .material-code {
+        margin: 0;
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+      }
+      
+      .po-number {
+        margin: 5px 0 0 0;
+        font-size: 14px;
+        color: #666;
+      }
+    }
+    
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        
+        &:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+        
+        i {
+          font-size: 18px;
+        }
+      }
+    }
+  }
+  
+  .card-content {
+    padding: 15px;
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      
+      .label {
+        font-weight: 500;
+        color: #333;
+        min-width: 100px;
+        font-size: 14px;
+      }
+      
+      .value {
+        color: #666;
+        font-size: 14px;
+        
+        &.negative-stock {
+          color: #dc3545;
+          font-weight: bold;
+        }
+      }
+      
+      .mobile-input {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 14px;
+        width: 120px;
+        
+        &.location-input {
+          width: 150px;
+        }
+        
+        &:focus {
+          outline: none;
+          border-color: #007bff;
+          box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+      }
+    }
+  }
+  
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-top: 1px solid #eee;
+    background: #f8f9fa;
+    
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .delete-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      
+      i {
+        font-size: 16px;
+      }
+    }
+  }
+  
   .search-box .search-input {
-    width: 200px;
+    width: 100%;
+    max-width: none;
   }
   
   .action-buttons {
     flex-wrap: wrap;
     gap: 8px;
+  }
+}
+
+// Desktop styles
+@media (min-width: 769px) {
+  .mobile-menu-btn {
+    display: none;
+  }
+  
+  .mobile-search-section {
+    display: none;
+  }
+  
+  .mobile-cards-container {
+    display: none;
+  }
+  
+  .desktop-only {
+    display: block;
+  }
+  
+  .desktop-search-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
   }
 }
 

@@ -83,6 +83,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   searchType: 'material' | 'po' | 'location' = 'material';
   private searchSubject = new Subject<string>();
   
+  // 🚀 OPTIMIZATION: Add loading states
+  isSearching = false;
+  searchProgress = 0;
+  
   // Negative stock tracking
   private negativeStockSubject = new BehaviorSubject<number>(0);
   public negativeStockCount$ = this.negativeStockSubject.asObservable();
@@ -94,11 +98,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Negative stock filter state
   showOnlyNegativeStock = false;
   
-  // Export column lock state
-  isExportColumnUnlocked = false;
   
   // Dropdown state
   isDropdownOpen = false;
+  
+  // Mobile menu state
+  showMobileMenu = false;
   
   // Show completed items
   // showCompleted = true; // Removed - replaced with Reset function
@@ -142,6 +147,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Initialize negative stock count and total stock count
     this.updateNegativeStockCount();
     
+    // 🆕 Setup real-time catalog listener for Standard Packing updates
+    this.setupCatalogListener();
+    
     console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
   }
@@ -174,8 +182,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('📦 Loading ASM1 inventory from Firebase...');
     this.isLoading = true;
     
+    // 🚀 OPTIMIZATION: Add limit and orderBy for faster loading
     this.firestore.collection('inventory-materials', ref => 
       ref.where('factory', '==', this.FACTORY)
+         .orderBy('importDate', 'desc')
+         .limit(1000) // Limit to 1000 items for faster initial load
     )
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
@@ -260,7 +271,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private loadInventoryAndSetupSearch(): void {
     console.log('📦 Setting up search mechanism without loading initial data...');
     
-    // Don't load any data initially - only setup search
+    // 🚀 OPTIMIZATION: Load minimal data initially for faster startup
     this.inventoryMaterials = [];
     this.filteredInventory = [];
     
@@ -461,6 +472,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private async loadCatalogFromFirebase(): Promise<void> {
     this.isCatalogLoading = true;
     console.log('📋 Loading catalog from Firebase...');
+    
+    // 🚀 OPTIMIZATION: Check cache first
+    if (this.catalogCache.size > 0) {
+      console.log('📚 Using cached catalog data');
+      this.isCatalogLoading = false;
+      this.catalogLoaded = true;
+      return;
+    }
     
     try {
       // THỬ NHIỀU COLLECTION NAMES - KIỂM TRA THỰC TẾ SỐ LƯỢNG DOCUMENTS
@@ -751,6 +770,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     this.searchTerm = searchTerm;
     this.isLoading = true;
+    this.isSearching = true;
+    this.searchProgress = 0;
     
     try {
       console.log(`🔍 ASM1 Searching for: "${searchTerm}" - Loading from Firebase...`);
@@ -759,6 +780,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       let querySnapshot;
       
       // Thử tìm kiếm theo materialCode trước (chính xác nhất) - ASM1 only
+      this.searchProgress = 25;
       querySnapshot = await this.firestore.collection('inventory-materials', ref => 
         ref.where('factory', '==', this.FACTORY)
            .where('materialCode', '==', searchTerm)
@@ -768,6 +790,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Nếu không tìm thấy, tìm kiếm theo pattern matching
       if (!querySnapshot || querySnapshot.empty) {
         console.log(`🔍 ASM1 No exact match for "${searchTerm}", trying pattern search...`);
+        this.searchProgress = 50;
         
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
           ref.where('factory', '==', this.FACTORY)
@@ -780,6 +803,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Nếu vẫn không tìm thấy, tìm kiếm theo PO number
       if (!querySnapshot || querySnapshot.empty) {
         console.log(`🔍 ASM1 No pattern match for "${searchTerm}", trying PO search...`);
+        this.searchProgress = 75;
         
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
           ref.where('factory', '==', this.FACTORY)
@@ -847,6 +871,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       this.filteredInventory = [];
     } finally {
       this.isLoading = false;
+      this.isSearching = false;
+      this.searchProgress = 100;
     }
   }
 
@@ -1150,11 +1176,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         this.canDelete = canAccess;
         // this.canEditHSD = canAccess; // Removed - HSD column deleted
         
-        // Reset export column lock if user doesn't have delete permission
-        if (!this.canDelete && this.isExportColumnUnlocked) {
-          this.isExportColumnUnlocked = false;
-          console.log('🔒 Export column automatically locked due to insufficient permissions');
-        }
         
         // Lưu ý: Cột "Đã xuất" chỉ có thể chỉnh sửa khi user có quyền Xóa và đã mở khóa
         // không phụ thuộc vào canExport permission
@@ -1164,7 +1185,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           canEdit: this.canEdit,
           canExport: this.canExport,
           canDelete: this.canDelete,
-          isExportColumnUnlocked: this.isExportColumnUnlocked,
           // canEditHSD: this.canEditHSD // Removed - HSD column deleted
         });
       });
@@ -1289,9 +1309,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.isDropdownOpen = !this.isDropdownOpen;
   }
 
-  async refreshInventory(): Promise<void> {
-    await this.loadInventoryFromFirebase();
+  // Toggle mobile menu
+  toggleMobileMenu(): void {
+    this.showMobileMenu = !this.showMobileMenu;
+    console.log('📱 Mobile menu toggled:', this.showMobileMenu);
   }
+
 
   stopScanning(): void {
     if (this.html5QrCode) {
@@ -1676,17 +1699,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   //   this.showCompleted = !this.showCompleted;
   // }
 
-  async syncFromInbound(): Promise<void> {
-    console.log('🔄 Syncing inventory data from Firebase...');
-    
-    // Reload inventory data from Firebase
-    await this.loadInventoryFromFirebase();
-    
-    // Reload catalog data
-    this.loadCatalogFromFirebase();
-    
-    console.log('✅ Sync completed - Data reloaded from Firebase');
-  }
 
   // Update methods for editing
   // updateExported method removed - exported quantity is now read-only and auto-updated from outbound
@@ -2734,10 +2746,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     
-    if (!this.isExportColumnUnlocked) {
-      console.error('❌ Export column is locked. Cannot update exported amount');
-      return;
-    }
     
     // Đảm bảo exported có giá trị hợp lệ
     if (material.exported === null || material.exported === undefined) {
@@ -2753,28 +2761,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
-  // Toggle export column lock/unlock - Chỉ cho phép user có quyền Xóa
-  toggleExportColumnLock(): void {
-    // Kiểm tra quyền trước khi cho phép mở khóa
-    if (!this.canDelete) {
-      console.error('❌ User does not have delete permission to unlock export column');
-      return;
-    }
-    
-    this.isExportColumnUnlocked = !this.isExportColumnUnlocked;
-    console.log(`🔓 Export column ${this.isExportColumnUnlocked ? 'unlocked' : 'locked'} by user with delete permission`);
-    
-    if (this.isExportColumnUnlocked) {
-      console.log('⚠️ WARNING: Export column is now editable. Changes will affect stock calculations.');
-    } else {
-      console.log('🔒 Export column is now locked. Changes are disabled.');
-    }
-  }
 
-  // Check if user can edit export column (has delete permission and column is unlocked)
-  canEditExportColumn(): boolean {
-    return this.canDelete && this.isExportColumnUnlocked;
-  }
 
 
 
@@ -3115,25 +3102,25 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           fullUnits,
           remainingQuantity
         });
-        
-        // Add full units
-        for (let i = 0; i < fullUnits; i++) {
-          qrCodes.push({
-            materialCode: material.materialCode,
-            poNumber: material.poNumber,
-            unitNumber: rollsOrBags,
-            qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
-          });
-        }
-        
-        // Add remaining quantity if any
-        if (remainingQuantity > 0) {
-          qrCodes.push({
-            materialCode: material.materialCode,
-            poNumber: material.poNumber,
-            unitNumber: remainingQuantity,
-            qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
-          });
+      
+      // Add full units
+      for (let i = 0; i < fullUnits; i++) {
+        qrCodes.push({
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          unitNumber: rollsOrBags,
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
+        });
+      }
+      
+      // Add remaining quantity if any
+      if (remainingQuantity > 0) {
+        qrCodes.push({
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          unitNumber: remainingQuantity,
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
+        });
         }
       }
 
@@ -3462,6 +3449,64 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
     printWindow.document.close();
     console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
+  }
+
+  // 🆕 Setup real-time catalog listener for Standard Packing updates
+  private setupCatalogListener(): void {
+    console.log('🔄 Setting up real-time catalog listener for Standard Packing updates...');
+    
+    // Listen to changes in materials collection (main catalog)
+    this.firestore.collection('materials')
+      .snapshotChanges()
+      .pipe(
+        debounceTime(500), // 🚀 OPTIMIZATION: Debounce 500ms to prevent rapid updates
+        takeUntil(this.destroy$)
+      )
+      .subscribe((actions) => {
+        console.log('📦 Catalog changes detected, checking for Standard Packing updates...');
+        
+        let hasStandardPackingUpdates = false;
+        
+        actions.forEach(action => {
+          if (action.type === 'modified') {
+            const data = action.payload.doc.data() as any;
+            const materialCode = action.payload.doc.id;
+            
+            // Check if standardPacking field was updated
+            if (data.standardPacking !== undefined) {
+              console.log(`🔄 Standard Packing updated for ${materialCode}: ${data.standardPacking}`);
+              
+              // Update local cache
+              if (this.catalogCache.has(materialCode)) {
+                const catalogItem = this.catalogCache.get(materialCode)!;
+                catalogItem.standardPacking = data.standardPacking;
+                this.catalogCache.set(materialCode, catalogItem);
+                console.log(`✅ Updated local cache for ${materialCode}: ${data.standardPacking}`);
+              }
+              
+              // Update inventory materials if they exist
+              this.inventoryMaterials.forEach(material => {
+                if (material.materialCode === materialCode) {
+                  material.standardPacking = data.standardPacking;
+                  console.log(`✅ Updated inventory material ${materialCode}: ${data.standardPacking}`);
+                }
+              });
+              
+              hasStandardPackingUpdates = true;
+            }
+          }
+        });
+        
+        if (hasStandardPackingUpdates) {
+          console.log('🎯 Standard Packing updates detected, refreshing display...');
+          this.cdr.detectChanges();
+          
+          // Update filtered inventory display
+          this.filteredInventory = [...this.inventoryMaterials];
+        }
+      });
+    
+    console.log('✅ Real-time catalog listener setup completed');
   }
 
   // Gộp dòng tự động khi load toàn bộ inventory

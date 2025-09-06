@@ -22,11 +22,16 @@
     <!-- Excel Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
+        <!-- Mobile Menu Button -->
+        <div class="mobile-menu-btn" (click)="toggleMobileMenu()">
+          <i class="material-icons">menu</i>
+        </div>
+        
         <!-- More Button with Dropdown -->
         <div class="dropdown">
           <button class="more-btn" (click)="toggleDropdown($event)">
             <i class="material-icons">more_vert</i>
-            More
+            <span class="desktop-only">More</span>
           </button>
           <div class="dropdown-menu" [class.show]="isDropdownOpen">
             <a class="dropdown-item" href="javascript:void(0)" (click)="importCatalog()">
@@ -104,95 +109,127 @@
           <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
         </div>
         
-        <!-- Lock/Unlock Button for Export Column - Chỉ hiển thị cho user có quyền Xóa -->
-        <div class="export-lock-box" 
-             *ngIf="canDelete"
-             [class.unlocked]="isExportColumnUnlocked"
-             [title]="isExportColumnUnlocked ? 'Click để khóa cột Đã xuất' : 'Click để mở khóa cột Đã xuất'">
-          <button class="export-lock-btn" 
-                  (click)="toggleExportColumnLock()"
-                  [class.unlocked]="isExportColumnUnlocked">
-            <i class="material-icons">{{ isExportColumnUnlocked ? 'lock_open' : 'lock' }}</i>
-            <span>{{ isExportColumnUnlocked ? 'Đã mở khóa' : 'Mở khóa' }}</span>
-          </button>
-        </div>
         
 
         
-        <!-- Search Type Selector -->
-        <div class="search-type-selector">
-          <div class="dropdown">
-            <button class="search-type-dropdown" 
-                    type="button" 
-                    data-toggle="dropdown" 
-                    aria-haspopup="true" 
-                    aria-expanded="false">
-              <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-              {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+        <!-- Mobile Search Section -->
+        <div class="mobile-search-section" *ngIf="showMobileMenu">
+          <!-- Search Type Selector -->
+          <div class="search-type-selector">
+            <div class="dropdown">
+              <button class="search-type-dropdown" 
+                      type="button" 
+                      data-toggle="dropdown" 
+                      aria-haspopup="true" 
+                      aria-expanded="false">
+                <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+                {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+              </button>
+              <div class="dropdown-menu">
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                  <i class="material-icons">inventory</i>
+                  Mã
+                </a>
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                  <i class="material-icons">receipt</i>
+                  PO
+                </a>
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                  <i class="material-icons">place</i>
+                  Vị trí
+                </a>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Search Box -->
+          <div class="search-box">
+            <input type="text"
+                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                   [(ngModel)]="searchTerm"
+                   (input)="onSearchInput($event)"
+                   (keyup)="onSearchKeyUp($event)"
+                   class="search-input"
+                   [disabled]="isLoading">
+            
+            <!-- Clear search button -->
+            <button class="clear-search-btn" 
+                    *ngIf="searchTerm" 
+                    (click)="clearSearch()" 
+                    title="Xóa tìm kiếm">
+              <i class="material-icons">clear</i>
             </button>
-            <div class="dropdown-menu">
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
-                <i class="material-icons">inventory</i>
-                Mã
-              </a>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
-                <i class="material-icons">receipt</i>
-                PO
-              </a>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
-                <i class="material-icons">place</i>
-                Vị trí
-              </a>
+            
+            <!-- Search warning -->
+            <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+              <i class="material-icons">info</i>
+              Cần ít nhất 3 ký tự
             </div>
           </div>
         </div>
         
-        <!-- Search Box -->
-        <div class="search-box">
-          <input type="text"
-                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchInput($event)"
-                 (keyup)="onSearchKeyUp($event)"
-                 class="search-input"
-                 [disabled]="isLoading">
+        <!-- Desktop Search Section -->
+        <div class="desktop-search-section">
+          <!-- Search Type Selector -->
+          <div class="search-type-selector">
+            <div class="dropdown">
+              <button class="search-type-dropdown" 
+                      type="button" 
+                      data-toggle="dropdown" 
+                      aria-haspopup="true" 
+                      aria-expanded="false">
+                <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+                {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+              </button>
+              <div class="dropdown-menu">
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                  <i class="material-icons">inventory</i>
+                  Mã
+                </a>
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                  <i class="material-icons">receipt</i>
+                  PO
+                </a>
+                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                  <i class="material-icons">place</i>
+                  Vị trí
+                </a>
+              </div>
+            </div>
+          </div>
           
-          <!-- Clear search button -->
-          <button class="clear-search-btn" 
-                  *ngIf="searchTerm" 
-                  (click)="clearSearch()" 
-                  title="Xóa tìm kiếm">
-            <i class="material-icons">clear</i>
-          </button>
-          
-          <!-- Search warning -->
-          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
-            <i class="material-icons">info</i>
-            Cần ít nhất 3 ký tự
+          <!-- Search Box -->
+          <div class="search-box">
+            <input type="text"
+                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                   [(ngModel)]="searchTerm"
+                   (input)="onSearchInput($event)"
+                   (keyup)="onSearchKeyUp($event)"
+                   class="search-input"
+                   [disabled]="isLoading">
+            
+            <!-- Clear search button -->
+            <button class="clear-search-btn" 
+                    *ngIf="searchTerm" 
+                    (click)="clearSearch()" 
+                    title="Xóa tìm kiếm">
+              <i class="material-icons">clear</i>
+            </button>
+            
+            <!-- Search warning -->
+            <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+              <i class="material-icons">info</i>
+              Cần ít nhất 3 ký tự
+            </div>
           </div>
         </div>
         
         <!-- Action Buttons -->
         <div class="action-buttons">
-                  <button class="refresh-btn" (click)="refreshInventory()" title="Làm mới dữ liệu ASM1">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
-
-
-                    <button class="sync-btn" (click)="syncFromInbound()" title="Đồng bộ từ Inbound ASM1">
-            <i class="material-icons">sync</i>
-          </button>
-
           <button class="reset-btn" (click)="resetZeroStock()" title="Xóa hàng có tồn kho = 0">
             <i class="material-icons">restart_alt</i>
             Reset
           </button>
-          
-
-          
-
-
         </div>
         
         <!-- Catalog Ready Icon -->
@@ -207,19 +244,142 @@
       <div class="loading-spinner">
         <i class="material-icons rotating">sync</i>
         <span>Đang tải dữ liệu ASM1...</span>
+        <!-- 🚀 OPTIMIZATION: Add progress bar for search -->
+        <div class="search-progress" *ngIf="isSearching">
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="searchProgress"></div>
+          </div>
+          <span class="progress-text">{{searchProgress}}%</span>
+        </div>
       </div>
     </div>
 
 
 
-    <!-- Table Container -->
-    <div class="table-container" *ngIf="!isLoading">
+    <!-- Mobile Card View -->
+    <div class="mobile-cards-container" *ngIf="!isLoading">
+      <div class="mobile-card" *ngFor="let material of filteredInventory; trackBy: trackByFn; let i = index" 
+           [class.duplicate-card]="material.isDuplicate"
+           [class.iqc-card]="isIQCLocation(material.location)">
+        
+        <!-- Card Header -->
+        <div class="card-header">
+          <div class="material-info">
+            <h3 class="material-code">{{material.materialCode}}</h3>
+            <p class="po-number">PO: {{material.poNumber}}</p>
+          </div>
+          <div class="card-actions">
+            <button class="qr-btn" 
+                    (click)="printQRCode(material)"
+                    [disabled]="!isRollsOrBagsValid(material)"
+                    [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
+              <i class="material-icons">qr_code</i>
+            </button>
+            <button class="scan-btn" 
+                    (click)="scanLocationQR(material)"
+                    title="Scan QR để thay đổi vị trí">
+              <i class="material-icons">qr_code_scanner</i>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Card Content -->
+        <div class="card-content">
+          <div class="info-row">
+            <span class="label">Batch:</span>
+            <span class="value">{{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}</span>
+          </div>
+          
+          <div class="info-row">
+            <span class="label">Tồn đầu:</span>
+            <input type="number" 
+                   class="mobile-input" 
+                   [ngModel]="material.openingStock || ''"
+                   (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
+                   (change)="updateOpeningStock(material)" 
+                   min="0" 
+                   step="0.1" 
+                   placeholder="Nhập tồn đầu">
+          </div>
+          
+          <div class="info-row">
+            <span class="label">NK:</span>
+            <span class="value">{{formatNumber(material.quantity)}}</span>
+          </div>
+          
+          <div class="info-row">
+            <span class="label">Đã xuất:</span>
+            <span class="value">{{formatNumber(material.exported || 0)}}</span>
+          </div>
+          
+          <div class="info-row">
+            <span class="label">XT:</span>
+            <input type="number" 
+                   class="mobile-input" 
+                   [(ngModel)]="material.xt" 
+                   (change)="updateXT(material)" 
+                   min="0" 
+                   step="0.1" 
+                   placeholder="Nhập XT">
+          </div>
+          
+          <div class="info-row">
+            <span class="label">Tồn kho:</span>
+            <span class="value" [class.negative-stock]="calculateCurrentStock(material) < 0">
+              {{formatNumber(calculateCurrentStock(material))}}
+            </span>
+          </div>
+          
+          <div class="info-row">
+            <span class="label">Vị trí:</span>
+            <input type="text" 
+                   class="mobile-input location-input" 
+                   [(ngModel)]="material.location" 
+                   (change)="updateLocation(material)"
+                   (blur)="onLocationChange(material)"
+                   placeholder="Nhập vị trí">
+          </div>
+          
+          <div class="info-row">
+            <span class="label">QTY BAG:</span>
+            <input type="number" 
+                   class="mobile-input" 
+                   [(ngModel)]="material.rollsOrBags" 
+                   (change)="updateRollsOrBags(material)"
+                   min="0" 
+                   step="1"
+                   [placeholder]="getStandardPacking(material.materialCode) || '0'">
+          </div>
+          
+          <div class="info-row">
+            <span class="label">Standard Packing:</span>
+            <span class="value">{{ getStandardPacking(material.materialCode) }}</span>
+          </div>
+        </div>
+        
+        <!-- Card Footer -->
+        <div class="card-footer">
+          <div class="status-badge" [class]="getStatusClass(material)">
+            {{ getStatusText(material) }}
+          </div>
+          <button class="delete-btn" 
+                  *ngIf="canDelete"
+                  (click)="deleteInventoryItem(material)"
+                  title="Xóa item này">
+            <i class="material-icons">delete</i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop Table Container -->
+    <div class="table-container desktop-only" *ngIf="!isLoading">
       <!-- Table -->
       <table class="excel-table">
         <thead>
           <tr>
             <th>QR</th>
-            <th>Lượng trên tem</th>
+            <th>QTY BAG</th>
             <th>STT</th>
 
             <th>Mã hàng</th>
@@ -263,7 +423,7 @@
                      min="0" 
                      step="1"
                      [placeholder]="getStandardPacking(material.materialCode) || '0'"
-                     [title]="'Lượng trên tem (mặc định từ Standard Packing: ' + (getStandardPacking(material.materialCode) || 'N/A') + ')'">
+                     [title]="'QTY BAG (mặc định từ Standard Packing: ' + (getStandardPacking(material.materialCode) || 'N/A') + ')'">
             </td>
             <td class="row-header">{{i + 1}}</td>
 

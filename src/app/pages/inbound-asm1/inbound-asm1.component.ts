@@ -524,6 +524,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.firestore.collection('inventory-materials').add(inventoryMaterial)
       .then(() => {
         console.log(`✅ ${material.materialCode} added to Inventory ASM1`);
+        
+        // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
+        this.updateStandardPackingFromInbound(material);
+        
         // No notification shown - silent operation
       })
       .catch((error) => {
@@ -532,6 +536,44 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         material.isReceived = false;
         this.updateMaterial(material);
       });
+  }
+
+  // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound ASM1
+  private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
+    try {
+      console.log(`📦 Updating Standard Packing for ${material.materialCode} from Inbound data...`);
+      
+      // Kiểm tra có rollsOrBags hợp lệ không
+      if (!material.rollsOrBags || material.rollsOrBags <= 0) {
+        console.log(`⚠️ Skipping Standard Packing update - invalid rollsOrBags: ${material.rollsOrBags}`);
+        return;
+      }
+      
+      const standardPackingValue = material.rollsOrBags;
+      console.log(`📊 Standard Packing value: ${standardPackingValue} for ${material.materialCode}`);
+      
+      // Cập nhật vào collection 'materials' (chính)
+      const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
+      await materialsDocRef.update({
+        standardPacking: standardPackingValue,
+        updatedAt: new Date()
+      });
+      console.log(`✅ Updated materials collection: ${material.materialCode} = ${standardPackingValue}`);
+      
+      // Cập nhật vào collection 'catalog' (đồng bộ)
+      const catalogDocRef = this.firestore.collection('catalog').doc(material.materialCode).ref;
+      await catalogDocRef.update({
+        standardPacking: standardPackingValue,
+        updatedAt: new Date()
+      });
+      console.log(`✅ Updated catalog collection: ${material.materialCode} = ${standardPackingValue}`);
+      
+      console.log(`🎯 Standard Packing updated successfully for ${material.materialCode}: ${standardPackingValue}`);
+      
+    } catch (error) {
+      console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
+      // Không throw error để không ảnh hưởng đến việc add vào inventory
+    }
   }
   
   onStatusFilterChange(): void {
