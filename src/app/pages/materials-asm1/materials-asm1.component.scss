@@ -155,10 +155,17 @@
   }
 }
 
-// Table header minimal
+// TABLE HEADER - CHỈ 1 CHỖ DUY NHẤT QUY ĐỊNH
 .excel-table th {
-  background: #333333 !important; // Black header
-  color: #ffffff !important; // White text
+  background: #ffffff !important;
+  color: #000000 !important;
+  white-space: nowrap !important;
+  text-transform: uppercase !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  padding: 8px 4px !important;
+  border: 1px solid #e0e0e0;
 }
 
 // Row styling minimal
@@ -499,6 +506,12 @@
 }
 
 // Giao diện phẳng cho cột Vị trí
+.location-cell {
+  width: 113px !important; // Bằng cột Tồn kho
+  min-width: 113px !important;
+  max-width: 113px !important;
+}
+
 .location-input {
   border: none !important;
   background: transparent !important;
@@ -521,30 +534,21 @@
   }
 }
 
-// Đảm bảo cột Vị trí có độ rộng đúng - không bị ghi đè
-td:nth-child(11) {
-  width: 70px !important;
-  min-width: 70px !important;
-  max-width: 70px !important;
-}
+// ========================================
+// CỘT ĐỘ RỘNG - CHỈ 1 CHỖ DUY NHẤT QUY ĐỊNH
+// ========================================
 
-th:nth-child(11) {
-  width: 70px !important;
-  min-width: 70px !important;
-  max-width: 70px !important;
-}
-
-// CSS mạnh nhất để đảm bảo cột Vị trí không bị ghi đè
-.excel-table td:nth-child(11),
-.excel-table th:nth-child(11) {
-  width: 70px !important;
-  min-width: 70px !important;
-  max-width: 70px !important;
+// Cột Vị trí (13) - Bằng cột Tồn kho
+.excel-table th:nth-child(13),
+.excel-table td:nth-child(13) {
+  width: 113px !important;
+  min-width: 113px !important;
+  max-width: 113px !important;
 }
 
 // CSS cho input trong cột Vị trí
-.excel-table td:nth-child(11) .location-input,
-.excel-table td:nth-child(11) .editable-cell {
+.excel-table td:nth-child(13) .location-input,
+.excel-table td:nth-child(13) .editable-cell {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -1334,12 +1338,6 @@ th:nth-child(11) {
     z-index: 10;
     
     th {
-      background: #f5f5f5 !important; // Màu xám nhạt thay vì đen
-      color: #000000 !important; // Màu đen thay vì trắng
-      border: 1px solid #e0e0e0; // Viền xám nhạt thay vì đen
-      padding: 12px 8px;
-      text-align: center;
-      font-weight: normal !important;
       position: sticky;
       top: 0;
     }
@@ -1402,22 +1400,19 @@ th:nth-child(11) {
     max-width: 80px;
   }
   
-  th:nth-child(11), // Cột "Vị trí" (cột thứ 11)
-  td:nth-child(11) {
-    width: 100px !important;
-    min-width: 100px !important;
-    max-width: 100px !important;
-  }
 
   // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
   th:nth-child(5), // Cột "Tồn đầu" (sau khi xóa FIFO)
   td:nth-child(5),
   th:nth-child(6), // Cột "NK" (sau khi xóa FIFO)
   td:nth-child(6),
-  th:nth-child(7), // Cột "Đã xuất" (sau khi xóa FIFO)
-  td:nth-child(7),
-  th:nth-child(8) { // Cột "Tồn kho" (sau khi xóa FIFO)
-    width: 113px !important; // Bằng chiều rộng cột Mã hàng
+  th:nth-child(9), // Cột "Đã xuất"
+  td:nth-child(9),
+  th:nth-child(10), // Cột "XT"
+  td:nth-child(10),
+  th:nth-child(12), // Cột "Tồn kho"
+  td:nth-child(12) {
+    width: 113px !important;
     min-width: 113px !important;
     max-width: 113px !important;
     text-align: center;

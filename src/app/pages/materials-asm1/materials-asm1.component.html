@@ -50,6 +50,15 @@
               <i class="material-icons">description</i>
               Download Stock Template
             </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="debugMaterialsCollection()">
+              <i class="material-icons">bug_report</i>
+              Debug Materials Collection
+            </a>
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="deleteMaterialsWithoutStandardPacking()">
+              <i class="material-icons">delete_forever</i>
+              Xóa mã không có Standard Packing
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
               <i class="material-icons">file_download</i>
               Export to Excel
@@ -209,7 +218,8 @@
       <table class="excel-table">
         <thead>
           <tr>
-            <th>Factory</th>
+            <th>QR</th>
+            <th>Lượng trên tem</th>
             <th>STT</th>
 
             <th>Mã hàng</th>
@@ -224,20 +234,36 @@
             <th>Change</th>
             <th>Loại Hình</th>
 
-            <th>Rolls/Bags</th>
             <th>Lưu ý</th>
             <th>Standard Packing</th>
             <th>Trạng thái</th>
             <th>Xóa</th>
-            <th>QR</th>
+            <th>Factory</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredInventory; trackBy: trackByFn; let i = index" 
               [class.duplicate-row]="material.isDuplicate"
               [class.iqc-row]="isIQCLocation(material.location)">
-            <td class="factory-cell factory-asm1">
-              ASM1
+            <td class="qr-cell">
+              <button class="qr-btn" 
+                      (click)="printQRCode(material)"
+                      [disabled]="!isRollsOrBagsValid(material)"
+                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
+                <i class="material-icons">qr_code</i>
+              </button>
+            </td>
+            <td class="rolls-bags-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.rollsOrBags" 
+                     (change)="updateRollsOrBags(material)"
+                     (blur)="updateRollsOrBags(material)"
+                     (keyup.enter)="updateRollsOrBags(material)"
+                     min="0" 
+                     step="1"
+                     [placeholder]="getStandardPacking(material.materialCode) || '0'"
+                     [title]="'Lượng trên tem (mặc định từ Standard Packing: ' + (getStandardPacking(material.materialCode) || 'N/A') + ')'">
             </td>
             <td class="row-header">{{i + 1}}</td>
 
@@ -315,14 +341,6 @@
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
 
-            <td class="rolls-bags-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.rollsOrBags" 
-                     (change)="updateMaterial(material)" 
-                     min="0" 
-                     [placeholder]="material.rollsOrBags ? '' : 'Rolls/Bags'">
-            </td>
             <td class="notes-cell">
               <input type="text" 
                      class="editable-input" 
@@ -348,13 +366,8 @@
                 <i class="material-icons">delete</i>
               </button>
             </td>
-            <td class="qr-cell">
-              <button class="qr-btn" 
-                      (click)="printQRCode(material)"
-                      [disabled]="!isRollsOrBagsValid(material)"
-                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
-                <i class="material-icons">qr_code</i>
-              </button>
+            <td class="factory-cell factory-asm1">
+              ASM1
             </td>
           </tr>
         </tbody>

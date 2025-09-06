@@ -199,6 +199,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               const catalogItem = this.catalogCache.get(material.materialCode)!;
               material.materialName = catalogItem.materialName;
               material.unit = catalogItem.unit;
+              
+              // Tự động điền rollsOrBags từ Standard Packing nếu trống
+              if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
+                const standardPacking = catalogItem.standardPacking;
+                if (standardPacking && standardPacking > 0) {
+                  material.rollsOrBags = standardPacking.toString();
+                  console.log(`🔄 Auto-filled rollsOrBags from Standard Packing: ${material.materialCode} = ${standardPacking}`);
+                }
+              }
             }
             
             return material;
@@ -259,24 +268,222 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('✅ Search mechanism setup completed - No initial data loaded');
   }
 
+  // Debug function to check materials collection
+  async debugMaterialsCollection(): Promise<void> {
+    console.log('🔍 DEBUG: Checking materials collection...');
+    
+    try {
+      const snapshot = await this.firestore.collection('materials').get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('❌ Collection "materials" is empty or does not exist');
+        alert('❌ Collection "materials" is empty or does not exist');
+        return;
+      }
+      
+      console.log(`📊 Total documents in materials collection: ${snapshot.size}`);
+      
+      // Phân tích cấu trúc dữ liệu
+      let withStandardPacking = 0;
+      let withMaterialCode = 0;
+      let withMaterialName = 0;
+      const fieldCounts: { [key: string]: number } = {};
+      
+      snapshot.docs.forEach((doc, index) => {
+        const data = doc.data() as any;
+        
+        // Đếm các field quan trọng
+        if (data.standardPacking !== undefined && data.standardPacking !== null) {
+          withStandardPacking++;
+        }
+        if (data.materialCode) {
+          withMaterialCode++;
+        }
+        if (data.materialName) {
+          withMaterialName++;
+        }
+        
+        // Đếm tất cả fields
+        Object.keys(data).forEach(field => {
+          fieldCounts[field] = (fieldCounts[field] || 0) + 1;
+        });
+        
+        // Log 3 documents đầu tiên để xem cấu trúc
+        if (index < 3) {
+          console.log(`📄 Document ${index + 1} (${doc.id}):`, data);
+        }
+      });
+      
+      console.log('📊 Field Analysis:');
+      console.log(`  - Documents with standardPacking: ${withStandardPacking}`);
+      console.log(`  - Documents with materialCode: ${withMaterialCode}`);
+      console.log(`  - Documents with materialName: ${withMaterialName}`);
+      
+      console.log('📊 All fields and their frequency:');
+      Object.entries(fieldCounts)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([field, count]) => {
+          console.log(`  - ${field}: ${count} documents`);
+        });
+      
+      alert(`🔍 MATERIALS COLLECTION DEBUG:\n\n` +
+            `📊 Total documents: ${snapshot.size}\n` +
+            `📦 With standardPacking: ${withStandardPacking}\n` +
+            `🏷️ With materialCode: ${withMaterialCode}\n` +
+            `📝 With materialName: ${withMaterialName}\n\n` +
+            `💡 Check console (F12) for detailed field analysis`);
+      
+    } catch (error) {
+      console.error('❌ Error checking materials collection:', error);
+      alert('❌ Error checking materials collection: ' + error.message);
+    }
+  }
+
+  // Xóa các mã không có standardPacking
+  async deleteMaterialsWithoutStandardPacking(): Promise<void> {
+    console.log('🗑️ Starting deletion of materials without standardPacking...');
+    
+    const confirmMessage = `⚠️ XÓA CÁC MÃ KHÔNG CÓ STANDARDPACKING\n\n` +
+      `📊 Tổng documents: 8,750\n` +
+      `📦 Có standardPacking: 5,792 (66%)\n` +
+      `❌ Không có standardPacking: 3,958 (34%)\n\n` +
+      `⚠️ Bạn có chắc chắn muốn XÓA 3,958 documents không có standardPacking?\n` +
+      `⚠️ Hành động này KHÔNG THỂ HOÀN TÁC!`;
+    
+    if (!confirm(confirmMessage)) {
+      console.log('❌ User cancelled deletion');
+      return;
+    }
+    
+    try {
+      console.log('🔍 Loading materials collection...');
+      const snapshot = await this.firestore.collection('materials').get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('❌ No materials found');
+        alert('❌ Không tìm thấy materials nào');
+        return;
+      }
+      
+      console.log(`📊 Total materials to check: ${snapshot.size}`);
+      
+      // Tìm các documents không có standardPacking
+      const documentsToDelete: any[] = [];
+      let processedCount = 0;
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        processedCount++;
+        
+        // Kiểm tra không có standardPacking hoặc standardPacking = null/undefined
+        if (data.standardPacking === undefined || data.standardPacking === null) {
+          documentsToDelete.push({
+            id: doc.id,
+            materialCode: data.materialCode || 'Unknown',
+            materialName: data.materialName || 'Unknown'
+          });
+        }
+        
+        // Log progress mỗi 1000 documents
+        if (processedCount % 1000 === 0) {
+          console.log(`📊 Processed ${processedCount}/${snapshot.size} documents, found ${documentsToDelete.length} to delete`);
+        }
+      });
+      
+      console.log(`📊 Analysis complete:`);
+      console.log(`  - Total processed: ${processedCount}`);
+      console.log(`  - Documents to delete: ${documentsToDelete.length}`);
+      console.log(`  - Documents to keep: ${processedCount - documentsToDelete.length}`);
+      
+      if (documentsToDelete.length === 0) {
+        alert('✅ Tất cả materials đều có standardPacking! Không cần xóa gì.');
+        return;
+      }
+      
+      // Xác nhận lần 2 với số liệu cụ thể
+      const finalConfirm = `⚠️ XÁC NHẬN CUỐI CÙNG\n\n` +
+        `📊 Sẽ xóa: ${documentsToDelete.length} documents\n` +
+        `📊 Sẽ giữ lại: ${processedCount - documentsToDelete.length} documents\n\n` +
+        `⚠️ Hành động này KHÔNG THỂ HOÀN TÁC!\n` +
+        `⚠️ Bạn có chắc chắn muốn tiếp tục?`;
+      
+      if (!confirm(finalConfirm)) {
+        console.log('❌ User cancelled final confirmation');
+        return;
+      }
+      
+      // Bắt đầu xóa theo batch (Firebase limit: 500 operations per batch)
+      const batchSize = 500;
+      let deletedCount = 0;
+      const totalBatches = Math.ceil(documentsToDelete.length / batchSize);
+      
+      console.log(`🗑️ Starting deletion in ${totalBatches} batches...`);
+      
+      for (let i = 0; i < documentsToDelete.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const currentBatch = documentsToDelete.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        
+        console.log(`🗑️ Processing batch ${batchNumber}/${totalBatches} (${currentBatch.length} documents)...`);
+        
+        currentBatch.forEach(docToDelete => {
+          const docRef = this.firestore.collection('materials').doc(docToDelete.id).ref;
+          batch.delete(docRef);
+        });
+        
+        await batch.commit();
+        deletedCount += currentBatch.length;
+        
+        console.log(`✅ Batch ${batchNumber} completed. Deleted: ${deletedCount}/${documentsToDelete.length}`);
+        
+        // Hiển thị progress
+        const progress = Math.round((deletedCount / documentsToDelete.length) * 100);
+        console.log(`📊 Progress: ${progress}% (${deletedCount}/${documentsToDelete.length})`);
+      }
+      
+      console.log(`✅ Deletion completed! Deleted ${deletedCount} documents`);
+      
+      alert(`✅ XÓA THÀNH CÔNG!\n\n` +
+            `🗑️ Đã xóa: ${deletedCount} documents\n` +
+            `📊 Còn lại: ${processedCount - deletedCount} documents\n` +
+            `📦 Tất cả materials còn lại đều có standardPacking\n\n` +
+            `💡 Collection materials đã được làm sạch!`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting materials without standardPacking:', error);
+      alert('❌ Lỗi khi xóa materials: ' + error.message);
+    }
+  }
+
   // Load catalog from Firebase
   private async loadCatalogFromFirebase(): Promise<void> {
     this.isCatalogLoading = true;
     console.log('📋 Loading catalog from Firebase...');
     
     try {
-      // THỬ NHIỀU COLLECTION NAMES - ƯU TIÊN 'materials' vì có 8750 documents với standardPacking
+      // THỬ NHIỀU COLLECTION NAMES - KIỂM TRA THỰC TẾ SỐ LƯỢNG DOCUMENTS
       let snapshot = null;
       let collectionName = '';
       
-      // Thử collection 'materials' trước (có 8750 documents với standardPacking field)
+      // Thử collection 'materials' trước - KIỂM TRA THỰC TẾ
       try {
-        console.log('🔍 Trying collection: materials (priority - has 8750 docs with standardPacking)');
+        console.log('🔍 Trying collection: materials - checking actual document count...');
         snapshot = await this.firestore.collection('materials').get().toPromise();
         if (snapshot && !snapshot.empty) {
           collectionName = 'materials';
           console.log('✅ Found catalog data in collection: materials');
-          console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
+          console.log(`📊 ACTUAL Catalog snapshot size: ${snapshot.size} documents`);
+          
+          // Kiểm tra thêm: đếm documents có standardPacking field
+          let withStandardPacking = 0;
+          snapshot.docs.forEach(doc => {
+            const data = doc.data() as any;
+            if (data.standardPacking !== undefined && data.standardPacking !== null) {
+              withStandardPacking++;
+            }
+          });
+          console.log(`📊 Documents WITH standardPacking field: ${withStandardPacking}`);
+          console.log(`📊 Documents WITHOUT standardPacking field: ${snapshot.size - withStandardPacking}`);
         } else {
           console.log('⚠️ Collection "materials" exists but is empty');
         }
@@ -1489,6 +1696,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   updateRollsOrBags(material: InventoryMaterial): void {
     if (!this.canEdit) return;
+    
+    // Nếu rollsOrBags trống, tự động lấy từ Standard Packing
+    if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
+      const standardPacking = this.getStandardPacking(material.materialCode);
+      if (standardPacking && standardPacking > 0) {
+        material.rollsOrBags = standardPacking.toString();
+        console.log(`🔄 Auto-filled rollsOrBags from Standard Packing: ${material.materialCode} = ${standardPacking}`);
+      }
+    }
+    
     this.updateMaterialInFirebase(material);
     
     // Update negative stock count for real-time display
@@ -2844,15 +3061,17 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       
-      // Calculate how many full units we can make
-      const fullUnits = Math.floor(totalQuantity / rollsOrBags);
-      const remainingQuantity = totalQuantity % rollsOrBags;
+      // Get Standard Packing for comparison
+      const standardPacking = this.getStandardPacking(material.materialCode);
+      
+      // Check if this is a partial label (in tem lẻ)
+      const isPartialLabel = standardPacking && rollsOrBags !== standardPacking;
       
       console.log('📊 QR calculation:', {
         totalQuantity,
         rollsOrBags,
-        fullUnits,
-        remainingQuantity
+        standardPacking,
+        isPartialLabel
       });
       
       // Generate QR codes based on quantity per unit
@@ -2865,24 +3084,44 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         material.importDate.toLocaleDateString('en-GB').split('/').join('') : 
         new Date().toLocaleDateString('en-GB').split('/').join('');
       
-      // Add full units
-      for (let i = 0; i < fullUnits; i++) {
+      if (isPartialLabel) {
+        // 🆕 LOGIC MỚI: In tem lẻ - chỉ in 1 tem với số lượng nhập vào
+        console.log('🏷️ In tem lẻ - chỉ in 1 tem với số lượng:', rollsOrBags);
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
           qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
         });
-      }
-      
-      // Add remaining quantity if any
-      if (remainingQuantity > 0) {
-        qrCodes.push({
-          materialCode: material.materialCode,
-          poNumber: material.poNumber,
-          unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
+      } else {
+        // 🔄 LOGIC CŨ: Tính toán bình thường dựa trên tổng tồn kho
+        const fullUnits = Math.floor(totalQuantity / rollsOrBags);
+        const remainingQuantity = totalQuantity % rollsOrBags;
+        
+        console.log('📦 In tem chuẩn - tính toán:', {
+          fullUnits,
+          remainingQuantity
         });
+        
+        // Add full units
+        for (let i = 0; i < fullUnits; i++) {
+          qrCodes.push({
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            unitNumber: rollsOrBags,
+            qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
+          });
+        }
+        
+        // Add remaining quantity if any
+        if (remainingQuantity > 0) {
+          qrCodes.push({
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            unitNumber: remainingQuantity,
+            qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
+          });
+        }
       }
 
       if (qrCodes.length === 0) {
@@ -2890,7 +3129,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
-      console.log(`📦 Generated ${qrCodes.length} QR codes for ASM1`);
+      console.log(`📦 Generated ${qrCodes.length} QR codes for ASM1${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
 
       // Generate QR code images
       const qrImages = await Promise.all(
@@ -2916,7 +3155,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       );
 
       // Create print window
-      this.createQRPrintWindow(qrImages, material);
+      this.createQRPrintWindow(qrImages, material, isPartialLabel);
       
     } catch (error) {
       console.error('❌ Error generating QR code for ASM1:', error);
@@ -3032,7 +3271,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   // Create print window for QR codes - Using Inbound format
-  private createQRPrintWindow(qrImages: any[], material: InventoryMaterial): void {
+  private createQRPrintWindow(qrImages: any[], material: InventoryMaterial, isPartialLabel: boolean = false): void {
     const printWindow = window.open('', '_blank');
     
     if (!printWindow) {
@@ -3209,7 +3448,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     `);
 
     printWindow.document.close();
-    console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels`);
+    console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
   }
 
   // Gộp dòng tự động khi load toàn bộ inventory

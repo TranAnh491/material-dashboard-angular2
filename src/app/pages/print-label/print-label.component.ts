@@ -361,7 +361,7 @@ export class PrintLabelComponent implements OnInit {
 
       // APPEND new data to existing data (merge approach)
       console.log('🔄 Merging new data with existing data...');
-      
+
       // Merge existing data with new data
       const mergedData = [...existingData, ...data];
       console.log(`✅ Merged data: ${existingData.length} existing + ${data.length} new = ${mergedData.length} total records`);
@@ -619,8 +619,8 @@ export class PrintLabelComponent implements OnInit {
           
           // Lọc mã chưa Done từ tất cả documents
           const notDoneItems = data.data.filter((item: any) => {
-            const status = item.tinhTrang?.toLowerCase()?.trim();
-            return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+              const status = item.tinhTrang?.toLowerCase()?.trim();
+              return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
           });
           
           allNotDoneItems.push(...notDoneItems);
@@ -702,8 +702,8 @@ export class PrintLabelComponent implements OnInit {
         console.log(`📄 Document ${docIndex + 1} (${doc.id}):`, {
           recordCount: data.recordCount,
           batchNumber: data.batchNumber,
-          importedAt: data.importedAt,
-          month: data.month,
+              importedAt: data.importedAt,
+              month: data.month,
           year: data.year,
           totalItems: data.data ? data.data.length : 0
         });
@@ -1486,13 +1486,13 @@ export class PrintLabelComponent implements OnInit {
       
       if (allDoneItems.length === 0) {
         alert('Không có mã Done nào để tải xuống!');
-        return;
-      }
+      return;
+    }
       
       const doneItems = allDoneItems;
-      
-      const currentMonth = new Date().getMonth() + 1;
-      const monthName = this.getMonthName(currentMonth.toString().padStart(2, '0'));
+    
+    const currentMonth = new Date().getMonth() + 1;
+    const monthName = this.getMonthName(currentMonth.toString().padStart(2, '0'));
     
     const exportData = [
       ['Nam', 'Thang', 'STT', 'SizePhoi', 'MaTem', 'SoLuongYeuCau', 'SoLuongPhoi', 'MaHang', 'LenhSanXuat', 'KhachHang', 'NgayNhan', 'YY', 'WW', 'LineNhan', 'NguoiIn', 'TinhTrang', 'BanVe', 'GhiChu'],
@@ -1532,7 +1532,7 @@ export class PrintLabelComponent implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     
-      alert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
+    alert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
       
     } catch (error) {
       console.error('❌ Error loading Done items for export:', error);
