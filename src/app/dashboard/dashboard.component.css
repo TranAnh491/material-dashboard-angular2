@@ -260,19 +260,73 @@
     padding-top: 0.2rem;
   }
 
-  /* Table Mobile */
+  /* Table Mobile - Work Order Status & Shipment Status */
   .workorder-status-table {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    width: 100%;
+    table-layout: fixed;
   }
 
   .workorder-status-table th,
   .workorder-status-table td {
-    padding: 8px 4px;
-    font-size: 0.8rem;
+    padding: 6px 3px;
+    font-size: 0.75rem;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .workorder-status-table th {
+    font-size: 0.8rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  /* Specific column widths for mobile */
+  .workorder-status-table th:nth-child(1),
+  .workorder-status-table td:nth-child(1) {
+    width: 20%; /* Date/Ship Date */
+  }
+
+  .workorder-status-table th:nth-child(2),
+  .workorder-status-table td:nth-child(2) {
+    width: 20%; /* Done/Shipment */
+  }
+
+  .workorder-status-table th:nth-child(3),
+  .workorder-status-table td:nth-child(3) {
+    width: 20%; /* Waiting/Customer */
+  }
+
+  .workorder-status-table th:nth-child(4),
+  .workorder-status-table td:nth-child(4) {
+    width: 20%; /* Ready/Carton */
+  }
+
+  .workorder-status-table th:nth-child(5),
+  .workorder-status-table td:nth-child(5) {
+    width: 20%; /* Delay/Status Detail */
+  }
+
+  /* Mobile card improvements */
+  .card .card-body {
+    padding: 10px;
+  }
+
+  .card .custom-card-header {
+    padding: 12px 15px 6px 15px;
+  }
+
+  .custom-card-title {
     font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+
+  .custom-card-desc {
+    font-size: 0.75rem;
+    margin-bottom: 8px;
   }
 
   /* Custom Card Header Mobile */
@@ -292,11 +346,44 @@
   .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
 
   .table, .workorder-status-table {
-    min-width: 500px;
+    min-width: 100%;
     border-radius: 8px;
+    margin-bottom: 0;
+  }
+
+  /* Mobile table improvements */
+  .workorder-status-table tbody tr {
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .workorder-status-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+
+  .workorder-status-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  /* Status indicators for mobile */
+  .workorder-status-table td[class*="text-"] {
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* Mobile card spacing */
+  .row .col-lg-6 {
+    margin-bottom: 20px;
+  }
+
+  .card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: none;
   }
 
   /* Animation Adjustments */
@@ -359,15 +446,71 @@
     font-size: 1rem;
   }
 
-  /* Table Ultra Compact */
+  /* Table Ultra Compact - Small Mobile */
   .workorder-status-table {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    table-layout: fixed;
   }
 
   .workorder-status-table th,
   .workorder-status-table td {
-    padding: 6px 2px;
+    padding: 4px 2px;
+    font-size: 0.7rem;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workorder-status-table th {
     font-size: 0.75rem;
+    font-weight: 700;
+    background-color: #e9ecef;
+  }
+
+  /* Even more compact column widths for small mobile */
+  .workorder-status-table th:nth-child(1),
+  .workorder-status-table td:nth-child(1) {
+    width: 18%; /* Date/Ship Date */
+  }
+
+  .workorder-status-table th:nth-child(2),
+  .workorder-status-table td:nth-child(2) {
+    width: 18%; /* Done/Shipment */
+  }
+
+  .workorder-status-table th:nth-child(3),
+  .workorder-status-table td:nth-child(3) {
+    width: 18%; /* Waiting/Customer */
+  }
+
+  .workorder-status-table th:nth-child(4),
+  .workorder-status-table td:nth-child(4) {
+    width: 18%; /* Ready/Carton */
+  }
+
+  .workorder-status-table th:nth-child(5),
+  .workorder-status-table td:nth-child(5) {
+    width: 28%; /* Delay/Status Detail - wider for more text */
+  }
+
+  /* Ultra compact cards */
+  .card .card-body {
+    padding: 8px;
+  }
+
+  .card .custom-card-header {
+    padding: 10px 12px 4px 12px;
+  }
+
+  .custom-card-title {
+    font-size: 0.8rem;
+    margin-bottom: 2px;
+  }
+
+  .custom-card-desc {
+    font-size: 0.7rem;
+    margin-bottom: 6px;
   }
 
   .custom-card-header {
@@ -419,6 +562,25 @@
     width: 40px;
     height: 40px;
     margin: -20px auto 6px;
+  }
+
+  /* Landscape table adjustments */
+  .workorder-status-table {
+    font-size: 0.7rem;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    padding: 4px 2px;
+    font-size: 0.7rem;
+  }
+
+  .custom-card-title {
+    font-size: 0.8rem;
+  }
+
+  .custom-card-desc {
+    font-size: 0.7rem;
   }
 }
 

@@ -104,6 +104,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Mobile menu state
   showMobileMenu = false;
+  showMobileStats = false;
   
   // Show completed items
   // showCompleted = true; // Removed - replaced with Reset function
@@ -1313,6 +1314,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   toggleMobileMenu(): void {
     this.showMobileMenu = !this.showMobileMenu;
     console.log('📱 Mobile menu toggled:', this.showMobileMenu);
+  }
+
+  toggleMobileStats(): void {
+    this.showMobileStats = !this.showMobileStats;
+    console.log('📊 Mobile stats toggled:', this.showMobileStats);
   }
 
 

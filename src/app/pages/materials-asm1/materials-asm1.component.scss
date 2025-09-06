@@ -970,17 +970,18 @@
   }
   
   .search-type-dropdown {
-    padding: 6px 12px;
+    padding: 6px 8px;
     border: 1px solid #d1d5db;
     background: #ffffff;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px !important;
+    font-size: 12px !important;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     color: #000000;
-    min-width: 120px;
+    min-width: 80px;
+    max-width: 80px;
     justify-content: space-between;
     height: 32px;
     
@@ -1241,7 +1242,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     margin-top: 10px;
     padding: 10px;
@@ -1250,11 +1251,121 @@
     
     .search-type-selector {
       flex-shrink: 0;
+      min-width: 80px; // Thu nhỏ box chọn
+      max-width: 80px;
     }
     
     .search-box {
       flex: 1;
       min-width: 0;
+      
+      .search-input {
+        width: 100%;
+        max-width: none;
+      }
+    }
+  }
+  
+  // Mobile stats section - HIDDEN on mobile
+  .mobile-stats-section {
+    display: none;
+  }
+  
+  // Desktop stats section - HIDDEN on mobile
+  .desktop-stats-section {
+    display: none;
+  }
+  
+  .negative-stock-counter-box {
+    background: #fef3c7;
+    border-color: #f59e0b;
+    color: #92400e;
+    
+    &.has-negative {
+      background: #ffebee;
+      border-color: #f44336;
+      color: #d32f2f;
+    }
+  }
+  
+  .total-counter-box {
+    background: #e3f2fd;
+    border-color: #2196f3;
+    color: #1976d2;
+    
+    &.active-filter {
+      background: #dbeafe;
+      border-color: #3b82f6;
+    }
+  }
+  
+  .total-stock-counter-box {
+    background: #f3e5f5;
+    border-color: #9c27b0;
+    color: #7b1fa2;
+  }
+  
+  // Mobile stats dropdown - hidden on mobile, shown on desktop
+  .mobile-stats-dropdown {
+    position: relative;
+    
+    .stats-toggle-btn {
+      background: #6b7280;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      
+      &:hover {
+        background: #4b5563;
+      }
+      
+      i {
+        font-size: 18px;
+      }
+    }
+    
+    .mobile-stats-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      min-width: 200px;
+      display: none;
+      
+      &.show {
+        display: block;
+      }
+      
+      .mobile-stat-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        i {
+          font-size: 16px;
+        }
+        
+        span {
+          font-weight: 500;
+        }
+      }
     }
   }
   
@@ -1287,10 +1398,10 @@
   
   .mobile-card {
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
+    border: 2px solid #000000;
+    border-radius: 0px;
     margin-bottom: 15px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: none;
     
     &.duplicate-card {
       border-left: 4px solid #ffc107;
@@ -1306,7 +1417,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 15px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 2px solid #000000;
     background: #f8f9fa;
     
     .material-info {
@@ -1316,13 +1427,20 @@
         margin: 0;
         font-size: 18px;
         font-weight: bold;
-        color: #333;
+        color: #000000;
+        border: 1px solid #000000;
+        padding: 8px;
+        text-align: center;
       }
       
       .po-number {
         margin: 5px 0 0 0;
         font-size: 14px;
-        color: #666;
+        color: #000000;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
+        font-weight: bold;
       }
     }
     
@@ -1333,9 +1451,9 @@
       button {
         background: #007bff;
         color: white;
-        border: none;
+        border: 2px solid #000000;
         padding: 8px;
-        border-radius: 4px;
+        border-radius: 0px;
         cursor: pointer;
         
         &:disabled {
@@ -1361,14 +1479,22 @@
       
       .label {
         font-weight: 500;
-        color: #333;
+        color: #000000;
         min-width: 100px;
         font-size: 14px;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
       }
       
       .value {
-        color: #666;
+        color: #000000;
         font-size: 14px;
+        font-weight: bold;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
+        min-width: 80px;
         
         &.negative-stock {
           color: #dc3545;
@@ -1377,20 +1503,45 @@
       }
       
       .mobile-input {
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        border: 2px solid #000000;
+        border-radius: 0px;
         padding: 6px 8px;
         font-size: 14px;
         width: 120px;
+        color: #000000;
+        font-weight: bold;
         
         &.location-input {
-          width: 150px;
+          width: 120px;
         }
         
         &:focus {
           outline: none;
           border-color: #007bff;
           box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+      }
+      
+      // Đặc biệt cho dòng vị trí - thêm nút Change
+      &.location-row {
+        .mobile-input.location-input {
+          width: 100px;
+          margin-right: 8px;
+        }
+        
+        .scan-btn {
+          background: #007bff;
+          color: white;
+          border: 2px solid #000000;
+          padding: 6px 8px;
+          border-radius: 0px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: bold;
+          
+          i {
+            font-size: 14px;
+          }
         }
       }
     }
@@ -1401,7 +1552,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 15px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid #000000;
     background: #f8f9fa;
     
     .status-badge {
@@ -1409,19 +1560,12 @@
       border-radius: 4px;
       font-size: 12px;
       font-weight: 500;
+      color: #000000;
+      border: 1px solid #000000;
     }
     
     .delete-btn {
-      background: #dc3545;
-      color: white;
-      border: none;
-      padding: 6px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      
-      i {
-        font-size: 16px;
-      }
+      display: none; // Ẩn nút xóa trên mobile
     }
   }
   
@@ -1430,9 +1574,17 @@
     max-width: none;
   }
   
+  // Ẩn icon cạnh box nhập liệu trên mobile
+  .search-box .clear-search-btn {
+    display: none;
+  }
+  
+  .search-box .search-warning {
+    display: none;
+  }
+  
   .action-buttons {
-    flex-wrap: wrap;
-    gap: 8px;
+    display: none; // Ẩn hoàn toàn trên mobile
   }
 }
 
@@ -1443,6 +1595,10 @@
   }
   
   .mobile-search-section {
+    display: none;
+  }
+  
+  .mobile-stats-section {
     display: none;
   }
   
@@ -1461,6 +1617,61 @@
     gap: 10px;
     flex: 1;
     min-width: 0;
+  }
+  
+  // Hiển thị action buttons trên desktop
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  
+  // Hiển thị icon cạnh box nhập liệu trên desktop
+  .search-box .clear-search-btn {
+    display: flex;
+  }
+  
+  .search-box .search-warning {
+    display: flex;
+  }
+  
+  // Desktop stats section
+  .desktop-stats-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  // Show individual stats boxes on desktop
+  .desktop-stats-section .negative-stock-counter-box,
+  .desktop-stats-section .total-counter-box,
+  .desktop-stats-section .total-stock-counter-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    
+    i {
+      font-size: 18px;
+    }
+    
+    span {
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
   }
 }
 

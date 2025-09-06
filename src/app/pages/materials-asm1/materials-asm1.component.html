@@ -85,35 +85,38 @@
           </div>
         </div>
         
-        <!-- Negative Stock Counter Box - Di chuyển lên trên cùng -->
-        <div class="negative-stock-counter-box" 
-             [class.has-negative]="(negativeStockCount$ | async) > 0"
-             [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
-          <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
-          <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
-        </div>
-        
-        <!-- Total Counter Box - Clickable to filter negative stock -->
-        <div class="total-counter-box clickable" 
-             (click)="toggleNegativeStockFilter()"
-             [class.active-filter]="showOnlyNegativeStock"
-             [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
-          <i class="material-icons">inventory_2</i>
-          <span>Tổng: {{ filteredInventory.length }} mã</span>
-        </div>
-        
-        <!-- Total Stock Counter Box - Hiển thị tổng số tồn kho -->
-        <div class="total-stock-counter-box" 
-             [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
-          <i class="material-icons">assessment</i>
-          <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+        <!-- Desktop Stats Boxes -->
+        <div class="desktop-stats-section">
+          <!-- Negative Stock Counter Box -->
+          <div class="negative-stock-counter-box" 
+               [class.has-negative]="(negativeStockCount$ | async) > 0"
+               [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+            <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+            <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
+          </div>
+          
+          <!-- Total Counter Box - Clickable to filter negative stock -->
+          <div class="total-counter-box clickable" 
+               (click)="toggleNegativeStockFilter()"
+               [class.active-filter]="showOnlyNegativeStock"
+               [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
+            <i class="material-icons">inventory_2</i>
+            <span>Tổng: {{ filteredInventory.length }} mã</span>
+          </div>
+          
+          <!-- Total Stock Counter Box -->
+          <div class="total-stock-counter-box" 
+               [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
+            <i class="material-icons">assessment</i>
+            <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+          </div>
         </div>
         
         
 
         
-        <!-- Mobile Search Section -->
-        <div class="mobile-search-section" *ngIf="showMobileMenu">
+        <!-- Mobile Search Section - Always visible on mobile -->
+        <div class="mobile-search-section">
           <!-- Search Type Selector -->
           <div class="search-type-selector">
             <div class="dropdown">
@@ -165,6 +168,33 @@
               <i class="material-icons">info</i>
               Cần ít nhất 3 ký tự
             </div>
+          </div>
+        </div>
+        
+        <!-- Mobile Stats Section - Individual boxes on mobile -->
+        <div class="mobile-stats-section">
+          <!-- Negative Stock Counter Box -->
+          <div class="negative-stock-counter-box" 
+               [class.has-negative]="(negativeStockCount$ | async) > 0"
+               [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+            <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+            <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
+          </div>
+          
+          <!-- Total Counter Box - Clickable to filter negative stock -->
+          <div class="total-counter-box clickable" 
+               (click)="toggleNegativeStockFilter()"
+               [class.active-filter]="showOnlyNegativeStock"
+               [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
+            <i class="material-icons">inventory_2</i>
+            <span>Tổng: {{ filteredInventory.length }} mã</span>
+          </div>
+          
+          <!-- Total Stock Counter Box -->
+          <div class="total-stock-counter-box" 
+               [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
+            <i class="material-icons">assessment</i>
+            <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
           </div>
         </div>
         
@@ -275,11 +305,6 @@
                     [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
               <i class="material-icons">qr_code</i>
             </button>
-            <button class="scan-btn" 
-                    (click)="scanLocationQR(material)"
-                    title="Scan QR để thay đổi vị trí">
-              <i class="material-icons">qr_code_scanner</i>
-            </button>
           </div>
         </div>
         
@@ -330,14 +355,21 @@
             </span>
           </div>
           
-          <div class="info-row">
+          <div class="info-row location-row">
             <span class="label">Vị trí:</span>
-            <input type="text" 
-                   class="mobile-input location-input" 
-                   [(ngModel)]="material.location" 
-                   (change)="updateLocation(material)"
-                   (blur)="onLocationChange(material)"
-                   placeholder="Nhập vị trí">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="text" 
+                     class="mobile-input location-input" 
+                     [(ngModel)]="material.location" 
+                     (change)="updateLocation(material)"
+                     (blur)="onLocationChange(material)"
+                     placeholder="Nhập vị trí">
+              <button class="scan-btn" 
+                      (click)="scanLocationQR(material)"
+                      title="Scan QR để thay đổi vị trí">
+                <i class="material-icons">qr_code_scanner</i>
+              </button>
+            </div>
           </div>
           
           <div class="info-row">

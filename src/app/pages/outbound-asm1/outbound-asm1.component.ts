@@ -53,6 +53,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   lastScannedData: any = null;
   exportQuantity: number = 0;
   
+  // Mobile Scanner Selection
+  selectedScanMethod: 'camera' | 'scanner' = 'camera';
+  isMobile: boolean = false;
+  
   // Physical Scanner properties
   isScannerInputActive: boolean = false;
   scannerBuffer: string = '';
@@ -94,12 +98,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
   ngOnInit(): void {
     console.log('🏭 Outbound ASM1 component initialized');
+    this.detectMobileDevice();
     this.setupDefaultDateRange();
     this.loadMaterials();
     // REMOVED: loadInventoryMaterials() - Không cần tính stock để scan nhanh
     
     // Add click outside listener to close dropdown
     document.addEventListener('click', this.onDocumentClick.bind(this));
+    
+    // Add window resize listener for mobile detection
+    window.addEventListener('resize', this.onWindowResize.bind(this));
   }
   
   private setupDefaultDateRange(): void {
@@ -161,6 +169,58 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // Remove click outside listener
     document.removeEventListener('click', this.onDocumentClick.bind(this));
+    
+    // Remove window resize listener
+    window.removeEventListener('resize', this.onWindowResize.bind(this));
+  }
+
+  // 📱 Mobile Detection
+  private detectMobileDevice(): void {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isMobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    const isMobileScreen = window.innerWidth <= 768;
+    
+    // Consider it mobile if either user agent or screen size indicates mobile
+    this.isMobile = isMobileUserAgent || isMobileScreen;
+    
+    console.log('📱 Device detection:', {
+      userAgent: userAgent,
+      isMobileUserAgent,
+      isMobileScreen,
+      windowWidth: window.innerWidth,
+      isMobile: this.isMobile
+    });
+    
+    if (this.isMobile) {
+      console.log('📱 Mobile device detected - Default to camera mode');
+      this.selectedScanMethod = 'camera';
+    } else {
+      console.log('🖥️ Desktop device detected - Default to scanner mode');
+      this.selectedScanMethod = 'scanner';
+    }
+  }
+
+  // 📱 Mobile Scanner Method Selection
+  selectScanMethod(method: 'camera' | 'scanner'): void {
+    this.selectedScanMethod = method;
+    console.log(`📱 Selected scan method: ${method}`);
+    
+    // Stop current scanning if active
+    if (this.isCameraScanning) {
+      this.stopScanning();
+    }
+  }
+
+  // 📱 Window Resize Handler
+  private onWindowResize(): void {
+    const wasMobile = this.isMobile;
+    this.detectMobileDevice();
+    
+    // If mobile state changed, trigger change detection
+    if (wasMobile !== this.isMobile) {
+      console.log('📱 Mobile state changed:', this.isMobile);
+      this.cdr.detectChanges();
+    }
   }
   
   // Dropdown methods

@@ -6,20 +6,46 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-                 <!-- Scanner Input for Batch Mode -->
-         <div class="scanner-input-group">
-           <input type="text" 
-                  #scannerInput
-                  [(ngModel)]="scannerBuffer"
-                  (keydown)="onScannerKeydown($event)"
-                  (blur)="onScannerInputBlur()"
-                  placeholder="Quét barcode/QR code..."
-                  class="scanner-input"
-                  [class.active]="isScannerInputActive">
-         </div>
+        <!-- Mobile Scanner Method Selection -->
+        <div class="mobile-scanner-selection" *ngIf="isMobile">
+          <div class="scanner-method-buttons">
+            <button class="method-btn" 
+                    [class.active]="selectedScanMethod === 'camera'"
+                    (click)="selectScanMethod('camera')"
+                    title="Sử dụng Camera để quét QR">
+              <i class="material-icons">camera_alt</i>
+              <span>Camera</span>
+            </button>
+            <button class="method-btn" 
+                    [class.active]="selectedScanMethod === 'scanner'"
+                    (click)="selectScanMethod('scanner')"
+                    title="Sử dụng Scanner vật lý">
+              <i class="material-icons">qr_code_scanner</i>
+              <span>Scanner</span>
+            </button>
+            <button class="start-btn-mobile" 
+                    (click)="isMobile && selectedScanMethod === 'camera' ? startCameraScanning() : startBatchScanningMode()"
+                    title="Bắt đầu chế độ scan">
+              <i class="material-icons">{{ isMobile && selectedScanMethod === 'camera' ? 'camera_alt' : 'play_arrow' }}</i>
+              <span>Start</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scanner Input for Batch Mode -->
+        <div class="scanner-input-group" [class.mobile-hidden]="isMobile && selectedScanMethod === 'camera'">
+          <input type="text" 
+                 #scannerInput
+                 [(ngModel)]="scannerBuffer"
+                 (keydown)="onScannerKeydown($event)"
+                 (blur)="onScannerInputBlur()"
+                 placeholder="Quét barcode/QR code..."
+                 class="scanner-input"
+                 [class.active]="isScannerInputActive">
+        </div>
 
         <!-- Simple Start/Stop Controls -->
-        <div class="scan-controls" *ngIf="!isBatchScanningMode">
+        <div class="scan-controls" *ngIf="!isBatchScanningMode && !isMobile">
           <button class="start-btn" 
                   (click)="startBatchScanningMode()"
                   title="Bắt đầu chế độ scan">
@@ -49,7 +75,7 @@
         </div>
         
         <!-- More Dropdown -->
-        <div class="dropdown" #dropdown>
+        <div class="dropdown" #dropdown [class.mobile-hidden]="isMobile">
           <button class="more-btn" type="button" (click)="toggleDropdown()">
             <i class="material-icons">more_vert</i>
             More
@@ -82,13 +108,13 @@
         </div>
         
                 <!-- Refresh Button -->
-        <button class="refresh-btn" (click)="loadMaterials()">
+        <button class="refresh-btn" (click)="loadMaterials()" [class.mobile-hidden]="isMobile">
           <i class="material-icons">refresh</i>
           Refresh
         </button>
 
         <!-- Date Range Selector -->
-        <div class="date-range-selector">
+        <div class="date-range-selector" [class.mobile-hidden]="isMobile">
           <input type="date" 
                  [(ngModel)]="startDate" 
                  (change)="onDateRangeChange()"
@@ -145,42 +171,42 @@
       <table class="excel-table">
         <thead>
           <tr>
-            <th>Factory</th>
-            <th>#</th>
-            <th>Ngày xuất</th>
+            <th class="mobile-hidden">Factory</th>
+            <th class="mobile-hidden">#</th>
+            <th class="mobile-hidden">Ngày xuất</th>
             <th>Mã hàng</th>
-                                  <th>Số PO</th>
-                      <th>Batch</th>
-                      <th>Xuất</th>
-                      <th>Mã nhân viên</th>
-                      <th>Lệnh sản xuất</th>
-            <th>Xóa</th>
+            <th>Số PO</th>
+            <th class="mobile-hidden">Batch</th>
+            <th>Xuất</th>
+            <th class="mobile-hidden">Mã nhân viên</th>
+            <th>Lệnh sản xuất</th>
+            <th class="mobile-hidden">Xóa</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
-            <td class="factory-cell factory-asm1">ASM1</td>
-            <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
-            <td class="date-cell">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
-                        <td class="code-cell readonly-cell">
+            <td class="factory-cell factory-asm1 mobile-hidden">ASM1</td>
+            <td class="row-header mobile-hidden">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
+            <td class="date-cell mobile-hidden">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
+            <td class="code-cell readonly-cell">
               {{material.materialCode}}
             </td>
             <td class="po-cell readonly-cell">
               {{material.poNumber}}
             </td>
-            <td class="import-date-cell readonly-cell">
+            <td class="import-date-cell readonly-cell mobile-hidden">
               {{material.importDate || 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}
             </td>
-            <td class="employee-cell readonly-cell">
+            <td class="employee-cell readonly-cell mobile-hidden">
               {{material.employeeId || 'N/A'}}
             </td>
             <td class="production-order-cell readonly-cell">
               {{material.productionOrder || 'N/A'}}
             </td>
-            <td class="action-cell">
+            <td class="action-cell mobile-hidden">
               <button class="action-btn delete-btn" (click)="deleteMaterial(material)">
                 <i class="material-icons">delete</i>
               </button>

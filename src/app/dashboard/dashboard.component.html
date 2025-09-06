@@ -175,11 +175,11 @@
               </thead>
               <tbody>
                 <tr *ngFor="let row of workOrderStatus">
-                  <td>{{ row.code }}</td>
-                  <td [class]="row.doneClass">{{ row.value }}</td>
-                  <td [class]="row.waitingClass">{{ row.note }}</td>
-                  <td [class]="row.readyClass">{{ row.ready }}</td>
-                  <td [class]="row.delayClass">{{ row.extra }}</td>
+                  <td [title]="row.code">{{ row.code }}</td>
+                  <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
+                  <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
+                  <td [class]="row.readyClass" [title]="row.ready">{{ row.ready }}</td>
+                  <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
                 </tr>
                 <tr *ngIf="workOrderStatus.length === 0">
                   <td colspan="5" class="text-center text-muted">No work orders found for the selected factory</td>
@@ -210,11 +210,11 @@
               </thead>
               <tbody>
                 <tr *ngFor="let row of shipmentStatus">
-                  <td>{{ row.shipDate }}</td>
-                  <td>{{ row.shipment }}</td>
-                  <td>{{ row.customer }}</td>
-                  <td>{{ row.carton }}</td>
-                  <td>{{ row.statusDetail }}</td>
+                  <td [title]="row.shipDate">{{ row.shipDate }}</td>
+                  <td [title]="row.shipment">{{ row.shipment }}</td>
+                  <td [title]="row.customer">{{ row.customer }}</td>
+                  <td [title]="row.carton">{{ row.carton }}</td>
+                  <td [title]="row.statusDetail">{{ row.statusDetail }}</td>
                 </tr>
                 <tr *ngIf="shipmentStatus.length === 0">
                   <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
