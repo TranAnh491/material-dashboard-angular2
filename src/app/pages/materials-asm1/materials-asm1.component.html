@@ -88,28 +88,28 @@
         <!-- Desktop Stats Boxes -->
         <div class="desktop-stats-section">
           <!-- Negative Stock Counter Box -->
-          <div class="negative-stock-counter-box" 
-               [class.has-negative]="(negativeStockCount$ | async) > 0"
-               [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
-            <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
-            <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
-          </div>
-          
-          <!-- Total Counter Box - Clickable to filter negative stock -->
-          <div class="total-counter-box clickable" 
-               (click)="toggleNegativeStockFilter()"
-               [class.active-filter]="showOnlyNegativeStock"
-               [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
-            <i class="material-icons">inventory_2</i>
-            <span>Tổng: {{ filteredInventory.length }} mã</span>
-          </div>
-          
+        <div class="negative-stock-counter-box" 
+             [class.has-negative]="(negativeStockCount$ | async) > 0"
+             [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+          <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+          <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
+        </div>
+        
+        <!-- Total Counter Box - Clickable to filter negative stock -->
+        <div class="total-counter-box clickable" 
+             (click)="toggleNegativeStockFilter()"
+             [class.active-filter]="showOnlyNegativeStock"
+             [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
+          <i class="material-icons">inventory_2</i>
+          <span>Tổng: {{ filteredInventory.length }} mã</span>
+        </div>
+        
           <!-- Total Stock Counter Box -->
-          <div class="total-stock-counter-box" 
-               [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
-            <i class="material-icons">assessment</i>
-            <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
-          </div>
+        <div class="total-stock-counter-box" 
+             [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
+          <i class="material-icons">assessment</i>
+          <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+        </div>
         </div>
         
         
@@ -161,7 +161,7 @@
                     (click)="clearSearch()" 
                     title="Xóa tìm kiếm">
               <i class="material-icons">clear</i>
-            </button>
+          </button>
             
             <!-- Search warning -->
             <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
@@ -200,56 +200,56 @@
         
         <!-- Desktop Search Section -->
         <div class="desktop-search-section">
-          <!-- Search Type Selector -->
-          <div class="search-type-selector">
-            <div class="dropdown">
-              <button class="search-type-dropdown" 
-                      type="button" 
-                      data-toggle="dropdown" 
-                      aria-haspopup="true" 
-                      aria-expanded="false">
-                <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-                {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
-              </button>
-              <div class="dropdown-menu">
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
-                  <i class="material-icons">inventory</i>
-                  Mã
-                </a>
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
-                  <i class="material-icons">receipt</i>
-                  PO
-                </a>
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
-                  <i class="material-icons">place</i>
-                  Vị trí
-                </a>
-              </div>
+        <!-- Search Type Selector -->
+        <div class="search-type-selector">
+          <div class="dropdown">
+            <button class="search-type-dropdown" 
+                    type="button" 
+                    data-toggle="dropdown" 
+                    aria-haspopup="true" 
+                    aria-expanded="false">
+              <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
+              {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+            </button>
+            <div class="dropdown-menu">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
+                <i class="material-icons">inventory</i>
+                Mã
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
+                <i class="material-icons">receipt</i>
+                PO
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
+                <i class="material-icons">place</i>
+                Vị trí
+              </a>
             </div>
           </div>
+        </div>
+        
+        <!-- Search Box -->
+        <div class="search-box">
+          <input type="text"
+                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
           
-          <!-- Search Box -->
-          <div class="search-box">
-            <input type="text"
-                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
-                   [(ngModel)]="searchTerm"
-                   (input)="onSearchInput($event)"
-                   (keyup)="onSearchKeyUp($event)"
-                   class="search-input"
-                   [disabled]="isLoading">
-            
-            <!-- Clear search button -->
-            <button class="clear-search-btn" 
-                    *ngIf="searchTerm" 
-                    (click)="clearSearch()" 
-                    title="Xóa tìm kiếm">
-              <i class="material-icons">clear</i>
-            </button>
-            
-            <!-- Search warning -->
-            <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
-              <i class="material-icons">info</i>
-              Cần ít nhất 3 ký tự
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
+          <!-- Search warning -->
+          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+            <i class="material-icons">info</i>
+            Cần ít nhất 3 ký tự
             </div>
           </div>
         </div>

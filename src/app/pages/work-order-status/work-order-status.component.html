@@ -782,13 +782,9 @@
 
           <!-- Camera Scanner -->
           <div class="camera-scanner" *ngIf="!isPhysicalScannerMode">
-            <div id="qr-scanner" class="qr-scanner-container" *ngIf="isScannerActive"></div>
             <div class="scanner-controls">
-              <button mat-raised-button color="primary" (click)="startScanner()" *ngIf="!isScannerActive">
+              <button mat-raised-button color="primary" (click)="startScanner()">
                 <mat-icon>videocam</mat-icon> Camera Scanner
-              </button>
-              <button mat-raised-button color="warn" (click)="stopScanner()" *ngIf="isScannerActive">
-                <mat-icon>videocam_off</mat-icon> Stop Camera
               </button>
             </div>
           </div>

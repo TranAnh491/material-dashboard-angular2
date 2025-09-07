@@ -5,9 +5,11 @@ import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
-import { Html5Qrcode } from 'html5-qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
+import { MatDialog } from '@angular/material/dialog';
+import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
@@ -113,7 +115,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   showScanDialog: boolean = false;
   isScannerActive: boolean = false;
   isProcessingScan: boolean = false;
-  html5QrCode: Html5Qrcode | null = null;
   scannedItems: ScannedItem[] = [];
   allWorkOrdersForScan: WorkOrder[] = []; // Store all work orders across factories for scan lookup
 
@@ -158,7 +159,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private userPermissionService: UserPermissionService,
-    private factoryAccessService: FactoryAccessService
+    private factoryAccessService: FactoryAccessService,
+    private qrScannerService: QRScannerService,
+    private dialog: MatDialog
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -2804,9 +2807,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     // Load all work orders first, then start scanner
     await this.loadAllWorkOrdersForScan();
     
-    // Auto-start physical scanner mode after data is loaded
+    // Auto-start scanner mode after data is loaded
     setTimeout(() => {
-      this.startPhysicalScanner();
+      if (this.isPhysicalScannerMode) {
+        this.startPhysicalScanner();
+      } else {
+        // If in camera mode, start camera scanner
+        this.startScanner();
+      }
     }, 500);
   }
 
@@ -2896,41 +2904,40 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   async startScanner(): Promise<void> {
     try {
       console.log('📷 Starting QR scanner...');
-      this.isScannerActive = true;
       
-      if (!this.html5QrCode) {
-        this.html5QrCode = new Html5Qrcode("qr-scanner");
-      }
-
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
+      // Use QRScannerModal for better mobile compatibility
+      const dialogData: QRScannerData = {
+        title: 'Quét QR Work Order',
+        message: 'Quét mã QR của Work Order để cập nhật trạng thái'
       };
-
-      await this.html5QrCode.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText, decodedResult) => {
-          this.onScanSuccess(decodedText);
-        },
-        (errorMessage) => {
-          // Handle scan errors silently
+      
+      const dialogRef = this.dialog.open(QRScannerModalComponent, {
+        width: '100vw',
+        maxWidth: '100vw',
+        height: '80vh',
+        maxHeight: '80vh',
+        data: dialogData,
+        panelClass: 'qr-scanner-modal'
+      });
+      
+      dialogRef.afterClosed().subscribe(result => {
+        if (result && result.text) {
+          console.log('📱 QR Code scanned:', result.text);
+          this.onScanSuccess(result.text);
         }
-      );
+      });
 
       console.log('✅ QR scanner started successfully');
     } catch (error) {
       console.error('❌ Error starting scanner:', error);
-      this.isScannerActive = false;
       alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
     }
   }
 
   async stopScanner(): Promise<void> {
     try {
-      if (this.html5QrCode && this.isScannerActive) {
-        await this.html5QrCode.stop();
+      if (this.isScannerActive) {
+        this.qrScannerService.stopScanning();
         console.log('🛑 QR scanner stopped');
       }
       this.isScannerActive = false;
@@ -3089,14 +3096,22 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   // Set camera mode
   setCameraMode(): void {
+    console.log('📷 Switching to camera mode...');
     if (this.isPhysicalScannerMode) {
       this.stopPhysicalScanner();
       this.isPhysicalScannerMode = false;
     }
+    // Start camera scanner when switching to camera mode
+    this.startScanner();
   }
 
   // Set scanner mode
   setScanMode(): void {
+    console.log('📱 Switching to scanner mode...');
+    // Stop camera scanner if active
+    if (this.isScannerActive) {
+      this.stopScanner();
+    }
     if (!this.isPhysicalScannerMode) {
       this.startPhysicalScanner();
     }
