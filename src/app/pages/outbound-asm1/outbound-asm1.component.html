@@ -54,24 +54,24 @@
           </button>
         </div>
 
-        <!-- Active Scanning Status -->
-        <div class="scan-status" *ngIf="isBatchScanningMode">
-          <div class="status-display">
-            <span class="status-item" [class.scanned]="isEmployeeIdScanned">
+        <!-- Active Scanning Status - Mobile Optimized -->
+        <div class="scan-status-mobile" *ngIf="isBatchScanningMode">
+          <div class="status-row">
+            <div class="status-item-mobile" [class.scanned]="isEmployeeIdScanned">
               <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
-              {{ batchEmployeeId || 'Chưa scan mã nhân viên' }}
-            </span>
-            <span class="status-item" [class.scanned]="isProductionOrderScanned">
+              <span class="status-text">{{ batchEmployeeId || 'Chưa scan mã nhân viên' }}</span>
+            </div>
+            <div class="status-item-mobile" [class.scanned]="isProductionOrderScanned">
               <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
-              {{ batchProductionOrder || 'Chưa scan LSX' }}
-            </span>
+              <span class="status-text">{{ batchProductionOrder || 'Chưa scan LSX' }}</span>
+            </div>
+            <button class="done-btn-mobile" 
+                    (click)="stopBatchScanningMode()"
+                    title="Dừng chế độ scan">
+              <i class="material-icons">done</i>
+              <span>Done</span>
+            </button>
           </div>
-          <button class="done-btn" 
-                  (click)="stopBatchScanningMode()"
-                  title="Dừng chế độ scan">
-            <i class="material-icons">stop</i>
-            Done
-          </button>
         </div>
         
         <!-- More Dropdown -->
@@ -168,48 +168,28 @@
       {{errorMessage}}
     </div>
     <div class="excel-body" *ngIf="!isLoading">
-      <table class="excel-table">
+      <table class="excel-table mobile-optimized">
         <thead>
           <tr>
-            <th class="mobile-hidden">Factory</th>
-            <th class="mobile-hidden">#</th>
-            <th class="mobile-hidden">Ngày xuất</th>
-            <th>Mã hàng</th>
-            <th>Số PO</th>
-            <th class="mobile-hidden">Batch</th>
-            <th>Xuất</th>
-            <th class="mobile-hidden">Mã nhân viên</th>
-            <th>Lệnh sản xuất</th>
-            <th class="mobile-hidden">Xóa</th>
+            <th class="col-material">Mã hàng</th>
+            <th class="col-po">Số PO</th>
+            <th class="col-quantity">Xuất</th>
+            <th class="col-production">Lệnh sản xuất</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
-            <td class="factory-cell factory-asm1 mobile-hidden">ASM1</td>
-            <td class="row-header mobile-hidden">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
-            <td class="date-cell mobile-hidden">{{material.exportDate | date:'dd/MM/yyyy HH:mm'}}</td>
             <td class="code-cell readonly-cell">
               {{material.materialCode}}
             </td>
             <td class="po-cell readonly-cell">
               {{material.poNumber}}
             </td>
-            <td class="import-date-cell readonly-cell mobile-hidden">
-              {{material.importDate || 'N/A'}}
-            </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}
             </td>
-            <td class="employee-cell readonly-cell mobile-hidden">
-              {{material.employeeId || 'N/A'}}
-            </td>
             <td class="production-order-cell readonly-cell">
               {{material.productionOrder || 'N/A'}}
-            </td>
-            <td class="action-cell mobile-hidden">
-              <button class="action-btn delete-btn" (click)="deleteMaterial(material)">
-                <i class="material-icons">delete</i>
-              </button>
             </td>
           </tr>
         </tbody>

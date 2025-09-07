@@ -38,7 +38,7 @@
     <!-- Scanning State -->
     <div class="scanner-state scanning-state" *ngIf="scannerState === 'scanning'">
       <div class="video-container">
-        <div id="video-preview-container" class="video-preview">
+        <div #videoPreviewContainer id="video-preview-container" class="video-preview">
           <!-- Video element will be inserted here -->
         </div>
         <div class="scan-overlay">

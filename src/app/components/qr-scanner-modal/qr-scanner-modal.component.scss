@@ -1,7 +1,10 @@
 .qr-scanner-modal {
-  width: 100%;
-  max-width: 500px;
-  min-height: 400px;
+  width: 100vw;
+  max-width: 100vw;
+  height: 80vh;
+  max-height: 80vh;
+  margin: 0;
+  border-radius: 0;
   
   // Modal Header
   .modal-header {
@@ -40,9 +43,11 @@
   .modal-content {
     padding: 20px;
     background: #ffffff;
-    min-height: 300px;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     
     // Material Info
     .material-info {
@@ -76,19 +81,24 @@
       background: #e3f2fd;
       border: 1px solid #bbdefb;
       border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 16px;
+      padding: 16px 20px;
+      margin-bottom: 30px;
       color: #1565c0;
-      font-size: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      flex-shrink: 0;
+      width: 100%;
+      max-width: 400px;
     }
 
     // Scanner States
     .scanner-state {
-      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      width: 100%;
       text-align: center;
       
       .state-icon {
@@ -146,27 +156,30 @@
 
       // Scanning State
       &.scanning-state {
-        align-items: stretch;
+        align-items: center;
         
         .video-container {
           position: relative;
-          width: 100%;
-          max-width: 400px;
-          margin: 0 auto 20px auto;
+          width: 8cm;
+          height: 8cm;
+          margin: 30px auto;
           border-radius: 8px;
           overflow: hidden;
-          background: #000000;
+          background: transparent;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          flex-shrink: 0;
           
           .video-preview {
             width: 100%;
-            min-height: 250px;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             
             video {
               width: 100%;
-              height: auto;
+              height: 100%;
+              object-fit: cover;
               display: block;
             }
           }
@@ -184,41 +197,41 @@
             
             .scan-box {
               position: relative;
-              width: 200px;
-              height: 200px;
+              width: 120px;
+              height: 120px;
               border: 2px solid rgba(255, 255, 255, 0.8);
               border-radius: 8px;
               
               .corner {
                 position: absolute;
-                width: 20px;
-                height: 20px;
-                border: 3px solid #00ff00;
+                width: 15px;
+                height: 15px;
+                border: 2px solid #00ff00;
                 
                 &.top-left {
-                  top: -3px;
-                  left: -3px;
+                  top: -2px;
+                  left: -2px;
                   border-right: none;
                   border-bottom: none;
                 }
                 
                 &.top-right {
-                  top: -3px;
-                  right: -3px;
+                  top: -2px;
+                  right: -2px;
                   border-left: none;
                   border-bottom: none;
                 }
                 
                 &.bottom-left {
-                  bottom: -3px;
-                  left: -3px;
+                  bottom: -2px;
+                  left: -2px;
                   border-right: none;
                   border-top: none;
                 }
                 
                 &.bottom-right {
-                  bottom: -3px;
-                  right: -3px;
+                  bottom: -2px;
+                  right: -2px;
                   border-left: none;
                   border-top: none;
                 }
@@ -229,19 +242,27 @@
         
         .scan-instructions {
           text-align: center;
+          flex-shrink: 0;
+          width: 100%;
+          max-width: 400px;
           
           h3 {
             margin-bottom: 8px;
+            font-size: 18px;
+            font-weight: 600;
           }
           
           p {
             margin-bottom: 16px;
+            font-size: 14px;
+            color: #666666;
           }
           
           .scan-actions {
             display: flex;
             gap: 12px;
             justify-content: center;
+            margin-top: 30px;
             
             button {
               border: 1px solid #000000;

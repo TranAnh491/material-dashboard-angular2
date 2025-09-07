@@ -35,7 +35,7 @@ export class QRScannerService {
   /**
    * Start camera and barcode scanning
    */
-  async startScanning(options: ScannerOptions = {}): Promise<Observable<QRScanResult>> {
+  async startScanning(options: ScannerOptions = {}, videoContainerElement?: HTMLElement): Promise<Observable<QRScanResult>> {
     try {
       console.log('📱 Starting barcode scanner...');
       console.log('📱 Scanner options:', options);
@@ -65,6 +65,12 @@ export class QRScannerService {
           break;
         }
       }
+      
+      // If no back camera found, try to find the highest resolution camera
+      if (!selectedDeviceId || selectedDeviceId === videoInputDevices[0]?.deviceId) {
+        console.log('📷 No back camera found, using first available camera');
+        selectedDeviceId = videoInputDevices[0]?.deviceId;
+      }
 
       this.currentDeviceId = selectedDeviceId;
       this.isScanning = true;
@@ -75,7 +81,7 @@ export class QRScannerService {
 
       // Create scan result observable
       return new Observable<QRScanResult>(observer => {
-        this.startBarcodeDecoding(observer, selectedDeviceId);
+        this.startBarcodeDecoding(observer, selectedDeviceId, videoContainerElement);
       });
 
     } catch (error) {
@@ -136,18 +142,30 @@ export class QRScannerService {
   /**
    * Start barcode decoding with ZXing
    */
-  private startBarcodeDecoding(observer: any, deviceId: string | undefined): void {
+  private startBarcodeDecoding(observer: any, deviceId: string | undefined, videoContainerElement?: HTMLElement): void {
     // Create video element
     this.videoElement = document.createElement('video');
     this.videoElement.style.width = '100%';
     this.videoElement.style.height = 'auto';
+    this.videoElement.style.display = 'block';
+    this.videoElement.style.backgroundColor = 'transparent';
     this.videoElement.autoplay = true;
     this.videoElement.muted = true;
     this.videoElement.playsInline = true;
+    this.videoElement.controls = false;
+    
+    console.log('📹 Created video element:', this.videoElement);
+    console.log('📹 Video element styles:', {
+      width: this.videoElement.style.width,
+      height: this.videoElement.style.height,
+      display: this.videoElement.style.display,
+      backgroundColor: this.videoElement.style.backgroundColor
+    });
     
     // Append video to container
-    const container = document.getElementById('video-preview-container');
+    const container = videoContainerElement || document.getElementById('video-preview-container');
     console.log('🔍 Looking for video container:', container);
+    console.log('🔍 Video container element provided:', !!videoContainerElement);
     
     if (container) {
       container.innerHTML = '';
@@ -156,9 +174,35 @@ export class QRScannerService {
       console.log('📹 Video element:', this.videoElement);
       console.log('📹 Container children:', container.children.length);
     } else {
-      console.error('❌ Video container not found: video-preview-container');
+      console.error('❌ Video container not found');
       console.log('🔍 Available elements with id containing "video":', 
         Array.from(document.querySelectorAll('[id*="video"]')).map(el => el.id));
+      
+      // Try to find container by class or other selectors
+      const alternativeContainer = document.querySelector('.video-preview') || 
+                                  document.querySelector('.video-container') ||
+                                  document.querySelector('[class*="video"]');
+      
+      if (alternativeContainer) {
+        console.log('🔍 Found alternative container:', alternativeContainer);
+        alternativeContainer.innerHTML = '';
+        alternativeContainer.appendChild(this.videoElement);
+      } else {
+      // Try to append to body as fallback
+      console.log('🔍 Trying to append video to body as fallback');
+      document.body.appendChild(this.videoElement);
+      this.videoElement.style.position = 'fixed';
+      this.videoElement.style.top = '50%';
+      this.videoElement.style.left = '50%';
+      this.videoElement.style.transform = 'translate(-50%, -50%)';
+      this.videoElement.style.zIndex = '9999';
+      this.videoElement.style.width = '8cm';
+      this.videoElement.style.height = '8cm';
+      this.videoElement.style.border = 'none';
+      this.videoElement.style.borderRadius = '8px';
+      this.videoElement.style.objectFit = 'cover';
+      this.videoElement.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+      }
     }
     
     // Start decoding from video input device
@@ -166,6 +210,7 @@ export class QRScannerService {
       if (result) {
         console.log('🎯 Barcode detected:', result.getText());
         console.log('📊 Barcode format:', result.getBarcodeFormat());
+        console.log('📊 Barcode confidence:', result.getResultMetadata());
         
         // Emit successful result
         observer.next({
@@ -174,9 +219,9 @@ export class QRScannerService {
           timestamp: new Date()
         });
         
-        // Auto-stop scanning after successful decode
-        this.stopScanning();
-        observer.complete();
+        // DON'T auto-stop scanning - let the component decide when to close
+        // The component will handle the 3-step process (LSX -> Employee ID -> Material)
+        console.log('🎯 QR code detected, but keeping camera open for next step');
         
       } else if (error && error.name !== 'NotFoundException') {
         // Only log non-standard errors (NotFoundException is normal when no barcode is visible)
@@ -186,6 +231,20 @@ export class QRScannerService {
       console.log('📹 Camera stream started successfully');
       console.log('📹 Video element srcObject:', this.videoElement?.srcObject);
       console.log('📹 Video element readyState:', this.videoElement?.readyState);
+      
+      // Add focus event listener to improve detection
+      if (this.videoElement) {
+        this.videoElement.addEventListener('loadedmetadata', () => {
+          console.log('📹 Video metadata loaded, dimensions:', {
+            videoWidth: this.videoElement?.videoWidth,
+            videoHeight: this.videoElement?.videoHeight
+          });
+        });
+        
+        this.videoElement.addEventListener('canplay', () => {
+          console.log('📹 Video can play, ready for scanning');
+        });
+      }
     }).catch((error) => {
       console.error('❌ Failed to start barcode decoding:', error);
       console.error('❌ Error details:', {
@@ -214,4 +273,5 @@ export class QRScannerService {
   getCurrentState(): 'idle' | 'starting' | 'scanning' | 'error' {
     return this.scannerStateSubject.value;
   }
+
 }

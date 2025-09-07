@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, Inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, Inject, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { Subject } from 'rxjs';
@@ -15,8 +15,10 @@ export interface QRScannerData {
   templateUrl: './qr-scanner-modal.component.html',
   styleUrls: ['./qr-scanner-modal.component.scss']
 })
-export class QRScannerModalComponent implements OnInit, OnDestroy {
+export class QRScannerModalComponent implements OnInit, OnDestroy, AfterViewInit {
   private destroy$ = new Subject<void>();
+  
+  @ViewChild('videoPreviewContainer') videoPreviewContainerRef!: ElementRef;
   
   scannerState: 'idle' | 'starting' | 'scanning' | 'error' = 'idle';
   videoElement: HTMLVideoElement | null = null;
@@ -33,11 +35,19 @@ export class QRScannerModalComponent implements OnInit, OnDestroy {
     console.log('🎬 Barcode Scanner Modal opened');
     this.checkCameraSupport();
     this.subscribeScannerState();
+  }
+
+  ngAfterViewInit(): void {
+    console.log('🎬 QR Scanner Modal AfterViewInit - DOM ready');
+    console.log('🎯 ViewChild element:', this.videoPreviewContainerRef);
+    console.log('🎯 Native element:', this.videoPreviewContainerRef?.nativeElement);
     
-    // Auto-start scanning immediately
+    // Auto-start scanning after DOM is ready with longer delay
     setTimeout(() => {
+      console.log('🎯 After delay - ViewChild element:', this.videoPreviewContainerRef);
+      console.log('🎯 After delay - Native element:', this.videoPreviewContainerRef?.nativeElement);
       this.startScanning();
-    }, 500);
+    }, 1000);
   }
 
   ngOnDestroy(): void {
@@ -78,15 +88,26 @@ export class QRScannerModalComponent implements OnInit, OnDestroy {
       this.errorMessage = '';
       
       console.log('🚀 Starting barcode scan...');
+      console.log('🎯 Video container element:', this.videoPreviewContainerRef?.nativeElement);
+      
+      // Fallback: if ViewChild is not available, try to find element by ID
+      let videoContainer = this.videoPreviewContainerRef?.nativeElement;
+      if (!videoContainer) {
+        console.log('🎯 ViewChild not available, trying to find by ID...');
+        videoContainer = document.getElementById('video-preview-container');
+        console.log('🎯 Found by ID:', videoContainer);
+        
+        // If still not found, try to find by class
+        if (!videoContainer) {
+          console.log('🎯 Not found by ID, trying to find by class...');
+          videoContainer = document.querySelector('.video-preview') as HTMLElement;
+          console.log('🎯 Found by class:', videoContainer);
+        }
+      }
       
       const scanResult$ = await this.qrScannerService.startScanning({
         facingMode: 'environment' // Use back camera
-      });
-
-      // Setup video preview
-      setTimeout(() => {
-        this.setupVideoPreview();
-      }, 1000);
+      }, videoContainer);
 
       // Listen for scan results
       scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
@@ -149,9 +170,11 @@ export class QRScannerModalComponent implements OnInit, OnDestroy {
   onScanSuccess(result: QRScanResult): void {
     console.log('🎯 QR scan result:', result.text);
     
-    // Close modal and return result
+    // DON'T close modal automatically - let the parent component decide
+    // Just emit the result to the parent component
     this.dialogRef.close({
       success: true,
+      text: result.text,
       location: result.text,
       timestamp: result.timestamp
     });
@@ -198,4 +221,5 @@ export class QRScannerModalComponent implements OnInit, OnDestroy {
       });
     }
   }
+
 }
