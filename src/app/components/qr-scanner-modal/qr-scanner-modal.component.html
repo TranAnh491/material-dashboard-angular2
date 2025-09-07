@@ -23,7 +23,7 @@
 
     <!-- Message -->
     <div class="message">
-      Đang mở camera để quét barcode vị trí...
+      {{ data.message || 'Đang mở camera để quét barcode...' }}
     </div>
 
     <!-- Starting State -->
@@ -52,8 +52,8 @@
       </div>
       
       <div class="scan-instructions">
-        <h3>Quét barcode vị trí</h3>
-        <p>Hướng camera vào barcode để đọc thông tin vị trí</p>
+        <h3>{{ data.title || 'Quét QR Code' }}</h3>
+        <p>{{ data.message || 'Hướng camera vào barcode để đọc thông tin' }}</p>
         
         <div class="scan-actions">
           <button mat-button (click)="closeModal()" class="stop-btn">

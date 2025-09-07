@@ -832,10 +832,27 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🎯 Starting QR scanner for Outbound ASM1...');
     console.log('📱 Mobile device:', this.isMobile);
     console.log('📱 Selected scan method:', this.selectedScanMethod);
+    console.log('📱 Current scan step:', this.currentScanStep);
+    
+    let title = 'Quét QR Code';
+    let message = 'Camera sẽ tự động quét QR code';
+    
+    if (this.currentScanStep === 'batch') {
+      if (!this.isProductionOrderScanned) {
+        title = 'Quét LSX (Lệnh Sản Xuất)';
+        message = 'Quét mã LSX để bắt đầu xuất kho';
+      } else if (!this.isEmployeeIdScanned) {
+        title = 'Quét Mã Nhân Viên';
+        message = 'Quét mã nhân viên (ASP + 4 số)';
+      }
+    } else if (this.currentScanStep === 'material') {
+      title = 'Quét Mã Hàng Hóa';
+      message = 'Quét QR code của hàng hóa để xuất kho';
+    }
     
     const dialogData: QRScannerData = {
-      title: this.isMobile ? 'Quét QR Code' : 'Quét Mã Nhân Viên',
-      message: this.isMobile ? 'Camera sẽ tự động quét QR code' : 'Camera sẽ tự động quét mã nhân viên',
+      title: title,
+      message: message,
       materialCode: undefined
     };
 
@@ -851,8 +868,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log('📱 QR Scanner result:', result);
       
       if (result && result.success && result.text) {
-        // Process the scanned data
-        this.onScanSuccess(result.text);
+        // Process the scanned data based on current scan step
+        this.processCameraScanResult(result.text);
       } else if (result && result.error) {
         console.error('❌ QR Scanner error:', result.error);
         this.errorMessage = 'Lỗi quét QR: ' + result.error;
@@ -919,6 +936,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🔍 Input decodedText:', decodedText);
     console.log('🔍 Input type:', typeof decodedText);
     console.log('🔍 Input length:', decodedText.length);
+    console.log('🔍 Current scan step:', this.currentScanStep);
+    console.log('🔍 Batch scanning mode:', this.isBatchScanningMode);
+    
+    // Check if we're in batch mode and need to process LSX/Employee ID first
+    if (this.isBatchScanningMode && this.currentScanStep === 'batch') {
+      console.log('🔍 Processing batch scan input for LSX/Employee ID');
+      this.processBatchScanInput(decodedText);
+      return;
+    }
     
     try {
       console.log('🔍 Processing scanned QR data:', decodedText);
@@ -1026,6 +1052,68 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.error('❌ QR scan error:', error);
     // Don't show error to user for scanning attempts - they're too frequent
   }
+
+  // Process camera scan result based on current scan step
+  processCameraScanResult(scannedText: string): void {
+    console.log('📱 Processing camera scan result:', scannedText);
+    console.log('📱 Current scan step:', this.currentScanStep);
+    console.log('📱 Batch scanning mode:', this.isBatchScanningMode);
+    
+    if (!this.isBatchScanningMode) {
+      // If not in batch mode, start batch mode first
+      this.startBatchScanningMode();
+    }
+    
+    if (this.currentScanStep === 'batch') {
+      // Step 1: Scan LSX (Production Order) or Employee ID
+      if (scannedText.startsWith('LSX') || scannedText.includes('LSX')) {
+        // This is a production order
+        this.batchProductionOrder = scannedText;
+        this.isProductionOrderScanned = true;
+        console.log('📱 LSX scanned:', this.batchProductionOrder);
+        
+        // Check if both LSX and Employee ID are scanned
+        if (this.isEmployeeIdScanned) {
+          this.currentScanStep = 'material';
+          console.log('📱 Both LSX and Employee ID scanned, ready for material scanning');
+        }
+      } else if (scannedText.startsWith('ASP') || scannedText.includes('ASP')) {
+        // This is an employee ID
+        this.batchEmployeeId = scannedText;
+        this.isEmployeeIdScanned = true;
+        console.log('📱 Employee ID scanned:', this.batchEmployeeId);
+        
+        // Check if both LSX and Employee ID are scanned
+        if (this.isProductionOrderScanned) {
+          this.currentScanStep = 'material';
+          console.log('📱 Both LSX and Employee ID scanned, ready for material scanning');
+        }
+      } else {
+        // Try to detect if it's LSX or Employee ID based on format
+        if (scannedText.length > 10) {
+          // Likely LSX (production order)
+          this.batchProductionOrder = scannedText;
+          this.isProductionOrderScanned = true;
+          console.log('📱 LSX detected by length:', this.batchProductionOrder);
+        } else {
+          // Likely Employee ID
+          this.batchEmployeeId = scannedText;
+          this.isEmployeeIdScanned = true;
+          console.log('📱 Employee ID detected by length:', this.batchEmployeeId);
+        }
+        
+        // Check if both are scanned
+        if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+          this.currentScanStep = 'material';
+          console.log('📱 Both LSX and Employee ID scanned, ready for material scanning');
+        }
+      }
+    } else if (this.currentScanStep === 'material') {
+      // Step 2: Scan material QR code for outbound
+      console.log('📱 Material QR scanned:', scannedText);
+      this.onScanSuccess(scannedText);
+    }
+  }
   
   // Consolidate outbound records by ALL 4 fields: material code + PO + employee ID + production order (LSX)
   private consolidateOutboundRecords(materials: OutboundMaterial[]): OutboundMaterial[] {
@@ -1074,10 +1162,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       exportQuantity: this.exportQuantity,
       exportDate: new Date(),
       location: '',
-      exportedBy: exportedBy,
-      employeeId: exportedBy, // Use exportedBy as employeeId for now
-      productionOrder: '', // Empty for manual scans
-      scanMethod: 'QR_SCANNER',
+      exportedBy: this.batchEmployeeId || exportedBy,
+      employeeId: this.batchEmployeeId || exportedBy,
+      productionOrder: this.batchProductionOrder || '',
+      scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
       importDate: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)
       createdAt: new Date(),
@@ -1145,7 +1233,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportQuantity: newExportQuantity,
             updatedAt: new Date(),
             exportedBy: exportedBy,
-            scanMethod: 'QR_SCANNER',
+            scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
             notes: newNotes
           });
           
@@ -1272,6 +1360,56 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
     
+    // Check for LSX pattern (any length, contains LSX)
+    if ((scannedData.startsWith('LSX') || scannedData.includes('LSX')) && !this.isProductionOrderScanned) {
+      this.batchProductionOrder = scannedData;
+      this.isProductionOrderScanned = true;
+      console.log('✅ LSX scanned via scanner:', this.batchProductionOrder);
+      
+      // Check if both LSX and Employee ID are scanned
+      if (this.isEmployeeIdScanned) {
+        this.currentScanStep = 'material';
+        console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+      }
+      return;
+    }
+    
+    // Check for ASP pattern (any length, contains ASP)
+    if ((scannedData.startsWith('ASP') || scannedData.includes('ASP')) && !this.isEmployeeIdScanned) {
+      this.batchEmployeeId = scannedData;
+      this.isEmployeeIdScanned = true;
+      console.log('✅ Employee ID scanned via scanner:', this.batchEmployeeId);
+      
+      // Check if both LSX and Employee ID are scanned
+      if (this.isProductionOrderScanned) {
+        this.currentScanStep = 'material';
+        console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+      }
+      return;
+    }
+    
+    // Try to detect by length if no clear pattern
+    if (!this.isProductionOrderScanned && !this.isEmployeeIdScanned) {
+      if (scannedData.length > 10) {
+        // Likely LSX (production order)
+        this.batchProductionOrder = scannedData;
+        this.isProductionOrderScanned = true;
+        console.log('✅ LSX detected by length via scanner:', this.batchProductionOrder);
+      } else {
+        // Likely Employee ID
+        this.batchEmployeeId = scannedData;
+        this.isEmployeeIdScanned = true;
+        console.log('✅ Employee ID detected by length via scanner:', this.batchEmployeeId);
+      }
+      
+      // Check if both are scanned
+      if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+        this.currentScanStep = 'material';
+        console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+      }
+      return;
+    }
+    
     // 🔧 LOGIC MỚI: Nếu đã scan lệnh sản xuất và mã nhân viên, xử lý mã hàng
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
       // Xử lý mã hàng trực tiếp
@@ -1279,7 +1417,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     } else {
       // Show what's still needed - chỉ log console, không alert
       if (!this.isProductionOrderScanned) {
-        console.log('⚠️ Vui lòng scan lệnh sản xuất (KZLSX...) trước!');
+        console.log('⚠️ Vui lòng scan lệnh sản xuất (LSX hoặc KZLSX...) trước!');
         // Bỏ alert - chỉ log console
       } else if (!this.isEmployeeIdScanned) {
         console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
@@ -1499,7 +1637,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         exportedBy: this.batchEmployeeId,
         productionOrder: this.batchProductionOrder,
         employeeId: this.batchEmployeeId,
-        scanMethod: 'Direct Scanner',
+        scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
         notes: `Direct scan - ${this.batchProductionOrder}`,
         importDate: importDate || null, // Thêm ngày nhập từ QR code
         createdAt: new Date(),
@@ -1640,9 +1778,18 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.focusScannerInput();
       }, 100);
     } else {
-      // Process the scanned data (same as camera scan)
-      console.log('🔍 Calling onScanSuccess with cleanData:', cleanData);
-      this.onScanSuccess(cleanData);
+      // Check if we need to start batch mode for LSX/Employee ID
+      if (cleanData.startsWith('LSX') || cleanData.includes('LSX') || 
+          cleanData.startsWith('ASP') || cleanData.includes('ASP') ||
+          cleanData.startsWith('KZLSX')) {
+        console.log('🔍 Detected LSX/Employee ID pattern, starting batch mode');
+        this.startBatchScanningMode();
+        this.processBatchScanInput(cleanData);
+      } else {
+        // Process the scanned data (same as camera scan)
+        console.log('🔍 Calling onScanSuccess with cleanData:', cleanData);
+        this.onScanSuccess(cleanData);
+      }
       
       // Keep input focused for next scan
       if (this.isScannerInputActive) {
