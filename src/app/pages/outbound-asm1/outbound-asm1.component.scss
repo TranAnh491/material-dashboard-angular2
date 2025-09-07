@@ -2123,6 +2123,99 @@
   }
 }
 
+// 🖥️ Desktop Table - Full Columns
+.excel-table.desktop-table {
+  width: 100%;
+  font-size: 13px;
+  table-layout: fixed;
+  
+  th, td {
+    padding: 8px 6px;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  th {
+    background: #f5f5f5;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  
+  // Desktop column widths - 10 columns
+  .col-factory {
+    width: 8%;
+    min-width: 60px;
+  }
+  
+  .col-index {
+    width: 5%;
+    min-width: 40px;
+  }
+  
+  .col-date {
+    width: 12%;
+    min-width: 100px;
+  }
+  
+  .col-material {
+    width: 15%;
+    min-width: 100px;
+  }
+  
+  .col-po {
+    width: 12%;
+    min-width: 80px;
+  }
+  
+  .col-batch {
+    width: 10%;
+    min-width: 70px;
+  }
+  
+  .col-quantity {
+    width: 8%;
+    min-width: 60px;
+  }
+  
+  .col-employee {
+    width: 12%;
+    min-width: 80px;
+  }
+  
+  .col-production {
+    width: 15%;
+    min-width: 100px;
+  }
+  
+  .col-delete {
+    width: 8%;
+    min-width: 60px;
+  }
+  
+  // Delete button styling
+  .delete-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: #c82333;
+    }
+    
+    i {
+      font-size: 14px;
+    }
+  }
+}
+
 // 📱 Mobile Optimized Table
 .excel-table.mobile-optimized {
   width: 100%;
