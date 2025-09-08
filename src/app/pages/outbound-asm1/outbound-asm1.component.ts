@@ -22,14 +22,15 @@ export interface OutboundMaterial {
   exportDate: Date;
   location: string;
   exportedBy: string;
-  batch?: string;
-  scanMethod?: string;
-  notes?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-  productionOrder?: string; // Lệnh sản xuất
-  employeeId?: string; // Mã nhân viên
-  importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
+      batch?: string;
+      batchNumber?: string; // Batch number từ QR code
+      scanMethod?: string;
+      notes?: string;
+      createdAt?: Date;
+      updatedAt?: Date;
+      productionOrder?: string; // Lệnh sản xuất
+      employeeId?: string; // Mã nhân viên
+      importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
 
 }
 
@@ -1155,6 +1156,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       exportedBy: this.batchEmployeeId || exportedBy,
       employeeId: this.batchEmployeeId || exportedBy,
       productionOrder: this.batchProductionOrder || '',
+      batchNumber: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)
       scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
       importDate: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)

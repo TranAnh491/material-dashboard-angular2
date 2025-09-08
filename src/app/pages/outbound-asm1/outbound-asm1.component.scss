@@ -282,11 +282,12 @@
       border-bottom: 2px solid #dee2e6;
     }
     
-    // Column widths for mobile - Only 4 visible columns
+    // Column widths for mobile - 5 visible columns
     th:nth-child(1), td:nth-child(1) { width: 20%; } // Mã hàng
     th:nth-child(2), td:nth-child(2) { width: 20%; } // Số PO
-    th:nth-child(3), td:nth-child(3) { width: 15%; } // Xuất
-    th:nth-child(4), td:nth-child(4) { width: 45%; } // Lệnh sản xuất
+    th:nth-child(3), td:nth-child(3) { width: 20%; } // Batch
+    th:nth-child(4), td:nth-child(4) { width: 15%; } // Xuất
+    th:nth-child(5), td:nth-child(5) { width: 25%; } // Lệnh sản xuất
   }
   
   // Mobile Cards
@@ -2239,10 +2240,15 @@
   
   .col-material {
     width: 20% !important;
-    max-width: 60px !important;
+    max-width: 80px !important;
   }
   
   .col-po {
+    width: 20% !important;
+    max-width: 80px !important;
+  }
+  
+  .col-batch {
     width: 20% !important;
     max-width: 80px !important;
   }
@@ -2253,8 +2259,8 @@
   }
   
   .col-production {
-    width: 45% !important;
-    max-width: 120px !important;
+    width: 25% !important;
+    max-width: 100px !important;
   }
   
   tbody tr {

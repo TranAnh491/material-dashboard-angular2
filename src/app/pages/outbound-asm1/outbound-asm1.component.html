@@ -222,12 +222,13 @@
         </tbody>
       </table>
 
-      <!-- Mobile Table - 4 Columns Only -->
+      <!-- Mobile Table - 5 Columns -->
       <table class="excel-table mobile-optimized" *ngIf="isMobile">
         <thead>
           <tr>
             <th class="col-material">Mã hàng</th>
             <th class="col-po">Số PO</th>
+            <th class="col-batch">Batch</th>
             <th class="col-quantity">Xuất</th>
             <th class="col-production">Lệnh sản xuất</th>
           </tr>
@@ -239,6 +240,9 @@
             </td>
             <td class="po-cell readonly-cell">
               {{material.poNumber}}
+            </td>
+            <td class="batch-cell readonly-cell">
+              {{material.batchNumber || 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}
