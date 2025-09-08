@@ -2121,6 +2121,28 @@
         font-size: 14px;
       }
     }
+    
+    .stop-camera-btn-mobile {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      flex-shrink: 0;
+      
+      &:hover {
+        background: #c82333;
+      }
+      
+      i {
+        font-size: 14px;
+      }
+    }
   }
 }
 

@@ -71,6 +71,13 @@
               <i class="material-icons">done</i>
               <span>Done</span>
             </button>
+            <button class="stop-camera-btn-mobile" 
+                    (click)="stopCameraScanning()"
+                    title="Tắt camera"
+                    *ngIf="isMobile && selectedScanMethod === 'camera'">
+              <i class="material-icons">videocam_off</i>
+              <span>Tắt Camera</span>
+            </button>
           </div>
         </div>
         

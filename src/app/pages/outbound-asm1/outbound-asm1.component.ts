@@ -882,28 +882,43 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         console.log('📱 - batchProductionOrder:', this.batchProductionOrder);
         console.log('📱 - batchEmployeeId:', this.batchEmployeeId);
         
-        // Check if we need to continue scanning or close camera
-        if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-          // Both LSX and Employee ID are scanned, ready for material scanning
-          console.log('📱 Both LSX and Employee ID scanned, ready for material scanning');
-          console.log('📱 Camera will stay open for material scanning');
-          // Camera stays open for material scanning (step 3)
-        } else if (this.isEmployeeIdScanned) {
-          // Employee ID scanned, camera should close (step 2 completed)
-          console.log('📱 Employee ID scanned, camera will close');
-          // Camera will close after Employee ID scan
-        } else {
-          console.log('📱 Need to continue scanning, reopening camera...');
-          // Reopen camera for next step (LSX or Employee ID)
-          setTimeout(() => {
-            this.startCameraScanning();
-          }, 500);
-        }
+        // Always reopen camera for continuous scanning
+        console.log('📱 Continuous scanning mode - reopening camera...');
+        setTimeout(() => {
+          this.startCameraScanning();
+        }, 1000); // 1 second delay between scans
       } else if (result && result.error) {
         console.error('❌ QR Scanner error:', result.error);
         this.errorMessage = 'Lỗi quét QR: ' + result.error;
+        
+        // Reopen camera even after error for continuous scanning
+        if (this.isBatchScanningMode) {
+          console.log('📱 Reopening camera after error...');
+          setTimeout(() => {
+            this.startCameraScanning();
+          }, 1000);
+        }
+      } else {
+        console.log('📱 QR Scanner cancelled or closed by user');
+        // Only reset when user manually closes
+        this.isBatchScanningMode = false;
+        this.isProductionOrderScanned = false;
+        this.isEmployeeIdScanned = false;
+        this.batchProductionOrder = '';
+        this.batchEmployeeId = '';
       }
     });
+  }
+  
+  // Stop camera scanning (for continuous mode)
+  stopCameraScanning(): void {
+    console.log('📱 Stopping camera scanning...');
+    this.isBatchScanningMode = false;
+    this.isProductionOrderScanned = false;
+    this.isEmployeeIdScanned = false;
+    this.batchProductionOrder = '';
+    this.batchEmployeeId = '';
+    console.log('📱 Camera scanning stopped');
   }
   
   private async waitForElement(elementId: string): Promise<void> {

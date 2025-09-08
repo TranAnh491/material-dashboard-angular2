@@ -69,8 +69,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadShipmentsFromFirebase();
-    this.startDate = new Date(2020, 0, 1);
-    this.endDate = new Date(2030, 11, 31);
+    // Fix date format issues - use proper date initialization
+    this.startDate = new Date('2020-01-01');
+    this.endDate = new Date('2030-12-31');
     this.applyFilters();
   }
 
@@ -223,6 +224,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Transfer shipment data to FG Out
   private transferToFGOut(shipment: ShipmentItem): void {
+    console.log(`🔄 Starting transfer to FG Out for shipment: ${shipment.shipmentCode}, material: ${shipment.materialCode}`);
+    
     // First, get FG Inventory data to find Batch, LSX, LOT
     this.firestore.collection('fg-inventory', ref => 
       ref.where('materialCode', '==', shipment.materialCode)
@@ -240,12 +243,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const lsx = inventoryItem.lsx || '';
       const lot = inventoryItem.lot || '';
 
-      // Check existing FG Out records for update count
+      // Check existing FG Out records for update count - count ALL records for this shipment+material
       this.firestore.collection('fg-out', ref => 
         ref.where('shipment', '==', shipment.shipmentCode)
            .where('materialCode', '==', shipment.materialCode)
-      ).get().subscribe((fgOutSnapshot) => {
+           .orderBy('createdAt', 'desc') // Add ordering to avoid index issues
+      ).get().subscribe({
+        next: (fgOutSnapshot) => {
         
+        // Count all existing records (including previous pushes) to get next update count
         const baseUpdateCount = fgOutSnapshot.size + 1;
         const fgOutRecords: any[] = [];
 
@@ -272,8 +278,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
               poShip: shipment.poShip,
               carton: fullCartons,
               odd: 0,
-              notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize})`,
+              notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize}) - Push #${baseUpdateCount}`,
               updateCount: baseUpdateCount,
+              pushCount: baseUpdateCount,
               transferredFrom: 'Shipment',
               transferredAt: new Date(),
               createdAt: new Date(),
@@ -294,8 +301,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
               poShip: shipment.poShip,
               carton: 0,
               odd: oddQuantity,
-              notes: `${shipment.notes} (ODD: ${oddQuantity})`,
+              notes: `${shipment.notes} (ODD: ${oddQuantity}) - Push #${baseUpdateCount}`,
               updateCount: baseUpdateCount + (fullCartonQuantity > 0 ? 1 : 0),
+              pushCount: baseUpdateCount,
               transferredFrom: 'Shipment',
               transferredAt: new Date(),
               createdAt: new Date(),
@@ -315,8 +323,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             poShip: shipment.poShip,
             carton: shipment.carton,
             odd: shipment.odd,
-            notes: shipment.notes,
+            notes: `${shipment.notes} - Push #${baseUpdateCount}`,
             updateCount: baseUpdateCount,
+            pushCount: baseUpdateCount,
             transferredFrom: 'Shipment',
             transferredAt: new Date(),
             createdAt: new Date(),
@@ -334,12 +343,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             console.log('✅ Data transferred to FG Out successfully');
             const recordCount = fgOutRecords.length;
             const batchInfo = `Batch: ${batchNumber}, LSX: ${lsx}, LOT: ${lot}`;
-            alert(`✅ Dữ liệu đã được chuyển sang FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}`);
+            const pushInfo = `Push #${baseUpdateCount}`;
+            alert(`✅ Dữ liệu đã được chuyển sang FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}\n🔄 ${pushInfo}`);
           })
           .catch((error) => {
             console.error('❌ Error transferring to FG Out:', error);
             alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
           });
+        },
+        error: (error) => {
+          console.error('❌ Error querying FG Out records:', error);
+          if (error.code === 'failed-precondition') {
+            alert(`❌ Lỗi Firebase Index: Cần tạo index cho query FG Out.\nVui lòng truy cập: https://console.firebase.google.com để tạo index.`);
+          } else {
+            alert(`❌ Lỗi khi truy vấn FG Out: ${error.message}`);
+          }
+        }
       });
     });
   }
