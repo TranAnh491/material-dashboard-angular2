@@ -281,9 +281,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportDate: data.exportDate?.toDate() || new Date(),
             location: data.location || '',
             exportedBy: data.exportedBy || '',
-                         employeeId: data.employeeId || '', // Fix: properly map employeeId
-             productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
-             importDate: data.importDate || null, // Thêm mapping cho importDate
+            employeeId: data.employeeId || '', // Fix: properly map employeeId
+            productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
+            batchNumber: data.batchNumber || data.importDate || null, // ✅ Map batchNumber từ database
+            importDate: data.importDate || null, // Thêm mapping cho importDate
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -291,6 +292,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           } as OutboundMaterial;
           
           console.log(`📅 Mapped material importDate:`, material.importDate);
+          console.log(`📦 Mapped material batchNumber:`, material.batchNumber);
           return material;
         });
         
@@ -1630,6 +1632,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         exportedBy: this.batchEmployeeId,
         productionOrder: this.batchProductionOrder,
         employeeId: this.batchEmployeeId,
+        batchNumber: importDate || null, // ✅ Thêm batchNumber field
         scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
         notes: `Direct scan - ${this.batchProductionOrder}`,
         importDate: importDate || null, // Thêm ngày nhập từ QR code
