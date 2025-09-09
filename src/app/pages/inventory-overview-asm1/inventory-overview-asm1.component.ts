@@ -179,20 +179,15 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       console.log(`✅ Tìm thấy ${snapshot.size} ASM1 documents trong collection inventory-materials`);
       
-      // Lấy outbound data cho ASM1
-      let outboundSnapshot: any = null;
-      try {
-        console.log('🔍 Lấy dữ liệu outbound cho ASM1...');
-        outboundSnapshot = await this.firestore.collection('outbound-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
-        ).ref.get();
-        console.log(`📊 Tìm thấy ${outboundSnapshot.size} ASM1 outbound documents`);
-      } catch (err) {
-        console.log('⚠️ Không thể lấy dữ liệu outbound ASM1:', err);
-      }
+      // 🔧 SỬA LỖI: Không cần load outbound data
+      // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
       
       // Xử lý dữ liệu từ collection inventory-materials để đảm bảo chính xác
       console.log(`📊 Xử lý ${snapshot.size} ASM1 documents từ collection inventory-materials`);
+      
+      // 🔧 SỬA LỖI: Không cần load outbound data
+      // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
+      // Nên dữ liệu exported trong inventory-materials đã là chính xác
       
       const items: InventoryOverviewItem[] = [];
       
@@ -224,6 +219,17 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const materialCode = data.materialCode || '';
         const poNumber = data.poNumber || '';
         
+        // Debug cho mã B001239
+        if (materialCode === 'B001239') {
+          console.log(`🔍 DEBUG B001239 (PO: ${poNumber}):`, {
+            openingStock: data.openingStock,
+            quantity: data.quantity,
+            exported: data.exported,
+            xt: data.xt,
+            calculatedStock: (data.openingStock || 0) + (data.quantity || 0) - (data.exported || 0) - (data.xt || 0)
+          });
+        }
+        
         // Kiểm tra mã hàng hợp lệ (không phải số đơn giản như "25")
         if (!this.isValidMaterialCode(materialCode)) {
           console.log(`⚠️ Skipping invalid material code: "${materialCode}" (PO: ${poNumber})`);
@@ -245,6 +251,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const openingStock = data.openingStock || 0;
         const exported = data.exported || 0;
         const xt = data.xt || 0;
+        
+        // 🔧 SỬA LỖI: Không cập nhật exported từ outbound-materials
+        // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
+        // Nên dữ liệu exported trong inventory-materials đã là chính xác
+        // Chỉ sử dụng exported từ inventory-materials
         
         // Tính toán current stock giống hệt như RM1 Inventory
         const currentStock = openingStock + quantity - exported - xt;
@@ -327,8 +338,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       this.currentFilterMode = 'all';
     }
     
-    this.applyFilters();
     console.log(`🔄 Changed filter mode to: ${this.currentFilterMode}`);
+    this.applyFilters();
   }
 
   // Get filter mode icon
@@ -349,7 +360,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       case 'negative':
         return 'Chỉ mã âm';
       case 'linkq-difference':
-        return 'Chỉ mã lệch LinkQ (≠0)';
+        return 'Chỉ mã lệch LinkQ (>1)';
       default:
         return 'Tất cả';
     }
@@ -393,25 +404,42 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       if (groupedMap.has(item.materialCode)) {
         // Add quantities for same material code
         const existing = groupedMap.get(item.materialCode)!;
+        const oldStock = existing.currentStock;
+        
         existing.openingStock += item.openingStock || 0;
         existing.quantity += item.quantity;
         existing.exported += item.exported;
         existing.xt += item.xt;
-        existing.currentStock += item.currentStock;
         
-        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho sau khi cộng dồn
+        // 🔧 SỬA LỖI: Tính lại currentStock từ các thành phần đã cộng dồn
+        existing.currentStock = existing.openingStock + existing.quantity - existing.exported - existing.xt;
+        
+        // Debug cho mã B001239
+        if (item.materialCode === 'B001239') {
+          console.log(`🔍 DEBUG GROUP B001239:`, {
+            poNumber: item.poNumber,
+            itemStock: item.currentStock,
+            oldGroupedStock: oldStock,
+            newGroupedStock: existing.currentStock,
+            openingStock: existing.openingStock,
+            quantity: existing.quantity,
+            exported: existing.exported,
+            xt: existing.xt
+          });
+        }
+        
+        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho sau khi tính toán
         existing.currentStock = Math.round(existing.currentStock);
         existing.isNegative = existing.currentStock < 0;
         
-        // 🔧 SỬA LỖI: Không copy stockDifference và hasDifference từ item cũ
-        // Sẽ tính toán lại dựa trên currentStock mới
+        // 🔧 SỬA LỖI: Cộng dồn linkQStock và tính toán lại stockDifference
         if (item.linkQStock !== undefined) {
-          existing.linkQStock = item.linkQStock;
+          existing.linkQStock = (existing.linkQStock || 0) + item.linkQStock;
           // Tính toán lại stockDifference dựa trên currentStock mới
           existing.stockDifference = existing.currentStock - existing.linkQStock;
-          // Kiểm tra lại hasDifference
+          // Kiểm tra lại hasDifference - chỉ hiện các mã lệch lớn hơn 1 và -1
           const absDifference = Math.abs(existing.stockDifference);
-          existing.hasDifference = absDifference >= 1;
+          existing.hasDifference = absDifference > 1;
         }
       } else {
         // Create new grouped item
@@ -430,8 +458,21 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           // Copy LinkQ data
           linkQStock: item.linkQStock,
           stockDifference: item.stockDifference,
-          hasDifference: item.hasDifference
+          hasDifference: item.linkQStock !== undefined ? Math.abs(item.stockDifference || 0) > 1 : false
         };
+        
+        // Debug cho mã B001239
+        if (item.materialCode === 'B001239') {
+          console.log(`🔍 DEBUG NEW GROUP B001239:`, {
+            poNumber: item.poNumber,
+            itemStock: item.currentStock,
+            openingStock: item.openingStock,
+            quantity: item.quantity,
+            exported: item.exported,
+            xt: item.xt
+          });
+        }
+        
         groupedMap.set(item.materialCode, groupedItem);
       }
     });
@@ -459,9 +500,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // Tính toán lại stockDifference dựa trên currentStock mới (đã được cộng dồn)
         item.stockDifference = roundedCurrentStock - roundedLinkQStock;
         
-        // Kiểm tra lại hasDifference
+        // Kiểm tra lại hasDifference - chỉ hiện các mã lệch lớn hơn 1 và -1
         const absDifference = Math.abs(item.stockDifference);
-        item.hasDifference = absDifference >= 1;
+        item.hasDifference = absDifference > 1;
         
         if (item.hasDifference) {
           differenceCount++;
@@ -491,6 +532,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       copy.linkQStock = item.linkQStock;
       copy.stockDifference = item.stockDifference;
       copy.hasDifference = item.hasDifference;
+      
+      
       return copy;
     });
     
@@ -502,9 +545,14 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         break;
       case 'linkq-difference':
         if (this.isLinkQDataLoaded) {
-          // 🔧 ẨN CÁC DÒNG BẰNG 0: Lọc bỏ các dòng có stockDifference = 0
-          filtered = filtered.filter(item => item.hasDifference && item.stockDifference !== 0);
-          console.log(`🔍 LinkQ difference filter (excluding zero differences): ${filtered.length} items`);
+          // 🔧 SỬA LỖI: Chỉ hiện các dòng lệch từ số 1 và -1 (loại bỏ từ -1 đến 1)
+          const beforeFilter = filtered.length;
+          filtered = filtered.filter(item => {
+            if (item.stockDifference === undefined) return false;
+            const absDifference = Math.abs(item.stockDifference);
+            return absDifference > 1; // Chỉ hiện lệch > 1 hoặc < -1
+          });
+          console.log(`🔍 LinkQ difference filter: ${beforeFilter} → ${filtered.length} items (only differences > 1 or < -1)`);
         } else {
           console.log('⚠️ LinkQ data not loaded, cannot filter by differences');
         }
@@ -532,13 +580,15 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       filtered = this.groupByMaterialCode(filtered);
       console.log(`🔍 Material grouping: ${beforeGroup} → ${filtered.length} items`);
       
-      // 🔧 SỬA LỖI: Sau khi group by material, cần đảm bảo LinkQ comparison được tính toán lại
-      if (this.isLinkQDataLoaded) {
-        console.log('🔍 LinkQ data detected after material grouping, ensuring comparison is up-to-date');
-        // Method groupByMaterialCode đã tự động gọi recalculateLinkQComparisonForGroupedItems
+      // 🔧 SỬA LỖI: Sau khi group by material, cần filter lại theo LinkQ difference
+      if (this.currentFilterMode === 'linkq-difference' && this.isLinkQDataLoaded) {
+        const beforeLinkQFilter = filtered.length;
+        filtered = filtered.filter(item => item.hasDifference);
+        console.log(`🔍 LinkQ difference filter after grouping: ${beforeLinkQFilter} → ${filtered.length} items`);
       }
     }
     // If groupByType === 'po', keep original structure (no grouping needed)
+    
     
     this.filteredItems = filtered;
     this.currentPage = 1; // Reset to first page
@@ -551,6 +601,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     console.log(`📊 LinkQ data preserved: ${itemsWithLinkQ} items have LinkQ data`);
     console.log(`📊 Items with differences: ${itemsWithDifference} items`);
     console.log(`🔍 Filter mode: ${this.currentFilterMode}, Group by: ${this.groupByType}`);
+    
   }
 
   // Clear search
@@ -707,6 +758,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     
     console.log('✅ LinkQ data cleared');
   }
+  
 
   // 🔧 Force refresh LinkQ data (fix cho dữ liệu bị mất)
   forceRefreshLinkQData(): void {
@@ -925,7 +977,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         comparisonData = this.filteredItems.map(item => {
           const linkQStock = item.linkQStock || 0;
           const stockDifference = item.currentStock - linkQStock;
-          const hasDifference = stockDifference >= 1 || stockDifference <= -1;
+          const hasDifference = stockDifference > 1 || stockDifference < -1;
           
           return {
             'Mã hàng': item.materialCode,
@@ -956,7 +1008,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         comparisonData = this.filteredItems.map(item => {
           const linkQStock = item.linkQStock || 0;
           const stockDifference = item.currentStock - linkQStock;
-          const hasDifference = stockDifference >= 1 || stockDifference <= -1;
+          const hasDifference = stockDifference > 1 || stockDifference < -1;
           
           return {
             'Mã hàng': item.materialCode,
@@ -1165,7 +1217,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // 🔧 SỬA LỖI SO SÁNH: Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
         // Bỏ qua các chênh lệch nhỏ từ -0.99 đến 0.99
         const absDifference = Math.abs(item.stockDifference);
-        item.hasDifference = absDifference >= 1;
+        item.hasDifference = absDifference > 1;
         
         if (item.hasDifference) {
           differenceCount++;
@@ -1215,7 +1267,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           
           // Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
           const absDifference = Math.abs(item.stockDifference);
-          item.hasDifference = absDifference >= 1;
+          item.hasDifference = absDifference > 1;
           
           if (item.hasDifference) {
             differenceCount++;

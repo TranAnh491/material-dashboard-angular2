@@ -84,8 +84,10 @@
             <th>PO Ship</th>
             <th>Carton</th>
             <th>Odd</th>
+            <th>Tồn kho</th>
             <th>FWD</th>
             <th>Push</th>
+            <th>PushNo</th>
             <th>Status</th>
             <th>CS Date</th>
             <th>Full Date</th>
@@ -97,7 +99,7 @@
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="17" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="19" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -155,6 +157,9 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Odd">
             </td>
+            <td class="number-cell">
+              <span class="inventory-display">{{getInventory(shipment.materialCode)}}</span>
+            </td>
             <td>
               <select class="editable-select" [(ngModel)]="shipment.shipMethod" (change)="updateShipmentInFirebase(shipment)">
                 <option value="">Chọn FWD</option>
@@ -168,6 +173,9 @@
                      class="push-checkbox"
                      [(ngModel)]="shipment.push"
                      (change)="onPushChange(shipment)">
+            </td>
+            <td class="pushno-cell">
+              <span class="pushno-display">{{shipment.pushNo || '000'}}</span>
             </td>
             <td class="status-cell">
               <select class="status-select" [(ngModel)]="shipment.status" (change)="updateShipmentInFirebase(shipment)">
@@ -334,6 +342,13 @@
                    class="form-input" 
                    [(ngModel)]="newShipment.odd" 
                    placeholder="Nhập số odd">
+          </div>
+          <div class="input-group">
+            <label class="input-label">Tồn kho</label>
+            <input type="number" 
+                   class="form-input" 
+                   [(ngModel)]="newShipment.inventory" 
+                   placeholder="Nhập tồn kho">
           </div>
           <div class="input-group">
             <label class="input-label">FWD</label>

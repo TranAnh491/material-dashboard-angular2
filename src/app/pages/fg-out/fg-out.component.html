@@ -58,7 +58,7 @@
         <thead>
           <tr>
             <th class="row-header">No</th>
-            <th class="update-header">Cập nhật</th>
+            <th class="update-header">PushNo</th>
             <th>Shipment</th>
             <th>Mã TP</th>
             <th>Mã Khách</th>
@@ -76,7 +76,7 @@
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index">
             <td class="row-header">{{i + 1}}</td>
-            <td class="update-cell">{{material.updateCount || 1}}</td>
+            <td class="update-cell">{{material.pushNo || '000'}}</td>
             <td class="code-cell">
               <input type="text"
                      class="editable-input"

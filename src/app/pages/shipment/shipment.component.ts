@@ -14,8 +14,10 @@ export interface ShipmentItem {
   poShip: string;
   carton: number;
   odd: number;
+  inventory?: number; // Thêm trường tồn kho
   shipMethod: string;
   push: boolean;
+  pushNo: string; // Thêm PushNo - format: 001, 002, 003...
   status: string;
   requestDate: Date;
   fullDate: Date;
@@ -50,8 +52,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     poShip: '',
     carton: 0,
     odd: 0,
+    inventory: 0, // Khởi tạo tồn kho = 0
     shipMethod: '',
     push: false,
+    pushNo: '000', // Khởi tạo PushNo = 000
     status: 'Chờ soạn',
     requestDate: new Date(),
     fullDate: new Date(),
@@ -93,6 +97,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             id: id,
             ...data,
             push: data.push === 'true' || data.push === true || data.push === 1,
+            pushNo: data.pushNo || '000', // Default PushNo if not exists
+            inventory: data.inventory || 0, // Default inventory if not exists
             requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : new Date(),
             fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : new Date(),
             actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : new Date()
@@ -167,6 +173,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       requestDate: this.newShipment.requestDate,
       fullDate: this.newShipment.fullDate,
       actualShipDate: this.newShipment.actualShipDate,
+      pushNo: this.newShipment.pushNo || '000', // Ensure PushNo is included
+      inventory: this.newShipment.inventory || 0, // Ensure inventory is included
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -184,6 +192,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       });
   }
 
+  // Get inventory for material code
+  getInventory(materialCode: string): number {
+    // Tìm trong danh sách shipments để lấy tồn kho
+    const shipment = this.shipments.find(s => s.materialCode === materialCode);
+    return shipment?.inventory || 0;
+  }
+
   resetNewShipment(): void {
     this.newShipment = {
       shipmentCode: '',
@@ -193,8 +208,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       poShip: '',
       carton: 0,
       odd: 0,
+      inventory: 0,
       shipMethod: '',
       push: false,
+      pushNo: '000',
       status: 'Chờ soạn',
       requestDate: new Date(),
       fullDate: new Date(),
@@ -215,152 +232,166 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     shipment.updatedAt = new Date();
     
     if (shipment.push) {
+      // Always generate new PushNo when push is checked (even if previously pushed)
+      this.generatePushNoSync(shipment);
       // When checked, transfer data to FG Out
       this.transferToFGOut(shipment);
+    } else {
+      // When unchecked, reset PushNo to 000
+      shipment.pushNo = '000';
     }
     
     this.updateShipmentInFirebase(shipment);
   }
 
-  // Transfer shipment data to FG Out
-  private transferToFGOut(shipment: ShipmentItem): void {
-    console.log(`🔄 Starting transfer to FG Out for shipment: ${shipment.shipmentCode}, material: ${shipment.materialCode}`);
+  // Generate PushNo - simple timestamp-based approach
+  private generatePushNoSync(shipment: ShipmentItem): void {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
     
-    // First, get FG Inventory data to find Batch, LSX, LOT
-    this.firestore.collection('fg-inventory', ref => 
-      ref.where('materialCode', '==', shipment.materialCode)
-         .orderBy('batchNumber', 'asc') // Get smallest batch first
-    ).get().subscribe((inventorySnapshot) => {
-      
-      if (inventorySnapshot.empty) {
-        alert(`❌ Không tìm thấy dữ liệu trong FG Inventory cho mã TP: ${shipment.materialCode}`);
-        return;
-      }
+    // Use timestamp to generate unique PushNo
+    const timestamp = Date.now();
+    const pushNo = String(timestamp % 1000).padStart(3, '0');
+    shipment.pushNo = pushNo;
+    
+    console.log(`🔄 Generated PushNo: ${pushNo} for month ${monthKey} (timestamp-based)`);
+  }
 
-      // Get the first (smallest batch) inventory item
-      const inventoryItem = inventorySnapshot.docs[0].data() as any;
-      const batchNumber = inventoryItem.batchNumber || '';
-      const lsx = inventoryItem.lsx || '';
-      const lot = inventoryItem.lot || '';
-
-      // Check existing FG Out records for update count - count ALL records for this shipment+material
-      this.firestore.collection('fg-out', ref => 
-        ref.where('shipment', '==', shipment.shipmentCode)
-           .where('materialCode', '==', shipment.materialCode)
-           .orderBy('createdAt', 'desc') // Add ordering to avoid index issues
-      ).get().subscribe({
-        next: (fgOutSnapshot) => {
+  // Transfer shipment data to FG Out - UPDATE VERSION
+  private transferToFGOut(shipment: ShipmentItem): void {
+    console.log(`🔄 Starting transfer to FG Out for shipment: ${shipment.shipmentCode}, material: ${shipment.materialCode}, PushNo: ${shipment.pushNo}`);
+    
+    // Default values if FG Inventory not found
+    let batchNumber = 'BATCH001';
+    let lsx = 'LSX001';
+    let lot = 'LOT001';
+    
+    // Try to get FG Inventory data (optional)
+    this.firestore.collection('fg-inventory').get().subscribe({
+      next: (inventorySnapshot) => {
+        // Find matching material in inventory
+        const matchingItem = inventorySnapshot.docs.find(doc => {
+          const data = doc.data() as any;
+          return data.materialCode === shipment.materialCode;
+        });
         
-        // Count all existing records (including previous pushes) to get next update count
-        const baseUpdateCount = fgOutSnapshot.size + 1;
-        const fgOutRecords: any[] = [];
-
-        // Calculate carton distribution
-        const totalQuantity = shipment.quantity;
-        const cartonSize = shipment.carton;
-        const oddQuantity = shipment.odd;
-
-        if (cartonSize > 0 && oddQuantity > 0) {
-          // Create two records: full cartons and ODD
-          const fullCartons = Math.floor((totalQuantity - oddQuantity) / cartonSize);
-          const fullCartonQuantity = fullCartons * cartonSize;
-          
-          // Record 1: Full cartons
-          if (fullCartonQuantity > 0) {
-            fgOutRecords.push({
-              shipment: shipment.shipmentCode,
-              materialCode: shipment.materialCode,
-              customerCode: shipment.customerCode,
-              batchNumber: batchNumber,
-              lsx: lsx,
-              lot: lot,
-              quantity: fullCartonQuantity,
-              poShip: shipment.poShip,
-              carton: fullCartons,
-              odd: 0,
-              notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize}) - Push #${baseUpdateCount}`,
-              updateCount: baseUpdateCount,
-              pushCount: baseUpdateCount,
-              transferredFrom: 'Shipment',
-              transferredAt: new Date(),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-          }
-
-          // Record 2: ODD quantity
-          if (oddQuantity > 0) {
-            fgOutRecords.push({
-              shipment: shipment.shipmentCode,
-              materialCode: shipment.materialCode,
-              customerCode: shipment.customerCode,
-              batchNumber: batchNumber,
-              lsx: lsx,
-              lot: lot,
-              quantity: oddQuantity,
-              poShip: shipment.poShip,
-              carton: 0,
-              odd: oddQuantity,
-              notes: `${shipment.notes} (ODD: ${oddQuantity}) - Push #${baseUpdateCount}`,
-              updateCount: baseUpdateCount + (fullCartonQuantity > 0 ? 1 : 0),
-              pushCount: baseUpdateCount,
-              transferredFrom: 'Shipment',
-              transferredAt: new Date(),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-          }
+        if (matchingItem) {
+          const inventoryData = matchingItem.data() as any;
+          batchNumber = inventoryData.batchNumber || 'BATCH001';
+          lsx = inventoryData.lsx || 'LSX001';
+          lot = inventoryData.lot || 'LOT001';
+          console.log(`✅ Found FG Inventory data: Batch=${batchNumber}, LSX=${lsx}, LOT=${lot}`);
         } else {
-          // Single record for simple quantity
-          fgOutRecords.push({
-            shipment: shipment.shipmentCode,
-            materialCode: shipment.materialCode,
-            customerCode: shipment.customerCode,
-            batchNumber: batchNumber,
-            lsx: lsx,
-            lot: lot,
-            quantity: totalQuantity,
-            poShip: shipment.poShip,
-            carton: shipment.carton,
-            odd: shipment.odd,
-            notes: `${shipment.notes} - Push #${baseUpdateCount}`,
-            updateCount: baseUpdateCount,
-            pushCount: baseUpdateCount,
-            transferredFrom: 'Shipment',
-            transferredAt: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
+          console.log(`⚠️ No FG Inventory found, using default values`);
         }
-
-        // Save all records to FG Out
-        const savePromises = fgOutRecords.map(record => 
-          this.firestore.collection('fg-out').add(record)
-        );
-
-        Promise.all(savePromises)
-          .then(() => {
-            console.log('✅ Data transferred to FG Out successfully');
-            const recordCount = fgOutRecords.length;
-            const batchInfo = `Batch: ${batchNumber}, LSX: ${lsx}, LOT: ${lot}`;
-            const pushInfo = `Push #${baseUpdateCount}`;
-            alert(`✅ Dữ liệu đã được chuyển sang FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}\n🔄 ${pushInfo}`);
-          })
-          .catch((error) => {
-            console.error('❌ Error transferring to FG Out:', error);
-            alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
-          });
-        },
-        error: (error) => {
-          console.error('❌ Error querying FG Out records:', error);
-          if (error.code === 'failed-precondition') {
-            alert(`❌ Lỗi Firebase Index: Cần tạo index cho query FG Out.\nVui lòng truy cập: https://console.firebase.google.com để tạo index.`);
-          } else {
-            alert(`❌ Lỗi khi truy vấn FG Out: ${error.message}`);
-          }
-        }
-      });
+        
+        // Check if record exists in FG Out
+        this.checkAndUpdateFGOut(shipment, batchNumber, lsx, lot);
+      },
+      error: (error) => {
+        console.log(`⚠️ Error getting FG Inventory, using default values: ${error.message}`);
+        this.checkAndUpdateFGOut(shipment, batchNumber, lsx, lot);
+      }
     });
+  }
+
+  // Check if FG Out record exists and update or create
+  private checkAndUpdateFGOut(shipment: ShipmentItem, batchNumber: string, lsx: string, lot: string): void {
+    this.firestore.collection('fg-out', ref => 
+      ref.where('shipment', '==', shipment.shipmentCode)
+         .where('materialCode', '==', shipment.materialCode)
+    ).get().subscribe(snapshot => {
+      
+      if (!snapshot.empty) {
+        // DELETE all existing records for this shipment+material
+        const deletePromises = snapshot.docs.map(doc => doc.ref.delete());
+        Promise.all(deletePromises).then(() => {
+          console.log(`🗑️ Deleted ${snapshot.docs.length} existing FG Out records`);
+          // CREATE new records with updated data
+          this.createFGOutRecords(shipment, batchNumber, lsx, lot);
+        }).catch(error => {
+          console.error('❌ Error deleting old FG Out records:', error);
+          alert(`❌ Lỗi khi xóa bản ghi cũ: ${error.message}`);
+        });
+      } else {
+        // CREATE new records
+        this.createFGOutRecords(shipment, batchNumber, lsx, lot);
+      }
+    });
+  }
+
+
+  // Create FG Out records - ALWAYS create 2 separate records (Full cartons + ODD)
+  private createFGOutRecords(shipment: ShipmentItem, batchNumber: string, lsx: string, lot: string): void {
+    const fgOutRecords: any[] = [];
+
+    // Calculate carton distribution
+    const totalQuantity = shipment.quantity;
+    const cartonSize = shipment.carton;
+    const oddQuantity = shipment.odd;
+
+    // Always create 2 records: Full cartons and ODD (even if one is 0)
+    const fullCartons = Math.floor((totalQuantity - oddQuantity) / cartonSize);
+    const fullCartonQuantity = fullCartons * cartonSize;
+    
+    // Record 1: Full cartons (always create, even if 0)
+    fgOutRecords.push({
+      shipment: shipment.shipmentCode,
+      materialCode: shipment.materialCode,
+      customerCode: shipment.customerCode,
+      batchNumber: batchNumber,
+      lsx: lsx,
+      lot: lot,
+      quantity: fullCartonQuantity,
+      poShip: shipment.poShip,
+      carton: fullCartons,
+      odd: 0,
+      notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize}) - PushNo: ${shipment.pushNo}`,
+      pushNo: shipment.pushNo,
+      transferredFrom: 'Shipment',
+      transferredAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Record 2: ODD quantity (always create, even if 0)
+    fgOutRecords.push({
+      shipment: shipment.shipmentCode,
+      materialCode: shipment.materialCode,
+      customerCode: shipment.customerCode,
+      batchNumber: batchNumber,
+      lsx: lsx,
+      lot: lot,
+      quantity: oddQuantity,
+      poShip: shipment.poShip,
+      carton: 0,
+      odd: oddQuantity,
+      notes: `${shipment.notes} (ODD: ${oddQuantity}) - PushNo: ${shipment.pushNo}`,
+      pushNo: shipment.pushNo,
+      transferredFrom: 'Shipment',
+      transferredAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Save all records to FG Out
+    const savePromises = fgOutRecords.map(record => 
+      this.firestore.collection('fg-out').add(record)
+    );
+
+    Promise.all(savePromises)
+      .then(() => {
+        console.log('✅ Data transferred to FG Out successfully');
+        const recordCount = fgOutRecords.length;
+        const batchInfo = `Batch: ${batchNumber}, LSX: ${lsx}, LOT: ${lot}`;
+        const cartonInfo = `Full cartons: ${fullCartons} x ${cartonSize} = ${fullCartonQuantity}, ODD: ${oddQuantity}`;
+        alert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}\n📦 ${cartonInfo}\n🔄 PushNo: ${shipment.pushNo}`);
+      })
+      .catch((error) => {
+        console.error('❌ Error transferring to FG Out:', error);
+        alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
+      });
   }
 
   // Format date for input field (YYYY-MM-DD)
@@ -392,6 +423,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         requestDate: shipment.requestDate,
         fullDate: shipment.fullDate,
         actualShipDate: shipment.actualShipDate,
+        pushNo: shipment.pushNo || '000', // Ensure PushNo is included
+        inventory: shipment.inventory || 0, // Ensure inventory is included
         updatedAt: new Date()
       };
       
@@ -399,7 +432,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       this.firestore.collection('shipments').doc(shipment.id).update(updateData)
         .then(() => {
-          console.log('Shipment updated successfully');
+          console.log(`Shipment updated successfully with PushNo: ${shipment.pushNo}`);
         })
         .catch(error => {
           console.error('Error updating shipment:', error);
@@ -496,6 +529,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       odd: parseFloat(row['Odd']) || 0,
       shipMethod: row['FWD'] || '',
       push: row['Push'] === 'true' || row['Push'] === true || row['Push'] === 1,
+      pushNo: '000', // Default PushNo for imported data
+      inventory: parseFloat(row['Tồn kho']) || 0, // Default inventory for imported data
       status: row['Status'] || 'Chờ soạn',
       requestDate: this.parseDate(row['CS Date'] || row['Ngày CS Y/c']) || new Date(),
       fullDate: this.parseDate(row['Full Date'] || row['Ngày full hàng']) || new Date(),
@@ -528,6 +563,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         requestDate: shipment.requestDate,
         fullDate: shipment.fullDate,
         actualShipDate: shipment.actualShipDate,
+        pushNo: shipment.pushNo || '000', // Ensure PushNo is included
+        inventory: shipment.inventory || 0, // Ensure inventory is included
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -553,8 +590,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'PO Ship': 'PO2024001',
         'Carton': 10,
         'Odd': 5,
+        'Tồn kho': 500,
         'FWD': 'Sea',
         'Push': true,
+        'PushNo': '001',
         'Status': 'Chờ soạn',
         'CS Date': '15/01/2024',
         'Full Date': '20/01/2024',
@@ -570,8 +609,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'PO Ship': 'PO2024002',
         'Carton': 20,
         'Odd': 8,
+        'Tồn kho': 750,
         'FWD': 'Air',
         'Push': false,
+        'PushNo': '000',
         'Status': 'Đang soạn',
         'CS Date': '16/01/2024',
         'Full Date': '21/01/2024',
@@ -593,8 +634,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 12 }, // PO Ship
       { wch: 10 }, // Carton
       { wch: 8 },  // Odd
+      { wch: 10 }, // Tồn kho
       { wch: 8 },  // FWD
-      { wch: 12 }, // Push
+      { wch: 8 },  // Push
+      { wch: 8 },  // PushNo
       { wch: 12 }, // Status
       { wch: 12 }, // CS Date
       { wch: 12 }, // Full Date

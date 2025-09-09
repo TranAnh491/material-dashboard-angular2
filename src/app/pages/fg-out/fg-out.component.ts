@@ -22,6 +22,7 @@ export interface FgOutItem {
   odd: number;
   notes: string;
   updateCount: number;
+  pushNo: string; // Thêm PushNo
   transferredFrom?: string;
   transferredAt?: Date;
   createdAt?: Date;
@@ -103,6 +104,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             lsx: data.lsx || '',
             lot: data.lot || '',
             updateCount: data.updateCount || 1,
+            pushNo: data.pushNo || '000', // Thêm pushNo với default value
             exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
           };
         });
@@ -119,6 +121,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const updateData = {
         ...material,
         exportDate: material.exportDate,
+        pushNo: material.pushNo || '000', // Đảm bảo pushNo được lưu
         updatedAt: new Date()
       };
       
@@ -341,6 +344,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       odd: parseInt(row['Odd']) || 0,
       notes: row['Ghi chú'] || '',
       updateCount: 1, // Default update count for imported data
+      pushNo: '000', // Default pushNo for imported data
       createdAt: new Date(),
       updatedAt: new Date()
     }));
@@ -365,6 +369,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const materialData = {
         ...material,
         exportDate: material.exportDate,
+        pushNo: material.pushNo || '000', // Đảm bảo pushNo được lưu
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -576,6 +581,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       odd: 0,
       notes: `Imported from XTP - ${this.xtpPXNumber}`,
       updateCount: 1, // Default update count for XTP imported data
+      pushNo: '000', // Default pushNo for XTP imported data
       createdAt: new Date(),
       updatedAt: new Date()
     }));

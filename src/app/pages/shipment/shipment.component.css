@@ -203,9 +203,9 @@
   border-collapse: collapse;
   background: #ffffff;
   font-size: 13px;
-  min-width: 1800px; /* Ensure table has enough width for all columns */
+  min-width: 1900px; /* Ensure table has enough width for all columns */
   table-layout: fixed;
-  border: none; /* Remove all table borders */
+  border: 2px solid #000000; /* Add black border around table */
 }
 
 .data-table th, .data-table td {
@@ -217,7 +217,7 @@
 }
 
 .data-table th {
-  border: none; /* Remove all borders from header cells */
+  border: 1px solid #000000; /* Add black borders to header cells */
   background: #f0f0f0;
   font-weight: bold;
   color: #000000;
@@ -231,11 +231,11 @@
 }
 
 .data-table td {
-  border: none; /* Remove all borders from content cells */
+  border: 1px solid #000000; /* Add black borders to content cells */
 }
 
 .data-table tr {
-  border-bottom: 1px solid #f0f0f0; /* Light separator between rows */
+  border-bottom: 1px solid #000000; /* Black separator between rows */
 }
 
 .data-table tr:hover {
@@ -293,15 +293,17 @@
 .data-table th:nth-child(6), .data-table td:nth-child(6) { width: 120px; } /* PO Ship */
 .data-table th:nth-child(7), .data-table td:nth-child(7) { width: 80px; } /* Carton */
 .data-table th:nth-child(8), .data-table td:nth-child(8) { width: 80px; } /* Odd */
-.data-table th:nth-child(9), .data-table td:nth-child(9) { width: 80px; } /* FWD */
-.data-table th:nth-child(10), .data-table td:nth-child(10) { width: 80px; } /* Push */
-.data-table th:nth-child(11), .data-table td:nth-child(11) { width: 100px; } /* Status */
-.data-table th:nth-child(12), .data-table td:nth-child(12) { width: 100px; } /* CS Date */
-.data-table th:nth-child(13), .data-table td:nth-child(13) { width: 100px; } /* Full Date */
-.data-table th:nth-child(14), .data-table td:nth-child(14) { width: 120px; } /* Dispatch Date */
-.data-table th:nth-child(15), .data-table td:nth-child(15) { width: 120px; } /* Ngày chuẩn bị */
-.data-table th:nth-child(16), .data-table td:nth-child(16) { width: 150px; } /* Ghi chú */
-.data-table th:nth-child(17), .data-table td:nth-child(17) { width: 80px; } /* Xóa */
+.data-table th:nth-child(9), .data-table td:nth-child(9) { width: 100px; } /* Tồn kho */
+.data-table th:nth-child(10), .data-table td:nth-child(10) { width: 80px; } /* FWD */
+.data-table th:nth-child(11), .data-table td:nth-child(11) { width: 80px; } /* Push */
+.data-table th:nth-child(12), .data-table td:nth-child(12) { width: 80px; } /* PushNo */
+.data-table th:nth-child(13), .data-table td:nth-child(13) { width: 100px; } /* Status */
+.data-table th:nth-child(14), .data-table td:nth-child(14) { width: 100px; } /* CS Date */
+.data-table th:nth-child(15), .data-table td:nth-child(15) { width: 100px; } /* Full Date */
+.data-table th:nth-child(16), .data-table td:nth-child(16) { width: 120px; } /* Dispatch Date */
+.data-table th:nth-child(17), .data-table td:nth-child(17) { width: 120px; } /* Ngày chuẩn bị */
+.data-table th:nth-child(18), .data-table td:nth-child(18) { width: 150px; } /* Ghi chú */
+.data-table th:nth-child(19), .data-table td:nth-child(19) { width: 80px; } /* Xóa */
 
 /* Status Styles */
 .status-completed {
@@ -411,6 +413,44 @@
 .checkbox-cell {
   text-align: center;
   min-width: 80px;
+}
+
+/* PushNo Cell Styles */
+.pushno-cell {
+  text-align: center;
+  padding: 8px;
+  border: 1px solid #ddd;
+  background: #f0f8ff;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #0066cc;
+  min-width: 80px;
+}
+
+.pushno-display {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #e6f3ff;
+  border: 1px solid #0066cc;
+  border-radius: 4px;
+  min-width: 40px;
+  text-align: center;
+}
+
+/* Inventory Display Styles */
+.inventory-display {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #f0f8f0;
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  min-width: 60px;
+  text-align: center;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #28a745;
 }
 
 .push-checkbox {
