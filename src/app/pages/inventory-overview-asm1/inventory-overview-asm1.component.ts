@@ -260,6 +260,18 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // Tính toán current stock giống hệt như RM1 Inventory
         const currentStock = openingStock + quantity - exported - xt;
         
+        // Debug cho mã B001627
+        if (materialCode === 'B001627') {
+          console.log(`🔍 DEBUG LOAD B001627:`, {
+            poNumber: poNumber,
+            openingStock: openingStock,
+            quantity: quantity,
+            exported: exported,
+            xt: xt,
+            currentStock: currentStock
+          });
+        }
+        
         items.push({
           id: doc.id, // Sử dụng ID thật từ Firebase
           materialCode: materialCode,
@@ -414,9 +426,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         // 🔧 SỬA LỖI: Tính lại currentStock từ các thành phần đã cộng dồn
         existing.currentStock = existing.openingStock + existing.quantity - existing.exported - existing.xt;
         
-        // Debug cho mã B001239
-        if (item.materialCode === 'B001239') {
-          console.log(`🔍 DEBUG GROUP B001239:`, {
+        // Debug cho mã B001627 (từ hình ảnh)
+        if (item.materialCode === 'B001627') {
+          console.log(`🔍 DEBUG GROUP B001627:`, {
             poNumber: item.poNumber,
             itemStock: item.currentStock,
             oldGroupedStock: oldStock,
@@ -424,7 +436,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
             openingStock: existing.openingStock,
             quantity: existing.quantity,
             exported: existing.exported,
-            xt: existing.xt
+            xt: existing.xt,
+            linkQStock: existing.linkQStock,
+            stockDifference: existing.stockDifference
           });
         }
         
@@ -472,15 +486,17 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           hasDifference: item.linkQStock !== undefined ? Math.abs(item.stockDifference || 0) > 1 : false
         };
         
-        // Debug cho mã B001239
-        if (item.materialCode === 'B001239') {
-          console.log(`🔍 DEBUG NEW GROUP B001239:`, {
+        // Debug cho mã B001627 (từ hình ảnh)
+        if (item.materialCode === 'B001627') {
+          console.log(`🔍 DEBUG NEW GROUP B001627:`, {
             poNumber: item.poNumber,
             itemStock: item.currentStock,
             openingStock: item.openingStock,
             quantity: item.quantity,
             exported: item.exported,
-            xt: item.xt
+            xt: item.xt,
+            linkQStock: item.linkQStock,
+            stockDifference: item.stockDifference
           });
         }
         
@@ -544,9 +560,19 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       copy.stockDifference = item.stockDifference;
       copy.hasDifference = item.hasDifference;
       
+      // 🔧 SỬA LỖI: Đảm bảo currentStock được copy đúng
+      copy.currentStock = item.currentStock;
       
       return copy;
     });
+    
+    // 🔧 SỬA LỖI: Group by material TRƯỚC khi filter LinkQ difference
+    // Để đảm bảo tất cả items có cùng mã hàng được cộng dồn trước khi filter
+    if (this.groupByType === 'material') {
+      const beforeGroup = filtered.length;
+      filtered = this.groupByMaterialCode(filtered);
+      console.log(`🔍 Material grouping (before filter): ${beforeGroup} → ${filtered.length} items`);
+    }
     
     // Filter by current filter mode
     switch (this.currentFilterMode) {
@@ -561,6 +587,18 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           filtered = filtered.filter(item => {
             if (item.stockDifference === undefined) return false;
             const absDifference = Math.abs(item.stockDifference);
+            
+            // Debug cho B001627
+            if (item.materialCode === 'B001627') {
+              console.log(`🔍 DEBUG FILTER B001627:`, {
+                currentStock: item.currentStock,
+                linkQStock: item.linkQStock,
+                stockDifference: item.stockDifference,
+                absDifference: absDifference,
+                willShow: absDifference > 1
+              });
+            }
+            
             return absDifference > 1; // Chỉ hiện lệch > 1 hoặc < -1
           });
           console.log(`🔍 LinkQ difference filter: ${beforeFilter} → ${filtered.length} items (only differences > 1 or < -1)`);
@@ -585,19 +623,6 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       console.log(`🔍 Search filter: ${beforeSearch} → ${filtered.length} items`);
     }
     
-    // Group data based on groupByType
-    if (this.groupByType === 'material') {
-      const beforeGroup = filtered.length;
-      filtered = this.groupByMaterialCode(filtered);
-      console.log(`🔍 Material grouping: ${beforeGroup} → ${filtered.length} items`);
-      
-      // 🔧 SỬA LỖI: Sau khi group by material, cần filter lại theo LinkQ difference
-      if (this.currentFilterMode === 'linkq-difference' && this.isLinkQDataLoaded) {
-        const beforeLinkQFilter = filtered.length;
-        filtered = filtered.filter(item => item.hasDifference);
-        console.log(`🔍 LinkQ difference filter after grouping: ${beforeLinkQFilter} → ${filtered.length} items`);
-      }
-    }
     // If groupByType === 'po', keep original structure (no grouping needed)
     
     
@@ -607,6 +632,18 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     // 🔧 SỬA LỖI: Kiểm tra dữ liệu LinkQ sau khi filter
     const itemsWithLinkQ = filtered.filter(item => item.linkQStock !== undefined).length;
     const itemsWithDifference = filtered.filter(item => item.hasDifference).length;
+    
+    // Debug cho B001627
+    const b001627Item = filtered.find(item => item.materialCode === 'B001627');
+    if (b001627Item) {
+      console.log(`🔍 DEBUG FINAL B001627:`, {
+        currentStock: b001627Item.currentStock,
+        linkQStock: b001627Item.linkQStock,
+        stockDifference: b001627Item.stockDifference,
+        hasDifference: b001627Item.hasDifference,
+        filterMode: this.currentFilterMode
+      });
+    }
     
     console.log(`✅ Applied filters: ${filtered.length} items shown`);
     console.log(`📊 LinkQ data preserved: ${itemsWithLinkQ} items have LinkQ data`);
@@ -1283,6 +1320,17 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     console.log('🔍 Starting silent stock comparison update...');
     console.log(`📊 LinkQ data size: ${this.linkQData.size}`);
     
+    // 🔧 DEBUG: Kiểm tra LinkQ data
+    if (this.linkQData.size === 0) {
+      console.log('⚠️ WARNING: LinkQ data is empty! This means no LinkQ data was loaded.');
+      console.log('🔍 Checking if LinkQ data exists in Firebase...');
+      return;
+    }
+    
+    // Debug: Log first few LinkQ entries
+    const linkQEntries = Array.from(this.linkQData.entries()).slice(0, 5);
+    console.log('🔍 DEBUG: First few LinkQ entries:', linkQEntries);
+    
     let updatedCount = 0;
     let differenceCount = 0;
     
@@ -1423,12 +1471,15 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       if (mostRecentFile.linkQData && Object.keys(mostRecentFile.linkQData).length > 0) {
         console.log(`🔄 Auto-loading most recent LinkQ data from: ${mostRecentFile.fileName}`);
+        console.log(`🔍 DEBUG: LinkQ data keys count: ${Object.keys(mostRecentFile.linkQData).length}`);
         
         // Restore LinkQ data
         this.linkQData.clear();
         Object.entries(mostRecentFile.linkQData).forEach(([materialCode, stock]) => {
           this.linkQData.set(materialCode, stock as number);
         });
+        
+        console.log(`🔍 DEBUG: Loaded ${this.linkQData.size} LinkQ items into memory`);
         
         // Set as current file
         this.currentLinkQFileId = mostRecentFile.id;
@@ -1443,6 +1494,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         console.log(`📊 Current file: ${mostRecentFile.fileName} (${mostRecentFile.processedItems} items)`);
       } else {
         console.log('⚠️ Most recent file has no LinkQ data to restore');
+        console.log(`🔍 DEBUG: mostRecentFile.linkQData:`, mostRecentFile.linkQData);
+        console.log(`🔍 DEBUG: Object.keys(mostRecentFile.linkQData):`, Object.keys(mostRecentFile.linkQData || {}));
       }
     } catch (error) {
       console.error('❌ Error auto-loading most recent LinkQ data:', error);
