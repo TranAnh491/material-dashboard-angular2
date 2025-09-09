@@ -432,14 +432,25 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         existing.currentStock = Math.round(existing.currentStock);
         existing.isNegative = existing.currentStock < 0;
         
-        // 🔧 SỬA LỖI: Cộng dồn linkQStock và tính toán lại stockDifference
-        if (item.linkQStock !== undefined) {
-          existing.linkQStock = (existing.linkQStock || 0) + item.linkQStock;
-          // Tính toán lại stockDifference dựa trên currentStock mới
+        // 🔧 SỬA LỖI: LinkQ không được cộng dồn, chỉ giữ nguyên giá trị từ item đầu tiên
+        // Vì LinkQ là dữ liệu từ hệ thống bên ngoài, không nên cộng dồn
+        if (item.linkQStock !== undefined && existing.linkQStock === undefined) {
+          // Chỉ set LinkQ nếu chưa có (từ item đầu tiên gặp mã này)
+          existing.linkQStock = item.linkQStock;
+          // Tính toán lại stockDifference dựa trên currentStock mới (đã cộng dồn)
           existing.stockDifference = existing.currentStock - existing.linkQStock;
           // Kiểm tra lại hasDifference - chỉ hiện các mã lệch lớn hơn 1 và -1
           const absDifference = Math.abs(existing.stockDifference);
           existing.hasDifference = absDifference > 1;
+          
+          // Debug log cho việc group by material
+          console.log(`🔍 GROUP BY MATERIAL: ${item.materialCode}`, {
+            poNumber: item.poNumber,
+            itemLinkQ: item.linkQStock,
+            groupedCurrentStock: existing.currentStock,
+            groupedLinkQ: existing.linkQStock,
+            stockDifference: existing.stockDifference
+          });
         }
       } else {
         // Create new grouped item
@@ -882,7 +893,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           this.updateStockComparisonSilently();
           
           // Show success message
-          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Dữ liệu cũ đã được ghi đè hoàn toàn\n🔍 Hệ thống sẽ so sánh với tồn kho hiện tại\n\n📊 Lưu ý: Tất cả số liệu đều được làm tròn thành số chẵn để so sánh chính xác`);
+          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Dữ liệu cũ đã được ghi đè hoàn toàn\n🔍 Hệ thống sẽ so sánh với tồn kho hiện tại\n\n📊 Lưu ý: Tất cả số liệu đều được làm tròn thành số chẵn để so sánh chính xác\n\n⚠️ Kiểm tra console để xem chi tiết duplicate (nếu có)`);
           
         } catch (error) {
           console.error('❌ Error importing LinkQ data:', error);
@@ -1117,10 +1128,17 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         data.slice(0, 3).forEach((row, index) => {
           console.log(`🔍 DEBUG: Row ${index + 1}:`, row);
         });
+        
+        // 🔧 KIỂM TRA DUPLICATE: Phân tích file Excel trước khi xử lý
+        this.analyzeExcelDuplicates(data);
       }
       
       let processedCount = 0;
       let skippedCount = 0;
+      let duplicateCount = 0;
+      
+      // 🔧 SỬA LỖI: Tạo Map để track duplicate material codes
+      const materialCodeCount = new Map<string, number>();
       
       data.forEach((row, index) => {
         // Try multiple possible column names for material code
@@ -1159,12 +1177,29 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         
         if (materialCode && materialCode.toString().trim() !== '') {
           const trimmedCode = materialCode.toString().trim();
-          this.linkQData.set(trimmedCode, stock);
-          processedCount++;
           
-          // Log first few successful items for debugging
-          if (processedCount <= 5) {
-            console.log(`✅ DEBUG: Processed item ${processedCount}: ${trimmedCode} -> ${stock}`);
+          // 🔧 SỬA LỖI: Kiểm tra duplicate trong file Excel
+          if (materialCodeCount.has(trimmedCode)) {
+            const currentCount = materialCodeCount.get(trimmedCode)!;
+            materialCodeCount.set(trimmedCode, currentCount + 1);
+            duplicateCount++;
+            
+            console.log(`⚠️ DUPLICATE: Material code "${trimmedCode}" appears ${currentCount + 1} times in Excel file (row ${index + 1})`);
+            
+            // Có thể chọn: ghi đè, cộng dồn, hoặc bỏ qua
+            // Hiện tại: ghi đè với giá trị mới nhất
+            this.linkQData.set(trimmedCode, stock);
+            console.log(`🔄 Overwrote with latest value: ${trimmedCode} -> ${stock}`);
+          } else {
+            // Lần đầu tiên gặp mã này
+            materialCodeCount.set(trimmedCode, 1);
+            this.linkQData.set(trimmedCode, stock);
+            processedCount++;
+            
+            // Log first few successful items for debugging
+            if (processedCount <= 5) {
+              console.log(`✅ DEBUG: Processed item ${processedCount}: ${trimmedCode} -> ${stock}`);
+            }
           }
         } else {
           skippedCount++;
@@ -1180,7 +1215,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       await this.saveLinkQFileToFirebase(fileName, data.length, processedCount, skippedCount);
       
       this.isLinkQDataLoaded = true;
-      console.log(`✅ Processed ${processedCount} LinkQ items, skipped ${skippedCount} rows`);
+      console.log(`✅ Processed ${processedCount} unique LinkQ items, skipped ${skippedCount} rows, found ${duplicateCount} duplicates`);
       console.log(`🔄 New LinkQ data has completely replaced old data and saved to Firebase`);
       
       // Log some sample data for verification
@@ -1506,6 +1541,56 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     } catch (error) {
       console.error('❌ Error deleting old LinkQ files:', error);
       // Don't throw error, continue with new file import
+    }
+  }
+
+  // 🔍 Phân tích duplicate trong file Excel
+  private analyzeExcelDuplicates(data: any[]): void {
+    console.log('🔍 Analyzing Excel file for duplicates...');
+    
+    const materialCodeCount = new Map<string, { count: number, rows: number[] }>();
+    
+    data.forEach((row, index) => {
+      const materialCode = row['Mã hàng'] || 
+                          row['materialCode'] || 
+                          row['Mã'] || 
+                          row['Code'] || 
+                          row['Material'] || 
+                          row['Item'] ||
+                          row['Part'] ||
+                          row['SKU'] ||
+                          row['Product'] ||
+                          row['Item Code'] ||
+                          row['Part Number'] ||
+                          row['Material Code'] ||
+                          row['Product Code'] ||
+                          '';
+      
+      if (materialCode && materialCode.toString().trim() !== '') {
+        const trimmedCode = materialCode.toString().trim();
+        
+        if (materialCodeCount.has(trimmedCode)) {
+          const existing = materialCodeCount.get(trimmedCode)!;
+          existing.count++;
+          existing.rows.push(index + 1);
+        } else {
+          materialCodeCount.set(trimmedCode, { count: 1, rows: [index + 1] });
+        }
+      }
+    });
+    
+    // Tìm và báo cáo duplicates
+    const duplicates = Array.from(materialCodeCount.entries())
+      .filter(([code, info]) => info.count > 1)
+      .sort((a, b) => b[1].count - a[1].count);
+    
+    if (duplicates.length > 0) {
+      console.log(`⚠️ FOUND ${duplicates.length} DUPLICATE MATERIAL CODES in Excel file:`);
+      duplicates.forEach(([code, info]) => {
+        console.log(`  📋 "${code}": appears ${info.count} times in rows ${info.rows.join(', ')}`);
+      });
+    } else {
+      console.log('✅ No duplicate material codes found in Excel file');
     }
   }
 
