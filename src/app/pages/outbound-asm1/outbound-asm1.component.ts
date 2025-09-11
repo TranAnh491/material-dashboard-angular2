@@ -186,13 +186,27 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     const isMobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
     const isMobileScreen = window.innerWidth <= 768;
     
-    // Consider it mobile if either user agent or screen size indicates mobile
-    this.isMobile = isMobileUserAgent || isMobileScreen;
+    // 🔧 SỬA LỖI: PDA có thể không được detect đúng, nên coi tất cả device nhỏ là mobile
+    // Hoặc có thể PDA có user agent đặc biệt
+    const isPDA = /pda|handheld|mobile|android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    const isSmallScreen = window.innerWidth <= 1024; // Tăng threshold cho PDA
+    
+    // Consider it mobile if either user agent, screen size, or PDA-like device
+    this.isMobile = isMobileUserAgent || isMobileScreen || isPDA || isSmallScreen;
+    
+    // 🔧 SỬA LỖI: Force mobile mode cho PDA nếu có vấn đề detect
+    // Nếu user đã chọn scanner và device có vẻ như PDA, force mobile mode
+    if (this.selectedScanMethod === 'scanner' && (isPDA || isSmallScreen)) {
+      console.log('🔧 Force mobile mode for PDA device');
+      this.isMobile = true;
+    }
     
     console.log('📱 Device detection:', {
       userAgent: userAgent,
       isMobileUserAgent,
       isMobileScreen,
+      isPDA,
+      isSmallScreen,
       windowWidth: window.innerWidth,
       isMobile: this.isMobile,
       currentSelectedMethod: this.selectedScanMethod
@@ -216,14 +230,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   selectScanMethod(method: 'camera' | 'scanner'): void {
     this.selectedScanMethod = method;
     console.log(`📱 Selected scan method: ${method}`);
-    console.log(`📱 Current mobile state: ${this.isMobile}`);
-    console.log(`📱 Will call: ${this.isMobile && method === 'camera' ? 'startCameraScanning()' : 'startBatchScanningMode()'}`);
+    console.log(`📱 Will call: ${method === 'scanner' ? 'startBatchScanningMode()' : 'startCameraScanning()'}`);
     
     // Stop current scanning if active
     if (this.isCameraScanning) {
       this.stopScanning();
     }
   }
+
 
   // 📱 Window Resize Handler
   private onWindowResize(): void {
