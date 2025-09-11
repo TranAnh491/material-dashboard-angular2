@@ -24,6 +24,7 @@
               <span>Scanner</span>
             </button>
             <button class="start-btn-mobile" 
+                    [disabled]="!selectedScanMethod"
                     (click)="isMobile && selectedScanMethod === 'camera' ? startCameraScanning() : startBatchScanningMode()"
                     title="Bắt đầu chế độ scan">
               <i class="material-icons">play_arrow</i>
@@ -78,6 +79,12 @@
               <i class="material-icons">videocam_off</i>
               <span>Tắt Camera</span>
             </button>
+          </div>
+          
+          <!-- 🔧 SỬA LỖI: Thêm dòng chữ hướng dẫn khi đã scan đủ LSX và mã nhân viên -->
+          <div class="scan-instruction" *ngIf="isProductionOrderScanned && isEmployeeIdScanned">
+            <i class="material-icons">info</i>
+            <span>Được phép scan xuất kho sau khi scan xong lệnh sản xuất và mã nhân viên</span>
           </div>
         </div>
         
@@ -157,8 +164,8 @@
           </button>
         </div>
 
-        <!-- Factory Badge -->
-        <span class="factory-badge asm1-badge">ASM1</span>
+        <!-- Factory Badge - 🔧 SỬA LỖI: Ẩn box ASM1 -->
+        <!-- <span class="factory-badge asm1-badge">ASM1</span> -->
         
         <!-- Negative stock counter -->
         <!-- REMOVED: Negative stock counter - Không cần tính stock để scan nhanh -->

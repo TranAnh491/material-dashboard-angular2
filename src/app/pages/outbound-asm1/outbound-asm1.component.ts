@@ -58,7 +58,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   exportQuantity: number = 0;
   
   // Mobile Scanner Selection
-  selectedScanMethod: 'camera' | 'scanner' = 'camera';
+  selectedScanMethod: 'camera' | 'scanner' | null = null; // 🔧 SỬA LỖI: Không chọn gì mặc định
   isMobile: boolean = false;
   
   // Physical Scanner properties
@@ -1379,6 +1379,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (this.isEmployeeIdScanned) {
         this.currentScanStep = 'material';
         console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+        // 🔧 SỬA LỖI: Bỏ popup, dữ liệu tự nhảy vào bảng
       }
       return;
     }
@@ -1393,6 +1394,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (this.isProductionOrderScanned) {
         this.currentScanStep = 'material';
         console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+        // 🔧 SỬA LỖI: Bỏ popup, dữ liệu tự nhảy vào bảng
       }
       return;
     }
@@ -1415,6 +1417,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
         this.currentScanStep = 'material';
         console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+        // 🔧 SỬA LỖI: Bỏ popup, dữ liệu tự nhảy vào bảng
       }
       return;
     }
@@ -1425,13 +1428,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log('🔍 Both LSX and Employee ID scanned, processing material via onScanSuccess');
       this.onScanSuccess(scannedData);
     } else {
-      // Show what's still needed - chỉ log console, không alert
+      // Show what's still needed
       if (!this.isProductionOrderScanned) {
         console.log('⚠️ Vui lòng scan lệnh sản xuất (LSX hoặc KZLSX...) trước!');
-        // Bỏ alert - chỉ log console
+        alert('⚠️ Vui lòng scan lệnh sản xuất (LSX) trước!');
       } else if (!this.isEmployeeIdScanned) {
         console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
-        // Bỏ alert - chỉ log console
+        alert('⚠️ Vui lòng scan mã nhân viên (ASP) trước!');
       }
     }
   }
@@ -1614,6 +1617,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       this.saveMaterialDirectlyToDatabase(materialCode, poNumber, quantity, 'N/A', importDate);
       
       console.log('✅ Đã lưu xong, có thể scan liên tục');
+      // 🔧 SỬA LỖI: Bỏ popup, dữ liệu tự nhảy vào bảng
       
       // Auto-focus cho scan tiếp theo
       setTimeout(() => {

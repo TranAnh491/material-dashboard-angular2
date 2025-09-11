@@ -50,6 +50,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   // Latest update date from Safety tab
   latestUpdateDate: Date | null = null;
+  
+  // All scan dates from Safety tab
+  allScanDates: Date[] = [];
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
@@ -377,29 +380,45 @@ export class DashboardComponent implements OnInit, OnDestroy {
       weekday.date = this.currentWeekDates[index];
     });
     
-    console.log('📅 Current week initialized:', this.currentWeekDates.map(d => d.toLocaleDateString('vi-VN')));
   }
 
   private loadSafetyData() {
     this.safetyService.getSafetyMaterials().subscribe(materials => {
       if (materials.length > 0) {
-        // Find the latest update date
-        const latestDate = materials.reduce((latest, material) => {
-          const materialDate = material.updatedAt ? new Date(material.updatedAt) : new Date(material.scanDate);
-          return materialDate > latest ? materialDate : latest;
-        }, new Date(0));
+        // Get all scan dates from materials - ONLY from scanDate column
+        const scanDates = new Set<string>();
         
-        this.latestUpdateDate = latestDate;
-        console.log('📊 Latest update date from Safety:', this.latestUpdateDate.toLocaleDateString('vi-VN'));
+        materials.forEach(material => {
+          // Only check scanDate, not updatedAt
+          if (material.scanDate && material.scanDate > new Date(0)) {
+            const scanDateStr = material.scanDate.toDateString();
+            scanDates.add(scanDateStr);
+          }
+        });
         
+        // Find the latest scan date
+        const allScanDates = Array.from(scanDates).map(dateStr => new Date(dateStr));
+        if (allScanDates.length > 0) {
+          this.latestUpdateDate = allScanDates.reduce((latest, date) => 
+            date > latest ? date : latest
+          );
+        } else {
+          this.latestUpdateDate = null;
+        }
+        
+        // Store all scan dates for checking individual days
+        this.allScanDates = allScanDates;
+        
+        this.updateWeekdayColors();
+      } else {
+        this.latestUpdateDate = null;
+        this.allScanDates = [];
         this.updateWeekdayColors();
       }
     });
   }
 
   private updateWeekdayColors() {
-    if (!this.latestUpdateDate) return;
-    
     const today = new Date();
     const currentDay = today.getDay();
     
@@ -407,32 +426,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (!weekday.date) return;
       
       const weekdayDate = weekday.date;
-      const isLatestUpdate = this.isSameDate(weekdayDate, this.latestUpdateDate!);
       const isInventoryDay = index === 1 || index === 5; // Tuesday (index 1) and Saturday (index 5)
       
       // Reset flags and status
       weekday.hasFlag = false;
       weekday.status = 'unknown';
       
-      // Check if this is a late day (past due date)
-      const isLate = weekdayDate < today && !this.isSameDate(weekdayDate, today);
+      // Check if this day has scan data from Safety tab
+      const hasScanData = this.allScanDates.some(scanDate => this.isSameDate(weekdayDate, scanDate));
       
-      // Apply status logic based on the image interface
-      if (index === 1) { // Tuesday - Inventory day
-        if (isLate) {
-          weekday.status = 'late'; // Red for late Tuesday
-          // No flag, keep weekday name visible
+      // Check if this day is past due (yesterday or earlier)
+      const isPastDue = weekdayDate < today && !this.isSameDate(weekdayDate, today);
+      
+      // Apply new logic based on requirements
+      if (isInventoryDay) {
+        // Thứ 3 (index 1) and Thứ 7 (index 5) - Inventory days
+        if (hasScanData) {
+          weekday.status = 'scan-day'; // Blue when scanned on correct date
+        } else if (isPastDue) {
+          weekday.status = 'late'; // Red when past due without scan
         } else {
-          weekday.status = 'inventory'; // Orange for normal Tuesday
+          weekday.status = 'inventory'; // Orange by default
         }
-      } else if (index === 5) { // Saturday - Inventory day
-        weekday.status = 'inventory'; // Always orange for Saturday
       } else {
-        // Other days (Monday, Wednesday, Thursday, Friday) - Regular days
-        if (isLatestUpdate) {
-          weekday.status = 'scan-day'; // Blue for scan day
+        // Thứ 2, 4, 5, 6 - Regular days
+        if (hasScanData) {
+          weekday.status = 'scan-day'; // Blue when scanned on correct date
         } else {
-          weekday.status = 'regular'; // White for regular days
+          weekday.status = 'regular'; // White by default (no change for no scan)
         }
       }
       
@@ -441,8 +462,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         weekday.isToday = true;
       }
     });
-    
-    console.log('🎨 Weekday status updated:', this.weekdays.map(w => ({ name: w.name, status: w.status, isToday: w.isToday, hasFlag: w.hasFlag })));
   }
 
   private isSameDate(date1: Date, date2: Date): boolean {
@@ -490,10 +509,4 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadSafetyData();
   }
 
-  // Test method to force refresh weekday colors
-  testRefreshWeekdayColors() {
-    console.log('🧪 Testing weekday colors refresh...');
-    this.latestUpdateDate = new Date(); // Use today as latest update
-    this.updateWeekdayColors();
-  }
 }
