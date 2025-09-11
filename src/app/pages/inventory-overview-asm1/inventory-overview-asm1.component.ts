@@ -162,46 +162,62 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       // Load LinkQ file history first
       await this.loadLinkQFileHistory();
       
-      // Lấy dữ liệu từ collection inventory-materials với filter factory == 'ASM1' 
-      // Giống hệt như logic trong RM1 Inventory để đảm bảo tính nhất quán
+      // 🔧 SỬA LỖI: Sử dụng real-time listener thay vì one-time snapshot
+      // Để đảm bảo RM1 Overview cập nhật ngay lập tức khi có thay đổi từ RM1 Inventory
       console.log('🔍 Lấy dữ liệu từ collection inventory-materials với filter factory == ASM1...');
       
-      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+      // Sử dụng snapshotChanges() để có real-time updates
+      // 🔧 SỬA LỖI: Bỏ orderBy để tránh cần index
+      this.firestore.collection('inventory-materials', ref => 
         ref.where('factory', '==', 'ASM1')
-      ).ref.get();
+      )
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((actions) => {
+        console.log(`🔄 Real-time update: ${actions.length} ASM1 documents changed`);
+        
+        if (actions.length === 0) {
+          console.log('ℹ️ Không tìm thấy dữ liệu ASM1 trong collection inventory-materials');
+          this.inventoryItems = [];
+          this.filteredItems = [];
+          this.isLoading = false;
+          return;
+        }
+        
+        console.log(`✅ Real-time update: ${actions.length} ASM1 documents trong collection inventory-materials`);
+        
+        // Process real-time changes
+        this.processInventoryData(actions);
+      });
       
-      if (snapshot.empty) {
-        console.log('ℹ️ Không tìm thấy dữ liệu ASM1 trong collection inventory-materials');
-        this.inventoryItems = [];
-        this.filteredItems = [];
-        return;
-      }
+      return; // Exit early since we're using subscription
       
-      console.log(`✅ Tìm thấy ${snapshot.size} ASM1 documents trong collection inventory-materials`);
-      
-      // 🔧 SỬA LỖI: Không cần load outbound data
-      // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
-      
-      // Xử lý dữ liệu từ collection inventory-materials để đảm bảo chính xác
-      console.log(`📊 Xử lý ${snapshot.size} ASM1 documents từ collection inventory-materials`);
-      
-      // 🔧 SỬA LỖI: Không cần load outbound data
-      // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
-      // Nên dữ liệu exported trong inventory-materials đã là chính xác
+    } catch (error) {
+      console.error('❌ Error loading inventory overview:', error);
+      // Show error in UI
+      this.inventoryItems = [];
+      this.filteredItems = [];
+      this.isLoading = false;
+    }
+  }
+
+  // Process real-time inventory data changes
+  private processInventoryData(actions: any[]): void {
+    try {
+      console.log(`📊 Processing ${actions.length} real-time changes...`);
       
       const items: InventoryOverviewItem[] = [];
-      
-      // Xử lý từng document từ collection inventory-materials
-      let itemIndex = 0;
       let validItemsCount = 0;
       let invalidItemsCount = 0;
       
-      snapshot.forEach((doc) => {
-        const data = doc.data() as any;
+      actions.forEach((action, index) => {
+        const data = action.payload.doc.data() as any;
+        const docId = action.payload.doc.id;
+        const changeType = action.type;
         
         // Log first few documents for debugging
-        if (itemIndex < 3) {
-          console.log(`🔍 Document ${itemIndex + 1} (ASM1):`, {
+        if (index < 3) {
+          console.log(`🔍 Real-time change ${index + 1} (${changeType}):`, {
             materialCode: data.materialCode,
             poNumber: data.poNumber,
             quantity: data.quantity,
@@ -209,10 +225,14 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
             exported: data.exported,
             xt: data.xt,
             location: data.location,
-            type: data.type,
-            // Log all available fields
-            allFields: Object.keys(data)
+            type: data.type
           });
+        }
+        
+        // Skip deleted documents
+        if (changeType === 'removed') {
+          console.log(`🗑️ Document removed: ${docId}`);
+          return;
         }
         
         // 🔍 FILTER: Loại bỏ dữ liệu scan sai
@@ -234,7 +254,6 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         if (!this.isValidMaterialCode(materialCode)) {
           console.log(`⚠️ Skipping invalid material code: "${materialCode}" (PO: ${poNumber})`);
           invalidItemsCount++;
-          itemIndex++;
           return; // Bỏ qua dòng này
         }
         
@@ -242,7 +261,6 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         if (!this.isValidPONumber(poNumber)) {
           console.log(`⚠️ Skipping invalid PO: "${poNumber}" (Material: ${materialCode})`);
           invalidItemsCount++;
-          itemIndex++;
           return; // Bỏ qua dòng này
         }
         
@@ -251,11 +269,6 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const openingStock = data.openingStock || 0;
         const exported = data.exported || 0;
         const xt = data.xt || 0;
-        
-        // 🔧 SỬA LỖI: Không cập nhật exported từ outbound-materials
-        // Vì RM1 Inventory đã cập nhật exported trực tiếp vào inventory-materials
-        // Nên dữ liệu exported trong inventory-materials đã là chính xác
-        // Chỉ sử dụng exported từ inventory-materials
         
         // Tính toán current stock giống hệt như RM1 Inventory
         const currentStock = openingStock + quantity - exported - xt;
@@ -273,11 +286,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         }
         
         items.push({
-          id: doc.id, // Sử dụng ID thật từ Firebase
+          id: docId, // Sử dụng ID thật từ Firebase
           materialCode: materialCode,
           poNumber: poNumber,
           quantity: quantity,
-          openingStock: openingStock, // Thêm openingStock
+          openingStock: openingStock,
           exported: exported,
           xt: xt,
           location: data.location || '',
@@ -287,10 +300,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         });
         
         validItemsCount++;
-        itemIndex++;
       });
       
-      console.log(`✅ Filtered results: ${validItemsCount} valid items, ${invalidItemsCount} invalid items skipped`);
+      console.log(`✅ Real-time update: ${validItemsCount} valid items, ${invalidItemsCount} invalid items skipped`);
       
       // Sort by material code then PO (FIFO)
       items.sort((a, b) => {
@@ -303,7 +315,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       this.inventoryItems = items;
       this.filteredItems = [...items];
       
-      console.log(`✅ Loaded ${items.length} ASM1 inventory items từ collection inventory-materials`);
+      console.log(`✅ Real-time update: ${items.length} ASM1 inventory items từ collection inventory-materials`);
       console.log(`📊 Negative stock items: ${items.filter(item => item.isNegative).length}`);
       
       // Log negative stock items specifically
@@ -315,17 +327,16 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         });
       }
       
+      // Apply filters to refresh display
+      this.applyFilters();
+      
       // Force change detection
       this.cdr.detectChanges();
       
     } catch (error) {
-      console.error('❌ Error loading inventory overview:', error);
-      // Show error in UI
-      this.inventoryItems = [];
-      this.filteredItems = [];
+      console.error('❌ Error processing real-time inventory data:', error);
     } finally {
       this.isLoading = false;
-      this.cdr.detectChanges();
     }
   }
 
@@ -889,15 +900,18 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   }
   
   // Auto refresh data every 30 seconds to keep in sync with RM1 Inventory
+  // 🔧 SỬA LỖI: Với real-time listener, auto-refresh không cần thiết nữa
+  // Nhưng vẫn giữ để refresh LinkQ data nếu cần
   private startAutoRefresh(): void {
     setInterval(() => {
       if (!this.isLoading) {
         console.log('🔄 Auto-refreshing inventory overview data...');
-        // Only auto-refresh if no LinkQ data is loaded to avoid interrupting user work
-        if (!this.isLinkQDataLoaded) {
-          this.loadInventoryOverview();
+        // Chỉ refresh LinkQ data, không cần refresh inventory data vì đã có real-time listener
+        if (this.isLinkQDataLoaded) {
+          console.log('🔄 Refreshing LinkQ data...');
+          this.updateStockComparisonSilently();
         } else {
-          console.log('⏸️ Skipping auto-refresh while LinkQ data is loaded to avoid interrupting user work');
+          console.log('ℹ️ No LinkQ data loaded, real-time listener handles inventory updates');
         }
       }
     }, 30000); // 30 seconds
