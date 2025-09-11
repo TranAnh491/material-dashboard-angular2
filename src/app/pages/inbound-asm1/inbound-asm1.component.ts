@@ -496,11 +496,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   private addToInventory(material: InboundMaterial): void {
     console.log(`Adding ${material.materialCode} to Inventory ASM1...`);
     
+    // 🔧 SỬA LỖI: batchNumber trong inventory chỉ là ngày nhập, không có số lô hàng
+    // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
+    const inventoryBatchNumber = material.importDate.toLocaleDateString('en-GB').split('/').join('');
+    
+    // 🔧 SỬA LỖI: Kiểm tra duplicate trước khi add
+    // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
+    // Cho phép có 2 dòng giống nhau ở 2 ngày khác nhau (batch khác nhau)
+    this.checkForDuplicateInInventory(material, inventoryBatchNumber).then(isDuplicate => {
+      if (isDuplicate) {
+        console.log(`⚠️ Duplicate detected for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
+        console.log(`  - Same batch already exists in inventory, skipping add`);
+        return;
+      }
+    
     const inventoryMaterial = {
       factory: 'ASM1',
       importDate: material.importDate,
       receivedDate: new Date(), // When moved to inventory
-      batchNumber: material.batchNumber,
+      batchNumber: inventoryBatchNumber, // Chỉ ngày nhập, không có số lô hàng
       materialCode: material.materialCode,
       poNumber: material.poNumber,
       quantity: material.quantity,
@@ -516,6 +530,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       rollsOrBags: material.rollsOrBags,
       supplier: material.supplier,
       remarks: material.remarks,
+      source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -524,10 +539,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.firestore.collection('inventory-materials').add(inventoryMaterial)
       .then(() => {
         console.log(`✅ ${material.materialCode} added to Inventory ASM1`);
-        
-        // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
-        this.updateStandardPackingFromInbound(material);
-        
+          
+          // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
+          this.updateStandardPackingFromInbound(material);
+          
         // No notification shown - silent operation
       })
       .catch((error) => {
@@ -535,7 +550,41 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // Revert the checkbox if failed
         material.isReceived = false;
         this.updateMaterial(material);
-      });
+        });
+    });
+  }
+
+  // 🔧 SỬA LỖI: Kiểm tra duplicate trong inventory trước khi add
+  // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
+  // Không cấm có 2 dòng giống nhau ở 2 ngày khác nhau (batch khác nhau)
+  private async checkForDuplicateInInventory(material: InboundMaterial, inventoryBatchNumber: string): Promise<boolean> {
+    try {
+      console.log(`🔍 Checking for duplicate in inventory: ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
+      console.log(`  - Inbound batchNumber: ${material.batchNumber} (có số lô hàng)`);
+      console.log(`  - Inventory batchNumber: ${inventoryBatchNumber} (chỉ ngày nhập)`);
+      
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+           .where('materialCode', '==', material.materialCode)
+           .where('poNumber', '==', material.poNumber)
+           .where('batchNumber', '==', inventoryBatchNumber)
+           .where('source', '==', 'inbound')
+      ).get().toPromise();
+      
+      if (snapshot && !snapshot.empty) {
+        console.log(`⚠️ Found ${snapshot.size} existing records for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
+        console.log(`  - This indicates duplicate tick "đã nhận" for the same batch (same day)`);
+        return true;
+      }
+      
+      console.log(`✅ No duplicate found for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
+      console.log(`  - Safe to add to inventory (different batch or first time)`);
+      return false;
+      
+    } catch (error) {
+      console.error('❌ Error checking for duplicate:', error);
+      return false; // Allow add if check fails
+    }
   }
 
   // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound ASM1
@@ -2112,6 +2161,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - Lô hàng: ${material.batchNumber}`);
       console.log(`  - Kết thúc xử lý do validation thất bại`);
       console.log(`  - Thời gian xử lý: ${duration}ms`);
+      return;
+    }
+    
+    // 🔧 SỬA LỖI: Kiểm tra xem đã tick rồi chưa để tránh duplicate
+    if (material.isReceived) {
+      console.log(`⚠️ Material ${material.materialCode} đã được tick "đã nhận" rồi, bỏ qua`);
       return;
     }
     
