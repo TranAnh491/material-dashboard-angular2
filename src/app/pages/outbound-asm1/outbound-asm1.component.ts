@@ -2096,4 +2096,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     return updatedNotes.length > 500 ? updatedNotes.substring(0, 500) + '...' : updatedNotes;
   }
 
+  // 🔧 DEBUG: Method để debug start button
+  debugStartButton(): void {
+    console.log('🚀 Start button clicked:', {
+      selectedScanMethod: this.selectedScanMethod,
+      willCall: this.selectedScanMethod === 'scanner' ? 'startBatchScanningMode()' : 'startCameraScanning()'
+    });
+  }
+
 }
