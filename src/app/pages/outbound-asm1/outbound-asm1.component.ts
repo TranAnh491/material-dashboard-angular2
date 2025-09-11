@@ -1349,9 +1349,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
     
+    // 🔧 SỬA LỖI: Activate physical scanner để có thể nhận input
+    this.isScannerInputActive = true;
     this.scannerBuffer = '';
+    
+    // 🔧 DEBUG: Log trạng thái để debug
+    console.log('🔍 Scanner state debug:', {
+      isMobile: this.isMobile,
+      selectedScanMethod: this.selectedScanMethod,
+      isScannerInputActive: this.isScannerInputActive,
+      isBatchScanningMode: this.isBatchScanningMode,
+      willShowInput: !(this.isMobile && this.selectedScanMethod === 'camera')
+    });
+    
     this.focusScannerInput();
-    console.log('✅ Batch scanning mode activated');
+    console.log('✅ Batch scanning mode activated - Physical scanner ready');
   }
 
   stopBatchScanningMode(): void {
@@ -1366,8 +1378,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
     
+    // 🔧 SỬA LỖI: Deactivate physical scanner
+    this.isScannerInputActive = false;
     this.scannerBuffer = '';
-    console.log('✅ Batch scanning mode deactivated');
+    console.log('✅ Batch scanning mode deactivated - Physical scanner deactivated');
   }
 
 
@@ -1453,10 +1467,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // Show what's still needed
       if (!this.isProductionOrderScanned) {
         console.log('⚠️ Vui lòng scan lệnh sản xuất (LSX hoặc KZLSX...) trước!');
-        alert('⚠️ Vui lòng scan lệnh sản xuất (LSX) trước!');
+        // 🔧 SỬA LỖI: Bỏ popup, chỉ log console
       } else if (!this.isEmployeeIdScanned) {
         console.log('⚠️ Vui lòng scan mã nhân viên (ASP...) trước!');
-        alert('⚠️ Vui lòng scan mã nhân viên (ASP) trước!');
+        // 🔧 SỬA LỖI: Bỏ popup, chỉ log console
       }
     }
   }
@@ -1699,7 +1713,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Error saving material directly:', error);
-      alert('❌ Lỗi khi lưu mã hàng: ' + error.message);
+      // 🔧 SỬA LỖI: Bỏ popup, chỉ log console
     }
   }
 
@@ -1711,6 +1725,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (inputElement) {
         inputElement.focus();
         console.log('📍 Scanner input focused');
+        console.log('📍 Scanner input state:', {
+          isActive: this.isScannerInputActive,
+          isBatchMode: this.isBatchScanningMode,
+          hasValue: inputElement.value,
+          isVisible: inputElement.offsetParent !== null
+        });
+      } else {
+        console.error('❌ Scanner input element not found!');
       }
     }, 100);
   }

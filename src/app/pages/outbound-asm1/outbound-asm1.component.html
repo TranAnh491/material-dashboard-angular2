@@ -34,7 +34,7 @@
         </div>
 
         <!-- Scanner Input for Batch Mode -->
-        <div class="scanner-input-group" [class.mobile-hidden]="isMobile && selectedScanMethod === 'camera'">
+        <div class="scanner-input-group" [class.mobile-hidden]="selectedScanMethod === 'camera'">
           <input type="text" 
                  #scannerInput
                  [(ngModel)]="scannerBuffer"
