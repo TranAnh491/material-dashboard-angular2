@@ -194,15 +194,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       isMobileUserAgent,
       isMobileScreen,
       windowWidth: window.innerWidth,
-      isMobile: this.isMobile
+      isMobile: this.isMobile,
+      currentSelectedMethod: this.selectedScanMethod
     });
     
-    if (this.isMobile) {
-      console.log('📱 Mobile device detected - Default to camera mode');
-      this.selectedScanMethod = 'camera';
+    // 🔧 SỬA LỖI: Chỉ set default khi chưa có lựa chọn, không reset lựa chọn của user
+    if (this.selectedScanMethod === null) {
+      if (this.isMobile) {
+        console.log('📱 Mobile device detected - Default to camera mode');
+        this.selectedScanMethod = 'camera';
+      } else {
+        console.log('🖥️ Desktop device detected - Default to scanner mode');
+        this.selectedScanMethod = 'scanner';
+      }
     } else {
-      console.log('🖥️ Desktop device detected - Default to scanner mode');
-      this.selectedScanMethod = 'scanner';
+      console.log(`📱 Device detection: ${this.isMobile ? 'Mobile' : 'Desktop'}, keeping user selection: ${this.selectedScanMethod}`);
     }
   }
 
@@ -210,6 +216,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   selectScanMethod(method: 'camera' | 'scanner'): void {
     this.selectedScanMethod = method;
     console.log(`📱 Selected scan method: ${method}`);
+    console.log(`📱 Current mobile state: ${this.isMobile}`);
+    console.log(`📱 Will call: ${this.isMobile && method === 'camera' ? 'startCameraScanning()' : 'startBatchScanningMode()'}`);
     
     // Stop current scanning if active
     if (this.isCameraScanning) {
