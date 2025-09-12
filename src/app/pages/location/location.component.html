@@ -9,29 +9,49 @@
     <!-- Excel Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- More Button with Dropdown -->
-        <div class="dropdown">
-          <button class="more-btn" (click)="toggleDropdown($event)">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" [class.show]="isDropdownOpen">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
-              <i class="material-icons">file_download</i>
-              Export to Excel
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
-              <i class="material-icons">add_circle</i>
-              Initialize Sample Data
-            </a>
+        <!-- Desktop Controls -->
+        <div class="desktop-controls">
+          <!-- More Button with Dropdown -->
+          <div class="dropdown">
+            <button class="more-btn" (click)="toggleDropdown($event)">
+              <i class="material-icons">more_vert</i>
+              More
+            </button>
+            <div class="dropdown-menu" [class.show]="isDropdownOpen">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+                <i class="material-icons">file_download</i>
+                Export to Excel
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
+                <i class="material-icons">add_circle</i>
+                Initialize Sample Data
+              </a>
+            </div>
+          </div>
+          
+          <!-- Total Counter Box -->
+          <div class="total-counter-box">
+            <i class="material-icons">location_on</i>
+            <span>Tổng: {{ filteredItems.length }} vị trí</span>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
+              <i class="material-icons">refresh</i>
+              Refresh
+            </button>
           </div>
         </div>
         
-        <!-- Total Counter Box -->
-        <div class="total-counter-box">
-          <i class="material-icons">location_on</i>
-          <span>Tổng: {{ filteredItems.length }} vị trí</span>
+        <!-- Mobile Controls -->
+        <div class="mobile-controls">
+          <!-- Change Location Button -->
+          <button class="change-location-btn" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
+            <i class="material-icons">swap_horiz</i>
+            Change Location
+          </button>
         </div>
         
         <!-- Search Box -->
@@ -57,14 +77,6 @@
             <i class="material-icons">info</i>
             Cần ít nhất 2 ký tự
           </div>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="action-buttons">
-          <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
-            <i class="material-icons">refresh</i>
-            Refresh
-          </button>
         </div>
       </div>
     </div>
@@ -266,5 +278,112 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Change Location Modal -->
+<div class="modal-overlay" *ngIf="showChangeLocationModal" (click)="closeChangeLocationModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🔄 Thay Đổi Vị Trí</h3>
+      <button class="close-btn" (click)="closeChangeLocationModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step 1: Choose Scanner Type -->
+      <div class="step-container" *ngIf="changeLocationStep === 1">
+        <h4>Chọn loại quét:</h4>
+        <div class="scanner-options">
+          <button class="scanner-option-btn" (click)="selectScannerType('camera')">
+            <i class="material-icons">camera_alt</i>
+            <span>Camera</span>
+          </button>
+          <button class="scanner-option-btn" (click)="selectScannerType('scanner')">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>Scanner</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Step 2: Scan Material Code -->
+      <div class="step-container" *ngIf="changeLocationStep === 2">
+        <h4>Bước 1: Quét mã hàng</h4>
+        <div class="scan-input-container">
+          <input type="text" 
+                 id="materialInput"
+                 [(ngModel)]="scannedMaterialCode" 
+                 (keyup.enter)="processMaterialCode()"
+                 placeholder="Quét hoặc nhập mã hàng"
+                 class="scan-input"
+                 #materialInput>
+          <button class="scan-btn" (click)="processMaterialCode()">
+            <i class="material-icons">check</i>
+          </button>
+        </div>
+        <div class="scan-info" *ngIf="scannedMaterialCode">
+          <p>Mã hàng: <strong>{{ scannedMaterialCode }}</strong></p>
+        </div>
+      </div>
+      
+      <!-- Step 3: Scan New Location -->
+      <div class="step-container" *ngIf="changeLocationStep === 3">
+        <h4>Bước 2: Quét vị trí mới</h4>
+        <div class="scan-input-container">
+          <input type="text" 
+                 id="locationInput"
+                 [(ngModel)]="scannedNewLocation" 
+                 (keyup.enter)="processNewLocation()"
+                 placeholder="Quét hoặc nhập vị trí mới"
+                 class="scan-input"
+                 #locationInput>
+          <button class="scan-btn" (click)="processNewLocation()">
+            <i class="material-icons">check</i>
+          </button>
+        </div>
+        <div class="scan-info">
+          <p>Mã hàng: <strong>{{ scannedMaterialCode }}</strong></p>
+          <p>Vị trí mới: <strong>{{ scannedNewLocation }}</strong></p>
+        </div>
+      </div>
+      
+      <!-- Step 4: Confirmation -->
+      <div class="step-container" *ngIf="changeLocationStep === 4">
+        <h4>Xác nhận thay đổi</h4>
+        <div class="confirmation-info">
+          <div class="info-item">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ scannedMaterialCode }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Vị trí cũ:</span>
+            <span class="value">{{ currentLocation }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Vị trí mới:</span>
+            <span class="value">{{ scannedNewLocation }}</span>
+          </div>
+        </div>
+        <div class="confirmation-actions">
+          <button class="confirm-btn" (click)="confirmLocationChange()">
+            <i class="material-icons">check</i>
+            Xác nhận
+          </button>
+          <button class="cancel-btn" (click)="resetChangeLocation()">
+            <i class="material-icons">cancel</i>
+            Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Success Notification -->
+<div class="success-notification" *ngIf="showSuccessNotification" [@slideIn]>
+  <div class="notification-content">
+    <i class="material-icons">check_circle</i>
+    <span>{{ successMessage }}</span>
   </div>
 </div>

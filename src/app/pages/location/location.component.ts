@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { trigger, state, style, transition, animate } from '@angular/animations';
 
 export interface LocationItem {
   id?: string;
@@ -20,7 +21,15 @@ export interface LocationItem {
 @Component({
   selector: 'app-location',
   templateUrl: './location.component.html',
-  styleUrls: ['./location.component.scss']
+  styleUrls: ['./location.component.scss'],
+  animations: [
+    trigger('slideIn', [
+      transition(':enter', [
+        style({ transform: 'translateX(100%)', opacity: 0 }),
+        animate('300ms ease-out', style({ transform: 'translateX(0)', opacity: 1 }))
+      ])
+    ])
+  ]
 })
 export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Data properties
@@ -56,6 +65,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Edit mode
   editingItem: LocationItem | null = null;
+  
+  // Change Location Modal
+  showChangeLocationModal = false;
+  changeLocationStep = 1; // 1: Choose scanner, 2: Scan material, 3: Scan location, 4: Confirm
+  selectedScannerType: 'camera' | 'scanner' | null = null;
+  scannedMaterialCode = '';
+  scannedNewLocation = '';
+  currentLocation = '';
+  foundRM1Item: any = null;
+  
+  // Success notification
+  showSuccessNotification = false;
+  successMessage = '';
   
   private destroy$ = new Subject<void>();
 
@@ -538,5 +560,143 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   trackByFn(index: number, item: LocationItem): string {
     return item.id || index.toString();
+  }
+
+  // Change Location Modal Methods
+  openChangeLocationModal(): void {
+    this.showChangeLocationModal = true;
+    this.resetChangeLocation();
+  }
+
+  closeChangeLocationModal(): void {
+    this.showChangeLocationModal = false;
+    this.resetChangeLocation();
+  }
+
+  resetChangeLocation(): void {
+    this.changeLocationStep = 1;
+    this.selectedScannerType = null;
+    this.scannedMaterialCode = '';
+    this.scannedNewLocation = '';
+    this.currentLocation = '';
+    this.foundRM1Item = null;
+  }
+
+  selectScannerType(type: 'camera' | 'scanner'): void {
+    this.selectedScannerType = type;
+    this.changeLocationStep = 2;
+    
+    // Focus on material input after a short delay
+    setTimeout(() => {
+      const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
+      if (materialInput) {
+        materialInput.focus();
+      }
+    }, 100);
+  }
+
+  processMaterialCode(): void {
+    if (!this.scannedMaterialCode.trim()) {
+      alert('Vui lòng nhập mã hàng');
+      return;
+    }
+
+    // Search for material in RM1 inventory
+    this.searchRM1Material(this.scannedMaterialCode.trim().toUpperCase());
+  }
+
+  private async searchRM1Material(materialCode: string): Promise<void> {
+    try {
+      console.log(`🔍 Searching for material: ${materialCode}`);
+      
+      // Query RM1 inventory collection
+      const querySnapshot = await this.firestore.collection('rm1-inventory', ref => 
+        ref.where('itemCode', '==', materialCode)
+      ).get().toPromise();
+
+      if (querySnapshot && !querySnapshot.empty) {
+        // Found material in RM1 inventory
+        const doc = querySnapshot.docs[0];
+        const docData = doc.data() as any;
+        this.foundRM1Item = {
+          id: doc.id,
+          ...docData
+        };
+        this.currentLocation = this.foundRM1Item.location || 'N/A';
+        
+        console.log(`✅ Found RM1 item:`, this.foundRM1Item);
+        
+        // Move to next step
+        this.changeLocationStep = 3;
+        
+        // Focus on location input
+        setTimeout(() => {
+          const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
+          if (locationInput) {
+            locationInput.focus();
+          }
+        }, 100);
+        
+      } else {
+        alert(`Không tìm thấy mã hàng "${materialCode}" trong RM1 inventory`);
+        this.scannedMaterialCode = '';
+      }
+    } catch (error) {
+      console.error('Error searching RM1 material:', error);
+      alert('Lỗi khi tìm kiếm mã hàng. Vui lòng thử lại.');
+    }
+  }
+
+  processNewLocation(): void {
+    if (!this.scannedNewLocation.trim()) {
+      alert('Vui lòng nhập vị trí mới');
+      return;
+    }
+
+    // Validate location format
+    if (!this.validateViTriInput(this.scannedNewLocation.trim())) {
+      alert('Vị trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
+      return;
+    }
+
+    this.scannedNewLocation = this.scannedNewLocation.trim().toUpperCase();
+    this.changeLocationStep = 4;
+  }
+
+  async confirmLocationChange(): Promise<void> {
+    if (!this.foundRM1Item || !this.scannedNewLocation) {
+      alert('Thiếu thông tin để thực hiện thay đổi');
+      return;
+    }
+
+    try {
+      console.log(`🔄 Updating location for ${this.scannedMaterialCode} from ${this.currentLocation} to ${this.scannedNewLocation}`);
+      
+      // Update location in RM1 inventory
+      await this.firestore.collection('rm1-inventory')
+        .doc(this.foundRM1Item.id)
+        .update({
+          location: this.scannedNewLocation,
+          lastUpdated: new Date()
+        });
+
+      console.log(`✅ Location updated successfully`);
+      
+      // Show success notification
+      this.successMessage = `Đã thay đổi vị trí của ${this.scannedMaterialCode} từ ${this.currentLocation} thành ${this.scannedNewLocation}`;
+      this.showSuccessNotification = true;
+      
+      // Auto hide notification after 3 seconds
+      setTimeout(() => {
+        this.showSuccessNotification = false;
+      }, 3000);
+      
+      // Close modal
+      this.closeChangeLocationModal();
+      
+    } catch (error) {
+      console.error('Error updating location:', error);
+      alert('Lỗi khi cập nhật vị trí. Vui lòng thử lại.');
+    }
   }
 }

@@ -271,26 +271,27 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
 
   
+  // Chỉ hiển thị 50 dòng gần nhất để tối ưu hiệu suất
+  private readonly DISPLAY_LIMIT = 50;
+  
   loadMaterials(): void {
     this.isLoading = true;
     this.errorMessage = '';
-    console.log('📦 Loading ASM1 outbound materials with real-time listener...');
+    console.log('📦 Loading ASM1 outbound materials (50 dòng gần nhất)...');
     
     // Use real-time listener to automatically update when data changes
     this.firestore.collection('outbound-materials', ref => 
-      ref.limit(1000)
+      ref.where('factory', '==', 'ASM1')
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
         console.log(`🔍 Real-time update from outbound-materials contains ${snapshot.length} documents`);
         
-        // Filter for ASM1 factory and sort client-side
-        const allMaterials = snapshot.map(doc => {
+        // 🔧 SỬA LỖI: Đã filter ở Firebase rồi, không cần filter lại
+        const materials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
           console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}`);
-          console.log(`📅 Doc ${doc.payload.doc.id} importDate:`, data.importDate);
-          console.log(`📅 Doc ${doc.payload.doc.id} importDate type:`, typeof data.importDate);
           
           const material = {
             id: doc.payload.doc.id,
@@ -303,27 +304,44 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportDate: data.exportDate?.toDate() || new Date(),
             location: data.location || '',
             exportedBy: data.exportedBy || '',
-            employeeId: data.employeeId || '', // Fix: properly map employeeId
-            productionOrder: data.productionOrder || '', // Fix: properly map productionOrder
-            batchNumber: data.batchNumber || data.importDate || null, // ✅ Map batchNumber từ database
-            importDate: data.importDate || null, // Thêm mapping cho importDate
+            employeeId: data.employeeId || '',
+            productionOrder: data.productionOrder || '',
+            batchNumber: data.batchNumber || data.importDate || null,
+            importDate: data.importDate || null,
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
           } as OutboundMaterial;
           
-          console.log(`📅 Mapped material importDate:`, material.importDate);
-          console.log(`📦 Mapped material batchNumber:`, material.batchNumber);
           return material;
         });
         
-        console.log(`🏭 All materials before filter: ${allMaterials.length}`);
-        console.log(`🏭 Factory values found:`, allMaterials.map(m => m.factory));
+        console.log(`📊 Loaded ${materials.length} ASM1 materials`);
         
-        this.materials = allMaterials
-          .filter(material => material.factory === 'ASM1')
-          .filter(material => {
+        // Sort by createdAt desc trước
+        this.materials = materials
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        
+        // 🔧 SỬA LỖI: Tắt consolidation để hiển thị từng dòng scan
+        // this.materials = this.consolidateOutboundRecords(this.materials);
+        
+        // Sort by latest scan first (newest first) trước khi filter
+        this.materials.sort((a, b) => {
+          // Sort by latest updated time first (newest first)
+          const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
+          if (updatedCompare !== 0) return updatedCompare;
+          
+          // If same updated time, sort by export date (newest first)
+          const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
+          if (dateCompare !== 0) return dateCompare;
+          
+          // If same date, sort by creation time (newest first)
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
+        
+        // Apply filters sau khi sort
+        this.materials = this.materials.filter(material => {
             // Auto-hide previous day's scan history
             if (this.hidePreviousDayHistory) {
               const today = new Date();
@@ -346,22 +364,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             return true;
           });
         
-        // Consolidate records by same date + material code + PO
-        this.materials = this.consolidateOutboundRecords(this.materials);
-        
-        // Sort by latest scan first (newest first)
-        this.materials.sort((a, b) => {
-          // Sort by latest updated time first (newest first)
-          const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
-          if (updatedCompare !== 0) return updatedCompare;
-          
-          // If same updated time, sort by export date (newest first)
-          const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
-          if (dateCompare !== 0) return dateCompare;
-          
-          // If same date, sort by creation time (newest first)
-          return b.createdAt.getTime() - a.createdAt.getTime();
-        });
+        // Lấy 50 dòng gần nhất sau khi filter
+        this.materials = this.materials.slice(0, this.DISPLAY_LIMIT);
+        console.log(`📊 Displaying ${this.materials.length} dòng gần nhất`);
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
         
@@ -369,7 +374,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         if (this.hidePreviousDayHistory) {
           console.log(`📅 Previous day's scan history is hidden`);
         }
-        console.log(`🔍 Filter applied: ${this.materials.length}/${allMaterials.filter(m => m.factory === 'ASM1').length} ASM1 records shown`);
+        console.log(`🔍 Filter applied: ${this.materials.length} ASM1 records shown`);
         
         this.filteredMaterials = [...this.materials];
         this.updatePagination();
@@ -505,12 +510,47 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
-  exportToExcel(): void {
+  // Export tất cả dữ liệu (không giới hạn 50 dòng)
+  async exportToExcel(): Promise<void> {
     try {
-      console.log('📊 Exporting ASM1 outbound data to Excel...');
+      console.log('📊 Exporting TẤT CẢ ASM1 outbound data to Excel...');
       
-             // Optimize data for smaller file size
-               const exportData = this.filteredMaterials.map(material => ({
+      // Load tất cả dữ liệu từ Firebase
+      const snapshot = await this.firestore.collection('outbound-materials', ref => 
+        ref.where('factory', '==', 'ASM1')
+      ).ref.get();
+      
+      const allMaterials = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          id: doc.id,
+          factory: data.factory || 'ASM1',
+          materialCode: data.materialCode || '',
+          poNumber: data.poNumber || '',
+          quantity: data.quantity || 0,
+          unit: data.unit || '',
+          exportQuantity: data.exportQuantity || 0,
+          exportDate: data.exportDate?.toDate() || new Date(),
+          location: data.location || '',
+          exportedBy: data.exportedBy || '',
+          employeeId: data.employeeId || '',
+          productionOrder: data.productionOrder || '',
+          batchNumber: data.batchNumber || data.importDate || null,
+          importDate: data.importDate || null,
+          scanMethod: data.scanMethod || 'MANUAL',
+          notes: data.notes || '',
+          createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+        } as OutboundMaterial;
+      });
+      
+      // Sort by createdAt desc để có dữ liệu mới nhất trước
+      const sortedMaterials = allMaterials.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      console.log(`📊 Exporting ${sortedMaterials.length} records (tất cả dữ liệu)`);
+      
+      // Optimize data for smaller file size
+      const exportData = sortedMaterials.map(material => ({
           'Factory': material.factory || 'ASM1',
           'Material': material.materialCode || '',
           'PO': material.poNumber || '',
@@ -1004,9 +1044,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🔍 Input length:', decodedText.length);
     console.log('🔍 Current scan step:', this.currentScanStep);
     console.log('🔍 Batch scanning mode:', this.isBatchScanningMode);
+    console.log('🔍 Batch state:', {
+      isProductionOrderScanned: this.isProductionOrderScanned,
+      isEmployeeIdScanned: this.isEmployeeIdScanned,
+      batchProductionOrder: this.batchProductionOrder,
+      batchEmployeeId: this.batchEmployeeId
+    });
     
-    // Check if we're in batch mode and need to process LSX/Employee ID first
-    if (this.isBatchScanningMode && this.currentScanStep === 'batch') {
+    // Check if we're in batch mode
+    if (this.isBatchScanningMode) {
       // Check if both LSX and Employee ID are already scanned
       if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
         console.log('🔍 Both LSX and Employee ID scanned, processing material scan');
@@ -1238,45 +1284,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       const exportedBy = user ? (user.email || user.uid) : 'SCANNER_USER';
       console.log('👤 Current user:', exportedBy);
       
-      // Check if record with same date + material code + PO already exists
-      const today = new Date().toISOString().split('T')[0];
-      const existingRecordQuery = await this.firestore.collection('outbound-materials', ref => 
-        ref.where('factory', '==', 'ASM1')
-           .where('materialCode', '==', this.lastScannedData.materialCode)
-           .where('poNumber', '==', this.lastScannedData.poNumber)
-           .limit(1)
-      ).get().toPromise();
-      
-      if (existingRecordQuery && !existingRecordQuery.empty) {
-        // Update existing record
-        const existingDoc = existingRecordQuery.docs[0];
-        const existingData = existingDoc.data() as any;
-        const existingDate = (existingData.exportDate?.toDate ? existingData.exportDate.toDate() : existingData.exportDate).toISOString().split('T')[0];
-        
-        if (existingDate === today) {
-          // Same day - update existing record
-          console.log('🔄 Updating existing record for same day:', existingDoc.id);
-          
-          const newExportQuantity = existingData.exportQuantity + this.exportQuantity;
-          const newNotes = `Gộp từ ${existingData.exportQuantity} + ${this.exportQuantity} = ${newExportQuantity} - ${existingData.notes || 'Auto-scanned export'}`;
-          
-          await existingDoc.ref.update({
-            exportQuantity: newExportQuantity,
-            updatedAt: new Date(),
-            exportedBy: exportedBy,
-            scanMethod: this.isMobile ? 'CAMERA' : 'QR_SCANNER',
-            notes: newNotes
-          });
-          
-          console.log('✅ Existing record updated successfully');
-        } else {
-          // Different day - create new record
-          await this.createNewOutboundRecord(exportedBy);
-        }
-      } else {
-        // No existing record - create new one
-        await this.createNewOutboundRecord(exportedBy);
-      }
+      // 🔧 SỬA LỖI: Tắt merge logic để mỗi lần scan tạo 1 record mới
+      // Luôn tạo record mới cho mỗi lần scan
+      console.log('➕ Creating new record for each scan (no merging)');
+      await this.createNewOutboundRecord(exportedBy);
       
       // Cập nhật cột "đã xuất" trong inventory
       console.log('📦 Updating inventory exported quantity...');
@@ -1460,9 +1471,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // 🔧 LOGIC MỚI: Nếu đã scan lệnh sản xuất và mã nhân viên, xử lý mã hàng
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-      // Use SAME LOGIC as regular scanner - call onScanSuccess
-      console.log('🔍 Both LSX and Employee ID scanned, processing material via onScanSuccess');
-      this.onScanSuccess(scannedData);
+      // Use BATCH MATERIAL SCAN logic for consistency
+      console.log('🔍 Both LSX and Employee ID scanned, processing material via processBatchMaterialScan');
+      this.processBatchMaterialScan(scannedData);
     } else {
       // Show what's still needed
       if (!this.isProductionOrderScanned) {
@@ -1560,6 +1571,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // 🔧 LOGIC MỚI: Xử lý scan mã hàng đơn giản (không có vị trí)
   private processBatchMaterialScan(scannedData: string): void {
     try {
+      console.log('🔍 === PROCESS BATCH MATERIAL SCAN START ===');
+      console.log('🔍 Scanned data:', scannedData);
+      console.log('🔍 Data length:', scannedData.length);
+      console.log('🔍 Batch state:', {
+        isProductionOrderScanned: this.isProductionOrderScanned,
+        isEmployeeIdScanned: this.isEmployeeIdScanned,
+        batchProductionOrder: this.batchProductionOrder,
+        batchEmployeeId: this.batchEmployeeId
+      });
+      
       // Kiểm tra xem đã scan mã nhân viên chưa
       if (!this.isEmployeeIdScanned) {
         console.log('⚠️ Phải scan mã nhân viên trước khi scan mã hàng!');
@@ -1573,9 +1594,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       let quantity = 1;
       let importDate: string | null = null;
       
-      // Pattern 1: Format "MaterialCode|PONumber|Quantity|BatchNumber" (dấu |)
+      // 🔧 SỬA LỖI: Đơn giản hóa logic parse mã hàng
+      // Chỉ xử lý format chuẩn: "MaterialCode|PONumber|Quantity|BatchNumber"
       if (scannedData.includes('|')) {
-        // Xử lý dấu cách và format không đúng
+        // Format chuẩn: MaterialCode|PONumber|Quantity|BatchNumber
         let cleanData = scannedData.trim();
         cleanData = cleanData.replace(/\s*\|\s*/g, '|');
         
@@ -1585,50 +1607,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           poNumber = parts[1].trim();
           quantity = parseInt(parts[2]) || 1;
           
-          // Đơn giản: lấy phần thứ 4 làm batch number
           if (parts.length >= 4) {
-            importDate = parts[3].trim(); // Ví dụ: 26082025
+            importDate = parts[3].trim();
           }
+          console.log('✅ Parsed pipe format:', { materialCode, poNumber, quantity, importDate });
         }
-      }
-      // Pattern 2: Format "MaterialCode,PONumber,Quantity" (dấu phẩy)
-      else if (scannedData.includes(',')) {
-        const parts = scannedData.split(',');
-        if (parts.length >= 3) {
-          materialCode = parts[0].trim();
-          poNumber = parts[1].trim();
-          quantity = parseInt(parts[2]) || 1;
-          console.log('✅ Parsed comma format:', { materialCode, poNumber, quantity });
-        }
-      }
-      // Pattern 3: Format "MaterialCode PONumber Quantity" (dấu cách)
-      else if (scannedData.includes(' ')) {
-        const parts = scannedData.split(' ');
-        if (parts.length >= 3) {
-          materialCode = parts[0].trim();
-          poNumber = parts[1].trim();
-          quantity = parseInt(parts[2]) || 1;
-          console.log('✅ Parsed space format:', { materialCode, poNumber, quantity });
-        }
-      }
-      // Pattern 4: Try to extract material code pattern (e.g., B024039, A002009)
-      else {
-        // Look for material code pattern: letter + 6+ digits
-        const materialCodeMatch = scannedData.match(/[A-Z]\d{6,}/);
-        if (materialCodeMatch) {
-          materialCode = materialCodeMatch[0];
-          // Look for PO pattern: PO + digits or KZP + digits
-          const poMatch = scannedData.match(/(?:PO|KZP)\d+[\/\d]*/i);
-          if (poMatch) {
-            poNumber = poMatch[0];
-          }
-          // Look for quantity (number at the end)
-          const quantityMatch = scannedData.match(/\d+$/);
-          if (quantityMatch) {
-            quantity = parseInt(quantityMatch[0]);
-          }
-          console.log('✅ Parsed pattern extraction:', { materialCode, poNumber, quantity });
-        }
+      } else {
+        // Fallback: Sử dụng raw data làm material code
+        materialCode = scannedData.trim();
+        poNumber = 'Unknown';
+        quantity = 1;
+        console.log('⚠️ Using raw data as material code:', { materialCode });
       }
       
       // Validate parsed data
@@ -1660,9 +1649,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.focusScannerInput();
       }, 100);
       
+      console.log('🔍 === PROCESS BATCH MATERIAL SCAN END ===');
+      
     } catch (error) {
       console.error('❌ Error processing material scan:', error);
       console.log('❌ Lỗi xử lý mã hàng!');
+      console.log('🔍 === PROCESS BATCH MATERIAL SCAN ERROR ===');
     }
   }
 

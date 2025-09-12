@@ -97,7 +97,7 @@
           <div class="dropdown-menu" [class.show]="isDropdownOpen">
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
               <i class="material-icons">download</i>
-              Export Excel
+              Export Tất Cả Dữ Liệu
             </a>
             
             <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
@@ -121,7 +121,16 @@
           </div>
         </div>
         
-                <!-- Refresh Button -->
+                <!-- Data Info -->
+        <div class="data-info" [class.mobile-hidden]="isMobile">
+          <span class="data-count">Hiển thị {{filteredMaterials.length}} dòng gần nhất</span>
+          <button class="export-all-btn" (click)="exportToExcel()" title="Tải tất cả dữ liệu">
+            <i class="material-icons">download</i>
+            Export Tất Cả
+          </button>
+        </div>
+        
+        <!-- Refresh Button -->
         <button class="refresh-btn" (click)="loadMaterials()" [class.mobile-hidden]="isMobile">
           <i class="material-icons">refresh</i>
           Refresh

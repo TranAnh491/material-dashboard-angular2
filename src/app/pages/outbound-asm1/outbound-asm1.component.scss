@@ -163,6 +163,45 @@
   display: none !important;
 }
 
+// Data Info Styles
+.data-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  
+  .data-count {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+  }
+  
+  .export-all-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    
+    &:hover {
+      background: #0056b3;
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+}
+
 // 📱 Mobile Responsive Design
 @media (max-width: 768px) {
   .main-content {
