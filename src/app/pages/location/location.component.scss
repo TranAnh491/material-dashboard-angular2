@@ -196,6 +196,31 @@
   gap: 8px;
   align-items: center;
   
+  .change-location-btn-desktop {
+    background: #007bff;
+    color: white;
+    border: 2px solid #000000;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
   .refresh-btn {
     background: #ffffff;
     color: #000000;
@@ -593,24 +618,34 @@
     background: #007bff;
     color: white;
     border: 2px solid #000000;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 12px 20px;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
+    justify-content: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 600;
     transition: all 0.3s ease;
+    width: 100%;
+    max-width: 250px;
+    margin: 0 auto;
+    box-shadow: 0 2px 6px rgba(0, 123, 255, 0.25);
     
     &:hover {
       background: #0056b3;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+    }
+    
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0, 123, 255, 0.25);
     }
     
     i {
-      font-size: 18px;
+      font-size: 20px;
     }
   }
 }
@@ -642,10 +677,16 @@
   border: 2px solid #000000;
   border-radius: 8px;
   width: 90%;
-  max-width: 500px;
+  max-width: 600px;
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  
+  // Better styling for desktop
+  @media (min-width: 769px) {
+    width: 70%;
+    max-width: 650px;
+  }
 }
 
 .modal-header {
@@ -726,6 +767,20 @@
       font-weight: 500;
       color: #000000;
     }
+    
+    // Better spacing for desktop
+    @media (min-width: 769px) {
+      min-width: 140px;
+      padding: 24px;
+      
+      i {
+        font-size: 36px;
+      }
+      
+      span {
+        font-size: 15px;
+      }
+    }
   }
 }
 
@@ -763,6 +818,16 @@
       background: #218838;
     }
     
+    &.disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.6;
+      
+      &:hover {
+        background: #6c757d;
+      }
+    }
+    
     i {
       font-size: 18px;
     }
@@ -781,6 +846,23 @@
     
     &:last-child {
       margin-bottom: 0;
+    }
+  }
+  
+  .parsed-info {
+    background: #e3f2fd;
+    padding: 8px;
+    margin: 8px 0;
+    border-radius: 4px;
+    border-left: 3px solid #2196f3;
+    
+    p {
+      margin: 0 0 2px 0;
+      font-size: 13px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
     }
   }
 }
@@ -829,9 +911,18 @@
     font-weight: 500;
     border: 2px solid #000000;
     transition: all 0.3s ease;
+    min-width: 120px;
+    justify-content: center;
     
     i {
       font-size: 18px;
+    }
+    
+    // Better styling for desktop
+    @media (min-width: 769px) {
+      padding: 14px 28px;
+      font-size: 15px;
+      min-width: 140px;
     }
   }
   
@@ -950,14 +1041,61 @@
   .modal-content {
     width: 95%;
     margin: 10px;
+    max-height: 90vh;
+  }
+  
+  .modal-header {
+    padding: 16px;
+    
+    h3 {
+      font-size: 16px;
+    }
+  }
+  
+  .modal-body {
+    padding: 16px;
   }
   
   .scanner-options {
     flex-direction: column;
     align-items: center;
+    gap: 12px;
+    
+    .scanner-option-btn {
+      width: 100%;
+      max-width: 200px;
+      padding: 16px;
+      
+      i {
+        font-size: 28px;
+      }
+      
+      span {
+        font-size: 15px;
+      }
+    }
+  }
+  
+  .scan-input-container {
+    .scan-input {
+      font-size: 16px; // Prevent zoom on iOS
+      padding: 14px;
+    }
+    
+    .scan-btn {
+      padding: 14px 18px;
+    }
   }
   
   .confirmation-actions {
     flex-direction: column;
+    gap: 8px;
+    
+    .confirm-btn, .cancel-btn {
+      width: 100%;
+      justify-content: center;
+      padding: 14px 20px;
+      font-size: 15px;
+    }
   }
 }

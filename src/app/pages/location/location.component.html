@@ -38,6 +38,10 @@
           
           <!-- Action Buttons -->
           <div class="action-buttons">
+            <button class="change-location-btn-desktop" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
+              <i class="material-icons">swap_horiz</i>
+              Change Location
+            </button>
             <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
               <i class="material-icons">refresh</i>
               Refresh
@@ -323,7 +327,19 @@
           </button>
         </div>
         <div class="scan-info" *ngIf="scannedMaterialCode">
-          <p>Mã hàng: <strong>{{ scannedMaterialCode }}</strong></p>
+          <p>Mã gốc: <strong>{{ scannedMaterialCode }}</strong></p>
+          <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
+            <p>Mã hàng: <strong>{{ foundRM1Item.parsedData.materialCode }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.poNumber">PO: <strong>{{ foundRM1Item.parsedData.poNumber }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.batch">Batch: <strong>{{ foundRM1Item.parsedData.batch }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.quantity">Số lượng: <strong>{{ foundRM1Item.parsedData.quantity }}</strong></p>
+          </div>
+          <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
+            <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
+            <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
+            <p *ngIf="foundRM1Item?.batchNumber">Batch: <strong>{{ foundRM1Item.batchNumber }}</strong></p>
+          </div>
+          <p *ngIf="currentLocation">Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
         </div>
       </div>
       
@@ -338,12 +354,27 @@
                  placeholder="Quét hoặc nhập vị trí mới"
                  class="scan-input"
                  #locationInput>
-          <button class="scan-btn" (click)="processNewLocation()">
+          <button class="scan-btn" 
+                  (click)="processNewLocation()"
+                  [disabled]="!canProcessNewLocation"
+                  [class.disabled]="!canProcessNewLocation"
+                  title="Cần có đủ Mã hàng, PO, và Batch để tiếp tục">
             <i class="material-icons">check</i>
           </button>
         </div>
         <div class="scan-info">
-          <p>Mã hàng: <strong>{{ scannedMaterialCode }}</strong></p>
+          <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
+            <p>Mã hàng: <strong>{{ foundRM1Item.parsedData.materialCode }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.poNumber">PO: <strong>{{ foundRM1Item.parsedData.poNumber }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.batch">Batch: <strong>{{ foundRM1Item.parsedData.batch }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.quantity">Số lượng: <strong>{{ foundRM1Item.parsedData.quantity }}</strong></p>
+          </div>
+          <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
+            <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
+            <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
+            <p *ngIf="foundRM1Item?.batchNumber">Batch: <strong>{{ foundRM1Item.batchNumber }}</strong></p>
+          </div>
+          <p>Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
           <p>Vị trí mới: <strong>{{ scannedNewLocation }}</strong></p>
         </div>
       </div>
@@ -352,9 +383,33 @@
       <div class="step-container" *ngIf="changeLocationStep === 4">
         <h4>Xác nhận thay đổi</h4>
         <div class="confirmation-info">
-          <div class="info-item">
+          <div class="info-item" *ngIf="foundRM1Item?.parsedData">
             <span class="label">Mã hàng:</span>
-            <span class="value">{{ scannedMaterialCode }}</span>
+            <span class="value">{{ foundRM1Item.parsedData.materialCode }}</span>
+          </div>
+          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ foundRM1Item.materialCode }}</span>
+          </div>
+          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.poNumber">
+            <span class="label">PO:</span>
+            <span class="value">{{ foundRM1Item.parsedData.poNumber }}</span>
+          </div>
+          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.poNumber">
+            <span class="label">PO:</span>
+            <span class="value">{{ foundRM1Item.poNumber }}</span>
+          </div>
+          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.batch">
+            <span class="label">Batch:</span>
+            <span class="value">{{ foundRM1Item.parsedData.batch }}</span>
+          </div>
+          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.batchNumber">
+            <span class="label">Batch:</span>
+            <span class="value">{{ foundRM1Item.batchNumber }}</span>
+          </div>
+          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.quantity">
+            <span class="label">Số lượng:</span>
+            <span class="value">{{ foundRM1Item.parsedData.quantity }}</span>
           </div>
           <div class="info-item">
             <span class="label">Vị trí cũ:</span>

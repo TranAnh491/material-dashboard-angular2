@@ -1430,9 +1430,26 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log(`📦 Committing ${this.pendingScanData.length} outbound records...`);
     await batch.commit();
 
-    // 3. Update inventory (có thể optimize thêm bằng cách group theo material)
+    // 3. Update inventory - GROUP theo material + PO + batch để optimize
     console.log(`📦 Updating inventory for ${inventoryUpdates.length} items...`);
+    
+    // Group updates theo materialCode + poNumber + importDate
+    const groupedUpdates = new Map<string, any>();
     for (const update of inventoryUpdates) {
+      const key = `${update.materialCode}|${update.poNumber}|${update.importDate || 'NOBATCH'}`;
+      if (groupedUpdates.has(key)) {
+        const existing = groupedUpdates.get(key);
+        existing.quantity += update.quantity; // Cộng dồn quantity
+      } else {
+        groupedUpdates.set(key, { ...update });
+      }
+    }
+    
+    console.log(`📊 Grouped ${inventoryUpdates.length} items into ${groupedUpdates.size} unique updates`);
+    
+    // Chỉ update inventory theo nhóm
+    for (const [key, update] of groupedUpdates) {
+      console.log(`🔄 Updating inventory: ${key} with total quantity: ${update.quantity}`);
       await this.updateInventoryExported(
         update.materialCode,
         update.poNumber,
@@ -1904,13 +1921,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // REMOVED: debugMaterialStock() - Không cần tính stock để scan nhanh
 
   /**
-   * Cập nhật cột "đã xuất" trong inventory khi quét outbound - LOGIC THÔNG MINH
-   * Tìm record có cùng materialCode + poNumber và cộng dồn vào cột exported
-   * KHÔNG BAO GIỜ reset về 0 - luôn cộng dồn vào số hiện tại (kể cả khi user sửa tay)
+   * Cập nhật cột "đã xuất" trong inventory khi quét outbound - LOGIC ĐƠN GIẢN
+   * CHỈ cập nhật exported cho record có ĐÚNG materialCode + poNumber + batchNumber
+   * KHÔNG tạo dòng mới - Có thì trừ, không có thì bỏ qua
    */
   private async updateInventoryExported(materialCode: string, poNumber: string, exportQuantity: number, importDate?: string): Promise<void> {
     try {
-      console.log(`🧠 SMART UPDATE: Updating inventory exported for ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
+      console.log(`🎯 SIMPLE UPDATE: Tìm & cập nhật inventory cho ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
       if (importDate) {
         console.log(`📅 Import date from QR: ${importDate} - Sẽ tìm inventory record có cùng ngày nhập`);
       }
@@ -2010,14 +2027,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }
 
       if (!inventoryQuery || inventoryQuery.empty) {
-        console.log(`⚠️ Không tìm thấy inventory record cho ${materialCode} - ${poNumber}`);
-        console.log(`💡 Tạo mới inventory record với exported = ${exportQuantity}`);
-        console.log(`🔍 Batch number từ QR: ${importDate}`);
-        
-        // Tạo mới inventory record nếu không tìm thấy
-        await this.createNewInventoryRecord(materialCode, poNumber, exportQuantity, importDate);
-        console.log(`✅ Đã tạo mới inventory record thành công!`);
-        return;
+        console.log(`⚠️ KHÔNG tìm thấy inventory record khớp Material + PO + Batch: ${materialCode} - ${poNumber} - ${importDate}`);
+        console.log(`📋 Theo yêu cầu: KHÔNG tạo dòng mới, chỉ bỏ qua và log thông tin`);
+        console.log(`✅ Outbound record đã được lưu, nhưng không cập nhật inventory (không có record khớp)`);
+        return; // 🔧 ĐÚNG YÊU CẦU: Không có thì không trừ, không tạo mới
       }
 
       console.log(`📊 Tìm thấy ${inventoryQuery.docs.length} inventory records cần cập nhật`);
@@ -2063,69 +2076,18 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       await batch.commit();
       console.log(`✅ Batch update committed successfully!`);
       
-      console.log(`✅ SMART UPDATE hoàn tất: ${totalUpdated} inventory records`);
+      console.log(`✅ SIMPLE UPDATE hoàn tất: ${totalUpdated} inventory records`);
       console.log(`📊 Tổng exported trước: ${totalExportedBefore} → Sau: ${totalExportedAfter}`);
       console.log(`📦 Số lượng mới được cộng: +${exportQuantity} cho ${materialCode}-${poNumber}`);
-      console.log(`🧠 LOGIC: Luôn cộng dồn, không bao giờ reset về 0!`);
+      console.log(`🎯 LOGIC: Có record khớp thì cập nhật exported, không có thì bỏ qua!`);
 
     } catch (error) {
-      console.error('❌ Error trong SMART UPDATE inventory exported:', error);
+      console.error('❌ Error trong SIMPLE UPDATE inventory exported:', error);
       // Không throw error để không block quá trình scan
     }
   }
 
-  /**
-   * Tạo mới inventory record nếu không tìm thấy
-   */
-  private async createNewInventoryRecord(materialCode: string, poNumber: string, exportQuantity: number, importDate?: string): Promise<void> {
-    try {
-      // Chuyển batch number thành Date object nếu có
-      let importDateObj: Date | null = null;
-      if (importDate) {
-        try {
-          // Parse batch number: 26082025 -> 26/08/2025 -> Date
-          const day = importDate.substring(0, 2);
-          const month = importDate.substring(2, 4);
-          const year = importDate.substring(4, 8);
-          importDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-          console.log(`📅 Chuyển batch ${importDate} thành ngày: ${importDateObj.toLocaleDateString('en-GB')}`);
-        } catch (error) {
-          console.warn(`⚠️ Không thể parse batch number ${importDate}:`, error);
-        }
-      }
-      
-      const newInventoryRecord = {
-        factory: 'ASM1',
-        materialCode: materialCode,
-        poNumber: poNumber,
-        quantity: 0, // Chưa có số lượng nhập
-        exported: exportQuantity, // Số lượng đã xuất
-        unit: 'KG',
-        location: 'ASM1',
-        importDate: importDateObj, // Lưu batch number dưới dạng Date
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastExportDate: new Date(),
-        lastUpdated: new Date(),
-        lastExportQuantity: exportQuantity,
-        exportHistory: [{
-          date: new Date(),
-          quantity: exportQuantity,
-          source: 'outbound-scan',
-          notes: `Tạo mới từ outbound scan - Batch: ${importDate || 'N/A'}`
-        }],
-        notes: `Tạo mới từ outbound scan - Xuất: ${exportQuantity} - Batch: ${importDate || 'N/A'}`
-      };
-
-      const docRef = await this.firestore.collection('inventory-materials').add(newInventoryRecord);
-      console.log(`✅ Tạo mới inventory record: ${materialCode}-${poNumber} với exported = ${exportQuantity}`);
-      console.log(`📄 Document ID: ${docRef.id}`);
-      console.log(`📅 Import date: ${importDateObj ? importDateObj.toLocaleDateString('en-GB') : 'N/A'}`);
-      
-    } catch (error) {
-      console.error('❌ Error tạo mới inventory record:', error);
-    }
-  }
+  // 🗑️ ĐÃ XÓA: createNewInventoryRecord() - Không tạo mới inventory record nữa theo yêu cầu
 
   /**
    * Cập nhật lịch sử xuất hàng

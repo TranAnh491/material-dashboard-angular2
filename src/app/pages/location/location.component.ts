@@ -601,18 +601,294 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    // Validate and parse the scanned code
+    const parsedData = this.parseScannedCode(this.scannedMaterialCode.trim());
+    
+    // Check if parsing was successful
+    if (!parsedData.materialCode) {
+      alert('🏷️ TEM LỖI - Format mã QR không đúng');
+      this.scannedMaterialCode = '';
+      return;
+    }
+    
     // Search for material in RM1 inventory
-    this.searchRM1Material(this.scannedMaterialCode.trim().toUpperCase());
+    this.searchRM1Material(parsedData);
   }
 
-  private async searchRM1Material(materialCode: string): Promise<void> {
-    try {
-      console.log(`🔍 Searching for material: ${materialCode}`);
+  // Parse scanned code: B001639|KZPO0425/0114|150|13082025
+  // Rules: 
+  // - First 7 chars (0-6): Material Code
+  // - Chars 9-21: PO Number  
+  // - Last 8 chars: Batch
+  private parseScannedCode(scannedCode: string): any {
+    const cleanCode = scannedCode.replace(/\s/g, ''); // Remove spaces
+    
+    // Validate basic format
+    if (cleanCode.length < 7) {
+      console.log(`❌ Code too short: ${cleanCode}`);
+      return {
+        materialCode: null,
+        poNumber: null,
+        batch: null,
+        quantity: null,
+        originalCode: scannedCode,
+        error: 'Code too short'
+      };
+    }
+    
+    if (cleanCode.includes('|') && cleanCode.length >= 25) {
+      // Full format QR code validation
+      const parts = cleanCode.split('|');
+      if (parts.length < 4) {
+        console.log(`❌ Invalid format - not enough parts: ${parts.length}`);
+        return {
+          materialCode: null,
+          poNumber: null,
+          batch: null,
+          quantity: null,
+          originalCode: scannedCode,
+          error: 'Invalid format'
+        };
+      }
       
-      // Query RM1 inventory collection
-      const querySnapshot = await this.firestore.collection('rm1-inventory', ref => 
-        ref.where('itemCode', '==', materialCode)
-      ).get().toPromise();
+      // Parse by splitting and position
+      const materialCode = parts[0]; // First part: B001639 (but take only 7 chars)
+      const poNumber = parts[1]; // Second part: KZPO0425/0114
+      const quantity = parts[2]; // Third part: 150
+      const batch = parts[3]; // Fourth part: 13082025 or 08092025
+      
+      // Ensure material code is exactly 7 characters
+      const finalMaterialCode = materialCode.substring(0, 7);
+      
+      // Validate material code format (should be letters and numbers)
+      if (!/^[A-Za-z0-9]{7}$/.test(finalMaterialCode)) {
+        console.log(`❌ Invalid material code format: ${finalMaterialCode}`);
+        return {
+          materialCode: null,
+          poNumber: null,
+          batch: null,
+          quantity: null,
+          originalCode: scannedCode,
+          error: 'Invalid material code format'
+        };
+      }
+      
+      // Validate batch format (should be 8 digits)
+      if (!/^\d{8}$/.test(batch)) {
+        console.log(`❌ Invalid batch format: ${batch}`);
+        return {
+          materialCode: null,
+          poNumber: null,
+          batch: null,
+          quantity: null,
+          originalCode: scannedCode,
+          error: 'Invalid batch format'
+        };
+      }
+      
+      console.log(`✅ Valid QR Code parsed:`, {
+        originalCode: scannedCode,
+        cleanCode: cleanCode,
+        parts: parts,
+        finalMaterialCode: finalMaterialCode,
+        poNumber: poNumber,
+        batch: batch,
+        quantity: quantity,
+        codeLength: cleanCode.length
+      });
+      
+      return {
+        materialCode: finalMaterialCode.toUpperCase(),
+        poNumber: poNumber,
+        batch: batch,
+        quantity: quantity,
+        originalCode: scannedCode
+      };
+    } else {
+      // Fallback: treat as plain material code if length is reasonable
+      if (cleanCode.length >= 7) {
+        const materialCode = cleanCode.substring(0, 7);
+        console.log(`📋 Fallback parsing - using as material code: ${materialCode}`);
+        return {
+          materialCode: materialCode.toUpperCase(),
+          poNumber: null,
+          batch: null,
+          quantity: null,
+          originalCode: scannedCode
+        };
+      } else {
+        console.log(`❌ Code too short for fallback: ${cleanCode}`);
+        return {
+          materialCode: null,
+          poNumber: null,
+          batch: null,
+          quantity: null,
+          originalCode: scannedCode,
+          error: 'Code too short'
+        };
+      }
+    }
+  }
+
+  private async searchRM1Material(parsedData: any): Promise<void> {
+    try {
+      console.log(`🔍 Searching for material:`, parsedData);
+      
+      // Check multiple collections for the batch
+      console.log(`🔍 Checking multiple collections for batch ${parsedData.batch}...`);
+      
+      // 1. Check RM1 INBOUND collection
+      console.log(`🔍 Checking RM1 INBOUND collection...`);
+      const inboundQuery = this.firestore.collection('rm1-inbound', ref => 
+        ref.where('materialCode', '==', parsedData.materialCode)
+           .where('poNumber', '==', parsedData.poNumber)
+           .where('batchNumber', '==', parsedData.batch)
+      );
+      
+      const inboundSnapshot = await inboundQuery.get().toPromise();
+      console.log(`📋 RM1 INBOUND - Found ${inboundSnapshot?.docs.length || 0} records with exact match`);
+      
+      // 2. Check OUTBOUND-MATERIALS collection
+      console.log(`🔍 Checking OUTBOUND-MATERIALS collection...`);
+      const outboundQuery = this.firestore.collection('outbound-materials', ref => 
+        ref.where('materialCode', '==', parsedData.materialCode)
+           .where('poNumber', '==', parsedData.poNumber)
+           .where('batchNumber', '==', parsedData.batch)
+      );
+      
+      const outboundSnapshot = await outboundQuery.get().toPromise();
+      console.log(`📋 OUTBOUND-MATERIALS - Found ${outboundSnapshot?.docs.length || 0} records with exact match`);
+      
+      // 3. Check INVENTORY-MATERIALS with different batch field names
+      console.log(`🔍 Checking INVENTORY-MATERIALS with different batch fields...`);
+      const inventoryBatchQuery = this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', parsedData.materialCode)
+           .where('factory', '==', 'ASM1')
+           .where('poNumber', '==', parsedData.poNumber)
+           .where('batch', '==', parsedData.batch) // Try 'batch' field
+      );
+      
+      const inventoryBatchSnapshot = await inventoryBatchQuery.get().toPromise();
+      console.log(`📋 INVENTORY-MATERIALS (batch field) - Found ${inventoryBatchSnapshot?.docs.length || 0} records`);
+      
+      // 4. Check INVENTORY-MATERIALS with batchNumber field
+      const inventoryBatchNumberQuery = this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', parsedData.materialCode)
+           .where('factory', '==', 'ASM1')
+           .where('poNumber', '==', parsedData.poNumber)
+           .where('batchNumber', '==', parsedData.batch) // Try 'batchNumber' field
+      );
+      
+      const inventoryBatchNumberSnapshot = await inventoryBatchNumberQuery.get().toPromise();
+      console.log(`📋 INVENTORY-MATERIALS (batchNumber field) - Found ${inventoryBatchNumberSnapshot?.docs.length || 0} records`);
+      
+      // Check which collection has the batch match
+      let foundCollection = '';
+      let foundRecord: any = null;
+      
+      if (inboundSnapshot && !inboundSnapshot.empty) {
+        foundCollection = 'rm1-inbound';
+        foundRecord = inboundSnapshot.docs[0].data();
+        console.log(`✅ Found in RM1 INBOUND!`);
+      } else if (outboundSnapshot && !outboundSnapshot.empty) {
+        foundCollection = 'outbound-materials';
+        foundRecord = outboundSnapshot.docs[0].data();
+        console.log(`✅ Found in OUTBOUND-MATERIALS!`);
+      } else if (inventoryBatchSnapshot && !inventoryBatchSnapshot.empty) {
+        foundCollection = 'inventory-materials (batch field)';
+        foundRecord = inventoryBatchSnapshot.docs[0].data();
+        console.log(`✅ Found in INVENTORY-MATERIALS (batch field)!`);
+      } else if (inventoryBatchNumberSnapshot && !inventoryBatchNumberSnapshot.empty) {
+        foundCollection = 'inventory-materials (batchNumber field)';
+        foundRecord = inventoryBatchNumberSnapshot.docs[0].data();
+        console.log(`✅ Found in INVENTORY-MATERIALS (batchNumber field)!`);
+      }
+      
+      if (foundRecord) {
+        console.log(`📋 Found record in ${foundCollection}:`, foundRecord);
+        
+        // Now search in inventory-materials for the same material to get location
+        const inventoryQuery = this.firestore.collection('inventory-materials', ref => 
+          ref.where('materialCode', '==', parsedData.materialCode)
+             .where('factory', '==', 'ASM1')
+             .where('poNumber', '==', parsedData.poNumber)
+        );
+        
+        const inventorySnapshot = await inventoryQuery.get().toPromise();
+        console.log(`📋 INVENTORY - Found ${inventorySnapshot?.docs.length || 0} records with MaterialCode + PO`);
+        
+        if (inventorySnapshot && !inventorySnapshot.empty) {
+          // Use the first inventory record
+          const invDoc = inventorySnapshot.docs[0];
+          const invData = invDoc.data() as any;
+          this.foundRM1Item = {
+            id: invDoc.id,
+            ...invData,
+            parsedData: parsedData,
+            sourceData: foundRecord, // Store source data for reference
+            sourceCollection: foundCollection
+          };
+          this.currentLocation = this.foundRM1Item.location || 'N/A';
+          
+          console.log(`✅ Using inventory record with ${foundCollection} reference:`, this.foundRM1Item);
+          
+          // Move to next step
+          this.changeLocationStep = 3;
+          
+          setTimeout(() => {
+            const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
+            if (locationInput) {
+              locationInput.focus();
+            }
+          }, 100);
+          
+          return;
+        }
+      }
+      
+      // If not found in inbound, check inventory-materials as before
+      const debugQuery = this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', parsedData.materialCode)
+           .where('factory', '==', 'ASM1')
+           .where('poNumber', '==', parsedData.poNumber || '')
+      );
+      
+      const debugSnapshot = await debugQuery.get().toPromise();
+      console.log(`📋 INVENTORY - Found ${debugSnapshot?.docs.length || 0} records with MaterialCode + PO:`);
+      debugSnapshot?.docs.forEach((doc, index) => {
+        const data = doc.data() as any;
+        console.log(`  Record ${index + 1} - ALL FIELDS:`, data);
+        console.log(`  Record ${index + 1} - Key fields:`, {
+          materialCode: data.materialCode,
+          poNumber: data.poNumber, 
+          batchNumber: data.batchNumber,
+          batch: data.batch,
+          location: data.location,
+          expiryDate: data.expiryDate,
+          importDate: data.importDate,
+          receivedDate: data.receivedDate
+        });
+      });
+      
+      // Build main query based on parsed data
+      let query = this.firestore.collection('inventory-materials', ref => {
+        let queryRef = ref.where('materialCode', '==', parsedData.materialCode)
+                         .where('factory', '==', 'ASM1');
+        
+        // Add PO filter if available
+        if (parsedData.poNumber) {
+          queryRef = queryRef.where('poNumber', '==', parsedData.poNumber);
+        }
+        
+        // Add batch filter if available  
+        if (parsedData.batch) {
+          queryRef = queryRef.where('batchNumber', '==', parsedData.batch);
+        }
+        
+        return queryRef;
+      });
+      
+      const querySnapshot = await query.get().toPromise();
 
       if (querySnapshot && !querySnapshot.empty) {
         // Found material in RM1 inventory
@@ -620,7 +896,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const docData = doc.data() as any;
         this.foundRM1Item = {
           id: doc.id,
-          ...docData
+          ...docData,
+          parsedData: parsedData // Store parsed data for display
         };
         this.currentLocation = this.foundRM1Item.location || 'N/A';
         
@@ -638,16 +915,141 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         }, 100);
         
       } else {
-        alert(`Không tìm thấy mã hàng "${materialCode}" trong RM1 inventory`);
-        this.scannedMaterialCode = '';
+        // Try fallback search with just material code + PO (without batch)
+        console.log(`⚠️ Exact match not found. Trying MaterialCode + PO only...`);
+        
+        const fallbackQuery = this.firestore.collection('inventory-materials', ref => 
+          ref.where('materialCode', '==', parsedData.materialCode)
+             .where('factory', '==', 'ASM1')
+             .where('poNumber', '==', parsedData.poNumber)
+        );
+        
+        const fallbackSnapshot = await fallbackQuery.get().toPromise();
+        
+        if (fallbackSnapshot && !fallbackSnapshot.empty) {
+          console.log(`✅ Found ${fallbackSnapshot.docs.length} records with MaterialCode + PO (ignoring batch)`);
+          
+          // Show all available batches for this MaterialCode + PO
+          const availableBatches = fallbackSnapshot.docs.map(doc => {
+            const data = doc.data() as any;
+            return data.batchNumber || data.batch || 'N/A';
+          });
+          
+          console.log(`📋 Available batches for ${parsedData.materialCode} + ${parsedData.poNumber}:`, availableBatches);
+          
+          // Use the first one but show warning
+          const doc = fallbackSnapshot.docs[0];
+          const docData = doc.data() as any;
+          this.foundRM1Item = {
+            id: doc.id,
+            ...docData,
+            parsedData: parsedData
+          };
+          this.currentLocation = this.foundRM1Item.location || 'N/A';
+          
+          // Không hiển thị thông báo, chỉ log để debug
+          console.log(`✅ Tìm thấy mã hàng ${parsedData.materialCode} + PO ${parsedData.poNumber}\nBatch "${parsedData.batch}" không khớp với batch trong database.\nBatch có sẵn: ${availableBatches.join(', ')}\n\nSử dụng record đầu tiên để tiếp tục.`);
+          
+          // Move to next step
+          this.changeLocationStep = 3;
+          
+          setTimeout(() => {
+            const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
+            if (locationInput) {
+              locationInput.focus();
+            }
+          }, 100);
+          
+        } else {
+          // Complete fallback with just material code
+          console.log(`⚠️ MaterialCode + PO not found. Trying material code only...`);
+          await this.fallbackSearchByMaterialCode(parsedData.materialCode, parsedData);
+        }
       }
     } catch (error) {
       console.error('Error searching RM1 material:', error);
-      alert('Lỗi khi tìm kiếm mã hàng. Vui lòng thử lại.');
+      alert('🏷️ TEM LỖI - Lỗi khi tìm kiếm mã hàng. Vui lòng thử lại.');
+    }
+  }
+
+  // Fallback search by material code only
+  private async fallbackSearchByMaterialCode(materialCode: string, originalParsedData?: any): Promise<void> {
+    try {
+      const querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('materialCode', '==', materialCode)
+           .where('factory', '==', 'ASM1')
+      ).get().toPromise();
+
+      if (querySnapshot && !querySnapshot.empty) {
+        // Show multiple matches if any
+        const docs = querySnapshot.docs;
+        console.log(`📋 Found ${docs.length} items with material code ${materialCode}`);
+        
+        // If we have parsed data, try to find exact match
+        let selectedDoc = docs[0];
+        if (originalParsedData && originalParsedData.poNumber && originalParsedData.batch) {
+          const exactMatch = docs.find(doc => {
+            const data = doc.data() as any;
+            return data.poNumber === originalParsedData.poNumber && 
+                   data.batchNumber === originalParsedData.batch;
+          });
+          
+          if (exactMatch) {
+            selectedDoc = exactMatch;
+            console.log(`✅ Found exact match with PO and Batch`);
+          } else {
+            // No exact match found
+            console.log(`🏷️ TEM LỖI - Mã hàng "${materialCode}" có trong kho nhưng không khớp PO "${originalParsedData.poNumber}" hoặc Batch "${originalParsedData.batch}"`);
+            this.scannedMaterialCode = '';
+            return;
+          }
+        }
+        
+        const docData = selectedDoc.data() as any;
+        this.foundRM1Item = {
+          id: selectedDoc.id,
+          ...docData,
+          parsedData: originalParsedData // Keep original parsed data
+        };
+        this.currentLocation = this.foundRM1Item.location || 'N/A';
+        
+        console.log(`✅ Using selected match:`, this.foundRM1Item);
+        
+        // Show warning if multiple matches but using fallback
+        if (docs.length > 1 && !originalParsedData) {
+          alert(`⚠️ Tìm thấy ${docs.length} items với mã hàng ${materialCode}. Sử dụng item đầu tiên.`);
+        }
+        
+        // Move to next step
+        this.changeLocationStep = 3;
+        
+        // Focus on location input
+        setTimeout(() => {
+          const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
+          if (locationInput) {
+            locationInput.focus();
+          }
+        }, 100);
+        
+      } else {
+        alert(`🏷️ TEM LỖI - Không tìm thấy mã hàng "${materialCode}" trong RM1 inventory`);
+        this.scannedMaterialCode = '';
+      }
+    } catch (error) {
+      console.error('Error in fallback search:', error);
+      alert('🏷️ TEM LỖI - Lỗi khi tìm kiếm mã hàng. Vui lòng thử lại.');
     }
   }
 
   processNewLocation(): void {
+    // Kiểm tra có đủ 3 thông tin cần thiết không
+    if (!this.foundRM1Item?.parsedData?.materialCode || 
+        !this.foundRM1Item?.parsedData?.poNumber || 
+        !this.foundRM1Item?.parsedData?.batch) {
+      console.log('❌ Thiếu thông tin: Mã hàng, PO, hoặc Batch');
+      return;
+    }
+
     if (!this.scannedNewLocation.trim()) {
       alert('Vui lòng nhập vị trí mới');
       return;
@@ -673,11 +1075,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`🔄 Updating location for ${this.scannedMaterialCode} from ${this.currentLocation} to ${this.scannedNewLocation}`);
       
       // Update location in RM1 inventory
-      await this.firestore.collection('rm1-inventory')
+      await this.firestore.collection('inventory-materials')
         .doc(this.foundRM1Item.id)
         .update({
           location: this.scannedNewLocation,
-          lastUpdated: new Date()
+          updatedAt: new Date()
         });
 
       console.log(`✅ Location updated successfully`);
@@ -698,5 +1100,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       console.error('Error updating location:', error);
       alert('Lỗi khi cập nhật vị trí. Vui lòng thử lại.');
     }
+  }
+
+  // Getter to check if all required data is available
+  get canProcessNewLocation(): boolean {
+    return !!(this.foundRM1Item?.parsedData?.materialCode && 
+              this.foundRM1Item?.parsedData?.poNumber && 
+              this.foundRM1Item?.parsedData?.batch);
   }
 }

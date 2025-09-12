@@ -86,7 +86,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // 🚀 OPTIMIZATION: Add loading states
   isSearching = false;
   searchProgress = 0;
-  
   // Negative stock tracking
   private negativeStockSubject = new BehaviorSubject<number>(0);
   public negativeStockCount$ = this.negativeStockSubject.asObservable();
