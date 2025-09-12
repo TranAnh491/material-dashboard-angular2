@@ -314,7 +314,46 @@
       <!-- Step 2: Scan Material Code -->
       <div class="step-container" *ngIf="changeLocationStep === 2">
         <h4>Bước 1: Quét mã hàng</h4>
-        <div class="scan-input-container">
+        
+        <!-- QR Scanner View -->
+        <div class="scanner-container" *ngIf="selectedScannerType === 'camera'">
+          <div class="scanner-wrapper">
+            <div id="material-scanner-container" class="scanner-video-container">
+              <!-- QR Scanner will be injected here -->
+            </div>
+            <div class="scanner-overlay" *ngIf="isScannerReady">
+              <div class="scan-frame">
+                <div class="scan-corners">
+                  <div class="corner top-left"></div>
+                  <div class="corner top-right"></div>
+                  <div class="corner bottom-left"></div>
+                  <div class="corner bottom-right"></div>
+                </div>
+              </div>
+            </div>
+            <div class="scanner-loading" *ngIf="scannerState === 'starting'">
+              <i class="material-icons">camera_alt</i>
+              <p>Đang khởi tạo scanner...</p>
+            </div>
+            <div class="scanner-error" *ngIf="scannerState === 'error'">
+              <i class="material-icons">error</i>
+              <p>{{ errorMessage }}</p>
+              <button class="retry-btn" (click)="startMaterialScanning()">
+                <i class="material-icons">refresh</i>
+                <span>Thử lại</span>
+              </button>
+            </div>
+          </div>
+          <div class="scanner-controls" *ngIf="isScannerReady">
+            <button class="scanner-btn stop-btn" (click)="stopScanning()">
+              <i class="material-icons">stop</i>
+              <span>Dừng</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Scanner Input -->
+        <div class="scan-input-container" *ngIf="selectedScannerType === 'scanner'">
           <input type="text" 
                  id="materialInput"
                  [(ngModel)]="scannedMaterialCode" 
@@ -326,6 +365,8 @@
             <i class="material-icons">check</i>
           </button>
         </div>
+        
+        <!-- Scan Info -->
         <div class="scan-info" *ngIf="scannedMaterialCode">
           <p>Mã gốc: <strong>{{ scannedMaterialCode }}</strong></p>
           <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
@@ -346,7 +387,46 @@
       <!-- Step 3: Scan New Location -->
       <div class="step-container" *ngIf="changeLocationStep === 3">
         <h4>Bước 2: Quét vị trí mới</h4>
-        <div class="scan-input-container">
+        
+        <!-- Location QR Scanner View -->
+        <div class="scanner-container" *ngIf="selectedScannerType === 'camera'">
+          <div class="scanner-wrapper">
+            <div id="location-scanner-container" class="scanner-video-container">
+              <!-- QR Scanner will be injected here -->
+            </div>
+            <div class="scanner-overlay" *ngIf="isScannerReady">
+              <div class="scan-frame">
+                <div class="scan-corners">
+                  <div class="corner top-left"></div>
+                  <div class="corner top-right"></div>
+                  <div class="corner bottom-left"></div>
+                  <div class="corner bottom-right"></div>
+                </div>
+              </div>
+            </div>
+            <div class="scanner-loading" *ngIf="scannerState === 'starting'">
+              <i class="material-icons">camera_alt</i>
+              <p>Đang khởi tạo scanner...</p>
+            </div>
+            <div class="scanner-error" *ngIf="scannerState === 'error'">
+              <i class="material-icons">error</i>
+              <p>{{ errorMessage }}</p>
+              <button class="retry-btn" (click)="startLocationScanning()">
+                <i class="material-icons">refresh</i>
+                <span>Thử lại</span>
+              </button>
+            </div>
+          </div>
+          <div class="scanner-controls" *ngIf="isScannerReady">
+            <button class="scanner-btn stop-btn" (click)="stopScanning()">
+              <i class="material-icons">stop</i>
+              <span>Dừng</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Location Scanner Input -->
+        <div class="scan-input-container" *ngIf="selectedScannerType === 'scanner'">
           <input type="text" 
                  id="locationInput"
                  [(ngModel)]="scannedNewLocation" 

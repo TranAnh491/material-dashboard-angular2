@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 
 export interface LocationItem {
@@ -75,6 +76,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   currentLocation = '';
   foundRM1Item: any = null;
   
+  // QR Scanner properties
+  isScanning = false;
+  scannerState: 'idle' | 'starting' | 'scanning' | 'error' = 'idle';
+  errorMessage = '';
+  
   // Success notification
   showSuccessNotification = false;
   successMessage = '';
@@ -86,7 +92,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private auth: AngularFireAuth,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private qrScannerService: QRScannerService
   ) {
     // Setup search debouncing
     this.searchSubject.pipe(
@@ -115,6 +122,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+    
+    // Stop scanner if active
+    this.stopScanning();
     
     // Remove event listeners
     document.removeEventListener('click', () => {
@@ -580,19 +590,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.scannedNewLocation = '';
     this.currentLocation = '';
     this.foundRM1Item = null;
+    
+    // Stop scanner if active
+    this.stopScanning();
   }
 
   selectScannerType(type: 'camera' | 'scanner'): void {
     this.selectedScannerType = type;
     this.changeLocationStep = 2;
     
-    // Focus on material input after a short delay
-    setTimeout(() => {
-      const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
-      if (materialInput) {
-        materialInput.focus();
-      }
-    }, 100);
+    if (type === 'camera') {
+      // Start QR scanner for material code
+      this.startMaterialScanning();
+    } else {
+      // Focus on material input for scanner
+      setTimeout(() => {
+        const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
+        if (materialInput) {
+          materialInput.focus();
+        }
+      }, 100);
+    }
   }
 
   processMaterialCode(): void {
@@ -610,7 +628,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.scannedMaterialCode = '';
       return;
     }
-    
+
     // Search for material in RM1 inventory
     this.searchRM1Material(parsedData);
   }
@@ -835,7 +853,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           // Move to next step
           this.changeLocationStep = 3;
           
+          // Initialize location scanner if camera was selected
           setTimeout(() => {
+            this.initializeLocationScannerForStep3();
+            
             const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
             if (locationInput) {
               locationInput.focus();
@@ -953,7 +974,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           // Move to next step
           this.changeLocationStep = 3;
           
+          // Initialize location scanner if camera was selected
           setTimeout(() => {
+            this.initializeLocationScannerForStep3();
+            
             const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
             if (locationInput) {
               locationInput.focus();
@@ -1065,6 +1089,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.changeLocationStep = 4;
   }
 
+  // Method to initialize location scanner when step 3 is reached
+  initializeLocationScannerForStep3(): void {
+    if (this.selectedScannerType === 'camera') {
+      this.startLocationScanning();
+    }
+  }
+
   async confirmLocationChange(): Promise<void> {
     if (!this.foundRM1Item || !this.scannedNewLocation) {
       alert('Thiếu thông tin để thực hiện thay đổi');
@@ -1107,5 +1138,137 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return !!(this.foundRM1Item?.parsedData?.materialCode && 
               this.foundRM1Item?.parsedData?.poNumber && 
               this.foundRM1Item?.parsedData?.batch);
+  }
+
+  // Getter to check if scanner is ready
+  get isScannerReady(): boolean {
+    return this.scannerState === 'scanning';
+  }
+
+  // QR Scanner methods
+  async startMaterialScanning(): Promise<void> {
+    try {
+      console.log('🎯 Starting QR scanner for material code...');
+      this.isScanning = true;
+      this.errorMessage = '';
+      this.scannerState = 'starting';
+      
+      // Wait for DOM element to be available
+      await this.waitForElement('material-scanner-container');
+      
+      // Start scanner
+      const scanResult$ = await this.qrScannerService.startScanning({
+        facingMode: 'environment'
+      }, document.getElementById('material-scanner-container'));
+      
+      this.scannerState = 'scanning';
+      
+      // Listen for scan results
+      scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+        next: (result: QRScanResult) => {
+          console.log('📱 Material QR Code scanned:', result.text);
+          this.onMaterialScanSuccess(result.text);
+        },
+        error: (error) => {
+          console.error('❌ Material scan error:', error);
+          this.onScanError(error);
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error starting material scanner:', error);
+      this.onScanError(error);
+    }
+  }
+
+  async startLocationScanning(): Promise<void> {
+    try {
+      console.log('🎯 Starting QR scanner for location...');
+      this.isScanning = true;
+      this.errorMessage = '';
+      this.scannerState = 'starting';
+      
+      // Wait for DOM element to be available
+      await this.waitForElement('location-scanner-container');
+      
+      // Start scanner
+      const scanResult$ = await this.qrScannerService.startScanning({
+        facingMode: 'environment'
+      }, document.getElementById('location-scanner-container'));
+      
+      this.scannerState = 'scanning';
+      
+      // Listen for scan results
+      scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+        next: (result: QRScanResult) => {
+          console.log('📱 Location QR Code scanned:', result.text);
+          this.onLocationScanSuccess(result.text);
+        },
+        error: (error) => {
+          console.error('❌ Location scan error:', error);
+          this.onScanError(error);
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error starting location scanner:', error);
+      this.onScanError(error);
+    }
+  }
+
+  onMaterialScanSuccess(scannedText: string): void {
+    console.log('✅ Material scan successful:', scannedText);
+    this.scannedMaterialCode = scannedText;
+    this.processMaterialCode();
+  }
+
+  onLocationScanSuccess(scannedText: string): void {
+    console.log('✅ Location scan successful:', scannedText);
+    this.scannedNewLocation = scannedText;
+    this.processNewLocation();
+  }
+
+  onScanError(error: any): void {
+    console.error('❌ Scan error:', error);
+    this.errorMessage = error.message || 'Lỗi khi quét QR code';
+    this.scannerState = 'error';
+    this.isScanning = false;
+  }
+
+  stopScanning(): void {
+    console.log('🛑 Stopping QR scanner...');
+    this.isScanning = false;
+    this.scannerState = 'idle';
+    this.qrScannerService.stopScanning();
+  }
+
+  // Helper method to wait for DOM element
+  private waitForElement(selector: string): Promise<HTMLElement> {
+    return new Promise((resolve, reject) => {
+      const element = document.getElementById(selector);
+      if (element) {
+        resolve(element);
+        return;
+      }
+
+      const observer = new MutationObserver((mutations, obs) => {
+        const element = document.getElementById(selector);
+        if (element) {
+          obs.disconnect();
+          resolve(element);
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(`Element ${selector} not found`));
+      }, 5000);
+    });
   }
 }
