@@ -55,6 +55,36 @@
           </button>
         </div>
 
+        <!-- Desktop Scanning Controls -->
+        <div class="scan-controls-desktop" *ngIf="isBatchScanningMode && !isMobile">
+          <div class="scan-status-desktop">
+            <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
+              <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+              <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
+            </div>
+            <div class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
+              <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+              <span>Nhân viên: {{ batchEmployeeId || 'Chưa scan' }}</span>
+            </div>
+          </div>
+          
+          <div class="scan-buttons-desktop">
+            <button class="review-btn-desktop" 
+                    (click)="showScanReview()"
+                    title="Xem danh sách đã scan"
+                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+              <i class="material-icons">list</i>
+              Review ({{ pendingScanData.length }})
+            </button>
+            <button class="done-btn-desktop" 
+                    (click)="stopBatchScanningMode()"
+                    title="Hoàn thành và lưu tất cả">
+              <i class="material-icons">done</i>
+              Done ({{ pendingScanData.length }})
+            </button>
+          </div>
+        </div>
+
         <!-- Active Scanning Status - Mobile Optimized -->
         <div class="scan-status-mobile" *ngIf="isBatchScanningMode">
           <div class="status-row">
@@ -66,11 +96,18 @@
               <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
               <span class="status-text">{{ batchProductionOrder || 'Chưa scan LSX' }}</span>
             </div>
+            <button class="review-btn-mobile" 
+                    (click)="showScanReview()"
+                    title="Xem danh sách đã scan"
+                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+              <i class="material-icons">list</i>
+              <span>Review ({{ pendingScanData.length }})</span>
+            </button>
             <button class="done-btn-mobile" 
                     (click)="stopBatchScanningMode()"
-                    title="Dừng chế độ scan">
+                    title="Dừng chế độ scan và lưu tất cả">
               <i class="material-icons">done</i>
-              <span>Done</span>
+              <span>Done ({{ pendingScanData.length }})</span>
             </button>
             <button class="stop-camera-btn-mobile" 
                     (click)="stopCameraScanning()"
@@ -121,14 +158,6 @@
           </div>
         </div>
         
-                <!-- Data Info -->
-        <div class="data-info" [class.mobile-hidden]="isMobile">
-          <span class="data-count">Hiển thị {{filteredMaterials.length}} dòng gần nhất</span>
-          <button class="export-all-btn" (click)="exportToExcel()" title="Tải tất cả dữ liệu">
-            <i class="material-icons">download</i>
-            Export Tất Cả
-          </button>
-        </div>
         
         <!-- Refresh Button -->
         <button class="refresh-btn" (click)="loadMaterials()" [class.mobile-hidden]="isMobile">
@@ -292,4 +321,59 @@
   </div>
 
   <!-- QR Scanner Modal is now handled by QRScannerModalComponent -->
+
+  <!-- Scan Review Modal -->
+  <div class="scan-review-modal" *ngIf="showScanReviewModal" (click)="closeScanReview()">
+    <div class="scan-review-content" (click)="$event.stopPropagation()">
+      <div class="scan-review-header">
+        <h3>Danh Sách Đã Scan ({{ pendingScanData.length }})</h3>
+        <button class="close-btn" (click)="closeScanReview()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="scan-review-info">
+        <div class="scan-info-item">
+          <strong>LSX:</strong> {{ batchProductionOrder }}
+        </div>
+        <div class="scan-info-item">
+          <strong>Nhân viên:</strong> {{ batchEmployeeId }}
+        </div>
+      </div>
+      
+      <div class="scan-review-list">
+        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index">
+          <div class="scan-item-header">
+            <span class="scan-index">#{{ i + 1 }}</span>
+            <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
+          </div>
+          <div class="scan-item-details">
+            <div class="scan-detail">
+              <strong>Mã hàng:</strong> {{ item.materialCode }}
+            </div>
+            <div class="scan-detail">
+              <strong>PO:</strong> {{ item.poNumber }}
+            </div>
+            <div class="scan-detail">
+              <strong>Số lượng:</strong> {{ item.quantity }} KG
+            </div>
+            <div class="scan-detail" *ngIf="item.importDate">
+              <strong>Batch:</strong> {{ item.importDate }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="scan-review-footer">
+        <button class="cancel-btn" (click)="closeScanReview()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+        <button class="confirm-btn" (click)="confirmAndSave()">
+          <i class="material-icons">save</i>
+          Xác Nhận & Lưu
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
