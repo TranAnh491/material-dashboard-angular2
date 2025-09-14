@@ -604,12 +604,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.startMaterialScanning();
     } else {
       // Focus on material input for scanner
-      setTimeout(() => {
-        const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
-        if (materialInput) {
-          materialInput.focus();
-        }
-      }, 100);
+    setTimeout(() => {
+      const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
+      if (materialInput) {
+        materialInput.focus();
+      }
+    }, 100);
     }
   }
 

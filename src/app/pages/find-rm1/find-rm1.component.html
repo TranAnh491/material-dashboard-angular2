@@ -1,107 +1,59 @@
 <div class="find-rm1-container">
   <!-- Header Section -->
   <div class="header-section">
-    <div class="container">
-      <div class="row align-items-center">
-        <div class="col-12 col-md-8">
-          <h1 class="page-title">
-            <i class="material-icons">search</i>
-            Find RM1
-          </h1>
-          <p class="page-subtitle">Tìm kiếm mã hàng RM1 với tồn kho và vị trí</p>
-        </div>
-        <div class="col-12 col-md-4 text-md-end">
-          <div class="stats-summary">
-            <div class="stat-item">
-              <span class="stat-number">{{totalItems}}</span>
-              <span class="stat-label">Mã hàng</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{totalLocations}}</span>
-              <span class="stat-label">Vị trí</span>
-            </div>
-          </div>
-        </div>
+    <div class="header-content">
+      <div class="header-left">
+        <h1 class="page-title">
+          <i class="material-icons">search</i>
+          Find RM1
+        </h1>
+        <p class="page-subtitle">Tìm kiếm mã hàng RM1 với tồn kho và vị trí</p>
       </div>
+      <!-- Thống kê đã được ẩn theo yêu cầu -->
     </div>
   </div>
 
   <!-- Search Section -->
   <div class="search-section">
-    <div class="container">
-      <div class="search-container">
-        <div class="search-box">
-          <div class="search-input-wrapper">
-            <i class="material-icons search-icon">search</i>
-            <input 
-              type="text" 
-              class="search-input" 
-              placeholder="Nhập mã hàng RM1 để tìm kiếm..."
-              [(ngModel)]="searchTerm"
-              (input)="onSearchInput($event)"
-              (keyup.enter)="performSearch()"
-              autocomplete="off"
-            >
-            <button 
-              class="clear-btn" 
-              *ngIf="searchTerm"
-              (click)="clearSearch()"
-            >
-              <i class="material-icons">close</i>
-            </button>
-          </div>
-          <button 
-            class="search-btn" 
-            (click)="performSearch()"
-            [disabled]="!searchTerm || isLoading"
+    <div class="search-container">
+      <div class="search-box">
+        <div class="search-input-wrapper">
+          <i class="material-icons search-icon">search</i>
+          <input 
+            type="text" 
+            class="search-input" 
+            placeholder=""
+            [(ngModel)]="searchTerm"
+            (input)="onSearchInput($event)"
+            (keyup.enter)="performSearch()"
+            autocomplete="off"
+            style="text-transform: uppercase;"
           >
-            <i class="material-icons" *ngIf="!isLoading">search</i>
-            <div class="spinner" *ngIf="isLoading"></div>
-            Tìm kiếm
+          <button 
+            class="clear-btn" 
+            *ngIf="searchTerm"
+            (click)="clearSearch()"
+          >
+            <i class="material-icons">close</i>
           </button>
         </div>
-        
-        <!-- Quick Filters -->
-        <div class="quick-filters" *ngIf="!searchResults.length">
-          <span class="filter-label">Tìm nhanh:</span>
-          <button 
-            class="filter-chip" 
-            *ngFor="let filter of quickFilters"
-            (click)="applyQuickFilter(filter)"
-          >
-            {{filter}}
-          </button>
-        </div>
+        <button 
+          class="search-btn" 
+          (click)="performSearch()"
+          [disabled]="!searchTerm || isLoading"
+        >
+          <i class="material-icons" *ngIf="!isLoading">search</i>
+          <div class="spinner" *ngIf="isLoading"></div>
+          TÌM KIẾM
+        </button>
       </div>
     </div>
   </div>
 
   <!-- Results Section -->
   <div class="results-section" *ngIf="searchResults.length > 0">
-    <div class="container">
-      <div class="results-header">
-        <div class="results-info">
-          <h3>Kết quả tìm kiếm</h3>
-          <span class="results-count">{{searchResults.length}} kết quả cho "{{searchTerm}}"</span>
-        </div>
-        <div class="results-actions">
-          <button 
-            class="btn btn-outline-secondary btn-sm"
-            (click)="exportResults()"
-            [disabled]="!searchResults.length"
-          >
-            <i class="material-icons">download</i>
-            Export
-          </button>
-          <button 
-            class="btn btn-outline-secondary btn-sm"
-            (click)="clearResults()"
-          >
-            <i class="material-icons">clear</i>
-            Xóa
-          </button>
-        </div>
-      </div>
+    <div class="results-container">
+      <!-- Header kết quả đã được ẩn theo yêu cầu -->
 
       <!-- Results Table -->
       <div class="results-table-container">
@@ -109,72 +61,41 @@
           <table class="results-table">
             <thead>
               <tr>
-                <th>Mã hàng</th>
-                <th>Vị trí</th>
-                <th>Tồn kho</th>
-                <th>PO/Description</th>
-                <th>Trạng thái</th>
-                <th>Thao tác</th>
+                <th>MÃ HÀNG</th>
+                <th>PO</th>
+                <!-- Cột BATCH đã được ẩn theo yêu cầu -->
+                <th>TỒN KHO</th>
+                <th>VỊ TRÍ</th>
+                <!-- Cột THAO TÁC đã được ẩn theo yêu cầu -->
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let item of searchResults; trackBy: trackByItemCode">
-                <td class="item-code">
+                <td class="material-code">
                   <div class="code-wrapper">
-                    <span class="code-text">{{item.itemCode}}</span>
+                    <span class="code-text">{{item.materialCode}}</span>
                     <button 
                       class="copy-btn" 
-                      (click)="copyToClipboard(item.itemCode)"
+                      (click)="copyToClipboard(item.materialCode)"
                       title="Copy mã hàng"
                     >
                       <i class="material-icons">content_copy</i>
                     </button>
                   </div>
                 </td>
-                <td class="location">
-                  <span class="location-text">{{item.location}}</span>
-                  <button 
-                    class="map-btn" 
-                    (click)="showOnMap(item.location)"
-                    title="Xem trên bản đồ"
-                  >
-                    <i class="material-icons">location_on</i>
-                  </button>
+                <td class="po">
+                  <span class="po-text" [title]="item.po">{{item.po}}</span>
                 </td>
+                <!-- Cột BATCH đã được ẩn theo yêu cầu -->
                 <td class="quantity">
                   <span class="qty-text" [class.low-stock]="item.quantity < 10">
-                    {{item.quantity}}
-                  </span>
-                  <span class="unit">pcs</span>
-                </td>
-                <td class="description">
-                  <div class="desc-wrapper">
-                    <span class="desc-text" [title]="item.po">{{item.po}}</span>
-                  </div>
-                </td>
-                <td class="status">
-                  <span class="status-badge" [class]="getStatusClass(item.quantity)">
-                    {{getStatusText(item.quantity)}}
+                    {{item.quantity | number:'1.0-0'}}
                   </span>
                 </td>
-                <td class="actions">
-                  <div class="action-buttons">
-                    <button 
-                      class="action-btn detail-btn"
-                      (click)="showItemDetail(item)"
-                      title="Xem chi tiết"
-                    >
-                      <i class="material-icons">visibility</i>
-                    </button>
-                    <button 
-                      class="action-btn edit-btn"
-                      (click)="editItem(item)"
-                      title="Chỉnh sửa"
-                    >
-                      <i class="material-icons">edit</i>
-                    </button>
-                  </div>
+                <td class="location">
+                  <span class="location-text">{{item.location}}</span>
                 </td>
+                <!-- Cột THAO TÁC đã được ẩn theo yêu cầu -->
               </tr>
             </tbody>
           </table>
@@ -225,7 +146,7 @@
         <div class="detail-grid">
           <div class="detail-item">
             <label>Mã hàng:</label>
-            <span>{{selectedItem.itemCode}}</span>
+            <span>{{selectedItem.materialCode}}</span>
           </div>
           <div class="detail-item">
             <label>Vị trí:</label>
@@ -238,6 +159,10 @@
           <div class="detail-item">
             <label>PO/Description:</label>
             <span>{{selectedItem.po}}</span>
+          </div>
+          <div class="detail-item" *ngIf="selectedItem.batch">
+            <label>Batch:</label>
+            <span>{{selectedItem.batch}}</span>
           </div>
           <div class="detail-item">
             <label>Trạng thái:</label>

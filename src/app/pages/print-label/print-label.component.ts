@@ -783,6 +783,17 @@ export class PrintLabelComponent implements OnInit {
           const notDoneItems = data.data.filter((item: any) => {
             const status = item.tinhTrang?.toLowerCase()?.trim();
             return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
+          }).map((item: any) => {
+            // Convert Firestore timestamp to Date
+            if (item.statusUpdateTime && item.statusUpdateTime.toDate) {
+              item.statusUpdateTime = item.statusUpdateTime.toDate();
+            } else if (item.statusUpdateTime && typeof item.statusUpdateTime === 'string') {
+              item.statusUpdateTime = new Date(item.statusUpdateTime);
+            } else if (!item.statusUpdateTime) {
+              // Nếu chưa có thời gian, tạo mới
+              item.statusUpdateTime = new Date();
+            }
+            return item;
           });
           
           allData.push(...notDoneItems);
@@ -793,6 +804,11 @@ export class PrintLabelComponent implements OnInit {
       this.scheduleData = allData;
       this.firebaseSaved = this.scheduleData.length > 0;
       console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items excluded)`);
+      
+      // Log status update times for debugging
+      this.scheduleData.forEach((item, index) => {
+        console.log(`Item ${index + 1} (${item.maTem}): statusUpdateTime =`, item.statusUpdateTime);
+      });
     }, error => {
       console.error('❌ Error loading from Firebase:', error);
     });
@@ -1548,7 +1564,15 @@ export class PrintLabelComponent implements OnInit {
 
   onFieldChange(item: ScheduleItem, fieldName: string): void {
     console.log(`Field ${fieldName} changed for item:`, item.maTem);
-    item.statusUpdateTime = new Date();
+    
+    // Cập nhật thời gian khi thay đổi tình trạng
+    if (fieldName === 'tinhTrang') {
+      item.statusUpdateTime = new Date();
+      console.log('Status update time set to:', item.statusUpdateTime);
+      
+      // Trigger change detection
+      this.scheduleData = [...this.scheduleData];
+    }
     
     // Save to Firebase
     this.saveToFirebaseReplace(this.scheduleData);

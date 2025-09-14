@@ -3,12 +3,15 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject, takeUntil, debounceTime, distinctUntilChanged } from 'rxjs';
 
 interface RM1Item {
-  itemCode: string;
+  id?: string;
+  materialCode: string;
   location: string;
   quantity: number;
   po: string;
+  batch?: string;
   description?: string;
   lastUpdated?: Date;
+  factory?: string;
 }
 
 @Component({
@@ -56,21 +59,24 @@ export class FindRm1Component implements OnInit, OnDestroy {
   private loadRM1Data(): void {
     this.isLoading = true;
     
-    this.firestore.collection('rm1-inventory')
-      .valueChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (data: any[]) => {
-          this.allItems = this.parseRM1Data(data);
-          this.updateStats();
-          this.isLoading = false;
-          console.log('RM1 data loaded:', this.allItems.length, 'items');
-        },
-        error: (error) => {
-          console.error('Error loading RM1 data:', error);
-          this.isLoading = false;
-        }
-      });
+    // Tìm kiếm trong inventory-materials collection với factory ASM1
+    this.firestore.collection('inventory-materials', ref => 
+      ref.where('factory', '==', 'ASM1')
+    )
+    .valueChanges()
+    .pipe(takeUntil(this.destroy$))
+    .subscribe({
+      next: (data: any[]) => {
+        this.allItems = this.parseRM1Data(data);
+        this.updateStats();
+        this.isLoading = false;
+        console.log('RM1 data loaded:', this.allItems.length, 'items');
+      },
+      error: (error) => {
+        console.error('Error loading RM1 data:', error);
+        this.isLoading = false;
+      }
+    });
   }
 
   /**
@@ -80,19 +86,24 @@ export class FindRm1Component implements OnInit, OnDestroy {
     const items: RM1Item[] = [];
     
     for (const row of data) {
-      const itemCode = row.itemCode || row.code || row.materialCode;
+      const materialCode = row.materialCode || row.itemCode || row.code;
       const location = row.location || row.warehouseLocation || row.storageLocation;
       const quantity = row.quantity || row.qty || row.stockQty || 0;
-      const po = row.po || row.purchaseOrder || row.itemName || row.description || 'N/A';
+      const po = row.po || row.purchaseOrder || row.poNumber || 'N/A';
+      const batch = row.batch || row.batchNumber || '';
+      const factory = row.factory || 'ASM1';
       
-      if (itemCode && location) {
+      if (materialCode && location) {
         items.push({
-          itemCode: String(itemCode).trim().toUpperCase(),
+          id: row.id,
+          materialCode: String(materialCode).trim().toUpperCase(),
           location: String(location).trim().toUpperCase(),
           quantity: Number(quantity),
           po: String(po).trim(),
+          batch: String(batch).trim(),
           description: row.description || row.itemName || '',
-          lastUpdated: row.lastUpdated ? new Date(row.lastUpdated) : new Date()
+          lastUpdated: row.lastUpdated ? new Date(row.lastUpdated) : new Date(),
+          factory: factory
         });
       }
     }
@@ -120,7 +131,10 @@ export class FindRm1Component implements OnInit, OnDestroy {
    * Handle search input changes
    */
   onSearchInput(event: any): void {
-    const value = event.target.value;
+    const value = event.target.value.toUpperCase();
+    this.searchTerm = value;
+    event.target.value = value;
+    
     if (value.length >= 2) {
       this.performSearch();
     } else if (value.length === 0) {
@@ -154,9 +168,10 @@ export class FindRm1Component implements OnInit, OnDestroy {
     const term = searchTerm.toLowerCase();
     
     return this.allItems.filter(item => 
-      item.itemCode.toLowerCase().includes(term) ||
+      item.materialCode.toLowerCase().includes(term) ||
       item.location.toLowerCase().includes(term) ||
       item.po.toLowerCase().includes(term) ||
+      (item.batch && item.batch.toLowerCase().includes(term)) ||
       (item.description && item.description.toLowerCase().includes(term))
     );
   }
@@ -214,6 +229,29 @@ export class FindRm1Component implements OnInit, OnDestroy {
       // Could add toast notification here
       console.log('Copied to clipboard:', text);
     });
+  }
+
+  /**
+   * Fill material code to other tabs
+   */
+  fillMaterialCode(item: RM1Item): void {
+    // Tạo object chứa thông tin đầy đủ để fill
+    const fillData = {
+      materialCode: item.materialCode,
+      po: item.po,
+      batch: item.batch,
+      location: item.location,
+      quantity: item.quantity
+    };
+    
+    // Lưu vào localStorage để các tab khác có thể đọc
+    localStorage.setItem('findRM1_fillData', JSON.stringify(fillData));
+    
+    // Hiển thị thông báo
+    console.log('✅ Đã fill mã hàng:', fillData);
+    
+    // Có thể mở tab Materials ASM1 hoặc tab khác
+    // window.open('/#/materials-asm1', '_blank');
   }
 
   /**
@@ -276,7 +314,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
   private convertToCSV(data: RM1Item[]): string {
     const headers = ['Mã hàng', 'Vị trí', 'Tồn kho', 'PO/Description', 'Mô tả', 'Cập nhật lần cuối'];
     const rows = data.map(item => [
-      item.itemCode,
+      item.materialCode,
       item.location,
       item.quantity,
       item.po,
@@ -308,9 +346,9 @@ export class FindRm1Component implements OnInit, OnDestroy {
   }
 
   /**
-   * Track items by item code for better performance
+   * Track items by material code for better performance
    */
   trackByItemCode(index: number, item: RM1Item): string {
-    return item.itemCode;
+    return item.materialCode;
   }
 }
