@@ -351,4 +351,273 @@ export class FindRm1Component implements OnInit, OnDestroy {
   trackByItemCode(index: number, item: RM1Item): string {
     return item.materialCode;
   }
+
+  /**
+   * Get warehouse map SVG with highlighted locations
+   */
+  getWarehouseMapSVG(): string {
+    const highlightedLocations = this.getHighlightedLocations();
+    console.log('Generating map with highlighted locations:', highlightedLocations);
+    return this.loadAndHighlightSVG(highlightedLocations);
+  }
+
+  /**
+   * Extract highlighted locations from search results
+   */
+  private getHighlightedLocations(): string[] {
+    const locations: string[] = [];
+    
+    for (const item of this.searchResults) {
+      if (item.location) {
+        const processedLocation = this.processLocationString(item.location);
+        if (processedLocation) {
+          locations.push(processedLocation);
+          console.log(`Location mapping: ${item.location} → ${processedLocation}`);
+        }
+      }
+    }
+    
+    console.log('Highlighted locations:', [...new Set(locations)]);
+    return [...new Set(locations)]; // Remove duplicates
+  }
+
+  /**
+   * Process location string to extract rack code (first 2 characters after cleanup)
+   * Examples: "D33", "D3.3", "D.3.3-A" → "D3"
+   * Examples: "F43", "F4.3", "F.4.3-A" → "F4"
+   * Special cases: "IQC", "NG", "Admin" → null (not rack locations)
+   */
+  private processLocationString(location: string): string | null {
+    if (!location) return null;
+    
+    // Handle special non-rack locations
+    const specialLocations = ['IQC', 'NG', 'ADMIN', 'QUALITY', 'SECURED', 'OFFICE', 'FORKLIFT', 'INBOUND', 'OUTBOUND'];
+    const upperLocation = location.toUpperCase();
+    
+    for (const special of specialLocations) {
+      if (upperLocation.includes(special)) {
+        return null; // Don't highlight special areas
+      }
+    }
+    
+    // Remove all special characters and keep only alphanumeric
+    const cleaned = location.replace(/[^A-Z0-9]/g, '');
+    
+    // Take first 2 characters
+    if (cleaned.length >= 2) {
+      const rackCode = cleaned.substring(0, 2);
+      
+      // Validate format: Letter + Number
+      if (/^[A-Z][0-9]$/.test(rackCode)) {
+        return rackCode;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Load and highlight the original LayoutD.svg file
+   */
+  private loadAndHighlightSVG(highlightedLocations: string[]): string {
+    // Original SVG content from LayoutD.svg
+    let svgContent = `<svg width="100%" height="auto" viewBox="0 0 340 540" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+  <!-- 
+    Layout kho hàng.
+    Quy ước tỉ lệ: 1 mét = 10 pixels.
+    Kích thước kho: 30m x 50m (300x500 pixels).
+    Kích thước kệ nhỏ: 1m x 3m (10x30 pixels).
+  -->
+
+  <!-- Tường kho (32m x 52m) -->
+  <rect x="0" y="0" width="320" height="520" fill="#f9f9f9" stroke="#333" stroke-width="2"/>
+  
+  <!-- NG Area -->
+  <g data-loc="NG">
+    <rect x="255" y="15" width="50" height="50" fill="white" stroke="#333" stroke-width="1"/>
+    <text x="280" y="40" font-family="Arial" font-size="10" text-anchor="middle" dominant-baseline="middle">NG</text>
+  </g>
+
+  <!-- Văn phòng & Khu vực trái -->
+  <g font-family="Arial" text-anchor="middle" dominant-baseline="middle" transform="translate(-5, 0)">
+      <!-- Admin Area -->
+      <g data-loc="Admin">
+        <rect x="15" y="11" width="80" height="59" fill="none" stroke="#333" stroke-width="1"/>
+        <text x="55" y="41" font-size="10">Admin</text>
+      </g>
+
+      <!-- Quality Office -->
+      <g data-loc="Quality">
+        <rect x="15" y="70" width="70" height="60" fill="none" stroke="#333" stroke-width="1"/>
+        <text x="50" y="100" font-size="10">Quality</text>
+      </g>
+      
+      <!-- Secured WH -->
+      <g data-loc="Secured WH">
+        <rect x="15" y="130" width="70" height="200" fill="none" stroke="#333" stroke-width="1"/>
+        <text x="50" y="320" font-size="10">Secured WH</text>
+      </g>
+      <!-- Kệ trong Secured WH -->
+      <g font-size="3" text-anchor="middle" dominant-baseline="middle">
+        <!-- Row Q: y=132 -->
+        <g data-loc="Q3" data-cell-id="cell-q3"><rect x="17" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="137" font-size="4">Q3</text></g>
+        <g data-loc="Q2" data-cell-id="cell-q2"><rect x="34" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="137" font-size="4">Q2</text></g>
+        <g data-loc="Q1" data-cell-id="cell-q1"><rect x="51" y="132" width="15" height="10" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="137" font-size="4">Q1</text></g>
+        
+        <!-- Kệ A12 -->
+        <g data-loc="A12" data-cell-id="cell-a12">
+          <rect x="71" y="132" width="10" height="10" fill="white" stroke="#000" stroke-width="0.5"/>
+          <text x="76" y="137" font-size="4">A12</text>
+        </g>
+        
+        <!-- Row R: y=147 -->
+        <g data-loc="RR3" data-cell-id="cell-rr3"><rect x="17" y="147" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="149.5">RR3</text></g><g data-loc="RL3" data-cell-id="cell-rl3"><rect x="17" y="152" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="154.5">RL3</text></g>
+        <g data-loc="RR2" data-cell-id="cell-rr2"><rect x="34" y="147" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="149.5">RR2</text></g><g data-loc="RL2" data-cell-id="cell-rl2"><rect x="34" y="152" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="154.5">RL2</text></g>
+        <g data-loc="RR1" data-cell-id="cell-rr1"><rect x="51" y="147" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="149.5">RR1</text></g><g data-loc="RL1" data-cell-id="cell-rl1"><rect x="51" y="152" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="154.5">RL1</text></g>
+        <!-- Row S: y=162 -->
+        <g data-loc="SR3" data-cell-id="cell-sr3"><rect x="17" y="162" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="164.5">SR3</text></g><g data-loc="SL3" data-cell-id="cell-sl3"><rect x="17" y="167" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="169.5">SL3</text></g>
+        <g data-loc="SR2" data-cell-id="cell-sr2"><rect x="34" y="162" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="164.5">SR2</text></g><g data-loc="SL2" data-cell-id="cell-sl2"><rect x="34" y="167" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="169.5">SL2</text></g>
+        <g data-loc="SR1" data-cell-id="cell-sr1"><rect x="51" y="162" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="164.5">SR1</text></g><g data-loc="SL1" data-cell-id="cell-sl1"><rect x="51" y="167" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="169.5">SL1</text></g>
+        <!-- Row T: y=177 -->
+        <g data-loc="TR3" data-cell-id="cell-tr3"><rect x="17" y="177" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="179.5">TR3</text></g><g data-loc="TL3" data-cell-id="cell-tl3"><rect x="17" y="182" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="184.5">TL3</text></g>
+        <g data-loc="TR2" data-cell-id="cell-tr2"><rect x="34" y="177" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="179.5">TR2</text></g><g data-loc="TL2" data-cell-id="cell-tl2"><rect x="34" y="182" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="184.5">TL2</text></g>
+        <g data-loc="TR1" data-cell-id="cell-tr1"><rect x="51" y="177" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="179.5">TR1</text></g><g data-loc="TL1" data-cell-id="cell-tl1"><rect x="51" y="182" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="184.5">TL1</text></g>
+        <!-- Row U: y=192 -->
+        <g data-loc="UR3" data-cell-id="cell-ur3"><rect x="17" y="192" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="194.5">UR3</text></g><g data-loc="UL3" data-cell-id="cell-ul3"><rect x="17" y="197" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="199.5">UL3</text></g>
+        <g data-loc="UR2" data-cell-id="cell-ur2"><rect x="34" y="192" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="194.5">UR2</text></g><g data-loc="UL2" data-cell-id="cell-ul2"><rect x="34" y="197" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="199.5">UL2</text></g>
+        <g data-loc="UR1" data-cell-id="cell-ur1"><rect x="51" y="192" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="194.5">UR1</text></g><g data-loc="UL1" data-cell-id="cell-ul1"><rect x="51" y="197" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="199.5">UL1</text></g>
+        <!-- Row V: y=207 -->
+        <g data-loc="VR3" data-cell-id="cell-vr3"><rect x="17" y="207" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="209.5">VR3</text></g><g data-loc="VL3" data-cell-id="cell-vl3"><rect x="17" y="212" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="214.5">VL3</text></g>
+        <g data-loc="VR2" data-cell-id="cell-vr2"><rect x="34" y="207" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="209.5">VR2</text></g><g data-loc="VL2" data-cell-id="cell-vl2"><rect x="34" y="212" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="214.5">VL2</text></g>
+        <g data-loc="VR1" data-cell-id="cell-vr1"><rect x="51" y="207" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="209.5">VR1</text></g><g data-loc="VL1" data-cell-id="cell-vl1"><rect x="51" y="212" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="214.5">VL1</text></g>
+        <!-- Row W: y=222 -->
+        <g data-loc="WR3" data-cell-id="cell-wr3"><rect x="17" y="222" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="224.5">WR3</text></g><g data-loc="WL3" data-cell-id="cell-wl3"><rect x="17" y="227" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="229.5">WL3</text></g>
+        <g data-loc="WR2" data-cell-id="cell-wr2"><rect x="34" y="222" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="224.5">WR2</text></g><g data-loc="WL2" data-cell-id="cell-wl2"><rect x="34" y="227" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="229.5">WL2</text></g>
+        <g data-loc="WR1" data-cell-id="cell-wr1"><rect x="51" y="222" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="224.5">WR1</text></g><g data-loc="WL1" data-cell-id="cell-wl1"><rect x="51" y="167" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="229.5">WL1</text></g>
+        <!-- Row X: y=237 -->
+        <g data-loc="XR3" data-cell-id="cell-xr3"><rect x="17" y="237" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="239.5">XR3</text></g><g data-loc="XL3" data-cell-id="cell-xl3"><rect x="17" y="242" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="244.5">XL3</text></g>
+        <g data-loc="XR2" data-cell-id="cell-xr2"><rect x="34" y="237" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="239.5">XR2</text></g><g data-loc="XL2" data-cell-id="cell-xl2"><rect x="34" y="242" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="244.5">XL2</text></g>
+        <g data-loc="XR1" data-cell-id="cell-xr1"><rect x="51" y="237" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="239.5">XR1</text></g><g data-loc="XL1" data-cell-id="cell-xl1"><rect x="51" y="242" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="244.5">XL1</text></g>
+        <!-- Row Y: y=252 -->
+        <g data-loc="YR3" data-cell-id="cell-yr3"><rect x="17" y="252" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="254.5">YR3</text></g><g data-loc="YL3" data-cell-id="cell-yl3"><rect x="17" y="257" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="259.5">YL3</text></g>
+        <g data-loc="YR2" data-cell-id="cell-yr2"><rect x="34" y="252" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="254.5">YR2</text></g><g data-loc="YL2" data-cell-id="cell-yl2"><rect x="34" y="257" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="259.5">YL2</text></g>
+        <g data-loc="YR1" data-cell-id="cell-yr1"><rect x="51" y="252" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="254.5">YR1</text></g><g data-loc="YL1" data-cell-id="cell-yl1"><rect x="51" y="257" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="259.5">YL1</text></g>
+        <!-- Row Z: y=267 -->
+        <g data-loc="ZR3" data-cell-id="cell-zr3"><rect x="17" y="267" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="269.5">ZR3</text></g><g data-loc="ZL3" data-cell-id="cell-zl3"><rect x="17" y="272" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="274.5">ZL3</text></g>
+        <g data-loc="ZR2" data-cell-id="cell-zr2"><rect x="34" y="267" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="269.5">ZR2</text></g><g data-loc="ZL2" data-cell-id="cell-zl2"><rect x="34" y="272" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="274.5">ZL2</text></g>
+        <g data-loc="ZR1" data-cell-id="cell-zr1"><rect x="51" y="267" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="269.5">ZR1</text></g><g data-loc="ZL1" data-cell-id="cell-zl1"><rect x="51" y="272" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="274.5">ZL1</text></g>
+        <!-- Row H: y=282 -->
+        <g data-loc="HR3" data-cell-id="cell-hr3"><rect x="17" y="282" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="284.5">HR3</text></g><g data-loc="HL3" data-cell-id="cell-hl3"><rect x="17" y="287" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="24.5" y="289.5">HL3</text></g>
+        <g data-loc="HR2" data-cell-id="cell-hr2"><rect x="34" y="282" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="284.5">HR2</text></g><g data-loc="HL2" data-cell-id="cell-hl2"><rect x="34" y="287" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="41.5" y="289.5">HL2</text></g>
+        <g data-loc="HR1" data-cell-id="cell-hr1"><rect x="51" y="282" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="284.5">HR1</text></g><g data-loc="HL1" data-cell-id="cell-hl1"><rect x="51" y="287" width="15" height="5" fill="white" stroke="#000" stroke-width="0.5"/><text x="58.5" y="289.5">HL1</text></g>
+      </g>
+      
+      <!-- Kệ K (bên trong office) -->
+      <g data-loc="K" data-cell-id="cell-k">
+        <rect x="79" y="150" width="5" height="80" fill="white" stroke="#000" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <text x="81.5" y="190" font-size="8">K</text>
+      </g>
+
+      <!-- WH Office -->
+      <g data-loc="WH Office">
+        <rect x="15" y="330" width="70" height="80" fill="none" stroke="#333" stroke-width="1"/>
+        <text x="50" y="370" font-size="10">WH Office</text>
+      </g>
+      <!-- Kệ trong WH Office -->
+      <g data-loc="VP" data-cell-id="cell-vp">
+        <rect x="65" y="400" width="20" height="10" fill="white" stroke="#000" stroke-width="0.5"/>
+        <text x="75" y="405" font-size="6" text-anchor="middle" dominant-baseline="middle">VP</text>
+      </g>
+      
+      <!-- Khu vực J -->
+      <g data-loc="J">
+        <rect x="15" y="410" width="70" height="60" fill="none" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="50" y="440" font-size="10">J</text>
+      </g>
+
+      <!-- Forklift Area -->
+      <g data-loc="Forklift">
+        <rect x="15" y="480" width="70" height="28" fill="none" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="50" y="494" font-size="10" text-anchor="middle" dominant-baseline="middle">Forklift</text>
+      </g>
+  </g>
+
+  <!-- Kệ IQC và W.O -->
+  <g font-family="Arial">
+    <g data-loc="IQC" data-cell-id="cell-iqc">
+      <rect x="100" y="210" width="10" height="180" fill="white" stroke="#000" stroke-width="0.5" stroke-dasharray="3,3"/>
+      <text x="105" y="300" font-size="8" transform="rotate(-90 105,300)" text-anchor="middle" dominant-baseline="middle">IQC</text>
+    </g>
+    <g data-loc="WO" data-cell-id="cell-wo">
+      <rect x="100" y="90" width="10" height="90" fill="white" stroke="#000" stroke-width="0.5" stroke-dasharray="3,3"/>
+      <text x="105" y="135" font-size="8" transform="rotate(-90 105,135)" text-anchor="middle" dominant-baseline="middle">W.O</text>
+    </g>
+  </g>
+
+  <!-- INBOUND & Outbound Stages -->
+  <g font-family="Arial" text-anchor="middle" dominant-baseline="middle">
+    <!-- Inbound Stage -->
+    <g data-loc="Inbound Stage">
+      <rect x="100" y="420" width="100" height="80" fill="none" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="150" y="460" font-size="8">Inbound Stage</text>
+    </g>
+    <!-- Outbound Stage -->
+    <g data-loc="Outbound Stage">
+      <rect x="235" y="420" width="70" height="80" fill="none" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="270" y="460" font-size="8">Outbound Stage</text>
+    </g>
+  </g>
+
+  <!-- Các dãy kệ -->
+  <g font-family="Arial" font-size="6" text-anchor="middle" dominant-baseline="middle">`;
+
+    // Add all racks A1-A9, B1-B9, C1-C9, D1-D9, E1-E9, F1-F9, G1-G9
+    const rackRows = [
+      { letter: 'A', x: 295 },
+      { letter: 'B', x: 255 },
+      { letter: 'C', x: 240 },
+      { letter: 'D', x: 200 },
+      { letter: 'E', x: 185 },
+      { letter: 'F', x: 145 },
+      { letter: 'G', x: 130 }
+    ];
+
+    for (const row of rackRows) {
+      for (let i = 1; i <= 9; i++) {
+        const rackCode = `${row.letter}${i}`;
+        const isHighlighted = highlightedLocations.includes(rackCode);
+        const fill = isHighlighted ? '#ff6b6b' : 'white';
+        const stroke = isHighlighted ? '#ff0000' : '#000';
+        const strokeWidth = isHighlighted ? '2' : '0.5';
+        
+        // Sửa lại positioning: A1 ở dưới, A9 ở trên
+        // A6 cách A7 một khoảng bằng 1 kệ hàng (30px)
+        // A7-F7 ngang bằng cạnh dưới W.O (y=180)
+        let y;
+        if (i <= 5) {
+          // A1-A5: từ dưới lên (y=360, 330, 300, 270, 240)
+          y = 360 - (i - 1) * 30;
+        } else if (i === 6) {
+          // A6: cách A7 một khoảng bằng 1 kệ hàng
+          y = 210; // A7 ở y=180, A6 ở y=210 (cách 30px)
+        } else {
+          // A7-A9: từ dưới lên, A7 ngang bằng cạnh dưới W.O
+          // W.O kết thúc ở y=180, nên A7 bắt đầu từ y=180
+          y = 180 - (i - 7) * 30;
+        }
+        
+        svgContent += `
+    <g data-loc="${rackCode}" data-cell-id="cell-${rackCode.toLowerCase()}">
+      <rect x="${row.x}" y="${y}" width="10" height="30" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+      <text x="${row.x + 5}" y="${y + 15}" font-size="6">${rackCode}</text>
+    </g>`;
+      }
+    }
+
+    svgContent += `
+  </g>
+</svg>`;
+
+    return svgContent;
+  }
 }

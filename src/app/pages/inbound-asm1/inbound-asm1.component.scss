@@ -583,6 +583,26 @@ iframe {
           color: #b91c1c;
         }
       }
+      
+      // Special styling for delete batch item
+      &.delete-batch-item {
+        color: #f97316;
+        
+        .material-icons {
+          color: #f97316;
+        }
+        
+        &:hover {
+          background: #fff7ed;
+          color: #ea580c;
+        }
+      }
+    }
+    
+    .dropdown-divider {
+      height: 1px;
+      background: #e5e7eb;
+      margin: 4px 0;
     }
   }
 }
@@ -675,6 +695,16 @@ iframe {
   }
   
   .batch-cell {
+    min-width: 80px;
+    width: 80px;
+    font-family: monospace;
+    font-weight: 600;
+    color: #059669;
+    background: #ecfdf5;
+    text-align: center;
+  }
+  
+  .lot-cell {
     min-width: 144px;
     width: 144px;
   }
@@ -1333,7 +1363,7 @@ iframe {
   display: flex;
   gap: 8px;
   
-  .clear-btn, .refresh-btn {
+  .clear-btn, .refresh-btn, .show-all-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1362,6 +1392,14 @@ iframe {
     
     &:hover {
       background: #dc2626;
+    }
+  }
+  
+  .show-all-btn {
+    background: #3b82f6;
+    
+    &:hover {
+      background: #2563eb;
     }
   }
 }
@@ -1844,6 +1882,85 @@ iframe {
     
     i {
       margin-right: 8px;
+    }
+  }
+}
+
+// Delete by batch modal styling
+.batch-delete-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  
+  &:focus {
+    outline: none;
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+}
+
+.batch-preview {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  
+  .batch-code {
+    font-weight: 600;
+    color: #d97706;
+    font-family: monospace;
+  }
+  
+  .warning-text {
+    color: #dc2626;
+    font-weight: 500;
+    margin-top: 8px;
+  }
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  
+  .cancel-btn, .delete-batch-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+  
+  .cancel-btn {
+    background: #6b7280;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #4b5563;
+    }
+  }
+  
+  .delete-batch-btn {
+    background: #f97316;
+    color: white;
+    
+    &:hover:not(:disabled) {
+      background: #ea580c;
     }
   }
 }

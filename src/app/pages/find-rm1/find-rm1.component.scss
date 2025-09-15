@@ -817,4 +817,156 @@
       }
     }
   }
+
+  // Warehouse Map Section
+  .warehouse-map-section {
+    margin-top: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+
+    .map-container {
+      padding: 15px;
+    }
+
+    .map-header {
+      margin-bottom: 15px;
+      text-align: center;
+
+      h3 {
+        color: #333;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 5px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+
+        .material-icons {
+          font-size: 1.2rem;
+          color: #ff6347;
+        }
+      }
+
+      p {
+        color: #666;
+        font-size: 0.8rem;
+        margin: 0;
+      }
+    }
+
+    .map-wrapper {
+      background: #f9f9f9;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 10px;
+      overflow: auto;
+
+      .warehouse-map {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+
+        // SVG responsive styles
+        svg {
+          width: 100%;
+          height: auto;
+          max-width: 100%;
+          display: block;
+
+          // Highlighted rack animation
+          g[data-loc] rect[fill="#ff6b6b"] {
+            animation: highlight-pulse 2s ease-in-out infinite;
+          }
+
+          // Text visibility on mobile
+          text {
+            font-size: 8px !important;
+            font-weight: bold;
+            fill: #333;
+          }
+
+          // Highlighted text
+          g[data-loc] text {
+            fill: #000 !important;
+            font-weight: bold !important;
+          }
+        }
+      }
+    }
+
+    // Mobile optimization
+    @media (max-width: 768px) {
+      margin-top: 15px;
+
+      .map-container {
+        padding: 10px;
+      }
+
+      .map-header {
+        h3 {
+          font-size: 1rem;
+        }
+
+        p {
+          font-size: 0.75rem;
+        }
+      }
+
+      .map-wrapper {
+        padding: 8px;
+
+        .warehouse-map {
+          svg {
+            // Smaller text for mobile
+            text {
+              font-size: 6px !important;
+            }
+
+            // Adjust stroke width for mobile
+            rect {
+              stroke-width: 1 !important;
+            }
+
+            g[data-loc] rect[fill="#ff6b6b"] {
+              stroke-width: 2 !important;
+            }
+          }
+        }
+      }
+    }
+
+    // Very small mobile screens
+    @media (max-width: 480px) {
+      .map-wrapper {
+        padding: 5px;
+
+        .warehouse-map {
+          svg {
+            text {
+              font-size: 4px !important;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Highlight animation keyframes
+  @keyframes highlight-pulse {
+    0% {
+      fill: #ff6b6b;
+      opacity: 1;
+    }
+    50% {
+      fill: #ff4757;
+      opacity: 0.8;
+    }
+    100% {
+      fill: #ff6b6b;
+      opacity: 1;
+    }
+  }
 }

@@ -178,4 +178,21 @@
       </div>
     </div>
   </div>
+
+  <!-- Warehouse Map Section -->
+  <div class="warehouse-map-section" *ngIf="searchResults.length > 0">
+    <div class="map-container">
+      <div class="map-header">
+        <h3>
+          <i class="material-icons">map</i>
+          Bản đồ kho hàng
+        </h3>
+        <p>Vị trí được tô sáng dựa trên kết quả tìm kiếm</p>
+      </div>
+      
+      <div class="map-wrapper">
+        <div class="warehouse-map" [innerHTML]="getWarehouseMapSVG() | sanitizeHtml"></div>
+      </div>
+    </div>
+  </div>
 </div>

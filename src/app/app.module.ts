@@ -30,6 +30,9 @@ import { environment } from '../environments/environment';
 import { LoginComponent } from './pages/login/login.component';
 import { FindRm1Component } from './pages/find-rm1/find-rm1.component';
 
+// Pipes
+import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
+
 // Có thể giữ các import dưới đây nếu dùng trong routes hoặc chỗ khác,
 // nhưng KHÔNG đưa vào declarations!
 // import { WorkOrderStatusComponent } from './pages/work-order-status/work-order-status.component';
@@ -67,6 +70,7 @@ import { FindRm1Component } from './pages/find-rm1/find-rm1.component';
     AdminLayoutComponent,
     LoginComponent,
     FindRm1Component,
+    SanitizeHtmlPipe,
     // DocumentsComponent removed from here
   ],
   providers: [],

@@ -82,6 +82,11 @@
               Xóa tất cả
             </a>
             
+            <a class="dropdown-item delete-batch-item" href="javascript:void(0)" (click)="openDeleteByBatchModal()">
+              <i class="material-icons">delete_outline</i>
+              Xóa theo lô hàng
+            </a>
+            
             <!-- Auto-hide Received Materials Toggle -->
             <div class="dropdown-item toggle-item">
               <label class="toggle-label">
@@ -92,6 +97,25 @@
                 <span class="toggle-text">Ẩn mã đã nhận qua ngày hôm sau</span>
               </label>
             </div>
+            
+            <!-- Separator -->
+            <div class="dropdown-divider"></div>
+            
+            <!-- Reset, Refresh, Clear buttons -->
+            <a class="dropdown-item" href="javascript:void(0)" (click)="clearFilters()">
+              <i class="material-icons">clear</i>
+              Reset
+            </a>
+            
+            <a class="dropdown-item" href="javascript:void(0)" (click)="loadMaterials()">
+              <i class="material-icons">refresh</i>
+              Refresh
+            </a>
+            
+            <a class="dropdown-item" href="javascript:void(0)" (click)="clearBatchFilter()">
+              <i class="material-icons">filter_alt_off</i>
+              Clear Filter
+            </a>
           </div>
         </div>
         
@@ -150,19 +174,7 @@
                  title="Đến ngày">
         </div>
         
-        <!-- Action Buttons -->
-        <div class="action-buttons">
-          <button class="clear-btn" (click)="clearFilters()">
-            <i class="material-icons">clear</i>
-            Reset
-          </button>
-          
-          <!-- Refresh Button -->
-          <button class="refresh-btn" (click)="loadMaterials()">
-            <i class="material-icons">refresh</i>
-            Refresh
-          </button>
-        </div>
+        <!-- Action Buttons - Removed show all button as it's redundant with status filter dropdown -->
         
         <!-- Ẩn Factory Badge vì không có chức năng -->
         <!-- <span class="factory-badge asm1-badge">ASM1</span> -->
@@ -191,7 +203,8 @@
             <th class="factory-cell">FACTORY</th>
             <th class="row-header">#</th>
             <th class="date-cell">NGÀY NHẬP</th>
-            <th class="batch-cell">LÔ HÀNG/ DNNK</th>
+            <th class="batch-cell">BATCH</th>
+            <th class="lot-cell">LÔ HÀNG/ DNNK</th>
             <th class="code-cell">MÃ HÀNG</th>
             <th class="po-cell">SỐ P.O</th>
             <th class="number-cell">LƯỢNG NHẬP</th>
@@ -221,7 +234,8 @@
             </td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{formatDate(material.importDate)}}</td>
-            <td class="batch-cell">
+            <td class="batch-cell">{{material.internalBatch}}</td>
+            <td class="lot-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.batchNumber" 
@@ -507,6 +521,49 @@
       <div class="camera-instructions">
         <p><i class="material-icons">info</i> Sử dụng camera điện thoại để quét mã QR</p>
         <p><i class="material-icons">smartphone</i> Đảm bảo camera có quyền truy cập</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete by Batch Modal -->
+<div class="modal-overlay" *ngIf="showDeleteByBatchModal" (click)="closeDeleteByBatchModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🗑️ Xóa theo lô hàng</h3>
+      <button class="close-btn" (click)="closeDeleteByBatchModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="batch-input-section">
+        <label for="batchToDelete">Nhập mã lô hàng/DNNK cần xóa:</label>
+        <input 
+          type="text" 
+          id="batchToDelete"
+          [(ngModel)]="batchToDelete"
+          placeholder="Ví dụ: KZDNN0925/0050"
+          class="batch-delete-input"
+          (keyup.enter)="deleteByBatch()">
+        
+        <div class="batch-preview" *ngIf="batchToDelete && batchToDelete.trim() !== ''">
+          <p><strong>Sẽ xóa tất cả materials có lô hàng:</strong> <span class="batch-code">{{ batchToDelete }}</span></p>
+          <p class="warning-text">⚠️ Hành động này không thể hoàn tác!</p>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="cancel-btn" (click)="closeDeleteByBatchModal()">
+          <i class="material-icons">cancel</i>
+          Hủy
+        </button>
+        <button class="delete-batch-btn" 
+                (click)="deleteByBatch()"
+                [disabled]="!batchToDelete || batchToDelete.trim() === ''">
+          <i class="material-icons">delete</i>
+          Xóa lô hàng
+        </button>
       </div>
     </div>
   </div>
