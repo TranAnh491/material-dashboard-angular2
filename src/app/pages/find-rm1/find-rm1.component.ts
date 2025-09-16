@@ -367,22 +367,34 @@ export class FindRm1Component implements OnInit, OnDestroy {
   private getHighlightedLocations(): string[] {
     const locations: string[] = [];
     
+    console.log('🔍 Processing search results for highlighting:');
+    console.log('Search results count:', this.searchResults.length);
+    
     for (const item of this.searchResults) {
+      console.log(`Item: ${item.materialCode} - Location: ${item.location}`);
       if (item.location) {
         const processedLocation = this.processLocationString(item.location);
+        console.log(`  → Processed: ${processedLocation}`);
         if (processedLocation) {
           locations.push(processedLocation);
-          console.log(`Location mapping: ${item.location} → ${processedLocation}`);
+          console.log(`  ✅ Added to highlight list: ${processedLocation}`);
+        } else {
+          console.log(`  ❌ No mapping found for: ${item.location}`);
         }
+      } else {
+        console.log(`  ❌ No location for item: ${item.materialCode}`);
       }
     }
     
-    console.log('Highlighted locations:', [...new Set(locations)]);
-    return [...new Set(locations)]; // Remove duplicates
+    const uniqueLocations = [...new Set(locations)];
+    console.log('🎯 Final highlighted locations:', uniqueLocations);
+    return uniqueLocations;
   }
 
   /**
-   * Process location string to extract rack code (first 2 characters after cleanup)
+   * Process location string to extract rack code
+   * Special handling for Q,R,S,T,U,V,W,X,Y,Z,H: take 3 characters after cleaning
+   * Examples: "TL27" → "TL2", "TL.27" → "TL2", "TL-27" → "TL2", "T.L.2.7" → "TL2"
    * Examples: "D33", "D3.3", "D.3.3-A" → "D3"
    * Examples: "F43", "F4.3", "F.4.3-A" → "F4"
    * Special cases: "IQC", "NG", "Admin" → null (not rack locations)
@@ -403,16 +415,34 @@ export class FindRm1Component implements OnInit, OnDestroy {
     // Remove all special characters and keep only alphanumeric
     const cleaned = location.replace(/[^A-Z0-9]/g, '');
     
-    // Take first 2 characters
     if (cleaned.length >= 2) {
-      const rackCode = cleaned.substring(0, 2);
+      const firstChar = cleaned.charAt(0);
+      const specialPrefixes = ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'H'];
       
-      // Validate format: Letter + Number
-      if (/^[A-Z][0-9]$/.test(rackCode)) {
-        return rackCode;
+      if (specialPrefixes.includes(firstChar)) {
+        // For special prefixes (Q,R,S,T,U,V,W,X,Y,Z,H): take 3 characters
+        if (cleaned.length >= 3) {
+          const threeChar = cleaned.substring(0, 3);
+          console.log(`📍 Special prefix mapping: ${location} → ${threeChar}`);
+          return threeChar; // Return TL2, Q12, etc.
+        } else if (cleaned.length >= 2) {
+          const twoChar = cleaned.substring(0, 2);
+          console.log(`📍 Special prefix mapping (2 chars): ${location} → ${twoChar}`);
+          return twoChar; // Return Q1, T1, etc.
+        }
+      } else {
+        // For other prefixes (A,B,C,D,E,F,G,I,J,K,L,M,N,O,P): take 2 characters
+        const rackCode = cleaned.substring(0, 2);
+        
+        // Validate format: Letter + Number
+        if (/^[A-Z][0-9]$/.test(rackCode)) {
+          console.log(`📍 Standard mapping: ${location} → ${rackCode}`);
+          return rackCode;
+        }
       }
     }
     
+    console.log(`📍 No mapping found for: ${location}`);
     return null;
   }
 
@@ -586,6 +616,13 @@ export class FindRm1Component implements OnInit, OnDestroy {
       for (let i = 1; i <= 9; i++) {
         const rackCode = `${row.letter}${i}`;
         const isHighlighted = highlightedLocations.includes(rackCode);
+        
+        // Debug logging for TL2
+        if (rackCode === 'TL2') {
+          console.log(`🔍 Checking TL2: isHighlighted = ${isHighlighted}`);
+          console.log(`🔍 highlightedLocations = ${JSON.stringify(highlightedLocations)}`);
+        }
+        
         const fill = isHighlighted ? '#ff6b6b' : 'white';
         const stroke = isHighlighted ? '#ff0000' : '#000';
         const strokeWidth = isHighlighted ? '2' : '0.5';
@@ -612,6 +649,57 @@ export class FindRm1Component implements OnInit, OnDestroy {
       <rect x="${row.x}" y="${y}" width="10" height="30" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
       <text x="${row.x + 5}" y="${y + 15}" font-size="6">${rackCode}</text>
     </g>`;
+      }
+    }
+
+    // Add highlighting for T, U, V, W, X, Y, Z, H positions (Letter + Letter + Number format)
+    const specialRackRows = [
+      { letter: 'T', x: 17, y: 177 },
+      { letter: 'U', x: 17, y: 192 },
+      { letter: 'V', x: 17, y: 207 },
+      { letter: 'W', x: 17, y: 222 },
+      { letter: 'X', x: 17, y: 237 },
+      { letter: 'Y', x: 17, y: 252 },
+      { letter: 'Z', x: 17, y: 267 },
+      { letter: 'H', x: 17, y: 282 }
+    ];
+
+    for (const row of specialRackRows) {
+      for (let i = 1; i <= 3; i++) {
+        // Check both R (Right) and L (Left) positions
+        const rackCodes = [`${row.letter}R${i}`, `${row.letter}L${i}`];
+        
+        for (const rackCode of rackCodes) {
+          const isHighlighted = highlightedLocations.includes(rackCode);
+          
+          // Debug logging for TL2
+          if (rackCode === 'TL2') {
+            console.log(`🔍 Checking special TL2: isHighlighted = ${isHighlighted}`);
+            console.log(`🔍 highlightedLocations = ${JSON.stringify(highlightedLocations)}`);
+          }
+          
+          const fill = isHighlighted ? '#ff6b6b' : 'white';
+          const stroke = isHighlighted ? '#ff0000' : '#000';
+          const strokeWidth = isHighlighted ? '2' : '0.5';
+          
+          // Calculate position based on rack code
+          let x, y;
+          if (rackCode.includes('R')) {
+            // Right side
+            x = row.x + (i === 1 ? 34 : i === 2 ? 17 : 0);
+            y = row.y;
+          } else {
+            // Left side  
+            x = row.x + (i === 1 ? 34 : i === 2 ? 17 : 0);
+            y = row.y + 5;
+          }
+          
+          svgContent += `
+    <g data-loc="${rackCode}" data-cell-id="cell-${rackCode.toLowerCase()}">
+      <rect x="${x}" y="${y}" width="15" height="5" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+      <text x="${x + 7.5}" y="${y + 2.5}" font-size="6" text-anchor="middle" dominant-baseline="middle">${rackCode}</text>
+    </g>`;
+        }
       }
     }
 

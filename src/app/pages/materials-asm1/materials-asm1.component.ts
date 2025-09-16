@@ -147,8 +147,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Initialize negative stock count and total stock count
     this.updateNegativeStockCount();
     
-    // 🆕 Setup real-time catalog listener for Standard Packing updates
-    this.setupCatalogListener();
+    // 🆕 Load catalog once when component initializes
+    this.loadCatalogOnce();
+    
+    // 🔍 DEBUG: Check outbound data on init
+    this.debugOutboundDataOnInit();
     
     console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
@@ -183,6 +186,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.isLoading = true;
     
     // 🚀 OPTIMIZATION: Add limit and orderBy for faster loading
+    console.log('🔍 Setting up Firebase subscription for inventory-materials...');
     this.firestore.collection('inventory-materials', ref => 
       ref.where('factory', '==', this.FACTORY)
          .orderBy('importDate', 'desc')
@@ -191,6 +195,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
+        console.log(`🔍 Firebase subscription received ${actions.length} actions`);
         this.inventoryMaterials = actions
           .map(action => {
             const data = action.payload.doc.data() as any;
@@ -229,6 +234,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
         // Set filteredInventory to show all loaded items initially
         this.filteredInventory = [...this.inventoryMaterials];
+        console.log(`🔍 DEBUG: Loaded ${this.inventoryMaterials.length} inventory materials`);
+        console.log(`🔍 DEBUG: First material:`, this.inventoryMaterials[0]);
         
         // Gộp dòng trùng lặp TRƯỚC KHI xử lý outbound
         console.log('🔄 Consolidating duplicate materials...');
@@ -262,23 +269,54 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           this.continueAfterConsolidation();
         }
       }, error => {
-        console.error('Error loading ASM1 inventory:', error);
+        console.error('❌ Error loading ASM1 inventory:', error);
+        console.error('❌ Error details:', error.message);
         this.isLoading = false;
       });
   }
 
   // Load inventory and setup search mechanism
   private loadInventoryAndSetupSearch(): void {
-    console.log('📦 Setting up search mechanism without loading initial data...');
-    
-    // 🚀 OPTIMIZATION: Load minimal data initially for faster startup
-    this.inventoryMaterials = [];
-    this.filteredInventory = [];
+    console.log('📦 Setting up search mechanism and loading inventory data...');
     
     // Setup search mechanism immediately
     console.log('🔍 Setting up search mechanism...');
     this.setupDebouncedSearch();
-    console.log('✅ Search mechanism setup completed - No initial data loaded');
+    console.log('✅ Search mechanism setup completed');
+    
+    // 🔧 FIX: Load inventory data immediately
+    console.log('🔍 Loading inventory data...');
+    this.loadInventoryFromFirebase();
+  }
+
+  // Debug function to check outbound data on init
+  async debugOutboundDataOnInit(): Promise<void> {
+    try {
+      console.log('🔍 DEBUG: Checking outbound data on init...');
+      
+      const outboundSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(5)
+        .get();
+      
+      console.log(`🔍 DEBUG: Found ${outboundSnapshot.size} outbound records for ASM1`);
+      
+      if (!outboundSnapshot.empty) {
+        console.log('📋 Outbound records found:');
+        let index = 0;
+        outboundSnapshot.forEach((doc) => {
+          const data = doc.data() as any;
+          console.log(`  ${index + 1}. Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${data.exportQuantity || data.quantity || 'N/A'}, Date: ${data.exportDate}`);
+          index++;
+        });
+      } else {
+        console.log('⚠️ No outbound records found for ASM1');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking outbound data:', error);
+    }
   }
 
   // Debug function to check materials collection
@@ -1926,7 +1964,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // - QUAN TRỌNG: Phải match theo Material + PO + Batch để tránh nhận sai dữ liệu
   async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string, batch?: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
     try {
-      console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber}`);
+      console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber} - Batch: ${batch || 'N/A'}`);
       
       const outboundRef = this.firestore.collection('outbound-materials');
       
@@ -1939,6 +1977,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           
           // Thử query với field 'batch' trước
           try {
+            console.log(`🔍 Trying query with 'batch' field...`);
             snapshot = await outboundRef
               .ref
               .where('factory', '==', 'ASM1')
@@ -1947,6 +1986,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               .where('batch', '==', batch)
               .orderBy('exportDate', 'asc')
               .get();
+            console.log(`✅ Query with 'batch' field successful, found ${snapshot.size} records`);
           } catch (batchError) {
             console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
             // Fallback: thử với field 'batchNumber'
@@ -1958,6 +1998,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               .where('batchNumber', '==', batch)
               .orderBy('exportDate', 'asc')
               .get();
+            console.log(`✅ Query with 'batchNumber' field successful, found ${snapshot.size} records`);
           }
         } else {
           // Nếu không có batch, query theo Material + PO (fallback)
@@ -1969,6 +2010,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             .where('poNumber', '==', poNumber)
             .orderBy('exportDate', 'asc')
             .get();
+          console.log(`✅ Query without batch successful, found ${snapshot.size} records`);
         }
               } catch (orderByError) {
           console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
@@ -2004,22 +2046,38 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           }
         }
 
+      console.log(`🔍 Query result: ${snapshot.size} records found`);
+      
       if (!snapshot.empty) {
         let totalExported = 0;
         const outboundRecords: any[] = [];
         
-        snapshot.forEach(doc => {
+        console.log(`📋 Processing ${snapshot.size} outbound records:`);
+        snapshot.forEach((doc, index) => {
           const data = doc.data() as any;
+          console.log(`  Record ${index + 1}:`, {
+            materialCode: data.materialCode,
+            poNumber: data.poNumber,
+            batch: data.batch || data.batchNumber || 'N/A',
+            exportQuantity: data.exportQuantity,
+            exported: data.exported,
+            quantity: data.quantity,
+            exportDate: data.exportDate
+          });
+          
           // Thử nhiều field names khác nhau để tìm số lượng xuất
           let exportQuantity = 0;
           
           // Kiểm tra từng field name có thể có
           if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
             exportQuantity = data.exportQuantity;
+            console.log(`    → Using exportQuantity: ${exportQuantity}`);
           } else if (data.exported !== undefined && data.exported !== null) {
             exportQuantity = data.exported;
+            console.log(`    → Using exported: ${exportQuantity}`);
           } else if (data.quantity !== undefined && data.quantity !== null) {
             exportQuantity = data.quantity;
+            console.log(`    → Using quantity: ${exportQuantity}`);
           } else if (data.amount !== undefined && data.amount !== null) {
             exportQuantity = data.amount;
           } else if (data.qty !== undefined && data.qty !== null) {
@@ -2124,7 +2182,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`  ${index + 1}. Material: ${record.materialCode}, PO: ${record.poNumber}, Quantity: ${record.exportQuantity || record.quantity}, Date: ${record.exportDate}`);
         });
       } else {
-        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber}`);
+        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber} - Batch: ${material.batchNumber || 'N/A'}`);
         console.log(`💡 Checking if outbound records exist with different criteria...`);
         
         // Kiểm tra tất cả outbound records có material code này
@@ -2139,7 +2197,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`📋 Found ${allOutboundQuery.size} outbound records with material code ${material.materialCode}:`);
           allOutboundQuery.forEach(doc => {
             const data = doc.data() as any;
-            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Quantity: ${data.exportQuantity || data.quantity}`);
+            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Batch: "${data.batch || data.batchNumber || 'N/A'}", Quantity: ${data.exportQuantity || data.quantity}`);
+            console.log(`    → Inventory PO: "${material.poNumber}" (type: ${typeof material.poNumber}), Batch: "${material.batchNumber || 'N/A'}"`);
+            
+            // Kiểm tra match
+            const poMatch = data.poNumber === material.poNumber;
+            const batchMatch = (data.batch || data.batchNumber) === material.batchNumber;
+            console.log(`    → PO Match: ${poMatch}, Batch Match: ${batchMatch}`);
           });
         } else {
           console.log(`⚠️ No outbound records found at all for material code ${material.materialCode}`);
@@ -2148,10 +2212,19 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Cập nhật số lượng xuất trực tiếp - CHỈ CẬP NHẬT NẾU TÌM THẤY OUTBOUND RECORDS
       if (outboundRecords.length > 0) {
+        console.log(`🔄 BEFORE UPDATE: material.exported = ${material.exported}, totalExported = ${totalExported}`);
+        
         if (material.exported !== totalExported) {
+          const oldExported = material.exported;
           material.exported = totalExported;
+          console.log(`🔄 UPDATING: ${oldExported} → ${totalExported}`);
+          
           await this.updateExportedInFirebase(material, totalExported);
-          console.log(`📊 Updated exported quantity: ${material.exported} → ${totalExported}`);
+          console.log(`✅ AFTER UPDATE: material.exported = ${material.exported}`);
+          
+          // Force UI update
+          this.filteredInventory = [...this.inventoryMaterials];
+          console.log(`🔄 UI updated, filteredInventory length: ${this.filteredInventory.length}`);
         } else {
           console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
         }
@@ -2289,6 +2362,153 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
     } catch (error) {
       console.error('❌ Error testing outbound data:', error);
+    }
+  }
+
+  // Test sync with detailed debug logging
+  async testSyncWithDebug(): Promise<void> {
+    try {
+      console.log('🧪 Testing sync with detailed debug logging...');
+      
+      // Kiểm tra dữ liệu hiện tại
+      console.log(`📋 Current inventory materials: ${this.inventoryMaterials.length}`);
+      if (this.inventoryMaterials.length > 0) {
+        const firstMaterial = this.inventoryMaterials[0];
+        console.log(`🔍 First material before sync:`, {
+          materialCode: firstMaterial.materialCode,
+          poNumber: firstMaterial.poNumber,
+          batchNumber: firstMaterial.batchNumber,
+          exported: firstMaterial.exported
+        });
+      }
+      
+      // Test sync với một material cụ thể
+      if (this.inventoryMaterials.length > 0) {
+        const testMaterial = this.inventoryMaterials[0];
+        console.log(`🧪 Testing sync for material: ${testMaterial.materialCode} - PO: ${testMaterial.poNumber}`);
+        await this.updateExportedFromOutboundFIFO(testMaterial);
+        
+        console.log(`🔍 First material after sync:`, {
+          materialCode: testMaterial.materialCode,
+          poNumber: testMaterial.poNumber,
+          batchNumber: testMaterial.batchNumber,
+          exported: testMaterial.exported
+        });
+        
+        // Force UI update
+        this.filteredInventory = [...this.inventoryMaterials];
+        console.log(`🔄 UI updated, filteredInventory length: ${this.filteredInventory.length}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error testing sync with debug:', error);
+      alert(`❌ Error testing sync: ${error.message}`);
+    }
+  }
+
+  // Simple test method to check if data is loaded
+  async testDataLoading(): Promise<void> {
+    try {
+      console.log('🔍 Testing data loading...');
+      
+      // Check inventory data
+      console.log(`📋 Inventory materials loaded: ${this.inventoryMaterials.length}`);
+      if (this.inventoryMaterials.length > 0) {
+        const first = this.inventoryMaterials[0];
+        console.log(`📦 First material:`, {
+          id: first.id,
+          materialCode: first.materialCode,
+          poNumber: first.poNumber,
+          batchNumber: first.batchNumber,
+          exported: first.exported,
+          quantity: first.quantity
+        });
+      } else {
+        console.log('⚠️ No inventory data loaded, trying backup method...');
+        await this.loadInventoryBackup();
+      }
+      
+      // Check outbound data
+      const outboundSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(5)
+        .get();
+      
+      console.log(`📤 Outbound records found: ${outboundSnapshot.size}`);
+      if (!outboundSnapshot.empty) {
+        outboundSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          console.log(`📤 Outbound:`, {
+            materialCode: data.materialCode,
+            poNumber: data.poNumber,
+            batch: data.batch || data.batchNumber,
+            quantity: data.exportQuantity || data.exported || data.quantity
+          });
+        });
+      }
+      
+      // Test sync for first material
+      if (this.inventoryMaterials.length > 0) {
+        const material = this.inventoryMaterials[0];
+        console.log(`🔄 Testing sync for: ${material.materialCode} - PO: ${material.poNumber}`);
+        
+        const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
+          material.materialCode, 
+          material.poNumber, 
+          material.batchNumber
+        );
+        
+        console.log(`📊 Sync result:`, {
+          totalExported,
+          outboundRecords: outboundRecords.length,
+          currentExported: material.exported
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error testing data loading:', error);
+    }
+  }
+
+  // Backup method to load inventory data if subscription fails
+  async loadInventoryBackup(): Promise<void> {
+    try {
+      console.log('🔄 Loading inventory data using backup method...');
+      
+      const snapshot = await this.firestore.collection('inventory-materials')
+        .ref
+        .where('factory', '==', this.FACTORY)
+        .orderBy('importDate', 'desc')
+        .limit(1000)
+        .get();
+      
+      console.log(`📦 Backup method found ${snapshot.size} inventory records`);
+      
+      this.inventoryMaterials = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        const id = doc.id;
+        return {
+          id: id,
+          ...data,
+          factory: this.FACTORY,
+          importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
+          receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
+          expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+          openingStock: data.openingStock || null,
+          xt: data.xt || 0,
+          source: data.source || 'manual'
+        };
+      });
+      
+      this.filteredInventory = [...this.inventoryMaterials];
+      console.log(`✅ Backup method loaded ${this.inventoryMaterials.length} materials`);
+      
+      // Auto-update exported quantities
+      this.autoUpdateAllExportedFromOutbound();
+      
+    } catch (error) {
+      console.error('❌ Error in backup method:', error);
     }
   }
 
@@ -2853,13 +3073,19 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   async syncAllExportedFromOutbound(): Promise<void> {
     try {
       console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound with FIFO logic...');
+      console.log(`📋 Total inventory materials to process: ${this.inventoryMaterials.length}`);
       
       let updatedCount = 0;
       let errorCount = 0;
       
-      for (const material of this.inventoryMaterials) {
+      for (let i = 0; i < this.inventoryMaterials.length; i++) {
+        const material = this.inventoryMaterials[i];
+        console.log(`\n🔄 Processing material ${i + 1}/${this.inventoryMaterials.length}: ${material.materialCode} - PO: ${material.poNumber}`);
+        console.log(`  Current exported: ${material.exported || 0}`);
+        
         try {
           await this.updateExportedFromOutboundFIFO(material);
+          console.log(`  Final exported: ${material.exported || 0}`);
           updatedCount++;
         } catch (error) {
           console.error(`❌ Error syncing ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
@@ -2867,10 +3093,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
       
-      console.log(`✅ Manual sync completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
+      console.log(`\n✅ Manual sync completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
       
       // Refresh the display
       this.filteredInventory = [...this.inventoryMaterials];
+      console.log(`🔄 Display refreshed, filteredInventory length: ${this.filteredInventory.length}`);
       
       // KHÔNG gộp dòng sau khi đồng bộ để tránh mất dữ liệu exported
       // this.consolidateInventoryData();
@@ -3456,62 +3683,66 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
   }
 
-  // 🆕 Setup real-time catalog listener for Standard Packing updates
-  private setupCatalogListener(): void {
-    console.log('🔄 Setting up real-time catalog listener for Standard Packing updates...');
-    
-    // Listen to changes in materials collection (main catalog)
-    this.firestore.collection('materials')
-      .snapshotChanges()
-      .pipe(
-        debounceTime(500), // 🚀 OPTIMIZATION: Debounce 500ms to prevent rapid updates
-        takeUntil(this.destroy$)
-      )
-      .subscribe((actions) => {
-        console.log('📦 Catalog changes detected, checking for Standard Packing updates...');
+  // 🆕 Load catalog once when component initializes (no real-time updates)
+  private async loadCatalogOnce(): Promise<void> {
+    try {
+      console.log('📦 Loading catalog once for Standard Packing...');
+      
+      const snapshot = await this.firestore.collection('materials')
+        .ref
+        .get();
+      
+      console.log(`📦 Loaded ${snapshot.size} catalog items`);
+      
+      // Clear existing cache
+      this.catalogCache.clear();
+      
+      // Load all catalog data
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        const materialCode = doc.id;
         
-        let hasStandardPackingUpdates = false;
-        
-        actions.forEach(action => {
-          if (action.type === 'modified') {
-            const data = action.payload.doc.data() as any;
-            const materialCode = action.payload.doc.id;
-            
-            // Check if standardPacking field was updated
-            if (data.standardPacking !== undefined) {
-              console.log(`🔄 Standard Packing updated for ${materialCode}: ${data.standardPacking}`);
-              
-              // Update local cache
-              if (this.catalogCache.has(materialCode)) {
-                const catalogItem = this.catalogCache.get(materialCode)!;
-                catalogItem.standardPacking = data.standardPacking;
-                this.catalogCache.set(materialCode, catalogItem);
-                console.log(`✅ Updated local cache for ${materialCode}: ${data.standardPacking}`);
-              }
-              
-              // Update inventory materials if they exist
-              this.inventoryMaterials.forEach(material => {
-                if (material.materialCode === materialCode) {
-                  material.standardPacking = data.standardPacking;
-                  console.log(`✅ Updated inventory material ${materialCode}: ${data.standardPacking}`);
-                }
-              });
-              
-              hasStandardPackingUpdates = true;
-            }
-          }
-        });
-        
-        if (hasStandardPackingUpdates) {
-          console.log('🎯 Standard Packing updates detected, refreshing display...');
-          this.cdr.detectChanges();
-          
-          // Update filtered inventory display
-          this.filteredInventory = [...this.inventoryMaterials];
+        if (data.standardPacking && data.standardPacking > 0) {
+          this.catalogCache.set(materialCode, {
+            materialCode: materialCode,
+            materialName: data.materialName || 'N/A',
+            unit: data.unit || 'N/A',
+            standardPacking: data.standardPacking
+          });
         }
       });
+      
+      this.catalogLoaded = true;
+      console.log(`✅ Catalog loaded once: ${this.catalogCache.size} items with Standard Packing`);
+      
+      // Apply catalog data to existing inventory materials
+      this.applyCatalogToInventory();
+      
+    } catch (error) {
+      console.error('❌ Error loading catalog once:', error);
+    }
+  }
+
+  // Apply catalog data to existing inventory materials
+  private applyCatalogToInventory(): void {
+    if (!this.catalogLoaded || this.inventoryMaterials.length === 0) {
+      return;
+    }
     
-    console.log('✅ Real-time catalog listener setup completed');
+    console.log('🔄 Applying catalog data to inventory materials...');
+    
+    this.inventoryMaterials.forEach(material => {
+      if (this.catalogCache.has(material.materialCode)) {
+        const catalogData = this.catalogCache.get(material.materialCode)!;
+        material.standardPacking = catalogData.standardPacking;
+        material.materialName = catalogData.materialName;
+        material.unit = catalogData.unit;
+      }
+    });
+    
+    // Refresh display
+    this.filteredInventory = [...this.inventoryMaterials];
+    console.log('✅ Catalog data applied to inventory materials');
   }
 
   // Gộp dòng tự động khi load toàn bộ inventory
@@ -3693,11 +3924,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     // Tự động cập nhật số lượng xuất từ outbound cho tất cả materials
     console.log('🔄 Updating exported quantities from outbound...');
+    console.log(`🔍 DEBUG: Before auto-update, first material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
     this.autoUpdateAllExportedFromOutbound();
     
     this.isLoading = false;
     
     console.log(`✅ Loaded ${this.inventoryMaterials.length} ASM1 inventory items`);
+    console.log(`🔍 DEBUG: After auto-update, first material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
   }
 
   // Gộp toàn bộ dòng trùng lặp và lưu vào Firebase
