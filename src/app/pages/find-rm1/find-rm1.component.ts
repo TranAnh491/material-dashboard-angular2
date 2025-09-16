@@ -592,18 +592,19 @@ export class FindRm1Component implements OnInit, OnDestroy {
         
         // Sửa lại positioning: A1 ở dưới, A9 ở trên
         // A6 cách A7 một khoảng bằng 1 kệ hàng (30px)
-        // A7-F7 ngang bằng cạnh dưới W.O (y=180)
+        // A7-F7: cạnh dưới ngang hàng với cạnh dưới W.O (y=180)
         let y;
         if (i <= 5) {
           // A1-A5: từ dưới lên (y=360, 330, 300, 270, 240)
           y = 360 - (i - 1) * 30;
         } else if (i === 6) {
           // A6: cách A7 một khoảng bằng 1 kệ hàng
-          y = 210; // A7 ở y=180, A6 ở y=210 (cách 30px)
+          y = 210; // A6 ở y=210 (cách A7 30px)
         } else {
-          // A7-A9: từ dưới lên, A7 ngang bằng cạnh dưới W.O
-          // W.O kết thúc ở y=180, nên A7 bắt đầu từ y=180
-          y = 180 - (i - 7) * 30;
+          // A7-A9: cạnh dưới của A7 ngang hàng với cạnh dưới W.O
+          // W.O kết thúc ở y=180, nên cạnh dưới A7 ở y=180
+          // A7 có chiều cao 30px, nên A7 bắt đầu từ y=150 (180-30)
+          y = 150 - (i - 7) * 30;
         }
         
         svgContent += `

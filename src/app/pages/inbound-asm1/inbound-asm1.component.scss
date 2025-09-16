@@ -692,6 +692,20 @@ iframe {
   .number-cell {
     min-width: 90px;
     width: 90px;
+    
+    .editable-input {
+      color: #000000 !important;
+      font-size: 1.3em !important; // Tăng 30% từ 1em lên 1.3em
+      font-weight: 600;
+    }
+    
+    .quantity-display {
+      color: #000000 !important;
+      font-size: 1.3em !important; // Tăng 30% từ 1em lên 1.3em
+      font-weight: 600;
+      display: block;
+      text-align: center;
+    }
   }
   
   .batch-cell {
@@ -699,8 +713,8 @@ iframe {
     width: 80px;
     font-family: monospace;
     font-weight: 600;
-    color: #059669;
-    background: #ecfdf5;
+    color: #000000 !important; // Chữ màu đen
+    background: #ffffff !important; // Nền trắng như các cột khác
     text-align: center;
   }
   

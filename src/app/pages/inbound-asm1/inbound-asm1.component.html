@@ -156,6 +156,17 @@
             </select>
           </div>
           
+          <!-- Sort Filter -->
+          <div class="filter-group">
+            <select class="filter-select" 
+                    [(ngModel)]="sortBy" 
+                    (change)="changeSortBy($event.target.value)">
+              <option value="importDate">Ngày nhập</option>
+              <option value="batchNumber">Lô hàng</option>
+              <option value="materialCode">Mã hàng</option>
+              <option value="createdAt">Thời gian tạo</option>
+            </select>
+          </div>
 
         </div>
         
@@ -174,7 +185,6 @@
                  title="Đến ngày">
         </div>
         
-        <!-- Action Buttons - Removed show all button as it's redundant with status filter dropdown -->
         
         <!-- Ẩn Factory Badge vì không có chức năng -->
         <!-- <span class="factory-badge asm1-badge">ASM1</span> -->
@@ -262,14 +272,10 @@
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số PO'">
             </td>
             <td class="number-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.quantity" 
-                     (change)="updateMaterial(material)"
-                     step="0.01"
-                     min="0"
-                     [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số lượng'">
+              <span class="quantity-display" 
+                    [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số lượng'">
+                {{ formatNumber(material.quantity) }}
+              </span>
             </td>
             <td class="location-cell">
               <input type="text" 

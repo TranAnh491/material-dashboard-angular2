@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 
 import { DashboardComponent } from '../../dashboard/dashboard.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
@@ -51,8 +50,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'fg-preparing',         loadChildren: () => import('../../pages/fg-preparing/fg-preparing.module').then(m => m.FGPreparingModule), canActivate: [AuthGuard] },
   { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard] },
 
-  { path: 'find',                 component: Layout3dComponent, canActivate: [AuthGuard] },
-  { path: 'layout',               component: Layout3dComponent, canActivate: [AuthGuard] },
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
   { path: 'safety',               loadChildren: () => import('../../pages/safety/safety.module').then(m => m.SafetyModule), canActivate: [AuthGuard] },
   { path: 'chart',                component: ChartComponent, canActivate: [AuthGuard] },
@@ -69,6 +66,5 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },
-  { path: 'layout-3d',            component: Layout3dComponent, canActivate: [AuthGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard] }
 ];

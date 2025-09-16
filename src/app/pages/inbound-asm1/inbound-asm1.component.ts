@@ -81,6 +81,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
   statusFilter: string = 'all'; // Default to Tất cả
   
+  // Sort filter
+  sortBy: string = 'importDate'; // Default to Ngày nhập
+  
   // Auto-hide received materials after next day (not 24 hours, but by calendar day)
   hideReceivedAfterNextDay: boolean = true;
   
@@ -468,14 +471,27 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}`);
     }
     
-    // Always maintain sort order by import date (oldest first) and creation time
+    // Sort based on selected sort option
     filtered.sort((a, b) => {
-      // Sort by import date first (oldest first)
-      const dateCompare = a.importDate.getTime() - b.importDate.getTime();
-      if (dateCompare !== 0) return dateCompare;
-      
-      // If same date, sort by creation time (import order)
-      return a.createdAt.getTime() - b.createdAt.getTime();
+      switch (this.sortBy) {
+        case 'batchNumber':
+          // Sort by batch number (A-Z)
+          return a.batchNumber.localeCompare(b.batchNumber);
+        case 'materialCode':
+          // Sort by material code (A-Z)
+          return a.materialCode.localeCompare(b.materialCode);
+        case 'createdAt':
+          // Sort by creation time (oldest first)
+          return a.createdAt.getTime() - b.createdAt.getTime();
+        case 'importDate':
+        default:
+          // Sort by import date first (oldest first)
+          const dateCompare = a.importDate.getTime() - b.importDate.getTime();
+          if (dateCompare !== 0) return dateCompare;
+          
+          // If same date, sort by creation time (import order)
+          return a.createdAt.getTime() - b.createdAt.getTime();
+      }
     });
     
     this.filteredMaterials = filtered;
@@ -864,6 +880,33 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     console.log(`  - Loại tìm kiếm: ${this.searchType}`);
     console.log(`  - Số materials sẽ hiển thị: ${status === 'received' ? receivedCount : status === 'pending' ? pendingCount : beforeCount}`);
     console.log(`  - Số materials sẽ bị ẩn: ${status === 'received' ? pendingCount : status === 'pending' ? receivedCount : 0}`);
+    
+    this.applyFilters();
+  }
+  
+  changeSortBy(sortBy: string): void {
+    this.sortBy = sortBy;
+    console.log(`🔄 Thay đổi sắp xếp: ${sortBy}`);
+    
+    // Log mô tả sắp xếp
+    let sortDescription = '';
+    switch (sortBy) {
+      case 'importDate':
+        sortDescription = 'Sắp xếp theo ngày nhập (cũ nhất trước)';
+        break;
+      case 'batchNumber':
+        sortDescription = 'Sắp xếp theo lô hàng (A-Z)';
+        break;
+      case 'materialCode':
+        sortDescription = 'Sắp xếp theo mã hàng (A-Z)';
+        break;
+      case 'createdAt':
+        sortDescription = 'Sắp xếp theo thời gian tạo (cũ nhất trước)';
+        break;
+      default:
+        sortDescription = 'Sắp xếp theo ngày nhập (cũ nhất trước)';
+    }
+    console.log(`📝 Mô tả sắp xếp: ${sortDescription}`);
     
     this.applyFilters();
   }
@@ -2128,6 +2171,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   formatDateTime(date: Date | null): string {
     if (!date) return '';
     return date.toLocaleString('vi-VN');
+  }
+  
+  // Format number with commas for thousands
+  formatNumber(value: number | null | undefined): string {
+    if (value === null || value === undefined) {
+      return '0';
+    }
+    
+    return value.toLocaleString('vi-VN');
   }
   
   getStatusBadgeClass(material: InboundMaterial): string {

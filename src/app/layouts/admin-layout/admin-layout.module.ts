@@ -52,7 +52,6 @@ import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.compone
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
-import { Layout3dComponent } from 'app/pages/layout-3d/layout-3d.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
@@ -108,7 +107,6 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     OutboundASM1Component,
     OutboundASM2Component,
     DocumentsComponent,
-    Layout3dComponent,
     UtilizationComponent,
     SettingsComponent,
     PrintLabelComponent,

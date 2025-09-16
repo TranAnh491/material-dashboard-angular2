@@ -31,7 +31,7 @@ export interface ShipmentItem {
 @Component({
   selector: 'app-shipment',
   templateUrl: './shipment.component.html',
-  styleUrls: ['./shipment.component.css']
+  styleUrls: ['./shipment.component.scss']
 })
 export class ShipmentComponent implements OnInit, OnDestroy {
   shipments: ShipmentItem[] = [];
