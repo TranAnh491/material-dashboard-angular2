@@ -893,7 +893,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }
     } else if (this.currentScanStep === 'material') {
       title = 'Quét Mã Hàng Hóa';
-      message = 'Quét QR code của hàng hóa để xuất kho';
+      message = 'Quét QR code của hàng hóa để xuất kho (sau khi scan xong sẽ dừng camera)';
     }
     
     const dialogData: QRScannerData = {
@@ -928,11 +928,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         // Update UI after processing
         this.cdr.detectChanges();
         
-        // Always reopen camera for continuous scanning
-        console.log('📱 Continuous scanning mode - reopening camera...');
-        setTimeout(() => {
-          this.startCameraScanning();
-        }, 1000); // 1 second delay between scans
+        // Only reopen camera if we're still in batch scanning mode and not ready to process
+        if (this.isBatchScanningMode && (!this.isProductionOrderScanned || !this.isEmployeeIdScanned)) {
+          console.log('📱 Still need to scan LSX/Employee - reopening camera...');
+          setTimeout(() => {
+            this.startCameraScanning();
+          }, 1000);
+        } else if (this.isBatchScanningMode && this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+          // After scanning material, continue camera for more materials
+          console.log('📱 Material scanned - continuing camera for more materials...');
+          setTimeout(() => {
+            this.startCameraScanning();
+          }, 1000);
+        } else {
+          console.log('📱 Batch scanning completed or stopped');
+        }
       } else if (result && result.error) {
         console.error('❌ QR Scanner error:', result.error);
         this.errorMessage = 'Lỗi quét QR: ' + result.error;
@@ -959,12 +969,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // Stop camera scanning (for continuous mode)
   stopCameraScanning(): void {
     console.log('📱 Stopping camera scanning...');
-    this.isBatchScanningMode = false;
-    this.isProductionOrderScanned = false;
-    this.isEmployeeIdScanned = false;
-    this.batchProductionOrder = '';
-    this.batchEmployeeId = '';
-    console.log('📱 Camera scanning stopped');
+    // Don't reset data, just stop the camera
+    // User can still use Done button to process pending data
+    console.log('📱 Camera scanning stopped - data preserved for processing');
   }
   
   private async waitForElement(elementId: string): Promise<void> {
@@ -1742,10 +1749,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // Update UI
       this.cdr.detectChanges();
       
-      // Auto-focus cho scan tiếp theo
-      setTimeout(() => {
-        this.focusScannerInput();
-      }, 100);
+      // For camera scanning, don't auto-focus, let user use Done button
+      if (this.selectedScanMethod === 'scanner') {
+        // Auto-focus cho scan tiếp theo (only for scanner)
+        setTimeout(() => {
+          this.focusScannerInput();
+        }, 100);
+      }
       
     } catch (error) {
       console.error('❌ Error processing material scan:', error);
