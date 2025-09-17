@@ -315,7 +315,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           } as OutboundMaterial;
         });
         
-        // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
+        console.log(`📦 Loaded ${materials.length} total materials from outbound-materials collection`);
         
         // 🔧 TỐI ƯU HÓA: Xử lý tất cả trong một lần để tăng tốc độ
         const today = new Date();
@@ -357,6 +357,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         
         // 🔧 TỐI ƯU HÓA: Chỉ log một lần thay vì nhiều lần
         console.log(`✅ Loaded ${materials.length} total, displaying ${this.materials.length} ASM1 materials`);
+        
+        // Debug: Check if new data was added
+        const recentMaterials = materials.filter(m => {
+          const now = new Date();
+          const materialTime = m.createdAt;
+          const timeDiff = now.getTime() - materialTime.getTime();
+          return timeDiff < 60000; // Within last minute
+        });
+        if (recentMaterials.length > 0) {
+          console.log(`🆕 Found ${recentMaterials.length} recently added materials:`, recentMaterials.map(m => ({
+            materialCode: m.materialCode,
+            createdAt: m.createdAt,
+            scanMethod: m.scanMethod
+          })));
+        }
         
         // Force change detection to update UI
         this.cdr.detectChanges();
@@ -893,7 +908,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       }
     } else if (this.currentScanStep === 'material') {
       title = 'Quét Mã Hàng Hóa';
-      message = 'Quét QR code của hàng hóa để xuất kho (sau khi scan xong sẽ dừng camera)';
+      message = 'Quét QR code của hàng hóa để xuất kho (camera sẽ tiếp tục mở để quét thêm)';
     }
     
     const dialogData: QRScannerData = {
@@ -956,12 +971,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         }
         } else {
         console.log('📱 QR Scanner cancelled or closed by user');
-        // Only reset when user manually closes
-        this.isBatchScanningMode = false;
-        this.isProductionOrderScanned = false;
-        this.isEmployeeIdScanned = false;
-        this.batchProductionOrder = '';
-        this.batchEmployeeId = '';
+        // Don't reset data when camera is closed, just stop camera scanning
+        // User can still use Review and Save buttons
+        console.log('📱 Camera scanning stopped - data preserved for processing');
       }
     });
   }
@@ -972,6 +984,111 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     // Don't reset data, just stop the camera
     // User can still use Done button to process pending data
     console.log('📱 Camera scanning stopped - data preserved for processing');
+  }
+  
+  // Reset all scanning data (when user wants to start fresh)
+  resetScanningData(): void {
+    console.log('🔄 Resetting all scanning data...');
+    this.isBatchScanningMode = false;
+    this.isProductionOrderScanned = false;
+    this.isEmployeeIdScanned = false;
+    this.batchProductionOrder = '';
+    this.batchEmployeeId = '';
+    this.pendingScanData = [];
+    this.currentScanStep = 'batch';
+    this.errorMessage = '';
+    console.log('✅ All scanning data reset');
+  }
+  
+  // Start camera scanning for materials (after LSX and Employee ID are scanned)
+  startMaterialCameraScanning(): void {
+    console.log('📱 Starting material camera scanning...');
+    if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
+      this.errorMessage = 'Phải scan LSX và mã nhân viên trước!';
+      return;
+    }
+    
+    this.currentScanStep = 'material';
+    this.startCameraScanning();
+  }
+  
+  // Save scanned data to outbound
+  saveScannedData(): void {
+    console.log('💾 Saving scanned data to outbound...');
+    if (this.pendingScanData.length === 0) {
+      this.errorMessage = 'Không có dữ liệu để lưu!';
+      return;
+    }
+    
+    // Use the same logic as stopBatchScanningMode but without stopping batch mode
+    this.processPendingScanData();
+  }
+  
+  // Process pending scan data (extracted from stopBatchScanningMode)
+  private async processPendingScanData(): Promise<void> {
+    if (this.pendingScanData.length === 0) {
+      console.log('📦 No pending data to process');
+      return;
+    }
+    
+    try {
+      console.log(`📦 Processing ${this.pendingScanData.length} pending items...`);
+      
+      // Show loading
+      this.isLoading = true;
+      this.errorMessage = `Đang xử lý ${this.pendingScanData.length} mã hàng...`;
+      
+      // Process each scanned item by creating outbound records
+      const batch = this.firestore.firestore.batch();
+      const outboundCollection = this.firestore.collection('outbound-materials');
+      
+      for (const scanItem of this.pendingScanData) {
+        const outboundData: OutboundMaterial = {
+          factory: this.selectedFactory,
+          materialCode: scanItem.materialCode,
+          poNumber: scanItem.poNumber,
+          quantity: scanItem.quantity,
+          unit: 'PCS',
+          exportQuantity: scanItem.quantity,
+          exportDate: new Date(),
+          location: scanItem.location,
+          exportedBy: scanItem.employeeId,
+          batch: scanItem.importDate,
+          batchNumber: scanItem.importDate,
+          scanMethod: scanItem.scanMethod,
+          notes: `Auto-scanned export - ${scanItem.scanTime.toISOString()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          productionOrder: scanItem.productionOrder,
+          employeeId: scanItem.employeeId,
+          importDate: scanItem.importDate
+        };
+        
+        const docRef = outboundCollection.ref.doc();
+        batch.set(docRef, outboundData);
+      }
+      
+      // Commit batch
+      await batch.commit();
+      console.log(`✅ Successfully saved ${this.pendingScanData.length} items to outbound-materials collection`);
+      
+      // Clear pending data
+      const processedCount = this.pendingScanData.length;
+      this.pendingScanData = [];
+      
+      // Success message
+      this.errorMessage = `✅ Đã lưu ${processedCount} mã hàng vào outbound!`;
+      
+      // Refresh data
+      await this.loadMaterials();
+      console.log('✅ Data refreshed after saving');
+      
+    } catch (error) {
+      console.error('❌ Error processing pending data:', error);
+      this.errorMessage = 'Lỗi xử lý dữ liệu: ' + error.message;
+    } finally {
+      this.isLoading = false;
+    }
   }
   
   private async waitForElement(elementId: string): Promise<void> {

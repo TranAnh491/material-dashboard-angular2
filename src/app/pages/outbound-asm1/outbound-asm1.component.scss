@@ -21,6 +21,79 @@
   box-shadow: none !important;
 }
 
+// 📱 Material Scan Controls
+.material-scan-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  
+  .camera-scan-btn, .review-btn, .save-btn, .stop-camera-btn, .reset-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border: 2px solid #007bff;
+    background: #ffffff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: #007bff;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      background: #007bff;
+      color: #ffffff;
+    }
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
+  .review-btn {
+    border-color: #28a745;
+    color: #28a745;
+    
+    &:hover {
+      background: #28a745;
+      color: #ffffff;
+    }
+  }
+  
+  .save-btn {
+    border-color: #dc3545;
+    color: #dc3545;
+    
+    &:hover {
+      background: #dc3545;
+      color: #ffffff;
+    }
+  }
+  
+  .stop-camera-btn {
+    border-color: #6c757d;
+    color: #6c757d;
+    
+    &:hover {
+      background: #6c757d;
+      color: #ffffff;
+    }
+  }
+  
+  .reset-btn {
+    border-color: #ffc107;
+    color: #ffc107;
+    
+    &:hover {
+      background: #ffc107;
+      color: #ffffff;
+    }
+  }
+}
+
 // 📱 Mobile Scanner Selection
 .mobile-scanner-selection {
   display: flex;

@@ -443,11 +443,11 @@ export class FindRm1Component implements OnInit, OnDestroy {
           rackCode = 'F7';
           console.log(`📍 Merged rack mapping: ${location} → ${rackCode}`);
         }
-        
-        // Validate format: Letter + Number
-        if (/^[A-Z][0-9]$/.test(rackCode)) {
+      
+      // Validate format: Letter + Number
+      if (/^[A-Z][0-9]$/.test(rackCode)) {
           console.log(`📍 Standard mapping: ${location} → ${rackCode}`);
-          return rackCode;
+        return rackCode;
         }
       }
     }

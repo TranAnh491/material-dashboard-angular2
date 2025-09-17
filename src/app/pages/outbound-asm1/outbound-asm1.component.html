@@ -122,6 +122,46 @@
           <div class="scan-instruction" *ngIf="isProductionOrderScanned && isEmployeeIdScanned">
             <i class="material-icons">info</i>
             <span>Được phép scan xuất kho sau khi scan xong lệnh sản xuất và mã nhân viên</span>
+            
+            <!-- Camera scanning controls for materials -->
+            <div class="material-scan-controls" *ngIf="selectedScanMethod === 'camera'">
+              <button class="camera-scan-btn" 
+                      (click)="startMaterialCameraScanning()"
+                      title="Mở camera để quét mã hàng">
+                <i class="material-icons">camera_alt</i>
+                <span>Quét Mã Hàng</span>
+              </button>
+              
+              <button class="review-btn" 
+                      (click)="showScanReview()"
+                      title="Xem danh sách đã quét"
+                      *ngIf="pendingScanData.length > 0">
+                <i class="material-icons">list</i>
+                <span>Xem Danh Sách ({{ pendingScanData.length }})</span>
+              </button>
+              
+              <button class="save-btn" 
+                      (click)="saveScannedData()"
+                      title="Lưu dữ liệu vào outbound"
+                      *ngIf="pendingScanData.length > 0">
+                <i class="material-icons">save</i>
+                <span>Lưu ({{ pendingScanData.length }})</span>
+              </button>
+              
+              <button class="stop-camera-btn" 
+                      (click)="stopCameraScanning()"
+                      title="Tắt camera">
+                <i class="material-icons">videocam_off</i>
+                <span>Tắt Camera</span>
+              </button>
+              
+              <button class="reset-btn" 
+                      (click)="resetScanningData()"
+                      title="Bắt đầu lại từ đầu">
+                <i class="material-icons">refresh</i>
+                <span>Bắt Đầu Lại</span>
+              </button>
+            </div>
           </div>
         </div>
         
