@@ -885,6 +885,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       } else if (!this.isEmployeeIdScanned) {
         title = 'Quét Mã Nhân Viên';
         message = 'Quét mã nhân viên (ASP + 4 số)';
+      } else {
+        // Both LSX and Employee ID scanned, ready for material
+        title = 'Quét Mã Hàng Hóa';
+        message = 'Quét QR code của hàng hóa để xuất kho';
+        this.currentScanStep = 'material';
       }
     } else if (this.currentScanStep === 'material') {
       title = 'Quét Mã Hàng Hóa';
@@ -919,6 +924,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         console.log('📱 - currentScanStep:', this.currentScanStep);
         console.log('📱 - batchProductionOrder:', this.batchProductionOrder);
         console.log('📱 - batchEmployeeId:', this.batchEmployeeId);
+        
+        // Update UI after processing
+        this.cdr.detectChanges();
         
         // Always reopen camera for continuous scanning
         console.log('📱 Continuous scanning mode - reopening camera...');
@@ -1156,9 +1164,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('📱 Batch scanning mode:', this.isBatchScanningMode);
     
     if (!this.isBatchScanningMode) {
-      // If not in batch mode, start batch mode first
+      // If not in batch mode, start batch mode first (but don't reset existing data)
       console.log('📱 Starting batch mode for camera scan');
-      this.startBatchScanningMode();
+      this.isBatchScanningMode = true;
+      this.currentScanStep = 'batch';
+      // DON'T reset isProductionOrderScanned, isEmployeeIdScanned, batchProductionOrder, batchEmployeeId
     }
     
     // Use EXACT SAME LOGIC as onScanSuccess for batch mode
@@ -1501,7 +1511,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           this.isProductionOrderScanned = true;
           console.log('✅ LSX scanned:', this.batchProductionOrder);
           this.showScanStatus();
-      return;
+          return;
         }
       }
       
@@ -1513,6 +1523,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
           this.showScanStatus();
+          
+          // 🔧 SỬA LỖI: Cập nhật currentScanStep thành 'material' sau khi scan Employee ID
+          if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+            this.currentScanStep = 'material';
+            console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+          }
           return;
         }
       }
@@ -1531,12 +1547,24 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           this.isProductionOrderScanned = true;
           console.log('✅ LSX detected by length:', this.batchProductionOrder);
           this.showScanStatus();
+          
+          // 🔧 SỬA LỖI: Cập nhật currentScanStep thành 'material' sau khi scan LSX
+          if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+            this.currentScanStep = 'material';
+            console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+          }
         } else {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
           this.batchEmployeeId = scannedData.substring(0, 7);
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
           this.showScanStatus();
+          
+          // 🔧 SỬA LỖI: Cập nhật currentScanStep thành 'material' sau khi scan Employee ID
+          if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+            this.currentScanStep = 'material';
+            console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+          }
         }
         return;
       }
@@ -1560,6 +1588,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       Employee: this.isEmployeeIdScanned ? this.batchEmployeeId : 'Chưa scan',
       Ready: this.isProductionOrderScanned && this.isEmployeeIdScanned
     });
+    
+    // Hiển thị thông báo cho user
+    if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+      this.errorMessage = `✅ Đã scan LSX: ${this.batchProductionOrder} và Employee: ${this.batchEmployeeId}. Bây giờ có thể scan mã hàng để xuất kho.`;
+    } else if (this.isProductionOrderScanned) {
+      this.errorMessage = `✅ Đã scan LSX: ${this.batchProductionOrder}. Tiếp tục scan mã nhân viên.`;
+    } else if (this.isEmployeeIdScanned) {
+      this.errorMessage = `✅ Đã scan Employee: ${this.batchEmployeeId}. Tiếp tục scan LSX.`;
+    }
   }
 
   private showScanError(message: string): void {
@@ -1701,6 +1738,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       this.pendingScanData.push(scanItem);
       console.log(`✅ Scan saved temporarily: ${materialCode} (${this.pendingScanData.length} items pending)`);
+      
+      // Update UI
+      this.cdr.detectChanges();
       
       // Auto-focus cho scan tiếp theo
       setTimeout(() => {
