@@ -5,9 +5,6 @@
       <i class="material-icons">qr_code_scanner</i>
       {{ data.title }}
     </h2>
-    <button mat-icon-button (click)="closeModal()" class="close-btn">
-      <i class="material-icons">close</i>
-    </button>
   </div>
 
   <!-- Modal Content -->
@@ -37,6 +34,11 @@
 
     <!-- Scanning State -->
     <div class="scanner-state scanning-state" *ngIf="scannerState === 'scanning'">
+      <div class="scan-instructions">
+        <h3>{{ data.title || 'Quét QR Code' }}</h3>
+        <p>{{ data.message || 'Hướng camera vào barcode để đọc thông tin' }}</p>
+      </div>
+      
       <div class="video-container">
         <div #videoPreviewContainer id="video-preview-container" class="video-preview">
           <!-- Video element will be inserted here -->
@@ -48,22 +50,6 @@
             <div class="corner bottom-left"></div>
             <div class="corner bottom-right"></div>
           </div>
-        </div>
-      </div>
-      
-      <div class="scan-instructions">
-        <h3>{{ data.title || 'Quét QR Code' }}</h3>
-        <p>{{ data.message || 'Hướng camera vào barcode để đọc thông tin' }}</p>
-        
-        <div class="scan-actions">
-          <button mat-button (click)="closeModal()" class="stop-btn">
-            <i class="material-icons">close</i>
-            Đóng
-          </button>
-          <button mat-button (click)="openManualInput()" class="manual-btn">
-            <i class="material-icons">keyboard</i>
-            Nhập thủ công
-          </button>
         </div>
       </div>
     </div>
@@ -81,10 +67,6 @@
           <i class="material-icons">refresh</i>
           Thử lại
         </button>
-        <button mat-button (click)="openManualInput()" class="manual-btn">
-          <i class="material-icons">keyboard</i>
-          Nhập thủ công
-        </button>
       </div>
     </div>
 
@@ -92,6 +74,10 @@
 
   <!-- Modal Footer -->
   <div mat-dialog-actions class="modal-footer">
+    <button mat-button (click)="closeModal()" class="close-btn">
+      <i class="material-icons">close</i>
+      Đóng
+    </button>
     <button mat-button (click)="closeModal()" class="cancel-btn">
       <i class="material-icons">cancel</i>
       Hủy

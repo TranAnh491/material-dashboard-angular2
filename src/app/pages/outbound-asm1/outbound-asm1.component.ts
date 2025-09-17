@@ -1000,6 +1000,22 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('✅ All scanning data reset');
   }
   
+  // Debug method to check current state
+  debugCurrentState(): void {
+    console.log('🔍 === DEBUG CURRENT STATE ===');
+    console.log('🔍 isBatchScanningMode:', this.isBatchScanningMode);
+    console.log('🔍 isProductionOrderScanned:', this.isProductionOrderScanned);
+    console.log('🔍 isEmployeeIdScanned:', this.isEmployeeIdScanned);
+    console.log('🔍 batchProductionOrder:', this.batchProductionOrder);
+    console.log('🔍 batchEmployeeId:', this.batchEmployeeId);
+    console.log('🔍 currentScanStep:', this.currentScanStep);
+    console.log('🔍 pendingScanData.length:', this.pendingScanData.length);
+    console.log('🔍 pendingScanData:', this.pendingScanData);
+    console.log('🔍 selectedScanMethod:', this.selectedScanMethod);
+    console.log('🔍 isMobile:', this.isMobile);
+    console.log('🔍 === END DEBUG STATE ===');
+  }
+  
   // Start camera scanning for materials (after LSX and Employee ID are scanned)
   startMaterialCameraScanning(): void {
     console.log('📱 Starting material camera scanning...');
@@ -1274,6 +1290,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
     
     console.log('🔍 === ON SCAN SUCCESS END ===');
+    console.log('🔍 Final pending data count:', this.pendingScanData.length);
+    console.log('🔍 Final batch state:', {
+      isProductionOrderScanned: this.isProductionOrderScanned,
+      isEmployeeIdScanned: this.isEmployeeIdScanned,
+      batchProductionOrder: this.batchProductionOrder,
+      batchEmployeeId: this.batchEmployeeId
+    });
   }
 
   onScanError(error: any): void {
@@ -1283,9 +1306,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   // Process camera scan result - SAME LOGIC AS SCANNER
   processCameraScanResult(scannedText: string): void {
-    console.log('📱 Processing camera scan result:', scannedText);
+    console.log('📱 === CAMERA SCAN RESULT START ===');
+    console.log('📱 Scanned text:', scannedText);
+    console.log('📱 Text length:', scannedText.length);
     console.log('📱 Current scan step:', this.currentScanStep);
     console.log('📱 Batch scanning mode:', this.isBatchScanningMode);
+    console.log('📱 LSX scanned:', this.isProductionOrderScanned);
+    console.log('📱 Employee scanned:', this.isEmployeeIdScanned);
+    console.log('📱 Pending data count:', this.pendingScanData.length);
     
     if (!this.isBatchScanningMode) {
       // If not in batch mode, start batch mode first (but don't reset existing data)
@@ -1298,6 +1326,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     // Use EXACT SAME LOGIC as onScanSuccess for batch mode
     console.log('📱 Calling onScanSuccess with camera scan result');
     this.onScanSuccess(scannedText);
+    
+    console.log('📱 === CAMERA SCAN RESULT END ===');
+    console.log('📱 After processing - Pending data count:', this.pendingScanData.length);
   }
 
   
@@ -1810,9 +1841,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   // 🔧 SIÊU TỐI ƯU: Chỉ lưu scan data, không update database ngay
   private processBatchMaterialScan(scannedData: string): void {
+    console.log('🔍 === PROCESS BATCH MATERIAL SCAN START ===');
+    console.log('🔍 Scanned data:', scannedData);
+    console.log('🔍 LSX scanned:', this.isProductionOrderScanned);
+    console.log('🔍 Employee scanned:', this.isEmployeeIdScanned);
+    console.log('🔍 Pending data before:', this.pendingScanData.length);
+    
     try {
       // Kiểm tra trạng thái scan
       if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
+        console.log('❌ Missing LSX or Employee ID');
         this.showScanError('Phải scan LSX và mã nhân viên trước!');
         return;
       }
@@ -1862,6 +1900,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       this.pendingScanData.push(scanItem);
       console.log(`✅ Scan saved temporarily: ${materialCode} (${this.pendingScanData.length} items pending)`);
+      console.log('🔍 Pending data after:', this.pendingScanData.length);
+      console.log('🔍 Scan item details:', {
+        materialCode: scanItem.materialCode,
+        poNumber: scanItem.poNumber,
+        quantity: scanItem.quantity,
+        productionOrder: scanItem.productionOrder,
+        employeeId: scanItem.employeeId,
+        scanMethod: scanItem.scanMethod
+      });
       
       // Update UI
       this.cdr.detectChanges();
@@ -1878,6 +1925,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.error('❌ Error processing material scan:', error);
       this.showScanError('Lỗi xử lý mã hàng: ' + error.message);
     }
+    
+    console.log('🔍 === PROCESS BATCH MATERIAL SCAN END ===');
   }
 
 
