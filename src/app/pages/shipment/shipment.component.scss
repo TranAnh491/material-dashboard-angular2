@@ -17,7 +17,7 @@ html, body {
   height: 100vh; /* Chiếm toàn bộ chiều cao trình duyệt */
   display: flex;
   flex-direction: column;
-  padding: 12px 15px; /* Further increased padding */
+  padding: 8px 12px; /* Giảm padding để tận dụng không gian */
   margin-top: 0px; /* Remove upward pull - neutral position */
 }
 .container-fluid {
@@ -78,26 +78,45 @@ html, body {
 
 // Summary cards without colors and reduced height
 .summary-card {
-  height: 50% !important; /* Reduce height to 50% */
-  min-height: 60px; /* Set minimum height */
-  margin-bottom: 5px; /* Reduced spacing */
+  height: 80px !important; /* Fixed height for consistent layout */
+  min-height: 80px; /* Fixed minimum height */
+  margin-bottom: 8px; /* Spacing between cards */
   
   .card-header {
-    padding: 8px 15px !important; /* Reduced padding */
+    padding: 10px 12px !important; /* Compact padding */
     background: #f8f9fa !important; /* Neutral background color */
     border: none !important;
+    height: 100%; /* Fill the card height */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     
     .card-category {
-      margin: 0 0 3px 0 !important; /* Reduced margin */
+      margin: 0 0 4px 0 !important; /* Minimal margin */
       font-size: 0.75em !important; /* Smaller font */
       color: #6c757d !important; /* Neutral text color */
+      font-weight: 500;
     }
     
     .card-title {
-      font-size: 1.1em !important; /* Smaller title */
+      font-size: 1.4em !important; /* Larger number */
       margin: 0 !important;
-      font-weight: 600;
+      font-weight: 700;
       color: #495057 !important; /* Neutral text color */
+    }
+    
+    .action-controls {
+      margin: 0;
+      
+      .dropdown {
+        width: 100%;
+        
+        .btn {
+          width: 100%;
+          font-size: 0.7em;
+          padding: 4px 8px;
+        }
+      }
     }
   }
 }
@@ -119,15 +138,15 @@ html, body {
 
 // Compact controls
 .controls-row {
-  margin-bottom: 12px; /* Further increased spacing */
-  margin-top: 3px; /* Add downward space */
+  margin-bottom: 8px; /* Giảm khoảng cách */
+  margin-top: 2px; /* Giảm khoảng cách */
 }
 
 .compact-controls {
-  margin-bottom: 5px; /* Further reduced */
+  margin-bottom: 3px; /* Giảm khoảng cách */
   
   .card-body {
-    padding: 10px 15px; /* Further reduced top/bottom padding */
+    padding: 6px 12px; /* Giảm padding để tận dụng không gian */
   }
 }
 
@@ -208,14 +227,14 @@ html, body {
   flex: 1;
   overflow-x: auto !important; /* Force horizontal scrolling */
   overflow-y: auto !important; /* Force vertical scrolling */
-  max-height: calc(100vh - 420px); /* Adjust based on header heights */
-  padding: 15px; /* Add some padding back for the table content */
+  max-height: calc(100vh - 180px); /* Tăng chiều cao bảng để tận dụng màn hình */
+  padding: 4px; /* Giảm padding để tận dụng không gian */
   width: 100% !important;
   max-width: 100% !important;
   
   .table {
     margin-bottom: 0;
-    min-width: 1050px !important; /* Reduced from 1500px (30% smaller) */
+    min-width: 1200px !important; /* Tối ưu cho bảng shipment với 19 cột */
     white-space: nowrap !important; /* Prevent text wrapping in cells */
     table-layout: fixed !important; /* Fixed table layout for consistent widths */
     border-collapse: collapse !important; /* Ensure borders collapse properly */
@@ -225,10 +244,10 @@ html, body {
       top: 0;
       background: #f8f9fa;
       z-index: 10;
-      min-width: 56px; /* Reduced minimum column width (30% smaller) */
+      min-width: 50px; /* Giảm chiều rộng cột */
       border-right: 1px solid #dee2e6 !important; /* Vertical border */
       border-bottom: 2px solid #dee2e6 !important; /* Header bottom border */
-      padding: 8px 6px !important; /* Reduced padding for compact look */
+      padding: 4px 3px !important; /* Giảm padding để tận dụng không gian */
       
       &:first-child {
         min-width: 35px; /* Checkbox column (30% smaller) */
@@ -240,11 +259,11 @@ html, body {
     }
     
     tbody td {
-      min-width: 56px; /* Reduced minimum cell width (30% smaller) */
+      min-width: 50px; /* Giảm chiều rộng cột */
       vertical-align: middle;
       border-right: 1px solid #dee2e6 !important; /* Vertical border */
       border-bottom: 1px solid #dee2e6 !important; /* Horizontal border */
-      padding: 6px 6px !important; /* Reduced padding for compact look */
+      padding: 4px 3px !important; /* Giảm padding để tận dụng không gian */
       
       &:first-child {
         min-width: 35px; /* Checkbox column (30% smaller) */
@@ -268,22 +287,26 @@ html, body {
       }
     }
     
-    // Specific column widths - reduced by 30%
-    th:nth-child(2), td:nth-child(2) { min-width: 49px !important; } /* Year: 70px -> 49px */
-    th:nth-child(3), td:nth-child(3) { min-width: 63px !important; } /* Month: 90px -> 63px */
-    th:nth-child(4), td:nth-child(4) { min-width: 91px !important; } /* No: 130px -> 91px */
-    th:nth-child(5), td:nth-child(5) { min-width: 84px !important; } /* P/N: 120px -> 84px */
-    th:nth-child(6), td:nth-child(6) { min-width: 98px !important; } /* Work Order: 140px -> 98px */
-    th:nth-child(7), td:nth-child(7) { min-width: 63px !important; } /* Quantity: 90px -> 63px */
-    th:nth-child(8), td:nth-child(8) { min-width: 126px !important; } /* Customer: 180px -> 126px */
-    th:nth-child(9), td:nth-child(9) { min-width: 84px !important; } /* Delivery Date: 120px -> 84px */
-    th:nth-child(10), td:nth-child(10) { min-width: 63px !important; } /* Line: 90px -> 63px */
-    th:nth-child(11), td:nth-child(11) { min-width: 70px !important; } /* Status: 100px -> 70px */
-    th:nth-child(12), td:nth-child(12) { min-width: 84px !important; } /* Kitting: 120px -> 84px */
-    th:nth-child(13), td:nth-child(13) { min-width: 84px !important; } /* Checked By: 120px -> 84px */
-    th:nth-child(14), td:nth-child(14) { min-width: 84px !important; } /* Plan Received: 120px -> 84px */
-    th:nth-child(15), td:nth-child(15) { min-width: 140px !important; } /* Notes: 200px -> 140px */
-    th:nth-child(16), td:nth-child(16) { min-width: 56px !important; } /* Actions: 80px -> 56px */
+    // Specific column widths - optimized for shipment table
+    th:nth-child(1), td:nth-child(1) { min-width: 40px !important; width: 40px !important; } /* No */
+    th:nth-child(2), td:nth-child(2) { min-width: 80px !important; width: 80px !important; } /* Shipment */
+    th:nth-child(3), td:nth-child(3) { min-width: 70px !important; width: 70px !important; } /* Mã TP */
+    th:nth-child(4), td:nth-child(4) { min-width: 70px !important; width: 70px !important; } /* Mã Khách */
+    th:nth-child(5), td:nth-child(5) { min-width: 70px !important; width: 70px !important; } /* Lượng Xuất */
+    th:nth-child(6), td:nth-child(6) { min-width: 70px !important; width: 70px !important; } /* PO Ship */
+    th:nth-child(7), td:nth-child(7) { min-width: 50px !important; width: 50px !important; } /* Carton */
+    th:nth-child(8), td:nth-child(8) { min-width: 50px !important; width: 50px !important; } /* Odd */
+    th:nth-child(9), td:nth-child(9) { min-width: 70px !important; width: 70px !important; } /* Tồn kho */
+    th:nth-child(10), td:nth-child(10) { min-width: 50px !important; width: 50px !important; } /* FWD */
+    th:nth-child(11), td:nth-child(11) { min-width: 40px !important; width: 40px !important; } /* Push */
+    th:nth-child(12), td:nth-child(12) { min-width: 50px !important; width: 50px !important; } /* PushNo */
+    th:nth-child(13), td:nth-child(13) { min-width: 80px !important; width: 80px !important; } /* Status */
+    th:nth-child(14), td:nth-child(14) { min-width: 80px !important; width: 80px !important; } /* CS Date */
+    th:nth-child(15), td:nth-child(15) { min-width: 80px !important; width: 80px !important; } /* Full Date */
+    th:nth-child(16), td:nth-child(16) { min-width: 80px !important; width: 80px !important; } /* Dispatch Date */
+    th:nth-child(17), td:nth-child(17) { min-width: 70px !important; width: 70px !important; } /* Ngày chuẩn bị */
+    th:nth-child(18), td:nth-child(18) { min-width: 100px !important; width: 100px !important; } /* Ghi chú */
+    th:nth-child(19), td:nth-child(19) { min-width: 50px !important; width: 50px !important; } /* Xóa */
   }
 }
 
@@ -295,7 +318,7 @@ html, body {
   width: 100% !important;
   
   table {
-    min-width: 1050px !important; /* Reduced from 1500px (30% smaller) */
+    min-width: 1200px !important; /* Tối ưu cho bảng shipment với 19 cột */
     width: max-content !important;
   }
 }
@@ -328,7 +351,7 @@ html, body {
   .col-lg-2:nth-child(1) .summary-card {
     background: #e3f2fd !important;
     border: none !important;
-    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2) !important;
     
     .card-header {
       background: #e3f2fd !important;
@@ -349,7 +372,7 @@ html, body {
   .col-lg-2:nth-child(2) .summary-card {
     background: #e8f5e8 !important;
     border: none !important;
-    box-shadow: 0 4px 8px rgba(76, 175, 80, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2) !important;
     
     .card-header {
       background: #e8f5e8 !important;
@@ -370,7 +393,7 @@ html, body {
   .col-lg-2:nth-child(3) .summary-card {
     background: #fff3e0 !important;
     border: none !important;
-    box-shadow: 0 4px 8px rgba(255, 152, 0, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2) !important;
     
     .card-header {
       background: #fff3e0 !important;
@@ -391,7 +414,7 @@ html, body {
   .col-lg-2:nth-child(4) .summary-card {
     background: #e0f2f1 !important;
     border: none !important;
-    box-shadow: 0 4px 8px rgba(0, 150, 136, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(0, 150, 136, 0.2) !important;
     
     .card-header {
       background: #e0f2f1 !important;
@@ -412,7 +435,7 @@ html, body {
   .col-lg-2:nth-child(5) .summary-card {
     background: #fce4ec !important;
     border: none !important;
-    box-shadow: 0 4px 8px rgba(233, 30, 99, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(233, 30, 99, 0.2) !important;
     
     .card-header {
       background: #fce4ec !important;
@@ -429,24 +452,26 @@ html, body {
       }
     }
   }
+}
+
+// More button row styling
+.more-button-row {
+  margin-bottom: 15px;
   
-  .col-lg-2:nth-child(6) .summary-card {
-    background: #f1f8e9 !important;
-    border: none !important;
-    box-shadow: 0 4px 8px rgba(139, 195, 74, 0.2) !important;
+  .more-button-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
     
-    .card-header {
-      background: #f1f8e9 !important;
-      border-bottom: none !important;
-      
-      .card-category {
-        color: #558b2f !important;
-        font-weight: 500 !important;
-      }
-      
-      .card-title {
-        color: #33691e !important;
-        font-weight: 600 !important;
+    .dropdown {
+      .btn {
+        padding: 8px 16px;
+        font-size: 14px;
+        border-radius: 6px;
+        
+        i {
+          margin-right: 6px;
+        }
       }
     }
   }
@@ -1777,6 +1802,7 @@ textarea.mat-input-element {
     &::placeholder {
       color: #999;
       font-size: 11px;
+      font-style: italic;
     }
   }
   
@@ -1790,6 +1816,34 @@ textarea.mat-input-element {
     .mat-form-field-outline {
       background: rgba(25, 118, 210, 0.05);
     }
+  }
+}
+
+// Date input styling
+.date-input {
+  width: 100%;
+  min-width: 80px;
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+  background: #fff;
+  
+  &::placeholder {
+    color: #999;
+    font-style: italic;
+    font-size: 10px;
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+  }
+  
+  &:hover {
+    border-color: #bbb;
   }
 }
 
@@ -2001,32 +2055,45 @@ textarea.mat-input-element {
 
 // Optimize table container for more rows
 .table-container {
-  max-height: calc(100vh - 300px); /* Increased height for more rows */
+  max-height: calc(100vh - 100px); /* Tăng chiều cao bảng để tận dụng màn hình */
   
   .table {
-    min-width: 1200px !important; /* Reduced from 1500px */
+    min-width: 1200px !important; /* Tối ưu cho bảng shipment */
     
     th, td {
-      padding: 4px 2px !important;
-      font-size: 8px !important;
+      padding: 3px 2px !important; /* Giảm padding để tận dụng không gian */
+      font-size: 10px !important; /* Tối ưu font size */
     }
   }
 }
 
 // Reduce summary cards height for more table space
 .summary-card {
-  height: 40% !important; /* Reduced from 50% */
-  min-height: 50px; /* Reduced from 60px */
+  height: 35% !important; /* Giảm thêm để tăng không gian bảng */
+  min-height: 45px; /* Giảm chiều cao tối thiểu */
 }
 
 // Reduce header spacing
-.card-header {
-  padding: 10px 15px !important; /* Reduced padding */
-  
-  .card-title {
-    font-size: 1.2em !important; /* Smaller title */
+  .card-header {
+    padding: 6px 12px !important; /* Giảm padding để tận dụng không gian */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .card-title {
+      font-size: 1.1em !important; /* Giảm kích thước title */
+      margin: 0;
+    }
+    
+    .card-category {
+      margin: 0;
+      font-size: 0.9em;
+    }
+    
+    .action-section {
+      margin: 0;
+    }
   }
-}
 
 // Reduce controls spacing
 .controls-row {
@@ -2349,12 +2416,18 @@ textarea.mat-input-element {
     overflow-y: auto;
     z-index: 9999 !important;
     position: absolute !important;
-    display: block !important;
+    display: none !important;
     background: white !important;
     border: 2px solid #ddd !important;
     border-radius: 6px !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     min-width: 120px !important;
+    top: 100% !important;
+    left: 0 !important;
+    
+    &.show {
+      display: block !important;
+    }
     
     .dropdown-item {
       transition: background-color 0.2s ease;
@@ -2372,6 +2445,12 @@ textarea.mat-input-element {
         border-bottom: none !important;
       }
     }
+  }
+
+  // Dropdown container positioning
+  .dropdown {
+    position: relative !important;
+    display: inline-block !important;
   }
 
   // Enhanced clickable field styling for dropdowns

@@ -237,6 +237,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return viTri.toUpperCase();
   }
 
+  // Normalize location code for duplicate checking
+  // Q1.1(L) -> Q11L, Q-1-1-L -> Q11L
+  normalizeLocationCode(viTri: string): string {
+    if (!viTri) return '';
+    
+    // Convert to uppercase and remove all special characters (dots, hyphens, parentheses)
+    return viTri.toUpperCase().replace(/[.\-()]/g, '');
+  }
+
   // Format and validate viTri input
   formatViTriInput(input: string): string {
     if (!input) return '';
@@ -244,8 +253,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     // Remove all spaces and convert to uppercase
     let formatted = input.replace(/\s/g, '').toUpperCase();
     
-    // Only allow letters, numbers, dots, and hyphens
-    formatted = formatted.replace(/[^A-Z0-9.-]/g, '');
+    // Only allow letters, numbers, dots, hyphens, and parentheses (escape parentheses)
+    formatted = formatted.replace(/[^A-Z0-9.\-()]/g, '');
     
     return formatted;
   }
@@ -254,8 +263,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   validateViTriInput(input: string): boolean {
     if (!input) return false;
     
-    // Check if contains only allowed characters
-    const allowedPattern = /^[A-Z0-9.-]+$/;
+    // Check if contains only allowed characters: letters, numbers, dots, hyphens, and parentheses (escape parentheses)
+    const allowedPattern = /^[A-Z0-9.\-()]+$/;
     return allowedPattern.test(input);
   }
 
@@ -283,13 +292,25 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Validate viTri format
     if (!this.validateViTriInput(this.newItem.viTri)) {
-      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
+      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
       return;
     }
 
-    // Check if Vị Trí already exists
+    // Check if Vị Trí already exists (exact match)
     if (this.locationItems.find(item => item.viTri === this.newItem.viTri)) {
       alert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
+      return;
+    }
+
+    // Check if normalized Vị Trí already exists (Q1.1(L) vs Q-1-1-L both become Q11L)
+    const normalizedNewViTri = this.normalizeLocationCode(this.newItem.viTri);
+    const duplicateItem = this.locationItems.find(item => {
+      const normalizedExistingViTri = this.normalizeLocationCode(item.viTri);
+      return normalizedExistingViTri === normalizedNewViTri;
+    });
+
+    if (duplicateItem) {
+      alert(`Vị trí "${this.newItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
       return;
     }
 
@@ -325,15 +346,28 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Validate viTri format
     if (!this.validateViTriInput(this.editingItem.viTri)) {
-      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
+      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
       return;
     }
 
-    // Check if Vị Trí already exists (excluding current item)
+    // Check if Vị Trí already exists (exact match, excluding current item)
     if (this.locationItems.find(item => 
       item.viTri === this.editingItem!.viTri && item.id !== this.editingItem!.id
     )) {
       alert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
+      return;
+    }
+
+    // Check if normalized Vị Trí already exists (Q1.1(L) vs Q-1-1-L both become Q11L)
+    const normalizedNewViTri = this.normalizeLocationCode(this.editingItem.viTri);
+    const duplicateItem = this.locationItems.find(item => {
+      if (item.id === this.editingItem!.id) return false; // Skip current item
+      const normalizedExistingViTri = this.normalizeLocationCode(item.viTri);
+      return normalizedExistingViTri === normalizedNewViTri;
+    });
+
+    if (duplicateItem) {
+      alert(`Vị trí "${this.editingItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
       return;
     }
 
@@ -428,6 +462,167 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         });
       });
     });
+  }
+
+  // Import locations from file
+  importLocations() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.processImportFile(file);
+      }
+    };
+    input.click();
+  }
+
+  // Process imported file
+  private processImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        console.log('📋 Imported data:', jsonData);
+        
+        // Skip header row (dòng 1) and process all data from row 2 onwards
+        const locations = [];
+        const normalizedCodes = new Set<string>(); // Track normalized codes to prevent duplicates
+        
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (row && row[0] && row[0].toString().trim()) {
+            const viTri = row[0].toString().trim().toUpperCase();
+            console.log(`📋 Processing row ${i + 1}: "${viTri}"`);
+            
+            if (this.validateViTriInput(viTri)) {
+              const normalizedCode = this.normalizeLocationCode(viTri);
+              
+              // Check for duplicates within import data
+              if (normalizedCodes.has(normalizedCode)) {
+                console.log(`❌ Duplicate in import data: ${viTri} (normalized: ${normalizedCode})`);
+                continue;
+              }
+              
+              // Check for duplicates with existing data
+              const existingDuplicate = this.locationItems.find(item => {
+                const normalizedExistingViTri = this.normalizeLocationCode(item.viTri);
+                return normalizedExistingViTri === normalizedCode;
+              });
+              
+              if (existingDuplicate) {
+                console.log(`❌ Duplicate with existing: ${viTri} vs ${existingDuplicate.viTri} (both normalized to: ${normalizedCode})`);
+                continue;
+              }
+              
+              normalizedCodes.add(normalizedCode);
+              locations.push({
+                stt: 0, // Will be auto-assigned
+                viTri: viTri,
+                qrCode: this.generateQRCode(viTri),
+                createdAt: new Date()
+              });
+              console.log(`✅ Valid location added: ${viTri} (normalized: ${normalizedCode})`);
+            } else {
+              console.log(`❌ Invalid location format: ${viTri}`);
+            }
+          } else {
+            console.log(`⚠️ Empty row ${i + 1}, skipping`);
+          }
+        }
+        
+        console.log(`📊 Total valid locations found: ${locations.length}`);
+        
+        if (locations.length > 0) {
+          this.saveImportedLocations(locations);
+        } else {
+          alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề "Vị trí"\n- Từ dòng 2 trở đi phải có dữ liệu vị trí\n- Định dạng vị trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
+        }
+      } catch (error) {
+        console.error('Error processing file:', error);
+        alert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Save imported locations to database
+  private saveImportedLocations(locations: Omit<LocationItem, 'id'>[]) {
+    const batch = this.firestore.firestore.batch();
+    
+    locations.forEach(location => {
+      const docRef = this.firestore.collection('locations').doc().ref;
+      batch.set(docRef, location);
+    });
+    
+    batch.commit().then(() => {
+      console.log(`Imported ${locations.length} locations`);
+      this.refreshData();
+      alert(`Đã import thành công ${locations.length} vị trí`);
+    }).catch(error => {
+      console.error('Error importing locations:', error);
+      alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
+    });
+  }
+
+  // Download template file
+  downloadTemplate() {
+    try {
+      const templateData = [
+        ['Vị trí'], // Tiêu đề cột
+        ['A1-01'],  // Dòng 2 - sẽ được import
+        ['A1-02'],  // Dòng 3 - sẽ được import
+        ['A2-01'],  // Dòng 4 - sẽ được import
+        ['A2-02'],  // Dòng 5 - sẽ được import
+        ['B1-01'],  // Dòng 6 - sẽ được import
+        ['B1-02'],  // Dòng 7 - sẽ được import
+        ['B2-01'],  // Dòng 8 - sẽ được import
+        ['C1-01'],  // Dòng 9 - sẽ được import
+        ['C1-02'],  // Dòng 10 - sẽ được import
+        ['D1.01'],  // Dòng 11 - ví dụ với dấu chấm
+        ['D1.02'],  // Dòng 12 - ví dụ với dấu chấm
+        ['E1(01)'], // Dòng 13 - ví dụ với dấu ngoặc đơn
+        ['E1(02)'], // Dòng 14 - ví dụ với dấu ngoặc đơn
+        ['F1-01.02'], // Dòng 15 - ví dụ kết hợp dấu gạch ngang và chấm
+        ['G1(01)-02'] // Dòng 16 - ví dụ kết hợp dấu ngoặc đơn và gạch ngang
+      ];
+
+      const ws: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(templateData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Location Template');
+      
+      XLSX.writeFile(wb, 'Location_Template.xlsx');
+    } catch (error) {
+      console.error('Error creating template:', error);
+      alert('Lỗi khi tạo template. Vui lòng thử lại.');
+    }
+  }
+
+  // Delete all locations
+  deleteAllLocations() {
+    if (confirm('Bạn có chắc muốn xóa TẤT CẢ vị trí? Hành động này không thể hoàn tác!')) {
+      this.firestore.collection('locations').get().subscribe(snapshot => {
+        const batch = this.firestore.firestore.batch();
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        batch.commit().then(() => {
+          console.log('All locations deleted');
+          this.refreshData();
+          alert('Đã xóa tất cả vị trí');
+        }).catch(error => {
+          console.error('Error deleting all locations:', error);
+          alert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
+        });
+      });
+    }
   }
 
     // Print QR Code - Tem 50mm x 30mm
@@ -1081,7 +1276,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Validate location format
     if (!this.validateViTriInput(this.scannedNewLocation.trim())) {
-      alert('Vị trí chỉ được chứa chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)');
+      alert('Vị trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
       return;
     }
 

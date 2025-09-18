@@ -1,52 +1,54 @@
-/* Shipment - Black & White Interface */
+/* Shipment - Modern Interface */
 :host {
   display: block;
-  width: 100%;
   height: 100%;
-  margin: 0;
-  padding: 0;
 }
 
 .main-content {
-  padding: 0;
-  margin: 0;
   height: 100vh;
-  overflow: hidden;
-  background: #ffffff;
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1;
-}
-
-.content-container {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  padding: 12px 15px;
+  margin-top: 0px;
+}
+
+.container-fluid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0px;
+}
+
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: 12px;
 }
 
 /* Header Section */
-.header-section {
+.card-header {
   background: #ffffff;
-  border-bottom: 2px solid #000000;
+  border-bottom: 1px solid #e0e0e0;
   padding: 15px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
 }
 
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: bold;
-  color: #000000;
+.card-title {
+  margin: 0 0 5px 0;
+  font-size: 1.5em;
+  font-weight: 600;
+  color: #333333;
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.card-category {
+  margin: 0;
+  color: #666666;
+  font-size: 0.9em;
 }
 
 .page-title i {
@@ -98,16 +100,18 @@
 
 /* Action Section */
 .action-section {
-  background: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
+  background: #f8f9fa;
   padding: 15px 20px;
-  flex-shrink: 0;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
 }
 
 .action-controls {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* Custom Buttons */
@@ -190,30 +194,30 @@
 }
 
 /* Table Section */
-.table-section {
+.table-responsive {
   flex: 1;
   overflow: auto;
   background: #ffffff;
-  overflow-x: auto; /* Enable horizontal scrolling */
-  overflow-y: auto; /* Enable vertical scrolling */
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
 }
 
-.data-table {
+.table {
   width: 100%;
   border-collapse: collapse;
   background: #ffffff;
   font-size: 13px;
   min-width: 1900px; /* Ensure table has enough width for all columns */
   table-layout: fixed;
-  border: 2px solid #000000; /* Add black border around table */
+  border: 1px solid #dee2e6; /* Modern border */
 }
 
-.data-table th, .data-table td {
+.table th, .table td {
   padding: 8px 12px; /* Increase horizontal padding for spacing */
   text-align: left;
   vertical-align: middle;
   background: #ffffff;
-  color: #000000;
+  color: #333333;
 }
 
 .data-table th {

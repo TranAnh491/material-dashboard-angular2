@@ -11,10 +11,7 @@ html, body {
   background: #ffffff !important;
 }
 
-.main-content {
-  background-color: #ffffff !important;
-  background: #ffffff !important;
-}
+/* Removed global .main-content override to prevent conflicts with component-specific styles */
 
 .wrapper {
   background-color: #ffffff !important;

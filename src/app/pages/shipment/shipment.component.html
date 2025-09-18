@@ -1,79 +1,100 @@
-<!-- Shipment - Black & White Interface -->
+<!-- Shipment - Modern Interface -->
 <div class="main-content">
-  <div class="content-container">
-    
-    <!-- Header -->
-    <div class="header-section">
-      <h2 class="page-title">
-        <i class="material-icons">local_shipping</i>
-        Shipment
-      </h2>
-    </div>
-    
-    <!-- Info Boxes -->
-    <div class="info-boxes">
-      <div class="info-box">
-        <div class="box-number">1</div>
-        <div class="box-content">Box 1</div>
-      </div>
-      <div class="info-box">
-        <div class="box-number">2</div>
-        <div class="box-content">Box 2</div>
-      </div>
-      <div class="info-box">
-        <div class="box-number">3</div>
-        <div class="box-content">Box 3</div>
-      </div>
-      <div class="info-box">
-        <div class="box-number">4</div>
-        <div class="box-content">Box 4</div>
-      </div>
-      <div class="info-box">
-        <div class="box-number">5</div>
-        <div class="box-content">Box 5</div>
-      </div>
-      <div class="info-box">
-        <div class="box-number">6</div>
-        <div class="box-content">Box 6</div>
-      </div>
-    </div>
-    
-    <!-- Action Controls -->
-    <div class="action-section">
-      <div class="action-controls">
-        <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Tải Template Shipment
-            </a>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <!-- Summary Cards -->
+          <div class="summary-row">
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="summary-card">
+                <div class="card-header">
+                  <div class="card-category">Tổng Shipment</div>
+                  <div class="card-title">{{getTotalShipments()}}</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="summary-card">
+                <div class="card-header">
+                  <div class="card-category">Đã soạn xong</div>
+                  <div class="card-title">{{getCompletedShipments()}}</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="summary-card">
+                <div class="card-header">
+                  <div class="card-category">Thiếu Hàng</div>
+                  <div class="card-title">{{getMissingItemsShipments()}}</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="summary-card">
+                <div class="card-header">
+                  <div class="card-category">Đang soạn</div>
+                  <div class="card-title">{{getInProgressShipments()}}</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="summary-card">
+                <div class="card-header">
+                  <div class="card-category">Chờ soạn</div>
+                  <div class="card-title">{{getPendingShipments()}}</div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        
-        <button class="custom-btn" (click)="showTimeRangeDialog = true">
-          <i class="material-icons">schedule</i>
-          Chọn thời gian
-        </button>
-        
-        <button class="custom-btn btn-primary" (click)="showAddShipmentDialog = true">
-          <i class="material-icons">add</i>
-          Add Shipment
-        </button>
-        
-        <button class="custom-btn" (click)="importFile()">
-          <i class="material-icons">file_upload</i>
-          Import file
-        </button>
-      </div>
-    </div>
+          
+          <!-- More Button Row -->
+          <div class="more-button-row">
+            <div class="col-12">
+              <div class="more-button-container">
+                <div class="dropdown" (click)="$event.stopPropagation()">
+                  <button class="btn btn-outline-secondary dropdown-toggle" type="button" (click)="toggleDropdown()">
+                    <i class="material-icons">more_vert</i>
+                    More
+                  </button>
+                  <div class="dropdown-menu" [class.show]="isDropdownOpen">
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); closeDropdown(); $event.preventDefault()">
+                      <i class="material-icons">download</i>
+                      Tải Template Shipment
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="showTimeRangeDialog = true; closeDropdown()">
+                      <i class="material-icons">schedule</i>
+                      Chọn thời gian
+                    </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="showAddShipmentDialog = true; closeDropdown()">
+                      <i class="material-icons">add</i>
+                      Add Shipment
+                    </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); closeDropdown()">
+                      <i class="material-icons">file_upload</i>
+                      Import file
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
+                      <i class="material-icons">file_download</i>
+                      Export to Excel
+                    </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllShipments(); closeDropdown()" *ngIf="filteredShipments.length > 0">
+                      <i class="material-icons">delete_forever</i>
+                      Xóa Tất Cả
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card-body">
     
-    <!-- Data Table -->
-    <div class="table-section">
-      <table class="data-table">
+            <!-- Data Table -->
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
                 <thead>
           <tr>
             <th class="row-header">No</th>
@@ -191,21 +212,21 @@
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.requestDate)"
                      (ngModelChange)="updateDateField(shipment, 'requestDate', $event)"
-                     placeholder="CS Date">
+                     placeholder="Chọn CS Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.fullDate)"
                      (ngModelChange)="updateDateField(shipment, 'fullDate', $event)"
-                     placeholder="Full Date">
+                     placeholder="Chọn Full Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.actualShipDate)"
                      (ngModelChange)="updateDateField(shipment, 'actualShipDate', $event)"
-                     placeholder="Dispatch Date">
+                     placeholder="Chọn Dispatch Date">
             </td>
             <td class="number-cell">
               <input type="number"

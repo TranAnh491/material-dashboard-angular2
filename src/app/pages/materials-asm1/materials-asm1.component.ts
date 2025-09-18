@@ -1043,6 +1043,114 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return location && location.toUpperCase() === 'IQC';
   }
 
+  // Convert old location format to new format
+  // TR12 -> T1.2(R), TR11 -> T1.1(R), etc.
+  convertLocationFormat(location: string): string {
+    if (!location) return location;
+    
+    const loc = location.trim().toUpperCase();
+    
+    // Pattern matching for old format: [Letter][Letter][Number]
+    const oldFormatPattern = /^([A-Z])([A-Z])(\d+)$/;
+    const match = loc.match(oldFormatPattern);
+    
+    if (match) {
+      const [, firstLetter, secondLetter, number] = match;
+      
+      // Convert based on the pattern
+      if (secondLetter === 'R') {
+        // TR12 -> T1.2(R)
+        const rowLetter = firstLetter;
+        const numStr = number.toString();
+        if (numStr.length >= 2) {
+          const firstDigit = numStr[0];
+          const remainingDigits = numStr.substring(1);
+          return `${rowLetter}${firstDigit}.${remainingDigits}(R)`;
+        } else {
+          return `${rowLetter}${number}(R)`;
+        }
+      } else if (secondLetter === 'L') {
+        // TL12 -> T1.2(L)
+        const rowLetter = firstLetter;
+        const numStr = number.toString();
+        if (numStr.length >= 2) {
+          const firstDigit = numStr[0];
+          const remainingDigits = numStr.substring(1);
+          return `${rowLetter}${firstDigit}.${remainingDigits}(L)`;
+        } else {
+          return `${rowLetter}${number}(L)`;
+        }
+      }
+    }
+    
+    // Special cases for Q and A12
+    if (loc === 'Q1') return 'Q1(L)';
+    if (loc === 'Q2') return 'Q2(L)';
+    if (loc === 'Q3') return 'Q3(L)';
+    if (loc === 'A12') return 'NVL-A12';
+    
+    // If no pattern matches, return original
+    return location;
+  }
+
+  // Update all locations in inventory to new format
+  async updateAllLocationsToNewFormat(): Promise<void> {
+    if (!confirm('Bạn có chắc muốn cập nhật tất cả vị trí sang format mới?\n\nVí dụ: TR12 -> T1.2(R), TL12 -> T1.2(L)\n\nHành động này không thể hoàn tác!')) {
+      return;
+    }
+
+    try {
+      this.isLoading = true;
+      console.log('🔄 Bắt đầu cập nhật vị trí sang format mới...');
+
+      // Get all inventory materials
+      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert('Không tìm thấy dữ liệu inventory để cập nhật');
+        return;
+      }
+
+      const batch = this.firestore.firestore.batch();
+      let updateCount = 0;
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const oldLocation = data.location;
+        const newLocation = this.convertLocationFormat(oldLocation);
+
+        if (oldLocation !== newLocation) {
+          console.log(`📍 Cập nhật: ${oldLocation} -> ${newLocation}`);
+          batch.update(doc.ref, { 
+            location: newLocation,
+            updatedAt: new Date()
+          });
+          updateCount++;
+        }
+      });
+
+      if (updateCount > 0) {
+        await batch.commit();
+        console.log(`✅ Đã cập nhật ${updateCount} vị trí sang format mới`);
+        alert(`✅ Đã cập nhật thành công ${updateCount} vị trí sang format mới!\n\nVí dụ: TR12 -> T1.2(R), TL12 -> T1.2(L)`);
+        
+        // Refresh data
+        this.loadInventoryFromFirebase();
+      } else {
+        console.log('ℹ️ Không có vị trí nào cần cập nhật');
+        alert('Không có vị trí nào cần cập nhật sang format mới');
+      }
+
+    } catch (error) {
+      console.error('❌ Lỗi khi cập nhật vị trí:', error);
+      alert('❌ Lỗi khi cập nhật vị trí. Vui lòng thử lại.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
   // Mark duplicates within ASM1
   markDuplicates(): void {
     const poMap = new Map<string, InventoryMaterial[]>();

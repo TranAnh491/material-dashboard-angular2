@@ -23,9 +23,22 @@
                 Export to Excel
               </a>
               <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="importLocations()">
+                <i class="material-icons">file_upload</i>
+                Import Vị Trí
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate()">
+                <i class="material-icons">description</i>
+                Template Vị Trí
+              </a>
+              <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
                 <i class="material-icons">add_circle</i>
                 Initialize Sample Data
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllLocations()" *ngIf="filteredItems.length > 0">
+                <i class="material-icons">delete_forever</i>
+                Xóa Tất Cả
               </a>
             </div>
           </div>
@@ -141,6 +154,7 @@
             <th>Vị Trí</th>
             <th>QR Code</th>
             <th>Thao Tác</th>
+            <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
@@ -205,12 +219,6 @@
                         title="Sửa {{item.viTri}}">
                   <i class="material-icons">edit</i>
                 </button>
-                <button class="delete-btn" 
-                        (click)="deleteLocationItem(item)"
-                        title="Xóa {{item.viTri}}"
-                        *ngIf="canDelete">
-                  <i class="material-icons">delete</i>
-                </button>
               </ng-container>
               <ng-template #editActions>
                 <button class="save-btn" 
@@ -224,6 +232,16 @@
                   <i class="material-icons">cancel</i>
                 </button>
               </ng-template>
+            </td>
+            
+            <!-- Delete Column -->
+            <td class="delete-cell">
+              <button class="delete-btn" 
+                      (click)="deleteLocationItem(item)"
+                      title="Xóa {{item.viTri}}">
+                <i class="material-icons">delete</i>
+                <span class="delete-text">X</span>
+              </button>
             </td>
           </tr>
         </tbody>

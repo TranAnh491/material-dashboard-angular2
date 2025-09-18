@@ -349,7 +349,7 @@
   
   th, td {
     padding: 8px 10px;
-    text-align: left;
+    text-align: center;
     border-bottom: 2px solid #000000;
     border-right: 2px solid #000000;
   }
@@ -387,6 +387,7 @@
 }
 
 .vitri-cell {
+  text-align: center;
   font-weight: normal;
   font-size: 14px; // Increased from 11px by 30%
   min-width: 100px;
@@ -423,9 +424,9 @@
 
 .actions-cell {
   text-align: center;
-  min-width: 120px;
+  min-width: 80px;
   
-  .edit-btn, .delete-btn, .save-btn, .cancel-btn {
+  .edit-btn, .save-btn, .cancel-btn {
     padding: 4px 6px;
     border-radius: 2px;
     cursor: pointer;
@@ -441,16 +442,6 @@
   }
   
   .edit-btn {
-    background: #ffffff;
-    color: #000000;
-    
-    &:hover {
-      background: #f8f9fa;
-      border-color: #000000;
-    }
-  }
-  
-  .delete-btn {
     background: #ffffff;
     color: #000000;
     
@@ -477,6 +468,68 @@
     &:hover {
       background: #f8f9fa;
       border-color: #000000;
+    }
+  }
+}
+
+.delete-cell {
+  text-align: center;
+  min-width: 60px;
+  
+  .delete-btn {
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: normal;
+    transition: all 0.2s;
+    margin: 0 2px;
+    border: 2px solid #dc3545;
+    background: #ffffff;
+    color: #dc3545;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    
+    &:hover {
+      background: #dc3545;
+      color: #ffffff;
+      border-color: #dc3545;
+      transform: scale(1.05);
+    }
+    
+    &:active {
+      transform: scale(0.95);
+    }
+    
+    i {
+      font-size: 16px;
+      font-family: 'Material Icons';
+      font-weight: normal;
+      font-style: normal;
+      display: inline-block;
+      line-height: 1;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    .delete-text {
+      font-size: 14px;
+      font-weight: bold;
+      display: none; // Hide by default, show only if icon fails
+    }
+    
+    // Show text if Material Icons not available
+    &:not(:has(i.material-icons)) .delete-text {
+      display: inline;
     }
   }
 }

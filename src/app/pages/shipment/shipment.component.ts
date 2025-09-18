@@ -19,9 +19,9 @@ export interface ShipmentItem {
   push: boolean;
   pushNo: string; // Thêm PushNo - format: 001, 002, 003...
   status: string;
-  requestDate: Date;
-  fullDate: Date;
-  actualShipDate: Date;
+  requestDate: Date | null; // Cho phép null
+  fullDate: Date | null; // Cho phép null
+  actualShipDate: Date | null; // Cho phép null
   dayPre: number;
   notes: string;
   createdAt?: Date;
@@ -31,7 +31,7 @@ export interface ShipmentItem {
 @Component({
   selector: 'app-shipment',
   templateUrl: './shipment.component.html',
-  styleUrls: ['./shipment.component.scss']
+  styleUrls: ['./shipment.component.css']
 })
 export class ShipmentComponent implements OnInit, OnDestroy {
   shipments: ShipmentItem[] = [];
@@ -44,6 +44,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   
   // Add shipment dialog
   showAddShipmentDialog: boolean = false;
+  
+  // Dropdown state
+  isDropdownOpen: boolean = false;
+  
   newShipment: ShipmentItem = {
     shipmentCode: '',
     materialCode: '',
@@ -99,9 +103,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             push: data.push === 'true' || data.push === true || data.push === 1,
             pushNo: data.pushNo || '000', // Default PushNo if not exists
             inventory: data.inventory || 0, // Default inventory if not exists
-            requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : new Date(),
-            fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : new Date(),
-            actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : new Date()
+            requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
+            fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
+            actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : null
           };
         });
         
@@ -109,6 +113,45 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         this.applyFilters();
         console.log('Loaded shipments from Firebase:', this.shipments.length);
       });
+  }
+
+  // Toggle dropdown
+  toggleDropdown(): void {
+    this.isDropdownOpen = !this.isDropdownOpen;
+  }
+
+  // Close dropdown when clicking outside
+  closeDropdown(): void {
+    this.isDropdownOpen = false;
+  }
+
+  // Get total shipments count
+  getTotalShipments(): number {
+    return this.filteredShipments.length;
+  }
+
+  // Get completed shipments count
+  getCompletedShipments(): number {
+    return this.filteredShipments.filter(s => s.status === 'Đã xong').length;
+  }
+
+  // Get missing items shipments count
+  getMissingItemsShipments(): number {
+    return this.filteredShipments.filter(s => {
+      // Check if inventory is less than quantity needed
+      const inventory = this.getInventory(s.materialCode);
+      return inventory < s.quantity;
+    }).length;
+  }
+
+  // Get in progress shipments count
+  getInProgressShipments(): number {
+    return this.filteredShipments.filter(s => s.status === 'Đang soạn').length;
+  }
+
+  // Get pending shipments count
+  getPendingShipments(): number {
+    return this.filteredShipments.filter(s => s.status === 'Chờ soạn').length;
   }
 
   // Apply filters
@@ -213,9 +256,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       push: false,
       pushNo: '000',
       status: 'Chờ soạn',
-      requestDate: new Date(),
-      fullDate: new Date(),
-      actualShipDate: new Date(),
+      requestDate: null, // Khởi tạo null thay vì new Date()
+      fullDate: null, // Khởi tạo null thay vì new Date()
+      actualShipDate: null, // Khởi tạo null thay vì new Date()
       dayPre: 0,
       notes: ''
     };
@@ -396,8 +439,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Format date for input field (YYYY-MM-DD)
   formatDateForInput(date: Date): string {
-    if (!date) return '';
+    if (!date || date.getTime() === 0) return '';
     const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -409,7 +453,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (dateString) {
       (shipment as any)[field] = new Date(dateString);
     } else {
-      (shipment as any)[field] = new Date();
+      // Set to null instead of current date when empty
+      (shipment as any)[field] = null;
     }
     shipment.updatedAt = new Date();
     this.updateShipmentInFirebase(shipment);
@@ -649,5 +694,72 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
     XLSX.writeFile(wb, 'Shipment_Template.xlsx');
+  }
+
+  // Export to Excel
+  exportToExcel(): void {
+    try {
+      const exportData = this.filteredShipments.map(shipment => ({
+        'No': this.filteredShipments.indexOf(shipment) + 1,
+        'Shipment': shipment.shipmentCode,
+        'Mã TP': shipment.materialCode,
+        'Mã Khách': shipment.customerCode,
+        'Lượng Xuất': shipment.quantity,
+        'PO Ship': shipment.poShip,
+        'Carton': shipment.carton,
+        'Odd': shipment.odd,
+        'Tồn kho': shipment.inventory || 0,
+        'FWD': shipment.shipMethod,
+        'Push': shipment.push ? 'Yes' : 'No',
+        'PushNo': shipment.pushNo,
+        'Status': shipment.status,
+        'CS Date': this.formatDateForExport(shipment.requestDate),
+        'Full Date': this.formatDateForExport(shipment.fullDate),
+        'Dispatch Date': this.formatDateForExport(shipment.actualShipDate),
+        'Ngày chuẩn bị': shipment.dayPre,
+        'Ghi chú': shipment.notes
+      }));
+
+      const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Shipment Data');
+      
+      XLSX.writeFile(wb, `Shipment_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('Lỗi khi export dữ liệu. Vui lòng thử lại.');
+    }
+  }
+
+  // Format date for export
+  private formatDateForExport(date: Date): string {
+    if (!date) return '';
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  // Delete all shipments
+  deleteAllShipments(): void {
+    if (confirm('Bạn có chắc muốn xóa TẤT CẢ shipments? Hành động này không thể hoàn tác!')) {
+      this.firestore.collection('shipments').get().subscribe(snapshot => {
+        const batch = this.firestore.firestore.batch();
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        batch.commit().then(() => {
+          console.log('All shipments deleted');
+          this.shipments = [];
+          this.filteredShipments = [];
+          alert('Đã xóa tất cả shipments');
+        }).catch(error => {
+          console.error('Error deleting all shipments:', error);
+          alert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
+        });
+      });
+    }
   }
 } 
