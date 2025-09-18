@@ -479,6 +479,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Process imported file
+  // IMPORTANT: This function ADDS new data to existing data, does NOT replace/delete existing data
   private processImportFile(file: File) {
     const reader = new FileReader();
     reader.onload = (e: any) => {
@@ -490,6 +491,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         console.log('📋 Imported data:', jsonData);
+        console.log('ℹ️ IMPORT MODE: Adding new data to existing data (not replacing)');
         
         // Skip header row (dòng 1) and process all data from row 2 onwards
         const locations = [];
@@ -553,18 +555,20 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Save imported locations to database
+  // IMPORTANT: This function ADDS new locations to existing data, does NOT replace existing data
   private saveImportedLocations(locations: Omit<LocationItem, 'id'>[]) {
     const batch = this.firestore.firestore.batch();
     
+    // Add each new location as a new document (preserves existing data)
     locations.forEach(location => {
       const docRef = this.firestore.collection('locations').doc().ref;
-      batch.set(docRef, location);
+      batch.set(docRef, location); // This ADDS new data, doesn't replace
     });
     
     batch.commit().then(() => {
-      console.log(`Imported ${locations.length} locations`);
+      console.log(`✅ Imported ${locations.length} new locations (added to existing data)`);
       this.refreshData();
-      alert(`Đã import thành công ${locations.length} vị trí`);
+      alert(`✅ Đã import thành công ${locations.length} vị trí mới!\n\n📝 Lưu ý: Dữ liệu mới được THÊM VÀO dữ liệu cũ, không thay thế dữ liệu cũ.`);
     }).catch(error => {
       console.error('Error importing locations:', error);
       alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
