@@ -363,6 +363,13 @@
             </div>
           </div>
           <div class="scanner-controls" *ngIf="isScannerReady">
+            <!-- Manual Scan Button -->
+            <button class="scanner-btn scan-btn" 
+                    (click)="triggerMaterialScan()" 
+                    [disabled]="!isScanButtonEnabled">
+              <i class="material-icons">qr_code_scanner</i>
+              <span>{{ scanButtonText }}</span>
+            </button>
             <button class="scanner-btn stop-btn" (click)="stopScanning()">
               <i class="material-icons">stop</i>
               <span>Dừng</span>
@@ -436,6 +443,13 @@
             </div>
           </div>
           <div class="scanner-controls" *ngIf="isScannerReady">
+            <!-- Manual Scan Button -->
+            <button class="scanner-btn scan-btn" 
+                    (click)="triggerLocationScan()" 
+                    [disabled]="!isScanButtonEnabled">
+              <i class="material-icons">qr_code_scanner</i>
+              <span>{{ scanButtonText }}</span>
+            </button>
             <button class="scanner-btn stop-btn" (click)="stopScanning()">
               <i class="material-icons">stop</i>
               <span>Dừng</span>

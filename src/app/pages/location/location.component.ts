@@ -81,6 +81,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   scannerState: 'idle' | 'starting' | 'scanning' | 'error' = 'idle';
   errorMessage = '';
   
+  // Manual scan control
+  isManualScanMode = true; // Enable manual scan mode for mobile
+  scanButtonText = 'Quét mã hàng';
+  isScanButtonEnabled = true;
+  materialScanResult$: any = null;
+  locationScanResult$: any = null;
+  
   // Success notification
   showSuccessNotification = false;
   successMessage = '';
@@ -790,6 +797,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.currentLocation = '';
     this.foundRM1Item = null;
     
+    // Reset scan states
+    this.scanButtonText = 'Quét mã hàng';
+    this.isScanButtonEnabled = true;
+    this.materialScanResult$ = null;
+    this.locationScanResult$ = null;
+    
     // Stop scanner if active
     this.stopScanning();
   }
@@ -1351,28 +1364,37 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isScanning = true;
       this.errorMessage = '';
       this.scannerState = 'starting';
+      this.scanButtonText = 'Đang khởi tạo...';
+      this.isScanButtonEnabled = false;
       
       // Wait for DOM element to be available
       await this.waitForElement('material-scanner-container');
       
-      // Start scanner
+      // Start scanner but don't start decoding yet in manual mode
       const scanResult$ = await this.qrScannerService.startScanning({
         facingMode: 'environment'
       }, document.getElementById('material-scanner-container'));
       
       this.scannerState = 'scanning';
+      this.scanButtonText = 'Quét mã hàng';
+      this.isScanButtonEnabled = true;
       
-      // Listen for scan results
-      scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
-        next: (result: QRScanResult) => {
-          console.log('📱 Material QR Code scanned:', result.text);
-          this.onMaterialScanSuccess(result.text);
-        },
-        error: (error) => {
-          console.error('❌ Material scan error:', error);
-          this.onScanError(error);
-        }
-      });
+      // Store the scan result observable for manual triggering
+      this.materialScanResult$ = scanResult$;
+      
+      // Listen for scan results only when manually triggered
+      if (!this.isManualScanMode) {
+        scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+          next: (result: QRScanResult) => {
+            console.log('📱 Material QR Code scanned:', result.text);
+            this.onMaterialScanSuccess(result.text);
+          },
+          error: (error) => {
+            console.error('❌ Material scan error:', error);
+            this.onScanError(error);
+          }
+        });
+      }
       
     } catch (error) {
       console.error('❌ Error starting material scanner:', error);
@@ -1386,28 +1408,37 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isScanning = true;
       this.errorMessage = '';
       this.scannerState = 'starting';
+      this.scanButtonText = 'Đang khởi tạo...';
+      this.isScanButtonEnabled = false;
       
       // Wait for DOM element to be available
       await this.waitForElement('location-scanner-container');
       
-      // Start scanner
+      // Start scanner but don't start decoding yet in manual mode
       const scanResult$ = await this.qrScannerService.startScanning({
         facingMode: 'environment'
       }, document.getElementById('location-scanner-container'));
       
       this.scannerState = 'scanning';
+      this.scanButtonText = 'Quét vị trí';
+      this.isScanButtonEnabled = true;
       
-      // Listen for scan results
-      scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
-        next: (result: QRScanResult) => {
-          console.log('📱 Location QR Code scanned:', result.text);
-          this.onLocationScanSuccess(result.text);
-        },
-        error: (error) => {
-          console.error('❌ Location scan error:', error);
-          this.onScanError(error);
-        }
-      });
+      // Store the scan result observable for manual triggering
+      this.locationScanResult$ = scanResult$;
+      
+      // Listen for scan results only when manually triggered
+      if (!this.isManualScanMode) {
+        scanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+          next: (result: QRScanResult) => {
+            console.log('📱 Location QR Code scanned:', result.text);
+            this.onLocationScanSuccess(result.text);
+          },
+          error: (error) => {
+            console.error('❌ Location scan error:', error);
+            this.onScanError(error);
+          }
+        });
+      }
       
     } catch (error) {
       console.error('❌ Error starting location scanner:', error);
@@ -1419,6 +1450,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('✅ Material scan successful:', scannedText);
     this.scannedMaterialCode = scannedText;
     this.processMaterialCode();
+    
+    // Reset scan button for next step
+    this.scanButtonText = 'Quét vị trí';
+    this.isScanButtonEnabled = true;
   }
 
   onLocationScanSuccess(scannedText: string): void {
@@ -1438,7 +1473,60 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('🛑 Stopping QR scanner...');
     this.isScanning = false;
     this.scannerState = 'idle';
+    this.scanButtonText = 'Quét mã hàng';
+    this.isScanButtonEnabled = true;
     this.qrScannerService.stopScanning();
+  }
+
+  // Manual scan trigger methods
+  triggerMaterialScan(): void {
+    if (!this.materialScanResult$ || !this.isScanButtonEnabled) {
+      return;
+    }
+
+    console.log('🎯 Triggering manual material scan...');
+    this.scanButtonText = 'Đang quét...';
+    this.isScanButtonEnabled = false;
+
+    this.materialScanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: (result: QRScanResult) => {
+        console.log('📱 Material QR Code scanned:', result.text);
+        this.onMaterialScanSuccess(result.text);
+        this.scanButtonText = 'Quét mã hàng';
+        this.isScanButtonEnabled = true;
+      },
+      error: (error) => {
+        console.error('❌ Material scan error:', error);
+        this.onScanError(error);
+        this.scanButtonText = 'Quét mã hàng';
+        this.isScanButtonEnabled = true;
+      }
+    });
+  }
+
+  triggerLocationScan(): void {
+    if (!this.locationScanResult$ || !this.isScanButtonEnabled) {
+      return;
+    }
+
+    console.log('🎯 Triggering manual location scan...');
+    this.scanButtonText = 'Đang quét...';
+    this.isScanButtonEnabled = false;
+
+    this.locationScanResult$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: (result: QRScanResult) => {
+        console.log('📱 Location QR Code scanned:', result.text);
+        this.onLocationScanSuccess(result.text);
+        this.scanButtonText = 'Quét vị trí';
+        this.isScanButtonEnabled = true;
+      },
+      error: (error) => {
+        console.error('❌ Location scan error:', error);
+        this.onScanError(error);
+        this.scanButtonText = 'Quét vị trí';
+        this.isScanButtonEnabled = true;
+      }
+    });
   }
 
   // Helper method to wait for DOM element

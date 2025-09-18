@@ -1066,9 +1066,36 @@
       transition: all 0.3s ease;
       min-width: 80px;
       
-      &:hover {
+      &:hover:not(:disabled) {
         background: #f8f9fa;
         transform: translateY(-2px);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        background: #f8f9fa;
+        transform: none;
+      }
+      
+      &.scan-btn {
+        background: #28a745;
+        border-color: #28a745;
+        color: white;
+        
+        i, span {
+          color: white;
+        }
+        
+        &:hover:not(:disabled) {
+          background: #218838;
+          border-color: #1e7e34;
+        }
+        
+        &:disabled {
+          background: #6c757d;
+          border-color: #6c757d;
+        }
       }
       
       &.stop-btn {
