@@ -5,7 +5,8 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 
 interface ScheduleItem {
-  batch?: string; // Batch ID để theo dõi các mã hàng import cùng lúc
+  importDate?: Date; // Import Date để theo dõi các mã hàng import cùng lúc
+  batch?: string; // Batch ID để theo dõi các lần import (giữ lại cho backward compatibility)
   nam?: string;
   thang?: string;
   stt?: string;
@@ -250,7 +251,7 @@ export class PrintLabelComponent implements OnInit {
     return `${day}/${month}/${year}`;
   }
 
-  // Generate batch ID dựa trên số lần import (tăng dần mỗi lần bấm import)
+  // Generate import date ID dựa trên số lần import (tăng dần mỗi lần bấm import)
   private async generateBatchId(fileContent: any[]): Promise<string> {
     try {
       // Lấy batch number cao nhất từ tất cả documents

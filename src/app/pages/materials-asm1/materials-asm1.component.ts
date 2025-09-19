@@ -180,6 +180,124 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
+  // Download inventory stock data from Firebase as Excel file
+  async loadInventoryStockFromFirebase(): Promise<void> {
+    console.log('📦 Downloading ASM1 inventory stock from Firebase as Excel...');
+    this.isLoading = true;
+    
+    try {
+      // Get all inventory materials from Firebase
+      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('ℹ️ No inventory stock data found in Firebase');
+        alert('Không tìm thấy dữ liệu tồn kho trong Firebase');
+        this.isLoading = false;
+        return;
+      }
+      
+      console.log(`📊 Found ${snapshot.docs.length} inventory records in Firebase`);
+      
+      const inventoryData: any[] = [];
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        
+        // Create Excel row with all Firebase fields
+        const excelRow = {
+          'STT': inventoryData.length + 1,
+          'ID': doc.id,
+          'Factory': data.factory || 'ASM1',
+          'Mã hàng': data.materialCode || '',
+          'Tên hàng': data.materialName || '',
+          'PO': data.poNumber || '',
+          'Import Date': data.importDate ? data.importDate.toDate().toLocaleDateString('vi-VN') : '',
+          'Received Date': data.receivedDate ? data.receivedDate.toDate().toLocaleDateString('vi-VN') : '',
+          'Tồn đầu': data.openingStock || 0,
+          'Số lượng': data.quantity || 0,
+          'Đã xuất': data.exported || 0,
+          'XT': data.xt || 0,
+          'Tồn kho': (data.openingStock || 0) + (data.quantity || 0) - (data.exported || 0) - (data.xt || 0),
+          'Đơn vị': data.unit || '',
+          'Vị trí': data.location || '',
+          'Loại hình': data.type || '',
+          'Expiry Date': data.expiryDate ? data.expiryDate.toDate().toLocaleDateString('vi-VN') : '',
+          'Quality Check': data.qualityCheck ? 'Yes' : 'No',
+          'Is Received': data.isReceived ? 'Yes' : 'No',
+          'Notes': data.notes || '',
+          'Rolls/Bags': data.rollsOrBags || '',
+          'Supplier': data.supplier || '',
+          'Remarks': data.remarks || '',
+          'Standard Packing': data.standardPacking || 0,
+          'Is Completed': data.isCompleted ? 'Yes' : 'No',
+          'Import Status': data.importStatus || '',
+          'Source': data.source || '',
+          'Updated At': data.updatedAt ? data.updatedAt.toDate().toLocaleString('vi-VN') : '',
+          'Created At': data.createdAt ? data.createdAt.toDate().toLocaleString('vi-VN') : ''
+        };
+        
+        inventoryData.push(excelRow);
+      });
+      
+      // Create Excel file
+      const worksheet = XLSX.utils.json_to_sheet(inventoryData);
+      
+      // Set column widths
+      const columnWidths = [
+        { wch: 5 },   // STT
+        { wch: 20 },  // ID
+        { wch: 8 },   // Factory
+        { wch: 15 },  // Mã hàng
+        { wch: 25 },  // Tên hàng
+        { wch: 15 },  // PO
+        { wch: 12 },  // Import Date
+        { wch: 12 },  // Received Date
+        { wch: 10 },  // Tồn đầu
+        { wch: 10 },  // Số lượng
+        { wch: 10 },  // Đã xuất
+        { wch: 8 },   // XT
+        { wch: 10 },  // Tồn kho
+        { wch: 8 },   // Đơn vị
+        { wch: 12 },  // Vị trí
+        { wch: 12 },  // Loại hình
+        { wch: 12 },  // Expiry Date
+        { wch: 12 },  // Quality Check
+        { wch: 12 },  // Is Received
+        { wch: 20 },  // Notes
+        { wch: 12 },  // Rolls/Bags
+        { wch: 15 },  // Supplier
+        { wch: 20 },  // Remarks
+        { wch: 12 },  // Standard Packing
+        { wch: 12 },  // Is Completed
+        { wch: 12 },  // Import Status
+        { wch: 10 },  // Source
+        { wch: 18 },  // Updated At
+        { wch: 18 }   // Created At
+      ];
+      worksheet['!cols'] = columnWidths;
+      
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM1_Inventory_Firebase');
+      
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0];
+      const fileName = `ASM1_Inventory_Firebase_${currentDate}.xlsx`;
+      
+      XLSX.writeFile(workbook, fileName);
+      
+      console.log(`✅ Successfully exported ${inventoryData.length} inventory items to Excel`);
+      alert(`✅ Đã tải thành công file Excel với ${inventoryData.length} mặt hàng tồn kho từ Firebase!\n\nFile: ${fileName}\nBao gồm tất cả thông tin đang lưu trên Firebase.`);
+      
+    } catch (error) {
+      console.error('❌ Error downloading inventory stock from Firebase:', error);
+      alert('❌ Lỗi khi tải file Excel từ Firebase. Vui lòng thử lại.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
   // Load inventory data from Firebase - ONLY ASM1
   async loadInventoryFromFirebase(): Promise<void> {
     console.log('📦 Loading ASM1 inventory from Firebase...');
@@ -1962,6 +2080,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     if (material.expiryDate) {
       updateData.expiryDate = material.expiryDate;
+    }
+    
+    if (material.importDate) {
+      updateData.importDate = material.importDate;
+    }
+    
+    if (material.batchNumber) {
+      updateData.batchNumber = material.batchNumber;
     }
     
     // Only add standardPacking if it has a valid value

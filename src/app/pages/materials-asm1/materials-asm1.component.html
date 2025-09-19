@@ -94,6 +94,10 @@
               <i class="material-icons">cloud_download</i>
               Load toàn bộ inventory
             </a>
+            <a class="dropdown-item text-primary" href="javascript:void(0)" (click)="loadInventoryStockFromFirebase()">
+              <i class="material-icons">inventory_2</i>
+              Tải tồn kho Firebase
+            </a>
             <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="consolidateAllInventory()">
               <i class="material-icons">merge_type</i>
               Gộp dòng trùng lặp
@@ -331,7 +335,7 @@
         <!-- Card Content -->
         <div class="card-content">
           <div class="info-row">
-            <span class="label">Batch:</span>
+            <span class="label">IMD:</span>
             <span class="value">{{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}</span>
           </div>
           
@@ -436,7 +440,7 @@
 
             <th>Mã hàng</th>
             <th>PO</th>
-                            <th>Batch</th>
+                            <th>IMD</th>
             <th>Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>

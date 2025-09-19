@@ -270,7 +270,7 @@
             <th class="col-date">Ngày xuất</th>
             <th class="col-material">Mã hàng</th>
             <th class="col-po">Số PO</th>
-            <th class="col-batch">Batch</th>
+            <th class="col-batch">IMD</th>
             <th class="col-quantity">Xuất</th>
             <th class="col-employee">Mã nhân viên</th>
             <th class="col-production">Lệnh sản xuất</th>
@@ -295,7 +295,7 @@
               {{material.poNumber}}
             </td>
             <td class="batch-cell readonly-cell">
-              {{material.batchNumber || 'N/A'}}
+              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}
@@ -321,7 +321,7 @@
           <tr>
             <th class="col-material">Mã hàng</th>
             <th class="col-po">Số PO</th>
-            <th class="col-batch">Batch</th>
+            <th class="col-batch">IMD</th>
             <th class="col-quantity">Xuất</th>
             <th class="col-production">Lệnh sản xuất</th>
           </tr>
@@ -335,7 +335,7 @@
               {{material.poNumber}}
             </td>
             <td class="batch-cell readonly-cell">
-              {{material.batchNumber || 'N/A'}}
+              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}

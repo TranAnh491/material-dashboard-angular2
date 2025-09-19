@@ -8,7 +8,7 @@ interface RM1Item {
   location: string;
   quantity: number;
   po: string;
-  batch?: string;
+  importDate?: Date;
   description?: string;
   lastUpdated?: Date;
   factory?: string;
@@ -90,7 +90,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
       const location = row.location || row.warehouseLocation || row.storageLocation;
       const quantity = row.quantity || row.qty || row.stockQty || 0;
       const po = row.po || row.purchaseOrder || row.poNumber || 'N/A';
-      const batch = row.batch || row.batchNumber || '';
+      const importDate = row.importDate ? new Date(row.importDate) : (row.batch ? new Date(row.batch) : undefined);
       const factory = row.factory || 'ASM1';
       
       if (materialCode && location) {
@@ -100,7 +100,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
           location: String(location).trim().toUpperCase(),
           quantity: Number(quantity),
           po: String(po).trim(),
-          batch: String(batch).trim(),
+          importDate: importDate,
           description: row.description || row.itemName || '',
           lastUpdated: row.lastUpdated ? new Date(row.lastUpdated) : new Date(),
           factory: factory
@@ -171,7 +171,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
       item.materialCode.toLowerCase().includes(term) ||
       item.location.toLowerCase().includes(term) ||
       item.po.toLowerCase().includes(term) ||
-      (item.batch && item.batch.toLowerCase().includes(term)) ||
+      (item.importDate && item.importDate.toLocaleDateString('en-GB').split('/').join('').toLowerCase().includes(term)) ||
       (item.description && item.description.toLowerCase().includes(term))
     );
   }
@@ -239,7 +239,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
     const fillData = {
       materialCode: item.materialCode,
       po: item.po,
-      batch: item.batch,
+      importDate: item.importDate,
       location: item.location,
       quantity: item.quantity
     };

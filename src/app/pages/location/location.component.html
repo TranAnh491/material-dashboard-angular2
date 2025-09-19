@@ -339,7 +339,17 @@
             <div id="material-scanner-container" class="scanner-video-container">
               <!-- QR Scanner will be injected here -->
             </div>
-            <div class="scanner-overlay" *ngIf="isScannerReady">
+            
+            <!-- Scanner Ready Status -->
+            <div class="scanner-ready-overlay" *ngIf="isScannerReady && !isActivelyScanningMaterial && !materialScanCompleted">
+              <div class="ready-content">
+                <i class="material-icons">qr_code_scanner</i>
+                <p>Camera sẵn sàng</p>
+              </div>
+            </div>
+            
+            <!-- Actively Scanning -->
+            <div class="scanner-overlay" *ngIf="isActivelyScanningMaterial">
               <div class="scan-frame">
                 <div class="scan-corners">
                   <div class="corner top-left"></div>
@@ -347,11 +357,13 @@
                   <div class="corner bottom-left"></div>
                   <div class="corner bottom-right"></div>
                 </div>
+                <p class="scan-instruction">Đưa mã QR/Barcode vào khung</p>
               </div>
             </div>
+            
             <div class="scanner-loading" *ngIf="scannerState === 'starting'">
               <i class="material-icons">camera_alt</i>
-              <p>Đang khởi tạo scanner...</p>
+              <p>Đang khởi tạo camera...</p>
             </div>
             <div class="scanner-error" *ngIf="scannerState === 'error'">
               <i class="material-icons">error</i>
@@ -362,17 +374,21 @@
               </button>
             </div>
           </div>
+          
+          <!-- Scanner Controls -->
           <div class="scanner-controls" *ngIf="isScannerReady">
-            <!-- Manual Scan Button -->
-            <button class="scanner-btn scan-btn" 
-                    (click)="triggerMaterialScan()" 
-                    [disabled]="!isScanButtonEnabled">
-              <i class="material-icons">qr_code_scanner</i>
-              <span>{{ scanButtonText }}</span>
+            <button class="scanner-btn scan-btn" (click)="startMaterialScan()" 
+                    *ngIf="!isActivelyScanningMaterial && !materialScanCompleted">
+              <i class="material-icons">qr_code</i>
+              <span>Scan mã hàng</span>
             </button>
-            <button class="scanner-btn stop-btn" (click)="stopScanning()">
+            <button class="scanner-btn stop-btn" (click)="stopScanning()" *ngIf="isActivelyScanningMaterial">
               <i class="material-icons">stop</i>
-              <span>Dừng</span>
+              <span>Dừng Scan</span>
+            </button>
+            <button class="scanner-btn close-btn" (click)="closeChangeLocationModal()">
+              <i class="material-icons">close</i>
+              <span>Đóng</span>
             </button>
           </div>
         </div>
@@ -391,21 +407,41 @@
           </button>
         </div>
         
-        <!-- Scan Info -->
-        <div class="scan-info" *ngIf="scannedMaterialCode">
-          <p>Mã gốc: <strong>{{ scannedMaterialCode }}</strong></p>
-          <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
-            <p>Mã hàng: <strong>{{ foundRM1Item.parsedData.materialCode }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.poNumber">PO: <strong>{{ foundRM1Item.parsedData.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.batch">Batch: <strong>{{ foundRM1Item.parsedData.batch }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.quantity">Số lượng: <strong>{{ foundRM1Item.parsedData.quantity }}</strong></p>
+        <!-- Material Scan Results -->
+        <div class="material-scan-results" *ngIf="materialScanCompleted && foundRM1Item">
+          <div class="success-header">
+            <i class="material-icons success-icon">check_circle</i>
+            <h5>✅ Đã quét thành công mã hàng!</h5>
           </div>
-          <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
-            <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
-            <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item?.batchNumber">Batch: <strong>{{ foundRM1Item.batchNumber }}</strong></p>
+          
+          <div class="scanned-info-card">
+            <h6>📋 Thông tin đã quét:</h6>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">Mã hàng:</span>
+                <span class="value">{{ foundRM1Item.parsedData?.materialCode || foundRM1Item.materialCode }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">PO:</span>
+                <span class="value">{{ foundRM1Item.parsedData?.poNumber || foundRM1Item.poNumber || 'N/A' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">IMD:</span>
+                <span class="value">{{ foundRM1Item.parsedData?.imd || 'N/A' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Vị trí hiện tại:</span>
+                <span class="value location-highlight">{{ currentLocation }}</span>
+              </div>
+            </div>
           </div>
-          <p *ngIf="currentLocation">Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
+          
+          <div class="next-action">
+            <button class="next-step-btn" (click)="proceedToLocationScan()">
+              <i class="material-icons">location_on</i>
+              Scan vị trí mới
+            </button>
+          </div>
         </div>
       </div>
       
@@ -419,7 +455,17 @@
             <div id="location-scanner-container" class="scanner-video-container">
               <!-- QR Scanner will be injected here -->
             </div>
-            <div class="scanner-overlay" *ngIf="isScannerReady">
+            
+            <!-- Scanner Ready Status -->
+            <div class="scanner-ready-overlay" *ngIf="isScannerReady && !isActivelyScanningLocation && !locationScanCompleted">
+              <div class="ready-content">
+                <i class="material-icons">place</i>
+                <p>Camera sẵn sàng</p>
+              </div>
+            </div>
+            
+            <!-- Actively Scanning Location -->
+            <div class="scanner-overlay" *ngIf="isActivelyScanningLocation">
               <div class="scan-frame">
                 <div class="scan-corners">
                   <div class="corner top-left"></div>
@@ -427,11 +473,13 @@
                   <div class="corner bottom-left"></div>
                   <div class="corner bottom-right"></div>
                 </div>
+                <p class="scan-instruction">Đưa mã vị trí vào khung</p>
               </div>
             </div>
+            
             <div class="scanner-loading" *ngIf="scannerState === 'starting'">
               <i class="material-icons">camera_alt</i>
-              <p>Đang khởi tạo scanner...</p>
+              <p>Đang khởi tạo camera...</p>
             </div>
             <div class="scanner-error" *ngIf="scannerState === 'error'">
               <i class="material-icons">error</i>
@@ -442,17 +490,21 @@
               </button>
             </div>
           </div>
+          
+          <!-- Scanner Controls -->
           <div class="scanner-controls" *ngIf="isScannerReady">
-            <!-- Manual Scan Button -->
-            <button class="scanner-btn scan-btn" 
-                    (click)="triggerLocationScan()" 
-                    [disabled]="!isScanButtonEnabled">
+            <button class="scanner-btn scan-btn" (click)="startLocationScan()" 
+                    *ngIf="!isActivelyScanningLocation && !locationScanCompleted">
               <i class="material-icons">qr_code_scanner</i>
-              <span>{{ scanButtonText }}</span>
+              <span>Scan vị trí</span>
             </button>
-            <button class="scanner-btn stop-btn" (click)="stopScanning()">
+            <button class="scanner-btn stop-btn" (click)="stopLocationScan()" *ngIf="isActivelyScanningLocation">
               <i class="material-icons">stop</i>
-              <span>Dừng</span>
+              <span>Dừng Scan</span>
+            </button>
+            <button class="scanner-btn back-btn" (click)="goBackToMaterialScan()">
+              <i class="material-icons">arrow_back</i>
+              <span>Quay lại</span>
             </button>
           </div>
         </div>
@@ -470,7 +522,7 @@
                   (click)="processNewLocation()"
                   [disabled]="!canProcessNewLocation"
                   [class.disabled]="!canProcessNewLocation"
-                  title="Cần có đủ Mã hàng, PO, và Batch để tiếp tục">
+                  title="Cần có đủ Mã hàng, PO, và IMD để tiếp tục">
             <i class="material-icons">check</i>
           </button>
         </div>
@@ -478,13 +530,13 @@
           <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
             <p>Mã hàng: <strong>{{ foundRM1Item.parsedData.materialCode }}</strong></p>
             <p *ngIf="foundRM1Item.parsedData.poNumber">PO: <strong>{{ foundRM1Item.parsedData.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.batch">Batch: <strong>{{ foundRM1Item.parsedData.batch }}</strong></p>
+            <p *ngIf="foundRM1Item.parsedData.imd">IMD: <strong>{{ foundRM1Item.parsedData.imd }}</strong></p>
             <p *ngIf="foundRM1Item.parsedData.quantity">Số lượng: <strong>{{ foundRM1Item.parsedData.quantity }}</strong></p>
           </div>
           <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
             <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
             <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item?.batchNumber">Batch: <strong>{{ foundRM1Item.batchNumber }}</strong></p>
+            <p *ngIf="foundRM1Item?.importDate">IMD: <strong>{{ foundRM1Item.importDate.toLocaleDateString('en-GB').split('/').join('') }}</strong></p>
           </div>
           <p>Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
           <p>Vị trí mới: <strong>{{ scannedNewLocation }}</strong></p>
@@ -511,13 +563,13 @@
             <span class="label">PO:</span>
             <span class="value">{{ foundRM1Item.poNumber }}</span>
           </div>
-          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.batch">
-            <span class="label">Batch:</span>
-            <span class="value">{{ foundRM1Item.parsedData.batch }}</span>
+          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.imd">
+            <span class="label">IMD:</span>
+            <span class="value">{{ foundRM1Item.parsedData.imd }}</span>
           </div>
-          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.batchNumber">
-            <span class="label">Batch:</span>
-            <span class="value">{{ foundRM1Item.batchNumber }}</span>
+          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.importDate">
+            <span class="label">IMD:</span>
+            <span class="value">{{ foundRM1Item.importDate.toLocaleDateString('en-GB').split('/').join('') }}</span>
           </div>
           <div class="info-item" *ngIf="foundRM1Item?.parsedData?.quantity">
             <span class="label">Số lượng:</span>

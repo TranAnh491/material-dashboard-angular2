@@ -18,7 +18,7 @@ export interface InventoryMaterial {
   factory?: string;
   importDate: Date;
   receivedDate?: Date;
-  batchNumber: string;
+  batchNumber: string; // Keep for backward compatibility, but use importDate for display
   materialCode: string;
   materialName?: string;
   poNumber: string;

@@ -160,9 +160,9 @@
             <label>PO/Description:</label>
             <span>{{selectedItem.po}}</span>
           </div>
-          <div class="detail-item" *ngIf="selectedItem.batch">
-            <label>Batch:</label>
-            <span>{{selectedItem.batch}}</span>
+          <div class="detail-item" *ngIf="selectedItem.importDate">
+            <label>IMD:</label>
+            <span>{{selectedItem.importDate.toLocaleDateString('en-GB').split('/').join('')}}</span>
           </div>
           <div class="detail-item">
             <label>Trạng thái:</label>
