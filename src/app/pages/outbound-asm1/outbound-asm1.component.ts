@@ -61,8 +61,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   selectedScanMethod: 'camera' | 'scanner' | null = null; // 🔧 SỬA LỖI: Không chọn gì mặc định
   isMobile: boolean = false;
   
-  // 🔧 SỬA LỖI: Track processed scans to prevent duplicates
-  private processedScans: Set<string> = new Set();
+  // REMOVED: processedScans - không cần duplicate detection nữa
   
   // Physical Scanner properties
   isScannerInputActive: boolean = false;
@@ -1526,8 +1525,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
     
-    // 🔧 SỬA LỖI: Clear processed scans to prevent duplicates
-    this.processedScans.clear();
+    // REMOVED: Clear processed scans - không cần duplicate detection nữa
     this.isScannerInputActive = true;
     this.scannerBuffer = '';
     
@@ -1538,8 +1536,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   async stopBatchScanningMode(): Promise<void> {
     console.log('🛑 Processing Done - Batch updating all scanned items...');
     
-    // 🔧 SỬA LỖI: Clear processed scans to prevent duplicates
-    this.processedScans.clear();
+    // REMOVED: Clear processed scans - không cần duplicate detection nữa
     
     // 🔧 SIÊU TỐI ƯU: Batch update tất cả pending scan data
     if (this.pendingScanData.length > 0) {
@@ -1877,17 +1874,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🔍 Employee scanned:', this.isEmployeeIdScanned);
     console.log('🔍 Pending data before:', this.pendingScanData.length);
     
-    // 🔧 SỬA LỖI: Kiểm tra duplicate scan để tránh xử lý 2 lần
-    const scanKey = `${scannedData}_${this.batchProductionOrder}_${this.batchEmployeeId}`;
-    if (this.processedScans && this.processedScans.has(scanKey)) {
-      console.log('⚠️ DUPLICATE SCAN DETECTED, skipping...');
-      return;
-    }
-    
-    if (!this.processedScans) {
-      this.processedScans = new Set();
-    }
-    this.processedScans.add(scanKey);
+    // 🔧 SỬA LỖI: Xóa hoàn toàn logic duplicate detection
+    // Cho phép scan trùng mã hàng hoàn toàn - user có thể scan cùng mã hàng nhiều lần
     
     try {
       // Kiểm tra trạng thái scan

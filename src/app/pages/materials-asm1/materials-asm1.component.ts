@@ -3872,19 +3872,21 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               display: flex !important;
               flex-direction: column !important;
               justify-content: space-between !important;
-              font-size: 8px !important;
+              font-size: 9.6px !important; /* Tăng 20% từ 8px */
               line-height: 1.1 !important;
               box-sizing: border-box !important;
+              color: #000000 !important; /* Tất cả text màu đen */
             }
             
             .info-row {
               margin: 0.3mm 0 !important;
               font-weight: bold !important;
+              color: #000000 !important; /* Tất cả text màu đen */
             }
             
             .info-row.small {
-              font-size: 7px !important;
-              color: #666 !important;
+              font-size: 8.4px !important; /* Tăng 20% từ 7px */
+              color: #000000 !important; /* Đổi từ #666 thành đen */
             }
             
             .qr-grid {
@@ -3936,12 +3938,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               }
               
               .info-section {
-                font-size: 8px !important;
+                font-size: 9.6px !important; /* Tăng 20% từ 8px */
                 padding: 1mm !important;
+                color: #000000 !important; /* Tất cả text màu đen */
               }
               
               .info-row.small {
-                font-size: 7px !important;
+                font-size: 8.4px !important; /* Tăng 20% từ 7px */
+                color: #000000 !important; /* Đổi từ #666 thành đen */
               }
               
               .qr-grid {
