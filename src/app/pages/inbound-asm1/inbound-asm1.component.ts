@@ -1608,19 +1608,26 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   display: flex !important;
                   flex-direction: column !important;
                   justify-content: space-between !important;
-                  font-size: 8px !important;
+                  font-size: 9.6px !important; /* Tăng 20% từ 8px */
                   line-height: 1.1 !important;
                   box-sizing: border-box !important;
+                  color: #000000 !important; /* Tất cả text màu đen */
                 }
                 
                 .info-row {
                   margin: 0.3mm 0 !important;
                   font-weight: bold !important;
+                  color: #000000 !important; /* Tất cả text màu đen */
                 }
                 
                 .info-row.small {
-                  font-size: 7px !important;
-                  color: #666 !important;
+                  font-size: 8.4px !important; /* Tăng 20% từ 7px */
+                  color: #000000 !important; /* Đổi từ #666 thành đen */
+                }
+                
+                .info-row.small.page-number {
+                  font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
+                  color: #000000 !important; /* Màu đen */
                 }
                 
                 .qr-grid {
@@ -1672,12 +1679,19 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   }
                   
                   .info-section {
-                    font-size: 8px !important;
+                    font-size: 9.6px !important; /* Tăng 20% từ 8px */
                     padding: 1mm !important;
+                    color: #000000 !important; /* Tất cả text màu đen */
                   }
                   
                   .info-row.small {
-                    font-size: 7px !important;
+                    font-size: 8.4px !important; /* Tăng 20% từ 7px */
+                    color: #000000 !important; /* Đổi từ #666 thành đen */
+                  }
+                  
+                  .info-row.small.page-number {
+                    font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
+                    color: #000000 !important; /* Màu đen */
                   }
                   
                   .qr-grid {
@@ -1718,7 +1732,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                         <div>
                           <div class="info-row small">Ngày in: ${qr.printDate}</div>
                           <div class="info-row small">NV: ${qr.printedBy}</div>
-                          <div class="info-row small">Trang: ${qr.pageNumber}/${qr.totalPages}</div>
+                          <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
                         </div>
                       </div>
                     </div>
