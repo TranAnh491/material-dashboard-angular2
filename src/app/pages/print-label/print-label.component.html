@@ -188,7 +188,7 @@
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 2px solid #000000;">
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate ? item.importDate.toLocaleDateString('en-GB').split('/').join('') : '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{i + 1}}</td>
@@ -292,7 +292,7 @@
               <ng-container *ngIf="showCompletedItems">
                 <ng-container *ngFor="let item of doneItems; let i = index">
               <tr style="background: #e8f5e8; border-bottom: 2px solid #000000; opacity: 0.8;">
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate ? item.importDate.toLocaleDateString('en-GB').split('/').join('') : '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px;">{{item.stt || '-'}}</td>

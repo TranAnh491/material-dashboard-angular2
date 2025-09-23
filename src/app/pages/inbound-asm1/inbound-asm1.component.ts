@@ -388,7 +388,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           });
           filteredOut.push({
             materialCode: material.materialCode,
-            importDate: material.importDate.toLocaleDateString('vi-VN'),
+            importDate: material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('vi-VN')) : 'N/A',
             internalBatch: material.internalBatch
           });
         } else {
@@ -601,7 +601,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     // 🔧 SỬA LỖI: batchNumber trong inventory chỉ là ngày nhập, không có số lô hàng
     // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
-    const inventoryBatchNumber = material.importDate.toLocaleDateString('en-GB').split('/').join('');
+    const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
     
     // 🔧 SỬA LỖI: Kiểm tra duplicate trước khi add
     // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
@@ -1038,7 +1038,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           internalBatch: m.internalBatch,
           isReceived: m.isReceived,
           importDate: m.importDate,
-          importDateString: m.importDate.toLocaleDateString('vi-VN'),
+          importDateString: m.importDate ? (typeof m.importDate === 'string' ? m.importDate : m.importDate.toLocaleDateString('vi-VN')) : 'N/A',
           importDateISO: m.importDate.toISOString()
         })));
         
@@ -1494,7 +1494,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       
       // Add full units
       // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
-      const batchNumber = material.importDate.toLocaleDateString('en-GB').split('/').join('');
+      const batchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
       
       for (let i = 0; i < fullUnits; i++) {
         qrCodes.push({
@@ -1818,11 +1818,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       // Optimize data for smaller file size
       const exportData = this.filteredMaterials.map(material => ({
         'Factory': material.factory || 'ASM1',
-        'Date': material.importDate.toLocaleDateString('vi-VN', {
+        'Date': material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('vi-VN', {
           day: '2-digit',
           month: '2-digit',
           year: '2-digit'
-        }),
+        })) : 'N/A',
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'PO': material.poNumber || '',

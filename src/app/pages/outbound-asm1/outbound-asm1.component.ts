@@ -61,6 +61,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   selectedScanMethod: 'camera' | 'scanner' | null = null; // 🔧 SỬA LỖI: Không chọn gì mặc định
   isMobile: boolean = false;
   
+  // 🔧 SỬA LỖI: Track processed scans to prevent duplicates
+  private processedScans: Set<string> = new Set();
+  
   // Physical Scanner properties
   isScannerInputActive: boolean = false;
   scannerBuffer: string = '';
@@ -1088,16 +1091,35 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       await batch.commit();
       console.log(`✅ Successfully saved ${this.pendingScanData.length} items to outbound-materials collection`);
       
+      // 🔧 SỬA LỖI: Cập nhật inventory exported quantity cho từng item
+      console.log('📦 Updating inventory exported quantities...');
+      for (const scanItem of this.pendingScanData) {
+        try {
+          await this.updateInventoryExported(
+            scanItem.materialCode,
+            scanItem.poNumber,
+            scanItem.quantity,
+            scanItem.importDate
+          );
+          console.log(`✅ Updated inventory for ${scanItem.materialCode} - PO: ${scanItem.poNumber} - Qty: ${scanItem.quantity}`);
+        } catch (error) {
+          console.error(`❌ Error updating inventory for ${scanItem.materialCode}:`, error);
+        }
+      }
+      console.log('✅ All inventory exported quantities updated');
+      
       // Clear pending data
       const processedCount = this.pendingScanData.length;
       this.pendingScanData = [];
       
       // Success message
-      this.errorMessage = `✅ Đã lưu ${processedCount} mã hàng vào outbound!`;
+      this.errorMessage = `✅ Đã lưu ${processedCount} mã hàng vào outbound và cập nhật inventory!`;
       
-      // Refresh data
-      await this.loadMaterials();
-      console.log('✅ Data refreshed after saving');
+      // Refresh data with delay to ensure outbound data is committed
+      setTimeout(async () => {
+        await this.loadMaterials();
+        console.log('✅ Data refreshed after saving');
+      }, 2000); // 2 second delay to ensure inventory is updated properly
       
     } catch (error) {
       console.error('❌ Error processing pending data:', error);
@@ -1452,10 +1474,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       this.lastScannedData = null;
       this.exportQuantity = 0;
       
-      // Reload data
+      // Reload data with delay to ensure outbound data is committed
       console.log('🔄 Reloading materials data...');
-      await this.loadMaterials();
-      console.log('✅ Materials data reloaded');
+      setTimeout(async () => {
+        await this.loadMaterials();
+        console.log('✅ Materials data reloaded');
+      }, 2000); // 2 second delay to ensure inventory is updated properly
       
       // Success - no popup needed for normal export
       console.log(`✅ Auto-export completed: ${successData.exportQuantity} ${successData.unit} của ${successData.materialCode}`);
@@ -1501,6 +1525,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isEmployeeIdScanned = false;
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
+    
+    // 🔧 SỬA LỖI: Clear processed scans to prevent duplicates
+    this.processedScans.clear();
     this.isScannerInputActive = true;
     this.scannerBuffer = '';
     
@@ -1510,6 +1537,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   async stopBatchScanningMode(): Promise<void> {
     console.log('🛑 Processing Done - Batch updating all scanned items...');
+    
+    // 🔧 SỬA LỖI: Clear processed scans to prevent duplicates
+    this.processedScans.clear();
     
     // 🔧 SIÊU TỐI ƯU: Batch update tất cả pending scan data
     if (this.pendingScanData.length > 0) {
@@ -1847,6 +1877,18 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log('🔍 Employee scanned:', this.isEmployeeIdScanned);
     console.log('🔍 Pending data before:', this.pendingScanData.length);
     
+    // 🔧 SỬA LỖI: Kiểm tra duplicate scan để tránh xử lý 2 lần
+    const scanKey = `${scannedData}_${this.batchProductionOrder}_${this.batchEmployeeId}`;
+    if (this.processedScans && this.processedScans.has(scanKey)) {
+      console.log('⚠️ DUPLICATE SCAN DETECTED, skipping...');
+      return;
+    }
+    
+    if (!this.processedScans) {
+      this.processedScans = new Set();
+    }
+    this.processedScans.add(scanKey);
+    
     try {
       // Kiểm tra trạng thái scan
       if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
@@ -1913,12 +1955,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // Update UI
       this.cdr.detectChanges();
       
-      // For camera scanning, don't auto-focus, let user use Done button
+      // 🔧 SỬA LỖI: Tự động xử lý dữ liệu scan cho scanner desktop
       if (this.selectedScanMethod === 'scanner') {
-        // Auto-focus cho scan tiếp theo (only for scanner)
+        console.log('🔌 Scanner mode: Auto-processing scanned data...');
+        // Tự động xử lý dữ liệu scan ngay lập tức
+        setTimeout(() => {
+          this.processPendingScanData();
+        }, 500); // Delay 500ms để đảm bảo UI update xong
+        
+        // Auto-focus cho scan tiếp theo
         setTimeout(() => {
           this.focusScannerInput();
-        }, 100);
+        }, 1000); // Delay 1s để xử lý xong trước khi focus
+      } else {
+        // For camera scanning, don't auto-focus, let user use Done button
+        console.log('📷 Camera mode: Waiting for user to click Done button');
       }
       
     } catch (error) {
@@ -2145,7 +2196,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log(`🎯 SIMPLE UPDATE: Tìm & cập nhật inventory cho ${materialCode}, PO: ${poNumber}, Export: ${exportQuantity}`);
       if (importDate) {
-        console.log(`📅 Import date from QR: ${importDate} - Sẽ tìm inventory record có cùng ngày nhập`);
+        console.log(`📅 Import date from QR: ${importDate} (type: ${typeof importDate}) - Sẽ tìm inventory record có cùng ngày nhập`);
+        console.log(`📅 Import date length: ${importDate.length}`);
+        console.log(`📅 Import date characters: ${importDate.split('').map(c => `${c}(${c.charCodeAt(0)})`).join(', ')}`);
       }
       
       // Tìm tất cả inventory items có cùng material code, PO và batch number (ASM1 only)
@@ -2184,6 +2237,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
               } else if (data.importDate instanceof Date) {
                 // Date object
                 inventoryBatch = data.importDate.toLocaleDateString('en-GB').split('/').join('');
+              } else {
+                // Fallback: treat as string
+                inventoryBatch = data.importDate.toString();
               }
             }
             
@@ -2194,6 +2250,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             console.log(`    - importDate type:`, typeof data.importDate);
             console.log(`    - So sánh PO: "${inventoryPO}" === "${poNumber}" = ${inventoryPO === poNumber}`);
             console.log(`    - So sánh Batch: "${inventoryBatch}" === "${importDate}" = ${inventoryBatch === importDate}`);
+            if (inventoryBatch && importDate) {
+              console.log(`    - Batch length: ${inventoryBatch.length} vs ${importDate.length}`);
+              console.log(`    - Batch characters: ${inventoryBatch.split('').map(c => `${c}(${c.charCodeAt(0)})`).join(', ')}`);
+              console.log(`    - ImportDate characters: ${importDate.split('').map(c => `${c}(${c.charCodeAt(0)})`).join(', ')}`);
+            }
             
             // Phải khớp CẢ PO và Batch
             return inventoryPO === poNumber && inventoryBatch === importDate;

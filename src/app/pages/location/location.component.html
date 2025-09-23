@@ -536,7 +536,7 @@
           <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
             <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
             <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item?.importDate">IMD: <strong>{{ foundRM1Item.importDate.toLocaleDateString('en-GB').split('/').join('') }}</strong></p>
+            <p *ngIf="foundRM1Item?.importDate">IMD: <strong>{{ foundRM1Item.importDate }}</strong></p>
           </div>
           <p>Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
           <p>Vị trí mới: <strong>{{ scannedNewLocation }}</strong></p>
@@ -569,7 +569,7 @@
           </div>
           <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.importDate">
             <span class="label">IMD:</span>
-            <span class="value">{{ foundRM1Item.importDate.toLocaleDateString('en-GB').split('/').join('') }}</span>
+            <span class="value">{{ foundRM1Item.importDate }}</span>
           </div>
           <div class="info-item" *ngIf="foundRM1Item?.parsedData?.quantity">
             <span class="label">Số lượng:</span>

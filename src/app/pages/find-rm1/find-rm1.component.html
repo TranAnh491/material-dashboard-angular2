@@ -162,7 +162,7 @@
           </div>
           <div class="detail-item" *ngIf="selectedItem.importDate">
             <label>IMD:</label>
-            <span>{{selectedItem.importDate.toLocaleDateString('en-GB').split('/').join('')}}</span>
+            <span>{{selectedItem.importDate || 'N/A'}}</span>
           </div>
           <div class="detail-item">
             <label>Trạng thái:</label>

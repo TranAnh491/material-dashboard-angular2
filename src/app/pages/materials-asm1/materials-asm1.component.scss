@@ -1255,15 +1255,16 @@
       max-width: 80px;
     }
     
-    .search-box {
-      flex: 1;
-      min-width: 0;
-      
-      .search-input {
-        width: 100%;
-        max-width: none;
-      }
+  .search-box {
+    flex: 1;
+    min-width: 0;
+    max-width: 300px; // Giới hạn chiều rộng tối đa
+    
+    .search-input {
+      width: 100%;
+      max-width: 250px; // Giới hạn chiều rộng input để không che nút reset
     }
+  }
   }
   
   // Mobile stats section - HIDDEN on mobile
@@ -1571,7 +1572,7 @@
   
   .search-box .search-input {
     width: 100%;
-    max-width: none;
+    max-width: 250px; // Giới hạn chiều rộng input để không che nút reset
   }
   
   // Ẩn icon cạnh box nhập liệu trên mobile

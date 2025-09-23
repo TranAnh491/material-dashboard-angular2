@@ -231,7 +231,7 @@
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
-              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
+              {{material.importDate || 'N/A'}}
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <input type="number" 

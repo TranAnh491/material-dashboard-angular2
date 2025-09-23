@@ -213,7 +213,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           'Mã hàng': data.materialCode || '',
           'Tên hàng': data.materialName || '',
           'PO': data.poNumber || '',
-          'Import Date': data.importDate ? data.importDate.toDate().toLocaleDateString('vi-VN') : '',
+          'Import Date': data.importDate ? (data.importDate.toDate ? data.importDate.toDate().toLocaleDateString('en-GB').split('/').join('') : data.importDate) : '',
           'Received Date': data.receivedDate ? data.receivedDate.toDate().toLocaleDateString('vi-VN') : '',
           'Tồn đầu': data.openingStock || 0,
           'Số lượng': data.quantity || 0,
@@ -322,7 +322,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               id: id,
               ...data,
               factory: this.FACTORY, // Force ASM1
-              importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
+              importDate: this.parseImportDate(data.importDate),
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
               openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
@@ -391,6 +391,59 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         console.error('❌ Error details:', error.message);
         this.isLoading = false;
       });
+  }
+
+  // Parse importDate from various formats
+  private parseImportDate(importDate: any): Date {
+    if (!importDate) {
+      return new Date();
+    }
+    
+    // If it's already a Date object
+    if (importDate instanceof Date) {
+      return importDate;
+    }
+    
+    // If it's a Firestore Timestamp
+    if (importDate.seconds) {
+      return new Date(importDate.seconds * 1000);
+    }
+    
+    // If it's a string in format "26082025" (DDMMYYYY)
+    if (typeof importDate === 'string' && /^\d{8}$/.test(importDate)) {
+      const day = importDate.substring(0, 2);
+      const month = importDate.substring(2, 4);
+      const year = importDate.substring(4, 8);
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // If it's a string in format "DD/MM/YYYY" or "DD-MM-YYYY"
+    if (typeof importDate === 'string' && (importDate.includes('/') || importDate.includes('-'))) {
+      const parts = importDate.split(/[\/\-]/);
+      if (parts.length === 3) {
+        const day = parts[0];
+        const month = parts[1];
+        const year = parts[2];
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      }
+    }
+    
+    // If it's a string that can be parsed as Date
+    if (typeof importDate === 'string') {
+      const parsed = new Date(importDate);
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    
+    // If it's a number (timestamp)
+    if (typeof importDate === 'number') {
+      return new Date(importDate);
+    }
+    
+    // Fallback to current date
+    console.warn('⚠️ Could not parse importDate:', importDate, 'using current date');
+    return new Date();
   }
 
   // Load inventory and setup search mechanism
@@ -2209,30 +2262,44 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           // Nếu có batch, query theo Material + PO + Batch
           console.log(`🔍 Querying with batch: ${materialCode} - PO: ${poNumber} - Batch: ${batch}`);
           
-          // Thử query với field 'batch' trước
+          // Thử query với field 'importDate' trước (vì outbound data sử dụng importDate)
           try {
-            console.log(`🔍 Trying query with 'batch' field...`);
+            console.log(`🔍 Trying query with 'importDate' field...`);
             snapshot = await outboundRef
               .ref
               .where('factory', '==', 'ASM1')
               .where('materialCode', '==', materialCode)
               .where('poNumber', '==', poNumber)
-              .where('batch', '==', batch)
+              .where('importDate', '==', batch)
               .orderBy('exportDate', 'asc')
               .get();
-            console.log(`✅ Query with 'batch' field successful, found ${snapshot.size} records`);
-          } catch (batchError) {
-            console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
-            // Fallback: thử với field 'batchNumber'
-            snapshot = await outboundRef
-              .ref
-              .where('factory', '==', 'ASM1')
-              .where('materialCode', '==', materialCode)
-              .where('poNumber', '==', poNumber)
-              .where('batchNumber', '==', batch)
-              .orderBy('exportDate', 'asc')
-              .get();
-            console.log(`✅ Query with 'batchNumber' field successful, found ${snapshot.size} records`);
+            console.log(`✅ Query with 'importDate' field successful, found ${snapshot.size} records`);
+          } catch (importDateError) {
+            console.log(`⚠️ Query with 'importDate' field failed, trying with 'batch':`, importDateError);
+            // Fallback: thử với field 'batch'
+            try {
+              snapshot = await outboundRef
+                .ref
+                .where('factory', '==', 'ASM1')
+                .where('materialCode', '==', materialCode)
+                .where('poNumber', '==', poNumber)
+                .where('batch', '==', batch)
+                .orderBy('exportDate', 'asc')
+                .get();
+              console.log(`✅ Query with 'batch' field successful, found ${snapshot.size} records`);
+            } catch (batchError) {
+              console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
+              // Fallback: thử với field 'batchNumber'
+              snapshot = await outboundRef
+                .ref
+                .where('factory', '==', 'ASM1')
+                .where('materialCode', '==', materialCode)
+                .where('poNumber', '==', poNumber)
+                .where('batchNumber', '==', batch)
+                .orderBy('exportDate', 'asc')
+                .get();
+              console.log(`✅ Query with 'batchNumber' field successful, found ${snapshot.size} records`);
+            }
           }
         } else {
           // Nếu không có batch, query theo Material + PO (fallback)
@@ -2400,11 +2467,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
       
-      // Lấy thông tin outbound - QUAN TRỌNG: Truyền batch để tránh nhận sai dữ liệu
+      // Lấy thông tin outbound - QUAN TRỌNG: Truyền importDate để query chính xác
       const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
         material.materialCode, 
         material.poNumber, 
-        material.batchNumber // Truyền batchNumber để query chính xác
+        material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : undefined // Truyền importDate để query chính xác
       );
       
       console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
@@ -2416,7 +2483,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`  ${index + 1}. Material: ${record.materialCode}, PO: ${record.poNumber}, Quantity: ${record.exportQuantity || record.quantity}, Date: ${record.exportDate}`);
         });
       } else {
-        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber} - Batch: ${material.batchNumber || 'N/A'}`);
+        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber} - ImportDate: ${material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}`);
         console.log(`💡 Checking if outbound records exist with different criteria...`);
         
         // Kiểm tra tất cả outbound records có material code này
@@ -2431,13 +2498,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`📋 Found ${allOutboundQuery.size} outbound records with material code ${material.materialCode}:`);
           allOutboundQuery.forEach(doc => {
             const data = doc.data() as any;
-            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Batch: "${data.batch || data.batchNumber || 'N/A'}", Quantity: ${data.exportQuantity || data.quantity}`);
-            console.log(`    → Inventory PO: "${material.poNumber}" (type: ${typeof material.poNumber}), Batch: "${material.batchNumber || 'N/A'}"`);
+            const outboundImportDate = data.importDate ? (typeof data.importDate === 'string' ? data.importDate : data.importDate.toLocaleDateString('en-GB').split('/').join('')) : 'N/A';
+            const inventoryImportDate = material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A';
+            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), ImportDate: "${outboundImportDate}", Quantity: ${data.exportQuantity || data.quantity}`);
+            console.log(`    → Inventory PO: "${material.poNumber}" (type: ${typeof material.poNumber}), ImportDate: "${inventoryImportDate}"`);
             
             // Kiểm tra match
             const poMatch = data.poNumber === material.poNumber;
-            const batchMatch = (data.batch || data.batchNumber) === material.batchNumber;
-            console.log(`    → PO Match: ${poMatch}, Batch Match: ${batchMatch}`);
+            const importDateMatch = outboundImportDate === inventoryImportDate;
+            console.log(`    → PO Match: ${poMatch}, ImportDate Match: ${importDateMatch}`);
           });
         } else {
           console.log(`⚠️ No outbound records found at all for material code ${material.materialCode}`);
@@ -3547,7 +3616,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
       const batchNumber = material.importDate ? 
-        material.importDate.toLocaleDateString('en-GB').split('/').join('') : 
+        (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : 
         new Date().toLocaleDateString('en-GB').split('/').join('');
       
       if (isPartialLabel) {
@@ -4393,11 +4462,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Optimize data for smaller file size
       const exportData = this.filteredInventory.map(material => ({
         'Factory': material.factory || 'ASM1',
-        'Import Date': material.importDate.toLocaleDateString('vi-VN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: '2-digit'
-        }),
+        'Import Date': material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : 'N/A',
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'Name': material.materialName || '',

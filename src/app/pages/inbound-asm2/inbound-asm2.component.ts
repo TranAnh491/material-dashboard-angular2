@@ -1241,11 +1241,11 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       // Optimize data for smaller file size
       const exportData = this.filteredMaterials.map(material => ({
         'Factory': material.factory || 'ASM2',
-        'Date': material.importDate.toLocaleDateString('vi-VN', {
+        'Date': material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('vi-VN', {
           day: '2-digit',
           month: '2-digit',
           year: '2-digit'
-        }),
+        })) : 'N/A',
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'PO': material.poNumber || '',

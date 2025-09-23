@@ -171,7 +171,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
       item.materialCode.toLowerCase().includes(term) ||
       item.location.toLowerCase().includes(term) ||
       item.po.toLowerCase().includes(term) ||
-      (item.importDate && item.importDate.toLocaleDateString('en-GB').split('/').join('').toLowerCase().includes(term)) ||
+      (item.importDate && item.importDate.toString().toLowerCase().includes(term)) ||
       (item.description && item.description.toLowerCase().includes(term))
     );
   }
