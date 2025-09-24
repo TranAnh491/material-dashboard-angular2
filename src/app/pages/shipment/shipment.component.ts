@@ -277,31 +277,90 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (shipment.push) {
       // Always generate new PushNo when push is checked (even if previously pushed)
       this.generatePushNoSync(shipment);
-      // When checked, transfer data to FG Out
-      this.transferToFGOut(shipment);
     } else {
       // When unchecked, reset PushNo to 000
       shipment.pushNo = '000';
+      this.updateShipmentInFirebase(shipment);
     }
-    
-    this.updateShipmentInFirebase(shipment);
   }
 
-  // Generate PushNo - simple timestamp-based approach
+  // Push final data to FG Out (manual trigger)
+  pushFinalToFGOut(shipment: ShipmentItem): void {
+    if (!shipment.push || !shipment.pushNo || shipment.pushNo === '000') {
+      alert('❌ Vui lòng tick Push và đảm bảo có PushNo trước khi push!');
+      return;
+    }
+
+    // Confirm before pushing
+    const confirmed = confirm(`✅ Xác nhận push dữ liệu cuối cùng?\n\nShipment: ${shipment.shipmentCode}\nMaterial: ${shipment.materialCode}\nPushNo: ${shipment.pushNo}\n\nDữ liệu sẽ được đóng băng tại thời điểm này.`);
+    
+    if (confirmed) {
+      console.log(`🚀 Manual push to FG Out: ${shipment.shipmentCode}, PushNo: ${shipment.pushNo}`);
+      this.transferToFGOut(shipment);
+    }
+  }
+
+  // Generate PushNo - format: DDMM + số thứ tự (01-99) - 6 số tối đa
   private generatePushNoSync(shipment: ShipmentItem): void {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const datePrefix = day + month; // DDMM (4 số)
     
-    // Use timestamp to generate unique PushNo
-    const timestamp = Date.now();
-    const pushNo = String(timestamp % 1000).padStart(3, '0');
-    shipment.pushNo = pushNo;
-    
-    console.log(`🔄 Generated PushNo: ${pushNo} for month ${monthKey} (timestamp-based)`);
+    // Get the highest PushNo for today
+    this.firestore.collection('shipments', ref => 
+      ref.where('pushNo', '>=', datePrefix + '01')
+          .where('pushNo', '<', datePrefix + '99')
+          .orderBy('pushNo', 'desc')
+          .limit(1)
+    ).get().subscribe({
+      next: (snapshot) => {
+        let nextSequence = 1; // Start from 01
+        
+        if (!snapshot.empty) {
+          const lastShipment = snapshot.docs[0].data() as any;
+          const lastPushNo = lastShipment.pushNo || '';
+          
+          // Extract sequence number from last PushNo
+          if (lastPushNo.startsWith(datePrefix)) {
+            const lastSequence = parseInt(lastPushNo.slice(-2));
+            nextSequence = lastSequence + 1;
+            
+            // If reached 99, reset to 01
+            if (nextSequence > 99) {
+              nextSequence = 1;
+            }
+          }
+        }
+        
+        const pushNo = datePrefix + String(nextSequence).padStart(2, '0');
+        shipment.pushNo = pushNo;
+        console.log(`🔄 Generated PushNo: ${pushNo} (${day}/${month} - #${nextSequence})`);
+        
+        // Update Firebase after generating PushNo
+        this.updateShipmentInFirebase(shipment);
+        
+        // Transfer to FG Out after generating PushNo
+        this.transferToFGOut(shipment);
+      },
+      error: (error) => {
+        console.error('Error getting last PushNo:', error);
+        // Fallback to first number of the day
+        const pushNo = datePrefix + '01';
+        shipment.pushNo = pushNo;
+        console.log(`🔄 Generated PushNo: ${pushNo} (fallback)`);
+        
+        // Update Firebase after generating PushNo
+        this.updateShipmentInFirebase(shipment);
+        
+        // Transfer to FG Out after generating PushNo
+        this.transferToFGOut(shipment);
+      }
+    });
   }
 
-  // Transfer shipment data to FG Out - UPDATE VERSION
+
+  // Transfer shipment data to FG Out - ADD NEW VERSION (không xóa dữ liệu cũ)
   private transferToFGOut(shipment: ShipmentItem): void {
     console.log(`🔄 Starting transfer to FG Out for shipment: ${shipment.shipmentCode}, material: ${shipment.materialCode}, PushNo: ${shipment.pushNo}`);
     
@@ -365,58 +424,76 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
 
-  // Create FG Out records - ALWAYS create 2 separate records (Full cartons + ODD)
+  // Create FG Out records - Create snapshot at push time (immutable data)
   private createFGOutRecords(shipment: ShipmentItem, batchNumber: string, lsx: string, lot: string): void {
     const fgOutRecords: any[] = [];
 
-    // Calculate carton distribution
-    const totalQuantity = shipment.quantity;
-    const cartonSize = shipment.carton;
-    const oddQuantity = shipment.odd;
+    // Create snapshot of shipment data at push time
+    const snapshotData = {
+      // Original shipment info
+      originalShipmentId: shipment.id,
+      originalShipmentCode: shipment.shipmentCode,
+      
+      // Snapshot data (frozen at push time)
+      materialCode: shipment.materialCode,
+      customerCode: shipment.customerCode,
+      poShip: shipment.poShip,
+      quantity: shipment.quantity,
+      carton: shipment.carton,
+      odd: shipment.odd,
+      shipMethod: shipment.shipMethod,
+      notes: shipment.notes,
+      
+      // Push info
+      pushNo: shipment.pushNo,
+      pushDate: new Date(),
+      
+      // FG Out specific
+      batchNumber: batchNumber,
+      lsx: lsx,
+      lot: lot,
+      
+      // Metadata
+      transferredFrom: 'Shipment',
+      transferredAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      
+      // Status tracking
+      status: 'Pushed',
+      isSnapshot: true // Mark as snapshot data
+    };
 
-    // Always create 2 records: Full cartons and ODD (even if one is 0)
+    // Calculate carton distribution from snapshot
+    const totalQuantity = snapshotData.quantity;
+    const cartonSize = snapshotData.carton;
+    const oddQuantity = snapshotData.odd;
+
+    // Always create full cartons record
     const fullCartons = Math.floor((totalQuantity - oddQuantity) / cartonSize);
     const fullCartonQuantity = fullCartons * cartonSize;
     
-    // Record 1: Full cartons (always create, even if 0)
+    // Record 1: Full cartons (always create)
     fgOutRecords.push({
-      shipment: shipment.shipmentCode,
-      materialCode: shipment.materialCode,
-      customerCode: shipment.customerCode,
-      batchNumber: batchNumber,
-      lsx: lsx,
-      lot: lot,
+      ...snapshotData,
       quantity: fullCartonQuantity,
-      poShip: shipment.poShip,
       carton: fullCartons,
       odd: 0,
-      notes: `${shipment.notes} (Full cartons: ${fullCartons} x ${cartonSize}) - PushNo: ${shipment.pushNo}`,
-      pushNo: shipment.pushNo,
-      transferredFrom: 'Shipment',
-      transferredAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
+      notes: `${snapshotData.notes} (Full cartons: ${fullCartons} x ${cartonSize}) - PushNo: ${snapshotData.pushNo}`,
+      recordType: 'FullCartons'
     });
 
-    // Record 2: ODD quantity (always create, even if 0)
-    fgOutRecords.push({
-      shipment: shipment.shipmentCode,
-      materialCode: shipment.materialCode,
-      customerCode: shipment.customerCode,
-      batchNumber: batchNumber,
-      lsx: lsx,
-      lot: lot,
-      quantity: oddQuantity,
-      poShip: shipment.poShip,
-      carton: 0,
-      odd: oddQuantity,
-      notes: `${shipment.notes} (ODD: ${oddQuantity}) - PushNo: ${shipment.pushNo}`,
-      pushNo: shipment.pushNo,
-      transferredFrom: 'Shipment',
-      transferredAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+    // Record 2: ODD quantity (ONLY create if ODD > 0)
+    if (oddQuantity > 0) {
+      fgOutRecords.push({
+        ...snapshotData,
+        quantity: oddQuantity,
+        carton: 0,
+        odd: oddQuantity,
+        notes: `${snapshotData.notes} (ODD: ${oddQuantity}) - PushNo: ${snapshotData.pushNo}`,
+        recordType: 'ODD'
+      });
+    }
 
     // Save all records to FG Out
     const savePromises = fgOutRecords.map(record => 
@@ -428,8 +505,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         console.log('✅ Data transferred to FG Out successfully');
         const recordCount = fgOutRecords.length;
         const batchInfo = `Batch: ${batchNumber}, LSX: ${lsx}, LOT: ${lot}`;
-        const cartonInfo = `Full cartons: ${fullCartons} x ${cartonSize} = ${fullCartonQuantity}, ODD: ${oddQuantity}`;
-        alert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 ${batchInfo}\n📦 ${cartonInfo}\n🔄 PushNo: ${shipment.pushNo}`);
+        const cartonInfo = `Full cartons: ${fullCartons} x ${cartonSize} = ${fullCartonQuantity}${oddQuantity > 0 ? `, ODD: ${oddQuantity}` : ''}`;
+        const recordInfo = recordCount === 1 ? '1 bản ghi (chỉ Full cartons)' : `${recordCount} bản ghi (Full cartons + ODD)`;
+        alert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordInfo}\n🔢 ${batchInfo}\n📦 ${cartonInfo}\n🔄 PushNo: ${shipment.pushNo}`);
       })
       .catch((error) => {
         console.error('❌ Error transferring to FG Out:', error);

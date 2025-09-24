@@ -42,6 +42,10 @@ export interface InventoryMaterial {
   isDuplicate?: boolean;
   importStatus?: string;
   source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
+  
+  // Edit states
+  isEditingOpeningStock?: boolean;
+  isEditingXT?: boolean;
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -330,6 +334,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               source: data.source || 'manual' // Set default source for old materials
             };
             
+            // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
+            if (data.batchNumber && (data.batchNumber.includes('01') || data.batchNumber.includes('02') || data.batchNumber.includes('03'))) {
+              console.log(`🔍 DEBUG: Found material with sequence batchNumber:`, {
+                materialCode: material.materialCode,
+                poNumber: material.poNumber,
+                batchNumber: data.batchNumber,
+                source: data.source
+              });
+            }
+            
             // Apply catalog data if available
             if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
               const catalogItem = this.catalogCache.get(material.materialCode)!;
@@ -487,6 +501,149 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
     } catch (error) {
       console.error('❌ Error checking outbound data:', error);
+    }
+  }
+
+  // Helper function to get display IMD (importDate + sequence if any)
+  getDisplayIMD(material: InventoryMaterial): string {
+    if (!material.importDate) return 'N/A';
+    
+    const baseDate = material.importDate.toLocaleDateString('en-GB').split('/').join('');
+    
+    // Kiểm tra nếu batchNumber có format đúng (chỉ chứa số và có độ dài hợp lý)
+    if (material.batchNumber && material.batchNumber !== baseDate) {
+      // Chỉ xử lý nếu batchNumber bắt đầu bằng baseDate và chỉ có thêm số sequence
+      if (material.batchNumber.startsWith(baseDate)) {
+        const suffix = material.batchNumber.substring(baseDate.length);
+        // Chỉ chấp nhận suffix nếu nó chỉ chứa số và có độ dài <= 2
+        if (/^\d{1,2}$/.test(suffix)) {
+          return baseDate + suffix;
+        }
+      }
+    }
+    
+    return baseDate;
+  }
+
+  // Debug function to find problematic batchNumbers
+  async debugProblematicBatchNumbers(): Promise<void> {
+    console.log('🔍 DEBUG: Checking for problematic batchNumbers...');
+    
+    try {
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('❌ No inventory materials found');
+        return;
+      }
+      
+      const problematicItems: any[] = [];
+      
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        const batchNumber = data.batchNumber;
+        const importDate = data.importDate;
+        
+        if (batchNumber && importDate) {
+          const expectedBaseDate = new Date(importDate.seconds * 1000).toLocaleDateString('en-GB').split('/').join('');
+          
+          // Kiểm tra nếu batchNumber có format không đúng
+          if (!batchNumber.startsWith(expectedBaseDate) || 
+              (batchNumber.length > expectedBaseDate.length && 
+               !/^\d{1,2}$/.test(batchNumber.substring(expectedBaseDate.length)))) {
+            problematicItems.push({
+              id: doc.id,
+              materialCode: data.materialCode,
+              poNumber: data.poNumber,
+              batchNumber: batchNumber,
+              expectedBaseDate: expectedBaseDate,
+              importDate: importDate
+            });
+          }
+        }
+      });
+      
+      console.log(`🔍 Found ${problematicItems.length} problematic batchNumbers:`, problematicItems);
+      
+      if (problematicItems.length > 0) {
+        console.log('📋 Problematic items:');
+        problematicItems.forEach((item, index) => {
+          console.log(`  ${index + 1}. ${item.materialCode} - ${item.poNumber}`);
+          console.log(`     Current: ${item.batchNumber}`);
+          console.log(`     Expected: ${item.expectedBaseDate}`);
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking problematic batchNumbers:', error);
+    }
+  }
+
+  // Fix problematic batchNumbers in Firebase
+  async fixProblematicBatchNumbers(): Promise<void> {
+    console.log('🔧 Starting to fix problematic batchNumbers...');
+    this.isLoading = true;
+    
+    try {
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('❌ No inventory materials found');
+        return;
+      }
+      
+      const batch = this.firestore.firestore.batch();
+      let updateCount = 0;
+      
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        const batchNumber = data.batchNumber;
+        const importDate = data.importDate;
+        
+        if (batchNumber && importDate) {
+          const expectedBaseDate = new Date(importDate.seconds * 1000).toLocaleDateString('en-GB').split('/').join('');
+          
+          // Kiểm tra nếu batchNumber có format không đúng
+          if (!batchNumber.startsWith(expectedBaseDate) || 
+              (batchNumber.length > expectedBaseDate.length && 
+               !/^\d{1,2}$/.test(batchNumber.substring(expectedBaseDate.length)))) {
+            
+            console.log(`🔧 Fixing ${data.materialCode} - ${data.poNumber}:`);
+            console.log(`  Current: ${batchNumber}`);
+            console.log(`  Fixed to: ${expectedBaseDate}`);
+            
+            // Cập nhật batchNumber về format đúng
+            batch.update(doc.ref, {
+              batchNumber: expectedBaseDate,
+              updatedAt: new Date()
+            });
+            
+            updateCount++;
+          }
+        }
+      });
+      
+      if (updateCount > 0) {
+        await batch.commit();
+        console.log(`✅ Fixed ${updateCount} problematic batchNumbers`);
+        alert(`✅ Đã sửa ${updateCount} batchNumber có format không đúng!`);
+        
+        // Refresh data
+        this.loadInventoryFromFirebase();
+      } else {
+        console.log('ℹ️ No problematic batchNumbers found');
+        alert('Không tìm thấy batchNumber nào cần sửa');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fixing batchNumbers:', error);
+      alert('❌ Lỗi khi sửa batchNumbers. Vui lòng thử lại.');
+    } finally {
+      this.isLoading = false;
     }
   }
 
@@ -3505,6 +3662,36 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
 
 
+  // Edit functions for Opening Stock
+  startEditingOpeningStock(material: InventoryMaterial): void {
+    material.isEditingOpeningStock = true;
+  }
+
+  finishEditingOpeningStock(material: InventoryMaterial): void {
+    material.isEditingOpeningStock = false;
+    this.updateOpeningStock(material);
+  }
+
+  cancelEditingOpeningStock(material: InventoryMaterial): void {
+    material.isEditingOpeningStock = false;
+    // Revert to original value if needed
+  }
+
+  // Edit functions for XT
+  startEditingXT(material: InventoryMaterial): void {
+    material.isEditingXT = true;
+  }
+
+  finishEditingXT(material: InventoryMaterial): void {
+    material.isEditingXT = false;
+    this.updateXT(material);
+  }
+
+  cancelEditingXT(material: InventoryMaterial): void {
+    material.isEditingXT = false;
+    // Revert to original value if needed
+  }
+
   // Format numbers with thousand separators
   formatNumber(value: any): string {
     if (value === null || value === undefined || value === '') {
@@ -3610,14 +3797,21 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       });
       
       // Generate QR codes based on quantity per unit
-      // QR code format: Mã hàng|PO|Số đơn vị|Ngày nhập (DD/MM/YYYY)
-      // Sử dụng importDate nếu có, nếu không thì dùng ngày hiện tại
+      // QR code format: Mã hàng|PO|Số đơn vị|IMD (có sequence number nếu duplicate)
+      // Sử dụng getDisplayIMD để lấy đúng IMD có sequence number
       const qrCodes = [];
       
-      // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
-      const batchNumber = material.importDate ? 
-        (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : 
-        new Date().toLocaleDateString('en-GB').split('/').join('');
+      // Sử dụng getDisplayIMD để lấy đúng IMD có sequence number
+      const imdForQR = this.getDisplayIMD(material);
+      
+      console.log('🏷️ QR Code IMD info:', {
+        materialCode: material.materialCode,
+        poNumber: material.poNumber,
+        importDate: material.importDate,
+        batchNumber: material.batchNumber,
+        displayIMD: imdForQR,
+        hasSequenceNumber: imdForQR !== (material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A')
+      });
       
       if (isPartialLabel) {
         // 🆕 LOGIC MỚI: In tem lẻ - chỉ in 1 tem với số lượng nhập vào
@@ -3626,7 +3820,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${imdForQR}`
         });
       } else {
         // 🔄 LOGIC CŨ: Tính toán bình thường dựa trên tổng tồn kho
@@ -3644,7 +3838,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${imdForQR}`
         });
       }
       
@@ -3654,7 +3848,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${imdForQR}`
         });
         }
       }

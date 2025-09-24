@@ -5,44 +5,44 @@
       <div class="col-md-12">
         <div class="card">
           <!-- Summary Cards -->
-          <div class="summary-row">
+          <div class="row summary-row">
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="summary-card">
+              <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <div class="card-category">Tổng Shipment</div>
-                  <div class="card-title">{{getTotalShipments()}}</div>
+                  <p class="card-category">Tổng Shipment</p>
+                  <h3 class="card-title">{{getTotalShipments()}}</h3>
                 </div>
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="summary-card">
+              <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <div class="card-category">Đã soạn xong</div>
-                  <div class="card-title">{{getCompletedShipments()}}</div>
+                  <p class="card-category">Đã soạn xong</p>
+                  <h3 class="card-title">{{getCompletedShipments()}}</h3>
                 </div>
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="summary-card">
+              <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <div class="card-category">Thiếu Hàng</div>
-                  <div class="card-title">{{getMissingItemsShipments()}}</div>
+                  <p class="card-category">Thiếu Hàng</p>
+                  <h3 class="card-title">{{getMissingItemsShipments()}}</h3>
                 </div>
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="summary-card">
+              <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <div class="card-category">Đang soạn</div>
-                  <div class="card-title">{{getInProgressShipments()}}</div>
+                  <p class="card-category">Đang soạn</p>
+                  <h3 class="card-title">{{getInProgressShipments()}}</h3>
                 </div>
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="summary-card">
+              <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <div class="card-category">Chờ soạn</div>
-                  <div class="card-title">{{getPendingShipments()}}</div>
+                  <p class="card-category">Chờ soạn</p>
+                  <h3 class="card-title">{{getPendingShipments()}}</h3>
                 </div>
               </div>
             </div>
@@ -243,6 +243,12 @@
                      placeholder="Nhập ghi chú...">
             </td>
             <td class="action-cell">
+              <button mat-icon-button color="primary" 
+                      (click)="pushFinalToFGOut(shipment)"
+                      [disabled]="!shipment.push || !shipment.pushNo || shipment.pushNo === '000'"
+                      matTooltip="Push dữ liệu cuối cùng qua FG Out">
+                <mat-icon>send</mat-icon>
+              </button>
               <button mat-icon-button color="warn" (click)="deleteShipment(shipment)"
                       matTooltip="Xóa">
                 <mat-icon>delete</mat-icon>

@@ -567,20 +567,37 @@
 // CỘT ĐỘ RỘNG - CHỈ 1 CHỖ DUY NHẤT QUY ĐỊNH
 // ========================================
 
-// Cột Vị trí (13) - Bằng cột Tồn kho
-.excel-table th:nth-child(13),
-.excel-table td:nth-child(13) {
+// Cột Vị trí (12) - Bằng cột Tồn kho
+.excel-table th:nth-child(12),
+.excel-table td:nth-child(12) {
   width: 113px !important;
   min-width: 113px !important;
   max-width: 113px !important;
 }
 
 // CSS cho input trong cột Vị trí
-.excel-table td:nth-child(13) .location-input,
-.excel-table td:nth-child(13) .editable-cell {
+.excel-table td:nth-child(12) .location-input,
+.excel-table td:nth-child(12) .editable-cell {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
+}
+
+// Display value styling (clickable numbers)
+.display-value {
+  cursor: pointer;
+  padding: 4px 6px;
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+  }
 }
 
 // Giao diện phẳng cho cột Tồn đầu - giống hệt cột Vị trí
@@ -1866,8 +1883,8 @@
   }
   
   // Thu nhỏ kích thước các cột cụ thể
-  th:nth-child(8), // Cột "Đã xuất" (sau khi thêm Tồn đầu)
-  td:nth-child(8) {
+  th:nth-child(9), // Cột "Đã xuất"
+  td:nth-child(9) {
     width: 113px; // Bằng chiều rộng cột Mã hàng
     min-width: 113px;
     max-width: 113px;
@@ -1895,8 +1912,8 @@
     }
   }
   
-  th:nth-child(10), // Cột "Loại Hình" (sau khi xóa FIFO)
-  td:nth-child(10) {
+  th:nth-child(14), // Cột "Loại Hình"
+  td:nth-child(14) {
     width: 80px;
     min-width: 80px;
     max-width: 80px;
@@ -1904,16 +1921,16 @@
   
 
   // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
-  th:nth-child(5), // Cột "Tồn đầu" (sau khi xóa FIFO)
-  td:nth-child(5),
-  th:nth-child(6), // Cột "NK" (sau khi xóa FIFO)
-  td:nth-child(6),
+  th:nth-child(7), // Cột "Tồn đầu"
+  td:nth-child(7),
+  th:nth-child(8), // Cột "NK"
+  td:nth-child(8),
   th:nth-child(9), // Cột "Đã xuất"
   td:nth-child(9),
   th:nth-child(10), // Cột "XT"
   td:nth-child(10),
-  th:nth-child(12), // Cột "Tồn kho"
-  td:nth-child(12) {
+  th:nth-child(11), // Cột "Tồn kho"
+  td:nth-child(11) {
     width: 113px !important;
     min-width: 113px !important;
     max-width: 113px !important;
@@ -1921,8 +1938,8 @@
   }
   
   // Cột Tồn đầu - giao diện giống hệt cột Vị trí
-  th:nth-child(5), // Cột "Tồn đầu" (sau khi xóa FIFO)
-  td:nth-child(5) {
+  th:nth-child(7), // Cột "Tồn đầu"
+  td:nth-child(7) {
     .opening-stock-input {
       border: none !important;
       background: transparent !important;

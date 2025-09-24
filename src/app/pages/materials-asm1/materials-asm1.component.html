@@ -38,73 +38,39 @@
               <i class="material-icons">file_upload</i>
               Update Standard Packing
             </a>
+            <!-- Import/Export -->
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
               <i class="material-icons">description</i>
               Download Standard Packing Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importCurrentStock()">
-              <i class="material-icons">file_upload</i>
-              Import Current Stock
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="deleteAllInventory()">
-              <i class="material-icons">delete_sweep</i>
-              Delete All ASM1 Data
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadStockTemplate()">
-              <i class="material-icons">description</i>
-              Download Stock Template
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugMaterialsCollection()">
-              <i class="material-icons">bug_report</i>
-              Debug Materials Collection
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testOutboundData()">
-              <i class="material-icons">assessment</i>
-              Test Outbound Data
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="syncAllExportedFromOutbound()">
-              <i class="material-icons">sync</i>
-              Sync from Outbound
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testSyncWithDebug()">
-              <i class="material-icons">bug_report</i>
-              Test Sync with Debug
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testDataLoading()">
-              <i class="material-icons">data_usage</i>
-              Test Data Loading
-            </a>
-            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="deleteMaterialsWithoutStandardPacking()">
-              <i class="material-icons">delete_forever</i>
-              Xóa mã không có Standard Packing
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
               <i class="material-icons">file_download</i>
               Export to Excel
             </a>
             <div class="dropdown-divider"></div>
+            
+            <!-- Reports -->
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM1()">
               <i class="material-icons">assessment</i>
               Download FIFO Report ASM1
             </a>
             <div class="dropdown-divider"></div>
+            
+            <!-- Data Management -->
             <a class="dropdown-item" href="javascript:void(0)" (click)="loadInventoryFromFirebase()">
               <i class="material-icons">cloud_download</i>
               Load toàn bộ inventory
-            </a>
-            <a class="dropdown-item text-primary" href="javascript:void(0)" (click)="loadInventoryStockFromFirebase()">
-              <i class="material-icons">inventory_2</i>
-              Tải tồn kho Firebase
             </a>
             <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="consolidateAllInventory()">
               <i class="material-icons">merge_type</i>
               Gộp dòng trùng lặp
             </a>
-            <a class="dropdown-item text-info" href="javascript:void(0)" (click)="updateAllLocationsToNewFormat()">
-              <i class="material-icons">location_on</i>
-              Cập nhật vị trí sang format mới
+            <div class="dropdown-divider"></div>
+            
+            <!-- Maintenance -->
+            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="fixProblematicBatchNumbers()">
+              <i class="material-icons">build</i>
+              Sửa batchNumber lỗi
             </a>
           </div>
         </div>
@@ -336,7 +302,7 @@
         <div class="card-content">
           <div class="info-row">
             <span class="label">IMD:</span>
-            <span class="value">{{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}</span>
+            <span class="value">{{getDisplayIMD(material)}}</span>
           </div>
           
           <div class="info-row">
@@ -491,17 +457,26 @@
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
-              {{material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}}
+              {{getDisplayIMD(material)}}
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
-              <input type="number" 
+              <span *ngIf="!material.isEditingOpeningStock" 
+                    class="display-value" 
+                    (click)="startEditingOpeningStock(material)"
+                    [title]="'Click để sửa tồn đầu: ' + formatNumber(material.openingStock || 0)">
+                {{formatNumber(material.openingStock || 0)}}
+              </span>
+              <input *ngIf="material.isEditingOpeningStock"
+                     type="number" 
                      class="opening-stock-input" 
                      [ngModel]="material.openingStock || ''"
                      (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
-                     (change)="updateOpeningStock(material)" 
+                     (blur)="finishEditingOpeningStock(material)"
+                     (keyup.enter)="finishEditingOpeningStock(material)"
+                     (keyup.escape)="cancelEditingOpeningStock(material)"
                      min="0" 
                      step="0.1" 
-                     [placeholder]="material.openingStock ? '' : 'Nhập tồn đầu'">
+                     placeholder="Nhập tồn đầu">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
             <!-- Cột "Đã xuất" - Có thể edit khi mở khóa -->
@@ -526,10 +501,20 @@
             </td>
                         <!-- Cột "XT" - Số lượng cần xuất (nhập tay) -->
             <td class="number-cell xt-column">
-              <input type="number" 
+              <span *ngIf="!material.isEditingXT" 
+                    class="display-value" 
+                    (click)="startEditingXT(material)"
+                    [title]="'Click để sửa XT: ' + formatNumber(material.xt || 0)">
+                {{formatNumber(material.xt || 0)}}
+              </span>
+              <input *ngIf="material.isEditingXT"
+                     type="number" 
                      class="editable-cell" 
-                     [(ngModel)]="material.xt" 
-                     (change)="updateXT(material)" 
+                     [ngModel]="material.xt || ''"
+                     (ngModelChange)="material.xt = $event === '' ? null : +$event" 
+                     (blur)="finishEditingXT(material)"
+                     (keyup.enter)="finishEditingXT(material)"
+                     (keyup.escape)="cancelEditingXT(material)"
                      min="0" 
                      step="0.1" 
                      placeholder="Nhập số lượng XT">

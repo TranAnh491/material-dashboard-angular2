@@ -682,11 +682,27 @@ iframe {
   .code-cell {
     min-width: 120px;
     width: 120px;
+    text-align: center;
+    
+    .editable-input {
+      color: #000000 !important;
+      font-size: 12px !important; /* Tăng kích thước chữ */
+      font-weight: 600;
+      text-align: center;
+    }
   }
   
   .po-cell {
     min-width: 120px;
     width: 120px;
+    text-align: center;
+    
+    .editable-input {
+      color: #000000 !important;
+      font-size: 12px !important; /* Tăng kích thước chữ */
+      font-weight: 600;
+      text-align: center;
+    }
   }
   
   .number-cell {
@@ -721,6 +737,14 @@ iframe {
   .lot-cell {
     min-width: 144px;
     width: 144px;
+    text-align: center;
+    
+    .editable-input {
+      color: #000000 !important;
+      font-size: 12px !important; /* Tăng kích thước chữ */
+      font-weight: 600;
+      text-align: center;
+    }
   }
   
   .date-cell {
