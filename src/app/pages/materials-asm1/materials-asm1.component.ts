@@ -318,6 +318,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
         console.log(`🔍 Firebase subscription received ${actions.length} actions`);
+        
         this.inventoryMaterials = actions
           .map(action => {
             const data = action.payload.doc.data() as any;
@@ -1216,8 +1217,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // Sắp xếp FIFO: Material Code -> PO (oldest first)
         this.sortInventoryFIFO();
         
-        // Tự động cập nhật số lượng xuất từ outbound cho kết quả tìm kiếm
-        this.autoUpdateSearchResultsExportedFromOutbound();
+        // 🔧 SIMPLIFIED: Exported quantities loaded directly from Firebase (no auto-update needed)
+        console.log('✅ Search results exported quantities loaded directly from Firebase');
         
         console.log(`✅ ASM1 Search completed: ${this.filteredInventory.length} results from ${this.inventoryMaterials.length} loaded items`);
         
@@ -2964,8 +2965,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       this.filteredInventory = [...this.inventoryMaterials];
       console.log(`✅ Backup method loaded ${this.inventoryMaterials.length} materials`);
       
-      // Auto-update exported quantities
-      this.autoUpdateAllExportedFromOutbound();
+      // 🔧 SIMPLIFIED: Exported quantities loaded directly from Firebase (no auto-update needed)
+      console.log('✅ Backup method exported quantities loaded directly from Firebase');
       
     } catch (error) {
       console.error('❌ Error in backup method:', error);
@@ -4423,10 +4424,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Mark duplicates for display
     this.markDuplicates();
     
-    // Tự động cập nhật số lượng xuất từ outbound cho tất cả materials
-    console.log('🔄 Updating exported quantities from outbound...');
-    console.log(`🔍 DEBUG: Before auto-update, first material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
-    this.autoUpdateAllExportedFromOutbound();
+    // 🔧 SIMPLIFIED: Exported quantity được lưu trực tiếp vào Firebase từ outbound scan
+    console.log('✅ Exported quantities loaded directly from Firebase (no auto-update needed)');
+    console.log(`🔍 DEBUG: First material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
     
     this.isLoading = false;
     
