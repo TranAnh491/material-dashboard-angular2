@@ -462,16 +462,22 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   onEmployeeScanned(employeeId: string): void {
     if (!employeeId || !employeeId.trim()) return;
     
-    // 🔧 VALIDATION: Validate format ASP + 4 số trước khi accept
+    // 🔧 LẤY 7 KÝ TỰ ĐẦU TIÊN: QR code có thể dài bao nhiêu cũng được, chỉ lấy 7 ký tự đầu
     const trimmedId = employeeId.trim();
-    if (trimmedId.length === 7 && trimmedId.startsWith('ASP')) {
-      const aspPart = trimmedId.substring(0, 3);
-      const numberPart = trimmedId.substring(3, 7);
+    const extractedId = trimmedId.substring(0, 7); // Lấy 7 ký tự đầu tiên
+    
+    console.log(`🔍 Original QR code: "${trimmedId}" (length: ${trimmedId.length})`);
+    console.log(`🔍 Extracted 7 chars: "${extractedId}"`);
+    
+    // 🔧 VALIDATION: Validate format ASP + 4 số sau khi lấy 7 ký tự đầu
+    if (extractedId.length === 7 && extractedId.startsWith('ASP')) {
+      const aspPart = extractedId.substring(0, 3);
+      const numberPart = extractedId.substring(3, 7);
       
       if (aspPart === 'ASP' && /^\d{4}$/.test(numberPart)) {
-        this.batchEmployeeId = trimmedId;
+        this.batchEmployeeId = extractedId;
         this.isEmployeeIdScanned = true;
-        console.log(`✅ Employee ID scanned: ${trimmedId} - Setup complete`);
+        console.log(`✅ Employee ID scanned: ${extractedId} - Setup complete`);
         
         // Close setup modal and start material scanning
         this.showScanningSetupModal = false;
@@ -490,12 +496,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         console.log('🎯 Professional scanning setup complete - Ready for material scanning');
       } else {
         // ❌ Invalid format - show error and stay on employee step
-        this.showScanError(`Sai định dạng mã nhân viên: ${trimmedId}. Phải có format ASP + 4 số (ví dụ: ASP2101)`);
+        this.showScanError(`Sai định dạng mã nhân viên: ${extractedId}. Phải có format ASP + 4 số (ví dụ: ASP2101)`);
         console.log('❌ Invalid employee ID format, staying on employee step');
       }
     } else {
       // ❌ Invalid format - show error and stay on employee step
-      this.showScanError(`Mã nhân viên phải có 7 ký tự (ASP + 4 số). Nhận được: ${trimmedId}`);
+      this.showScanError(`Mã nhân viên phải có 7 ký tự (ASP + 4 số). Nhận được: ${extractedId}`);
       console.log('❌ Invalid employee ID length/format, staying on employee step');
     }
   }
@@ -2059,7 +2065,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (!this.isEmployeeIdScanned) {
         if (scannedData.includes('ASP') || scannedData.length <= 10) {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
-          this.batchEmployeeId = scannedData.substring(0, 7);
+          const extractedId = scannedData.substring(0, 7);
+          console.log(`🔍 Auto-detect: Original "${scannedData}" → Extracted "${extractedId}"`);
+          this.batchEmployeeId = extractedId;
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
           this.showScanStatus();
@@ -2095,7 +2103,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           }
         } else {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
-          this.batchEmployeeId = scannedData.substring(0, 7);
+          const extractedId = scannedData.substring(0, 7);
+          console.log(`🔍 Auto-detect: Original "${scannedData}" → Extracted "${extractedId}"`);
+          this.batchEmployeeId = extractedId;
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
           this.showScanStatus();
@@ -2155,47 +2165,39 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log('🔍 Processing employee ID scan:', scannedData);
       
-      // 🔧 VALIDATION: Mã nhân viên phải bắt đầu bằng ASP và có 4 số phía sau (tổng 7 ký tự)
-      let employeeId = '';
+      // 🔧 LẤY 7 KÝ TỰ ĐẦU TIÊN: QR code có thể dài bao nhiêu cũng được, chỉ lấy 7 ký tự đầu
+      const trimmedData = scannedData.trim();
+      const extractedId = trimmedData.substring(0, 7); // Lấy 7 ký tự đầu tiên
       
-      // Pattern 1: Bắt đầu với ASP - lấy 7 ký tự đầu
-      if (scannedData.startsWith('ASP')) {
-        employeeId = scannedData.substring(0, 7);
-      }
-      // Pattern 2: Tìm ASP trong chuỗi - lấy 7 ký tự từ vị trí ASP
-      else {
-        const aspIndex = scannedData.indexOf('ASP');
-        if (aspIndex >= 0) {
-          employeeId = scannedData.substring(aspIndex, aspIndex + 7);
-        }
-      }
+      console.log(`🔍 Original QR code: "${trimmedData}" (length: ${trimmedData.length})`);
+      console.log(`🔍 Extracted 7 chars: "${extractedId}"`);
       
-      // 🔧 VALIDATION: Kiểm tra format ASP + 4 số
-      if (employeeId && employeeId.length === 7) {
-        const aspPart = employeeId.substring(0, 3);
-        const numberPart = employeeId.substring(3, 7);
+      // 🔧 VALIDATION: Kiểm tra format ASP + 4 số sau khi lấy 7 ký tự đầu
+      if (extractedId && extractedId.length === 7) {
+        const aspPart = extractedId.substring(0, 3);
+        const numberPart = extractedId.substring(3, 7);
         
         // Kiểm tra ASP và 4 số
         if (aspPart === 'ASP' && /^\d{4}$/.test(numberPart)) {
-        this.batchEmployeeId = employeeId;
-        this.isEmployeeIdScanned = true;
-        
-        console.log('✅ Employee ID scanned successfully:', employeeId);
-        console.log('📊 Original scanned data:', scannedData);
-        console.log('📊 Extracted employee ID:', employeeId);
+          this.batchEmployeeId = extractedId;
+          this.isEmployeeIdScanned = true;
+          
+          console.log('✅ Employee ID scanned successfully:', extractedId);
+          console.log('📊 Original scanned data:', scannedData);
+          console.log('📊 Extracted employee ID:', extractedId);
           console.log('📊 ASP part:', aspPart, 'Number part:', numberPart);
-        
-        // Auto-focus for next scan
-        setTimeout(() => {
-          this.focusScannerInput();
-        }, 100);
-        
-      } else {
-          throw new Error(`Sai định dạng mã nhân viên: ${employeeId}. Phải có format ASP + 4 số (ví dụ: ASP2101)`);
+          
+          // Auto-focus for next scan
+          setTimeout(() => {
+            this.focusScannerInput();
+          }, 100);
+          
+        } else {
+          throw new Error(`Sai định dạng mã nhân viên: ${extractedId}. Phải có format ASP + 4 số (ví dụ: ASP2101)`);
         }
         
       } else {
-        throw new Error(`Mã nhân viên phải có 7 ký tự (ASP + 4 số). Nhận được: ${employeeId || 'không tìm thấy'}`);
+        throw new Error(`Mã nhân viên phải có 7 ký tự (ASP + 4 số). Nhận được: ${extractedId || 'không tìm thấy'}`);
       }
       
     } catch (error) {
