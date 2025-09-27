@@ -84,6 +84,11 @@
             Export Excel
           </a>
           
+          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFullReport()">
+            <i class="material-icons">assessment</i>
+            Tải báo cáo
+          </a>
+          
           <!-- Refresh LinkQ Data Only -->
           <a class="dropdown-item" href="javascript:void(0)" (click)="refreshLinkQDataOnly()" *ngIf="isLinkQDataLoaded">
             <i class="material-icons">refresh</i>
@@ -196,6 +201,7 @@
           <th *ngIf="groupByType === 'po'">Đã xuất</th>
           <th *ngIf="groupByType === 'po'">XT</th>
           <th>Tồn kho</th>
+          <th>Vị trí</th>
           <th *ngIf="isLinkQDataLoaded">LinkQ</th>
           <th *ngIf="isLinkQDataLoaded">So Sánh</th>
         </tr>
@@ -211,6 +217,7 @@
           <td class="stock-cell" [class.negative-stock]="item.isNegative">
             {{ item.currentStock | number:'1.0-3' }}
           </td>
+          <td class="location-cell">{{ item.location || '-' }}</td>
           <td *ngIf="isLinkQDataLoaded" class="linkq-cell">
             {{ item.linkQStock !== undefined ? (item.linkQStock | number:'1.0-3') : '-' }}
           </td>

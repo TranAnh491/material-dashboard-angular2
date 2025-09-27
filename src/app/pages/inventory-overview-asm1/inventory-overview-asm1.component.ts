@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 interface InventoryOverviewItem {
   id: string;
   materialCode: string;
+  materialName?: string; // Thêm materialName
   poNumber: string;
   quantity: number;
   openingStock: number; // Thêm openingStock để giống RM1 Inventory
@@ -18,6 +19,9 @@ interface InventoryOverviewItem {
   type: string;
   currentStock: number;
   isNegative: boolean;
+  factory?: string; // Thêm factory
+  importDate?: string | Date; // Thêm importDate
+  batchNumber?: string; // Thêm batchNumber
   // LinkQ fields
   linkQStock?: number;
   stockDifference?: number;
@@ -289,6 +293,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const newItem: InventoryOverviewItem = {
           id: docId, // Sử dụng ID thật từ Firebase
           materialCode: materialCode,
+          materialName: data.materialName || '', // Thêm materialName
           poNumber: poNumber,
           quantity: quantity,
           openingStock: openingStock,
@@ -298,6 +303,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           type: data.type || '',
           currentStock: currentStock,
           isNegative: currentStock < 0,
+          factory: data.factory || 'ASM1', // Thêm factory
+          importDate: data.importDate || '', // Thêm importDate
+          batchNumber: data.batchNumber || '', // Thêm batchNumber
           // 🔧 SỬA LỖI: Xử lý LinkQ data trong real-time update
           linkQStock: undefined,
           stockDifference: undefined,
@@ -519,6 +527,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const groupedItem: InventoryOverviewItem = {
           id: item.materialCode, // Use material code as ID for grouped items
           materialCode: item.materialCode,
+          materialName: item.materialName || '', // Thêm materialName
           poNumber: '', // Clear PO for grouped view
           quantity: item.quantity,
           openingStock: item.openingStock || 0, // Thêm openingStock
@@ -528,6 +537,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           type: item.type,
           currentStock: item.currentStock,
           isNegative: item.currentStock < 0,
+          factory: item.factory || 'ASM1', // Thêm factory
+          importDate: item.importDate || '', // Thêm importDate
+          batchNumber: item.batchNumber || '', // Thêm batchNumber
           // Copy LinkQ data
           linkQStock: item.linkQStock,
           stockDifference: item.stockDifference,
@@ -778,6 +790,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         }
         
         row['Tồn kho'] = item.currentStock;
+        row['Vị trí'] = item.location || '-';
         
         if (this.isLinkQDataLoaded) {
           row['LinkQ'] = item.linkQStock !== undefined ? item.linkQStock : '-';
@@ -796,6 +809,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         { wch: 15 }, // Mã hàng
         ...(this.groupByType === 'po' ? [{ wch: 15 }] : []), // PO (if applicable)
         { wch: 12 }, // Tồn kho
+        { wch: 15 }, // Vị trí
         ...(this.isLinkQDataLoaded ? [{ wch: 12 }, { wch: 12 }] : []) // LinkQ, So Sánh (if applicable)
       ];
       ws['!cols'] = colWidths;
@@ -814,6 +828,88 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       console.log(`✅ Excel exported successfully: ${filename}`);
     } catch (error) {
       console.error('❌ Error exporting to Excel:', error);
+    }
+  }
+
+  // Download full report with all data
+  downloadFullReport(): void {
+    if (this.inventoryItems.length === 0) {
+      console.warn('⚠️ No data to export');
+      alert('⚠️ Không có dữ liệu để tải báo cáo');
+      return;
+    }
+
+    try {
+      console.log('📊 Downloading full report...');
+      
+      // Prepare comprehensive data for export
+      const exportData = this.inventoryItems.map(item => {
+        const row: any = {
+          'Mã hàng': item.materialCode,
+          'Tên hàng': item.materialName || '',
+          'PO': item.poNumber || '',
+          'Tồn đầu': item.openingStock || 0,
+          'NK': item.quantity || 0,
+          'Đã xuất': item.exported || 0,
+          'XT': item.xt || 0,
+          'Tồn kho': item.currentStock,
+          'Vị trí': item.location || '-',
+          'Loại hình': item.type || '',
+          'Factory': item.factory || 'ASM1',
+          'Ngày nhập': item.importDate ? (typeof item.importDate === 'string' ? item.importDate : (item.importDate instanceof Date ? item.importDate.toLocaleDateString('vi-VN') : String(item.importDate))) : '-',
+          'Batch': item.batchNumber || '',
+          'Trạng thái': item.isNegative ? 'Tồn kho âm' : 'Bình thường'
+        };
+        
+        if (this.isLinkQDataLoaded) {
+          row['LinkQ Stock'] = item.linkQStock !== undefined ? item.linkQStock : '-';
+          row['Chênh lệch'] = item.stockDifference !== undefined ? item.stockDifference : '-';
+          row['Có lệch'] = item.hasDifference ? 'Có' : 'Không';
+        }
+        
+        return row;
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths for better readability
+      const colWidths = [
+        { wch: 15 }, // Mã hàng
+        { wch: 25 }, // Tên hàng
+        { wch: 15 }, // PO
+        { wch: 12 }, // Tồn đầu
+        { wch: 12 }, // NK
+        { wch: 12 }, // Đã xuất
+        { wch: 12 }, // XT
+        { wch: 12 }, // Tồn kho
+        { wch: 15 }, // Vị trí
+        { wch: 12 }, // Loại hình
+        { wch: 10 }, // Factory
+        { wch: 12 }, // Ngày nhập
+        { wch: 15 }, // Batch
+        { wch: 15 }, // Trạng thái
+        ...(this.isLinkQDataLoaded ? [{ wch: 12 }, { wch: 12 }, { wch: 10 }] : []) // LinkQ columns
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      const sheetName = 'RM1_Inventory_Full_Report';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      // Generate filename
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `RM1_Inventory_Full_Report_${timestamp}.xlsx`;
+
+      // Save file
+      XLSX.writeFile(wb, filename);
+      
+      console.log(`✅ Full report downloaded successfully: ${filename}`);
+      alert(`✅ Đã tải báo cáo đầy đủ: ${filename}\n\n📊 Tổng số dòng: ${exportData.length}\n📅 Thời gian: ${new Date().toLocaleString('vi-VN')}`);
+    } catch (error) {
+      console.error('❌ Error downloading full report:', error);
+      alert('❌ Lỗi khi tải báo cáo: ' + error.message);
     }
   }
 
