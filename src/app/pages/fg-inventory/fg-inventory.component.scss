@@ -715,3 +715,61 @@ mat-checkbox {
     }
   }
 }
+
+// PX Form styling
+.px-form {
+  .form-group {
+    margin-bottom: 20px;
+    
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      
+      &:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+      }
+      
+      &[type="number"] {
+        text-align: right;
+      }
+    }
+    
+    textarea.form-input {
+      resize: vertical;
+      min-height: 80px;
+    }
+  }
+  
+  .info-display {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 16px;
+    
+    p {
+      margin: 4px 0;
+      font-size: 13px;
+      color: #555;
+      
+      strong {
+        color: #333;
+        font-weight: 600;
+      }
+    }
+  }
+}

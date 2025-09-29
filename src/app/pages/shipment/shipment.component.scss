@@ -17,7 +17,7 @@ html, body {
   height: 100vh; /* Chiếm toàn bộ chiều cao trình duyệt */
   display: flex;
   flex-direction: column;
-  padding: 8px 12px; /* Giảm padding để tận dụng không gian */
+  padding: 4px 6px; /* Giảm padding để tận dụng không gian tối đa */
   margin-top: 0px; /* Remove upward pull - neutral position */
 }
 .container-fluid {
@@ -28,10 +28,10 @@ html, body {
 }
 .card-body {
   flex: 1;
-    display: flex;
+  display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-top: 12px; /* Further increased top padding */
+  padding: 4px 6px; /* Giảm padding để tận dụng không gian tối đa */
 }
 
 // Compact header styling (now unused but keeping for potential future use)
@@ -56,8 +56,8 @@ html, body {
 // Compact summary cards
 /* Summary cards - same style as work order */
 .summary-row {
-  margin-bottom: 12px;
-  margin-top: 5px;
+  margin-bottom: 8px; /* Giảm margin */
+  margin-top: 2px; /* Giảm margin */
 }
 
 .compact-stats {
@@ -78,28 +78,47 @@ html, body {
 }
 
 .summary-card {
-  height: 80px !important;
-  min-height: 80px;
-  margin-bottom: 8px;
+  height: 56px !important; /* Giảm từ 80px xuống 56px (70%) */
+  min-height: 56px;
+  margin-bottom: 6px;
   
   .card-header {
-    padding: 10px 12px !important;
+    padding: 6px 8px !important; /* Giảm padding */
     background: #f8f9fa !important;
     border: none !important;
     height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center; /* Căn giữa nội dung */
+    text-align: center; /* Căn giữa chữ */
+    
+    .card-header-icon {
+      margin-bottom: 2px;
+      
+      i {
+        font-size: 20px !important; /* Giảm kích thước icon */
+        color: #666;
+      }
+    }
     
     .card-category {
-      margin: 0 0 4px 0 !important;
-      font-size: 0.75em !important;
+      margin: 0 0 1px 0 !important;
+      font-size: 0.65em !important; /* Giảm font size */
       color: #666 !important;
+      line-height: 1.1;
+    }
+    
+    .card-category-en {
+      margin: 0 0 2px 0 !important;
+      font-size: 0.55em !important; /* Giảm font size tiếng Anh */
+      color: #999 !important;
+      line-height: 1.1;
     }
     
     .card-title {
       margin: 0 !important;
-      font-size: 1.2em !important;
+      font-size: 1.0em !important; /* Giảm font size */
       font-weight: 600 !important;
       color: #333 !important;
     }
@@ -379,8 +398,8 @@ html, body {
   flex: 1;
   overflow-x: auto !important; /* Force horizontal scrolling */
   overflow-y: auto !important; /* Force vertical scrolling */
-  max-height: calc(100vh - 180px); /* Tăng chiều cao bảng để tận dụng màn hình */
-  padding: 4px; /* Giảm padding để tận dụng không gian */
+  max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
+  padding: 2px; /* Giảm padding để tận dụng không gian tối đa */
   width: 100% !important;
   max-width: 100% !important;
   
@@ -498,109 +517,184 @@ html, body {
   }
 }
 
-// Summary cards with solid pastel colors - targeting by column position
+// Summary cards with white background and colored borders
 .summary-row {
   .col-lg-2:nth-child(1) .summary-card {
-    background: #e3f2fd !important;
-    border: none !important;
+    background: #ffffff !important;
+    border: 3px solid #2196f3 !important;
     box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2) !important;
     
     .card-header {
-      background: #e3f2fd !important;
+      background: #ffffff !important;
       border-bottom: none !important;
       
+      .card-header-icon i {
+        color: #2196f3 !important; /* Icon màu xanh dương */
+      }
+      
       .card-category {
-        color: #1976d2 !important;
-        font-weight: 500 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
       
       .card-title {
-        color: #0d47a1 !important;
-        font-weight: 600 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
       }
     }
   }
   
   .col-lg-2:nth-child(2) .summary-card {
-    background: #e8f5e8 !important;
-    border: none !important;
+    background: #ffffff !important;
+    border: 3px solid #4caf50 !important;
     box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2) !important;
     
     .card-header {
-      background: #e8f5e8 !important;
+      background: #ffffff !important;
       border-bottom: none !important;
       
+      .card-header-icon i {
+        color: #4caf50 !important; /* Icon màu xanh lá */
+      }
+      
       .card-category {
-        color: #2e7d32 !important;
-        font-weight: 500 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
       
       .card-title {
-        color: #1b5e20 !important;
-        font-weight: 600 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
       }
     }
   }
   
   .col-lg-2:nth-child(3) .summary-card {
-    background: #fff3e0 !important;
-    border: none !important;
+    background: #ffffff !important;
+    border: 3px solid #ff9800 !important;
     box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2) !important;
     
     .card-header {
-      background: #fff3e0 !important;
+      background: #ffffff !important;
       border-bottom: none !important;
       
+      .card-header-icon i {
+        color: #ff9800 !important; /* Icon màu cam */
+      }
+      
       .card-category {
-        color: #f57c00 !important;
-        font-weight: 500 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
       
       .card-title {
-        color: #e65100 !important;
-        font-weight: 600 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
       }
     }
   }
   
   .col-lg-2:nth-child(4) .summary-card {
-    background: #e0f2f1 !important;
-    border: none !important;
-    box-shadow: 0 2px 4px rgba(0, 150, 136, 0.2) !important;
+    background: #ffffff !important;
+    border: 3px solid #00bcd4 !important;
+    box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2) !important;
     
     .card-header {
-      background: #e0f2f1 !important;
+      background: #ffffff !important;
       border-bottom: none !important;
       
+      .card-header-icon i {
+        color: #00bcd4 !important; /* Icon màu xanh cyan */
+      }
+      
       .card-category {
-        color: #00796b !important;
-        font-weight: 500 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
       
       .card-title {
-        color: #004d40 !important;
-        font-weight: 600 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
       }
     }
   }
   
   .col-lg-2:nth-child(5) .summary-card {
-    background: #fce4ec !important;
-    border: none !important;
-    box-shadow: 0 2px 4px rgba(233, 30, 99, 0.2) !important;
+    background: #ffffff !important;
+    border: 3px solid #9c27b0 !important;
+    box-shadow: 0 2px 4px rgba(156, 39, 176, 0.2) !important;
     
     .card-header {
-      background: #fce4ec !important;
+      background: #ffffff !important;
       border-bottom: none !important;
       
+      .card-header-icon i {
+        color: #9c27b0 !important; /* Icon màu tím */
+      }
+      
       .card-category {
-        color: #c2185b !important;
-        font-weight: 500 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
       
       .card-title {
-        color: #880e4f !important;
-        font-weight: 600 !important;
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+    }
+  }
+  
+  .col-lg-2:nth-child(6) .summary-card {
+    background: #ffffff !important;
+    border: 3px solid #f44336 !important;
+    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2) !important;
+    
+    .card-header {
+      background: #ffffff !important;
+      border-bottom: none !important;
+      
+      .card-header-icon i {
+        color: #f44336 !important; /* Icon màu đỏ */
+      }
+      
+      .card-category {
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-category-en {
+        color: #000000 !important;
+        font-weight: normal !important;
+      }
+      
+      .card-title {
+        color: #000000 !important;
+        font-weight: normal !important;
       }
     }
   }
@@ -608,7 +702,7 @@ html, body {
 
 // More button row styling
 .more-button-row {
-  margin-bottom: 15px;
+  margin-bottom: 8px; /* Giảm margin */
   
   .more-button-container {
     display: flex;

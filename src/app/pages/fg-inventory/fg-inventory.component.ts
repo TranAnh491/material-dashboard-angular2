@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { FgExportService } from '../../services/fg-export.service';
+import { FgInService } from '../../services/fg-in.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -77,6 +79,15 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   endDate: Date = new Date();
   
+  // Create PX dialog
+  showCreatePXDialog: boolean = false;
+  selectedMaterial: FGInventoryItem | null = null;
+  pxForm = {
+    shipment: '',
+    quantity: 0,
+    notes: ''
+  };
+  
   // Display options
   showCompleted: boolean = true;
   
@@ -90,6 +101,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
+    private fgExportService: FgExportService,
+    private fgInService: FgInService,
     private dialog: MatDialog
   ) {}
 
@@ -165,32 +178,62 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         
         this.materials = firebaseMaterials;
         
-        // Calculate Tồn only for materials that need it (optimized)
-        const materialsToUpdate: FGInventoryItem[] = [];
+        // Initialize tonDau if missing (for new materials)
         this.materials.forEach(material => {
-          // Only calculate if ton is missing or zero
-          if (!material.ton || material.ton === 0) {
-            const calculatedTon = this.calculateTon(material);
-            if (calculatedTon > 0) {
-              material.ton = calculatedTon;
-              materialsToUpdate.push(material);
-            }
+          if (!material.tonDau) {
+            material.tonDau = 0;
           }
         });
         
-        // Only update if there are changes (reduce Firebase calls)
-        if (materialsToUpdate.length > 0) {
-          console.log(`Updated Tồn for ${materialsToUpdate.length} materials`);
-          // Batch update for better performance
-          materialsToUpdate.forEach(material => {
-            this.updateMaterialInFirebase(material);
-          });
-        }
+        // Load export data for each material
+        this.loadExportDataForMaterials();
         
         this.sortMaterials();
         this.applyFilters();
         this.isLoading = false;
       });
+  }
+
+  // Load export and import data for all materials
+  private loadExportDataForMaterials(): void {
+    this.materials.forEach(material => {
+      // Load export data from fg-export collection
+      this.fgExportService.getTotalExportQuantity(
+        material.materialCode, 
+        material.batchNumber, 
+        material.lsx, 
+        material.lot
+      ).pipe(takeUntil(this.destroy$))
+      .subscribe(totalExport => {
+        material.xuat = totalExport;
+        this.recalculateTon(material);
+        console.log(`Updated export for ${material.materialCode}: ${totalExport} units`);
+      });
+
+      // Load import data from fg-in collection
+      this.fgInService.getTotalImportQuantity(
+        material.materialCode, 
+        material.batchNumber, 
+        material.lsx, 
+        material.lot
+      ).pipe(takeUntil(this.destroy$))
+      .subscribe(totalImport => {
+        material.nhap = totalImport;
+        this.recalculateTon(material);
+        console.log(`Updated import for ${material.materialCode}: ${totalImport} units`);
+      });
+    });
+  }
+
+  // Recalculate ton using formula: Tồn đầu + Nhập - Xuất = Tồn
+  private recalculateTon(material: FGInventoryItem): void {
+    const tonDau = material.tonDau || 0;
+    const nhap = material.nhap || 0;
+    const xuat = material.xuat || 0;
+    
+    material.ton = tonDau + nhap - xuat;
+    
+    console.log(`Recalculated ton for ${material.materialCode}: ${tonDau} + ${nhap} - ${xuat} = ${material.ton}`);
   }
 
   // Update material in Firebase
@@ -849,19 +892,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Update Tồn when Tồn đầu, Nhập, or Xuất changes
   updateTon(material: FGInventoryItem): void {
-    const newTon = this.calculateTon(material);
-    if (material.ton !== newTon) {
-      material.ton = newTon;
-      
-      // Recalculate Carton/ODD based on new Tồn
-      if (material.standard > 0) {
-        material.carton = Math.ceil(material.ton / material.standard);
-        material.odd = material.ton % material.standard;
-      }
-      
-      this.updateMaterialInFirebase(material);
-      console.log(`Updated Tồn for ${material.materialCode}: ${material.ton}, Carton: ${material.carton}, ODD: ${material.odd}`);
+    this.recalculateTon(material);
+    
+    // Recalculate Carton/ODD based on new Tồn
+    if (material.standard > 0) {
+      material.carton = Math.ceil(material.ton / material.standard);
+      material.odd = material.ton % material.standard;
     }
+    
+    this.updateMaterialInFirebase(material);
+    console.log(`Updated Tồn for ${material.materialCode}: ${material.ton}, Carton: ${material.carton}, ODD: ${material.odd}`);
   }
 
   // Debug Carton/ODD calculation
@@ -1026,6 +1066,96 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   applyTimeRangeFilter(): void {
     this.applyFilters();
     this.showTimeRangeDialog = false;
+  }
+
+  // Open Create PX Dialog
+  openCreatePXDialog(material: FGInventoryItem): void {
+    this.selectedMaterial = material;
+    this.pxForm = {
+      shipment: '',
+      quantity: 0,
+      notes: ''
+    };
+    this.showCreatePXDialog = true;
+  }
+
+  // Check if PX form is valid
+  isPXFormValid(): boolean {
+    return !!(this.pxForm.shipment.trim() && 
+              this.pxForm.quantity > 0 && 
+              this.pxForm.quantity <= (this.selectedMaterial?.ton || 0));
+  }
+
+  // Create PX (Phiếu Xuất)
+  createPX(): void {
+    if (!this.selectedMaterial || !this.isPXFormValid()) {
+      alert('❌ Vui lòng nhập đầy đủ thông tin!');
+      return;
+    }
+
+    // Confirm before creating
+    const confirmMessage = `✅ Xác nhận tạo phiếu xuất?\n\n` +
+      `Mã TP: ${this.selectedMaterial.materialCode}\n` +
+      `Batch: ${this.selectedMaterial.batchNumber}\n` +
+      `Shipment: ${this.pxForm.shipment}\n` +
+      `Số lượng: ${this.pxForm.quantity}\n\n` +
+      `Dữ liệu sẽ được tạo trong FG Out.`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Generate PushNo
+    const now = new Date();
+    const day = now.getDate().toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const pushNo = day + month + hours + minutes;
+
+    // Create FG Out record
+    const fgOutRecord = {
+      factory: 'ASM1',
+      exportDate: now,
+      shipment: this.pxForm.shipment.trim(),
+      materialCode: this.selectedMaterial.materialCode,
+      customerCode: this.selectedMaterial.customer || '',
+      batchNumber: this.selectedMaterial.batchNumber,
+      lsx: this.selectedMaterial.lsx,
+      lot: this.selectedMaterial.lot,
+      quantity: this.pxForm.quantity,
+      poShip: '', // Empty for special PX
+      carton: Math.ceil(this.pxForm.quantity / 100), // Default carton calculation
+      qtyBox: 100, // Default QTYBOX
+      odd: this.pxForm.quantity % 100, // Calculate odd
+      location: this.selectedMaterial.location || '',
+      notes: this.pxForm.notes.trim() || `Tạo từ FG Inventory - ${now.toLocaleString('vi-VN')}`,
+      updateCount: 1,
+      pushNo: pushNo,
+      approved: false, // Not approved yet
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // Save to Firebase
+    this.firestore.collection('fg-out').add(fgOutRecord)
+      .then(() => {
+        console.log('✅ Created special PX in FG Out:', fgOutRecord);
+        
+        const successMessage = `✅ Đã tạo phiếu xuất thành công!\n\n` +
+          `Mã TP: ${this.selectedMaterial.materialCode}\n` +
+          `Shipment: ${this.pxForm.shipment}\n` +
+          `Số lượng: ${this.pxForm.quantity}\n` +
+          `PushNo: ${pushNo}\n\n` +
+          `Vui lòng vào FG Out để duyệt xuất.`;
+        
+        alert(successMessage);
+        this.showCreatePXDialog = false;
+      })
+      .catch(error => {
+        console.error('❌ Error creating PX:', error);
+        alert(`❌ Lỗi khi tạo phiếu xuất: ${error.message}`);
+      });
   }
 
 

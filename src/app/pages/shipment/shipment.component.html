@@ -9,7 +9,13 @@
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <p class="card-category">Tổng Shipment</p>
+                  <div class="card-header-icon">
+                    <i class="material-icons">local_shipping</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">TỔNG SHIPMENT</p>
+                    <p class="card-category-en">TOTAL SHIPMENT</p>
+                  </div>
                   <h3 class="card-title">{{getTotalShipments()}}</h3>
                 </div>
               </div>
@@ -17,7 +23,13 @@
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <p class="card-category">Đã soạn xong</p>
+                  <div class="card-header-icon">
+                    <i class="material-icons">check_circle</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">ĐÃ SOẠN XONG</p>
+                    <p class="card-category-en">COMPLETED</p>
+                  </div>
                   <h3 class="card-title">{{getCompletedShipments()}}</h3>
                 </div>
               </div>
@@ -25,7 +37,13 @@
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <p class="card-category">Thiếu Hàng</p>
+                  <div class="card-header-icon">
+                    <i class="material-icons">warning</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">THIẾU HÀNG</p>
+                    <p class="card-category-en">MISSING ITEMS</p>
+                  </div>
                   <h3 class="card-title">{{getMissingItemsShipments()}}</h3>
                 </div>
               </div>
@@ -33,7 +51,13 @@
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <p class="card-category">Đang soạn</p>
+                  <div class="card-header-icon">
+                    <i class="material-icons">work</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">ĐANG SOẠN</p>
+                    <p class="card-category-en">IN PROGRESS</p>
+                  </div>
                   <h3 class="card-title">{{getInProgressShipments()}}</h3>
                 </div>
               </div>
@@ -41,14 +65,34 @@
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
-                  <p class="card-category">Chờ soạn</p>
+                  <div class="card-header-icon">
+                    <i class="material-icons">schedule</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">CHỜ SOẠN</p>
+                    <p class="card-category-en">PENDING</p>
+                  </div>
                   <h3 class="card-title">{{getPendingShipments()}}</h3>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4 col-sm-6">
+              <div class="card card-stats compact-stats summary-card">
+                <div class="card-header">
+                  <div class="card-header-icon">
+                    <i class="material-icons">error</i>
+                  </div>
+                  <div class="card-content">
+                    <p class="card-category">DELAY</p>
+                    <p class="card-category-en">DELAY</p>
+                  </div>
+                  <h3 class="card-title">{{getDelayShipments()}}</h3>
                 </div>
               </div>
             </div>
           </div>
           
-          <!-- More Button Row -->
+          <!-- More Button and Search Row -->
           <div class="more-button-row">
             <div class="col-12">
               <div class="more-button-container">
@@ -75,6 +119,14 @@
                       <i class="material-icons">file_upload</i>
                       Import file
                     </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="refreshFGInventoryCache(); closeDropdown()">
+                      <i class="material-icons">refresh</i>
+                      Refresh Tồn Kho
+                    </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="debugInventoryData(); closeDropdown()">
+                      <i class="material-icons">bug_report</i>
+                      Debug Tồn Kho
+                    </a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
                       <i class="material-icons">file_download</i>
@@ -85,6 +137,14 @@
                       Xóa Tất Cả
                     </a>
                   </div>
+                </div>
+                <div class="search-container">
+                  <input type="text" 
+                         class="search-input" 
+                         placeholder="Tìm kiếm theo Shipment..." 
+                         [(ngModel)]="searchTerm"
+                         (input)="applyFilters()">
+                  <i class="material-icons search-icon">search</i>
                 </div>
               </div>
             </div>
@@ -97,30 +157,31 @@
               <table class="table table-striped table-hover">
                 <thead>
           <tr>
-            <th class="row-header">No</th>
-            <th>Shipment</th>
-            <th>Mã TP</th>
-            <th>Mã Khách</th>
-            <th>Lượng Xuất</th>
-            <th>PO Ship</th>
-            <th>Carton</th>
-            <th>Odd</th>
-            <th>Tồn kho</th>
+            <th class="row-header">NO</th>
+            <th>SHIPMENT</th>
+            <th>MÃ TP</th>
+            <th>MÃ KHÁCH</th>
+            <th>LƯỢNG XUẤT</th>
+            <th>PO SHIP</th>
+            <th>CARTON</th>
+            <th>QTYBOX</th>
+            <th>ODD</th>
+            <th>TỒN KHO</th>
             <th>FWD</th>
-            <th>Push</th>
-            <th>PushNo</th>
-            <th>Status</th>
-            <th>CS Date</th>
-            <th>Full Date</th>
-            <th>Dispatch Date</th>
-            <th>Ngày chuẩn bị</th>
-            <th>Ghi chú</th>
-            <th>Xóa</th>
+            <th>PUSH</th>
+            <th>PUSHNO</th>
+            <th>STATUS</th>
+            <th>CS DATE</th>
+            <th>FULL DATE</th>
+            <th>DISPATCH DATE</th>
+            <th>NGÀY CHUẨN BỊ</th>
+            <th>GHI CHÚ</th>
+            <th>XÓA</th>
           </tr>
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="19" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -151,10 +212,10 @@
                      placeholder="Mã Khách">
             </td>
             <td class="number-cell">
-              <input type="number"
+              <input type="text"
                      class="editable-input number-input"
-                     [(ngModel)]="shipment.quantity"
-                     (change)="updateShipmentInFirebase(shipment)"
+                     [value]="formatNumber(shipment.quantity)"
+                     (input)="onQuantityChange($event, shipment)"
                      placeholder="Lượng">
             </td>
             <td>
@@ -174,12 +235,19 @@
             <td class="number-cell">
               <input type="number"
                      class="editable-input number-input"
+                     [(ngModel)]="shipment.qtyBox"
+                     (change)="updateShipmentInFirebase(shipment)"
+                     placeholder="QtyBox">
+            </td>
+            <td class="number-cell">
+              <input type="number"
+                     class="editable-input number-input"
                      [(ngModel)]="shipment.odd"
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Odd">
             </td>
             <td class="number-cell">
-              <span class="inventory-display">{{getInventory(shipment.materialCode)}}</span>
+              <span class="inventory-display">{{formatNumber(getInventory(shipment.materialCode))}}</span>
             </td>
             <td>
               <select class="editable-select" [(ngModel)]="shipment.shipMethod" (change)="updateShipmentInFirebase(shipment)">
@@ -243,12 +311,6 @@
                      placeholder="Nhập ghi chú...">
             </td>
             <td class="action-cell">
-              <button mat-icon-button color="primary" 
-                      (click)="pushFinalToFGOut(shipment)"
-                      [disabled]="!shipment.push || !shipment.pushNo || shipment.pushNo === '000'"
-                      matTooltip="Push dữ liệu cuối cùng qua FG Out">
-                <mat-icon>send</mat-icon>
-              </button>
               <button mat-icon-button color="warn" (click)="deleteShipment(shipment)"
                       matTooltip="Xóa">
                 <mat-icon>delete</mat-icon>

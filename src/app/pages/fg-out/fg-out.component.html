@@ -34,6 +34,15 @@
                  class="custom-input search-input-uppercase">
         </div>
         
+        <div class="shipment-selector">
+          <select class="custom-select" [(ngModel)]="selectedShipment" (change)="onShipmentChange()">
+            <option value="">-- Chọn Shipment --</option>
+            <option *ngFor="let shipment of availableShipments" [value]="shipment">
+              {{shipment}}
+            </option>
+          </select>
+        </div>
+        
         <button class="custom-btn" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
           Chọn thời gian
@@ -48,6 +57,11 @@
           <i class="material-icons">add</i>
           + XTP
         </button>
+        
+        <button class="custom-btn btn-success" (click)="printSelectedShipment()" [disabled]="!selectedShipment">
+          <i class="material-icons">print</i>
+          In
+        </button>
 
       </div>
     </div>
@@ -58,7 +72,9 @@
         <thead>
           <tr>
             <th class="row-header">No</th>
+            <th class="date-header">NGÀY</th>
             <th class="update-header">PushNo</th>
+            <th>Factory</th>
             <th>Shipment</th>
             <th>Mã TP</th>
             <th>Mã Khách</th>
@@ -68,15 +84,37 @@
             <th>Lượng Xuất</th>
             <th>PO Ship</th>
             <th>Carton</th>
+            <th>QTYBOX</th>
             <th>Odd</th>
+            <th>Vị trí</th>
             <th>Ghi chú</th>
+            <th>Duyệt Xuất</th>
             <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index">
             <td class="row-header">{{i + 1}}</td>
-            <td class="update-cell">{{material.pushNo || '000'}}</td>
+            <td class="date-cell">
+              <input type="date"
+                     class="editable-input"
+                     [value]="formatDateForInput(material.exportDate)"
+                     (change)="onDateChange($event, material)">
+            </td>
+            <td class="update-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.pushNo"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="PushNo">
+            </td>
+            <td>
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.factory"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="Factory">
+            </td>
             <td class="code-cell">
               <input type="text"
                      class="editable-input"
@@ -143,16 +181,37 @@
             <td class="number-cell">
               <input type="number"
                      class="editable-input number-input"
+                     [(ngModel)]="material.qtyBox"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="QtyBox">
+            </td>
+            <td class="checkbox-cell">
+              <input type="checkbox"
+                     class="odd-checkbox"
                      [(ngModel)]="material.odd"
                      (change)="updateMaterialInFirebase(material)"
-                     placeholder="Odd">
+                     [title]="material.odd ? 'Gộp Thùng' : 'Thùng Chẵn'">
+            </td>
+            <td class="location-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.location"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="Vị trí">
             </td>
             <td>
               <input type="text"
                      class="editable-input"
                      [(ngModel)]="material.notes"
                      (change)="updateMaterialInFirebase(material)"
-                     placeholder="Nhập ghi chú...">
+                     placeholder="">
+            </td>
+            <td class="checkbox-cell">
+              <input type="checkbox"
+                     class="approval-checkbox"
+                     [(ngModel)]="material.approved"
+                     (change)="onApprovalChange(material)"
+                     [title]="material.approved ? 'Đã duyệt' : 'Chưa duyệt'">
             </td>
             <td class="action-cell">
               <button mat-icon-button color="warn" (click)="deleteMaterial(material)"
@@ -296,6 +355,96 @@
               [disabled]="!canImportXTP()">
         <i class="material-icons">file_upload</i>
         Import XTP
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Print Dialog -->
+<div class="custom-modal" [class.show]="showPrintDialog" [style.display]="showPrintDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showPrintDialog = false"></div>
+  <div class="modal-container print-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">print</i>
+        In phiếu xuất hàng - Shipment: {{selectedShipment}}
+      </h5>
+      <button type="button" class="close-btn" (click)="showPrintDialog = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body print-body">
+      <div class="print-content" id="printContent">
+        <div class="print-header">
+          <h2>PHIẾU XUẤT HÀNG</h2>
+          <div class="print-info">
+            <p><strong>Shipment:</strong> {{selectedShipment}}</p>
+            <p><strong>Ngày in:</strong> {{getCurrentDate()}}</p>
+            <p><strong>Người in:</strong> {{getCurrentUser()}}</p>
+          </div>
+        </div>
+        
+        <div class="print-table">
+          <table class="print-table-content">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã TP</th>
+                <th>Mã Khách</th>
+                <th>Batch</th>
+                <th>LSX</th>
+                <th>LOT</th>
+                <th>Lượng Xuất</th>
+                <th>Carton</th>
+                <th>QTYBOX</th>
+                <th>Vị trí</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let material of printMaterials; let i = index">
+                <td>{{i + 1}}</td>
+                <td>{{material.materialCode}}</td>
+                <td>{{material.customerCode}}</td>
+                <td>{{material.batchNumber}}</td>
+                <td>{{material.lsx}}</td>
+                <td>{{material.lot}}</td>
+                <td>{{material.quantity}}</td>
+                <td>{{material.carton}}</td>
+                <td>{{material.qtyBox}}</td>
+                <td>{{material.location}}</td>
+                <td>{{material.notes}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="print-footer">
+          <div class="signature-section">
+            <div class="signature-box">
+              <p>Người soạn hàng</p>
+              <div class="signature-line"></div>
+            </div>
+            <div class="signature-box">
+              <p>Người kiểm tra</p>
+              <div class="signature-line"></div>
+            </div>
+            <div class="signature-box">
+              <p>Người xuất kho</p>
+              <div class="signature-line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showPrintDialog = false">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="btn btn-apply" (click)="printDocument()">
+        <i class="material-icons">print</i>
+        In
       </button>
     </div>
   </div>

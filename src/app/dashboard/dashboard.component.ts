@@ -164,19 +164,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private async loadWorkOrdersFromFirebase() {
     try {
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth() + 1;
-      
       // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
       const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
       
       console.log(`Loading work orders for factories: ${factoryFilter.join(', ')}`);
       
-      this.firestore.collection('work-orders', ref => 
-        ref.where('year', '==', currentYear)
-           .where('month', '==', currentMonth)
-      ).valueChanges().subscribe((workOrders: any[]) => {
+      // Load ALL work orders from database (like work order tab)
+      this.firestore.collection('work-orders').snapshotChanges().subscribe((actions) => {
+        const workOrders = actions.map(a => {
+          const data = a.payload.doc.data() as any;
+          const id = a.payload.doc.id;
+          return { id, ...data };
+        });
+        
         // Filter by factory
         this.workOrders = workOrders.filter(wo => {
           const woFactory = wo.factory || 'ASM1';

@@ -90,6 +90,7 @@
             <th>Scan</th>
             <th>Ghi chú</th>
             <th>Khách</th>
+            <th>Tạo PX</th>
             <th>Xóa</th>
           </tr>
         </thead>
@@ -155,6 +156,12 @@
             </td>
             <td>{{material.customer}}</td>
             <td class="status-cell">
+              <button mat-icon-button color="primary" (click)="openCreatePXDialog(material)" 
+                      matTooltip="Tạo phiếu xuất">
+                <mat-icon>add_shopping_cart</mat-icon>
+              </button>
+            </td>
+            <td class="status-cell">
               <button mat-icon-button color="warn" (click)="deleteItem(material)" 
                       matTooltip="Xóa"
                       *ngIf="hasDeletePermission">
@@ -201,6 +208,72 @@
       <button type="button" class="btn btn-apply" (click)="applyTimeRangeFilter()">
         <i class="material-icons">check</i>
         Áp dụng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Create PX Dialog -->
+<div class="custom-modal" [class.show]="showCreatePXDialog" [style.display]="showCreatePXDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showCreatePXDialog = false"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">add_shopping_cart</i>
+        Tạo phiếu xuất đặc biệt
+      </h5>
+      <button type="button" class="close-btn" (click)="showCreatePXDialog = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="px-form">
+        <div class="form-group">
+          <label class="form-label">Thông tin hàng hóa</label>
+          <div class="info-display">
+            <p><strong>Mã TP:</strong> {{selectedMaterial?.materialCode}}</p>
+            <p><strong>Batch:</strong> {{selectedMaterial?.batchNumber}}</p>
+            <p><strong>LSX:</strong> {{selectedMaterial?.lsx}}</p>
+            <p><strong>LOT:</strong> {{selectedMaterial?.lot}}</p>
+            <p><strong>Tồn hiện có:</strong> {{selectedMaterial?.ton | number}}</p>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Shipment *</label>
+          <input type="text" 
+                 class="form-input" 
+                 [(ngModel)]="pxForm.shipment" 
+                 placeholder="Nhập số shipment">
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Số lượng xuất *</label>
+          <input type="number" 
+                 class="form-input" 
+                 [(ngModel)]="pxForm.quantity" 
+                 placeholder="Nhập số lượng xuất"
+                 min="1"
+                 [max]="selectedMaterial?.ton || 0">
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Ghi chú</label>
+          <textarea class="form-input" 
+                    [(ngModel)]="pxForm.notes" 
+                    placeholder="Nhập ghi chú (tùy chọn)"
+                    rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showCreatePXDialog = false">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="createPX()" [disabled]="!isPXFormValid()">
+        <i class="material-icons">add_shopping_cart</i>
+        Tạo PX
       </button>
     </div>
   </div>

@@ -8,7 +8,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 12px 15px;
+  padding: 0px 6px; /* Loại bỏ padding trên để xóa khoảng trống */
   margin-top: 0px;
 }
 
@@ -17,6 +17,7 @@
   display: flex;
   flex-direction: column;
   margin-top: 0px;
+  padding-top: 0px; /* Loại bỏ padding trên */
 }
 
 .card-body {
@@ -24,7 +25,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-top: 12px;
+  padding: 4px 6px; /* Giảm padding để tận dụng không gian tối đa */
 }
 
 /* Header Section */
@@ -54,6 +55,138 @@
 .page-title i {
   font-size: 28px;
   color: #000000;
+}
+
+/* Summary Cards */
+.summary-row {
+  margin-bottom: 8px;
+  margin-top: 0px; /* Loại bỏ margin trên */
+}
+
+.summary-card {
+  height: 56px !important; /* Giảm từ 80px xuống 56px (70%) */
+  min-height: 56px;
+  margin-bottom: 6px;
+}
+
+.summary-card .card-header {
+  padding: 6px 8px !important; /* Giảm padding */
+  background: #ffffff !important;
+  border: none !important;
+  height: 100%;
+  display: flex;
+  flex-direction: row; /* Icon trái, tên giữa, số phải */
+  justify-content: space-between; /* Phân bố đều */
+  align-items: center; /* Căn đều trên dưới */
+  text-align: left; /* Căn trái chữ */
+}
+
+.summary-card .card-header-icon {
+  margin-right: 8px; /* Khoảng cách bên phải icon */
+  flex-shrink: 0; /* Không co lại */
+  display: flex;
+  align-items: center; /* Căn đều icon trên dưới */
+}
+
+.summary-card .card-header-icon i {
+  font-size: 20px !important; /* Giảm kích thước icon */
+  color: #666;
+}
+
+.summary-card .card-content {
+  flex: 1; /* Chiếm không gian còn lại */
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Căn đều tên trên dưới */
+  text-align: center; /* Căn giữa tên */
+}
+
+.summary-card .card-category {
+  margin: 0 0 1px 0 !important;
+  font-size: 0.845em !important; /* Tăng 30% từ 0.65em lên 0.845em */
+  color: #000000 !important;
+  font-weight: normal !important;
+  line-height: 1.1;
+}
+
+.summary-card .card-category-en {
+  margin: 0 0 2px 0 !important;
+  font-size: 0.715em !important; /* Tăng 30% từ 0.55em lên 0.715em */
+  color: #000000 !important;
+  font-weight: normal !important;
+  line-height: 1.1;
+}
+
+.summary-card .card-title {
+  margin: 0 !important;
+  font-size: 2.0em !important; /* Tăng gấp đôi từ 1.0em lên 2.0em */
+  font-weight: normal !important;
+  color: #000000 !important;
+  text-align: right; /* Căn phải số đếm */
+  flex-shrink: 0; /* Không co lại */
+  display: flex;
+  align-items: center; /* Căn đều số trên dưới */
+}
+
+/* Summary cards with white background and colored borders */
+.summary-row .col-lg-2:nth-child(1) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #2196f3 !important;
+  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(1) .summary-card .card-header-icon i {
+  color: #2196f3 !important; /* Icon màu xanh dương */
+}
+
+.summary-row .col-lg-2:nth-child(2) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #4caf50 !important;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(2) .summary-card .card-header-icon i {
+  color: #4caf50 !important; /* Icon màu xanh lá */
+}
+
+.summary-row .col-lg-2:nth-child(3) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #ff9800 !important;
+  box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(3) .summary-card .card-header-icon i {
+  color: #ff9800 !important; /* Icon màu cam */
+}
+
+.summary-row .col-lg-2:nth-child(4) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #00bcd4 !important;
+  box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(4) .summary-card .card-header-icon i {
+  color: #00bcd4 !important; /* Icon màu xanh cyan */
+}
+
+.summary-row .col-lg-2:nth-child(5) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #9c27b0 !important;
+  box-shadow: 0 2px 4px rgba(156, 39, 176, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(5) .summary-card .card-header-icon i {
+  color: #9c27b0 !important; /* Icon màu tím */
+}
+
+.summary-row .col-lg-2:nth-child(6) .summary-card {
+  background: #ffffff !important;
+  border: 3px solid #f44336 !important;
+  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2) !important;
+}
+
+.summary-row .col-lg-2:nth-child(6) .summary-card .card-header-icon i {
+  color: #f44336 !important; /* Icon màu đỏ */
 }
 
 /* Info Boxes */
@@ -96,6 +229,47 @@
 .info-box .box-content {
   font-size: 14px;
   color: #666666;
+}
+
+/* More Button Row */
+.more-button-row {
+  margin-bottom: 8px; /* Giảm margin */
+}
+
+.more-button-container {
+  display: flex;
+  justify-content: flex-start; /* Căn trái */
+  align-items: center;
+  gap: 15px; /* Khoảng cách giữa More button và Search */
+}
+
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  padding: 8px 35px 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 250px;
+  background: #ffffff;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+.search-icon {
+  position: absolute;
+  right: 8px;
+  color: #666;
+  font-size: 18px;
+  pointer-events: none;
 }
 
 /* Action Section */
@@ -200,6 +374,8 @@
   background: #ffffff;
   border-radius: 6px;
   border: 1px solid #e9ecef;
+  max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
+  padding: 2px; /* Giảm padding để tận dụng không gian tối đa */
 }
 
 .table {
@@ -212,12 +388,97 @@
   border: 1px solid #dee2e6; /* Modern border */
 }
 
+/* Viền cho toàn bộ bảng - chỉ giữ viền cho header */
+.table th:first-child {
+  border-left: 1px solid #dee2e6 !important;
+}
+
+.table th:last-child {
+  border-right: 1px solid #dee2e6 !important;
+}
+
+/* Giữ viền cho nội dung */
+.table td:first-child {
+  border-left: 1px solid #dee2e6 !important;
+}
+
+.table td:last-child {
+  border-right: 1px solid #dee2e6 !important;
+}
+
+/* Giữ viền cho dòng nội dung */
+.table tbody tr {
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+.table tbody tr:last-child {
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
 .table th, .table td {
   padding: 8px 12px; /* Increase horizontal padding for spacing */
-  text-align: left;
+  text-align: center; /* Căn giữa tất cả */
   vertical-align: middle;
   background: #ffffff;
   color: #333333;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Cùng font chữ */
+}
+
+/* Cố định size dòng tiêu đề */
+.table th {
+  font-size: 10.4px !important; /* Giảm từ 13px xuống 80% (10.4px) */
+  font-weight: 600 !important;
+  text-transform: uppercase; /* Chữ in hoa */
+  color: #000000 !important;
+  background: #f8f9fa !important;
+  border: 1px solid #dee2e6 !important; /* Viền cho tiêu đề */
+  border-bottom: 2px solid #dee2e6 !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  white-space: nowrap !important; /* Không xuống dòng */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center !important; /* Căn giữa nội dung */
+}
+
+/* Cố định size nội dung */
+.table td {
+  font-size: 12px !important; /* Size cố định cho nội dung */
+  font-weight: normal !important;
+  color: #333333 !important;
+  border: 1px solid #dee2e6 !important; /* Giữ viền bảng */
+  background: #ffffff !important; /* Nền trắng cho tất cả các cột */
+  text-align: center !important; /* Căn giữa tất cả nội dung */
+  text-transform: uppercase !important; /* Viết hoa 100% */
+}
+
+/* Loại bỏ màu nền đặc biệt cho các ô nội dung */
+.table td .inventory-display,
+.table td .pushno-display,
+.table td .badge,
+.table td .status-badge,
+.table td .editable-input,
+.table td .editable-select,
+.table td .status-select {
+  background: #ffffff !important; /* Nền trắng cho tất cả nội dung */
+  color: #333333 !important; /* Màu chữ đen */
+  border: none !important; /* Loại bỏ viền nội dung */
+}
+
+/* Loại bỏ màu nền cho các input và select */
+.table td input,
+.table td select {
+  background: #ffffff !important;
+  color: #333333 !important;
+  border: 1px solid #ddd !important;
+}
+
+.table td input:focus,
+.table td select:focus {
+  background: #ffffff !important;
+  color: #333333 !important;
+  border-color: #2196f3 !important;
 }
 
 .data-table th {
