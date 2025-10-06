@@ -34,18 +34,17 @@
                  class="custom-input search-input-uppercase">
         </div>
         
-        <div class="shipment-selector">
-          <select class="custom-select" [(ngModel)]="selectedShipment" (change)="onShipmentChange()">
-            <option value="">-- Chọn Shipment --</option>
-            <option *ngFor="let shipment of availableShipments" [value]="shipment">
-              {{shipment}}
-            </option>
-          </select>
+        <div class="shipment-input">
+          <input type="text" 
+                 class="custom-input" 
+                 [(ngModel)]="selectedShipment" 
+                 (input)="onShipmentInputChange()"
+                 placeholder="Nhập mã Shipment để lọc">
         </div>
         
         <button class="custom-btn" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
-          Chọn thời gian
+          Lọc theo thời gian
         </button>
         
         <button class="custom-btn" (click)="viewAllMaterials()">
@@ -61,6 +60,11 @@
         <button class="custom-btn btn-success" (click)="printSelectedShipment()" [disabled]="!selectedShipment">
           <i class="material-icons">print</i>
           In
+        </button>
+        
+        <button class="custom-btn btn-info" (click)="addNewRow()">
+          <i class="material-icons">add_box</i>
+          Thêm dòng
         </button>
 
       </div>
@@ -445,6 +449,44 @@
       <button type="button" class="btn btn-apply" (click)="printDocument()">
         <i class="material-icons">print</i>
         In
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Time Range Dialog -->
+<div class="modal-overlay" *ngIf="showTimeRangeDialog" (click)="showTimeRangeDialog = false">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Lọc theo thời gian</h3>
+      <button class="close-btn" (click)="showTimeRangeDialog = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Từ ngày:</label>
+        <input type="date" 
+               class="form-input" 
+               [(ngModel)]="startDate"
+               [value]="formatDateForInput(startDate)">
+      </div>
+      <div class="form-group">
+        <label>Đến ngày:</label>
+        <input type="date" 
+               class="form-input" 
+               [(ngModel)]="endDate"
+               [value]="formatDateForInput(endDate)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showTimeRangeDialog = false">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="applyTimeRangeFilter()">
+        <i class="material-icons">search</i>
+        Lọc
       </button>
     </div>
   </div>

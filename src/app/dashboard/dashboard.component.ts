@@ -167,9 +167,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
       const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
       
-      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')}`);
+      // Get current month and year for filtering
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // 1-12
+      const currentYear = currentDate.getFullYear();
       
-      // Load ALL work orders from database (like work order tab)
+      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} for month ${currentMonth}/${currentYear}`);
+      
+      // Load work orders from database with monthly filter
       this.firestore.collection('work-orders').snapshotChanges().subscribe((actions) => {
         const workOrders = actions.map(a => {
           const data = a.payload.doc.data() as any;
@@ -177,20 +182,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
           return { id, ...data };
         });
         
-        // Filter by factory
+        // Filter by factory AND current month/year
         this.workOrders = workOrders.filter(wo => {
           const woFactory = wo.factory || 'ASM1';
-          return factoryFilter.includes(woFactory);
+          const woMonth = wo.month || 1;
+          const woYear = wo.year || currentYear;
+          
+          // Check factory match
+          const factoryMatch = factoryFilter.includes(woFactory);
+          
+          // Check month/year match
+          const monthYearMatch = woMonth === currentMonth && woYear === currentYear;
+          
+          return factoryMatch && monthYearMatch;
         });
         
         this.filteredWorkOrders = [...this.workOrders];
         
-        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (${factoryFilter.join(', ')})`);
+        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (${factoryFilter.join(', ')}) in ${currentMonth}/${currentYear}`);
         console.log('Work orders:', this.workOrders.map(wo => ({
           id: wo.id,
           productCode: wo.productCode,
           factory: wo.factory,
           status: wo.status,
+          month: wo.month,
+          year: wo.year,
           deliveryDate: wo.deliveryDate
         })));
         
@@ -309,17 +325,43 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private loadShipmentDataFromGoogleSheets() {
-    // Keep existing shipment loading logic
+    // Get current month and year for filtering
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
+    const currentYear = currentDate.getFullYear();
+    
+    console.log(`Loading shipment data for ${currentMonth}/${currentYear}`);
+    
+    // Keep existing shipment loading logic from Google Sheets
     fetch('https://docs.google.com/spreadsheets/d/1dGfJhDx-JNsFJ0l3kcz8uAHvMtm7GhPeAcUj8pBqx_Q/pub?gid=1580861382&single=true&output=csv')
       .then(res => res.text())
       .then(csv => {
         const rows = csv.split('\n').map(row => row.split(','));
 
+        // Parse shipment data from CSV
+        let totalShipments = 0;
+        let completedShipments = 0;
+        
         for (let cells of rows) {
-          if (cells[0]?.trim().toLowerCase() === "shipment") this.shipment = cells[1]?.trim();
+          if (cells[0]?.trim().toLowerCase() === "shipment") {
+            // Try to parse the shipment value as "completed/total" format
+            const shipmentValue = cells[1]?.trim();
+            if (shipmentValue && shipmentValue.includes('/')) {
+              const parts = shipmentValue.split('/');
+              completedShipments = parseInt(parts[0]) || 0;
+              totalShipments = parseInt(parts[1]) || 0;
+            } else {
+              // Fallback to single value
+              this.shipment = shipmentValue || "0/0";
+            }
+          }
         }
+        
+        // Set shipment display with monthly context
+        this.shipment = `${completedShipments}/${totalShipments}`;
+        console.log(`Shipment data for ${currentMonth}/${currentYear}: ${this.shipment} (completed/total)`);
 
-        // Shipment Status (keep existing)
+        // Shipment Status (keep existing logic for next 7 days)
         this.shipmentStatus = [];
         for (let i = 31; i < rows.length; i++) {
           if (!rows[i] || !rows[i][0] || rows[i][0].trim() === '') break;
@@ -336,6 +378,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error('Error loading shipment data:', error);
+        // Fallback values
+        this.shipment = "0/0";
       });
   }
 

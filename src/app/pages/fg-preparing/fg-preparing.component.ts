@@ -21,6 +21,9 @@ export interface FGPreparingItem {
   carton: number;
   odd: number;
   customer: string;
+  customerCode: string;
+  shipment: string;
+  pallet: string;
   isPrepared: boolean;
   preparedDate?: Date;
   preparedBy?: string;
@@ -47,6 +50,15 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
   // Permissions
   hasDeletePermission: boolean = false;
   hasCompletePermission: boolean = false;
+  
+  // Scanner properties
+  showScannerDialog: boolean = false;
+  scannerStep: number = 1;
+  scannedShipment: string = '';
+  scannedEmployee: string = '';
+  scannedCustomerCode: string = '';
+  currentScanInput: string = '';
+  scannedMaterials: string[] = [];
   
   private destroy$ = new Subject<void>();
   
@@ -98,6 +110,9 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
             carton: data.carton || 0,
             odd: data.odd || 0,
             customer: data.customer || data.khach || '',
+            customerCode: data.customerCode || '',
+            shipment: data.shipment || '',
+            pallet: data.pallet || '',
             isPrepared: data.isPrepared || false,
             preparedDate: data.preparedDate ? new Date(data.preparedDate.seconds * 1000) : undefined,
             preparedBy: data.preparedBy || '',
@@ -138,13 +153,9 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
       // Filter by search term
       const searchableText = [
         material.materialCode,
-        material.batchNumber,
-        material.location,
-        material.lsx,
-        material.lot,
-        material.rev,
-        material.notes,
-        material.customer
+        material.shipment,
+        material.customerCode,
+        material.pallet
       ].filter(Boolean).join(' ').toUpperCase();
       
       if (!searchableText.includes(this.searchTerm)) {
@@ -286,5 +297,123 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
     if (newLocation !== null && newLocation.trim() !== '') {
       this.updateLocation(material, newLocation.trim());
     }
+  }
+
+  // Update customer code
+  updateCustomerCode(material: FGPreparingItem): void {
+    material.customerCode = material.customerCode || '';
+    material.updatedAt = new Date();
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Update pallet
+  updatePallet(material: FGPreparingItem): void {
+    material.pallet = material.pallet || '';
+    material.updatedAt = new Date();
+    this.updateMaterialInFirebase(material);
+  }
+
+  // Scanner Methods
+  openScanner(): void {
+    this.showScannerDialog = true;
+    this.resetScanner();
+  }
+
+  closeScanner(): void {
+    this.showScannerDialog = false;
+    this.resetScanner();
+  }
+
+  resetScanner(): void {
+    this.scannerStep = 1;
+    this.scannedShipment = '';
+    this.scannedEmployee = '';
+    this.scannedCustomerCode = '';
+    this.currentScanInput = '';
+    this.scannedMaterials = [];
+  }
+
+  onShipmentScanned(): void {
+    if (this.scannedShipment.trim()) {
+      this.scannerStep = 2;
+      console.log('Shipment scanned:', this.scannedShipment);
+    }
+  }
+
+  onEmployeeScanned(): void {
+    if (this.scannedEmployee.trim()) {
+      this.scannerStep = 3;
+      console.log('Employee scanned:', this.scannedEmployee);
+    }
+  }
+
+  onCustomerCodeScanned(): void {
+    if (this.scannedCustomerCode.trim()) {
+      this.scannerStep = 4;
+      console.log('Customer code scanned:', this.scannedCustomerCode);
+    }
+  }
+
+  onMaterialScanned(): void {
+    if (this.currentScanInput.trim()) {
+      const materialCode = this.currentScanInput.trim();
+      if (!this.scannedMaterials.includes(materialCode)) {
+        this.scannedMaterials.push(materialCode);
+        console.log('Material scanned:', materialCode);
+      }
+      this.currentScanInput = '';
+    }
+  }
+
+  removeScannedMaterial(index: number): void {
+    this.scannedMaterials.splice(index, 1);
+  }
+
+  saveScannedData(): void {
+    if (this.scannedMaterials.length === 0) {
+      alert('Vui lòng quét ít nhất một mã hàng!');
+      return;
+    }
+
+    // Create FG Preparing items for each scanned material
+    const newItems: FGPreparingItem[] = this.scannedMaterials.map(materialCode => ({
+      factory: 'ASM1',
+      importDate: new Date(),
+      batchNumber: '',
+      materialCode: materialCode,
+      rev: '',
+      lot: '',
+      lsx: '',
+      quantity: 0,
+      location: '',
+      notes: `Scanned from Shipment: ${this.scannedShipment}, Employee: ${this.scannedEmployee}`,
+      standard: 0,
+      carton: 0,
+      odd: 0,
+      customer: '',
+      customerCode: this.scannedCustomerCode,
+      shipment: this.scannedShipment,
+      pallet: '',
+      isPrepared: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }));
+
+    // Save to Firebase
+    const savePromises = newItems.map(item => 
+      this.firestore.collection('fg-preparing').add(item)
+    );
+
+    Promise.all(savePromises)
+      .then(() => {
+        console.log('Scanned data saved successfully');
+        alert(`Đã lưu ${newItems.length} mã hàng vào FG Check!`);
+        this.closeScanner();
+        this.loadMaterialsFromFirebase(); // Refresh the list
+      })
+      .catch(error => {
+        console.error('Error saving scanned data:', error);
+        alert('Lỗi khi lưu dữ liệu: ' + error.message);
+      });
   }
 }

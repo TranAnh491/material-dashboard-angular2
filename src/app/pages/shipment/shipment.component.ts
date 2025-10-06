@@ -41,6 +41,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
   
+  // Push tracking to prevent duplicate
+  private isPushing: Set<string> = new Set();
+  
   // Time range filter
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -95,6 +98,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.isPushing.clear();
   }
 
   // Load shipments from Firebase
@@ -582,6 +586,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Transfer shipment data to FG Out - ADD NEW VERSION (không xóa dữ liệu cũ)
   private transferToFGOut(shipment: ShipmentItem): void {
+    const pushKey = `${shipment.shipmentCode}-${shipment.materialCode}-${shipment.pushNo}`;
+    
+    // Check if already pushing this shipment
+    if (this.isPushing.has(pushKey)) {
+      console.log(`⚠️ Already pushing shipment: ${pushKey}`);
+      return;
+    }
+    
+    // Mark as pushing
+    this.isPushing.add(pushKey);
+    
     console.log(`🔄 Starting transfer to FG Out for shipment: ${shipment.shipmentCode}, material: ${shipment.materialCode}, PushNo: ${shipment.pushNo}`);
     
     // Get FG Inventory data and check availability
@@ -686,23 +701,42 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     console.log(`📊 Checking inventory for ${shipment.materialCode}, required: ${requiredQuantity}`);
     
-    // Collect all quantities from different batches first
+    // Collect all quantities from different batches first - GROUP BY BATCH INFO
     const batchQuantities: {batch: any, quantity: number}[] = [];
+    const batchMap = new Map<string, {batch: any, totalQuantity: number}>();
     
-    for (let i = 0; i < inventoryItems.length && remainingQuantity > 0; i++) {
-      const inventoryItem = inventoryItems[i];
+    // Group inventory items by batch info
+    for (const inventoryItem of inventoryItems) {
       const availableQuantity = inventoryItem.ton || 0;
-      
       if (availableQuantity <= 0) continue;
       
-      const quantityToTake = Math.min(remainingQuantity, availableQuantity);
+      const batchKey = `${inventoryItem.batchNumber}-${inventoryItem.lsx}-${inventoryItem.lot}`;
+      
+      if (batchMap.has(batchKey)) {
+        // Add to existing batch
+        const existing = batchMap.get(batchKey)!;
+        existing.totalQuantity += availableQuantity;
+      } else {
+        // Create new batch
+        batchMap.set(batchKey, {
+          batch: inventoryItem,
+          totalQuantity: availableQuantity
+        });
+      }
+    }
+    
+    // Convert to array and process
+    for (const [batchKey, batchData] of batchMap) {
+      if (remainingQuantity <= 0) break;
+      
+      const quantityToTake = Math.min(remainingQuantity, batchData.totalQuantity);
       batchQuantities.push({
-        batch: inventoryItem,
+        batch: batchData.batch,
         quantity: quantityToTake
       });
       
       remainingQuantity -= quantityToTake;
-      console.log(`✅ Using batch ${inventoryItem.batchNumber}: ${quantityToTake} units (${remainingQuantity} remaining)`);
+      console.log(`✅ Using batch ${batchData.batch.batchNumber}: ${quantityToTake} units (${remainingQuantity} remaining)`);
     }
     
     if (remainingQuantity > 0) {
@@ -714,6 +748,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         quantity: remainingQuantity
       });
     }
+    
+    console.log(`📊 Final batchQuantities count: ${batchQuantities.length}`);
+    console.log(`📋 BatchQuantities:`, batchQuantities.map(b => `${b.batch.batchNumber}: ${b.quantity}`));
     
     // Now create FG Out records with proper carton distribution
     this.createFGOutRecordsWithCartonDistribution(shipment, batchQuantities, fgOutRecords);
@@ -770,6 +807,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         remainingForFullCartons -= usedFromThisBatch;
         
         console.log(`✅ Created full carton record: ${usedFromThisBatch} from ${batchItem.batch.batchNumber}`);
+        console.log(`📊 usedFromEachBatch:`, usedFromEachBatch);
       }
     }
     
@@ -779,6 +817,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const remainingInThisBatch = batchItem.quantity - usedFromThisBatch;
       
       console.log(`🔍 Checking batch ${batchItem.batch.batchNumber}: quantity=${batchItem.quantity}, used=${usedFromThisBatch}, remaining=${remainingInThisBatch}`);
+      console.log(`📊 Current usedFromEachBatch:`, usedFromEachBatch);
       
       if (remainingInThisBatch > 0) {
         fgOutRecords.push(this.createFGOutRecord(
@@ -899,6 +938,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         shipment.push = true;
         this.updateShipmentInFirebase(shipment);
         
+        // Remove from pushing set
+        const pushKey = `${shipment.shipmentCode}-${shipment.materialCode}-${shipment.pushNo}`;
+        this.isPushing.delete(pushKey);
+        
         alert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 Tổng lượng: ${totalQuantity}\n📦 Batches: ${batchInfo}\n🔄 PushNo: ${shipment.pushNo}`);
       })
       .catch((error) => {
@@ -908,6 +951,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         shipment.push = false;
         shipment.pushNo = '000';
         this.updateShipmentInFirebase(shipment);
+        
+        // Remove from pushing set
+        const pushKey = `${shipment.shipmentCode}-${shipment.materialCode}-${shipment.pushNo}`;
+        this.isPushing.delete(pushKey);
         
         alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
       });

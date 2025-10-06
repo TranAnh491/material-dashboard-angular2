@@ -49,10 +49,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
   selectedFactory: string = 'ASM1';
   availableFactories: string[] = ['ASM1'];
   
-  // Time range filter
-  showTimeRangeDialog: boolean = false;
-  startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  endDate: Date = new Date();
   
   // XTP Import
   showXTPDialog: boolean = false;
@@ -67,6 +63,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Shipment filter
   selectedShipment: string = '';
   availableShipments: string[] = [];
+  
+  // Time filter for old shipments
+  showTimeRangeDialog: boolean = false;
+  startDate: Date = new Date();
+  endDate: Date = new Date();
   
   // Print dialog
   showPrintDialog: boolean = false;
@@ -113,9 +114,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.locationCache.clear();
   }
 
-  // Load materials from Firebase
+  // Load materials from Firebase - Only last 10 days
   loadMaterialsFromFirebase(): void {
-    this.firestore.collection('fg-out')
+    // Calculate date 10 days ago
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    
+    this.firestore.collection('fg-out', ref => 
+      ref.where('exportDate', '>=', tenDaysAgo)
+         .orderBy('exportDate', 'desc')
+    )
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
@@ -191,6 +199,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Update material in Firebase
   updateMaterialInFirebase(material: FgOutItem): void {
     if (material.id) {
+      // Update existing record
       const updateData = {
         ...material,
         exportDate: material.exportDate,
@@ -206,6 +215,26 @@ export class FgOutComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error updating FG Out material in Firebase:', error);
+        });
+    } else {
+      // Create new record
+      const newData = {
+        ...material,
+        exportDate: material.exportDate,
+        pushNo: material.pushNo || '000',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      delete newData.id;
+      
+      this.firestore.collection('fg-out').add(newData)
+        .then(docRef => {
+          material.id = docRef.id;
+          console.log('FG Out material created in Firebase successfully with ID:', docRef.id);
+        })
+        .catch(error => {
+          console.error('Error creating FG Out material in Firebase:', error);
         });
     }
   }
@@ -571,10 +600,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
-  applyTimeRangeFilter(): void {
-    this.applyFilters();
-    this.showTimeRangeDialog = false;
-  }
 
   // XTP Import Methods
   selectXTPFile(): void {
@@ -733,9 +758,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Handle shipment selection change
-  onShipmentChange(): void {
-    console.log('Shipment changed to:', this.selectedShipment);
+  // Handle shipment input change
+  onShipmentInputChange(): void {
+    console.log('Shipment input changed to:', this.selectedShipment);
     this.applyFilters();
   }
 
@@ -997,6 +1022,86 @@ export class FgOutComponent implements OnInit, OnDestroy {
       material.exportDate = new Date(dateValue);
       this.updateMaterialInFirebase(material);
     }
+  }
+
+  // Load materials by time range (for old shipments)
+  loadMaterialsByTimeRange(): void {
+    console.log('Loading materials by time range:', this.startDate, 'to', this.endDate);
+    
+    this.firestore.collection('fg-out', ref => 
+      ref.where('exportDate', '>=', this.startDate)
+         .where('exportDate', '<=', this.endDate)
+         .orderBy('exportDate', 'desc')
+    )
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((actions) => {
+        const firebaseMaterials = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          const id = action.payload.doc.id;
+          return {
+            id: id,
+            ...data,
+            shipment: data.shipment || '',
+            batchNumber: data.batchNumber || '',
+            lsx: data.lsx || '',
+            lot: data.lot || '',
+            location: data.location || '',
+            updateCount: data.updateCount || 1,
+            pushNo: data.pushNo || '000',
+            approved: data.approved || false,
+            exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
+          };
+        });
+        
+        this.materials = firebaseMaterials;
+        this.sortMaterials();
+        this.applyFilters();
+        this.loadAvailableShipments();
+        this.loadLocationsSubject.next();
+        console.log('Loaded FG Out materials by time range:', this.materials.length);
+      });
+  }
+
+  // Apply time range filter
+  applyTimeRangeFilter(): void {
+    this.loadMaterialsByTimeRange();
+    this.showTimeRangeDialog = false;
+  }
+
+  // Add new row manually
+  addNewRow(): void {
+    const newMaterial: FgOutItem = {
+      id: '', // Will be set when saved to Firebase
+      factory: 'ASM1',
+      exportDate: new Date(),
+      shipment: this.selectedShipment || '',
+      materialCode: '',
+      customerCode: '',
+      batchNumber: '',
+      lsx: '',
+      lot: '',
+      quantity: 0,
+      poShip: '',
+      carton: 0,
+      qtyBox: 100,
+      odd: 0,
+      location: '',
+      notes: '',
+      approved: false,
+      updateCount: 0,
+      pushNo: '000',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Add to materials array
+    this.materials.unshift(newMaterial); // Add to beginning of array
+    
+    // Update filtered materials
+    this.applyFilters();
+    
+    console.log('✅ Added new row manually');
   }
 
   // Get location from FG Inventory - SIMPLIFIED to avoid infinite loop

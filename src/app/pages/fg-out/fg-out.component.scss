@@ -991,17 +991,17 @@ mat-checkbox {
   }
 }
 
-// Shipment selector styling
-.shipment-selector {
+// Shipment input styling
+.shipment-input {
   margin-right: 10px;
   
-  .custom-select {
+  .custom-input {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: white;
     font-size: 12px;
-    min-width: 150px;
+    min-width: 200px;
     
     &:focus {
       outline: none;
@@ -1130,5 +1130,16 @@ mat-checkbox {
     background-color: #6c757d;
     border-color: #6c757d;
     cursor: not-allowed;
+  }
+}
+
+.btn-info {
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+  color: white;
+  
+  &:hover {
+    background-color: #138496;
+    border-color: #117a8b;
   }
 }

@@ -6,10 +6,18 @@
     <div class="header-section">
       <h2 class="page-title">
         <i class="material-icons">inventory_2</i>
-        FG Preparing
+        FG Check
       </h2>
-      
+    </div>
+    
+    <!-- Action Buttons and Search -->
+    <div class="action-section">
       <div class="action-buttons">
+        <button class="custom-btn btn-primary" (click)="openScanner()">
+          <i class="material-icons">qr_code_scanner</i>
+          Scanner
+        </button>
+        
         <div class="dropdown">
           <button class="custom-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
             <i class="material-icons">more_vert</i>
@@ -22,14 +30,14 @@
             </a>
           </div>
         </div>
-        
-        <div class="search-box">
-          <input type="text" 
-                 placeholder="Tìm kiếm theo mã TP, Batch, LSX, LOT, Vị trí..." 
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchChange($event)"
-                 class="custom-input search-input-uppercase">
-        </div>
+      </div>
+      
+      <div class="search-box">
+        <input type="text" 
+                 placeholder="Tìm kiếm theo Shipment, Mã TP, Mã khách hàng, Pallet..."
+               [(ngModel)]="searchTerm"
+               (input)="onSearchChange($event)"
+               class="custom-input search-input-uppercase">
       </div>
     </div>
     
@@ -44,28 +52,20 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th>Shipment</th>
             <th class="row-header">No</th>
-            <th>Batch</th>
             <th>Mã TP</th>
-            <th>REV</th>
-            <th>LOT</th>
-            <th>LSX</th>
-            <th>Lượng</th>
-            <th>Standard</th>
+            <th>Mã Khách Hàng</th>
             <th>Carton</th>
-            <th>ODD</th>
-            <th>Vị trí</th>
-            <th>Ghi chú</th>
-            <th>Khách</th>
-            <th>Trạng thái</th>
-            <th>Chuẩn bị</th>
+            <th>Số Lượng</th>
+            <th>Pallet</th>
             <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="16" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="8" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -73,43 +73,26 @@
           </tr>
           
           <tr *ngFor="let material of filteredMaterials; let i = index">
+            <td>{{material.shipment || ''}}</td>
             <td class="row-header">{{i + 1}}</td>
-            <td>{{material.batchNumber}}</td>
             <td class="code-cell">{{material.materialCode}}</td>
-            <td>{{material.rev}}</td>
-            <td>{{material.lot}}</td>
-            <td>{{material.lsx}}</td>
-            <td class="number-cell">{{formatNumber(material.quantity)}}</td>
-            <td class="number-cell">{{formatNumber(material.standard)}}</td>
-            <td class="number-cell">{{formatNumber(material.carton)}}</td>
-            <td class="number-cell">{{formatNumber(material.odd)}}</td>
-            <td>
-              <div class="editable-location" (click)="editLocation(material)">
-                {{material.location || 'Temporary'}}
-              </div>
-            </td>
             <td>
               <input type="text" 
                      class="editable-input" 
-                     [(ngModel)]="material.notes" 
-                     (change)="updateNotes(material)"
-                     placeholder="Nhập ghi chú..."
+                     [(ngModel)]="material.customerCode" 
+                     (change)="updateCustomerCode(material)"
+                     placeholder="Mã khách hàng"
                      [disabled]="!canEditMaterial(material)">
             </td>
-            <td>{{material.customer}}</td>
-            <td class="status-cell">
-              <span [class]="material.isPrepared ? 'status-prepared' : 'status-pending'">
-                {{material.isPrepared ? 'Đã chuẩn bị' : 'Chờ chuẩn bị'}}
-              </span>
-            </td>
-            <td class="status-cell">
-              <button mat-icon-button 
-                      [color]="material.isPrepared ? 'warn' : 'primary'" 
-                      (click)="markAsPrepared(material)" 
-                      [disabled]="material.isPrepared"
-                      matTooltip="{{material.isPrepared ? 'Đã chuẩn bị' : 'Đánh dấu đã chuẩn bị'}}">
-                <mat-icon>{{material.isPrepared ? 'check_circle' : 'radio_button_unchecked'}}</mat-icon>
-              </button>
+            <td class="number-cell">{{formatNumber(material.carton)}}</td>
+            <td class="number-cell">{{formatNumber(material.quantity)}}</td>
+            <td>
+              <input type="text" 
+                     class="editable-input" 
+                     [(ngModel)]="material.pallet" 
+                     (change)="updatePallet(material)"
+                     placeholder="Pallet"
+                     [disabled]="!canEditMaterial(material)">
             </td>
             <td class="status-cell">
               <button mat-icon-button color="warn" (click)="deleteItem(material)" 
@@ -121,6 +104,131 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner Dialog -->
+<div class="modal-overlay" *ngIf="showScannerDialog" (click)="closeScanner()">
+  <div class="modal-dialog scanner-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Scanner - FG Check</h3>
+      <button class="close-btn" (click)="closeScanner()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      
+      <!-- Step 1: Scan Shipment -->
+      <div class="scanner-step" [class.active]="scannerStep === 1">
+        <div class="step-header">
+          <div class="step-number">1</div>
+          <h4>Scan Shipment</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="scanner-input-group">
+            <input type="text" 
+                   class="scanner-input" 
+                   [(ngModel)]="scannedShipment"
+                   (keyup.enter)="onShipmentScanned()"
+                   placeholder="Quét mã Shipment">
+            <button class="scanner-btn" (click)="onShipmentScanned()">
+              <i class="material-icons">check</i>
+            </button>
+          </div>
+          <div class="scanned-value" *ngIf="scannedShipment">
+            <i class="material-icons">done</i>
+            {{scannedShipment}}
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Scan Employee -->
+      <div class="scanner-step" [class.active]="scannerStep === 2">
+        <div class="step-header">
+          <div class="step-number">2</div>
+          <h4>Scan Mã Nhân Viên</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="scanner-input-group">
+            <input type="text" 
+                   class="scanner-input" 
+                   [(ngModel)]="scannedEmployee"
+                   (keyup.enter)="onEmployeeScanned()"
+                   placeholder="Quét mã nhân viên">
+            <button class="scanner-btn" (click)="onEmployeeScanned()">
+              <i class="material-icons">check</i>
+            </button>
+          </div>
+          <div class="scanned-value" *ngIf="scannedEmployee">
+            <i class="material-icons">done</i>
+            {{scannedEmployee}}
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Scan Customer Code -->
+      <div class="scanner-step" [class.active]="scannerStep === 3">
+        <div class="step-header">
+          <div class="step-number">3</div>
+          <h4>Scan Mã Khách Hàng</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="scanner-input-group">
+            <input type="text" 
+                   class="scanner-input" 
+                   [(ngModel)]="scannedCustomerCode"
+                   (keyup.enter)="onCustomerCodeScanned()"
+                   placeholder="Quét mã khách hàng">
+            <button class="scanner-btn" (click)="onCustomerCodeScanned()">
+              <i class="material-icons">check</i>
+            </button>
+          </div>
+          <div class="scanned-value" *ngIf="scannedCustomerCode">
+            <i class="material-icons">done</i>
+            {{scannedCustomerCode}}
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Scan Materials -->
+      <div class="scanner-step" [class.active]="scannerStep === 4">
+        <div class="step-header">
+          <div class="step-number">4</div>
+          <h4>Scan Mã Hàng</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="scanner-input-group">
+            <input type="text" 
+                   class="scanner-input" 
+                   [(ngModel)]="currentScanInput"
+                   (keyup.enter)="onMaterialScanned()"
+                   placeholder="Quét mã hàng">
+            <button class="scanner-btn" (click)="onMaterialScanned()">
+              <i class="material-icons">add</i>
+            </button>
+          </div>
+          <div class="scanned-materials">
+            <div class="material-item" *ngFor="let material of scannedMaterials; let i = index">
+              <span class="material-code">{{material}}</span>
+              <button class="remove-btn" (click)="removeScannedMaterial(i)">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeScanner()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="btn btn-apply" (click)="saveScannedData()" [disabled]="scannedMaterials.length === 0">
+        <i class="material-icons">save</i>
+        Lưu
+      </button>
     </div>
   </div>
 </div>
