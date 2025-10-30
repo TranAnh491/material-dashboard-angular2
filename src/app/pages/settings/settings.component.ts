@@ -5,6 +5,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { NotificationService } from '../../services/notification.service';
+import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../../services/employee-cleanup.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -76,6 +77,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   private refreshTimeout: any = null;
   private isRefreshing = false;
 
+  // Employee cleanup variables
+  employeeComparisonResult: CleanupResult | null = null;
+  isComparingEmployees = false;
+  isCleaningUp = false;
+  selectedRedundantEmployees: string[] = [];
+
   
 
 
@@ -85,7 +92,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private userPermissionService: UserPermissionService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private employeeCleanupService: EmployeeCleanupService
   ) { }
 
   ngOnInit(): void {
@@ -1352,5 +1360,163 @@ export class SettingsComponent implements OnInit, OnDestroy {
       user.role === 'Quản lý' ||
       user.uid === 'special-steve-uid'
     ).length;
+  }
+
+  // ==================== EMPLOYEE CLEANUP METHODS ====================
+
+  /**
+   * So sánh mã nhân viên giữa Settings và Firebase
+   */
+  async compareEmployees(): Promise<void> {
+    this.isComparingEmployees = true;
+    try {
+      console.log('🔍 Bắt đầu so sánh mã nhân viên...');
+      
+      // Debug: Hiển thị danh sách users
+      this.debugSettingsUsers();
+      
+      // Sử dụng danh sách users thực tế từ Settings
+      if (this.firebaseUsers && this.firebaseUsers.length > 0) {
+        console.log(`📋 Sử dụng ${this.firebaseUsers.length} users từ Settings`);
+        this.employeeComparisonResult = await this.employeeCleanupService.compareEmployeesWithSettingsUsers(this.firebaseUsers);
+      } else {
+        console.log('⚠️ Chưa có danh sách users, sử dụng method cũ');
+        this.employeeComparisonResult = await this.employeeCleanupService.compareEmployees();
+      }
+      
+      console.log('✅ Hoàn thành so sánh:', this.employeeComparisonResult.summary);
+    } catch (error) {
+      console.error('❌ Lỗi khi so sánh mã nhân viên:', error);
+      alert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
+    } finally {
+      this.isComparingEmployees = false;
+    }
+  }
+
+  /**
+   * Debug: Hiển thị chi tiết danh sách users trong Settings
+   */
+  private debugSettingsUsers(): void {
+    console.log('🔍 DEBUG: Danh sách users trong Settings:');
+    console.log(`📊 Tổng số users: ${this.firebaseUsers.length}`);
+    
+    this.firebaseUsers.forEach((user, index) => {
+      const empId = this.getEmployeeIdOnly(user);
+      console.log(`  ${index + 1}. ${empId} (${user.email}) - UID: ${user.uid}`);
+      console.log(`     - employeeId: ${user.employeeId || 'N/A'}`);
+      console.log(`     - displayName: ${user.displayName || 'N/A'}`);
+      console.log(`     - email: ${user.email || 'N/A'}`);
+    });
+  }
+
+  /**
+   * Xóa mã nhân viên dư thừa đã chọn
+   */
+  async cleanupSelectedEmployees(): Promise<void> {
+    if (this.selectedRedundantEmployees.length === 0) {
+      alert('⚠️ Vui lòng chọn ít nhất một mã nhân viên để xóa!');
+      return;
+    }
+
+    const confirmMessage = `Bạn có chắc chắn muốn xóa ${this.selectedRedundantEmployees.length} mã nhân viên dư thừa?\n\n` +
+      `Danh sách sẽ xóa:\n${this.selectedRedundantEmployees.join(', ')}\n\n` +
+      `⚠️ LƯU Ý: Hành động này sẽ thay thế mã nhân viên bằng "DELETED_EMPLOYEE" và không thể hoàn tác!`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    this.isCleaningUp = true;
+    try {
+      console.log('🗑️ Bắt đầu xóa mã nhân viên dư thừa...');
+      const result = await this.employeeCleanupService.cleanupRedundantEmployees(this.selectedRedundantEmployees);
+      
+      console.log('✅ Hoàn thành xóa:', result);
+      alert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
+            `❌ Lỗi: ${result.errors}\n\n` +
+            `Chi tiết:\n${result.details.join('\n')}`);
+      
+      // Refresh comparison result
+      await this.compareEmployees();
+      this.selectedRedundantEmployees = [];
+      
+    } catch (error) {
+      console.error('❌ Lỗi khi xóa mã nhân viên:', error);
+      alert('❌ Có lỗi xảy ra khi xóa mã nhân viên!');
+    } finally {
+      this.isCleaningUp = false;
+    }
+  }
+
+  /**
+   * Xóa tất cả mã nhân viên dư thừa
+   */
+  async cleanupAllRedundantEmployees(): Promise<void> {
+    if (!this.employeeComparisonResult || this.employeeComparisonResult.redundantEmployees.length === 0) {
+      alert('⚠️ Không có mã nhân viên dư thừa để xóa!');
+      return;
+    }
+
+    const allRedundantIds = this.employeeComparisonResult.redundantEmployees.map(emp => emp.employeeId);
+    this.selectedRedundantEmployees = allRedundantIds;
+    await this.cleanupSelectedEmployees();
+  }
+
+  /**
+   * Chọn/bỏ chọn mã nhân viên dư thừa
+   */
+  toggleRedundantEmployeeSelection(employeeId: string): void {
+    const index = this.selectedRedundantEmployees.indexOf(employeeId);
+    if (index > -1) {
+      this.selectedRedundantEmployees.splice(index, 1);
+    } else {
+      this.selectedRedundantEmployees.push(employeeId);
+    }
+  }
+
+  /**
+   * Kiểm tra xem mã nhân viên có được chọn không
+   */
+  isRedundantEmployeeSelected(employeeId: string): boolean {
+    return this.selectedRedundantEmployees.includes(employeeId);
+  }
+
+  /**
+   * Chọn tất cả mã nhân viên dư thừa
+   */
+  selectAllRedundantEmployees(): void {
+    if (this.employeeComparisonResult) {
+      this.selectedRedundantEmployees = this.employeeComparisonResult.redundantEmployees.map(emp => emp.employeeId);
+    }
+  }
+
+  /**
+   * Bỏ chọn tất cả mã nhân viên dư thừa
+   */
+  deselectAllRedundantEmployees(): void {
+    this.selectedRedundantEmployees = [];
+  }
+
+  /**
+   * Xuất báo cáo so sánh
+   */
+  exportComparisonReport(): void {
+    if (this.employeeComparisonResult) {
+      this.employeeCleanupService.exportComparisonReport(this.employeeComparisonResult);
+    }
+  }
+
+  /**
+   * Format ngày tháng cho hiển thị
+   */
+  formatDate(date: Date | undefined): string {
+    if (!date) return 'N/A';
+    return date.toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 }

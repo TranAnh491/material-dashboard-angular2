@@ -25,7 +25,7 @@
             </button>
             <button class="start-btn-mobile" 
                     [disabled]="!selectedScanMethod"
-                    (click)="debugStartButton(); selectedScanMethod === 'scanner' ? startBatchScanningMode() : startCameraScanning()"
+                    (click)="selectedScanMethod === 'scanner' ? startBatchScanningMode() : startCameraScanning()"
                     title="Bắt đầu chế độ scan">
               <i class="material-icons">play_arrow</i>
               <span>Start</span>
@@ -44,6 +44,28 @@
                  class="scanner-input"
                  [class.active]="isScannerInputActive || showScanningSetupModal"
                  autocomplete="off">
+        </div>
+
+        <!-- LSX Search Box - Desktop and Mobile -->
+        <div class="lsx-search-box" *ngIf="!isBatchScanningMode">
+          <input type="text" 
+                 class="lsx-search-input"
+                 [(ngModel)]="searchProductionOrder"
+                 (keyup.enter)="searchByProductionOrder()"
+                 [placeholder]="isMobile ? 'Nhập LSX (vd: KZLSX1125/0040)' : 'Nhập LSX để xem (ví dụ: KZLSX1125/0040)'"
+                 title="Nhập lệnh sản xuất và nhấn Enter">
+          <button class="search-btn" 
+                  (click)="searchByProductionOrder()"
+                  [disabled]="!searchProductionOrder || !searchProductionOrder.trim()"
+                  title="Tìm kiếm LSX">
+            <i class="material-icons">search</i>
+          </button>
+          <button class="clear-search-btn" 
+                  *ngIf="selectedProductionOrder"
+                  (click)="clearProductionOrderFilter()"
+                  title="Xóa và ẩn dữ liệu">
+            <i class="material-icons">clear</i>
+          </button>
         </div>
 
         <!-- Simple Start/Stop Controls -->
@@ -175,32 +197,16 @@
               <i class="material-icons">add</i>
               Thêm Material
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); closeDropdown()">
-              <i class="material-icons">description</i>
-              Tải báo cáo
-            </a>
+            
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadMonthlyHistory(); closeDropdown()">
               <i class="material-icons">calendar_month</i>
-              Tải theo tháng
+              Tải Dữ Liệu Theo Tháng
             </a>
+            
             <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
               <i class="material-icons">cleaning_services</i>
               Làm sạch dữ liệu
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugInventoryCollections(); closeDropdown()">
-              <i class="material-icons">bug_report</i>
-              Debug Inventory
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testInventoryUpdate(); closeDropdown()">
-              <i class="material-icons">science</i>
-              Test Inventory Update
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugFindMaterial('B017445', 'KZP00825/0186'); closeDropdown()">
-              <i class="material-icons">search</i>
-              Find B017445
-            </a>
-            
-            <!-- REMOVED: Debug Inventory Stock - Không cần tính stock để scan nhanh -->
           </div>
         </div>
         
@@ -395,27 +401,10 @@
           </div>
           
           <div class="scan-input-section">
-            <div class="input-group">
-              <label>Lệnh Sản Xuất:</label>
-              <input type="text" 
-                     class="scan-input"
-                     placeholder="Quét hoặc nhập mã LSX..."
-                     [(ngModel)]="batchProductionOrder"
-                     (keyup.enter)="onLSXScanned(batchProductionOrder)">
-            </div>
-            
-            <div class="scan-actions">
-              <button class="scan-btn primary" 
-                      (click)="onLSXScanned(batchProductionOrder)"
-                      [disabled]="!batchProductionOrder.trim()">
-                <i class="material-icons">check</i>
-                Xác Nhận LSX
-              </button>
-              <button class="scan-btn secondary" 
-                      (click)="skipToNextStep()">
-                <i class="material-icons">skip_next</i>
-                Bỏ Qua
-              </button>
+            <div class="scan-instruction-text">
+              <i class="material-icons">qr_code_scanner</i>
+              <p>Vui lòng quét mã lệnh sản xuất (LSX)</p>
+              <small>Hệ thống sẽ tự động chuyển sang bước tiếp theo sau khi quét</small>
             </div>
           </div>
         </div>
@@ -430,30 +419,17 @@
             </div>
           </div>
           
-          <!-- Removed duplicate LSX info - already shown in main status -->
+          <!-- LSX already scanned info -->
+          <div class="scan-complete-info">
+            <i class="material-icons success-icon">check_circle</i>
+            <p>✅ Đã quét LSX: <strong>{{ batchProductionOrder }}</strong></p>
+          </div>
           
           <div class="scan-input-section">
-            <div class="input-group">
-              <label>Mã Nhân Viên:</label>
-              <input type="text" 
-                     class="scan-input"
-                     placeholder="Quét hoặc nhập mã nhân viên..."
-                     [(ngModel)]="batchEmployeeId"
-                     (keyup.enter)="onEmployeeScanned(batchEmployeeId)">
-            </div>
-            
-            <div class="scan-actions">
-              <button class="scan-btn primary" 
-                      (click)="onEmployeeScanned(batchEmployeeId)"
-                      [disabled]="!batchEmployeeId.trim() || batchEmployeeId.length !== 7">
-                <i class="material-icons">check</i>
-                Xác Nhận & Bắt Đầu
-              </button>
-              <button class="scan-btn secondary" 
-                      (click)="skipToNextStep()">
-                <i class="material-icons">skip_next</i>
-                Bỏ Qua
-              </button>
+            <div class="scan-instruction-text">
+              <i class="material-icons">qr_code_scanner</i>
+              <p>Vui lòng quét mã nhân viên</p>
+              <small>Hệ thống sẽ tự động bắt đầu scan hàng sau khi quét mã nhân viên</small>
             </div>
           </div>
         </div>

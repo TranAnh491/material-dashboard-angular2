@@ -376,5 +376,164 @@
 
     </div>
 
+    <!-- Employee Cleanup Section -->
+    <div *ngIf="isAdminLoggedIn" class="employee-cleanup-section">
+      <div class="section-header">
+        <h3>
+          <mat-icon>cleaning_services</mat-icon>
+          Dọn dẹp mã nhân viên
+        </h3>
+        <div class="header-actions">
+          <button mat-raised-button color="primary" (click)="compareEmployees()" [disabled]="isComparingEmployees">
+            <mat-icon>compare</mat-icon>
+            {{ isComparingEmployees ? 'Đang so sánh...' : 'So sánh mã nhân viên' }}
+          </button>
+          <button mat-raised-button color="accent" (click)="exportComparisonReport()" [disabled]="!employeeComparisonResult">
+            <mat-icon>download</mat-icon>
+            Xuất báo cáo
+          </button>
+        </div>
+      </div>
+
+      <!-- Comparison Results -->
+      <div *ngIf="employeeComparisonResult" class="comparison-results">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <mat-icon>settings</mat-icon>
+            <div class="card-content">
+              <h4>{{ employeeComparisonResult.totalSettings }}</h4>
+              <p>Trong Settings</p>
+            </div>
+          </div>
+          <div class="summary-card">
+            <mat-icon>storage</mat-icon>
+            <div class="card-content">
+              <h4>{{ employeeComparisonResult.totalFirebase }}</h4>
+              <p>Trong Firebase</p>
+            </div>
+          </div>
+          <div class="summary-card valid">
+            <mat-icon>check_circle</mat-icon>
+            <div class="card-content">
+              <h4>{{ employeeComparisonResult.validEmployees }}</h4>
+              <p>Hợp lệ</p>
+            </div>
+          </div>
+          <div class="summary-card redundant">
+            <mat-icon>warning</mat-icon>
+            <div class="card-content">
+              <h4>{{ employeeComparisonResult.redundantEmployees.length }}</h4>
+              <p>Dư thừa</p>
+            </div>
+          </div>
+          <div class="summary-card missing">
+            <mat-icon>error</mat-icon>
+            <div class="card-content">
+              <h4>{{ employeeComparisonResult.missingEmployees.length }}</h4>
+              <p>Thiếu</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Redundant Employees -->
+        <div *ngIf="employeeComparisonResult.redundantEmployees.length > 0" class="redundant-employees">
+          <div class="subsection-header">
+            <h4>
+              <mat-icon>warning</mat-icon>
+              Mã nhân viên dư thừa ({{ employeeComparisonResult.redundantEmployees.length }})
+            </h4>
+            <div class="subsection-actions">
+              <button mat-button (click)="selectAllRedundantEmployees()">
+                <mat-icon>select_all</mat-icon>
+                Chọn tất cả
+              </button>
+              <button mat-button (click)="deselectAllRedundantEmployees()">
+                <mat-icon>deselect</mat-icon>
+                Bỏ chọn tất cả
+              </button>
+              <button mat-raised-button color="warn" 
+                      (click)="cleanupSelectedEmployees()" 
+                      [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
+                <mat-icon>delete</mat-icon>
+                {{ isCleaningUp ? 'Đang xóa...' : 'Xóa đã chọn (' + selectedRedundantEmployees.length + ')' }}
+              </button>
+              <button mat-raised-button color="warn" 
+                      (click)="cleanupAllRedundantEmployees()" 
+                      [disabled]="isCleaningUp">
+                <mat-icon>delete_forever</mat-icon>
+                Xóa tất cả
+              </button>
+            </div>
+          </div>
+
+          <div class="employees-table">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th width="50px">
+                    <input type="checkbox" 
+                           [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
+                           (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()">
+                  </th>
+                  <th>Mã nhân viên</th>
+                  <th>Trạng thái</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees">
+                  <td>
+                    <input type="checkbox" 
+                           [checked]="isRedundantEmployeeSelected(emp.employeeId)"
+                           (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
+                  </td>
+                  <td>
+                    <strong>{{ emp.employeeId }}</strong>
+                  </td>
+                  <td>
+                    <span class="status-badge redundant">Dư thừa</span>
+                  </td>
+                  <td>
+                    Có trong Firebase, không có trong Settings
+                  </td>
+                </tr>
+                <tr *ngFor="let empId of employeeComparisonResult.missingEmployees">
+                  <td>
+                    <input type="checkbox" 
+                           [checked]="isRedundantEmployeeSelected(empId)"
+                           (change)="toggleRedundantEmployeeSelection(empId)">
+                  </td>
+                  <td>
+                    <strong>{{ empId }}</strong>
+                  </td>
+                  <td>
+                    <span class="status-badge missing">Thiếu</span>
+                  </td>
+                  <td>
+                    Có trong Settings, không có trong Firebase
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Missing Employees -->
+        <div *ngIf="employeeComparisonResult.missingEmployees.length > 0" class="missing-employees">
+          <div class="subsection-header">
+            <h4>
+              <mat-icon>error</mat-icon>
+              Mã nhân viên thiếu trong Firebase ({{ employeeComparisonResult.missingEmployees.length }})
+            </h4>
+          </div>
+          <div class="missing-list">
+            <span *ngFor="let empId of employeeComparisonResult.missingEmployees" class="missing-tag">
+              {{ empId }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div> 

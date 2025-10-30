@@ -1991,6 +1991,91 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`🔄 Updated local catalog cache with ${catalogData.length} items`);
   }
 
+  // Tải Standard Packing từ Firebase và xuất Excel
+  async loadStandardPacking(): Promise<void> {
+    try {
+      console.log('📥 Loading Standard Packing from Firebase and exporting to Excel...');
+      
+      // Hiển thị loading state
+      this.isCatalogLoading = true;
+      
+      // Tải dữ liệu từ collection materials
+      const snapshot = await this.firestore.collection('materials').get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        alert('❌ Không tìm thấy dữ liệu Standard Packing trong Firebase!');
+        return;
+      }
+      
+      console.log(`📊 Found ${snapshot.size} materials with Standard Packing data`);
+      
+      // Chuẩn bị dữ liệu cho Excel
+      const excelData: any[] = [];
+      let withStandardPacking = 0;
+      let totalMaterials = 0;
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        totalMaterials++;
+        
+        // Thêm vào dữ liệu Excel
+        excelData.push({
+          'Material Code': data.materialCode || '',
+          'Material Name': data.materialName || '',
+          'Unit': data.unit || '',
+          'Standard Packing': data.standardPacking || 0,
+          'Supplier': data.supplier || '',
+          'Description': data.description || ''
+        });
+        
+        if (data.standardPacking !== undefined && data.standardPacking !== null && data.standardPacking > 0) {
+          withStandardPacking++;
+        }
+      });
+      
+      // Tạo workbook và worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      
+      // Thiết lập độ rộng cột
+      const columnWidths = [
+        { wch: 15 }, // Material Code
+        { wch: 30 }, // Material Name
+        { wch: 10 }, // Unit
+        { wch: 18 }, // Standard Packing
+        { wch: 20 }, // Supplier
+        { wch: 25 }  // Description
+      ];
+      worksheet['!cols'] = columnWidths;
+      
+      // Thêm worksheet vào workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Standard Packing');
+      
+      // Tạo tên file với timestamp
+      const now = new Date();
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+      const fileName = `Standard_Packing_ASM1_${timestamp}.xlsx`;
+      
+      // Xuất file Excel
+      XLSX.writeFile(workbook, fileName);
+      
+      // Cập nhật cache
+      await this.loadCatalogFromFirebase();
+      
+      alert(`✅ Tải Standard Packing thành công!\n\n` +
+            `📊 Tổng materials: ${totalMaterials}\n` +
+            `📦 Có Standard Packing: ${withStandardPacking}\n` +
+            `📈 Tỷ lệ: ${((withStandardPacking / totalMaterials) * 100).toFixed(1)}%\n\n` +
+            `📁 File Excel đã được tải về: ${fileName}`);
+      
+    } catch (error) {
+      console.error('❌ Error loading Standard Packing:', error);
+      alert('❌ Lỗi khi tải Standard Packing: ' + error.message);
+    } finally {
+      this.isCatalogLoading = false;
+    }
+  }
+
   downloadCatalogTemplate(): void {
     try {
       console.log('📥 Downloading catalog template - Standard Packing only');
@@ -2823,6 +2908,163 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
     } catch (error) {
       console.error('❌ Error testing outbound data:', error);
+    }
+  }
+
+  /**
+   * Debug method để kiểm tra vấn đề matching giữa Outbound và Inventory
+   */
+  async debugInventoryMatching(): Promise<void> {
+    try {
+      console.log('🔍 Debugging RM1 Inventory matching issue...');
+      
+      // 1. Kiểm tra dữ liệu Outbound
+      console.log('\n📦 === CHECKING OUTBOUND DATA ===');
+      const outboundSnapshot = await this.firestore.collection('outbound-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(10)
+        .get();
+      
+      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
+      
+      if (!outboundSnapshot.empty) {
+        console.log('\n📋 Outbound Records:');
+        outboundSnapshot.forEach((doc) => {
+          const data = doc.data() as any;
+          console.log(`  ID: ${doc.id}`);
+          console.log(`     Material: ${data.materialCode}`);
+          console.log(`     PO: "${data.poNumber}" (type: ${typeof data.poNumber})`);
+          console.log(`     ImportDate: ${data.importDate} (type: ${typeof data.importDate})`);
+          console.log(`     ExportQuantity: ${data.exportQuantity}`);
+          console.log(`     ExportDate: ${data.exportDate}`);
+          console.log('     ---');
+        });
+      }
+      
+      // 2. Kiểm tra dữ liệu Inventory
+      console.log('\n📦 === CHECKING INVENTORY DATA ===');
+      const inventorySnapshot = await this.firestore.collection('inventory-materials')
+        .ref
+        .where('factory', '==', 'ASM1')
+        .limit(10)
+        .get();
+      
+      console.log(`📊 Found ${inventorySnapshot.size} inventory records for ASM1`);
+      
+      if (!inventorySnapshot.empty) {
+        console.log('\n📋 Inventory Records:');
+        inventorySnapshot.forEach((doc) => {
+          const data = doc.data() as any;
+          console.log(`  ID: ${doc.id}`);
+          console.log(`     Material: ${data.materialCode}`);
+          console.log(`     PO: "${data.poNumber}" (type: ${typeof data.poNumber})`);
+          console.log(`     ImportDate: ${data.importDate} (type: ${typeof data.importDate})`);
+          console.log(`     Quantity: ${data.quantity}`);
+          console.log(`     Exported: ${data.exported}`);
+          console.log(`     Location: ${data.location}`);
+          console.log('     ---');
+        });
+      }
+      
+      // 3. Tìm matching records
+      console.log('\n🔍 === FINDING MATCHING RECORDS ===');
+      const outboundRecords: any[] = [];
+      const inventoryRecords: any[] = [];
+      
+      outboundSnapshot.forEach(doc => {
+        const data = doc.data() as any;
+        outboundRecords.push({ id: doc.id, ...data });
+      });
+      
+      inventorySnapshot.forEach(doc => {
+        const data = doc.data() as any;
+        inventoryRecords.push({ id: doc.id, ...data });
+      });
+      
+      let matchCount = 0;
+      let noMatchCount = 0;
+      
+      outboundRecords.forEach(outbound => {
+        console.log(`\n🔍 Checking outbound: ${outbound.materialCode} - PO: "${outbound.poNumber}"`);
+        
+        const matches = inventoryRecords.filter(inventory => {
+          const materialMatch = inventory.materialCode === outbound.materialCode;
+          const poMatch = inventory.poNumber === outbound.poNumber;
+          
+          // Check import date match
+          let importDateMatch = false;
+          if (outbound.importDate && inventory.importDate) {
+            let outboundDate = '';
+            let inventoryDate = '';
+            
+            // Parse outbound import date
+            if (outbound.importDate.toDate) {
+              outboundDate = outbound.importDate.toDate().toLocaleDateString('en-GB').split('/').join('');
+            } else {
+              outboundDate = outbound.importDate.toString();
+            }
+            
+            // Parse inventory import date
+            if (inventory.importDate.toDate) {
+              inventoryDate = inventory.importDate.toDate().toLocaleDateString('en-GB').split('/').join('');
+            } else {
+              inventoryDate = inventory.importDate.toString();
+            }
+            
+            importDateMatch = outboundDate === inventoryDate;
+          }
+          
+          return materialMatch && poMatch && importDateMatch;
+        });
+        
+        if (matches.length > 0) {
+          matchCount++;
+          console.log(`  ✅ FOUND ${matches.length} matching inventory records:`);
+          matches.forEach(match => {
+            console.log(`    - Inventory ID: ${match.id}`);
+            console.log(`    - Current Exported: ${match.exported || 0}`);
+            console.log(`    - Outbound Export: ${outbound.exportQuantity || outbound.quantity || 0}`);
+          });
+        } else {
+          noMatchCount++;
+          console.log(`  ❌ NO matching inventory records found`);
+          console.log(`    - Checking available inventory for material ${outbound.materialCode}:`);
+          
+          const materialMatches = inventoryRecords.filter(inv => inv.materialCode === outbound.materialCode);
+          if (materialMatches.length > 0) {
+            console.log(`    - Found ${materialMatches.length} records with same material:`);
+            materialMatches.forEach(match => {
+              console.log(`      * PO: "${match.poNumber}" vs "${outbound.poNumber}"`);
+              console.log(`      * ImportDate: ${match.importDate} vs ${outbound.importDate}`);
+            });
+          } else {
+            console.log(`    - No inventory records found for material ${outbound.materialCode}`);
+          }
+        }
+      });
+      
+      console.log(`\n📊 === SUMMARY ===`);
+      console.log(`✅ Matching records: ${matchCount}`);
+      console.log(`❌ No match records: ${noMatchCount}`);
+      
+      // 4. Kiểm tra logic update
+      console.log('\n🔧 === TESTING UPDATE LOGIC ===');
+      if (matchCount > 0) {
+        console.log('💡 Logic should work for matching records');
+        console.log('💡 Check if updateExportedFromOutboundFIFO is being called');
+        console.log('💡 Check if updateInventoryExported is being called');
+      } else {
+        console.log('⚠️ No matching records found - this explains why inventory is not updating');
+        console.log('💡 Possible issues:');
+        console.log('   - PO Number format mismatch');
+        console.log('   - Import Date format mismatch');
+        console.log('   - Missing inventory records');
+        console.log('   - Data type issues');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error during debug:', error);
     }
   }
 

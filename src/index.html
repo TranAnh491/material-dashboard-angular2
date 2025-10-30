@@ -44,5 +44,21 @@
 
   <!-- Google API nếu bạn có dùng -->
   <script src="https://apis.google.com/js/api.js"></script>
+  
+  <!-- XLSX Library for Excel export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    // Debug XLSX loading
+    window.addEventListener('load', function() {
+      console.log('🔍 Checking XLSX library after page load...');
+      console.log('window.XLSX:', window.XLSX);
+      console.log('typeof XLSX:', typeof window.XLSX);
+      if (window.XLSX) {
+        console.log('✅ XLSX library loaded successfully');
+      } else {
+        console.log('❌ XLSX library not loaded');
+      }
+    });
+  </script>
 </body>
 </html>

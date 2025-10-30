@@ -39,6 +39,10 @@
               Update Standard Packing
             </a>
             <!-- Import/Export -->
+            <a class="dropdown-item" href="javascript:void(0)" (click)="loadStandardPacking()">
+              <i class="material-icons">file_download</i>
+              Tải Standard Packing (Excel)
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
               <i class="material-icons">description</i>
               Download Standard Packing Template
@@ -64,6 +68,21 @@
             <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="consolidateAllInventory()">
               <i class="material-icons">merge_type</i>
               Gộp dòng trùng lặp
+            </a>
+            <div class="dropdown-divider"></div>
+            
+            <!-- Debug Tools -->
+            <a class="dropdown-item" href="javascript:void(0)" (click)="debugInventoryMatching()">
+              <i class="material-icons">bug_report</i>
+              Debug Inventory Matching
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testFIFOLogic('TEST001', 'PO001')">
+              <i class="material-icons">bug_report</i>
+              Test FIFO Logic
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="testOutboundData()">
+              <i class="material-icons">bug_report</i>
+              Test Outbound Data
             </a>
             <div class="dropdown-divider"></div>
             

@@ -2591,4 +2591,218 @@
   font-size: 11px;
 }
 
+// Employee Cleanup Section Styles
+.employee-cleanup-section {
+  margin-top: 30px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+
+  .section-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    h3 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+  }
+
+  .comparison-results {
+    padding: 30px;
+
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+
+      .summary-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: transform 0.2s ease;
+
+        &:hover {
+          transform: translateY(-2px);
+        }
+
+        mat-icon {
+          font-size: 2.5rem;
+          width: 2.5rem;
+          height: 2.5rem;
+          color: #666;
+        }
+
+        .card-content {
+          h4 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+          }
+
+          p {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 0.9rem;
+          }
+        }
+
+        &.valid {
+          mat-icon {
+            color: #4CAF50;
+          }
+          .card-content h4 {
+            color: #4CAF50;
+          }
+        }
+
+        &.redundant {
+          mat-icon {
+            color: #FF9800;
+          }
+          .card-content h4 {
+            color: #FF9800;
+          }
+        }
+
+        &.missing {
+          mat-icon {
+            color: #F44336;
+          }
+          .card-content h4 {
+            color: #F44336;
+          }
+        }
+      }
+    }
+
+    .redundant-employees, .missing-employees {
+      margin-top: 30px;
+
+      .subsection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #eee;
+
+        h4 {
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #333;
+          font-size: 1.2rem;
+        }
+
+        .subsection-actions {
+          display: flex;
+          gap: 10px;
+        }
+      }
+
+      .employees-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+        table {
+          width: 100%;
+          margin: 0;
+
+          th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+            padding: 15px 10px;
+            border-bottom: 2px solid #dee2e6;
+          }
+
+          td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: middle;
+          }
+
+          tr:hover {
+            background: #f8f9fa;
+          }
+        }
+      }
+
+      .collections {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+
+        .collection-tag {
+          background: #e3f2fd;
+          color: #1976d2;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 0.8rem;
+          font-weight: 500;
+        }
+      }
+
+      .status-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-weight: bold;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        
+        &.redundant {
+          background: #fff3e0;
+          color: #f57c00;
+          border: 1px solid #ffb74d;
+        }
+        
+        &.missing {
+          background: #ffebee;
+          color: #c62828;
+          border: 1px solid #ef5350;
+        }
+      }
+
+      .missing-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+
+        .missing-tag {
+          background: #ffebee;
+          color: #c62828;
+          padding: 8px 12px;
+          border-radius: 20px;
+          font-weight: 500;
+          border: 1px solid #ffcdd2;
+        }
+      }
+    }
+  }
+}
+
  

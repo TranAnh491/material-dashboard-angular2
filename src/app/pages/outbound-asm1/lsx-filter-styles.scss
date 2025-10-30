@@ -1,0 +1,139 @@
+// LSX Search Box Styles
+.lsx-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  width: 100%; // Full width for mobile
+  max-width: 100%; // Ensure it doesn't overflow
+
+  .lsx-search-input {
+    padding: 9px 12px;
+    border: 2px solid #333;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 280px;
+    flex: 1; // Take remaining space
+    
+    &:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+    }
+    
+    &::placeholder {
+      color: #999;
+      font-weight: 400;
+    }
+  }
+  
+  // Mobile responsive
+  @media (max-width: 768px) {
+    margin-right: 0;
+    margin-bottom: 8px;
+    
+    .lsx-search-input {
+      min-width: 0;
+      font-size: 12px;
+      padding: 8px 10px;
+    }
+  }
+
+  .search-btn {
+    padding: 9px 12px;
+    border: 2px solid #007bff;
+    background: #007bff;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    flex-shrink: 0; // Don't shrink on mobile
+    
+    &:hover:not(:disabled) {
+      background: #0056b3;
+      border-color: #0056b3;
+    }
+    
+    &:disabled {
+      background: #ccc;
+      border-color: #ccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    
+    i {
+      font-size: 18px;
+    }
+    
+    @media (max-width: 768px) {
+      padding: 8px 10px;
+      
+      i {
+        font-size: 16px;
+      }
+    }
+  }
+
+  .clear-search-btn {
+    padding: 9px 12px;
+    border: 2px solid #dc3545;
+    background: #fff;
+    color: #dc3545;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    flex-shrink: 0; // Don't shrink on mobile
+    
+    &:hover {
+      background: #dc3545;
+      color: #fff;
+    }
+    
+    i {
+      font-size: 18px;
+    }
+    
+    @media (max-width: 768px) {
+      padding: 8px 10px;
+      
+      i {
+        font-size: 16px;
+      }
+    }
+  }
+}
+
+.scan-controls {
+  display: flex;
+  gap: 8px;
+  
+  .start-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: #28a745;
+    color: #fff;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    
+    &:hover {
+      background: #218838;
+    }
+    
+    &:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    i {
+      font-size: 20px;
+    }
+  }
+}
+
