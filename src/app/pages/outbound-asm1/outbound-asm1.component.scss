@@ -1012,6 +1012,10 @@
   to { transform: rotate(360deg); }
 }
 
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
 // More Button
 .more-btn {
   display: flex;
@@ -2214,6 +2218,30 @@
   border-radius: 6px;
   border: 1px solid #dee2e6;
   
+  .saving-indicator-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 6px;
+    color: #856404;
+    font-size: 14px;
+    font-weight: 600;
+    
+    i {
+      font-size: 20px;
+      color: #ffc107;
+    }
+    
+    span {
+      font-size: 14px;
+      font-weight: 600;
+    }
+  }
+  
   .status-row {
     display: flex;
     align-items: center;
@@ -2460,6 +2488,30 @@
   background: #f8f9fa;
   border-radius: 8px;
   margin: 16px 0;
+  
+  .saving-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    color: #856404;
+    font-size: 16px;
+    font-weight: 600;
+    
+    i {
+      font-size: 24px;
+      color: #ffc107;
+    }
+    
+    span {
+      font-size: 16px;
+      font-weight: 600;
+    }
+  }
   
   .scan-status-desktop {
     display: flex;

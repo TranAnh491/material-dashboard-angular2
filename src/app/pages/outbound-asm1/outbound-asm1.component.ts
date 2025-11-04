@@ -83,6 +83,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // 🔧 LOGIC MỚI SIÊU TỐI ƯU: Chỉ lưu dữ liệu scan, Done mới update
   pendingScanData: any[] = []; // Lưu trữ tạm thời các scan
   showScanReviewModal: boolean = false; // Hiển thị modal review
+  isSavingBatchData: boolean = false; // Trạng thái đang lưu dữ liệu
   // - Bước 1: Scan lệnh sản xuất và mã nhân viên
   // - Bước 2: Scan mã hàng (Material + PO + Quantity) - lưu vào pendingScanData
   // - Bước 3: Bấm Done -> batch update inventory + Firebase
@@ -1752,26 +1753,26 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       try {
         console.log(`📦 Batch updating ${savedCount} items...`);
         
-        // Hiển thị loading
+        // Hiển thị loading và trạng thái saving
         this.isLoading = true;
+        this.isSavingBatchData = true;
+        this.cdr.detectChanges(); // Force UI update để hiển thị ngay
         
         await this.batchUpdateAllScanData();
         
         console.log('✅ Batch update completed successfully');
         
-        // 🔧 OPTIMIZED: Refresh ngay sau khi batch update xong
+        // 🔧 OPTIMIZED: Refresh ngay sau khi batch update xong (không hiển thị alert)
         console.log('🔄 Refreshing data after batch update...');
         await this.loadMaterials();
-        console.log('✅ Data refreshed after batch update');
-        
-        // Hiển thị thông báo SAU KHI đã refresh data
-        alert(`✅ Đã lưu thành công ${savedCount} mã hàng!`);
+        console.log('✅ Data refreshed - Saved ${savedCount} items');
         
       } catch (error) {
         console.error('❌ Error in batch update:', error);
         alert('Lỗi cập nhật dữ liệu: ' + error.message);
       } finally {
         this.isLoading = false;
+        this.isSavingBatchData = false;
         
         // 🔧 SỬA LỖI: Reset trong finally block để đảm bảo luôn chạy
         console.log('🔄 Resetting all batch scanning states...');

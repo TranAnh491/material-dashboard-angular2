@@ -80,7 +80,13 @@
 
         <!-- Desktop Scanning Controls -->
         <div class="scan-controls-desktop" *ngIf="isBatchScanningMode && !isMobile">
-          <div class="scan-status-desktop">
+          <!-- Saving Progress Indicator -->
+          <div class="saving-indicator" *ngIf="isSavingBatchData">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang cập nhật dữ liệu...</span>
+          </div>
+          
+          <div class="scan-status-desktop" *ngIf="!isSavingBatchData">
             <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
               <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
               <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
@@ -91,7 +97,7 @@
             </div>
           </div>
           
-          <div class="scan-buttons-desktop">
+          <div class="scan-buttons-desktop" *ngIf="!isSavingBatchData">
             <button class="review-btn-desktop" 
                     (click)="showScanReview()"
                     title="Xem danh sách đã scan"
@@ -110,7 +116,13 @@
 
         <!-- Mobile Controls Only - Status info removed (using desktop status) -->
         <div class="scan-status-mobile" *ngIf="isBatchScanningMode">
-          <div class="status-row">
+          <!-- Mobile Saving Progress Indicator -->
+          <div class="saving-indicator-mobile" *ngIf="isSavingBatchData">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang cập nhật dữ liệu...</span>
+          </div>
+          
+          <div class="status-row" *ngIf="!isSavingBatchData">
             <button class="review-btn-mobile" 
                     (click)="showScanReview()"
                     title="Xem danh sách đã scan"
