@@ -340,32 +340,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log(`🎯 UNIFIED UPDATE: ${scanMethod} - Material=${materialCode}, PO=${poNumber}, Qty=${exportQuantity}, Batch=${importDate}`);
       
-      // 🔧 THÊM DELAY: Đảm bảo inventory update không bị race condition
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // 🔧 DEBUG: Kiểm tra collection inventory-materials
-      console.log(`🔍 DEBUG: Checking inventory-materials collection...`);
-      const testQuery = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('materialCode', '==', materialCode)
-           .where('factory', '==', 'ASM1')
-           .limit(5)
-      ).get().toPromise();
-      
-      if (testQuery && !testQuery.empty) {
-        console.log(`🔍 DEBUG: Found ${testQuery.docs.length} inventory records with materialCode=${materialCode}`);
-        testQuery.docs.forEach((doc, index) => {
-          const data = doc.data() as any;
-          console.log(`  ${index + 1}. ID: ${doc.id}, PO: ${data.poNumber}, Exported: ${data.exported || 0}`);
-        });
-      } else {
-        console.log(`⚠️ DEBUG: No inventory records found with materialCode=${materialCode}, factory=ASM1`);
-      }
-      
-      // Gọi method cập nhật inventory thống nhất
+      // Gọi method cập nhật inventory thống nhất (đã loại bỏ các delay không cần thiết)
       await this.updateInventoryExported(materialCode, poNumber, exportQuantity, importDate);
-      
-      // 🔧 THÊM DELAY: Đảm bảo inventory được commit trước khi tiếp tục
-      await new Promise(resolve => setTimeout(resolve, 200));
       
       console.log(`✅ UNIFIED: Inventory updated successfully for ${scanMethod}`);
       
@@ -1782,14 +1758,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         await this.batchUpdateAllScanData();
         
         console.log('✅ Batch update completed successfully');
-        alert(`✅ Đã lưu thành công ${savedCount} mã hàng!`);
         
-        // 🔧 CAMERA SYNC FIX: Delay loadMaterials() để đảm bảo Firebase sync
-        setTimeout(async () => {
-          console.log('🔄 Camera: Refreshing data after batch update...');
-          await this.loadMaterials();
-          console.log('✅ Camera: Data refreshed after batch update');
-        }, 4000); // 4 giây delay để Firebase sync hoàn toàn
+        // 🔧 OPTIMIZED: Refresh ngay sau khi batch update xong
+        console.log('🔄 Refreshing data after batch update...');
+        await this.loadMaterials();
+        console.log('✅ Data refreshed after batch update');
+        
+        // Hiển thị thông báo SAU KHI đã refresh data
+        alert(`✅ Đã lưu thành công ${savedCount} mã hàng!`);
         
       } catch (error) {
         console.error('❌ Error in batch update:', error);
@@ -2150,7 +2126,52 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   // Minimal fallback to avoid compile break if missing
   private async updateInventoryExported(materialCode: string, poNumber: string, exportQuantity: number, importDate?: string): Promise<void> {
-    console.log('⚠️ Fallback updateInventoryExported called', { materialCode, poNumber, exportQuantity, importDate });
+    try {
+      console.log(`📦 Updating inventory exported: ${materialCode}, PO: ${poNumber}, Qty: ${exportQuantity}, Batch: ${importDate}`);
+      
+      // Query inventory-materials để tìm record phù hợp
+      let query = this.firestore.collection('inventory-materials', ref =>
+        ref.where('materialCode', '==', materialCode)
+           .where('poNumber', '==', poNumber)
+           .where('factory', '==', 'ASM1')
+      );
+      
+      // Nếu có importDate, thêm filter theo importDate để tìm đúng batch
+      if (importDate) {
+        query = this.firestore.collection('inventory-materials', ref =>
+          ref.where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .where('factory', '==', 'ASM1')
+             .where('importDate', '==', importDate)
+        );
+      }
+      
+      const snapshot = await query.get().toPromise();
+      
+      if (snapshot && !snapshot.empty) {
+        // Tìm thấy inventory record
+        const doc = snapshot.docs[0]; // Lấy record đầu tiên
+        const data = doc.data() as any;
+        const currentExported = data.exported || 0;
+        const newExported = currentExported + exportQuantity;
+        
+        console.log(`🔄 Updating inventory doc ${doc.id}: exported ${currentExported} → ${newExported}`);
+        
+        await this.firestore.collection('inventory-materials').doc(doc.id).update({
+          exported: newExported,
+          updatedAt: new Date()
+        });
+        
+        console.log(`✅ Inventory updated: ${materialCode} - PO ${poNumber}, exported: ${newExported}`);
+      } else {
+        console.log(`⚠️ No inventory record found for ${materialCode} - PO ${poNumber} - Batch ${importDate}`);
+        console.log(`⚠️ Skipping inventory update (material may not exist in inventory)`);
+      }
+    } catch (error) {
+      console.error(`❌ Error updating inventory exported:`, error);
+      // Không throw error để không block batch update của các item khác
+      console.log(`⚠️ Continuing batch update despite inventory update error`);
+    }
   }
 
   // Queue for rapid scans
