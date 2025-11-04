@@ -1761,11 +1761,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         await this.batchUpdateAllScanData();
         
         console.log('✅ Batch update completed successfully');
-        
-        // 🔧 OPTIMIZED: Refresh ngay sau khi batch update xong (không hiển thị alert)
-        console.log('🔄 Refreshing data after batch update...');
-        await this.loadMaterials();
-        console.log('✅ Data refreshed - Saved ${savedCount} items');
+        console.log(`✅ Saved ${savedCount} items - Firebase listener will auto-sync data`);
         
       } catch (error) {
         console.error('❌ Error in batch update:', error);
