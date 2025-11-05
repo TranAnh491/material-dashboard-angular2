@@ -126,7 +126,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.detectMobileDevice();
     this.setupDefaultDateRange();
     this.restorePendingFromStorage();
-    this.loadMaterials();
+    // 🔧 OPTIMIZATION: Không load materials khi khởi tạo - chỉ load khi search LSX
+    console.log('⏸️ Ready - waiting for LSX search to load data');
+    // REMOVED: loadMaterials() - Chỉ load khi user nhập LSX
     // REMOVED: loadInventoryMaterials() - Không cần tính stock để scan nhanh
     
     // Add click outside listener to close dropdown
@@ -486,13 +488,26 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private readonly DISPLAY_LIMIT = 50;
   
   loadMaterials(): void {
+    // 🔧 OPTIMIZATION: Không load gì cả nếu chưa có LSX được chọn
+    if (!this.selectedProductionOrder || !this.selectedProductionOrder.trim()) {
+      console.log('⏸️ No LSX selected - skipping data load');
+      this.materials = [];
+      this.filteredMaterials = [];
+      this.isLoading = false;
+      return;
+    }
+    
     this.isLoading = true;
     this.errorMessage = '';
-    console.log('📦 Loading ASM1 outbound materials (50 dòng gần nhất)...');
+    console.log(`📦 Loading materials for LSX: ${this.selectedProductionOrder}...`);
     
+    // 🔧 MOBILE OPTIMIZATION: Chỉ load records của LSX được chọn
     // Use real-time listener to automatically update when data changes
     this.firestore.collection('outbound-materials', ref => 
       ref.where('factory', '==', 'ASM1')
+         .where('productionOrder', '==', this.selectedProductionOrder)
+         .orderBy('createdAt', 'desc')
+         .limit(100)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -563,6 +578,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           }
         }
         
+        // 🔧 OPTIMIZATION: Đã query đúng LSX rồi, không cần filter nữa
         this.materials = materials
           .sort((a, b) => {
             // Sort by latest updated time first (newest first)
@@ -577,33 +593,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             return b.createdAt.getTime() - a.createdAt.getTime();
           })
           .filter(material => {
-            // 🔧 NGUYÊN TẮC MỚI: Chỉ hiển thị khi có chọn LSX cụ thể
-            if (this.selectedProductionOrder) {
-              // 🔧 SO SÁNH KHÔNG PHÂN BIỆT CHỮ HOA/THƯỜNG
-              const materialLSX = (material.productionOrder || '').toUpperCase();
-              const selectedLSX = (this.selectedProductionOrder || '').toUpperCase();
-              
-              // Nếu có chọn LSX cụ thể, chỉ hiển thị LSX đó (exact match hoặc contains)
-              if (!materialLSX.includes(selectedLSX) && materialLSX !== selectedLSX) {
-                return false;
-              }
-            } else {
-              // Nếu KHÔNG chọn LSX → Ẩn tất cả (không hiển thị gì)
-              return false;
-            }
-            
-            // Auto-hide previous day's scan history
-            if (this.hidePreviousDayHistory) {
-              const exportDate = new Date(material.exportDate);
-              exportDate.setHours(0, 0, 0, 0);
-              if (exportDate < today) return false;
-            }
-            
             // Filter by date range if specified
             if (this.startDate && this.endDate) {
               const exportDate = material.exportDate.toISOString().split('T')[0];
               return exportDate >= this.startDate && exportDate <= this.endDate;
             }
+            
+            // Auto-hide previous day's scan history
+            if (this.hidePreviousDayHistory) {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const exportDate = new Date(material.exportDate);
+              exportDate.setHours(0, 0, 0, 0);
+              if (exportDate < today) return false;
+            }
+            
             return true;
           })
           .slice(0, this.DISPLAY_LIMIT); // Lấy 50 dòng gần nhất
@@ -1808,12 +1812,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
-  // 🔧 SIÊU TỐI ƯU: Batch update với CỘNG DỒN theo LSX + Mã hàng
+  // 🔧 ĐƠN GIẢN HÓA: Chỉ lưu outbound records, BỎ inventory updates
   private async batchUpdateAllScanData(): Promise<void> {
-    if (this.pendingScanData.length === 0) return;
+    if (this.pendingScanData.length === 0) {
+      console.log('⚠️ No pending data to save');
+      return;
+    }
 
+    console.log(`📦 Saving ${this.pendingScanData.length} scanned items to outbound...`);
+    
     const batch = this.firestore.firestore.batch();
-    const inventoryUpdates: any[] = [];
 
     // 1. CỘNG DỒN theo LSX + Mã hàng (Material Code) trước khi lưu
     const consolidatedMap = new Map<string, any>();
@@ -1827,8 +1835,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         const existing = consolidatedMap.get(key);
         existing.quantity += scanItem.quantity;
         existing.exportQuantity += scanItem.quantity;
-        existing.updatedAt = scanItem.scanTime; // Cập nhật thời gian mới nhất
-        console.log(`🔄 Consolidating: ${key} - Old: ${existing.quantity - scanItem.quantity} + New: ${scanItem.quantity} = Total: ${existing.quantity}`);
+        existing.updatedAt = scanItem.scanTime;
       } else {
         // Record mới → Thêm vào map
         consolidatedMap.set(key, {
@@ -1851,14 +1858,6 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           updatedAt: scanItem.scanTime
         });
       }
-      
-      // Lưu thông tin để update inventory sau (giữ nguyên từng scan)
-      inventoryUpdates.push({
-        materialCode: scanItem.materialCode,
-        poNumber: scanItem.poNumber,
-        quantity: scanItem.quantity,
-        importDate: scanItem.importDate
-      });
     }
     
     console.log(`📊 Consolidated ${this.pendingScanData.length} scans into ${consolidatedMap.size} outbound records`);
@@ -1869,67 +1868,13 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       batch.set(docRef, record);
     }
 
-    // 3. Commit batch outbound records
-    console.log(`📦 Committing ${consolidatedMap.size} consolidated outbound records...`);
+    // 3. Commit batch outbound records - CHỈ CÓ BƯỚC NÀY!
+    console.log(`📦 Committing ${consolidatedMap.size} records to Firebase...`);
     await batch.commit();
-
-    // 3. Update inventory - GROUP theo material + PO + batch để optimize
-    console.log(`📦 Updating inventory for ${inventoryUpdates.length} items...`);
+    console.log(`✅ Successfully saved ${consolidatedMap.size} outbound records!`);
     
-    // Group updates theo materialCode + poNumber + importDate
-    const groupedUpdates = new Map<string, any>();
-    for (const update of inventoryUpdates) {
-      const key = `${update.materialCode}|${update.poNumber}|${update.importDate || 'NOBATCH'}`;
-      if (groupedUpdates.has(key)) {
-        const existing = groupedUpdates.get(key);
-        existing.quantity += update.quantity; // Cộng dồn quantity
-      } else {
-        groupedUpdates.set(key, { ...update });
-      }
-    }
-    
-    console.log(`📊 Grouped ${inventoryUpdates.length} items into ${groupedUpdates.size} unique updates`);
-    
-    // 🔧 MOBILE OPTIMIZATION: Bỏ qua inventory updates trên mobile để tăng tốc độ
-    // Inventory sẽ được sync sau bởi background job hoặc khi xem trên desktop
-    if (this.isMobile) {
-      console.log('📱 Mobile: Skipping inventory updates for speed optimization');
-      console.log('✅ Batch update completed: ${this.pendingScanData.length} items processed (mobile fast mode)');
-      return;
-    }
-    
-    // Desktop: Update inventory song song
-    console.log('🖥️ Desktop: Starting parallel inventory updates...');
-    
-    const inventoryPromises = Array.from(groupedUpdates.entries()).map(([key, update]) => {
-      return Promise.race([
-        this.unifiedUpdateInventory(
-          update.materialCode,
-          update.poNumber,
-          update.quantity,
-          update.importDate,
-          'BATCH_GROUPED'
-        ),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Inventory update timeout')), 5000)
-        )
-      ]).then(() => {
-        console.log(`✅ Inventory updated: ${key}`);
-        return { key, status: 'success' };
-      }).catch((error) => {
-        console.error(`⚠️ Failed to update inventory for ${key}:`, error.message);
-        return { key, status: 'failed', error };
-      });
-    });
-    
-    // Chờ TẤT CẢ inventory updates hoàn thành (hoặc timeout)
-    const results = await Promise.allSettled(inventoryPromises);
-    
-    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
-    const errorCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'failed').length;
-
-    console.log(`✅ Batch update completed: ${this.pendingScanData.length} items processed`);
-    console.log(`📊 Inventory updates: ${successCount} success, ${errorCount} failed (parallel execution)`);
+    // 🔧 NOTE: Inventory updates bị bỏ qua để tăng tốc độ
+    // Inventory sẽ được update sau bởi background job hoặc manual sync
   }
 
   // 🔧 SCAN REVIEW MODAL: Xem danh sách scan trước khi lưu
