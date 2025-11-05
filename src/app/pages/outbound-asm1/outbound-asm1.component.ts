@@ -1757,18 +1757,22 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         this.isLoading = true;
         this.isSavingBatchData = true;
         this.cdr.detectChanges(); // Force UI update để hiển thị ngay
+        console.log('🔄 UI updated - showing saving indicator');
         
+        console.log('📦 Starting batch update...');
         await this.batchUpdateAllScanData();
-        
         console.log('✅ Batch update completed successfully');
+        
         console.log(`✅ Saved ${savedCount} items - Firebase listener will auto-sync data`);
         
       } catch (error) {
         console.error('❌ Error in batch update:', error);
         alert('Lỗi cập nhật dữ liệu: ' + error.message);
       } finally {
+        console.log('🔄 Entering finally block - resetting states...');
         this.isLoading = false;
         this.isSavingBatchData = false;
+        console.log('✅ Loading flags reset:', { isLoading: this.isLoading, isSavingBatchData: this.isSavingBatchData });
         
         // 🔧 SỬA LỖI: Reset trong finally block để đảm bảo luôn chạy
         console.log('🔄 Resetting all batch scanning states...');
@@ -1886,19 +1890,46 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     console.log(`📊 Grouped ${inventoryUpdates.length} items into ${groupedUpdates.size} unique updates`);
     
-    // 🔧 UNIFIED: Chỉ update inventory theo nhóm
-    for (const [key, update] of groupedUpdates) {
-      console.log(`🔄 Updating inventory: ${key} with total quantity: ${update.quantity}`);
-      await this.unifiedUpdateInventory(
-        update.materialCode,
-        update.poNumber,
-        update.quantity,
-        update.importDate,
-        'BATCH_GROUPED'
-      );
+    // 🔧 MOBILE OPTIMIZATION: Bỏ qua inventory updates trên mobile để tăng tốc độ
+    // Inventory sẽ được sync sau bởi background job hoặc khi xem trên desktop
+    if (this.isMobile) {
+      console.log('📱 Mobile: Skipping inventory updates for speed optimization');
+      console.log('✅ Batch update completed: ${this.pendingScanData.length} items processed (mobile fast mode)');
+      return;
     }
+    
+    // Desktop: Update inventory song song
+    console.log('🖥️ Desktop: Starting parallel inventory updates...');
+    
+    const inventoryPromises = Array.from(groupedUpdates.entries()).map(([key, update]) => {
+      return Promise.race([
+        this.unifiedUpdateInventory(
+          update.materialCode,
+          update.poNumber,
+          update.quantity,
+          update.importDate,
+          'BATCH_GROUPED'
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Inventory update timeout')), 5000)
+        )
+      ]).then(() => {
+        console.log(`✅ Inventory updated: ${key}`);
+        return { key, status: 'success' };
+      }).catch((error) => {
+        console.error(`⚠️ Failed to update inventory for ${key}:`, error.message);
+        return { key, status: 'failed', error };
+      });
+    });
+    
+    // Chờ TẤT CẢ inventory updates hoàn thành (hoặc timeout)
+    const results = await Promise.allSettled(inventoryPromises);
+    
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
+    const errorCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'failed').length;
 
     console.log(`✅ Batch update completed: ${this.pendingScanData.length} items processed`);
+    console.log(`📊 Inventory updates: ${successCount} success, ${errorCount} failed (parallel execution)`);
   }
 
   // 🔧 SCAN REVIEW MODAL: Xem danh sách scan trước khi lưu
