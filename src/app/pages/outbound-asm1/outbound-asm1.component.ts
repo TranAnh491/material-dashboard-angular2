@@ -1867,13 +1867,51 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       batch.set(docRef, record);
     }
 
-    // 3. Commit batch outbound records - CHỈ CÓ BƯỚC NÀY!
+    // 3. Commit batch outbound records
     console.log(`📦 Committing ${consolidatedMap.size} records to Firebase...`);
     await batch.commit();
     console.log(`✅ Successfully saved ${consolidatedMap.size} outbound records!`);
     
-    // 🔧 NOTE: Inventory updates bị bỏ qua để tăng tốc độ
-    // Inventory sẽ được update sau bởi background job hoặc manual sync
+    // 4. Update inventory - Chạy SONG SONG không chờ để không làm chậm
+    console.log(`📦 Updating inventory in background...`);
+    this.updateInventoryInBackground(this.pendingScanData);
+  }
+  
+  // Update inventory trong background, không block UI
+  private updateInventoryInBackground(scanData: any[]): void {
+    // Group theo materialCode + poNumber + importDate
+    const groupedUpdates = new Map<string, any>();
+    
+    for (const scanItem of scanData) {
+      const key = `${scanItem.materialCode}|${scanItem.poNumber}|${scanItem.importDate || 'NOBATCH'}`;
+      if (groupedUpdates.has(key)) {
+        const existing = groupedUpdates.get(key);
+        existing.quantity += scanItem.quantity;
+      } else {
+        groupedUpdates.set(key, {
+          materialCode: scanItem.materialCode,
+          poNumber: scanItem.poNumber,
+          quantity: scanItem.quantity,
+          importDate: scanItem.importDate
+        });
+      }
+    }
+    
+    console.log(`📊 Grouped ${scanData.length} items into ${groupedUpdates.size} inventory updates`);
+    
+    // Update từng item trong background (không await)
+    groupedUpdates.forEach((update, key) => {
+      this.updateInventoryExported(
+        update.materialCode,
+        update.poNumber,
+        update.quantity,
+        update.importDate
+      ).catch(error => {
+        console.error(`⚠️ Background inventory update failed for ${key}:`, error.message);
+      });
+    });
+    
+    console.log(`✅ Inventory updates queued in background`);
   }
 
   // 🔧 SCAN REVIEW MODAL: Xem danh sách scan trước khi lưu
@@ -2101,42 +2139,74 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       console.log(`📦 Updating inventory exported: ${materialCode}, PO: ${poNumber}, Qty: ${exportQuantity}, Batch: ${importDate}`);
       
-      // Query inventory-materials để tìm record phù hợp
-      let query = this.firestore.collection('inventory-materials', ref =>
+      // 🔧 KHÔNG DÙNG where('importDate') vì format có thể khác nhau
+      // Query tất cả records của materialCode + poNumber, sau đó filter client-side
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('materialCode', '==', materialCode)
            .where('poNumber', '==', poNumber)
            .where('factory', '==', 'ASM1')
-      );
-      
-      // Nếu có importDate, thêm filter theo importDate để tìm đúng batch
-      if (importDate) {
-        query = this.firestore.collection('inventory-materials', ref =>
-          ref.where('materialCode', '==', materialCode)
-             .where('poNumber', '==', poNumber)
-             .where('factory', '==', 'ASM1')
-             .where('importDate', '==', importDate)
-        );
-      }
-      
-      const snapshot = await query.get().toPromise();
+      ).get().toPromise();
       
       if (snapshot && !snapshot.empty) {
-        // Tìm thấy inventory record
-        const doc = snapshot.docs[0]; // Lấy record đầu tiên
-        const data = doc.data() as any;
+        console.log(`📦 Found ${snapshot.docs.length} inventory records for ${materialCode} - PO ${poNumber}`);
+        
+        // Nếu có importDate từ scan, tìm record khớp batch
+        let targetDoc = null;
+        
+        if (importDate) {
+          // Chuẩn hóa importDate từ scan về format DDMMYYYY
+          const normalizedScanDate = this.normalizeImportDate(importDate);
+          console.log(`🔍 Looking for batch: ${normalizedScanDate}`);
+          
+          // Tìm record có importDate khớp
+          for (const doc of snapshot.docs) {
+            const data = doc.data() as any;
+            const invImportDate = this.normalizeImportDate(data.importDate);
+            console.log(`  - Checking doc ${doc.id}: importDate = ${data.importDate} → normalized = ${invImportDate}`);
+            
+            if (invImportDate === normalizedScanDate) {
+              targetDoc = doc;
+              console.log(`✅ Found matching batch: ${doc.id}`);
+              break;
+            }
+          }
+        }
+        
+        // Nếu không tìm thấy batch khớp, lấy record đầu tiên có quantity > exported
+        if (!targetDoc) {
+          console.log(`⚠️ No matching batch found, using first available record with stock`);
+          for (const doc of snapshot.docs) {
+            const data = doc.data() as any;
+            const available = (data.quantity || 0) - (data.exported || 0);
+            if (available > 0) {
+              targetDoc = doc;
+              console.log(`✅ Using doc ${doc.id} with available stock: ${available}`);
+              break;
+            }
+          }
+          
+          // Nếu vẫn không có, lấy record đầu tiên
+          if (!targetDoc) {
+            targetDoc = snapshot.docs[0];
+            console.log(`⚠️ No stock available, using first doc: ${targetDoc.id}`);
+          }
+        }
+        
+        // Update inventory
+        const data = targetDoc.data() as any;
         const currentExported = data.exported || 0;
         const newExported = currentExported + exportQuantity;
         
-        console.log(`🔄 Updating inventory doc ${doc.id}: exported ${currentExported} → ${newExported}`);
+        console.log(`🔄 Updating inventory doc ${targetDoc.id}: exported ${currentExported} → ${newExported}`);
         
-        await this.firestore.collection('inventory-materials').doc(doc.id).update({
+        await this.firestore.collection('inventory-materials').doc(targetDoc.id).update({
           exported: newExported,
           updatedAt: new Date()
         });
         
         console.log(`✅ Inventory updated: ${materialCode} - PO ${poNumber}, exported: ${newExported}`);
       } else {
-        console.log(`⚠️ No inventory record found for ${materialCode} - PO ${poNumber} - Batch ${importDate}`);
+        console.log(`⚠️ No inventory record found for ${materialCode} - PO ${poNumber}`);
         console.log(`⚠️ Skipping inventory update (material may not exist in inventory)`);
       }
     } catch (error) {
@@ -2144,6 +2214,51 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // Không throw error để không block batch update của các item khác
       console.log(`⚠️ Continuing batch update despite inventory update error`);
     }
+  }
+  
+  // Chuẩn hóa importDate về format DDMMYYYY để so sánh
+  private normalizeImportDate(importDate: any): string {
+    if (!importDate) return '';
+    
+    // Nếu đã là string DDMMYYYY (8 ký tự số)
+    if (typeof importDate === 'string' && /^\d{8}$/.test(importDate)) {
+      return importDate;
+    }
+    
+    // Nếu là Date object
+    if (importDate instanceof Date || importDate.toDate) {
+      const date = importDate.toDate ? importDate.toDate() : importDate;
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}${month}${year}`;
+    }
+    
+    // Nếu là string format khác (YYYY-MM-DD, DD/MM/YYYY, etc.)
+    if (typeof importDate === 'string') {
+      // Thử parse các format phổ biến
+      const formats = [
+        /^(\d{2})\/(\d{2})\/(\d{4})$/,  // DD/MM/YYYY
+        /^(\d{4})-(\d{2})-(\d{2})$/,    // YYYY-MM-DD
+        /^(\d{2})-(\d{2})-(\d{4})$/     // DD-MM-YYYY
+      ];
+      
+      for (const format of formats) {
+        const match = importDate.match(format);
+        if (match) {
+          if (format.source.startsWith('^\\(\\d{4}')) {
+            // YYYY-MM-DD
+            return `${match[3]}${match[2]}${match[1]}`;
+          } else {
+            // DD/MM/YYYY or DD-MM-YYYY
+            return `${match[1]}${match[2]}${match[3]}`;
+          }
+        }
+      }
+    }
+    
+    console.log(`⚠️ Cannot normalize importDate: ${importDate}`);
+    return String(importDate);
   }
 
   // Queue for rapid scans
