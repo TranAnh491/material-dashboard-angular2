@@ -183,13 +183,23 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.errorMessage = '';
     
     // Reset scan states
-    this.isActivelyScanningMaterial = false;
+    this.isActivelyScanningMaterial = true; // 🔧 FIX: Set true ngay để sẵn sàng scan
     this.materialScanCompleted = false;
     
-    // Initialize camera for material scanning
+    console.log('📱 Starting material scanning...');
+    
+    // 🔧 FIX: Tăng timeout cho mobile chậm và force change detection
+    this.cdr.detectChanges();
     setTimeout(() => {
-      this.initializeCameraScanner('material-scanner-container');
-    }, 200);
+      const container = document.getElementById('material-scanner-container');
+      if (container) {
+        console.log('✅ Container found, initializing scanner...');
+        this.initializeCameraScanner('material-scanner-container');
+      } else {
+        console.error('❌ Container not found!');
+        this.handleScannerError('Không tìm thấy container scanner');
+      }
+    }, 500); // Tăng từ 200ms lên 500ms
   }
 
   startMaterialScan(): void {
@@ -234,16 +244,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   startQRScannerForStep(step: number): void {
-    console.log(`Starting QR scanner for step ${step}`);
+    console.log(`📱 Starting QR scanner for step ${step}`);
     this.isScanning = true;
     this.scannerState = 'starting';
     this.isScannerReady = false;
     
     // Initialize camera for location scanning (step 3)
     if (step === 3) {
+      console.log('📱 Starting location scanning...');
+      
+      // 🔧 FIX: Tăng timeout cho mobile chậm và force change detection
+      this.cdr.detectChanges();
       setTimeout(() => {
-        this.initializeCameraScanner('location-scanner-container');
-      }, 200);
+        const container = document.getElementById('location-scanner-container');
+        if (container) {
+          console.log('✅ Location container found, initializing scanner...');
+          this.initializeCameraScanner('location-scanner-container');
+        } else {
+          console.error('❌ Location container not found!');
+          this.handleScannerError('Không tìm thấy container scanner');
+        }
+      }, 500); // Tăng từ 200ms lên 500ms
     }
   }
 
@@ -338,24 +359,44 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.locationScanCompleted = true;
       this.newLocation = scannedCode.trim();
       
-      // Stop scanner and show confirmation
+      console.log(`✅ Location scanned: ${scannedCode.trim()}`);
+      
+      // Stop scanner
       this.stopScanning();
       
-      // Show success message with confirmation
-      this.showLocationScanSuccess(scannedCode.trim());
+      // 🔧 FIX: Tự động cập nhật ngay, không cần confirm
+      this.autoConfirmLocationChange();
     }
   }
 
-  private showLocationScanSuccess(location: string): void {
-    const message = `✅ Đã quét thành công vị trí mới!\n\nVị trí: ${location}\n\nBạn có muốn cập nhật vị trí không?`;
+  private async autoConfirmLocationChange(): Promise<void> {
+    console.log('🔄 Auto-confirming location change...');
     
-    if (confirm(message)) {
-      this.confirmLocationChange();
-    } else {
-      // Allow scanning again
-      this.isActivelyScanningLocation = false;
-      this.locationScanCompleted = false;
-      this.startLocationScanning();
+    // 🔧 FIX: Lưu thông tin trước khi cập nhật (vì confirmLocationChange sẽ reset foundRM1Item)
+    const materialCode = this.foundRM1Item?.parsedData?.materialCode || this.foundRM1Item?.materialCode || 'N/A';
+    const newLocationValue = this.newLocation;
+    
+    // Hiển thị loading
+    this.isLoading = true;
+    this.cdr.detectChanges();
+    
+    try {
+      // Cập nhật location
+      await this.confirmLocationChange();
+      
+      // Hiển thị thông báo thành công (dùng dữ liệu đã lưu)
+      console.log('✅ Location updated successfully!');
+      alert(`✅ Đã cập nhật vị trí thành công!\n\nMã hàng: ${materialCode}\nVị trí mới: ${newLocationValue}`);
+      
+      // Đóng modal
+      this.closeChangeLocationModal();
+      
+    } catch (error) {
+      console.error('❌ Error updating location:', error);
+      alert('❌ Lỗi cập nhật vị trí: ' + error.message);
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -1289,13 +1330,30 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   initializeLocationScannerForStep3(): void {
     console.log(`🔧 Initializing location scanner for step 3...`);
     
+    // 🔧 FIX: Set scanning state trước khi khởi tạo scanner
+    this.isActivelyScanningLocation = true;
+    this.locationScanCompleted = false;
+    
     if (this.selectedScannerTypes.step3 === 'camera') {
       // Start QR scanner for step 3
-        setTimeout(() => {
+      setTimeout(() => {
         console.log(`📸 Starting QR scanner for location (step 3)...`);
         this.startQRScannerForStep(3);
       }, 200);
     }
+  }
+
+  processNewLocation(): void {
+    if (!this.scannedNewLocation || !this.scannedNewLocation.trim()) {
+      alert('⚠️ Vui lòng nhập vị trí mới!');
+      return;
+    }
+    
+    console.log(`📍 Processing new location: ${this.scannedNewLocation}`);
+    
+    // Set new location và tự động confirm
+    this.newLocation = this.scannedNewLocation.trim();
+    this.autoConfirmLocationChange();
   }
 
   confirmLocationChange(): void {

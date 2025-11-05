@@ -7,6 +7,11 @@
   font-weight: normal;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #000000;
+  
+  // 🔧 FIX: Đảm bảo không che nút sidebar menu trên mobile
+  @media (max-width: 768px) {
+    padding-top: 60px; // Để trống chỗ cho navbar
+  }
 }
 
 .excel-container {
