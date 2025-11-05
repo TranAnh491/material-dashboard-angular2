@@ -502,11 +502,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     console.log(`📦 Loading materials for LSX: ${this.selectedProductionOrder}...`);
     
     // 🔧 MOBILE OPTIMIZATION: Chỉ load records của LSX được chọn
-    // Use real-time listener to automatically update when data changes
+    // Bỏ orderBy để tránh cần composite index, sẽ sort ở client-side
     this.firestore.collection('outbound-materials', ref => 
       ref.where('factory', '==', 'ASM1')
          .where('productionOrder', '==', this.selectedProductionOrder)
-         .orderBy('createdAt', 'desc')
          .limit(100)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
