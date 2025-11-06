@@ -1822,21 +1822,28 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     const batch = this.firestore.firestore.batch();
 
-    // 1. CỘNG DỒN theo LSX + Mã hàng (Material Code) trước khi lưu
+    // 1. CỘNG DỒN - CHỈ KHI TRÙNG ĐẦY ĐỦ 6 TRƯỜNG
+    // Nguyên tắc: Ngày xuất + Mã hàng + Số PO + IMD + Mã nhân viên + Lệnh sản xuất
     const consolidatedMap = new Map<string, any>();
     
     for (const scanItem of this.pendingScanData) {
-      // Key: LSX + Material Code (không bao gồm PO, Batch)
-      const key = `${scanItem.productionOrder}|${scanItem.materialCode}`;
+      // 🔧 FIX: Key phải bao gồm ĐẦY ĐỦ các trường để tách dòng đúng
+      // Ngày xuất (normalize về ngày, bỏ giờ phút giây)
+      const exportDateStr = scanItem.scanTime instanceof Date 
+        ? scanItem.scanTime.toISOString().split('T')[0] 
+        : new Date(scanItem.scanTime).toISOString().split('T')[0];
+      
+      const key = `${exportDateStr}|${scanItem.materialCode}|${scanItem.poNumber}|${scanItem.importDate || 'NO_IMD'}|${scanItem.employeeId}|${scanItem.productionOrder}`;
       
       if (consolidatedMap.has(key)) {
-        // Đã có record này → Cộng dồn quantity
+        // ✅ TRÙNG ĐẦY ĐỦ 6 TRƯỜNG → Cộng dồn quantity
         const existing = consolidatedMap.get(key);
         existing.quantity += scanItem.quantity;
         existing.exportQuantity += scanItem.quantity;
         existing.updatedAt = scanItem.scanTime;
+        console.log(`📊 Merged scan: ${scanItem.materialCode} (${scanItem.quantity}kg) into existing record`);
       } else {
-        // Record mới → Thêm vào map
+        // ❌ KHÁC ÍT NHẤT 1 TRƯỜNG → Tạo dòng mới
         consolidatedMap.set(key, {
           factory: 'ASM1',
           materialCode: scanItem.materialCode,
@@ -1856,6 +1863,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           createdAt: scanItem.scanTime,
           updatedAt: scanItem.scanTime
         });
+        console.log(`📝 New record: ${scanItem.materialCode} | PO: ${scanItem.poNumber} | IMD: ${scanItem.importDate || 'N/A'}`);
       }
     }
     
