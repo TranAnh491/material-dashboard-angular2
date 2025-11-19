@@ -35,6 +35,15 @@ export interface ProductCatalogItem {
   updatedAt?: Date;
 }
 
+export interface CustomerCodeMappingItem {
+  id?: string;
+  customerCode: string; // Mã khách hàng
+  materialCode: string; // Mã thành phẩm
+  description?: string; // Mô tả
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 @Component({
   selector: 'app-fg-in',
   templateUrl: './fg-in.component.html',
@@ -76,6 +85,19 @@ export class FgInComponent implements OnInit, OnDestroy {
     customer: ''
   };
   
+  // Customer Code Mapping
+  showMappingDialog: boolean = false;
+  mappingItems: CustomerCodeMappingItem[] = [];
+  filteredMappingItems: CustomerCodeMappingItem[] = [];
+  mappingSearchTerm: string = '';
+  
+  // New mapping item for manual addition
+  newMappingItem: CustomerCodeMappingItem = {
+    customerCode: '',
+    materialCode: '',
+    description: ''
+  };
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -88,6 +110,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     // Load catalog immediately so calculations work
     this.loadCatalogFromFirebase();
+    // Load mapping immediately
+    this.loadMappingFromFirebase();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
     this.applyFilters();
@@ -898,5 +922,251 @@ export class FgInComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, 'FG_Catalog_Template.xlsx');
   }
 
+  // ===== CUSTOMER CODE MAPPING METHODS =====
+
+  // Load mapping from Firebase
+  loadMappingFromFirebase(): void {
+    this.firestore.collection('fg-customer-mapping')
+      .get()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((querySnapshot) => {
+        const firebaseMapping = querySnapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          const id = doc.id;
+          return {
+            id: id,
+            ...data,
+            createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
+            updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
+          };
+        });
+        
+        this.mappingItems = firebaseMapping;
+        this.applyMappingFilters();
+        console.log('Loaded Customer Code Mapping from Firebase:', this.mappingItems.length);
+      });
+  }
+
+  // Show mapping dialog
+  showMapping(): void {
+    this.showMappingDialog = true;
+    if (this.mappingItems.length === 0) {
+      this.loadMappingFromFirebase();
+    } else {
+      this.applyMappingFilters();
+    }
+  }
+
+  // Close mapping dialog
+  closeMapping(): void {
+    this.showMappingDialog = false;
+    this.mappingSearchTerm = '';
+    this.newMappingItem = {
+      customerCode: '',
+      materialCode: '',
+      description: ''
+    };
+  }
+
+  // Apply mapping filters
+  applyMappingFilters(): void {
+    this.filteredMappingItems = this.mappingItems.filter(item => {
+      if (this.mappingSearchTerm) {
+        const searchableText = [
+          item.customerCode,
+          item.materialCode,
+          item.description
+        ].filter(Boolean).join(' ').toUpperCase();
+        
+        if (!searchableText.includes(this.mappingSearchTerm.toUpperCase())) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  // Search mapping
+  onMappingSearchChange(event: any): void {
+    this.mappingSearchTerm = event.target.value;
+    this.applyMappingFilters();
+  }
+
+  // Import mapping from Excel
+  importMapping(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.processMappingExcelFile(file);
+      }
+    };
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+  }
+
+  private async processMappingExcelFile(file: File): Promise<void> {
+    try {
+      const data = await this.readExcelFile(file);
+      const mappingItems = this.parseMappingExcelData(data);
+      
+      // Check for duplicates
+      const duplicates = mappingItems.filter(newItem => 
+        this.mappingItems.some(existingItem => 
+          existingItem.customerCode === newItem.customerCode
+        )
+      );
+      
+      if (duplicates.length > 0) {
+        const duplicateCodes = duplicates.map(d => d.customerCode).join(', ');
+        const confirmed = confirm(`⚠️ Có ${duplicates.length} mã khách hàng trùng lặp: ${duplicateCodes}\n\nBạn có muốn tiếp tục import?`);
+        if (!confirmed) return;
+      }
+      
+      // Save to Firebase
+      this.saveMappingItemsToFirebase(mappingItems);
+      
+      // Refresh mapping data
+      this.loadMappingFromFirebase();
+      
+      alert(`✅ Đã import thành công ${mappingItems.length} items vào mapping!`);
+      
+    } catch (error) {
+      console.error('Error processing mapping Excel file:', error);
+      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+    }
+  }
+
+  private parseMappingExcelData(data: any[]): CustomerCodeMappingItem[] {
+    return data.map((row: any) => ({
+      customerCode: row['Mã Khách Hàng'] || row['Customer Code'] || '',
+      materialCode: row['Mã Thành Phẩm'] || row['Material Code'] || '',
+      description: row['Mô Tả'] || row['Description'] || '',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })).filter(item => item.customerCode.trim() !== '' && item.materialCode.trim() !== ''); // Filter out empty rows
+  }
+
+  // Save mapping items to Firebase
+  saveMappingItemsToFirebase(mappingItems: CustomerCodeMappingItem[]): void {
+    mappingItems.forEach(item => {
+      const itemData = {
+        ...item,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      delete itemData.id;
+      
+      this.firestore.collection('fg-customer-mapping').add(itemData)
+        .then((docRef) => {
+          console.log('Customer Code Mapping item saved to Firebase successfully with ID:', docRef.id);
+        })
+        .catch(error => {
+          console.error('Error saving Customer Code Mapping item to Firebase:', error);
+        });
+    });
+  }
+
+  // Add new mapping item manually
+  addMappingItem(): void {
+    if (!this.newMappingItem.customerCode.trim() || !this.newMappingItem.materialCode.trim()) {
+      alert('❌ Vui lòng nhập đầy đủ Mã Khách Hàng và Mã Thành Phẩm');
+      return;
+    }
+
+    // Check for duplicate
+    const isDuplicate = this.mappingItems.some(item => 
+      item.customerCode === this.newMappingItem.customerCode
+    );
+
+    if (isDuplicate) {
+      const confirmed = confirm(`⚠️ Mã Khách Hàng "${this.newMappingItem.customerCode}" đã tồn tại trong mapping.\n\nBạn có muốn thêm duplicate?`);
+      if (!confirmed) return;
+    }
+
+    const newItem = {
+      ...this.newMappingItem,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    this.firestore.collection('fg-customer-mapping').add(newItem)
+      .then((docRef) => {
+        console.log('Customer Code Mapping item added successfully with ID:', docRef.id);
+        alert(`✅ Đã thêm mapping "${newItem.customerCode}" → "${newItem.materialCode}"`);
+        
+        // Refresh mapping data
+        this.loadMappingFromFirebase();
+        
+        // Reset form
+        this.newMappingItem = {
+          customerCode: '',
+          materialCode: '',
+          description: ''
+        };
+      })
+      .catch(error => {
+        console.error('Error adding Customer Code Mapping item:', error);
+        alert(`❌ Lỗi khi thêm item: ${error.message || error}`);
+      });
+  }
+
+  // Delete mapping item
+  deleteMappingItem(item: CustomerCodeMappingItem): void {
+    if (confirm(`Xác nhận xóa mapping "${item.customerCode}" → "${item.materialCode}"?`)) {
+      if (item.id) {
+        this.firestore.collection('fg-customer-mapping').doc(item.id).get().subscribe(doc => {
+          if (doc.exists) {
+            doc.ref.delete().then(() => {
+              console.log('Customer Code Mapping item deleted from Firebase successfully');
+              alert(`✅ Đã xóa mapping "${item.customerCode}"`);
+              // Refresh mapping data
+              this.loadMappingFromFirebase();
+            }).catch(error => {
+              console.error('Error deleting Customer Code Mapping item from Firebase:', error);
+              alert(`❌ Lỗi khi xóa item: ${error.message || error}`);
+            });
+          } else {
+            console.error('❌ Mapping document does not exist in Firebase');
+            alert('❌ Không tìm thấy item trong Firebase');
+          }
+        });
+      }
+    }
+  }
+
+  // Download mapping template
+  downloadMappingTemplate(): void {
+    const templateData = [
+      {
+        'Mã Khách Hàng': 'CUST001',
+        'Mã Thành Phẩm': 'P001234',
+        'Mô Tả': 'Customer 1 Product Mapping'
+      },
+      {
+        'Mã Khách Hàng': 'CUST002',
+        'Mã Thành Phẩm': 'P002345',
+        'Mô Tả': 'Customer 2 Product Mapping'
+      }
+    ];
+
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'FG_Customer_Mapping_Template.xlsx');
+  }
+
+  // Get material code from customer code mapping
+  getMaterialCodeFromCustomerCode(customerCode: string): string {
+    const mapping = this.mappingItems.find(item => item.customerCode === customerCode);
+    return mapping ? mapping.materialCode : '';
+  }
 
 }

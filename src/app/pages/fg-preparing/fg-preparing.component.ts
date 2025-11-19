@@ -5,6 +5,11 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 
+export interface CustomerCodeMapping {
+  customerCode: string;
+  materialCode: string;
+}
+
 export interface FGPreparingItem {
   id?: string;
   factory?: string;
@@ -53,12 +58,23 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
   
   // Scanner properties
   showScannerDialog: boolean = false;
-  scannerStep: number = 1;
+  scannerStep: number = 0; // Start with mode selection
+  scanMode: 'carton' | 'carton-qty' = 'carton'; // Mode selection
   scannedShipment: string = '';
   scannedEmployee: string = '';
-  scannedCustomerCode: string = '';
+  scannedPallet: string = '';
   currentScanInput: string = '';
-  scannedMaterials: string[] = [];
+  currentQtyInput: string = '';
+  scannedItems: Array<{customerCode: string, quantity: number}> = [];
+  waitingForQty: boolean = false; // For carton-qty mode
+  currentShipmentData: any = null; // Store shipment data to check packing type
+  needPalletScan: boolean = false; // Flag to determine if pallet scan is needed
+  
+  // Customer code mapping
+  customerMappings: Map<string, string> = new Map(); // customerCode -> materialCode
+  
+  // Shipments data
+  shipments: any[] = [];
   
   private destroy$ = new Subject<void>();
   
@@ -75,6 +91,8 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     this.loadPermissions();
     this.loadFactoryAccess();
+    this.loadCustomerMappings();
+    this.loadShipments();
   }
 
   ngOnDestroy(): void {
@@ -318,6 +336,24 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
     this.showScannerDialog = true;
     this.resetScanner();
   }
+  
+  // Select mode and continue to step 1
+  selectModeAndContinue(mode: 'carton' | 'carton-qty'): void {
+    console.log('🔵 selectModeAndContinue called with mode:', mode);
+    this.scanMode = mode;
+    this.scannerStep = 1;
+    console.log('✅ Mode selected:', mode, '| scannerStep:', this.scannerStep);
+    // Auto focus on shipment input after a short delay
+    setTimeout(() => {
+      const input = document.querySelector('.scanner-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        console.log('✅ Input focused');
+      } else {
+        console.log('❌ Input not found');
+      }
+    }, 100);
+  }
 
   closeScanner(): void {
     this.showScannerDialog = false;
@@ -325,79 +361,227 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
   }
 
   resetScanner(): void {
-    this.scannerStep = 1;
+    this.scannerStep = 0; // Start with mode selection
+    this.scanMode = 'carton';
     this.scannedShipment = '';
     this.scannedEmployee = '';
-    this.scannedCustomerCode = '';
+    this.scannedPallet = '';
     this.currentScanInput = '';
-    this.scannedMaterials = [];
+    this.currentQtyInput = '';
+    this.scannedItems = [];
+    this.waitingForQty = false;
+    this.currentShipmentData = null;
+    this.needPalletScan = false;
   }
 
   onShipmentScanned(): void {
-    if (this.scannedShipment.trim()) {
+    const shipmentCode = this.scannedShipment.trim();
+    if (!shipmentCode) return;
+    
+    // Find shipment data
+    this.currentShipmentData = this.shipments.find(s => 
+      String(s.shipmentCode).trim().toUpperCase() === shipmentCode.toUpperCase()
+    );
+    
+    if (!this.currentShipmentData) {
+      alert('❌ Không tìm thấy Shipment: ' + shipmentCode);
+      console.log('Shipment not found:', shipmentCode);
+      return;
+    }
+    
+    console.log('Shipment found:', this.currentShipmentData);
+    console.log('Packing type:', this.currentShipmentData.packing);
+    
+    // Check if pallet scan is needed
+    const packing = String(this.currentShipmentData.packing || '').toUpperCase();
+    this.needPalletScan = (packing === 'PALLET');
+    
+    if (this.needPalletScan) {
+      // Packing = Pallet → go to step 2 (scan pallet)
       this.scannerStep = 2;
-      console.log('Shipment scanned:', this.scannedShipment);
+      console.log('→ Need pallet scan, moving to step 2');
+    } else {
+      // Packing = Box → skip pallet, go to step 3 (scan employee)
+      this.scannerStep = 3;
+      console.log('→ Box packing, skipping pallet scan, moving to step 3');
+    }
+  }
+
+  onPalletScanned(): void {
+    if (this.scannedPallet.trim()) {
+      // After pallet scan, go to step 3 (employee scan)
+      this.scannerStep = 3;
+      console.log('Pallet scanned:', this.scannedPallet);
     }
   }
 
   onEmployeeScanned(): void {
     if (this.scannedEmployee.trim()) {
-      this.scannerStep = 3;
+      // After employee scan, go to step 4 (material scan)
+      this.scannerStep = 4;
       console.log('Employee scanned:', this.scannedEmployee);
+      // Auto focus on scan input for continuous scanning
+      setTimeout(() => {
+        const scanInput = document.querySelector('.scanner-input-continuous') as HTMLInputElement;
+        if (scanInput) scanInput.focus();
+      }, 100);
     }
   }
 
   onCustomerCodeScanned(): void {
-    if (this.scannedCustomerCode.trim()) {
-      this.scannerStep = 4;
-      console.log('Customer code scanned:', this.scannedCustomerCode);
-    }
-  }
-
-  onMaterialScanned(): void {
-    if (this.currentScanInput.trim()) {
-      const materialCode = this.currentScanInput.trim();
-      if (!this.scannedMaterials.includes(materialCode)) {
-        this.scannedMaterials.push(materialCode);
-        console.log('Material scanned:', materialCode);
-      }
+    if (!this.currentScanInput.trim()) return;
+    
+    const customerCode = this.currentScanInput.trim();
+    
+    if (this.scanMode === 'carton') {
+      // Mode Carton: mỗi lần scan = 1 carton (quantity = 1)
+      this.scannedItems.push({ customerCode, quantity: 1 });
+      console.log('Customer code scanned (Carton mode):', customerCode);
       this.currentScanInput = '';
+    } else if (this.scanMode === 'carton-qty') {
+      // Mode Carton & Qty: sau khi scan customerCode, đợi scan quantity
+      if (!this.waitingForQty) {
+        // Đang chờ scan quantity cho customerCode này
+        this.waitingForQty = true;
+        console.log('Customer code scanned (Carton & Qty mode), waiting for quantity:', customerCode);
+      }
     }
   }
 
-  removeScannedMaterial(index: number): void {
-    this.scannedMaterials.splice(index, 1);
+  onQuantityScanned(): void {
+    if (!this.currentQtyInput.trim() || !this.currentScanInput.trim()) return;
+    
+    const customerCode = this.currentScanInput.trim();
+    const quantity = parseInt(this.currentQtyInput.trim()) || 1;
+    
+    this.scannedItems.push({ customerCode, quantity });
+    console.log('Quantity scanned:', quantity, 'for customer code:', customerCode);
+    
+    // Reset for next scan
+    this.currentScanInput = '';
+    this.currentQtyInput = '';
+    this.waitingForQty = false;
+    
+    // Auto focus back to customer code input
+    setTimeout(() => {
+      const scanInput = document.querySelector('.scanner-input-continuous') as HTMLInputElement;
+      if (scanInput) scanInput.focus();
+    }, 100);
+  }
+
+  removeScannedItem(index: number): void {
+    this.scannedItems.splice(index, 1);
+  }
+  
+  // Get total cartons (for display)
+  getTotalCartons(): number {
+    return this.scannedItems.length;
+  }
+  
+  // Get total quantity (for display)
+  getTotalQuantity(): number {
+    return this.scannedItems.reduce((sum, item) => sum + item.quantity, 0);
+  }
+  
+  // Group scanned items by customerCode with count
+  getGroupedItems(): Array<{customerCode: string, count: number, totalQty: number}> {
+    const grouped = new Map<string, {count: number, totalQty: number}>();
+    
+    this.scannedItems.forEach(item => {
+      if (grouped.has(item.customerCode)) {
+        const existing = grouped.get(item.customerCode)!;
+        existing.count += 1;
+        existing.totalQty += item.quantity;
+      } else {
+        grouped.set(item.customerCode, { count: 1, totalQty: item.quantity });
+      }
+    });
+    
+    return Array.from(grouped.entries()).map(([customerCode, data]) => ({
+      customerCode,
+      count: data.count,
+      totalQty: data.totalQty
+    }));
+  }
+
+  // Load customer code mappings from Firebase
+  loadCustomerMappings(): void {
+    this.firestore.collection('fg-customer-mapping')
+      .get()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((querySnapshot) => {
+        this.customerMappings.clear();
+        querySnapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          if (data.customerCode && data.materialCode) {
+            this.customerMappings.set(data.customerCode, data.materialCode);
+          }
+        });
+        console.log('Loaded customer mappings:', this.customerMappings.size);
+      });
+  }
+
+  // Get material code from customer code
+  getMaterialCodeFromCustomerCode(customerCode: string): string {
+    return this.customerMappings.get(customerCode) || '';
+  }
+
+  // Load shipments from Firebase to check packing type
+  loadShipments(): void {
+    this.firestore.collection('shipments')
+      .get()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((querySnapshot) => {
+        this.shipments = querySnapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            id: doc.id,
+            shipmentCode: data.shipmentCode,
+            packing: data.packing || 'Pallet', // Default to Pallet if not specified
+            ...data
+          };
+        });
+        console.log('Loaded shipments for FG Check:', this.shipments.length);
+      });
   }
 
   saveScannedData(): void {
-    if (this.scannedMaterials.length === 0) {
+    if (this.scannedItems.length === 0) {
       alert('Vui lòng quét ít nhất một mã hàng!');
       return;
     }
 
-    // Create FG Preparing items for each scanned material
-    const newItems: FGPreparingItem[] = this.scannedMaterials.map(materialCode => ({
-      factory: 'ASM1',
-      importDate: new Date(),
-      batchNumber: '',
-      materialCode: materialCode,
-      rev: '',
-      lot: '',
-      lsx: '',
-      quantity: 0,
-      location: '',
-      notes: `Scanned from Shipment: ${this.scannedShipment}, Employee: ${this.scannedEmployee}`,
-      standard: 0,
-      carton: 0,
-      odd: 0,
-      customer: '',
-      customerCode: this.scannedCustomerCode,
-      shipment: this.scannedShipment,
-      pallet: '',
-      isPrepared: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }));
+    // Group scanned items by customerCode
+    const grouped = this.getGroupedItems();
+    
+    // Create FG Preparing items for each unique customerCode
+    const newItems: FGPreparingItem[] = grouped.map(group => {
+      // Try to get materialCode from mapping
+      const materialCode = this.getMaterialCodeFromCustomerCode(group.customerCode);
+      
+      return {
+        factory: 'ASM1',
+        importDate: new Date(),
+        batchNumber: '',
+        materialCode: materialCode, // Auto-filled from mapping if available
+        rev: '',
+        lot: '',
+        lsx: '',
+        quantity: group.totalQty,
+        location: '',
+        notes: `Scanned: Shipment: ${this.scannedShipment}, Employee: ${this.scannedEmployee}, Pallet: ${this.scannedPallet}`,
+        standard: 0,
+        carton: group.count, // Number of times scanned = number of cartons
+        odd: 0,
+        customer: '',
+        customerCode: group.customerCode,
+        shipment: this.scannedShipment,
+        pallet: this.scannedPallet,
+        isPrepared: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    });
 
     // Save to Firebase
     const savePromises = newItems.map(item => 
@@ -407,13 +591,13 @@ export class FGPreparingComponent implements OnInit, OnDestroy {
     Promise.all(savePromises)
       .then(() => {
         console.log('Scanned data saved successfully');
-        alert(`Đã lưu ${newItems.length} mã hàng vào FG Check!`);
+        alert(`✅ Đã lưu ${newItems.length} mã khách hàng vào FG Check!\n\nTổng ${this.getTotalCartons()} lần scan, Tổng quantity: ${this.getTotalQuantity()}`);
         this.closeScanner();
         this.loadMaterialsFromFirebase(); // Refresh the list
       })
       .catch(error => {
         console.error('Error saving scanned data:', error);
-        alert('Lỗi khi lưu dữ liệu: ' + error.message);
+        alert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
       });
   }
 }

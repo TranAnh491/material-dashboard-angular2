@@ -4,6 +4,7 @@ import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import * as QRCode from 'qrcode';
 
 export interface ShipmentItem {
   id?: string;
@@ -17,6 +18,8 @@ export interface ShipmentItem {
   odd: number;
   inventory?: number; // Thêm trường tồn kho
   shipMethod: string;
+  packing: string; // Packing type: Pallet or Box
+  qtyPallet: number; // Số lượng pallet
   push: boolean;
   pushNo: string; // Thêm PushNo - format: 001, 002, 003...
   status: string;
@@ -58,6 +61,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Search term
   searchTerm: string = '';
   
+  // Print Label dialog
+  showPrintLabelDialog: boolean = false;
+  selectedShipmentForPrint: ShipmentItem | null = null;
+  
   newShipment: ShipmentItem = {
     shipmentCode: '',
     materialCode: '',
@@ -69,6 +76,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     odd: 0,
     inventory: 0, // Khởi tạo tồn kho = 0
     shipMethod: '',
+    packing: 'Pallet', // Mặc định là Pallet
+    qtyPallet: 0, // Khởi tạo Qty Pallet = 0
     push: false,
     pushNo: '000', // Khởi tạo PushNo = 000
     status: 'Chờ soạn',
@@ -116,6 +125,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             push: data.push === 'true' || data.push === true || data.push === 1,
             pushNo: data.pushNo || '000', // Default PushNo if not exists
             inventory: data.inventory || 0, // Default inventory if not exists
+            packing: data.packing || 'Pallet', // Default packing if not exists
+            qtyPallet: data.qtyPallet || 0, // Default qtyPallet if not exists
             requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
             fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
             actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : null
@@ -243,6 +254,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       actualShipDate: this.newShipment.actualShipDate,
       pushNo: this.newShipment.pushNo || '000', // Ensure PushNo is included
       inventory: this.newShipment.inventory || 0, // Ensure inventory is included
+      packing: this.newShipment.packing || 'Pallet', // Ensure packing is included
+      qtyPallet: this.newShipment.qtyPallet || 0, // Ensure qtyPallet is included
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -432,6 +445,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       odd: 0,
       inventory: 0,
       shipMethod: '',
+      packing: 'Pallet', // Mặc định là Pallet
+      qtyPallet: 0, // Khởi tạo Qty Pallet = 0
       push: false,
       pushNo: '000',
       status: 'Chờ soạn',
@@ -995,6 +1010,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         actualShipDate: shipment.actualShipDate,
         pushNo: shipment.pushNo || '000', // Ensure PushNo is included
         inventory: shipment.inventory || 0, // Ensure inventory is included
+        packing: shipment.packing || 'Pallet', // Ensure packing is included
+        qtyPallet: shipment.qtyPallet || 0, // Ensure qtyPallet is included
         updatedAt: new Date()
       };
       
@@ -1099,6 +1116,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       qtyBox: parseFloat(row['QTYBOX']) || 0, // Thêm QTYBOX từ Excel
       odd: parseFloat(row['Odd']) || 0,
       shipMethod: row['FWD'] || '',
+      packing: row['Packing'] || 'Pallet', // Thêm Packing từ Excel
+      qtyPallet: parseFloat(row['Qty Pallet']) || 0, // Thêm Qty Pallet từ Excel
       push: row['Push'] === 'true' || row['Push'] === true || row['Push'] === 1,
       pushNo: '000', // Default PushNo for imported data
       inventory: parseFloat(row['Tồn kho']) || 0, // Default inventory for imported data
@@ -1136,6 +1155,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         actualShipDate: shipment.actualShipDate,
         pushNo: shipment.pushNo || '000', // Ensure PushNo is included
         inventory: shipment.inventory || 0, // Ensure inventory is included
+        packing: shipment.packing || 'Pallet', // Ensure packing is included
+        qtyPallet: shipment.qtyPallet || 0, // Ensure qtyPallet is included
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1164,6 +1185,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Odd': 5,
         'Tồn kho': 500,
         'FWD': 'Sea',
+        'Packing': 'Pallet',
+        'Qty Pallet': 5,
         'Push': true,
         'PushNo': '001',
         'Status': 'Chờ soạn',
@@ -1184,6 +1207,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Odd': 8,
         'Tồn kho': 750,
         'FWD': 'Air',
+        'Packing': 'Box',
+        'Qty Pallet': 3,
         'Push': false,
         'PushNo': '000',
         'Status': 'Đang soạn',
@@ -1210,6 +1235,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 8 },  // Odd
       { wch: 10 }, // Tồn kho
       { wch: 8 },  // FWD
+      { wch: 10 }, // Packing
+      { wch: 10 }, // Qty Pallet
       { wch: 8 },  // Push
       { wch: 8 },  // PushNo
       { wch: 12 }, // Status
@@ -1240,6 +1267,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Odd': shipment.odd,
         'Tồn kho': shipment.inventory || 0,
         'FWD': shipment.shipMethod,
+        'Packing': shipment.packing || 'Pallet',
+        'Qty Pallet': shipment.qtyPallet || 0,
         'Push': shipment.push ? 'Yes' : 'No',
         'PushNo': shipment.pushNo,
         'Status': shipment.status,
@@ -1290,6 +1319,295 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           alert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
         });
       });
+    }
+  }
+
+  // Print Label Methods
+  openPrintLabelDialog(shipment: ShipmentItem): void {
+    this.selectedShipmentForPrint = shipment;
+    this.showPrintLabelDialog = true;
+  }
+
+  closePrintLabelDialog(): void {
+    this.showPrintLabelDialog = false;
+    this.selectedShipmentForPrint = null;
+  }
+
+  async printShipmentLabel(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    
+    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '');
+    if (!shipmentCode || shipmentCode.trim() === '') {
+      alert('❌ Mã Shipment không hợp lệ!');
+      return;
+    }
+    
+    console.log('🏷️ Printing Shipment Label:', shipmentCode);
+    
+    try {
+      await this.generateAndPrintQRCode(shipmentCode, 'Shipment Label');
+      this.closePrintLabelDialog();
+    } catch (error) {
+      console.error('❌ Error printing shipment label:', error);
+      alert('❌ Lỗi: ' + (error?.message || String(error)));
+    }
+  }
+
+  async printPalletLabels(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    
+    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '');
+    if (!shipmentCode || shipmentCode.trim() === '') {
+      alert('❌ Mã Shipment không hợp lệ!');
+      return;
+    }
+    
+    const qtyPallet = Number(this.selectedShipmentForPrint.qtyPallet) || 0;
+    
+    if (qtyPallet <= 0) {
+      alert('❌ Qty Pallet phải lớn hơn 0!');
+      return;
+    }
+    
+    if (qtyPallet > 100) {
+      alert('❌ Số lượng pallet quá lớn (>100). Vui lòng kiểm tra lại!');
+      return;
+    }
+    
+    console.log('🏷️ Printing Pallet Labels:', shipmentCode, 'Qty:', qtyPallet);
+    
+    try {
+      // Generate QR codes for each pallet
+      const palletCodes: string[] = [];
+      for (let i = 1; i <= qtyPallet; i++) {
+        const palletCode = `${shipmentCode}${String(i).padStart(2, '0')}`;
+        palletCodes.push(palletCode);
+      }
+      
+      console.log('📋 Pallet codes:', palletCodes);
+      
+      await this.generateAndPrintMultipleQRCodes(palletCodes, 'Pallet Labels');
+      this.closePrintLabelDialog();
+    } catch (error) {
+      console.error('❌ Error printing pallet labels:', error);
+      alert('❌ Lỗi khi in tem pallet: ' + error.message);
+    }
+  }
+
+  // Generate and print single QR code
+  private async generateAndPrintQRCode(code: string, title: string): Promise<void> {
+    try {
+      console.log('🔧 Generating QR code for:', code);
+      
+      // Generate QR code using qrcode library (same as materials)
+      const qrCodeDataURL = await QRCode.toDataURL(code, {
+        width: 240,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      
+      console.log('✅ QR code generated, length:', qrCodeDataURL.length);
+      
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
+        return;
+      }
+      
+      console.log('✅ Print window opened');
+      
+      const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <title>${title}</title>
+  <style>
+    @page { size: 57mm 32mm; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif;
+      background: white;
+      width: 57mm;
+      height: 32mm;
+    }
+    .label-container {
+      width: 57mm;
+      height: 32mm;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      gap: 3mm;
+      background: white;
+    }
+    .qr-code {
+      width: 28mm;
+      height: 28mm;
+    }
+    .code-text {
+      font-size: 14px;
+      font-weight: bold;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <img class="qr-code" src="${qrCodeDataURL}">
+    <div class="code-text">${code}</div>
+  </div>
+</body>
+</html>`;
+
+      console.log('📝 Writing HTML to print window...');
+      printWindow.document.write(htmlContent);
+      
+      printWindow.document.close();
+      console.log('✅ Document closed');
+      
+      // Wait for content to load, then print
+      printWindow.onload = () => {
+        console.log('📄 Content loaded');
+        setTimeout(() => {
+          console.log('🖨️ Starting print...');
+          printWindow.focus();
+          printWindow.print();
+        }, 300);
+      };
+      
+      // Fallback if onload doesn't fire
+      setTimeout(() => {
+        if (printWindow && !printWindow.closed) {
+          console.log('🖨️ Fallback print...');
+          printWindow.focus();
+          printWindow.print();
+        }
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert('❌ Lỗi: ' + (error?.message || String(error)));
+    }
+  }
+
+  // Generate and print multiple QR codes
+  private async generateAndPrintMultipleQRCodes(codes: string[], title: string): Promise<void> {
+    try {
+      console.log('🔧 Generating multiple QR codes for:', codes.length, 'labels');
+      
+      // Generate all QR codes first
+      const qrCodeDataURLs = await Promise.all(
+        codes.map(code => 
+          QRCode.toDataURL(code, {
+            width: 240, // 30mm = 240px (8px/mm) - same as materials inbound
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          })
+        )
+      );
+      
+      console.log('✅ All QR codes generated successfully:', qrCodeDataURLs.length);
+      
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
+        return;
+      }
+      
+      console.log('✅ Print window opened for multiple labels');
+      
+      let labelsHtml = '';
+      codes.forEach((code, index) => {
+        const qrCodeDataURL = qrCodeDataURLs[index];
+        const pageBreak = index < codes.length - 1 ? 'page-break-after: always;' : '';
+        labelsHtml += `
+  <div class="label-container" style="${pageBreak}">
+    <img class="qr-code" src="${qrCodeDataURL}">
+    <div class="code-text">${code}</div>
+  </div>`;
+      });
+      
+      const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <title>${title}</title>
+  <style>
+    @page { size: 57mm 32mm; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif;
+      background: white;
+    }
+    .label-container {
+      width: 57mm;
+      height: 32mm;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      gap: 3mm;
+      background: white;
+    }
+    .qr-code {
+      width: 28mm;
+      height: 28mm;
+    }
+    .code-text {
+      font-size: 14px;
+      font-weight: bold;
+      color: #000;
+    }
+  </style>
+</head>
+<body>${labelsHtml}
+</body>
+</html>`;
+
+      console.log('📝 Writing HTML for multiple labels...');
+      printWindow.document.write(htmlContent);
+      
+      printWindow.document.close();
+      console.log('✅ Document closed for multiple labels');
+      
+      // Wait for content to load, then print
+      printWindow.onload = () => {
+        console.log('📄 Multiple labels content loaded');
+        setTimeout(() => {
+          console.log('🖨️ Starting print for multiple labels...');
+          printWindow.focus();
+          printWindow.print();
+        }, 300);
+      };
+      
+      // Fallback if onload doesn't fire
+      setTimeout(() => {
+        if (printWindow && !printWindow.closed) {
+          console.log('🖨️ Fallback print for multiple labels...');
+          printWindow.focus();
+          printWindow.print();
+        }
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert('❌ Lỗi: ' + (error?.message || String(error)));
     }
   }
 } 

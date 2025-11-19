@@ -119,8 +119,52 @@
     </div>
     <div class="modal-body">
       
+      <!-- Scan Mode Selection (Step 0) -->
+      <div class="scanner-step" [class.active]="scannerStep === 0" *ngIf="scannerStep === 0">
+        <div class="step-header">
+          <div class="step-number">⚙️</div>
+          <h4>Chọn chế độ scan</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="mode-selection-new">
+            <button class="mode-btn-large mode-btn-green" 
+                    (click)="selectModeAndContinue('carton')">
+              <i class="material-icons">inventory_2</i>
+              <div class="btn-content">
+                <span class="btn-title">Carton</span>
+                <small class="btn-desc">Mỗi lần scan = 1 carton</small>
+              </div>
+            </button>
+            <button class="mode-btn-large mode-btn-orange" 
+                    (click)="selectModeAndContinue('carton-qty')">
+              <i class="material-icons">plus_one</i>
+              <div class="btn-content">
+                <span class="btn-title">Carton & Qty</span>
+                <small class="btn-desc">Scan mã → Scan số lượng</small>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+      
       <!-- Step 1: Scan Shipment -->
-      <div class="scanner-step" [class.active]="scannerStep === 1">
+      <div class="scanner-step" [class.active]="scannerStep === 1" *ngIf="scannerStep > 1">
+        <div class="step-header">
+          <div class="step-number">✓</div>
+          <h4>Shipment</h4>
+        </div>
+        <div class="scanned-value">
+          <i class="material-icons">done</i>
+          {{scannedShipment}}
+          <span class="packing-type" *ngIf="currentShipmentData" 
+                [class.packing-pallet]="currentShipmentData.packing === 'Pallet'"
+                [class.packing-box]="currentShipmentData.packing === 'Box'">
+            ({{currentShipmentData.packing}})
+          </span>
+        </div>
+      </div>
+      
+      <div class="scanner-step" [class.active]="scannerStep === 1" *ngIf="scannerStep === 1">
         <div class="step-header">
           <div class="step-number">1</div>
           <h4>Scan Shipment</h4>
@@ -131,22 +175,62 @@
                    class="scanner-input" 
                    [(ngModel)]="scannedShipment"
                    (keyup.enter)="onShipmentScanned()"
-                   placeholder="Quét mã Shipment">
+                   placeholder="Quét mã Shipment"
+                   autofocus>
             <button class="scanner-btn" (click)="onShipmentScanned()">
               <i class="material-icons">check</i>
             </button>
           </div>
-          <div class="scanned-value" *ngIf="scannedShipment">
-            <i class="material-icons">done</i>
-            {{scannedShipment}}
+        </div>
+      </div>
+
+      <!-- Step 2: Scan Pallet (only if needPalletScan) -->
+      <div class="scanner-step" [class.active]="scannerStep === 2" *ngIf="needPalletScan && scannerStep > 2">
+        <div class="step-header">
+          <div class="step-number">✓</div>
+          <h4>Pallet</h4>
+        </div>
+        <div class="scanned-value">
+          <i class="material-icons">done</i>
+          {{scannedPallet}}
+        </div>
+      </div>
+      
+      <div class="scanner-step" [class.active]="scannerStep === 2" *ngIf="needPalletScan && scannerStep === 2">
+        <div class="step-header">
+          <div class="step-number">2</div>
+          <h4>Scan Mã Pallet</h4>
+        </div>
+        <div class="scanner-content">
+          <div class="scanner-input-group">
+            <input type="text" 
+                   class="scanner-input" 
+                   [(ngModel)]="scannedPallet"
+                   (keyup.enter)="onPalletScanned()"
+                   placeholder="Quét mã pallet"
+                   autofocus>
+            <button class="scanner-btn" (click)="onPalletScanned()">
+              <i class="material-icons">check</i>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Step 2: Scan Employee -->
-      <div class="scanner-step" [class.active]="scannerStep === 2">
+      <!-- Step 3: Scan Employee -->
+      <div class="scanner-step" [class.active]="scannerStep === 3" *ngIf="scannerStep > 3">
         <div class="step-header">
-          <div class="step-number">2</div>
+          <div class="step-number">✓</div>
+          <h4>Nhân viên</h4>
+        </div>
+        <div class="scanned-value">
+          <i class="material-icons">done</i>
+          {{scannedEmployee}}
+        </div>
+      </div>
+      
+      <div class="scanner-step" [class.active]="scannerStep === 3" *ngIf="scannerStep === 3">
+        <div class="step-header">
+          <div class="step-number">{{needPalletScan ? '3' : '2'}}</div>
           <h4>Scan Mã Nhân Viên</h4>
         </div>
         <div class="scanner-content">
@@ -155,79 +239,112 @@
                    class="scanner-input" 
                    [(ngModel)]="scannedEmployee"
                    (keyup.enter)="onEmployeeScanned()"
-                   placeholder="Quét mã nhân viên">
+                   placeholder="Quét mã nhân viên"
+                   autofocus>
             <button class="scanner-btn" (click)="onEmployeeScanned()">
               <i class="material-icons">check</i>
             </button>
           </div>
-          <div class="scanned-value" *ngIf="scannedEmployee">
-            <i class="material-icons">done</i>
-            {{scannedEmployee}}
-          </div>
         </div>
       </div>
 
-      <!-- Step 3: Scan Customer Code -->
-      <div class="scanner-step" [class.active]="scannerStep === 3">
+      <!-- Step 4: Scan Customer Codes (Continuous Scanning) -->
+      <div class="scanner-step" [class.active]="scannerStep === 4" *ngIf="scannerStep === 4">
         <div class="step-header">
-          <div class="step-number">3</div>
-          <h4>Scan Mã Khách Hàng</h4>
+          <div class="step-number">{{needPalletScan ? '4' : '3'}}</div>
+          <h4>Scan Mã Hàng (Liên tục)</h4>
         </div>
         <div class="scanner-content">
-          <div class="scanner-input-group">
-            <input type="text" 
-                   class="scanner-input" 
-                   [(ngModel)]="scannedCustomerCode"
-                   (keyup.enter)="onCustomerCodeScanned()"
-                   placeholder="Quét mã khách hàng">
-            <button class="scanner-btn" (click)="onCustomerCodeScanned()">
-              <i class="material-icons">check</i>
-            </button>
-          </div>
-          <div class="scanned-value" *ngIf="scannedCustomerCode">
-            <i class="material-icons">done</i>
-            {{scannedCustomerCode}}
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 4: Scan Materials -->
-      <div class="scanner-step" [class.active]="scannerStep === 4">
-        <div class="step-header">
-          <div class="step-number">4</div>
-          <h4>Scan Mã Hàng</h4>
-        </div>
-        <div class="scanner-content">
-          <div class="scanner-input-group">
-            <input type="text" 
-                   class="scanner-input" 
-                   [(ngModel)]="currentScanInput"
-                   (keyup.enter)="onMaterialScanned()"
-                   placeholder="Quét mã hàng">
-            <button class="scanner-btn" (click)="onMaterialScanned()">
-              <i class="material-icons">add</i>
-            </button>
-          </div>
-          <div class="scanned-materials">
-            <div class="material-item" *ngFor="let material of scannedMaterials; let i = index">
-              <span class="material-code">{{material}}</span>
-              <button class="remove-btn" (click)="removeScannedMaterial(i)">
-                <i class="material-icons">close</i>
+          <!-- Carton Mode -->
+          <div *ngIf="scanMode === 'carton'" class="scan-mode-carton">
+            <div class="scanner-input-group">
+              <input type="text" 
+                     class="scanner-input scanner-input-continuous" 
+                     [(ngModel)]="currentScanInput"
+                     (keyup.enter)="onCustomerCodeScanned()"
+                     placeholder="Quét mã khách hàng"
+                     autofocus>
+              <button class="scanner-btn" (click)="onCustomerCodeScanned()">
+                <i class="material-icons">add</i>
               </button>
             </div>
+            <div class="scan-info">
+              <span>📦 Tổng: {{getTotalCartons()}} carton</span>
+            </div>
+          </div>
+
+          <!-- Carton & Qty Mode -->
+          <div *ngIf="scanMode === 'carton-qty'" class="scan-mode-carton-qty">
+            <div class="scanner-input-group" *ngIf="!waitingForQty">
+              <input type="text" 
+                     class="scanner-input scanner-input-continuous" 
+                     [(ngModel)]="currentScanInput"
+                     (keyup.enter)="onCustomerCodeScanned()"
+                     placeholder="Quét mã khách hàng"
+                     autofocus>
+              <button class="scanner-btn" (click)="onCustomerCodeScanned()">
+                <i class="material-icons">arrow_forward</i>
+              </button>
+            </div>
+            <div class="scanner-input-group" *ngIf="waitingForQty">
+              <div class="waiting-info">
+                <span>Mã: <strong>{{currentScanInput}}</strong></span>
+              </div>
+              <input type="number" 
+                     class="scanner-input scanner-input-qty" 
+                     [(ngModel)]="currentQtyInput"
+                     (keyup.enter)="onQuantityScanned()"
+                     placeholder="Quét số lượng"
+                     autofocus>
+              <button class="scanner-btn" (click)="onQuantityScanned()">
+                <i class="material-icons">add</i>
+              </button>
+            </div>
+            <div class="scan-info">
+              <span>📦 Tổng: {{getTotalCartons()}} carton | Qty: {{getTotalQuantity()}}</span>
+            </div>
+          </div>
+
+          <!-- Scanned Items List (Grouped) -->
+          <div class="scanned-items-list">
+            <h5>Danh sách đã quét:</h5>
+            <div class="grouped-items">
+              <div class="grouped-item" *ngFor="let group of getGroupedItems(); let i = index">
+                <div class="item-info">
+                  <span class="customer-code">{{group.customerCode}}</span>
+                  <span class="item-stats">
+                    <span class="carton-count">{{group.count}} carton</span>
+                    <span class="qty-total" *ngIf="scanMode === 'carton-qty'">| Qty: {{group.totalQty}}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- All individual scans -->
+            <details class="scan-details">
+              <summary>Chi tiết từng lần scan ({{scannedItems.length}})</summary>
+              <div class="scan-item" *ngFor="let item of scannedItems; let i = index">
+                <span class="scan-code">{{item.customerCode}}</span>
+                <span class="scan-qty" *ngIf="scanMode === 'carton-qty'">Qty: {{item.quantity}}</span>
+                <button class="remove-btn" (click)="removeScannedItem(i)">
+                  <i class="material-icons">close</i>
+                </button>
+              </div>
+            </details>
           </div>
         </div>
       </div>
 
     </div>
     <div class="modal-footer">
+      <!-- Normal flow footer (Step 1-4) -->
       <button type="button" class="btn btn-cancel" (click)="closeScanner()">
         <i class="material-icons">close</i>
         Đóng
       </button>
-      <button type="button" class="btn btn-apply" (click)="saveScannedData()" [disabled]="scannedMaterials.length === 0">
+      <button type="button" class="btn btn-apply" (click)="saveScannedData()" [disabled]="scannedItems.length === 0" *ngIf="scannerStep === 4">
         <i class="material-icons">save</i>
-        Lưu
+        Lưu ({{scannedItems.length}})
       </button>
     </div>
   </div>

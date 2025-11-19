@@ -168,6 +168,8 @@
             <th>ODD</th>
             <th>TỒN KHO</th>
             <th>FWD</th>
+            <th>PACKING</th>
+            <th>QTY PALLET</th>
             <th>PUSH</th>
             <th>PUSHNO</th>
             <th>STATUS</th>
@@ -176,12 +178,13 @@
             <th>DISPATCH DATE</th>
             <th>NGÀY CHUẨN BỊ</th>
             <th>GHI CHÚ</th>
+            <th>PRINT</th>
             <th>XÓA</th>
           </tr>
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="22" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -257,6 +260,19 @@
                 <option value="Road">Road</option>
               </select>
             </td>
+            <td>
+              <select class="editable-select" [(ngModel)]="shipment.packing" (change)="updateShipmentInFirebase(shipment)">
+                <option value="Pallet">Pallet</option>
+                <option value="Box">Box</option>
+              </select>
+            </td>
+            <td class="number-cell">
+              <input type="number"
+                     class="editable-input number-input"
+                     [(ngModel)]="shipment.qtyPallet"
+                     (change)="updateShipmentInFirebase(shipment)"
+                     placeholder="Qty Pallet">
+            </td>
             <td class="checkbox-cell">
               <input type="checkbox"
                      class="push-checkbox"
@@ -309,6 +325,12 @@
                      [(ngModel)]="shipment.notes"
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Nhập ghi chú...">
+            </td>
+            <td class="action-cell">
+              <button mat-icon-button color="primary" (click)="openPrintLabelDialog(shipment)"
+                      matTooltip="Print Label">
+                <mat-icon>print</mat-icon>
+              </button>
             </td>
             <td class="action-cell">
               <button mat-icon-button color="warn" (click)="deleteShipment(shipment)"
@@ -449,6 +471,23 @@
             </select>
           </div>
           <div class="input-group">
+            <label class="input-label">Packing</label>
+            <select class="form-input" [(ngModel)]="newShipment.packing">
+              <option value="Pallet">Pallet</option>
+              <option value="Box">Box</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Qty Pallet</label>
+            <input type="number" 
+                   class="form-input" 
+                   [(ngModel)]="newShipment.qtyPallet" 
+                   placeholder="Nhập số pallet">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="input-group">
             <label class="input-label">Push</label>
             <div class="checkbox-container">
               <input type="checkbox" 
@@ -525,6 +564,60 @@
               [disabled]="!canAddShipment()">
         <i class="material-icons">add</i>
         Add Shipment
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Print Label Dialog -->
+<div class="custom-modal" [class.show]="showPrintLabelDialog" [style.display]="showPrintLabelDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closePrintLabelDialog()"></div>
+  <div class="modal-container print-label-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">print</i>
+        In Tem QR Code
+      </h5>
+      <button type="button" class="close-btn" (click)="closePrintLabelDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="print-label-info" *ngIf="selectedShipmentForPrint">
+        <div class="info-row">
+          <label>Shipment:</label>
+          <span class="info-value">{{selectedShipmentForPrint.shipmentCode}}</span>
+        </div>
+        <div class="info-row">
+          <label>Qty Pallet:</label>
+          <span class="info-value">{{selectedShipmentForPrint.qtyPallet || 0}}</span>
+        </div>
+      </div>
+      
+      <div class="print-label-options">
+        <button class="print-option-btn shipment-btn" (click)="printShipmentLabel()">
+          <i class="material-icons">qr_code</i>
+          <div class="btn-content">
+            <span class="btn-title">Shipment Label</span>
+            <small class="btn-desc">In 1 tem QR với mã shipment</small>
+          </div>
+        </button>
+        
+        <button class="print-option-btn pallet-btn" (click)="printPalletLabels()">
+          <i class="material-icons">qr_code_2</i>
+          <div class="btn-content">
+            <span class="btn-title">Pallet Labels</span>
+            <small class="btn-desc">In nhiều tem theo Qty Pallet</small>
+          </div>
+        </button>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closePrintLabelDialog()">
+        <i class="material-icons">close</i>
+        Đóng
       </button>
     </div>
   </div>

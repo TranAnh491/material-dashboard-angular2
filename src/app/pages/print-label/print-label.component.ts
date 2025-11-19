@@ -3,6 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { PermissionService } from '../../services/permission.service';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
 
 interface ScheduleItem {
   importDate?: Date; // Import Date để theo dõi các mã hàng import cùng lúc
@@ -85,6 +86,14 @@ export class PrintLabelComponent implements OnInit {
   // Cleanup properties
   private subscriptions: any[] = [];
   private timers: any[] = [];
+
+  // IQC properties
+  showIQCModal: boolean = false;
+  iqcScanInput: string = '';
+  scannedLabel: ScheduleItem | null = null;
+  iqcEmployeeId: string = '';
+  iqcEmployeeVerified: boolean = false;
+  iqcStep: number = 1;
 
   constructor(
     private firestore: AngularFirestore,
@@ -285,6 +294,22 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
+  // Helper function to round to integer then make even
+  private roundToEven(value: string | number | undefined): string {
+    if (!value) return '';
+    
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) return value.toString();
+    
+    // Bước 1: Làm tròn thành số nguyên (21.9999999999 -> 22)
+    const rounded = Math.round(numValue);
+    
+    // Bước 2: Làm chẵn - nếu là số lẻ thì cộng thêm 1
+    const evenNumber = rounded % 2 === 0 ? rounded : rounded + 1;
+    
+    return evenNumber.toString();
+  }
+
   private async cleanExcelData(data: any[]): Promise<ScheduleItem[]> {
     const headers = data[0];
     const rows = data.slice(1);
@@ -311,7 +336,10 @@ export class PrintLabelComponent implements OnInit {
           case 'sizephoi': item.sizePhoi = value?.toString() || ''; break;
           case 'matem': item.maTem = value?.toString() || ''; break;
           case 'soluongyeucau': item.soLuongYeuCau = value?.toString() || ''; break;
-          case 'soluongphoi': item.soLuongPhoi = value?.toString() || ''; break;
+          case 'soluongphoi': 
+            // Tự động làm chẵn số lượng phôi
+            item.soLuongPhoi = this.roundToEven(value); 
+            break;
           case 'mahang': item.maHang = value?.toString() || ''; break;
           case 'lenhsanxuat': item.lenhSanXuat = value?.toString() || ''; break;
           case 'khachhang': item.khachHang = value?.toString() || ''; break;
@@ -1362,8 +1390,10 @@ export class PrintLabelComponent implements OnInit {
       return value.toString();
     }
     
-    // Format as integer if it's a whole number, otherwise keep as is
-    return num % 1 === 0 ? num.toString() : num.toString();
+    // Làm tròn thành số nguyên (21.9999999999 -> 22)
+    const rounded = Math.round(num);
+    
+    return rounded.toString();
   }
 
   // Status count methods
@@ -1958,6 +1988,395 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     } catch (error) {
       console.error('❌ Error checking/clearing Firebase data:', error);
       alert(`❌ Lỗi khi kiểm tra/xóa dữ liệu Firebase: ${error.message}`);
+    }
+  }
+
+  // ==================== QR LABEL PRINTING ====================
+  
+  async printQRLabel(item: ScheduleItem): Promise<void> {
+    console.log('🖨️ Printing QR label for:', item);
+
+    if (!item.maTem) {
+      alert('⚠️ Mã tem không tồn tại!');
+      return;
+    }
+    
+    // Show print instructions
+    console.log('💡 Lưu ý: Trong Print Settings, bỏ tick "Headers and footers" để ẩn thông tin ngoài lề');
+    console.log('💡 Note: In Print Settings, uncheck "Headers and footers" to hide margins')
+
+    try {
+      // Prepare QR data: maTem|soLuongTem|lenhSanXuat
+      const maTem = item.maTem || '';
+      const soLuongTem = item.soLuongYeuCau || item.soLuongPhoi || '';
+      const lenhSanXuat = item.lenhSanXuat || '';
+      
+      const qrData = `${maTem}|${soLuongTem}|${lenhSanXuat}`;
+      console.log('📝 QR Data:', qrData);
+
+      // Generate QR code image
+      const qrImage = await QRCode.toDataURL(qrData, {
+        width: 240, // 30mm = 240px (8px/mm)
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+
+      // Get current user info
+      const user = await this.auth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+
+      // Create print window
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title></title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 1mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 9.6px !important;
+                  line-height: 1.1 !important;
+                  box-sizing: border-box !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row {
+                  margin: 0.3mm 0 !important;
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row.small {
+                  font-size: 8.4px !important;
+                  color: #000000 !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  /* Hide browser headers and footers */
+                  @page {
+                    margin: 0;
+                  }
+                  
+                  html, body {
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    width: 57mm !important; 
+                    height: 32mm !important; 
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 9.6px !important;
+                    padding: 1mm !important;
+                    color: #000000 !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 8.4px !important;
+                    color: #000000 !important;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-container">
+                <div class="qr-section">
+                  <img src="${qrImage}" class="qr-image" alt="QR Code">
+                </div>
+                <div class="info-section">
+                  <div>
+                    <div class="info-row">Mã tem: ${maTem}</div>
+                    <div class="info-row">Lượng: ${soLuongTem}</div>
+                    <div class="info-row">LSX: ${lenhSanXuat}</div>
+                  </div>
+                  <div>
+                    <div class="info-row small">Ngày in: ${printDate}</div>
+                    <div class="info-row small">NV: ${currentUser}</div>
+                  </div>
+                </div>
+              </div>
+              <script>
+                window.onload = function() {
+                  document.title = '';
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        
+        console.log('✅ QR label printed successfully');
+      } else {
+        alert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
+      }
+    } catch (error) {
+      console.error('❌ Error printing QR label:', error);
+      alert(`❌ Lỗi khi in tem QR: ${error.message}`);
+    }
+  }
+
+  // ==================== IQC METHODS ====================
+
+  openIQCModal(): void {
+    console.log('🔬 Opening IQC modal');
+    this.showIQCModal = true;
+    this.iqcStep = 1;
+    this.iqcScanInput = '';
+    this.scannedLabel = null;
+    this.iqcEmployeeId = '';
+    this.iqcEmployeeVerified = false;
+    
+    // Focus input after modal opens
+    setTimeout(() => {
+      const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 300);
+  }
+
+  closeIQCModal(): void {
+    console.log('🔬 Closing IQC modal');
+    this.showIQCModal = false;
+    this.iqcStep = 1;
+    this.iqcScanInput = '';
+    this.scannedLabel = null;
+    this.iqcEmployeeId = '';
+    this.iqcEmployeeVerified = false;
+  }
+
+  async verifyQAEmployee(): Promise<void> {
+    console.log('🔬 Verifying QA employee');
+    
+    if (!this.iqcScanInput || this.iqcScanInput.trim() === '') {
+      alert('⚠️ Vui lòng nhập mã nhân viên!');
+      return;
+    }
+
+    // Extract first 7 characters and convert to uppercase
+    const scannedEmployeeId = this.iqcScanInput.trim().substring(0, 7).toUpperCase();
+    console.log('🔍 Extracted employee ID:', scannedEmployeeId);
+
+    // Hardcoded list of allowed QA employee IDs
+    const allowedEmployeeIds = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2137'];
+
+    if (allowedEmployeeIds.includes(scannedEmployeeId)) {
+      console.log('✅ Employee verified:', scannedEmployeeId);
+      this.iqcEmployeeId = scannedEmployeeId;
+      this.iqcEmployeeVerified = true;
+      this.iqcStep = 2;
+      this.iqcScanInput = '';
+      
+      // Focus input for next step
+      setTimeout(() => {
+        const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 300);
+    } else {
+      console.log('❌ Employee not authorized:', scannedEmployeeId);
+      alert(`❌ Nhân viên ${scannedEmployeeId} không có quyền thực hiện IQC. Chỉ nhân viên QA mới được phép.`);
+      this.iqcScanInput = '';
+    }
+  }
+
+  async processIQCScan(): Promise<void> {
+    console.log('🔬 Processing IQC scan');
+    
+    if (!this.iqcScanInput || this.iqcScanInput.trim() === '') {
+      alert('⚠️ Vui lòng quét mã QR!');
+      return;
+    }
+
+    const scannedData = this.iqcScanInput.trim();
+    console.log('📊 Scanned QR data:', scannedData);
+
+    // Parse QR code format: MaTem|SoLuongTem|LenhSanXuat
+    let maTem: string;
+    let soLuongTem: string;
+    let lenhSanXuat: string;
+
+    if (scannedData.includes('|')) {
+      const parts = scannedData.split('|');
+      maTem = parts[0] || '';
+      soLuongTem = parts[1] || '';
+      lenhSanXuat = parts[2] || '';
+      console.log('🔍 Parsed QR:', { maTem, soLuongTem, lenhSanXuat });
+    } else {
+      // If no separator, treat as maTem only
+      maTem = scannedData;
+      soLuongTem = '';
+      lenhSanXuat = '';
+      console.log('🔍 Single value QR:', maTem);
+    }
+
+    // Search for the label in scheduleData
+    const foundLabel = this.scheduleData.find(item => {
+      const matchMaTem = item.maTem && item.maTem.trim() === maTem;
+      
+      // If we have all 3 fields, match all
+      if (soLuongTem && lenhSanXuat) {
+        const matchSoLuong = (item.soLuongYeuCau === soLuongTem || item.soLuongPhoi === soLuongTem);
+        const matchLSX = item.lenhSanXuat && item.lenhSanXuat.trim() === lenhSanXuat;
+        return matchMaTem && matchSoLuong && matchLSX;
+      }
+      
+      // Otherwise just match maTem
+      return matchMaTem;
+    });
+
+    if (foundLabel) {
+      console.log('✅ Label found:', foundLabel);
+      this.scannedLabel = foundLabel;
+      this.iqcScanInput = '';
+    } else {
+      console.log('❌ Label not found');
+      alert(`❌ Không tìm thấy tem với mã: ${maTem}`);
+      this.iqcScanInput = '';
+    }
+  }
+
+  async updateIQCStatus(status: string): Promise<void> {
+    console.log('🔬 Updating IQC status to:', status);
+    
+    if (!this.scannedLabel) {
+      alert('⚠️ Không có tem nào được quét!');
+      return;
+    }
+
+    try {
+      // Update local data
+      const labelIndex = this.scheduleData.findIndex(item => 
+        item.maTem === this.scannedLabel.maTem &&
+        item.lenhSanXuat === this.scannedLabel.lenhSanXuat
+      );
+
+      if (labelIndex !== -1) {
+        this.scheduleData[labelIndex].tinhTrang = status;
+        this.scheduleData[labelIndex].statusUpdateTime = new Date();
+
+        // Update in Firebase
+        const querySnapshot = await this.firestore.collection('schedule')
+          .ref
+          .where('maTem', '==', this.scannedLabel.maTem)
+          .where('lenhSanXuat', '==', this.scannedLabel.lenhSanXuat)
+          .get();
+
+        if (!querySnapshot.empty) {
+          const doc = querySnapshot.docs[0];
+          await doc.ref.update({
+            tinhTrang: status,
+            statusUpdateTime: new Date()
+          });
+          console.log('✅ Firebase updated successfully');
+        }
+
+        alert(`✅ Đã cập nhật trạng thái "${status}" cho tem ${this.scannedLabel.maTem}`);
+        
+        // Reset for next scan
+        this.scannedLabel = null;
+        this.iqcScanInput = '';
+        
+        // Focus input for next scan
+        setTimeout(() => {
+          const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+          if (input) {
+            input.focus();
+          }
+        }, 300);
+      } else {
+        alert('❌ Không tìm thấy tem trong danh sách!');
+      }
+    } catch (error) {
+      console.error('❌ Error updating IQC status:', error);
+      alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
     }
   }
 }

@@ -20,6 +20,7 @@ export interface InboundMaterial {
   unit: string;
   location: string;
   type: string;
+  iqcStatus?: string; // IQC Status: Chờ kiểm, Pass, NG, Đặc Cách, Chờ phán định
   expiryDate: Date | null;
   qualityCheck: boolean; // Changed to boolean for Tick/No
   isReceived: boolean;
@@ -94,6 +95,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   batchStartTime: Date | null = null;
   showBatchModal: boolean = false;
   scannedEmployeeId: string = '';
+  
+  // IQC Modal properties
+  showIQCModal: boolean = false;
+  iqcScanInput: string = '';
+  scannedMaterial: InboundMaterial | null = null;
+  iqcEmployeeId: string = '';
+  iqcEmployeeVerified: boolean = false;
+  iqcStep: number = 1; // 1: Scan employee, 2: Scan material
   
   // Physical Scanner properties (copy from outbound)
   isScannerInputActive: boolean = false;
@@ -230,6 +239,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             unit: data.unit || '',
             location: data.location || '',
             type: data.type || '',
+            iqcStatus: data.iqcStatus || 'Chờ kiểm', // Default IQC status
             expiryDate: data.expiryDate?.toDate() || null,
             qualityCheck: data.qualityCheck || false,
             isReceived: data.isReceived || false,
@@ -3335,6 +3345,207 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       alert(`❌ Lỗi xóa lô hàng: ${error.message}`);
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  // ==================== IQC FUNCTIONS ====================
+
+  openIQCModal(): void {
+    console.log('🔬 Opening IQC modal');
+    this.showIQCModal = true;
+    this.iqcScanInput = '';
+    this.scannedMaterial = null;
+    this.iqcEmployeeId = '';
+    this.iqcEmployeeVerified = false;
+    this.iqcStep = 1; // Reset to employee scan step
+    this.showDropdown = false;
+    
+    // Auto-focus on input after modal opens
+    setTimeout(() => {
+      const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  }
+
+  closeIQCModal(): void {
+    console.log('🔬 Closing IQC modal');
+    this.showIQCModal = false;
+    this.iqcScanInput = '';
+    this.scannedMaterial = null;
+    this.iqcEmployeeId = '';
+    this.iqcEmployeeVerified = false;
+    this.iqcStep = 1;
+  }
+
+  onIQCScanKeyup(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.iqcScanInput.trim()) {
+      if (this.iqcStep === 1) {
+        this.verifyQAEmployee();
+      } else {
+        this.processIQCScan();
+      }
+    }
+  }
+
+  async verifyQAEmployee(): Promise<void> {
+    const scannedData = this.iqcScanInput.trim();
+    console.log('👤 Verifying QA employee - raw input:', scannedData);
+
+    if (!scannedData) {
+      alert('⚠️ Vui lòng nhập mã nhân viên');
+      return;
+    }
+
+    // Parse employee ID from format: ASP1752-NGUYEN THANH HUY-Bo Phan Chat Luong-19/06/2023
+    // Extract first 7 characters
+    const employeeId = scannedData.substring(0, 7).toUpperCase();
+    console.log('🔍 Extracted employee ID (first 7 chars):', employeeId);
+
+    // Allowed QA employee IDs (hardcoded list)
+    const allowedQAEmployees = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2137'];
+
+    if (allowedQAEmployees.includes(employeeId)) {
+      // Employee is authorized for IQC
+      this.iqcEmployeeId = employeeId;
+      this.iqcEmployeeVerified = true;
+      this.iqcStep = 2;
+      this.iqcScanInput = '';
+      
+      console.log('✅ QA employee verified:', employeeId);
+      
+      // Auto-focus for material scan
+      setTimeout(() => {
+        const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 100);
+    } else {
+      // Employee is not authorized
+      console.log('❌ Employee not authorized for IQC:', employeeId);
+      alert(`❌ Nhân viên không có quyền thực hiện IQC!\n\nMã nhân viên: ${employeeId}\n\nChỉ các mã sau được phép:\n- ASP0106\n- ASP1752`);
+      this.iqcScanInput = '';
+    }
+  }
+
+  processIQCScan(): void {
+    const scannedCode = this.iqcScanInput.trim();
+    console.log('🔬 Processing IQC scan:', scannedCode);
+
+    if (!scannedCode) {
+      alert('⚠️ Vui lòng nhập mã QR');
+      return;
+    }
+
+    // Parse QR code format: MaterialCode|PO|Quantity|BatchDate
+    // Example: B017431|KZPO1025/0194|100|19112025
+    const parts = scannedCode.split('|');
+    console.log('🔍 QR code parts:', parts);
+
+    let foundMaterial: InboundMaterial | undefined;
+
+    if (parts.length >= 2) {
+      // QR code format from print: materialCode|poNumber|quantity|date
+      const materialCode = parts[0];
+      const poNumber = parts[1];
+      
+      console.log('🔍 Searching for material:', { materialCode, poNumber });
+      
+      // Find material by materialCode and poNumber
+      foundMaterial = this.materials.find(m => 
+        m.materialCode === materialCode && m.poNumber === poNumber
+      );
+    } else {
+      // Try direct search by materialCode, poNumber, or internalBatch
+      foundMaterial = this.materials.find(m => 
+        m.materialCode === scannedCode || 
+        m.poNumber === scannedCode || 
+        m.internalBatch === scannedCode
+      );
+    }
+
+    if (foundMaterial) {
+      console.log('✅ Found material:', foundMaterial);
+      this.scannedMaterial = foundMaterial;
+      this.iqcScanInput = ''; // Clear input for next scan
+    } else {
+      console.log('❌ Material not found for code:', scannedCode);
+      console.log('📊 Available materials:', this.materials.map(m => ({ 
+        materialCode: m.materialCode, 
+        poNumber: m.poNumber,
+        internalBatch: m.internalBatch 
+      })));
+      alert(`❌ Không tìm thấy material với mã: ${scannedCode}`);
+      this.iqcScanInput = '';
+    }
+  }
+
+  async updateIQCStatus(status: string): Promise<void> {
+    if (!this.scannedMaterial) {
+      alert('⚠️ Chưa scan material');
+      return;
+    }
+
+    console.log(`🔬 Updating IQC status to: ${status} for material:`, this.scannedMaterial.materialCode);
+
+    try {
+      const materialId = this.scannedMaterial.id;
+      if (!materialId) {
+        alert('❌ Material không có ID');
+        return;
+      }
+
+      // Update in Firestore
+      await this.firestore.collection('inbound-materials').doc(materialId).update({
+        iqcStatus: status,
+        updatedAt: new Date()
+      });
+
+      // Update local data
+      const materialIndex = this.materials.findIndex(m => m.id === materialId);
+      if (materialIndex !== -1) {
+        this.materials[materialIndex].iqcStatus = status;
+      }
+
+      console.log(`✅ IQC status updated to: ${status}`);
+      alert(`✅ Đã cập nhật trạng thái IQC: ${status}`);
+
+      // Reset for next scan
+      this.scannedMaterial = null;
+      this.iqcScanInput = '';
+      
+      // Refocus input
+      setTimeout(() => {
+        const input = document.getElementById('iqcScanInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 100);
+
+      // Refresh filtered materials to show updated status
+      this.applyFilters();
+
+    } catch (error) {
+      console.error('❌ Error updating IQC status:', error);
+      alert(`❌ Lỗi cập nhật trạng thái: ${error.message}`);
+    }
+  }
+
+  getIQCStatusClass(status: string): string {
+    switch (status) {
+      case 'Pass':
+        return 'iqc-pass';
+      case 'NG':
+        return 'iqc-ng';
+      case 'Đặc Cách':
+        return 'iqc-special';
+      case 'Chờ phán định':
+        return 'iqc-pending-judgment';
+      case 'Chờ kiểm':
+      default:
+        return 'iqc-waiting';
     }
   }
 }

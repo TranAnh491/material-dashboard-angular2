@@ -53,6 +53,12 @@
           </div>
         </div>
         
+        <!-- IQC Button -->
+        <button class="iqc-btn" (click)="openIQCModal()">
+          <i class="material-icons">check_circle</i>
+          IQC
+        </button>
+        
         <!-- More Button with Dropdown -->
         <div class="dropdown">
           <button class="more-btn" (click)="toggleDropdown()">
@@ -220,6 +226,7 @@
             <th class="number-cell">LƯỢNG NHẬP</th>
             <th class="location-cell">VỊ TRÍ</th>
             <th class="type-cell">LOẠI HÌNH</th>
+            <th class="status-cell">STATUS</th>
             <th class="date-cell">HSD</th>
             <th class="status-cell">KK</th>
             <th class="status-cell">ĐÃ NHẬN</th>
@@ -294,6 +301,11 @@
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa loại hình'"
                      placeholder="Loại">
+            </td>
+            <td class="status-cell">
+              <span class="iqc-status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus || 'Chờ kiểm')">
+                {{ material.iqcStatus || 'Chờ kiểm' }}
+              </span>
             </td>
             <td class="date-cell">
               <input type="date" 
@@ -570,6 +582,131 @@
           <i class="material-icons">delete</i>
           Xóa lô hàng
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IQC Modal -->
+<div class="modal-overlay" *ngIf="showIQCModal" (click)="closeIQCModal()">
+  <div class="modal-content iqc-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🔬 IQC - Kiểm tra chất lượng</h3>
+      <button class="close-btn" (click)="closeIQCModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step 1: Scan Employee ID -->
+      <div class="iqc-scanner-section" *ngIf="iqcStep === 1">
+        <label for="iqcScanInput">
+          <i class="material-icons">badge</i> 
+          Bước 1: Quét mã nhân viên QA
+        </label>
+        <input 
+          type="text" 
+          id="iqcScanInput"
+          [(ngModel)]="iqcScanInput"
+          placeholder="Quét hoặc nhập mã nhân viên..."
+          class="iqc-scan-input"
+          (keyup)="onIQCScanKeyup($event)"
+          autofocus>
+        
+        <button class="scan-submit-btn" (click)="verifyQAEmployee()">
+          <i class="material-icons">verified_user</i>
+          Xác thực
+        </button>
+      </div>
+
+      <!-- Employee Verified Badge -->
+      <div class="employee-verified-badge" *ngIf="iqcEmployeeVerified">
+        <i class="material-icons">check_circle</i>
+        <span>Nhân viên QA: <strong>{{ iqcEmployeeId }}</strong></span>
+      </div>
+
+      <!-- Step 2: Scanner Section -->
+      <div class="iqc-scanner-section" *ngIf="iqcStep === 2">
+        <label for="iqcScanInput">
+          <i class="material-icons">qr_code_scanner</i>
+          Bước 2: Quét mã QR của material
+        </label>
+        <input 
+          type="text" 
+          id="iqcScanInput"
+          [(ngModel)]="iqcScanInput"
+          placeholder="Quét hoặc nhập mã QR..."
+          class="iqc-scan-input"
+          (keyup)="onIQCScanKeyup($event)"
+          autofocus>
+        
+        <button class="scan-submit-btn" (click)="processIQCScan()">
+          <i class="material-icons">qr_code_scanner</i>
+          Scan
+        </button>
+      </div>
+
+      <!-- Scanned Material Info -->
+      <div class="scanned-material-info" *ngIf="scannedMaterial">
+        <h4>📦 Material đã quét:</h4>
+        <div class="material-details">
+          <div class="detail-row">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ scannedMaterial.materialCode }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Batch:</span>
+            <span class="value">{{ scannedMaterial.internalBatch }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Lô hàng:</span>
+            <span class="value">{{ scannedMaterial.batchNumber }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Số lượng:</span>
+            <span class="value">{{ formatNumber(scannedMaterial.quantity) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Trạng thái hiện tại:</span>
+            <span class="value iqc-status-badge" [ngClass]="getIQCStatusClass(scannedMaterial.iqcStatus || 'Chờ kiểm')">
+              {{ scannedMaterial.iqcStatus || 'Chờ kiểm' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- IQC Status Selection -->
+        <div class="iqc-status-selection">
+          <h4>Chọn trạng thái IQC:</h4>
+          <div class="status-buttons">
+            <button class="status-btn pass-btn" (click)="updateIQCStatus('Pass')">
+              <i class="material-icons">check_circle</i>
+              Pass
+            </button>
+            <button class="status-btn ng-btn" (click)="updateIQCStatus('NG')">
+              <i class="material-icons">cancel</i>
+              NG
+            </button>
+            <button class="status-btn special-btn" (click)="updateIQCStatus('Đặc Cách')">
+              <i class="material-icons">star</i>
+              Đặc Cách
+            </button>
+            <button class="status-btn pending-btn" (click)="updateIQCStatus('Chờ phán định')">
+              <i class="material-icons">access_time</i>
+              Chờ phán định
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="iqc-instructions" *ngIf="iqcStep === 1 && !iqcEmployeeVerified">
+        <p><i class="material-icons">info</i> Quét mã nhân viên QA để bắt đầu kiểm tra</p>
+        <p><i class="material-icons">security</i> Chỉ nhân viên thuộc bộ phận QA mới có quyền thực hiện IQC</p>
+      </div>
+      
+      <div class="iqc-instructions" *ngIf="iqcStep === 2 && !scannedMaterial">
+        <p><i class="material-icons">info</i> Quét mã QR trên tem material để bắt đầu kiểm tra</p>
+        <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
       </div>
     </div>
   </div>

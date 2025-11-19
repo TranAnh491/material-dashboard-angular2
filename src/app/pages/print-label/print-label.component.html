@@ -23,6 +23,10 @@
               <i class="material-icons">download</i>
               Template
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="removeDuplicateItems()">
+              <i class="material-icons">content_copy</i>
+              Xóa mã trùng (DUP)
+            </a>
             <div class="dropdown-divider"></div>
             <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteOldDataDialog(); $event.preventDefault()">
               <i class="material-icons">delete_sweep</i>
@@ -83,10 +87,11 @@
           </button>
           
           <button class="custom-btn" 
-                  (click)="removeDuplicateItems()"
-                  title="Xóa các mã trùng lặp (giữ lại 1 mã)">
-            <i class="material-icons">content_copy</i>
-            Dup
+                  (click)="openIQCModal()"
+                  title="IQC - Kiểm tra chất lượng"
+                  style="background: #10b981; color: white;">
+            <i class="material-icons">check_circle</i>
+            IQC
           </button>
           
 
@@ -165,7 +170,7 @@
                 <th style="min-width: 60px; font-size: 10px; color: #000000; font-weight: bold;">Gấp</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã tem</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng Tem</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng phôi</th>
+                <th style="min-width: 50px; max-width: 70px; font-size: 10px; color: #000000; font-weight: bold;">Lượng phôi</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã Hàng</th>
 
                 <th style="font-size: 13px; color: #000000; font-weight: bold;">Lệnh sản xuất</th>
@@ -178,6 +183,7 @@
                 <th style="min-width: 120px; font-size: 10px; color: #000000; font-weight: bold;">Tình trạng</th>
                 <th style="min-width: 140px; font-size: 10px; color: #000000; font-weight: bold;">Thời gian</th>
                 <th style="min-width: 150px; font-size: 10px; color: #000000; font-weight: bold;">Ghi chú</th>
+                <th style="font-size: 10px; color: #000000; font-weight: bold;">QR</th>
                 <th style="font-size: 10px; color: #000000; font-weight: bold;">Xóa</th>
               </tr>
             </thead>
@@ -188,10 +194,10 @@
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
                   style="border-bottom: 2px solid #000000;">
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{i + 1}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.importDate || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nam || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.thang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{i + 1}}</td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
@@ -213,16 +219,16 @@
                   </button>
                   <span *ngIf="item.isUrgent" style="color: #000000; font-size: 10px; display: block; text-align: center;">🔥</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.maTem || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.lenhSanXuat || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.khachHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.ngayNhanKeHoach || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.yy || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ww || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lineNhan || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.maTem || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; min-width: 50px; max-width: 70px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.maHang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.lenhSanXuat || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.khachHang || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.ngayNhanKeHoach || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || ''}}</td>
               <td style="border: 1px solid #000000;">
                   <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
                           [disabled]="!canEditField('nguoiIn')"
@@ -240,16 +246,38 @@
                   </select>
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
-              <td style="border: 1px solid #000000;">
-                  <select [(ngModel)]="item.tinhTrang" (change)="onFieldChange(item, 'tinhTrang')" style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
+              <td style="border: 1px solid #000000; text-align: center;">
+                  <!-- Nếu là Pass hoặc NG thì hiển thị text, không cho edit -->
+                  <span 
+                    *ngIf="item.tinhTrang === 'Pass' || item.tinhTrang === 'NG'" 
+                    [style.background]="item.tinhTrang === 'Pass' ? '#4caf50' : '#f44336'"
+                    [style.color]="'white'"
+                    [style.padding]="'6px 12px'"
+                    [style.border-radius]="'4px'"
+                    [style.font-weight]="'bold'"
+                    [style.font-size]="'13px'"
+                    [style.display]="'inline-block'"
+                    [style.cursor]="'not-allowed'"
+                    [title]="'Trạng thái này chỉ có thể thay đổi qua IQC Scanner'">
+                    {{ item.tinhTrang }}
+                  </span>
+                  
+                  <!-- Các tình trạng khác thì cho phép chọn -->
+                  <select 
+                    *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG'"
+                    [(ngModel)]="item.tinhTrang" 
+                    (change)="onFieldChange(item, 'tinhTrang')" 
+                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000000;" 
+                    onmouseover="this.style.background='#f0f8ff'" 
+                    onmouseout="this.style.background='transparent'" 
+                    onfocus="this.style.background='#e6f3ff'" 
+                    onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option value="IQC">IQC</option>
                     <option value="Chờ in">Chờ in</option>
                     <option value="Chờ bản vẽ">Chờ bản vẽ</option>
                     <option value="Chờ Template">Chờ Template</option>
-                    <option value="Chờ in">Chờ in</option>
                     <option value="Đã in">Đã in</option>
-                    <option value="Pass">Pass</option>
                     <option value="Done">Done</option>
                   </select>
               </td>
@@ -275,6 +303,20 @@
                     title="Nhấn Enter để lưu ghi chú hoặc click ra ngoài để tự động lưu">
                 </td>
               
+              <!-- Cột QR -->
+              <td style="text-align: center; border: 1px solid #000000;">
+                <button 
+                  (click)="printQRLabel(item)"
+                  title="In tem QR"
+                  class="qr-print-btn"
+                  style="background: #4caf50; border: none; color: white; font-size: 12px; cursor: pointer; padding: 6px 12px; border-radius: 4px; transition: all 0.3s; display: inline-flex; align-items: center; gap: 4px;"
+                  onmouseover="this.style.background='#388e3c'"
+                  onmouseout="this.style.background='#4caf50'">
+                  <span style="font-size: 16px;">🖨️</span>
+                  QR
+                </button>
+              </td>
+
               <!-- Cột Xóa -->
               <td style="text-align: center; border: 1px solid #000000;">
                 <button 
@@ -292,25 +334,49 @@
               <ng-container *ngIf="showCompletedItems">
                 <ng-container *ngFor="let item of doneItems; let i = index">
               <tr style="background: #e8f5e8; border-bottom: 2px solid #000000; opacity: 0.8;">
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.importDate || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nam || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.thang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.stt || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.sizePhoi || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.maTem || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.soLuongYeuCau || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.soLuongPhoi || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.maHang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.lenhSanXuat || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.khachHang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold;">{{item.ngayNhanKeHoach || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.yy || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ww || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.lineNhan || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.nguoiIn || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; background: #4caf50; color: white; font-weight: bold;">{{item.tinhTrang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.banVe || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px;">{{item.ghiChu || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.importDate || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nam || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.thang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.stt || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.sizePhoi || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.maTem || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.soLuongYeuCau || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; min-width: 50px; max-width: 70px;">{{item.soLuongPhoi || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.maHang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.lenhSanXuat || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.khachHang || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.ngayNhanKeHoach || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nguoiIn || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; text-align: center;">
+                <span 
+                  *ngIf="item.tinhTrang === 'Pass' || item.tinhTrang === 'NG'"
+                  [style.background]="item.tinhTrang === 'Pass' ? '#4caf50' : '#f44336'"
+                  [style.color]="'white'"
+                  [style.padding]="'4px 8px'"
+                  [style.border-radius]="'4px'"
+                  [style.font-weight]="'bold'"
+                  [style.font-size]="'10px'"
+                  [style.display]="'inline-block'">
+                  {{ item.tinhTrang }}
+                </span>
+                <span *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG'" style="color: #000000;">
+                  {{ item.tinhTrang || '-' }}
+                </span>
+              </td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.banVe || '-'}}</td>
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ghiChu || '-'}}</td>
+              <td style="text-align: center; border: 1px solid #000000;">
+                <button 
+                  (click)="printQRLabel(item)"
+                  title="In tem QR"
+                  class="qr-print-btn"
+                  style="background: #4caf50; border: none; color: white; font-size: 10px; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+                  🖨️ QR
+                </button>
+              </td>
               <td style="text-align: center; border: 1px solid #000000; color: #4caf50;">
                 ✅ Done
               </td>
@@ -526,7 +592,7 @@
     }
     
     .table-container {
-      max-height: 70vh;
+      max-height: 85vh;
       overflow-y: auto;
       border: 1px solid #dee2e6;
       border-radius: 6px;
@@ -620,7 +686,7 @@
       }
       
       .table-container {
-        max-height: 60vh;
+        max-height: 75vh;
       }
       
       .complete-btn {
@@ -629,4 +695,111 @@
       }
     }
   </style>
+
+  <!-- IQC Modal -->
+  <div class="modal-overlay" *ngIf="showIQCModal" (click)="closeIQCModal()">
+    <div class="modal-content iqc-modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>🔬 IQC - Kiểm tra chất lượng tem</h3>
+        <button class="close-btn" (click)="closeIQCModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Step 1: Scan Employee ID -->
+        <div class="iqc-scanner-section" *ngIf="iqcStep === 1">
+          <label for="iqcScanInput">
+            <i class="material-icons">badge</i> 
+            Bước 1: Quét mã nhân viên QA
+          </label>
+          <input 
+            type="text" 
+            id="iqcScanInput"
+            [(ngModel)]="iqcScanInput"
+            placeholder="Quét hoặc nhập mã nhân viên..."
+            class="iqc-scan-input"
+            (keyup.enter)="verifyQAEmployee()"
+            autofocus>
+          
+          <button class="scan-submit-btn" (click)="verifyQAEmployee()">
+            <i class="material-icons">verified_user</i>
+            Xác thực
+          </button>
+        </div>
+
+        <!-- Employee Verified Badge -->
+        <div class="employee-verified-badge" *ngIf="iqcEmployeeVerified">
+          <i class="material-icons">check_circle</i>
+          <span>Nhân viên QA: <strong>{{ iqcEmployeeId }}</strong></span>
+        </div>
+
+        <!-- Step 2: Scanner Section -->
+        <div class="iqc-scanner-section" *ngIf="iqcStep === 2">
+          <label for="iqcScanInput">
+            <i class="material-icons">qr_code_scanner</i>
+            Bước 2: Quét mã QR của tem
+          </label>
+          <input 
+            type="text" 
+            id="iqcScanInput"
+            [(ngModel)]="iqcScanInput"
+            placeholder="Quét hoặc nhập mã QR..."
+            class="iqc-scan-input"
+            (keyup.enter)="processIQCScan()"
+            autofocus>
+          
+          <button class="scan-submit-btn" (click)="processIQCScan()">
+            <i class="material-icons">qr_code_scanner</i>
+            Scan
+          </button>
+        </div>
+
+        <!-- Scanned Label Info -->
+        <div class="scanned-label-info" *ngIf="scannedLabel">
+          <h4>📋 Tem đã quét:</h4>
+          <div class="label-details">
+            <div class="detail-row">
+              <span class="label">Mã tem:</span>
+              <span class="value">{{ scannedLabel.maTem }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Lượng tem:</span>
+              <span class="value">{{ scannedLabel.soLuongYeuCau }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Lệnh sản xuất:</span>
+              <span class="value">{{ scannedLabel.lenhSanXuat }}</span>
+            </div>
+          </div>
+
+          <!-- IQC Status Selection -->
+          <div class="iqc-status-selection">
+            <h4>Chọn kết quả IQC:</h4>
+            <div class="status-buttons">
+              <button class="status-btn pass-btn" (click)="updateIQCStatus('Pass')">
+                <i class="material-icons">check_circle</i>
+                PASS
+              </button>
+              <button class="status-btn ng-btn" (click)="updateIQCStatus('NG')">
+                <i class="material-icons">cancel</i>
+                NG
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="iqc-instructions" *ngIf="iqcStep === 1 && !iqcEmployeeVerified">
+          <p><i class="material-icons">info</i> Quét mã nhân viên QA để bắt đầu kiểm tra</p>
+          <p><i class="material-icons">security</i> Chỉ nhân viên thuộc bộ phận QA mới có quyền thực hiện IQC</p>
+        </div>
+        
+        <div class="iqc-instructions" *ngIf="iqcStep === 2 && !scannedLabel">
+          <p><i class="material-icons">info</i> Quét mã QR trên tem để bắt đầu kiểm tra</p>
+          <p><i class="material-icons">qr_code_scanner</i> Format: MaTem|SoLuongTem|LenhSanXuat</p>
+        </div>
+      </div>
+    </div>
+  </div>
 </div> 

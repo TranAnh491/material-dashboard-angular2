@@ -418,6 +418,88 @@
   }
   
   .scanner-content {
+    // Mode selection buttons (new design)
+    .mode-selection-new {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      padding: 20px 0;
+      
+      .mode-btn-large {
+        flex: 1;
+        max-width: 300px;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        padding: 30px 20px;
+        border: 3px solid transparent;
+        border-radius: 12px;
+        font-size: 18px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        
+        i {
+          font-size: 48px;
+          margin-bottom: 10px;
+        }
+        
+        .btn-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          
+          .btn-title {
+            font-size: 22px;
+            font-weight: bold;
+          }
+          
+          .btn-desc {
+            font-size: 13px;
+            opacity: 0.9;
+            font-weight: normal;
+          }
+        }
+        
+        &:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+        
+        &:active {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+      }
+      
+      .mode-btn-green {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border-color: #1e7e34;
+        
+        &:hover {
+          background: linear-gradient(135deg, #218838 0%, #1aa179 100%);
+          border-color: #145523;
+        }
+      }
+      
+      .mode-btn-orange {
+        background: linear-gradient(135deg, #fd7e14 0%, #ff922b 100%);
+        color: white;
+        border-color: #d46308;
+        
+        &:hover {
+          background: linear-gradient(135deg, #e36209 0%, #f08219 100%);
+          border-color: #a84f07;
+        }
+      }
+    }
+    
     .scanner-input-group {
       display: flex;
       gap: 10px;
@@ -464,6 +546,24 @@
         margin-right: 8px;
         color: #28a745;
       }
+      
+      .packing-type {
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        
+        &.packing-pallet {
+          background: #e3f2fd;
+          color: #1976d2;
+        }
+        
+        &.packing-box {
+          background: #fff3e0;
+          color: #f57c00;
+        }
+      }
     }
     
     .scanned-materials {
@@ -495,6 +595,169 @@
           
           &:hover {
             background: #c82333;
+          }
+        }
+      }
+    }
+    
+    // New scan modes styles
+    .scan-mode-carton,
+    .scan-mode-carton-qty {
+      .scan-info {
+        padding: 12px;
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 4px;
+        margin-top: 10px;
+        text-align: center;
+        font-weight: 600;
+        color: #0066cc;
+      }
+      
+      .waiting-info {
+        padding: 10px;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        text-align: center;
+        
+        strong {
+          color: #856404;
+          font-size: 16px;
+        }
+      }
+      
+      .scanner-input-qty {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #ffc107;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: bold;
+        text-align: center;
+        
+        &:focus {
+          outline: none;
+          border-color: #ff9800;
+          box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.25);
+        }
+      }
+    }
+    
+    .scanned-items-list {
+      margin-top: 20px;
+      
+      h5 {
+        margin: 0 0 15px 0;
+        color: #333;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      
+      .grouped-items {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 15px;
+        
+        .grouped-item {
+          padding: 12px;
+          background: #f8f9fa;
+          border: 1px solid #dee2e6;
+          border-radius: 4px;
+          margin-bottom: 8px;
+          
+          .item-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            
+            .customer-code {
+              font-weight: 600;
+              font-size: 15px;
+              color: #333;
+            }
+            
+            .item-stats {
+              display: flex;
+              gap: 10px;
+              font-size: 13px;
+              color: #666;
+              
+              .carton-count {
+                font-weight: 500;
+                color: #28a745;
+              }
+              
+              .qty-total {
+                font-weight: 500;
+                color: #007bff;
+              }
+            }
+          }
+        }
+      }
+      
+      .scan-details {
+        margin-top: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        
+        summary {
+          cursor: pointer;
+          font-weight: 600;
+          color: #666;
+          padding: 5px;
+          user-select: none;
+          
+          &:hover {
+            color: #333;
+            background: #f8f9fa;
+          }
+        }
+        
+        .scan-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 8px;
+          background: #fff;
+          border-bottom: 1px solid #eee;
+          
+          &:last-child {
+            border-bottom: none;
+          }
+          
+          .scan-code {
+            font-family: 'Courier New', monospace;
+            font-weight: 500;
+            color: #333;
+          }
+          
+          .scan-qty {
+            font-weight: 500;
+            color: #007bff;
+            margin-right: 10px;
+          }
+          
+          .remove-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            
+            i {
+              font-size: 16px;
+            }
+            
+            &:hover {
+              background: #c82333;
+            }
           }
         }
       }

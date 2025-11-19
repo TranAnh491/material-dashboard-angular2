@@ -2002,3 +2002,309 @@ iframe {
     }
   }
 }
+
+// ==================== IQC STYLES ====================
+
+// IQC Button
+.iqc-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background: #059669;
+  }
+  
+  i {
+    font-size: 16px;
+  }
+}
+
+// IQC Status Badges
+.iqc-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  
+  &.iqc-waiting {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde047;
+  }
+  
+  &.iqc-pass {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+  }
+  
+  &.iqc-ng {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+  }
+  
+  &.iqc-special {
+    background: #ddd6fe;
+    color: #5b21b6;
+    border: 1px solid #c4b5fd;
+  }
+  
+  &.iqc-pending-judgment {
+    background: #fed7aa;
+    color: #9a3412;
+    border: 1px solid #fdba74;
+  }
+}
+
+// IQC Modal
+.iqc-modal-content {
+  max-width: 600px;
+  
+  .employee-verified-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #d1fae5;
+    border: 2px solid #6ee7b7;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    
+    i {
+      color: #059669;
+      font-size: 24px;
+    }
+    
+    span {
+      color: #065f46;
+      font-size: 14px;
+      
+      strong {
+        font-weight: 700;
+        color: #047857;
+      }
+    }
+  }
+  
+  .iqc-scanner-section {
+    margin-bottom: 24px;
+    
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #374151;
+      font-size: 14px;
+      
+      i {
+        color: #10b981;
+        font-size: 20px;
+      }
+    }
+    
+    .iqc-scan-input {
+      width: calc(100% - 80px);
+      padding: 12px 16px;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-right: 8px;
+      
+      &:focus {
+        outline: none;
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+      }
+    }
+    
+    .scan-submit-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 16px;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      
+      &:hover {
+        background: #059669;
+        transform: translateY(-1px);
+      }
+      
+      i {
+        font-size: 18px;
+      }
+    }
+  }
+  
+  .scanned-material-info {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+    
+    h4 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #111827;
+    }
+    
+    .material-details {
+      margin-bottom: 24px;
+      
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #e5e7eb;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        .label {
+          font-weight: 500;
+          color: #6b7280;
+          font-size: 13px;
+        }
+        
+        .value {
+          font-weight: 600;
+          color: #111827;
+          font-size: 13px;
+        }
+      }
+    }
+    
+    .iqc-status-selection {
+      h4 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+      }
+      
+      .status-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        
+        .status-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 12px 16px;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          
+          i {
+            font-size: 20px;
+          }
+          
+          &.pass-btn {
+            background: #d1fae5;
+            color: #065f46;
+            
+            &:hover {
+              background: #a7f3d0;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            }
+          }
+          
+          &.ng-btn {
+            background: #fee2e2;
+            color: #991b1b;
+            
+            &:hover {
+              background: #fecaca;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+            }
+          }
+          
+          &.special-btn {
+            background: #ddd6fe;
+            color: #5b21b6;
+            
+            &:hover {
+              background: #c4b5fd;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            }
+          }
+          
+          &.pending-btn {
+            background: #fed7aa;
+            color: #9a3412;
+            
+            &:hover {
+              background: #fdba74;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  .iqc-instructions {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 16px;
+    
+    p {
+      margin: 8px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #0369a1;
+      font-size: 14px;
+      
+      i {
+        font-size: 18px;
+        color: #0284c7;
+      }
+      
+      &:first-child {
+        margin-top: 0;
+      }
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+}

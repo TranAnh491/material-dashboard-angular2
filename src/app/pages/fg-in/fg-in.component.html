@@ -25,7 +25,11 @@
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="showCatalog(); $event.preventDefault()">
               <i class="material-icons">list</i>
-              Danh mục
+              Danh mục TP
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="showMapping(); $event.preventDefault()">
+              <i class="material-icons">link</i>
+              Mapping KH-TP
             </a>
           </div>
         </div>
@@ -265,6 +269,102 @@
     
     <div class="modal-footer">
       <button type="button" class="btn btn-cancel" (click)="closeCatalog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Code Mapping Dialog -->
+<div class="custom-modal" [class.show]="showMappingDialog" [style.display]="showMappingDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeMapping()"></div>
+  <div class="modal-container catalog-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">link</i>
+        Mapping Mã Khách Hàng → Mã Thành Phẩm
+      </h5>
+      <button type="button" class="close-btn" (click)="closeMapping()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Mapping Actions -->
+      <div class="catalog-actions">
+        <button class="custom-btn" (click)="importMapping()">
+          <i class="material-icons">file_upload</i>
+          Import
+        </button>
+        <button class="custom-btn" (click)="downloadMappingTemplate()">
+          <i class="material-icons">download</i>
+          Tải Template
+        </button>
+        <div class="search-box">
+          <input type="text" 
+                 placeholder="TÌM KIẾM MAPPING..." 
+                 [(ngModel)]="mappingSearchTerm"
+                 (input)="onMappingSearchChange($event)"
+                 class="custom-input search-input-uppercase">
+        </div>
+      </div>
+
+      <!-- Add New Mapping Form -->
+      <div class="add-item-form">
+        <h6>Thêm mới mapping:</h6>
+        <div class="form-row">
+          <input type="text" 
+                 [(ngModel)]="newMappingItem.customerCode" 
+                 placeholder="Mã Khách Hàng"
+                 class="custom-input">
+          <input type="text" 
+                 [(ngModel)]="newMappingItem.materialCode" 
+                 placeholder="Mã Thành Phẩm"
+                 class="custom-input">
+          <input type="text" 
+                 [(ngModel)]="newMappingItem.description" 
+                 placeholder="Mô Tả (optional)"
+                 class="custom-input">
+          <button class="custom-btn" (click)="addMappingItem()">
+            <i class="material-icons">add</i>
+            Thêm
+          </button>
+        </div>
+      </div>
+
+      <!-- Mapping Table -->
+      <div class="catalog-table-container">
+        <table class="excel-table catalog-table">
+          <thead>
+            <tr>
+              <th class="row-header">No</th>
+              <th>Mã Khách Hàng</th>
+              <th>Mã Thành Phẩm</th>
+              <th>Mô Tả</th>
+              <th>Xóa</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of filteredMappingItems; let i = index">
+              <td class="row-header">{{i + 1}}</td>
+              <td class="code-cell">{{item.customerCode}}</td>
+              <td class="code-cell">{{item.materialCode}}</td>
+              <td>{{item.description}}</td>
+              <td class="status-cell">
+                <button mat-icon-button color="warn" (click)="deleteMappingItem(item)" 
+                        matTooltip="Xóa">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeMapping()">
         <i class="material-icons">close</i>
         Đóng
       </button>
