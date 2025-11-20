@@ -92,10 +92,43 @@
       </div>
       
       <div class="actions-section">
+        <!-- Refresh Button (always visible) -->
         <button class="refresh-btn" (click)="refreshRackData()" [disabled]="isRefreshing">
           <i class="material-icons" [class.rotating]="isRefreshing">refresh</i>
           <span>{{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}</span>
         </button>
+        
+        <!-- More Dropdown -->
+        <div class="more-dropdown">
+          <button class="more-btn" (click)="toggleMoreMenu()">
+            <i class="material-icons">more_vert</i>
+            <span>More</span>
+          </button>
+          
+          <div class="more-menu" *ngIf="showMoreMenu">
+            <button class="menu-item" (click)="downloadTemplate(); showMoreMenu = false">
+              <i class="material-icons">download</i>
+              <span>Download Template</span>
+            </button>
+            
+            <button class="menu-item" (click)="fileInput.click(); showMoreMenu = false">
+              <i class="material-icons">upload_file</i>
+              <span>Import Catalog</span>
+            </button>
+            
+            <button class="menu-item" (click)="exportMissingUnitWeight(); showMoreMenu = false">
+              <i class="material-icons">warning</i>
+              <span>Export Missing ({{ missingUnitWeightCount }})</span>
+            </button>
+            
+            <button class="menu-item danger" (click)="clearAllUnitWeight(); showMoreMenu = false">
+              <i class="material-icons">delete_sweep</i>
+              <span>Clear All Unit Weights</span>
+            </button>
+          </div>
+        </div>
+        
+        <input #fileInput type="file" accept=".csv,.xlsx,.xls" style="display: none" (change)="onFileSelected($event)">
       </div>
     </div>
   </div>
@@ -131,7 +164,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let rack of rackLoadingData" [class]="getRackStatusClass(rack.usage)">
+          <tr *ngFor="let rack of rackLoadingData" 
+              [class]="getRackStatusClass(rack.usage)" 
+              class="clickable-row"
+              (click)="exportPositionDetails(rack.position)"
+              title="Click để tải chi tiết vị trí {{ rack.position }}">
             <td class="rack-position">
               <div class="position-display">
                 <i class="material-icons">view_module</i>
@@ -168,25 +205,41 @@
     </div>
   </div>
 
-  <!-- Legend -->
-  <div class="legend-section">
-    <h4 class="legend-title">Status Legend</h4>
-    <div class="legend-items">
-      <div class="legend-item available">
-        <div class="legend-color"></div>
-        <span>Available (&lt;20%)</span>
+  <!-- Import Progress Modal -->
+  <div class="modal-overlay" *ngIf="showImportProgress">
+    <div class="progress-modal">
+      <div class="progress-header">
+        <h3>📤 Đang Import Catalog</h3>
       </div>
-      <div class="legend-item normal">
-        <div class="legend-color"></div>
-        <span>Normal (20-79%)</span>
-      </div>
-      <div class="legend-item warning">
-        <div class="legend-color"></div>
-        <span>Warning (80-94%)</span>
-      </div>
-      <div class="legend-item critical">
-        <div class="legend-color"></div>
-        <span>Critical (≥95%)</span>
+      
+      <div class="progress-body">
+        <div class="progress-stats">
+          <div class="stat-item">
+            <span class="stat-label">Batch:</span>
+            <span class="stat-value">{{ importCurrentBatch }} / {{ importTotalBatches }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Tiến độ:</span>
+            <span class="stat-value">{{ importProgress }}%</span>
+          </div>
+          <div class="stat-item success">
+            <span class="stat-label">✅ Thành công:</span>
+            <span class="stat-value">{{ importSuccessCount }}</span>
+          </div>
+          <div class="stat-item error" *ngIf="importErrorCount > 0">
+            <span class="stat-label">❌ Lỗi:</span>
+            <span class="stat-value">{{ importErrorCount }}</span>
+          </div>
+        </div>
+        
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="importProgress"></div>
+          </div>
+          <span class="progress-text">{{ importProgress }}%</span>
+        </div>
+        
+        <p class="progress-note">⏳ Vui lòng đợi... Đang xử lý dữ liệu</p>
       </div>
     </div>
   </div>

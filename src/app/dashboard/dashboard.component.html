@@ -69,9 +69,10 @@
 
 
 
-    <!-- Safety Stock Level - Copied from Chart tab -->
+    <!-- Safety Stock Level & Rack Warnings Row -->
     <div class="row mt-3">
-      <div class="col-12">
+      <!-- Safety Stock Level -->
+      <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="safety-stock-container">
           <div class="safety-stock-box">
             <div class="box-header">
@@ -97,6 +98,44 @@
                   <div class="weekday-month">{{ getMonth(weekday.date) }}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Rack Utilization Warnings -->
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="rack-warnings-container">
+          <div class="rack-warnings-box">
+            <div class="box-header">
+              <h5>
+                <i class="material-icons" style="color: #ef5350;">warning</i>
+                Rack Utilization Warnings
+              </h5>
+            </div>
+            
+            <div class="warnings-summary" *ngIf="!rackWarningsLoading">
+              <div *ngIf="rackWarnings.length === 0" class="all-clear">
+                <i class="material-icons">check_circle</i>
+                <span>All Clear</span>
+              </div>
+              
+              <div *ngIf="rackWarnings.length > 0" class="summary-counts">
+                <div class="count-item critical" *ngIf="criticalCount > 0">
+                  <div class="count-number">{{ criticalCount }}</div>
+                  <div class="count-label">Critical</div>
+                </div>
+                
+                <div class="count-item warning" *ngIf="warningCount > 0">
+                  <div class="count-number">{{ warningCount }}</div>
+                  <div class="count-label">Warning</div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="warnings-loading" *ngIf="rackWarningsLoading">
+              <i class="material-icons rotating">refresh</i>
+              <span>Loading...</span>
             </div>
           </div>
         </div>

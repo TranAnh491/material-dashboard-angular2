@@ -1,0 +1,57 @@
+[
+  {
+    "materialCode": "B001003",
+    "materialName": "Dây điện đồng 1.5mm",
+    "unit": "m",
+    "unitWeight": 50,
+    "standardPacking": 100,
+    "category": "Dây điện",
+    "supplier": "ABC Electric"
+  },
+  {
+    "materialCode": "B017431",
+    "materialName": "Dây điện nhôm 2.5mm",
+    "unit": "m",
+    "unitWeight": 80,
+    "standardPacking": 200,
+    "category": "Dây điện",
+    "supplier": "ABC Electric"
+  },
+  {
+    "materialCode": "P0123",
+    "materialName": "Túi nhựa PE 20x30cm",
+    "unit": "pcs",
+    "unitWeight": 5,
+    "standardPacking": 50,
+    "category": "Bao bì",
+    "supplier": "XYZ Plastic"
+  },
+  {
+    "materialCode": "M001234",
+    "materialName": "Motor 220V 1HP",
+    "unit": "pcs",
+    "unitWeight": 2500,
+    "standardPacking": 1,
+    "category": "Motor",
+    "supplier": "Motor Inc"
+  },
+  {
+    "materialCode": "C005678",
+    "materialName": "Capacitor 100uF 450V",
+    "unit": "pcs",
+    "unitWeight": 15,
+    "standardPacking": 100,
+    "category": "Linh kiện điện tử",
+    "supplier": "Electronic Parts"
+  },
+  {
+    "materialCode": "R009876",
+    "materialName": "Relay 12V DC 10A",
+    "unit": "pcs",
+    "unitWeight": 25,
+    "standardPacking": 50,
+    "category": "Linh kiện điện tử",
+    "supplier": "Electronic Parts"
+  }
+]
+

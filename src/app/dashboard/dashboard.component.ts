@@ -53,9 +53,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   // All scan dates from Safety tab
   allScanDates: Date[] = [];
+  
+  // Rack Utilization Warnings
+  rackWarnings: Array<{
+    position: string;
+    usage: number;
+    currentLoad: number;
+    maxCapacity: number;
+    status: 'warning' | 'critical';
+  }> = [];
+  rackWarningsLoading = false;
+  criticalCount = 0;
+  warningCount = 0;
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
+  rackWarningsRefreshInterval: any;
+  rackWarningsRefreshTime = 14400000; // 4 tiếng
 
   constructor(private firestore: AngularFirestore, private safetyService: SafetyService, private cdr: ChangeDetectorRef) { }
 
@@ -72,6 +86,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     // Load Safety data for weekday colors - Copied from Chart tab
     this.loadSafetyData();
+    
+    // Load Rack Utilization Warnings
+    this.loadRackWarnings();
+    
+    // Auto refresh rack warnings every 4 hours
+    this.rackWarningsRefreshInterval = setInterval(() => this.loadRackWarnings(), this.rackWarningsRefreshTime);
     
     // Listen for factory changes from navbar
     window.addEventListener('factoryChanged', (event: any) => {
@@ -91,6 +111,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
+    if (this.rackWarningsRefreshInterval) clearInterval(this.rackWarningsRefreshInterval);
   }
 
   createChart(canvasId: string, label: string, labels: string[], data: number[], color: string, yRange?: { min?: number, max?: number }) {
@@ -551,6 +572,123 @@ export class DashboardComponent implements OnInit, OnDestroy {
   refreshData() {
     this.initializeCurrentWeek();
     this.loadSafetyData();
+    this.loadRackWarnings();
+  }
+  
+  // Load Rack Utilization Warnings
+  async loadRackWarnings() {
+    this.rackWarningsLoading = true;
+    
+    try {
+      // Load inventory materials for ASM1
+      const inventorySnapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      const materials = inventorySnapshot.docs.map(doc => doc.data() as any);
+      
+      // Load catalog for unit weights
+      const catalogSnapshot = await this.firestore.collection('materials').get().toPromise();
+      const catalogCache = new Map<string, any>();
+      
+      catalogSnapshot.docs.forEach(doc => {
+        const item = doc.data();
+        if (item['materialCode']) {
+          const code = item['materialCode'].toString().trim().toUpperCase();
+          catalogCache.set(code, {
+            unitWeight: item['unitWeight'] || item['unit_weight'] || 0
+          });
+        }
+      });
+      
+      // Calculate rack loading
+      const positionMap = new Map<string, { totalWeightKg: number, itemCount: number }>();
+      
+      materials.forEach(material => {
+        const location = material.location || '';
+        const position = this.normalizePosition(location);
+        
+        if (!position) return;
+        
+        // Calculate stock: openingStock + quantity - exported - xt
+        const openingStock = material.openingStock !== null && material.openingStock !== undefined 
+          ? material.openingStock 
+          : 0;
+        const stockQty = openingStock + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
+        
+        if (stockQty <= 0) return;
+        
+        const materialCode = material.materialCode?.toString().trim().toUpperCase();
+        const catalogItem = catalogCache.get(materialCode);
+        const unitWeightGram = catalogItem?.unitWeight || 0;
+        
+        if (unitWeightGram <= 0) return;
+        
+        const weightKg = (stockQty * unitWeightGram) / 1000;
+        
+        if (!positionMap.has(position)) {
+          positionMap.set(position, { totalWeightKg: 0, itemCount: 0 });
+        }
+        
+        const posData = positionMap.get(position)!;
+        posData.totalWeightKg += weightKg;
+        posData.itemCount++;
+      });
+      
+      // Find positions with warnings (>= 80%)
+      const warnings: typeof this.rackWarnings = [];
+      
+      positionMap.forEach((data, position) => {
+        // Max capacity logic from utilization tab:
+        // Positions ending with '1' have 5000kg, others have 1300kg
+        const maxCapacity = position.endsWith('1') ? 5000 : 1300;
+        const usage = (data.totalWeightKg / maxCapacity) * 100;
+        
+        if (usage >= 80) {
+          warnings.push({
+            position: position,
+            usage: usage,
+            currentLoad: data.totalWeightKg,
+            maxCapacity: maxCapacity,
+            status: usage >= 95 ? 'critical' : 'warning'
+          });
+        }
+      });
+      
+      // Sort by usage descending
+      warnings.sort((a, b) => b.usage - a.usage);
+      
+      this.rackWarnings = warnings;
+      
+      // Count critical and warning
+      this.criticalCount = warnings.filter(w => w.status === 'critical').length;
+      this.warningCount = warnings.filter(w => w.status === 'warning').length;
+      
+      console.log('📊 Rack warnings loaded:', warnings.length, `(${this.criticalCount} critical, ${this.warningCount} warning)`);
+      
+    } catch (error) {
+      console.error('❌ Error loading rack warnings:', error);
+    } finally {
+      this.rackWarningsLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+  
+  private normalizePosition(location: string): string {
+    if (!location) return '';
+    
+    const cleaned = location.replace(/[.,]/g, '').substring(0, 3).toUpperCase();
+    const validPattern = /^[A-G]\d{2}$/;
+    
+    if (!validPattern.test(cleaned)) {
+      return '';
+    }
+    
+    return cleaned;
+  }
+  
+  getWarningStatusClass(status: 'warning' | 'critical'): string {
+    return status === 'critical' ? 'status-critical' : 'status-warning';
   }
 
 }
