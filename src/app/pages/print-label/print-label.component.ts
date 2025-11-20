@@ -2240,11 +2240,13 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     }
 
     // Extract first 7 characters and convert to uppercase
-    const scannedEmployeeId = this.iqcScanInput.trim().substring(0, 7).toUpperCase();
+    // Normalize "ÁP" to "ASP" in case of character encoding issues
+    let normalizedInput = this.iqcScanInput.trim().replace(/ÁP/gi, 'ASP');
+    const scannedEmployeeId = normalizedInput.substring(0, 7).toUpperCase();
     console.log('🔍 Extracted employee ID:', scannedEmployeeId);
 
     // Hardcoded list of allowed QA employee IDs
-    const allowedEmployeeIds = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2137'];
+    const allowedEmployeeIds = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2083', 'ASP2137'];
 
     if (allowedEmployeeIds.includes(scannedEmployeeId)) {
       console.log('✅ Employee verified:', scannedEmployeeId);

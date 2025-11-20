@@ -3400,11 +3400,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
     // Parse employee ID from format: ASP1752-NGUYEN THANH HUY-Bo Phan Chat Luong-19/06/2023
     // Extract first 7 characters
-    const employeeId = scannedData.substring(0, 7).toUpperCase();
+    // Normalize "ÁP" to "ASP" in case of character encoding issues
+    const normalizedData = scannedData.replace(/ÁP/gi, 'ASP');
+    const employeeId = normalizedData.substring(0, 7).toUpperCase();
     console.log('🔍 Extracted employee ID (first 7 chars):', employeeId);
 
     // Allowed QA employee IDs (hardcoded list)
-    const allowedQAEmployees = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2137'];
+    const allowedQAEmployees = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2083', 'ASP2137'];
 
     if (allowedQAEmployees.includes(employeeId)) {
       // Employee is authorized for IQC
