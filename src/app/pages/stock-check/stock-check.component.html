@@ -1,0 +1,209 @@
+<div class="stock-check-wrapper">
+  <!-- Header with Factory Selection -->
+  <div class="header">
+    <h2>STOCK CHECK</h2>
+    <div class="factory-buttons">
+      <button 
+        type="button"
+        class="factory-btn" 
+        [class.active]="selectedFactory === 'ASM1'"
+        (click)="selectFactory('ASM1')"
+        [attr.data-factory]="'ASM1'">
+        ASM1
+      </button>
+      <button 
+        type="button"
+        class="factory-btn" 
+        [class.active]="selectedFactory === 'ASM2'"
+        (click)="selectFactory('ASM2')"
+        [attr.data-factory]="'ASM2'">
+        ASM2
+      </button>
+    </div>
+  </div>
+
+<div class="stock-check-container">
+
+  <!-- Data Table -->
+  <div class="data-section" *ngIf="selectedFactory">
+    <!-- Action Bar -->
+    <div class="action-bar">
+      <button class="inventory-btn" (click)="startInventoryCheck()">
+        <i class="material-icons">qr_code_scanner</i>
+        Kiểm Kê
+      </button>
+    </div>
+
+    <!-- Counter Boxes -->
+    <div class="counter-boxes">
+      <div class="counter-box total-box clickable" 
+           [class.active]="filterMode === 'all'"
+           (click)="setFilterMode('all')"
+           title="Click để hiển thị tất cả">
+        <div class="counter-icon">
+          <i class="material-icons">inventory_2</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">Tổng mã</div>
+          <div class="counter-value">{{ totalMaterials }}</div>
+        </div>
+      </div>
+
+      <div class="counter-box checked-box clickable" 
+           [class.active]="filterMode === 'checked'"
+           (click)="setFilterMode('checked')"
+           title="Click để hiển thị mã đã kiểm tra">
+        <div class="counter-icon">
+          <i class="material-icons">check_circle</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">Đã kiểm tra</div>
+          <div class="counter-value">{{ checkedMaterials }}</div>
+        </div>
+      </div>
+
+      <div class="counter-box unchecked-box clickable" 
+           [class.active]="filterMode === 'unchecked'"
+           (click)="setFilterMode('unchecked')"
+           title="Click để hiển thị mã chưa kiểm tra">
+        <div class="counter-icon">
+          <i class="material-icons">pending</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">Chưa kiểm tra</div>
+          <div class="counter-value">{{ uncheckedMaterials }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" *ngIf="isLoading">
+      <i class="material-icons rotating">sync</i>
+      <span>Loading data...</span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container" *ngIf="!isLoading">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Mã hàng</th>
+            <th>PO</th>
+            <th>IMD</th>
+            <th>Tồn Kho</th>
+            <th>Vị trí</th>
+            <th>Stock Check</th>
+            <th>Qty Check</th>
+            <th>ID Check</th>
+            <th>Date Check</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let material of displayedMaterials">
+            <td>{{ material.stt }}</td>
+            <td>{{ material.materialCode }}</td>
+            <td>{{ material.poNumber }}</td>
+            <td>{{ material.imd }}</td>
+            <td>{{ material.stock }}</td>
+            <td>{{ material.location }}</td>
+            <td class="check-cell">
+              <span *ngIf="material.stockCheck" class="check-icon">✓</span>
+              <span *ngIf="!material.stockCheck" style="color: #999;">-</span>
+            </td>
+            <td class="qty-cell">
+              <span *ngIf="material.qtyCheck !== null">{{ material.qtyCheck }}</span>
+              <span *ngIf="material.qtyCheck === null" style="color: #999;">-</span>
+            </td>
+            <td class="id-cell">
+              <span *ngIf="material.idCheck">{{ material.idCheck }}</span>
+              <span *ngIf="!material.idCheck" style="color: #999;">-</span>
+            </td>
+            <td>
+              <span *ngIf="material.dateCheck">
+                {{ material.dateCheck | date:'dd/MM/yyyy HH:mm' }}
+              </span>
+              <span *ngIf="!material.dateCheck" style="color: #999;">-</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="!isLoading && displayedMaterials.length > 0">
+      <button 
+        class="page-btn" 
+        (click)="previousPage()" 
+        [disabled]="currentPage === 1">
+        <i class="material-icons">chevron_left</i>
+        Previous
+      </button>
+      <span class="page-info">
+        Page {{ currentPage }} of {{ totalPages }} | Showing {{ displayedMaterials.length }} of {{ filteredMaterials.length }} items
+      </span>
+      <button 
+        class="page-btn" 
+        (click)="nextPage()" 
+        [disabled]="currentPage === totalPages">
+        Next
+        <i class="material-icons">chevron_right</i>
+      </button>
+    </div>
+
+    <!-- No Data -->
+    <div class="no-data" *ngIf="!isLoading && displayedMaterials.length === 0">
+      <i class="material-icons">inbox</i>
+      <p *ngIf="filterMode === 'all'">No data available</p>
+      <p *ngIf="filterMode === 'checked'">Chưa có mã nào được kiểm tra</p>
+      <p *ngIf="filterMode === 'unchecked'">Tất cả mã đã được kiểm tra</p>
+    </div>
+  </div>
+
+  <!-- Scan Modal -->
+  <div class="scan-modal" *ngIf="showScanModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Kiểm Kê - {{ selectedFactory }}</h3>
+        <button class="close-btn" (click)="closeScanModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="scan-message">
+        {{ scanMessage }}
+      </div>
+      
+      <div class="scan-input-container">
+        <input 
+          id="scan-input"
+          type="text" 
+          class="scan-input"
+          [(ngModel)]="scanInput"
+          (keyup.enter)="onScanInputEnter()"
+          (input)="onScanInputChange()"
+          [placeholder]="scanStep === 'employee' ? 'Nhập hoặc scan mã nhân viên...' : 'Scan mã hàng hóa...'"
+          autocomplete="off"
+          autofocus>
+        <button class="scan-submit-btn" (click)="onScanInputEnter()">
+          <i class="material-icons">send</i>
+        </button>
+      </div>
+
+      <!-- Scan History -->
+      <div class="scan-history" *ngIf="scanHistory.length > 0">
+        <div class="history-title">Lịch sử scan:</div>
+        <div class="history-item" *ngFor="let item of scanHistory">
+          {{ item }}
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="cancel-btn" (click)="closeScanModal()">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>

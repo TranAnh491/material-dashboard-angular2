@@ -20,6 +20,7 @@ import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.c
 import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
+import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
@@ -64,6 +65,7 @@ export const AdminLayoutRoutes: Routes = [
 
 
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
+  { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard] }

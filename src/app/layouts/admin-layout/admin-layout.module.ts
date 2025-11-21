@@ -53,6 +53,7 @@ import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.comp
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { UtilizationComponent } from '../../pages/utilization/utilization.component';
+import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
@@ -108,6 +109,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     OutboundASM2Component,
     DocumentsComponent,
     UtilizationComponent,
+    StockCheckComponent,
     SettingsComponent,
     PrintLabelComponent,
     IndexComponent,
