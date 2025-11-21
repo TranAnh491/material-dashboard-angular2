@@ -232,8 +232,8 @@
             <th class="status-cell">ĐÃ NHẬN</th>
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
+            <th class="unitweight-cell">U.W (g)</th>
             <th class="remarks-cell">LƯU Ý</th>
-            <th class="status-cell">TRẠNG THÁI</th>
             <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
             <!-- <th class="employee-cell">MSNV</th> -->
             <!-- <th class="time-cell">THỜI GIAN</th> -->
@@ -297,10 +297,11 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.type" 
+                     (blur)="validateType(material)"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa loại hình'"
-                     placeholder="Loại">
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa loại hình (A12, H11, ND, E31)'"
+                     placeholder="A12/H11/ND/E31">
             </td>
             <td class="status-cell">
               <span class="iqc-status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus || 'Chờ kiểm')">
@@ -348,6 +349,19 @@
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa nhà cung cấp'"
                      placeholder="Nhà cung cấp">
             </td>
+            <td class="unitweight-cell">
+              <input type="number" 
+                     class="editable-input" 
+                     [(ngModel)]="material.unitWeight" 
+                     (change)="updateMaterial(material)"
+                     (input)="validateUnitWeight(material)"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa trọng lượng đơn vị (gram)'"
+                     placeholder="gram"
+                     step="0.01"
+                     min="0"
+                     max="99999.99">
+            </td>
             <td class="remarks-cell">
               <input type="text" 
                      class="editable-input" 
@@ -357,11 +371,6 @@
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lưu ý'"
                      placeholder="Lưu ý">
             </td>
-                         <td class="status-cell">
-               <span class="status-badge" [ngClass]="getStatusBadgeClass(material)">
-                 {{getStatusText(material)}}
-               </span>
-             </td>
              <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
              <!-- <td class="employee-cell">
                <span class="employee-display">{{ getEmployeeDisplay(material) }}</span>

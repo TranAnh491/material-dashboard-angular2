@@ -27,6 +27,7 @@ export interface InboundMaterial {
   notes: string;
   rollsOrBags: number;
   supplier: string;
+  unitWeight?: number; // Trọng lượng đơn vị (gram) - max 2 decimals
   remarks: string;
   hasQRGenerated?: boolean; // Track if QR code has been generated
   createdAt?: Date;
@@ -278,6 +279,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           });
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
+        
+        // Load unitWeight từ danh mục materials nếu chưa có
+        this.loadUnitWeightsFromCatalog();
         
         // Log materials by batch for debugging
         const materialsByBatch = this.materials.reduce((acc, material) => {
@@ -659,6 +663,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
           this.updateStandardPackingFromInbound(material);
           
+          // 🆕 Cập nhật Unit Weight vào danh mục materials
+          this.updateUnitWeightFromInbound(material);
+          
         // No notification shown - silent operation
       })
       .catch((error) => {
@@ -786,6 +793,126 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
       // Không throw error để không ảnh hưởng đến việc add vào inventory
+    }
+  }
+  
+  private async updateUnitWeightFromInbound(material: InboundMaterial): Promise<void> {
+    try {
+      // Kiểm tra có unitWeight hợp lệ không
+      if (!material.unitWeight || material.unitWeight <= 0) {
+        console.log(`⚠️ Skipping Unit Weight update - no valid value: ${material.unitWeight}`);
+        return;
+      }
+      
+      // Làm tròn 2 chữ số thập phân
+      const unitWeightValue = Math.round(material.unitWeight * 100) / 100;
+      console.log(`⚖️ Updating Unit Weight for ${material.materialCode}: ${unitWeightValue}g`);
+      
+      // Cập nhật vào collection 'materials' (danh mục chính - dùng cho utilization)
+      const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
+      
+      // Kiểm tra document có tồn tại không
+      const docSnapshot = await materialsDocRef.get();
+      
+      if (docSnapshot.exists) {
+        // Update nếu đã tồn tại
+        await materialsDocRef.update({
+          unitWeight: unitWeightValue,
+          updatedAt: new Date()
+        });
+        console.log(`✅ Updated materials collection: ${material.materialCode} = ${unitWeightValue}g`);
+      } else {
+        // Tạo mới nếu chưa tồn tại
+        await materialsDocRef.set({
+          materialCode: material.materialCode,
+          unitWeight: unitWeightValue,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }, { merge: true });
+        console.log(`✅ Created materials document: ${material.materialCode} = ${unitWeightValue}g`);
+      }
+      
+      console.log(`🎯 Unit Weight updated successfully for ${material.materialCode}: ${unitWeightValue}g`);
+      
+    } catch (error) {
+      console.error(`❌ Error updating Unit Weight for ${material.materialCode}:`, error);
+      // Không throw error để không ảnh hưởng đến việc add vào inventory
+    }
+  }
+  
+  // Validate Unit Weight: chỉ cho phép số với tối đa 2 chữ số thập phân
+  validateUnitWeight(material: InboundMaterial): void {
+    if (material.unitWeight !== null && material.unitWeight !== undefined) {
+      // Làm tròn về 2 chữ số thập phân
+      material.unitWeight = Math.round(material.unitWeight * 100) / 100;
+      
+      // Giới hạn giá trị
+      if (material.unitWeight < 0) {
+        material.unitWeight = 0;
+      }
+      if (material.unitWeight > 99999.99) {
+        material.unitWeight = 99999.99;
+      }
+    }
+  }
+  
+  // Validate Type: chỉ chấp nhận A12, H11, ND, E31
+  validateType(material: InboundMaterial): void {
+    const allowedTypes = ['A12', 'H11', 'ND', 'E31'];
+    
+    if (material.type) {
+      // Trim và uppercase
+      const typeValue = material.type.trim().toUpperCase();
+      
+      // Kiểm tra có trong danh sách không
+      if (allowedTypes.includes(typeValue)) {
+        material.type = typeValue;
+      } else {
+        // Không hợp lệ - set về rỗng
+        material.type = '';
+        console.log(`⚠️ Loại hình không hợp lệ. Chỉ chấp nhận: ${allowedTypes.join(', ')}`);
+      }
+    }
+  }
+  
+  // Load unit weights từ danh mục materials collection
+  private async loadUnitWeightsFromCatalog(): Promise<void> {
+    try {
+      console.log('⚖️ Loading unit weights from materials catalog...');
+      
+      // Lấy unique material codes
+      const materialCodes = [...new Set(this.materials.map(m => m.materialCode))];
+      
+      if (materialCodes.length === 0) return;
+      
+      // Load từ materials collection (danh mục chính)
+      const snapshot = await this.firestore.collection('materials').get().toPromise();
+      
+      const catalogMap = new Map<string, number>();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data && data['unitWeight']) {
+          catalogMap.set(doc.id, data['unitWeight']);
+        }
+      });
+      
+      console.log(`📚 Loaded ${catalogMap.size} unit weights from catalog`);
+      
+      // Fill unitWeight vào materials nếu chưa có
+      let filledCount = 0;
+      this.materials.forEach(material => {
+        if (!material.unitWeight && catalogMap.has(material.materialCode)) {
+          material.unitWeight = catalogMap.get(material.materialCode);
+          filledCount++;
+        }
+      });
+      
+      if (filledCount > 0) {
+        console.log(`✅ Filled ${filledCount} unit weights from catalog`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error loading unit weights from catalog:', error);
     }
   }
   
@@ -1373,6 +1500,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       notes: material.notes,
       rollsOrBags: material.rollsOrBags,
       supplier: material.supplier,
+      unitWeight: material.unitWeight || null,
       remarks: material.remarks,
       updatedAt: material.updatedAt
     }).then(() => {
