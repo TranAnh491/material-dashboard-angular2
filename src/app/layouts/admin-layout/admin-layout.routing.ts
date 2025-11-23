@@ -28,7 +28,6 @@ import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
-import { ChartComponent } from '../../pages/chart/chart.component';
 
 export const AdminLayoutRoutes: Routes = [
   { 
@@ -53,7 +52,6 @@ export const AdminLayoutRoutes: Routes = [
 
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard] },
   { path: 'safety',               loadChildren: () => import('../../pages/safety/safety.module').then(m => m.SafetyModule), canActivate: [AuthGuard] },
-  { path: 'chart',                component: ChartComponent, canActivate: [AuthGuard] },
   { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard] },
   { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard] },
   { path: 'find-rm1',            component: FindRm1Component, canActivate: [AuthGuard] },
@@ -64,8 +62,8 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'shipment',             component: ShipmentComponent, canActivate: [AuthGuard] },
 
 
-  { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard] },
+  { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard] }

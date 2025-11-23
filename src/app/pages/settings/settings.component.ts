@@ -62,6 +62,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'find', name: 'Find' },
     { key: 'layout', name: 'Layout' },
     { key: 'checklist', name: 'Safety & Quality' },
+    { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
     { key: 'settings', name: 'Settings' }
   ];
