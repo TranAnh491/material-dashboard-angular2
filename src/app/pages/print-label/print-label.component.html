@@ -247,10 +247,29 @@
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000; text-align: center;">
-                  <!-- Nếu là Pass hoặc NG thì hiển thị text, không cho edit -->
+                  <!-- Nếu là Pass thì có thể click để chuyển thành Done -->
                   <span 
-                    *ngIf="item.tinhTrang === 'Pass' || item.tinhTrang === 'NG'" 
-                    [style.background]="item.tinhTrang === 'Pass' ? '#4caf50' : '#f44336'"
+                    *ngIf="item.tinhTrang === 'Pass'"
+                    (click)="updateStatusToDone(item)"
+                    [style.background]="'#4caf50'"
+                    [style.color]="'white'"
+                    [style.padding]="'6px 12px'"
+                    [style.border-radius]="'4px'"
+                    [style.font-weight]="'bold'"
+                    [style.font-size]="'13px'"
+                    [style.display]="'inline-block'"
+                    [style.cursor]="'pointer'"
+                    [style.transition]="'all 0.2s ease'"
+                    [title]="'Click để chuyển thành Done'"
+                    onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
+                    onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                    {{ item.tinhTrang }}
+                  </span>
+                  
+                  <!-- Nếu là NG thì hiển thị text, không cho edit -->
+                  <span 
+                    *ngIf="item.tinhTrang === 'NG'" 
+                    [style.background]="'#f44336'"
                     [style.color]="'white'"
                     [style.padding]="'6px 12px'"
                     [style.border-radius]="'4px'"
@@ -262,9 +281,22 @@
                     {{ item.tinhTrang }}
                   </span>
                   
+                  <!-- Nếu là Done thì hiển thị text -->
+                  <span 
+                    *ngIf="item.tinhTrang === 'Done'" 
+                    [style.background]="'#9c27b0'"
+                    [style.color]="'white'"
+                    [style.padding]="'6px 12px'"
+                    [style.border-radius]="'4px'"
+                    [style.font-weight]="'bold'"
+                    [style.font-size]="'13px'"
+                    [style.display]="'inline-block'">
+                    {{ item.tinhTrang }}
+                  </span>
+                  
                   <!-- Các tình trạng khác thì cho phép chọn -->
                   <select 
-                    *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG'"
+                    *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG' && item.tinhTrang !== 'Done'"
                     [(ngModel)]="item.tinhTrang" 
                     (change)="onFieldChange(item, 'tinhTrang')" 
                     style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000000;" 
@@ -351,9 +383,29 @@
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nguoiIn || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; text-align: center;">
+                <!-- Nếu là Pass thì có thể click để chuyển thành Done -->
                 <span 
-                  *ngIf="item.tinhTrang === 'Pass' || item.tinhTrang === 'NG'"
-                  [style.background]="item.tinhTrang === 'Pass' ? '#4caf50' : '#f44336'"
+                  *ngIf="item.tinhTrang === 'Pass'"
+                  (click)="updateStatusToDone(item)"
+                  [style.background]="'#4caf50'"
+                  [style.color]="'white'"
+                  [style.padding]="'4px 8px'"
+                  [style.border-radius]="'4px'"
+                  [style.font-weight]="'bold'"
+                  [style.font-size]="'10px'"
+                  [style.display]="'inline-block'"
+                  [style.cursor]="'pointer'"
+                  [style.transition]="'all 0.2s ease'"
+                  [title]="'Click để chuyển thành Done'"
+                  onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
+                  onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                  {{ item.tinhTrang }}
+                </span>
+                
+                <!-- Nếu là NG thì hiển thị text -->
+                <span 
+                  *ngIf="item.tinhTrang === 'NG'"
+                  [style.background]="'#f44336'"
                   [style.color]="'white'"
                   [style.padding]="'4px 8px'"
                   [style.border-radius]="'4px'"
@@ -362,7 +414,21 @@
                   [style.display]="'inline-block'">
                   {{ item.tinhTrang }}
                 </span>
-                <span *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG'" style="color: #000000;">
+                
+                <!-- Nếu là Done thì hiển thị text -->
+                <span 
+                  *ngIf="item.tinhTrang === 'Done'"
+                  [style.background]="'#9c27b0'"
+                  [style.color]="'white'"
+                  [style.padding]="'4px 8px'"
+                  [style.border-radius]="'4px'"
+                  [style.font-weight]="'bold'"
+                  [style.font-size]="'10px'"
+                  [style.display]="'inline-block'">
+                  {{ item.tinhTrang }}
+                </span>
+                
+                <span *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG' && item.tinhTrang !== 'Done'" style="color: #000000;">
                   {{ item.tinhTrang || '-' }}
                 </span>
               </td>

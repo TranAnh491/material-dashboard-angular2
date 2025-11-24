@@ -2381,4 +2381,50 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
     }
   }
+
+  /**
+   * Update status from Pass to Done
+   */
+  async updateStatusToDone(item: ScheduleItem): Promise<void> {
+    if (item.tinhTrang !== 'Pass') {
+      alert('⚠️ Chỉ có thể chuyển từ Pass sang Done!');
+      return;
+    }
+
+    if (!confirm(`Bạn có chắc muốn chuyển tem ${item.maTem} từ Pass sang Done?`)) {
+      return;
+    }
+
+    try {
+      // Update local data
+      item.tinhTrang = 'Done';
+      item.statusUpdateTime = new Date();
+
+      // Update in Firebase
+      const querySnapshot = await this.firestore.collection('schedule')
+        .ref
+        .where('maTem', '==', item.maTem)
+        .where('lenhSanXuat', '==', item.lenhSanXuat)
+        .get();
+
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        await doc.ref.update({
+          tinhTrang: 'Done',
+          statusUpdateTime: new Date()
+        });
+        console.log('✅ Firebase updated successfully: Pass -> Done');
+      }
+
+      // Call onFieldChange to trigger save if needed
+      this.onFieldChange(item, 'tinhTrang');
+      
+      console.log(`✅ Đã chuyển tem ${item.maTem} từ Pass sang Done`);
+    } catch (error) {
+      console.error('❌ Error updating status to Done:', error);
+      alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
+      // Revert local change on error
+      item.tinhTrang = 'Pass';
+    }
+  }
 }
