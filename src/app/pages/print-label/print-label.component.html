@@ -81,8 +81,8 @@
           </button>
           
           <button class="custom-btn" 
-                  (click)="showDoneItemsList()"
-                  title="Tải xuống danh sách các mã đã Done (Excel)">
+                  (click)="openDownloadModal()"
+                  title="Tải xuống lịch sử">
             <i class="material-icons">download</i>
           </button>
           
@@ -865,6 +865,46 @@
           <p><i class="material-icons">info</i> Quét mã QR trên tem để bắt đầu kiểm tra</p>
           <p><i class="material-icons">qr_code_scanner</i> Format: MaTem|SoLuongTem|LenhSanXuat</p>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Download Modal -->
+<div *ngIf="showDownloadModal" class="delete-confirm-overlay" (click)="closeDownloadModal()">
+  <div class="delete-confirm-dialog" (click)="$event.stopPropagation()">
+    <div class="dialog-header">
+      <h5>📥 Tải xuống lịch sử</h5>
+      <button class="close-btn" (click)="closeDownloadModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <p style="margin-bottom: 20px; font-size: 14px;">Chọn phương thức tải xuống:</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button 
+          class="download-option-btn" 
+          (click)="downloadAllHistory()"
+          style="background: #2196F3; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 10px;"
+          onmouseover="this.style.background='#1976D2'; this.style.transform='scale(1.02)'"
+          onmouseout="this.style.background='#2196F3'; this.style.transform='scale(1)'">
+          <i class="material-icons">cloud_download</i>
+          <span>Tải toàn bộ lịch sử</span>
+        </button>
+        
+        <button 
+          class="download-option-btn" 
+          (click)="downloadFilteredHistory()"
+          style="background: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 10px;"
+          onmouseover="this.style.background='#45a049'; this.style.transform='scale(1.02)'"
+          onmouseout="this.style.background='#4CAF50'; this.style.transform='scale(1)'">
+          <i class="material-icons">filter_list</i>
+          <span>Tải theo bộ lọc hiện tại</span>
+          <span *ngIf="currentStatusFilter" style="font-size: 12px; opacity: 0.9; margin-left: auto;">
+            ({{ currentStatusFilter }})
+          </span>
+        </button>
       </div>
     </div>
   </div>

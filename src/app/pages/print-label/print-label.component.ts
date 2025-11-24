@@ -95,6 +95,9 @@ export class PrintLabelComponent implements OnInit {
   iqcEmployeeVerified: boolean = false;
   iqcStep: number = 1;
 
+  // Download modal properties
+  showDownloadModal: boolean = false;
+
   constructor(
     private firestore: AngularFirestore,
     private permissionService: PermissionService,
@@ -2379,6 +2382,101 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     } catch (error) {
       console.error('❌ Error updating IQC status:', error);
       alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
+    }
+  }
+
+  /**
+   * Open download modal
+   */
+  openDownloadModal(): void {
+    console.log('📥 Opening download modal...');
+    this.showDownloadModal = true;
+    console.log('📥 showDownloadModal:', this.showDownloadModal);
+  }
+
+  /**
+   * Close download modal
+   */
+  closeDownloadModal(): void {
+    this.showDownloadModal = false;
+  }
+
+  /**
+   * Download all history
+   */
+  downloadAllHistory(): void {
+    this.closeDownloadModal();
+    this.exportToExcel(this.scheduleData, 'ToanBoLichSu');
+  }
+
+  /**
+   * Download filtered history (based on current filters)
+   */
+  downloadFilteredHistory(): void {
+    this.closeDownloadModal();
+    const filteredData = this.getFilteredData();
+    const filterInfo = this.currentStatusFilter ? `_${this.currentStatusFilter}` : '';
+    this.exportToExcel(filteredData, `LocHienTai${filterInfo}`);
+  }
+
+  /**
+   * Export data to Excel
+   */
+  exportToExcel(data: ScheduleItem[], fileNamePrefix: string): void {
+    if (!data || data.length === 0) {
+      alert('⚠️ Không có dữ liệu để xuất!');
+      return;
+    }
+
+    try {
+      const headers = [
+        'Năm', 'Tháng', 'STT', 'Size Phôi', 'Mã Tem', 'Số Lượng Yêu Cầu', 'Số Lượng Phôi',
+        'Mã Hàng', 'Lệnh Sản Xuất', 'Khách Hàng', 'Ngày Nhận Kế Hoạch', 'YY', 'WW',
+        'Line Nhận', 'Người In', 'Tình Trạng', 'Bản Vẽ', 'Ghi Chú'
+      ];
+
+      const excelData = data.map(item => [
+        item.nam || '',
+        item.thang || '',
+        item.stt || '',
+        item.sizePhoi || '',
+        item.maTem || '',
+        item.soLuongYeuCau || '',
+        item.soLuongPhoi || '',
+        item.maHang || '',
+        item.lenhSanXuat || '',
+        item.khachHang || '',
+        item.ngayNhanKeHoach || '',
+        item.yy || '',
+        item.ww || '',
+        item.lineNhan || '',
+        item.nguoiIn || '',
+        item.tinhTrang || '',
+        item.banVe || '',
+        item.ghiChu || ''
+      ]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...excelData]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch sử');
+
+      // Set column widths
+      const colWidths = [
+        { wch: 8 }, { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 15 },
+        { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 },
+        { wch: 18 }, { wch: 6 }, { wch: 6 }, { wch: 12 }, { wch: 15 },
+        { wch: 15 }, { wch: 15 }, { wch: 30 }
+      ];
+      worksheet['!cols'] = colWidths;
+
+      const fileName = `${fileNamePrefix}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      console.log(`✅ Exported ${data.length} items to ${fileName}`);
+      alert(`✅ Đã xuất ${data.length} dòng dữ liệu!\n\nFile: ${fileName}`);
+    } catch (error) {
+      console.error('❌ Error exporting to Excel:', error);
+      alert('❌ Lỗi khi xuất file Excel!');
     }
   }
 

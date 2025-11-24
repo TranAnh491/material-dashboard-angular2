@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
+import { environment } from '../../../environments/environment';
 
 interface StockCheckMaterial {
   stt: number;
@@ -452,8 +453,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Load inventory data from Firestore
    */
   loadData(): void {
-    if (!this.selectedFactory) return;
+    if (!this.selectedFactory) {
+      console.log('⚠️ No factory selected');
+      return;
+    }
 
+    console.log(`📊 Loading data for factory: ${this.selectedFactory}`);
     this.isLoading = true;
     this.allMaterials = [];
     this.displayedMaterials = [];
@@ -587,6 +592,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    */
   async loadStockCheckData(materials: StockCheckMaterial[]): Promise<void> {
     try {
+      console.log(`🔍 [loadStockCheckData] Loading stock-check for factory: ${this.selectedFactory}`);
+      console.log(`🔍 [loadStockCheckData] Environment production: ${environment.production}`);
+      console.log(`🔍 [loadStockCheckData] Firebase projectId: ${environment.firebase.projectId}`);
+      
       const stockCheckSnapshot = await this.firestore
         .collection('stock-check', ref =>
           ref.where('factory', '==', this.selectedFactory)
@@ -594,6 +603,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         .get()
         .toPromise();
 
+      console.log(`📦 [loadStockCheckData] Found ${stockCheckSnapshot?.size || 0} stock-check records`);
+      
+      // Log first few documents for debugging
+      if (stockCheckSnapshot && !stockCheckSnapshot.empty) {
+        const firstFew = stockCheckSnapshot.docs.slice(0, 3).map(doc => {
+          const data = doc.data() as StockCheckData;
+          return {
+            id: doc.id,
+            materialCode: data.materialCode,
+            poNumber: data.poNumber,
+            imd: data.imd,
+            factory: data.factory,
+            qtyCheck: data.qtyCheck
+          };
+        });
+        console.log(`📋 [loadStockCheckData] Sample documents:`, firstFew);
+      }
+      
       if (stockCheckSnapshot && !stockCheckSnapshot.empty) {
         const stockCheckMap = new Map<string, StockCheckData>();
         
@@ -603,23 +630,71 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           stockCheckMap.set(key, data);
         });
 
+        console.log(`📊 [loadStockCheckData] Mapped ${stockCheckMap.size} unique items`);
+
         // Apply stock check data to materials
+        let matchedCount = 0;
+        let unmatchedKeys: string[] = [];
+        
         materials.forEach(mat => {
+          // Try exact match first
           const key = `${mat.materialCode}_${mat.poNumber}_${mat.imd}`;
-          const checkData = stockCheckMap.get(key);
+          let checkData = stockCheckMap.get(key);
+          
+          // If not found, try matching without case sensitivity and trimming
+          if (!checkData) {
+            const normalizedKey = `${mat.materialCode.trim().toUpperCase()}_${mat.poNumber.trim()}_${mat.imd.trim()}`;
+            for (const [mapKey, mapData] of stockCheckMap.entries()) {
+              const normalizedMapKey = `${mapData.materialCode.trim().toUpperCase()}_${mapData.poNumber.trim()}_${mapData.imd.trim()}`;
+              if (normalizedKey === normalizedMapKey) {
+                checkData = mapData;
+                console.log(`🔄 [loadStockCheckData] Matched with normalized key: ${key} -> ${mapKey}`);
+                break;
+              }
+            }
+          }
+          
+          // If still not found, try matching by materialCode + PO only (ignore IMD)
+          if (!checkData) {
+            const candidates = Array.from(stockCheckMap.values()).filter(data => 
+              data.materialCode.trim().toUpperCase() === mat.materialCode.trim().toUpperCase() &&
+              data.poNumber.trim() === mat.poNumber.trim()
+            );
+            if (candidates.length === 1) {
+              checkData = candidates[0];
+              console.log(`🔄 [loadStockCheckData] Matched by code+PO only (ignoring IMD): ${mat.materialCode}_${mat.poNumber}`);
+            } else if (candidates.length > 1) {
+              console.log(`⚠️ [loadStockCheckData] Multiple candidates found for ${mat.materialCode}_${mat.poNumber}, using first one`);
+              checkData = candidates[0];
+            }
+          }
           
           if (checkData) {
             mat.stockCheck = '✓';
             mat.qtyCheck = checkData.qtyCheck;
             mat.idCheck = checkData.idCheck;
             mat.dateCheck = checkData.dateCheck?.toDate ? checkData.dateCheck.toDate() : checkData.dateCheck;
+            matchedCount++;
+          } else {
+            unmatchedKeys.push(key);
           }
         });
 
-        console.log(`✅ Loaded stock check data for ${stockCheckMap.size} items`);
+        console.log(`✅ [loadStockCheckData] Applied stock check data to ${matchedCount} materials`);
+        if (unmatchedKeys.length > 0 && unmatchedKeys.length <= 10) {
+          console.log(`⚠️ [loadStockCheckData] Unmatched keys (first 10):`, unmatchedKeys.slice(0, 10));
+        }
+        
+        // Log sample of stock-check keys for debugging
+        if (stockCheckMap.size > 0) {
+          const sampleKeys = Array.from(stockCheckMap.keys()).slice(0, 5);
+          console.log(`📋 [loadStockCheckData] Sample stock-check keys:`, sampleKeys);
+        }
+      } else {
+        console.log(`⚠️ [loadStockCheckData] No stock-check data found for factory: ${this.selectedFactory}`);
       }
     } catch (error) {
-      console.error('❌ Error loading stock check data:', error);
+      console.error('❌ [loadStockCheckData] Error loading stock check data:', error);
     }
   }
 
