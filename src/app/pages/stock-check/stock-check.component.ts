@@ -58,6 +58,7 @@ interface CheckHistoryItem {
 })
 export class StockCheckComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
+  private dataSubscription: any = null; // Track subscription để có thể unsubscribe
   
   // Factory selection
   selectedFactory: 'ASM1' | 'ASM2' | null = null;
@@ -346,6 +347,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Unsubscribe data subscription nếu có
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+      this.dataSubscription = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -458,13 +464,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Unsubscribe subscription cũ nếu có để tránh race condition
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+      this.dataSubscription = null;
+    }
+
     console.log(`📊 Loading data for factory: ${this.selectedFactory}`);
     this.isLoading = true;
     this.allMaterials = [];
     this.displayedMaterials = [];
 
-    // Load inventory materials
-    this.firestore
+    // Load inventory materials - chỉ lấy 1 lần (take(1)) để tránh multiple emits
+    this.dataSubscription = this.firestore
       .collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
       )
@@ -595,132 +607,48 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Load stock check data from Firebase - Load từ snapshot mới, fallback về collection cũ
+   * Load stock check data from Firebase - Đơn giản: load từ 1 collection duy nhất
    */
   async loadStockCheckData(materials: StockCheckMaterial[]): Promise<void> {
     try {
-      console.log(`🔍 [loadStockCheckData] Loading stock-check for factory: ${this.selectedFactory}`);
-      console.log(`🔍 [loadStockCheckData] Total materials to check: ${materials.length}`);
-      
-      let checkedMaterials: any[] = [];
-      
-      // Thử load từ snapshot mới trước
+      // Load từ collection stock-check-snapshot
       const docId = `${this.selectedFactory}_stock_check_current`;
-      const snapshotDoc = await this.firestore
+      const doc = await this.firestore
         .collection('stock-check-snapshot')
         .doc(docId)
         .get()
         .toPromise();
 
-      if (snapshotDoc && snapshotDoc.exists) {
-        // Load từ snapshot mới
-        const data = snapshotDoc.data() as any;
-        checkedMaterials = data.materials || [];
-        console.log(`📦 [loadStockCheckData] Loaded ${checkedMaterials.length} checked materials from snapshot`);
-      } else {
-        // Fallback: Load từ collection cũ (tương thích với dữ liệu cũ)
-        console.log(`⚠️ [loadStockCheckData] Snapshot not found, loading from old collection...`);
-        try {
-          const oldSnapshot = await this.firestore
-            .collection('stock-check', ref =>
-              ref.where('factory', '==', this.selectedFactory)
-            )
-            .get()
-            .toPromise();
-
-          if (oldSnapshot && !oldSnapshot.empty) {
-            checkedMaterials = oldSnapshot.docs.map(doc => {
-              const data = doc.data() as StockCheckData;
-              return {
-                materialCode: data.materialCode,
-                poNumber: data.poNumber,
-                imd: data.imd,
-                qtyCheck: data.qtyCheck,
-                idCheck: data.idCheck,
-                dateCheck: data.dateCheck,
-                updatedAt: data.updatedAt || data.dateCheck
-              };
-            });
-            console.log(`📦 [loadStockCheckData] Loaded ${checkedMaterials.length} checked materials from old collection`);
-            
-            // Tự động migrate sang snapshot mới (không await để không block)
-            this.migrateToSnapshot(checkedMaterials).catch(err => {
-              console.error('❌ [loadStockCheckData] Migration error (non-blocking):', err);
-            });
-          } else {
-            console.log(`⚠️ [loadStockCheckData] No data found in old collection either`);
-          }
-        } catch (oldCollectionError) {
-          console.error('❌ [loadStockCheckData] Error loading from old collection:', oldCollectionError);
-        }
+      if (!doc || !doc.exists) {
+        console.log(`⚠️ [loadStockCheckData] No snapshot found for factory: ${this.selectedFactory}`);
+        return;
       }
 
-      if (checkedMaterials.length > 0) {
-        // Loại bỏ duplicate trước khi tạo map
-        const uniqueMap = new Map<string, any>();
-        checkedMaterials.forEach((item: any) => {
-          if (!item.materialCode || !item.poNumber || !item.imd) {
-            console.warn('⚠️ [loadStockCheckData] Skipping invalid item:', item);
-            return;
-          }
-          
-          const key = `${item.materialCode}_${item.poNumber}_${item.imd}`;
-          // Nếu đã có, giữ lại bản mới nhất (có updatedAt lớn hơn)
-          if (!uniqueMap.has(key)) {
-            uniqueMap.set(key, item);
-          } else {
-            const existing = uniqueMap.get(key);
-            const existingDate = existing.updatedAt?.toDate ? existing.updatedAt.toDate() : 
-                                (existing.updatedAt ? new Date(existing.updatedAt) : 
-                                (existing.dateCheck?.toDate ? existing.dateCheck.toDate() : 
-                                (existing.dateCheck ? new Date(existing.dateCheck) : new Date(0))));
-            const newDate = item.updatedAt?.toDate ? item.updatedAt.toDate() : 
-                           (item.updatedAt ? new Date(item.updatedAt) : 
-                           (item.dateCheck?.toDate ? item.dateCheck.toDate() : 
-                           (item.dateCheck ? new Date(item.dateCheck) : new Date(0))));
-            if (newDate > existingDate) {
-              uniqueMap.set(key, item);
-            }
-          }
-        });
+      const data = doc.data() as any;
+      const checkedMaterials = data.materials || [];
 
-        const uniqueCheckedMaterials = Array.from(uniqueMap.values());
-        console.log(`📊 [loadStockCheckData] Removed duplicates: ${checkedMaterials.length} -> ${uniqueCheckedMaterials.length}`);
+      if (checkedMaterials.length === 0) {
+        console.log(`⚠️ [loadStockCheckData] No checked materials in snapshot`);
+        return;
+      }
 
-        // Tạo map để tìm nhanh
-        const checkedMap = new Map<string, any>();
-        uniqueCheckedMaterials.forEach((item: any) => {
+      console.log(`📦 [loadStockCheckData] Loaded ${checkedMaterials.length} checked materials from snapshot`);
+
+      // Tạo map: key = materialCode_PO_IMD
+      const checkedMap = new Map<string, any>();
+      checkedMaterials.forEach((item: any) => {
+        if (item.materialCode && item.poNumber && item.imd) {
           const key = `${item.materialCode}_${item.poNumber}_${item.imd}`;
           checkedMap.set(key, item);
-        });
+        }
+      });
 
-        console.log(`📋 [loadStockCheckData] Created map with ${checkedMap.size} unique items`);
-
-        // Apply vào materials - thử match chính xác trước, sau đó thử normalize
-        let matchedCount = 0;
-        let unmatchedCount = 0;
-        
-        materials.forEach(mat => {
-          if (!mat.materialCode || !mat.poNumber || !mat.imd) {
-            return;
-          }
-          
-          // Try exact match first
-          let key = `${mat.materialCode}_${mat.poNumber}_${mat.imd}`;
-          let checkedItem = checkedMap.get(key);
-          
-          // If not found, try normalized match
-          if (!checkedItem) {
-            const normalizedKey = `${mat.materialCode.trim().toUpperCase()}_${mat.poNumber.trim()}_${mat.imd.trim()}`;
-            for (const [mapKey, mapData] of checkedMap.entries()) {
-              const normalizedMapKey = `${mapData.materialCode.trim().toUpperCase()}_${mapData.poNumber.trim()}_${mapData.imd.trim()}`;
-              if (normalizedKey === normalizedMapKey) {
-                checkedItem = mapData;
-                console.log(`🔄 [loadStockCheckData] Normalized match: ${key} -> ${mapKey}`);
-                break;
-              }
-            }
-          }
+      // Apply vào materials
+      let matchedCount = 0;
+      materials.forEach(mat => {
+        if (mat.materialCode && mat.poNumber && mat.imd) {
+          const key = `${mat.materialCode}_${mat.poNumber}_${mat.imd}`;
+          const checkedItem = checkedMap.get(key);
           
           if (checkedItem) {
             mat.stockCheck = '✓';
@@ -729,22 +657,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             mat.dateCheck = checkedItem.dateCheck?.toDate ? checkedItem.dateCheck.toDate() : 
                            (checkedItem.dateCheck ? new Date(checkedItem.dateCheck) : null);
             matchedCount++;
-          } else {
-            unmatchedCount++;
           }
-        });
-
-        console.log(`✅ [loadStockCheckData] Applied ${matchedCount} checked materials out of ${materials.length} total materials`);
-        if (unmatchedCount > 0 && unmatchedCount <= 10) {
-          console.log(`⚠️ [loadStockCheckData] ${unmatchedCount} materials could not be matched`);
         }
-        
-        this.cdr.detectChanges();
-      } else {
-        console.log(`⚠️ [loadStockCheckData] No checked materials found for factory: ${this.selectedFactory}`);
-      }
+      });
+
+      console.log(`✅ [loadStockCheckData] Applied ${matchedCount} checked materials to ${materials.length} total materials`);
+      this.cdr.detectChanges();
     } catch (error) {
-      console.error('❌ [loadStockCheckData] Error loading stock check data:', error);
+      console.error('❌ Error loading stock check data:', error);
     }
   }
 
