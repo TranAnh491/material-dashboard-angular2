@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, first, filter } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
@@ -59,6 +59,7 @@ interface CheckHistoryItem {
 export class StockCheckComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private dataSubscription: any = null; // Track subscription để có thể unsubscribe
+  private snapshotSubscription: any = null; // Track snapshot subscription để reload khi có thay đổi
   
   // Factory selection
   selectedFactory: 'ASM1' | 'ASM2' | null = null;
@@ -352,6 +353,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.dataSubscription.unsubscribe();
       this.dataSubscription = null;
     }
+    // Unsubscribe snapshot subscription nếu có
+    if (this.snapshotSubscription) {
+      this.snapshotSubscription.unsubscribe();
+      this.snapshotSubscription = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -475,13 +481,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.allMaterials = [];
     this.displayedMaterials = [];
 
-    // Load inventory materials - chỉ lấy 1 lần (take(1)) để tránh multiple emits
+    // Load inventory materials - sử dụng valueChanges() để real-time update
+    // Nhưng chỉ xử lý khi có data (filter empty arrays)
     this.dataSubscription = this.firestore
       .collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
       )
       .valueChanges({ idField: 'id' })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        filter((materials: any[]) => materials && materials.length > 0) // Chỉ xử lý khi có data
+      )
       .subscribe(async (materials: any[]) => {
         // Group by materialCode and poNumber, then sum quantities
         const groupedMap = new Map<string, any>();
@@ -603,32 +613,108 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         // Final check - log checked materials count
         const checkedCount = this.allMaterials.filter(m => m.stockCheck === '✓').length;
         console.log(`✅ [loadData] Final: ${checkedCount} materials marked as checked out of ${this.allMaterials.length} total`);
+        
+        // Subscribe to snapshot changes để real-time update khi có thay đổi
+        this.subscribeToSnapshotChanges();
+      });
+  }
+
+  /**
+   * Subscribe to stock-check-snapshot changes để real-time update
+   */
+  private subscribeToSnapshotChanges(): void {
+    // Unsubscribe subscription cũ nếu có
+    if (this.snapshotSubscription) {
+      this.snapshotSubscription.unsubscribe();
+      this.snapshotSubscription = null;
+    }
+
+    if (!this.selectedFactory) {
+      return;
+    }
+
+    const docId = `${this.selectedFactory}_stock_check_current`;
+    
+    this.snapshotSubscription = this.firestore
+      .collection('stock-check-snapshot')
+      .doc(docId)
+      .valueChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(async (snapshotData: any) => {
+        if (!this.allMaterials || this.allMaterials.length === 0) {
+          return;
+        }
+
+        console.log(`🔄 [subscribeToSnapshotChanges] Snapshot updated, reloading stock check data...`);
+        
+        // Reload stock check data và apply vào materials hiện tại (truyền snapshotData trực tiếp)
+        await this.loadStockCheckData(this.allMaterials, snapshotData);
+        
+        // Update filtered materials
+        this.filteredMaterials = [...this.allMaterials];
+        
+        // Reload current page
+        this.loadPageFromFiltered(this.currentPage);
+        
+        // Recalculate stats
+        this.calculateIdCheckStats();
+        
+        // Force change detection
+        this.cdr.detectChanges();
+        
+        const checkedCount = this.allMaterials.filter(m => m.stockCheck === '✓').length;
+        console.log(`✅ [subscribeToSnapshotChanges] Updated: ${checkedCount} materials marked as checked`);
       });
   }
 
   /**
    * Load stock check data from Firebase - Đơn giản: load từ 1 collection duy nhất
    */
-  async loadStockCheckData(materials: StockCheckMaterial[]): Promise<void> {
+  async loadStockCheckData(materials: StockCheckMaterial[], snapshotData?: any): Promise<void> {
     try {
-      // Load từ collection stock-check-snapshot
-      const docId = `${this.selectedFactory}_stock_check_current`;
-      const doc = await this.firestore
-        .collection('stock-check-snapshot')
-        .doc(docId)
-        .get()
-        .toPromise();
-
-      if (!doc || !doc.exists) {
-        console.log(`⚠️ [loadStockCheckData] No snapshot found for factory: ${this.selectedFactory}`);
+      if (!this.selectedFactory || !materials || materials.length === 0) {
         return;
       }
 
-      const data = doc.data() as any;
-      const checkedMaterials = data.materials || [];
+      let checkedMaterials: any[] = [];
+
+      if (snapshotData) {
+        // Nếu có snapshotData trực tiếp (từ subscription), dùng luôn
+        checkedMaterials = snapshotData.materials || [];
+      } else {
+        // Nếu không có, load từ Firebase
+        const docId = `${this.selectedFactory}_stock_check_current`;
+        const doc = await this.firestore
+          .collection('stock-check-snapshot')
+          .doc(docId)
+          .get()
+          .toPromise();
+
+        if (!doc || !doc.exists) {
+          console.log(`⚠️ [loadStockCheckData] No snapshot found for factory: ${this.selectedFactory}`);
+          // Reset tất cả materials về chưa check
+          materials.forEach(mat => {
+            mat.stockCheck = '';
+            mat.qtyCheck = null;
+            mat.idCheck = '';
+            mat.dateCheck = null;
+          });
+          return;
+        }
+
+        const data = doc.data() as any;
+        checkedMaterials = data.materials || [];
+      }
 
       if (checkedMaterials.length === 0) {
         console.log(`⚠️ [loadStockCheckData] No checked materials in snapshot`);
+        // Reset tất cả materials về chưa check
+        materials.forEach(mat => {
+          mat.stockCheck = '';
+          mat.qtyCheck = null;
+          mat.idCheck = '';
+          mat.dateCheck = null;
+        });
         return;
       }
 
@@ -643,7 +729,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         }
       });
 
-      // Apply vào materials
+      // Reset tất cả materials về chưa check trước
+      materials.forEach(mat => {
+        mat.stockCheck = '';
+        mat.qtyCheck = null;
+        mat.idCheck = '';
+        mat.dateCheck = null;
+      });
+
+      // Apply checked data vào materials
       let matchedCount = 0;
       materials.forEach(mat => {
         if (mat.materialCode && mat.poNumber && mat.imd) {
