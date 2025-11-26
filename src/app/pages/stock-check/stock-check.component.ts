@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
-import { takeUntil, first, filter } from 'rxjs/operators';
+import { takeUntil, first, filter, skip } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
@@ -60,6 +60,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private dataSubscription: any = null; // Track subscription để có thể unsubscribe
   private snapshotSubscription: any = null; // Track snapshot subscription để reload khi có thay đổi
+  private isInitialDataLoaded: boolean = false; // Track xem đã load initial data chưa
   
   // Factory selection
   selectedFactory: 'ASM1' | 'ASM2' | null = null;
@@ -369,6 +370,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.selectedFactory = factory;
     this.currentPage = 1;
     this.currentEmployeeId = ''; // Reset employee ID
+    this.isInitialDataLoaded = false; // Reset flag
+    
+    // Subscribe ngay từ đầu để catch mọi thay đổi (trước khi load data)
+    this.subscribeToSnapshotChanges();
+    
     this.loadData();
     
     // Show employee scan modal after selecting factory
@@ -614,8 +620,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         const checkedCount = this.allMaterials.filter(m => m.stockCheck === '✓').length;
         console.log(`✅ [loadData] Final: ${checkedCount} materials marked as checked out of ${this.allMaterials.length} total`);
         
-        // Subscribe to snapshot changes để real-time update khi có thay đổi
-        this.subscribeToSnapshotChanges();
+        // Đánh dấu đã load initial data xong
+        this.isInitialDataLoaded = true;
       });
   }
 
@@ -641,11 +647,23 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       .valueChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(async (snapshotData: any) => {
-        if (!this.allMaterials || this.allMaterials.length === 0) {
+        // Nếu chưa load initial data, skip (sẽ được load trong loadData)
+        if (!this.isInitialDataLoaded) {
+          console.log(`⏳ [subscribeToSnapshotChanges] Initial data not loaded yet, skipping...`);
           return;
         }
 
-        console.log(`🔄 [subscribeToSnapshotChanges] Snapshot updated, reloading stock check data...`);
+        if (!this.allMaterials || this.allMaterials.length === 0) {
+          console.log(`⚠️ [subscribeToSnapshotChanges] No materials loaded yet, skipping update`);
+          return;
+        }
+
+        if (!snapshotData || !snapshotData.materials) {
+          console.log(`⚠️ [subscribeToSnapshotChanges] No snapshot data, skipping update`);
+          return;
+        }
+
+        console.log(`🔄 [subscribeToSnapshotChanges] Snapshot updated! Detected ${snapshotData.materials.length} checked materials, reloading...`);
         
         // Reload stock check data và apply vào materials hiện tại (truyền snapshotData trực tiếp)
         await this.loadStockCheckData(this.allMaterials, snapshotData);
