@@ -1,4 +1,38 @@
-<div class="manage-container">
+<!-- Password Modal -->
+<div *ngIf="showPasswordModal" class="password-modal-overlay">
+  <div class="password-modal-content">
+    <div class="password-modal-header">
+      <h4>
+        <i class="material-icons">lock</i>
+        Yêu cầu mật khẩu
+      </h4>
+    </div>
+    <div class="password-modal-body">
+      <p>Vui lòng nhập mật khẩu để truy cập tab Manage:</p>
+      <div class="password-input-group">
+        <input 
+          type="password" 
+          class="form-control password-input"
+          [(ngModel)]="password"
+          (keyup)="onPasswordKeyPress($event)"
+          placeholder="Nhập mật khẩu..."
+          autofocus>
+        <div *ngIf="passwordError" class="password-error">
+          <i class="material-icons">error</i>
+          {{ passwordError }}
+        </div>
+      </div>
+      <div class="password-modal-actions">
+        <button class="btn btn-primary" (click)="checkPassword()">
+          <i class="material-icons">check</i>
+          Xác nhận
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="manage-container" *ngIf="!showPasswordModal">
   <div class="card">
     <div class="card-header">
       <h4 class="card-title">

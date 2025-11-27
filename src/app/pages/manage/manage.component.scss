@@ -1,3 +1,116 @@
+// Password Modal Styles
+.password-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.password-modal-content {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 400px;
+  
+  .password-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    
+    h4 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      color: #333;
+      
+      i.material-icons {
+        font-size: 24px;
+        color: #1976d2;
+      }
+    }
+  }
+  
+  .password-modal-body {
+    padding: 20px;
+    
+    p {
+      margin: 0 0 20px 0;
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .password-input-group {
+      margin-bottom: 20px;
+      
+      .password-input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        
+        &:focus {
+          outline: none;
+          border-color: #1976d2;
+          box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+        }
+      }
+      
+      .password-error {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #ffebee;
+        color: #c62828;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        
+        i.material-icons {
+          font-size: 20px;
+        }
+      }
+    }
+    
+    .password-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+        
+        &.btn-primary {
+          background-color: #1976d2;
+          color: #ffffff;
+          
+          &:hover {
+            background-color: #1565c0;
+          }
+        }
+      }
+    }
+  }
+}
+
 .manage-container {
   padding: 20px;
   

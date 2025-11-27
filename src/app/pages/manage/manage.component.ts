@@ -49,12 +49,25 @@ export class ManageComponent implements OnInit, OnDestroy {
   selectedLocation: string = '';
   locationMaterials: InventoryMaterial[] = [];
   
+  // Password protection
+  showPasswordModal: boolean = true;
+  password: string = '';
+  passwordError: string = '';
+  private readonly CORRECT_PASSWORD = '0110';
+  
   private destroy$ = new Subject<void>();
 
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
     console.log('🚀 ManageComponent initialized');
+    // Check if password was already entered in this session
+    const passwordEntered = sessionStorage.getItem('manage-password-entered');
+    if (passwordEntered === 'true') {
+      this.showPasswordModal = false;
+    } else {
+      this.showPasswordModal = true;
+    }
   }
 
   ngOnDestroy(): void {
@@ -380,6 +393,25 @@ export class ManageComponent implements OnInit, OnDestroy {
     });
 
     console.log(`📊 Summary calculated: ${this.summaryData.length} unique PO/IMD combinations`);
+  }
+
+  checkPassword(): void {
+    if (this.password === this.CORRECT_PASSWORD) {
+      this.showPasswordModal = false;
+      this.passwordError = '';
+      this.password = '';
+      // Save to session storage
+      sessionStorage.setItem('manage-password-entered', 'true');
+    } else {
+      this.passwordError = 'Mật khẩu không đúng!';
+      this.password = '';
+    }
+  }
+
+  onPasswordKeyPress(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.checkPassword();
+    }
   }
 }
 
