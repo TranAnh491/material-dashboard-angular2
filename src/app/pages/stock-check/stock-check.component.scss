@@ -2560,32 +2560,64 @@
       }
       
       .top-bar-actions {
+        display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
       }
 
-      .back-btn {
-        width: 100%;
-        justify-content: center;
-        padding: 8px 16px;
-        font-size: 13px;
-      }
-
-      .inventory-btn,
-      .report-btn {
-        width: 100%;
-        justify-content: center;
-        padding: 8px 16px;
-        font-size: 13px;
-      }
-
+      // Ẩn tất cả các nút trừ nút sắp xếp và kiểm kê
+      .back-btn,
+      .logout-btn,
+      .reset-btn,
+      .history-btn,
+      .report-btn,
       .search-box {
-        width: 100%;
-        min-width: 0;
+        display: none !important;
+      }
 
-        .search-input {
-          font-size: 13px;
-          padding: 8px 12px;
+      // Chỉ hiển thị nút sắp xếp (AZ)
+      .sort-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 16px;
+        font-size: 14px;
+        min-height: 44px;
+        background: #FF9800;
+        color: #ffffff;
+        border: 2px solid #FF9800;
+        
+        span {
+          font-size: 14px;
+          display: inline;
+        }
+        
+        i.material-icons {
+          font-size: 20px;
+          margin-right: 8px;
+        }
+      }
+
+      // Nút KIỂM KÊ (scanner) - nổi bật nhất
+      .inventory-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 12px 20px;
+        font-size: 16px;
+        font-weight: 600;
+        background: linear-gradient(145deg, #2196F3, #1976D2);
+        color: #ffffff;
+        border: 2px solid #1976D2;
+        min-height: 50px;
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+        
+        span {
+          font-size: 16px;
+          display: inline;
+        }
+        
+        i.material-icons {
+          font-size: 24px;
+          margin-right: 8px;
         }
       }
     }

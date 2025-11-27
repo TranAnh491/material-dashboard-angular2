@@ -769,6 +769,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       if (snapshotData) {
         // Nếu có snapshotData trực tiếp (từ subscription), dùng luôn
         checkedMaterials = snapshotData.materials || [];
+        // Cập nhật cache
+        this.snapshotCache[this.selectedFactory] = {
+          materials: [...checkedMaterials],
+          lastUpdated: new Date()
+        };
       } else {
         // Nếu không có, load từ Firebase
         const docId = `${this.selectedFactory}_stock_check_current`;
@@ -780,6 +785,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         if (!doc || !doc.exists) {
           console.log(`⚠️ [loadStockCheckData] No snapshot found for factory: ${this.selectedFactory}`);
+          // Clear cache
+          this.snapshotCache[this.selectedFactory] = {
+            materials: [],
+            lastUpdated: new Date()
+          };
           // Reset tất cả materials về chưa check
           materials.forEach(mat => {
             mat.stockCheck = '';
@@ -792,6 +802,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         const data = doc.data() as any;
         checkedMaterials = data.materials || [];
+        // Cập nhật cache
+        this.snapshotCache[this.selectedFactory] = {
+          materials: [...checkedMaterials],
+          lastUpdated: new Date()
+        };
       }
 
       if (checkedMaterials.length === 0) {
@@ -898,21 +913,38 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /**
    * Save stock check data to Firebase - Đơn giản: lưu toàn bộ vào 1 document snapshot
    */
+  // Cache snapshot trong memory để tránh đọc Firebase mỗi lần scan
+  private snapshotCache: { [factory: string]: { materials: any[], lastUpdated: Date } } = {};
+
   async saveStockCheckToFirebase(material: StockCheckMaterial, scannedQty?: number): Promise<void> {
     try {
       const snapshotDocId = `${this.selectedFactory}_stock_check_current`;
       
-      // Load snapshot hiện tại
-      const doc = await this.firestore
-        .collection('stock-check-snapshot')
-        .doc(snapshotDocId)
-        .get()
-        .toPromise();
-
+      // Sử dụng cache nếu có, nếu không thì load từ Firebase
       let checkedMaterials: any[] = [];
-      if (doc && doc.exists) {
-        const data = doc.data() as any;
-        checkedMaterials = data.materials || [];
+      const cacheKey = this.selectedFactory;
+      
+      if (this.snapshotCache[cacheKey] && this.snapshotCache[cacheKey].materials) {
+        // Sử dụng cache - nhanh hơn nhiều
+        checkedMaterials = [...this.snapshotCache[cacheKey].materials];
+      } else {
+        // Load snapshot hiện tại từ Firebase (chỉ lần đầu hoặc khi cache không có)
+        const doc = await this.firestore
+          .collection('stock-check-snapshot')
+          .doc(snapshotDocId)
+          .get()
+          .toPromise();
+
+        if (doc && doc.exists) {
+          const data = doc.data() as any;
+          checkedMaterials = data.materials || [];
+        }
+        
+        // Lưu vào cache
+        this.snapshotCache[cacheKey] = {
+          materials: [...checkedMaterials],
+          lastUpdated: new Date()
+        };
       }
 
       // Tìm material trong danh sách đã check
@@ -948,8 +980,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         material.qtyCheck = newQty;
       }
 
-      // Lưu toàn bộ snapshot vào 1 document
-      await this.firestore
+      // Cập nhật cache
+      this.snapshotCache[cacheKey] = {
+        materials: [...checkedMaterials],
+        lastUpdated: new Date()
+      };
+
+      // Lưu snapshot vào Firebase (không await - fire and forget để tăng tốc)
+      // Sẽ được sync sau trong background
+      this.firestore
         .collection('stock-check-snapshot')
         .doc(snapshotDocId)
         .set({
@@ -957,21 +996,29 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           materials: checkedMaterials,
           lastUpdated: new Date(),
           updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        }, { merge: true })
+        .catch(error => {
+          console.error('❌ Error saving snapshot (async):', error);
+        });
 
-      console.log(`✅ Saved stock check snapshot: ${checkedMaterials.length} materials`);
-
-      // Vẫn lưu vào lịch sử vĩnh viễn
+      // Lưu vào lịch sử vĩnh viễn (không await - fire and forget để tăng tốc)
+      // Lịch sử không cần thiết phải block scan
       const historyItem: CheckHistoryItem = {
         idCheck: material.idCheck,
         qtyCheck: newQty,
         dateCheck: material.dateCheck || new Date(),
         updatedAt: new Date()
       };
-      await this.saveToPermanentHistory(material, newQty, historyItem);
       
-      // Recalculate ID stats
+      // Save history async - không block scan
+      this.saveToPermanentHistory(material, newQty, historyItem).catch(error => {
+        console.error('❌ Error saving history (async):', error);
+      });
+      
+      // Recalculate ID stats (nhanh, không cần await)
       this.calculateIdCheckStats();
+      
+      console.log(`✅ Stock check saved (cached): ${checkedMaterials.length} materials`);
     } catch (error) {
       console.error('❌ Error saving stock check to Firebase:', error);
     }
@@ -979,6 +1026,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   /**
    * Lưu vào lịch sử vĩnh viễn (collection riêng, không bị xóa khi RESET)
+   * Tối ưu: Chỉ filter/sort khi cần thiết (khi history > 100 items)
    */
   async saveToPermanentHistory(material: StockCheckMaterial, scannedQty: number, historyItem: CheckHistoryItem): Promise<void> {
     try {
@@ -1015,22 +1063,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       
       historyList.push(newHistoryItem);
       
-      // XÓA DỮ LIỆU CŨ HƠN 1 NĂM
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      
-      historyList = historyList.filter(item => {
-        const itemDate = item.dateCheck?.toDate ? item.dateCheck.toDate() : (item.dateCheck ? new Date(item.dateCheck) : null);
-        if (!itemDate) return true; // Giữ lại nếu không có date
-        return itemDate >= oneYearAgo;
-      });
-      
-      // Sắp xếp theo date (mới nhất trước)
-      historyList.sort((a, b) => {
-        const dateA = a.dateCheck?.toDate ? a.dateCheck.toDate().getTime() : (a.dateCheck ? new Date(a.dateCheck).getTime() : 0);
-        const dateB = b.dateCheck?.toDate ? b.dateCheck.toDate().getTime() : (b.dateCheck ? new Date(b.dateCheck).getTime() : 0);
-        return dateB - dateA;
-      });
+      // Tối ưu: Chỉ filter/sort khi history quá lớn (> 100 items)
+      // Điều này giúp tăng tốc đáng kể khi scan nhiều
+      if (historyList.length > 100) {
+        // XÓA DỮ LIỆU CŨ HƠN 1 NĂM
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        
+        historyList = historyList.filter(item => {
+          const itemDate = item.dateCheck?.toDate ? item.dateCheck.toDate() : (item.dateCheck ? new Date(item.dateCheck) : null);
+          if (!itemDate) return true; // Giữ lại nếu không có date
+          return itemDate >= oneYearAgo;
+        });
+        
+        // Sắp xếp theo date (mới nhất trước)
+        historyList.sort((a, b) => {
+          const dateA = a.dateCheck?.toDate ? a.dateCheck.toDate().getTime() : (a.dateCheck ? new Date(a.dateCheck).getTime() : 0);
+          const dateB = b.dateCheck?.toDate ? b.dateCheck.toDate().getTime() : (b.dateCheck ? new Date(b.dateCheck).getTime() : 0);
+          return dateB - dateA;
+        });
+      }
       
       // Lưu vào Firebase
       await this.firestore
@@ -1045,7 +1097,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           lastUpdated: firebase.default.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
       
-      console.log(`📝 Saved to permanent history: ${material.materialCode} | Qty: ${scannedQty}`);
+      // Chỉ log khi cần debug
+      // console.log(`📝 Saved to permanent history: ${material.materialCode} | Qty: ${scannedQty}`);
     } catch (error) {
       console.error('❌ Error saving to permanent history:', error);
     }
@@ -1255,11 +1308,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           
           this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\n\nScan mã tiếp theo`;
           
-          // Refresh the current view to show updated check status
-          this.applyFilter();
-          
+          // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
-          this.cdr.detectChanges();
+          
+          // Refresh view (không block scan - async)
+          setTimeout(() => {
+            this.applyFilter();
+            this.cdr.detectChanges();
+          }, 0);
         } else {
           // Không tìm thấy trong bảng - tạo material mới và thêm vào
           console.log('📝 Material not found in table, creating new entry:', { materialCode, poNumber, imd, quantity });
@@ -1322,27 +1378,31 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           
           this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\n\nScan mã tiếp theo`;
           
-          // Update filtered materials và displayed materials
-          this.applyFilter();
-          
-          // Nếu đang ở filter mode 'all' hoặc 'outside', hiển thị material mới
-          if (this.filterMode === 'all' || this.filterMode === 'outside') {
-            // Tìm page chứa material mới
-            const materialIndex = this.filteredMaterials.findIndex(m => 
-              m.materialCode === materialCode && 
-              m.poNumber === poNumber && 
-              m.imd === imd
-            );
-            
-            if (materialIndex >= 0) {
-              const page = Math.floor(materialIndex / this.itemsPerPage) + 1;
-              this.currentPage = page;
-              this.loadPageFromFiltered(page);
-            }
-          }
-          
+          // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
-          this.cdr.detectChanges();
+          
+          // Update filtered materials và displayed materials (không block scan - async)
+          setTimeout(() => {
+            this.applyFilter();
+            
+            // Nếu đang ở filter mode 'all' hoặc 'outside', hiển thị material mới
+            if (this.filterMode === 'all' || this.filterMode === 'outside') {
+              // Tìm page chứa material mới
+              const materialIndex = this.filteredMaterials.findIndex(m => 
+                m.materialCode === materialCode && 
+                m.poNumber === poNumber && 
+                m.imd === imd
+              );
+              
+              if (materialIndex >= 0) {
+                const page = Math.floor(materialIndex / this.itemsPerPage) + 1;
+                this.currentPage = page;
+                this.loadPageFromFiltered(page);
+              }
+            }
+            
+            this.cdr.detectChanges();
+          }, 0);
         }
       } else {
         this.scanMessage = '❌ Mã không hợp lệ!\n\nFormat: Mã|PO|Số lượng|IMD\n\nScan lại';

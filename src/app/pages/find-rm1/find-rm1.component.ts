@@ -88,7 +88,29 @@ export class FindRm1Component implements OnInit, OnDestroy {
     for (const row of data) {
       const materialCode = row.materialCode || row.itemCode || row.code;
       const location = row.location || row.warehouseLocation || row.storageLocation;
-      const quantity = row.quantity || row.qty || row.stockQty || 0;
+      
+      // Lấy Tồn kho (stock) thay vì NK (quantity)
+      // Luôn tính từ công thức: openingStock + quantity - exported - xt
+      // (giống như trong materials-asm1 component)
+      const openingStock = row.openingStock !== null && row.openingStock !== undefined ? Number(row.openingStock) : 0;
+      const quantity = Number(row.quantity) || 0; // NK
+      const exported = Number(row.exported) || 0;
+      const xt = Number(row.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      
+      // Debug: Log để kiểm tra (chỉ log 1 item đầu tiên để tránh spam)
+      if (items.length === 0 && materialCode) {
+        console.log('🔍 [Find RM1] Debug tồn kho:', {
+          materialCode: materialCode,
+          openingStock: openingStock,
+          quantity: quantity,
+          exported: exported,
+          xt: xt,
+          calculatedStock: stock,
+          rawRow: row
+        });
+      }
+      
       const po = row.po || row.purchaseOrder || row.poNumber || 'N/A';
       const importDate = row.importDate ? new Date(row.importDate) : (row.batch ? new Date(row.batch) : undefined);
       const factory = row.factory || 'ASM1';
@@ -98,7 +120,7 @@ export class FindRm1Component implements OnInit, OnDestroy {
           id: row.id,
           materialCode: String(materialCode).trim().toUpperCase(),
           location: String(location).trim().toUpperCase(),
-          quantity: Number(quantity),
+          quantity: stock, // Lưu tồn kho vào quantity field
           po: String(po).trim(),
           importDate: importDate,
           description: row.description || row.itemName || '',
