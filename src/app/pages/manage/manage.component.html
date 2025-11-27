@@ -100,7 +100,9 @@
               <th>Vị trí</th>
               <th>Tồn kho</th>
               <th>Standard Packing</th>
-              <th>Số cuộn</th>
+              <th>Cuộn chẵn</th>
+              <th>Cuộn lẻ</th>
+              <th>Lượng lẻ</th>
               <th>Trọng lượng cuộn (g)</th>
             </tr>
           </thead>
@@ -122,8 +124,17 @@
               </td>
               <td class="text-right">{{ item.stock | number:'1.0-2' }}</td>
               <td class="text-right">{{ item.standardPacking | number:'1.0-2' }}</td>
-              <td class="text-right">{{ item.numberOfRolls | number:'1.0-2' }}</td>
+              <td class="text-right">{{ item.evenRolls | number:'1.0-0' }}</td>
+              <td class="text-right">{{ item.oddRolls | number:'1.2-2' }}</td>
+              <td class="text-right">{{ item.oddQuantity | number:'1.0-2' }}</td>
               <td class="text-right">{{ item.totalWeight | number:'1.0-2' }}</td>
+            </tr>
+            <!-- Dòng tổng -->
+            <tr class="total-row" *ngIf="summaryData.length > 0">
+              <td colspan="7" class="text-right"><strong>TỔNG:</strong></td>
+              <td class="text-right"><strong>{{ totalEvenRolls | number:'1.0-0' }}</strong></td>
+              <td class="text-right"><strong>{{ totalOddRolls | number:'1.2-2' }}</strong></td>
+              <td colspan="2"></td>
             </tr>
           </tbody>
         </table>

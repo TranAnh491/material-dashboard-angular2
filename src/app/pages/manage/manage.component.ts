@@ -25,7 +25,10 @@ export interface MaterialSummary {
   imd: string;
   stock: number;
   standardPacking: number;
-  numberOfRolls: number;
+  numberOfRolls: number; // Tổng số cuộn (giữ lại để tính tổng)
+  evenRolls: number; // Cuộn chẵn (phần nguyên)
+  oddRolls: number; // Cuộn lẻ (phần thập phân)
+  oddQuantity: number; // Lượng lẻ = cuộn lẻ × standard packing
   totalWeight: number;
   locations: string[]; // Danh sách các vị trí
 }
@@ -54,6 +57,15 @@ export class ManageComponent implements OnInit, OnDestroy {
   password: string = '';
   passwordError: string = '';
   private readonly CORRECT_PASSWORD = '0110';
+  
+  // Tổng số cuộn
+  get totalEvenRolls(): number {
+    return this.summaryData.reduce((sum, item) => sum + item.evenRolls, 0);
+  }
+  
+  get totalOddRolls(): number {
+    return this.summaryData.reduce((sum, item) => sum + item.oddRolls, 0);
+  }
   
   private destroy$ = new Subject<void>();
 
@@ -361,10 +373,20 @@ export class ManageComponent implements OnInit, OnDestroy {
       const standardPacking = catalogItem?.standardPacking || material.standardPacking || 1;
       const unitWeight = catalogItem?.unitWeight || material.unitWeight || 0;
       
+      // Tính số cuộn
+      const numberOfRolls = stock / standardPacking;
+      const evenRolls = Math.floor(numberOfRolls); // Cuộn chẵn (phần nguyên)
+      const oddRolls = numberOfRolls - evenRolls; // Cuộn lẻ (phần thập phân)
+      const oddQuantity = oddRolls * standardPacking; // Lượng lẻ
+      
       if (summaryMap.has(key)) {
         const existing = summaryMap.get(key)!;
         existing.stock += stock;
         existing.numberOfRolls = existing.stock / existing.standardPacking;
+        // Tính lại cuộn chẵn và lẻ
+        existing.evenRolls = Math.floor(existing.numberOfRolls);
+        existing.oddRolls = existing.numberOfRolls - existing.evenRolls;
+        existing.oddQuantity = existing.oddRolls * existing.standardPacking;
         // Tính lại totalWeight với unitWeight từ catalog
         existing.totalWeight = existing.stock * unitWeight;
         // Thêm location nếu chưa có
@@ -378,7 +400,10 @@ export class ManageComponent implements OnInit, OnDestroy {
           imd: imd,
           stock: stock,
           standardPacking: standardPacking, // Từ catalog
-          numberOfRolls: stock / standardPacking,
+          numberOfRolls: numberOfRolls,
+          evenRolls: evenRolls,
+          oddRolls: oddRolls,
+          oddQuantity: oddQuantity,
           totalWeight: stock * unitWeight, // Từ catalog (giống tab utilization)
           locations: material.location ? [material.location] : []
         });
