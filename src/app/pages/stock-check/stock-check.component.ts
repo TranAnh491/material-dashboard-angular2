@@ -97,6 +97,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   // Search
   searchInput: string = '';
   
+  // Sort mode
+  sortMode: 'alphabetical' | 'byDateCheck' = 'alphabetical';
+  
   // ID Check Statistics
   idCheckStats: { id: string; count: number }[] = [];
   
@@ -140,6 +143,60 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside'): void {
     this.filterMode = mode;
     this.applyFilter();
+  }
+
+  /**
+   * Toggle sort mode between alphabetical and by date check
+   */
+  toggleSortMode(): void {
+    if (this.sortMode === 'alphabetical') {
+      this.sortMode = 'byDateCheck';
+    } else {
+      this.sortMode = 'alphabetical';
+    }
+    
+    // Sort materials
+    this.sortMaterials();
+    
+    // Update STT after sorting
+    this.allMaterials.forEach((mat, index) => {
+      mat.stt = index + 1;
+    });
+    
+    // Reapply filter to update displayed materials
+    this.applyFilter();
+    
+    // Reload current page
+    this.loadPageFromFiltered(this.currentPage);
+    
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Sort materials based on current sort mode
+   */
+  private sortMaterials(): void {
+    if (this.sortMode === 'alphabetical') {
+      // Sort alphabetically by material code
+      this.allMaterials.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    } else {
+      // Sort by dateCheck (newest first), then by material code for items without dateCheck
+      this.allMaterials.sort((a, b) => {
+        // Items with dateCheck come first
+        if (a.dateCheck && !b.dateCheck) return -1;
+        if (!a.dateCheck && b.dateCheck) return 1;
+        
+        // Both have dateCheck - sort by newest first
+        if (a.dateCheck && b.dateCheck) {
+          const dateA = a.dateCheck instanceof Date ? a.dateCheck.getTime() : new Date(a.dateCheck).getTime();
+          const dateB = b.dateCheck instanceof Date ? b.dateCheck.getTime() : new Date(b.dateCheck).getTime();
+          return dateB - dateA; // Newest first
+        }
+        
+        // Both don't have dateCheck - sort alphabetically
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+    }
   }
 
   /**
@@ -314,8 +371,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       filtered = filtered.filter(m => m.isNewMaterial === true);
     }
     
-    // Sort alphabetically
-    filtered.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    // Sort based on current sort mode
+    if (this.sortMode === 'alphabetical') {
+      filtered.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    } else {
+      filtered.sort((a, b) => {
+        if (a.dateCheck && !b.dateCheck) return -1;
+        if (!a.dateCheck && b.dateCheck) return 1;
+        if (a.dateCheck && b.dateCheck) {
+          const dateA = a.dateCheck instanceof Date ? a.dateCheck.getTime() : new Date(a.dateCheck).getTime();
+          const dateB = b.dateCheck instanceof Date ? b.dateCheck.getTime() : new Date(b.dateCheck).getTime();
+          return dateB - dateA; // Newest first
+        }
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+    }
 
     // Update STT
     filtered.forEach((mat, index) => {
@@ -591,8 +661,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         // Calculate ID check statistics
         this.calculateIdCheckStats();
 
-        // Sort alphabetically by material code
-        this.allMaterials.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+        // Sort materials based on current sort mode
+        this.sortMaterials();
 
         // Update STT after sorting
         this.allMaterials.forEach((mat, index) => {
@@ -1194,8 +1264,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           // Không tìm thấy trong bảng - tạo material mới và thêm vào
           console.log('📝 Material not found in table, creating new entry:', { materialCode, poNumber, imd, quantity });
           
+          const scannedQty = parseFloat(quantity) || 0;
+          
           const newMaterial: StockCheckMaterial = {
-            stt: this.allMaterials.length + 1,
+            stt: 0, // Sẽ được cập nhật sau khi sort
             materialCode: materialCode,
             poNumber: poNumber,
             imd: imd,
@@ -1203,7 +1275,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             location: '', // Không có thông tin location từ scan
             standardPacking: '', // Sẽ tải sau nếu cần
             stockCheck: '✓',
-            qtyCheck: parseFloat(quantity),
+            qtyCheck: scannedQty,
             idCheck: this.scannedEmployeeId,
             dateCheck: new Date(),
             openingStock: undefined,
@@ -1218,8 +1290,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           // Thêm vào allMaterials
           this.allMaterials.push(newMaterial);
           
+          // Sort lại theo sort mode hiện tại
+          this.sortMaterials();
+          
+          // Update STT sau khi sort
+          this.allMaterials.forEach((mat, index) => {
+            mat.stt = index + 1;
+          });
+          
           // Lưu vào Firebase
-          await this.saveStockCheckToFirebase(newMaterial);
+          await this.saveStockCheckToFirebase(newMaterial, scannedQty);
           
           // Thử tải standardPacking từ materials collection nếu có
           try {
@@ -1242,8 +1322,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           
           this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\n\nScan mã tiếp theo`;
           
-          // Refresh the current view to show new material
+          // Update filtered materials và displayed materials
           this.applyFilter();
+          
+          // Nếu đang ở filter mode 'all' hoặc 'outside', hiển thị material mới
+          if (this.filterMode === 'all' || this.filterMode === 'outside') {
+            // Tìm page chứa material mới
+            const materialIndex = this.filteredMaterials.findIndex(m => 
+              m.materialCode === materialCode && 
+              m.poNumber === poNumber && 
+              m.imd === imd
+            );
+            
+            if (materialIndex >= 0) {
+              const page = Math.floor(materialIndex / this.itemsPerPage) + 1;
+              this.currentPage = page;
+              this.loadPageFromFiltered(page);
+            }
+          }
           
           this.scanInput = '';
           this.cdr.detectChanges();

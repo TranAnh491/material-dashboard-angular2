@@ -411,6 +411,7 @@
     }
 
     .inventory-btn,
+    .sort-btn,
     .report-btn {
       display: flex;
       align-items: center;
@@ -443,6 +444,22 @@
 
       i {
         font-size: 18px;
+      }
+    }
+
+    .sort-btn {
+      background: #FF9800;
+      color: #ffffff;
+      border-color: #FF9800;
+
+      &:hover {
+        background: #F57C00;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+      }
+
+      &:active {
+        transform: translateY(0);
       }
     }
 

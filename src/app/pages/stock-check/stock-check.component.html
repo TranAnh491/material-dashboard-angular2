@@ -76,6 +76,11 @@
           KIỂM KÊ
         </button>
         
+        <button class="sort-btn" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
+          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
+          <span>SẮP XẾP</span>
+        </button>
+        
         <button class="report-btn" (click)="exportStockCheckReport()">
           <i class="material-icons">download</i>
           REPORT
