@@ -42,7 +42,7 @@
                   <p>💡 Hướng dẫn:</p>
                   <ul>
                     <li>File Excel phải có header: Nhà Máy, Năm, Tháng, STT, Mã TP VN, LSX, Lượng sản phẩm, Khách hàng, Gấp, Ngày Giao NVL, Line, NVL thiếu, Người soạn, Tình trạng, Đủ/Thiếu, Ngày nhận thông tin, Ghi Chú</li>
-                    <li>Nhà Máy phải là một trong: ASM1, ASM2, Sample 1, Sample 2</li>
+                    <li>Nhà Máy phải là một trong: ASM1, ASM2, ASM3, Sample 1, Sample 2</li>
                     <li>Nếu không có Nhà Máy, sẽ sử dụng nhà máy đang chọn ({{selectedFactory}})</li>
                     <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
                     <li>File tối đa 10MB</li>
@@ -138,6 +138,13 @@
                           style="color: #4caf50; border: none;"
                           [style.background]="selectedFactory === 'ASM2' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i> ASM2
+                  </button>
+                  <button class="btn btn-outline-primary" 
+                          [class.active]="selectedFactory === 'ASM3'"
+                          (click)="selectFactory('ASM3')"
+                          style="color: #ff9800; border: none;"
+                          [style.background]="selectedFactory === 'ASM3' ? '#fce4ec' : 'transparent'">
+                    <i class="material-icons">factory</i> ASM3
                   </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFactory === 'Sample 1'"
@@ -401,7 +408,7 @@
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">Ngày Giao NVL</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 13.33px; font-weight: normal;">Line</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">NVL thiếu</th>
-                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 25px; font-size: 13.33px; font-weight: normal;">Người soạn</th>
+                          <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 25px; font-size: 13.33px; font-weight: normal;">Người soạn/Import</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 25px; font-size: 13.33px; font-weight: normal;">Tình trạng</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 45px; font-size: 13.33px; font-weight: normal;">Đủ/Thiếu</th>
                           <th style="padding: 4px; border: 1px solid #ddd; text-align: center; min-width: 55px; font-size: 13.33px; font-weight: normal;">Ngày nhận thông tin</th>
@@ -485,7 +492,8 @@
                               <option value="Toàn">Toàn</option>
                               <option value="Ninh">Ninh</option>
                             </select>
-                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.createdBy || 'Chưa có'}}</span>
+                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;" [title]="wo.createdBy || 'Chưa có'">{{(wo.createdBy || 'Chưa có').length > 20 ? (wo.createdBy || 'Chưa có').substring(0, 20) + '...' : (wo.createdBy || 'Chưa có')}}</span>
+                            <span *ngIf="canEdit() && wo.createdBy" style="font-size: 9px; color: #999; display: block; margin-top: 2px;" [title]="wo.createdBy">{{(wo.createdBy || '').length > 20 ? (wo.createdBy || '').substring(0, 20) + '...' : (wo.createdBy || '')}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                             <select [(ngModel)]="wo.status" (change)="updateWorkOrderStatus(wo, $event.target.value)" 
@@ -731,6 +739,7 @@
             <option value="">Tất cả nhà máy</option>
             <option value="ASM1">ASM1</option>
             <option value="ASM2">ASM2</option>
+            <option value="ASM3">ASM3</option>
             <option value="Sample 1">Sample 1</option>
             <option value="Sample 2">Sample 2</option>
           </select>

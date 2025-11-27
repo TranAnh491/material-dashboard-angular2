@@ -1,539 +1,222 @@
-<div class="main-content">
-  <div class="container-fluid">
-    
-    <!-- Admin Login Section -->
-    <div *ngIf="!isAdminLoggedIn" class="admin-login">
-      <!-- Warehouse Background Elements -->
-      <div class="warehouse-elements">
-        <div class="warehouse-box"></div>
-        <div class="warehouse-box"></div>
-        <div class="warehouse-box"></div>
-        <div class="warehouse-box"></div>
-      </div>
-      
-      <div class="login-card">
-        <div class="login-header">
-          <mat-icon>warehouse</mat-icon>
-          <h2>Warehouse Management</h2>
-          <p>Đăng nhập để truy cập hệ thống quản lý kho</p>
+<div class="settings-container">
+  <!-- Admin Login -->
+  <div *ngIf="!isAdminLoggedIn" class="login-section">
+    <div class="login-box">
+      <h2>Đăng nhập</h2>
+      <form (ngSubmit)="adminLogin()">
+        <div class="form-group">
+          <label>Tên đăng nhập</label>
+          <input type="text" [(ngModel)]="adminUsername" name="username" required>
         </div>
-        
-        <form (ngSubmit)="adminLogin()" #loginForm="ngForm">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Tên đăng nhập</mat-label>
-            <input matInput 
-                   type="text" 
-                   [(ngModel)]="adminUsername" 
-                   name="username"
-                   required>
-            <mat-icon matSuffix>person</mat-icon>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Mật khẩu</mat-label>
-            <input matInput 
-                   type="password" 
-                   [(ngModel)]="adminPassword" 
-                   name="password"
-                   required>
-            <mat-icon matSuffix>lock</mat-icon>
-          </mat-form-field>
-
-          <div *ngIf="loginError" class="error-message">
-            <mat-icon>error</mat-icon>
-            {{ loginError }}
-          </div>
-
-          <button mat-raised-button 
-                  color="primary" 
-                  type="submit"
-                  [disabled]="!adminUsername || !adminPassword"
-                  class="login-btn">
-            <mat-icon>login</mat-icon>
-            Đăng nhập
-          </button>
-        </form>
-      </div>
+        <div class="form-group">
+          <label>Mật khẩu</label>
+          <input type="password" [(ngModel)]="adminPassword" name="password" required>
+        </div>
+        <div *ngIf="loginError" class="error">{{ loginError }}</div>
+        <button type="submit" [disabled]="!adminUsername || !adminPassword">Đăng nhập</button>
+      </form>
     </div>
-
-    <!-- Settings Dashboard -->
-    <div *ngIf="isAdminLoggedIn" class="settings-dashboard">
-
-
-      <!-- Settings Body -->
-      <div class="settings-body">
-        <!-- Stats Cards - Compact Horizontal Layout -->
-        <div class="stats-grid-compact">
-          <div class="stat-card-compact">
-            <div class="stat-icon-compact">
-              <mat-icon>notifications</mat-icon>
-            </div>
-            <div class="stat-content-compact">
-              <h3 class="stat-number-compact">{{ newUserNotifications.length }}</h3>
-              <p class="stat-label-compact">Tài khoản mới</p>
-            </div>
-          </div>
-          
-          <div class="stat-card-compact">
-            <div class="stat-icon-compact">
-              <mat-icon>people</mat-icon>
-            </div>
-            <div class="stat-content-compact">
-              <h3 class="stat-number-compact">{{ firebaseUsers.length }}</h3>
-              <p class="stat-label-compact">Người dùng</p>
-            </div>
-          </div>
-          
-          <div class="stat-card-compact">
-            <div class="stat-icon-compact">
-              <mat-icon>security</mat-icon>
-            </div>
-            <div class="stat-content-compact">
-              <h3 class="stat-number-compact">{{ getAdminUsersCount() }}</h3>
-              <p class="stat-label-compact">Quản trị viên</p>
-            </div>
-          </div>
-
-          
-        </div>
-
-        <!-- New User Notifications Section -->
-        <div class="section-card" *ngIf="newUserNotifications.length > 0">
-          <div class="card-header">
-            <div class="card-title">
-              <mat-icon>notifications_active</mat-icon>
-              <h3>Tài khoản mới đăng ký</h3>
-              <span class="badge">{{ newUserNotifications.length }}</span>
-            </div>
-            <button mat-raised-button 
-                    color="primary" 
-                    (click)="markAllNotificationsAsReadPublic()"
-                    class="action-btn">
-              <mat-icon>check</mat-icon>
-              Đánh dấu đã đọc
-            </button>
-          </div>
-          
-          <div class="notifications-grid">
-            <div class="notification-card" *ngFor="let notification of newUserNotifications">
-              <div class="notification-header">
-                <div class="user-avatar">
-                  <mat-icon>person</mat-icon>
-                </div>
-                <div class="user-info">
-                  <h4>{{ notification.displayName || notification.userEmail }}</h4>
-                  <div class="user-meta">
-                    <span class="department">{{ notification.department }}</span>
-                    <span class="factory">{{ notification.factory }}</span>
-                    <span class="role">{{ notification.role }}</span>
-                  </div>
-                </div>
-                <div class="notification-time">
-                  {{ notification.createdAt | date:'dd/MM HH:mm' }}
-                </div>
-              </div>
-              <div class="notification-actions">
-                <button mat-icon-button 
-                        color="primary" 
-                        (click)="markNotificationAsRead(notification.id)"
-                        matTooltip="Đánh dấu đã đọc">
-                  <mat-icon>check</mat-icon>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-
-        <!-- Firebase Users Section -->
-        <div class="section-card">
-          <div class="card-header">
-            <div class="card-actions">
-            </div>
-          </div>
-
-            <!-- Simplified Permission Controls -->
-            <div *ngIf="isEditingPermissions" class="permission-controls" style="margin: 8px 0; padding: 8px; background: #f5f5f5; border-radius: 4px;">
-              <div class="permission-actions" style="display: flex; gap: 8px; align-items: center;">
-                <button mat-raised-button 
-                        color="primary" 
-                        (click)="saveAllPermissions()"
-                        [disabled]="firebaseUsers.length === 0"
-                        style="font-size: 12px; padding: 4px 8px; min-width: auto;">
-                  <mat-icon style="font-size: 16px;">save</mat-icon>
-                  Lưu tất cả
-                </button>
-                <button mat-raised-button 
-                        (click)="cancelPermissionEdit()"
-                        [disabled]="firebaseUsers.length === 0"
-                        style="font-size: 12px; padding: 4px 8px; min-width: auto;">
-                  <mat-icon style="font-size: 16px;">cancel</mat-icon>
-                  Hủy
-                </button>
-                <span style="font-size: 12px; color: #666; margin-left: 8px;">
-                  <mat-icon style="font-size: 14px; vertical-align: middle;">info</mat-icon>
-                  Bật/tắt quyền chỉnh sửa cho từng user
-                </span>
-              </div>
-            </div>
-
-            <!-- Loading state -->
-            <div *ngIf="isLoadingFirebaseUsers" class="loading-container">
-              <mat-spinner diameter="40"></mat-spinner>
-              <p>Đang tải danh sách email...</p>
-            </div>
-
-            <!-- Empty state -->
-            <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length === 0" class="empty-state">
-              <mat-icon>account_circle</mat-icon>
-              <h3>Chưa có email nào đăng nhập</h3>
-              <p>Chưa có email nào đăng nhập vào hệ thống.</p>
-            </div>
-
-            <!-- Optimized Firebase Users Table -->
-            <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="firebase-users-container">
-              <div class="table-scroll-container">
-                <table mat-table [dataSource]="getSortedFirebaseUsers()" class="excel-table">
-                
-                <!-- Account Column -->
-                <ng-container matColumnDef="email">
-                  <th mat-header-cell *matHeaderCellDef>Tài khoản</th>
-                  <td mat-cell *matCellDef="let user">
-                    <div class="account-info" 
-                         [matTooltip]="getAccountTypeLabel(user)"
-                         matTooltipPosition="above">
-                      <span class="account-icon">{{ getAccountTypeIcon(user) }}</span>
-                      <span class="account-text" 
-                            [style.color]="user.uid === 'special-steve-uid' ? '#ff6b35' : user.uid === 'special-asp0001-uid' ? '#4CAF50' : 'inherit'" 
-                            [style.fontWeight]="user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid' ? 'bold' : 'normal'">
-                        {{ getEmployeeIdOnly(user) }}
-                      </span>
-                    </div>
-                  </td>
-                </ng-container>
-
-
-
-                <!-- Role Column -->
-                <ng-container matColumnDef="role">
-                  <th mat-header-cell *matHeaderCellDef>Vai trò</th>
-                  <td mat-cell *matCellDef="let user">
-                    <span *ngIf="!isEditingPermissions" [class]="getRoleClass(user.role || 'User')">{{ user.role || 'User' }}</span>
-                    <select *ngIf="isEditingPermissions" 
-                            [(ngModel)]="user.role" 
-                            (change)="updateUserRole(user.uid, user.role)"
-                            class="excel-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="Admin">Admin</option>
-                      <option value="Quản lý">Quản lý</option>
-                      <option value="User">User</option>
-                    </select>
-                  </td>
-                </ng-container>
-
-                <!-- Department Column -->
-                <ng-container matColumnDef="department">
-                  <th mat-header-cell *matHeaderCellDef>Bộ phận</th>
-                  <td mat-cell *matCellDef="let user">
-                    <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
-                    <select *ngIf="isEditingPermissions" 
-                            [(ngModel)]="user.department" 
-                            (change)="updateUserDepartment(user.uid, user.department)"
-                            class="excel-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="">Chọn</option>
-                      <option value="WH">WH</option>
-                      <option value="QA">QA</option>
-                      <option value="ENG">ENG</option>
-                      <option value="PLAN">PLAN</option>
-                      <option value="PD">PD</option>
-                      <option value="CS">CS</option>
-                      <option value="ACC">ACC</option>
-                    </select>
-                  </td>
-                </ng-container>
-
-                <!-- Factory Column -->
-                <ng-container matColumnDef="factory">
-                  <th mat-header-cell *matHeaderCellDef>Nhà máy</th>
-                  <td mat-cell *matCellDef="let user">
-                    <span *ngIf="!isEditingPermissions" [class]="getFactoryClass(user.factory || 'Tất cả')">{{ user.factory || 'Tất cả' }}</span>
-                    <select *ngIf="isEditingPermissions" 
-                            [(ngModel)]="user.factory" 
-                            (change)="updateUserFactory(user.uid, user.factory)"
-                            class="excel-select"
-                            style="font-size: 11px; padding: 2px 4px; text-align: center; border: 1px solid #ccc; border-radius: 2px;">
-                      <option value="ASM1">ASM1</option>
-                      <option value="ASM2">ASM2</option>
-                    </select>
-                  </td>
-                </ng-container>
-
-                <!-- Display Name Column -->
-                <ng-container matColumnDef="displayName">
-                  <th mat-header-cell *matHeaderCellDef>Tên</th>
-                  <td mat-cell *matCellDef="let user">{{ user.displayName || '-' }}</td>
-                </ng-container>
-
-                <!-- Read Only Column -->
-                <ng-container matColumnDef="readOnly">
-                  <th mat-header-cell *matHeaderCellDef matTooltip="Tài khoản chỉ được xem, không được chỉnh sửa">Chỉ xem</th>
-                  <td mat-cell *matCellDef="let user">
-                    <mat-checkbox
-                      [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
-                      (change)="updateUserReadOnlyPermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
-                      color="warn"
-                      matTooltip="Bật/tắt chế độ chỉ xem (không được chỉnh sửa)"
-                      style="transform: scale(0.8);">
-                    </mat-checkbox>
-                  </td>
-                </ng-container>
-
-                <!-- Created Date Column -->
-                <ng-container matColumnDef="createdAt">
-                  <th mat-header-cell *matHeaderCellDef>Ngày tạo</th>
-                  <td mat-cell *matCellDef="let user">{{ user.createdAt | date:'dd/MM' }}</td>
-                </ng-container>
-
-                <!-- Permission Column -->
-                <ng-container matColumnDef="permission">
-                  <th mat-header-cell *matHeaderCellDef matTooltip="Quyền xóa dữ liệu">Xóa</th>
-                  <td mat-cell *matCellDef="let user">
-                    <mat-checkbox
-                      [checked]="firebaseUserPermissions[user.uid] || false"
-                      (change)="updateUserPermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
-                      color="primary"
-                      matTooltip="Bật/tắt quyền xóa dữ liệu"
-                      style="transform: scale(0.8);">
-                    </mat-checkbox>
-                  </td>
-                </ng-container>
-
-                <!-- Complete Permission Column -->
-                <ng-container matColumnDef="completePermission">
-                  <th mat-header-cell *matHeaderCellDef matTooltip="Quyền hoàn thành Work Order">Hoàn thành</th>
-                  <td mat-cell *matCellDef="let user">
-                    <mat-checkbox
-                      [checked]="firebaseUserCompletePermissions[user.uid] || false"
-                      (change)="updateUserCompletePermission(user.uid, $event.checked)"
-                      [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
-                      color="primary"
-                      matTooltip="Bật/tắt quyền hoàn thành Work Order"
-                      style="transform: scale(0.8);">
-                    </mat-checkbox>
-                  </td>
-                </ng-container>
-
-                <!-- Last Login Column -->
-                <ng-container matColumnDef="lastLoginAt">
-                  <th mat-header-cell *matHeaderCellDef>Đăng nhập gần nhất</th>
-                  <td mat-cell *matCellDef="let user">
-                    {{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}
-                  </td>
-                </ng-container>
-
-            <!-- Actions Column -->
-            <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef>Thao tác</th>
-              <td mat-cell *matCellDef="let user">
-                <button mat-icon-button 
-                        color="warn" 
-                        (click)="deleteFirebaseUser(user)"
-                        [disabled]="user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
-                        matTooltip="Xóa user"
-                        style="transform: scale(0.8);">
-                  <mat-icon style="font-size: 16px;">delete</mat-icon>
-                </button>
-              </td>
-            </ng-container>
-
-            <!-- Tab Permissions Columns -->
-            <ng-container *ngFor="let tab of availableTabs" [matColumnDef]="'tab-' + tab.key">
-              <th mat-header-cell *matHeaderCellDef matTooltip="Quyền xem và chỉnh sửa tab {{ tab.name }}">{{ tab.name }}</th>
-              <td mat-cell *matCellDef="let user">
-                <mat-checkbox
-                  [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
-                  (change)="updateUserTabPermission(user.uid, tab.key, $event.checked)"
-                  [disabled]="!isEditingPermissions || user.uid === 'special-steve-uid' || user.uid === 'special-asp0001-uid'"
-                  color="primary"
-                  [matTooltip]="'Bật/tắt quyền xem và chỉnh sửa tab ' + tab.name"
-                  style="transform: scale(0.8);">
-                </mat-checkbox>
-              </td>
-            </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="getTableColumns()"></tr>
-                <tr mat-row *matRowDef="let row; columns: getTableColumns();"></tr>
-                </table>
-              </div>
-            </div>
-
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Employee Cleanup Section -->
-    <div *ngIf="isAdminLoggedIn" class="employee-cleanup-section">
-      <div class="section-header">
-        <h3>
-          <mat-icon>cleaning_services</mat-icon>
-          Dọn dẹp mã nhân viên
-        </h3>
-        <div class="header-actions">
-          <button mat-raised-button color="primary" (click)="compareEmployees()" [disabled]="isComparingEmployees">
-            <mat-icon>compare</mat-icon>
-            {{ isComparingEmployees ? 'Đang so sánh...' : 'So sánh mã nhân viên' }}
-          </button>
-          <button mat-raised-button color="accent" (click)="exportComparisonReport()" [disabled]="!employeeComparisonResult">
-            <mat-icon>download</mat-icon>
-            Xuất báo cáo
-          </button>
-        </div>
-      </div>
-
-      <!-- Comparison Results -->
-      <div *ngIf="employeeComparisonResult" class="comparison-results">
-        <div class="summary-cards">
-          <div class="summary-card">
-            <mat-icon>settings</mat-icon>
-            <div class="card-content">
-              <h4>{{ employeeComparisonResult.totalSettings }}</h4>
-              <p>Trong Settings</p>
-            </div>
-          </div>
-          <div class="summary-card">
-            <mat-icon>storage</mat-icon>
-            <div class="card-content">
-              <h4>{{ employeeComparisonResult.totalFirebase }}</h4>
-              <p>Trong Firebase</p>
-            </div>
-          </div>
-          <div class="summary-card valid">
-            <mat-icon>check_circle</mat-icon>
-            <div class="card-content">
-              <h4>{{ employeeComparisonResult.validEmployees }}</h4>
-              <p>Hợp lệ</p>
-            </div>
-          </div>
-          <div class="summary-card redundant">
-            <mat-icon>warning</mat-icon>
-            <div class="card-content">
-              <h4>{{ employeeComparisonResult.redundantEmployees.length }}</h4>
-              <p>Dư thừa</p>
-            </div>
-          </div>
-          <div class="summary-card missing">
-            <mat-icon>error</mat-icon>
-            <div class="card-content">
-              <h4>{{ employeeComparisonResult.missingEmployees.length }}</h4>
-              <p>Thiếu</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Redundant Employees -->
-        <div *ngIf="employeeComparisonResult.redundantEmployees.length > 0" class="redundant-employees">
-          <div class="subsection-header">
-            <h4>
-              <mat-icon>warning</mat-icon>
-              Mã nhân viên dư thừa ({{ employeeComparisonResult.redundantEmployees.length }})
-            </h4>
-            <div class="subsection-actions">
-              <button mat-button (click)="selectAllRedundantEmployees()">
-                <mat-icon>select_all</mat-icon>
-                Chọn tất cả
-              </button>
-              <button mat-button (click)="deselectAllRedundantEmployees()">
-                <mat-icon>deselect</mat-icon>
-                Bỏ chọn tất cả
-              </button>
-              <button mat-raised-button color="warn" 
-                      (click)="cleanupSelectedEmployees()" 
-                      [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
-                <mat-icon>delete</mat-icon>
-                {{ isCleaningUp ? 'Đang xóa...' : 'Xóa đã chọn (' + selectedRedundantEmployees.length + ')' }}
-              </button>
-              <button mat-raised-button color="warn" 
-                      (click)="cleanupAllRedundantEmployees()" 
-                      [disabled]="isCleaningUp">
-                <mat-icon>delete_forever</mat-icon>
-                Xóa tất cả
-              </button>
-            </div>
-          </div>
-
-          <div class="employees-table">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th width="50px">
-                    <input type="checkbox" 
-                           [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
-                           (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()">
-                  </th>
-                  <th>Mã nhân viên</th>
-                  <th>Trạng thái</th>
-                  <th>Ghi chú</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees">
-                  <td>
-                    <input type="checkbox" 
-                           [checked]="isRedundantEmployeeSelected(emp.employeeId)"
-                           (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
-                  </td>
-                  <td>
-                    <strong>{{ emp.employeeId }}</strong>
-                  </td>
-                  <td>
-                    <span class="status-badge redundant">Dư thừa</span>
-                  </td>
-                  <td>
-                    Có trong Firebase, không có trong Settings
-                  </td>
-                </tr>
-                <tr *ngFor="let empId of employeeComparisonResult.missingEmployees">
-                  <td>
-                    <input type="checkbox" 
-                           [checked]="isRedundantEmployeeSelected(empId)"
-                           (change)="toggleRedundantEmployeeSelection(empId)">
-                  </td>
-                  <td>
-                    <strong>{{ empId }}</strong>
-                  </td>
-                  <td>
-                    <span class="status-badge missing">Thiếu</span>
-                  </td>
-                  <td>
-                    Có trong Settings, không có trong Firebase
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Missing Employees -->
-        <div *ngIf="employeeComparisonResult.missingEmployees.length > 0" class="missing-employees">
-          <div class="subsection-header">
-            <h4>
-              <mat-icon>error</mat-icon>
-              Mã nhân viên thiếu trong Firebase ({{ employeeComparisonResult.missingEmployees.length }})
-            </h4>
-          </div>
-          <div class="missing-list">
-            <span *ngFor="let empId of employeeComparisonResult.missingEmployees" class="missing-tag">
-              {{ empId }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
-</div> 
+
+  <!-- Settings Dashboard -->
+  <div *ngIf="isAdminLoggedIn" class="dashboard">
+    <div class="header">
+      <h1>Quản lý người dùng</h1>
+      <button (click)="logout()">Đăng xuất</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-number">{{ firebaseUsers.length }}</div>
+        <div class="stat-label">Người dùng</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">{{ getAdminUsersCount() }}</div>
+        <div class="stat-label">Quản trị viên</div>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div *ngIf="newUserNotifications.length > 0" class="notifications">
+      <div class="notifications-header">
+        <h3>Tài khoản mới ({{ newUserNotifications.length }})</h3>
+        <button (click)="markAllNotificationsAsReadPublic()">Đánh dấu đã đọc</button>
+      </div>
+      <div class="notifications-list">
+        <div *ngFor="let notification of newUserNotifications" class="notification-item">
+          <div class="notification-info">
+            <strong>{{ notification.displayName || notification.userEmail }}</strong>
+            <span>{{ notification.department }} - {{ notification.factory }}</span>
+            <span class="time">{{ notification.createdAt | date:'dd/MM HH:mm' }}</span>
+          </div>
+          <button (click)="markNotificationAsRead(notification.id)">✓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="users-section">
+      <div class="section-header">
+        <h3>Danh sách người dùng</h3>
+        <div class="actions">
+          <button (click)="saveAllPermissions()" [disabled]="firebaseUsers.length === 0">Lưu tất cả</button>
+          <button (click)="cancelPermissionEdit()" [disabled]="firebaseUsers.length === 0">Hủy</button>
+          <button (click)="refreshFirebaseUsers()">Làm mới</button>
+        </div>
+      </div>
+
+      <div *ngIf="isLoadingFirebaseUsers" class="loading">Đang tải...</div>
+      
+      <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length === 0" class="empty">
+        Chưa có người dùng nào
+      </div>
+
+      <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="table-container">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>Tài khoản</th>
+              <th>Vai trò</th>
+              <th>Bộ phận</th>
+              <th>Nhà máy</th>
+              <th>Tên</th>
+              <th>Chỉ xem</th>
+              <th>Xóa</th>
+              <th>Hoàn thành</th>
+              <th>Đăng nhập gần nhất</th>
+              <th>Thao tác</th>
+              <th *ngFor="let tab of availableTabs">{{ tab.name }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let user of getSortedFirebaseUsers()">
+              <td>{{ getEmployeeIdOnly(user) }}</td>
+              <td>
+                <select *ngIf="isEditingPermissions" 
+                        [(ngModel)]="user.role" 
+                        (change)="updateUserRole(user.uid, user.role)">
+                  <option value="Admin">Admin</option>
+                  <option value="Quản lý">Quản lý</option>
+                  <option value="User">User</option>
+                </select>
+                <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
+              </td>
+              <td>
+                <select *ngIf="isEditingPermissions" 
+                        [(ngModel)]="user.department" 
+                        (change)="updateUserDepartment(user.uid, user.department)">
+                  <option value="">-</option>
+                  <option value="WH">WH</option>
+                  <option value="QA">QA</option>
+                  <option value="ENG">ENG</option>
+                  <option value="PLAN">PLAN</option>
+                  <option value="PD">PD</option>
+                  <option value="CS">CS</option>
+                  <option value="ACC">ACC</option>
+                </select>
+                <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
+              </td>
+              <td>
+                <select *ngIf="isEditingPermissions" 
+                        [(ngModel)]="user.factory" 
+                        (change)="updateUserFactory(user.uid, user.factory)">
+                  <option value="ASM1">ASM1</option>
+                  <option value="ASM2">ASM2</option>
+                </select>
+                <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
+              </td>
+              <td>{{ user.displayName || '-' }}</td>
+              <td>
+                <input type="checkbox"
+                       [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
+                       (change)="updateUserReadOnlyPermission(user.uid, $event.target.checked)"
+                       [disabled]="!isEditingPermissions">
+              </td>
+              <td>
+                <input type="checkbox"
+                       [checked]="firebaseUserPermissions[user.uid] || false"
+                       (change)="updateUserPermission(user.uid, $event.target.checked)"
+                       [disabled]="!isEditingPermissions">
+              </td>
+              <td>
+                <input type="checkbox"
+                       [checked]="firebaseUserCompletePermissions[user.uid] || false"
+                       (change)="updateUserCompletePermission(user.uid, $event.target.checked)"
+                       [disabled]="!isEditingPermissions">
+              </td>
+              <td>{{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}</td>
+              <td>
+                <button (click)="deleteFirebaseUser(user)">Xóa</button>
+              </td>
+              <td *ngFor="let tab of availableTabs">
+                <input type="checkbox"
+                       [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
+                       (change)="updateUserTabPermission(user.uid, tab.key, $event.target.checked)"
+                       [disabled]="!isEditingPermissions">
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Employee Cleanup -->
+    <div class="cleanup-section">
+      <div class="section-header">
+        <h3>Dọn dẹp mã nhân viên</h3>
+        <div class="actions">
+          <button (click)="compareEmployees()" [disabled]="isComparingEmployees">
+            {{ isComparingEmployees ? 'Đang so sánh...' : 'So sánh' }}
+          </button>
+          <button (click)="exportComparisonReport()" [disabled]="!employeeComparisonResult">Xuất báo cáo</button>
+        </div>
+      </div>
+
+      <div *ngIf="employeeComparisonResult" class="comparison-results">
+        <div class="summary">
+          <div>Settings: {{ employeeComparisonResult.totalSettings }}</div>
+          <div>Firebase: {{ employeeComparisonResult.totalFirebase }}</div>
+          <div>Hợp lệ: {{ employeeComparisonResult.validEmployees }}</div>
+          <div>Dư thừa: {{ employeeComparisonResult.redundantEmployees.length }}</div>
+          <div>Thiếu: {{ employeeComparisonResult.missingEmployees.length }}</div>
+        </div>
+
+        <div *ngIf="employeeComparisonResult.redundantEmployees.length > 0" class="redundant-list">
+          <h4>Mã dư thừa ({{ employeeComparisonResult.redundantEmployees.length }})</h4>
+          <div class="actions">
+            <button (click)="selectAllRedundantEmployees()">Chọn tất cả</button>
+            <button (click)="deselectAllRedundantEmployees()">Bỏ chọn</button>
+            <button (click)="cleanupSelectedEmployees()" 
+                    [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
+              Xóa đã chọn ({{ selectedRedundantEmployees.length }})
+            </button>
+            <button (click)="cleanupAllRedundantEmployees()" [disabled]="isCleaningUp">Xóa tất cả</button>
+          </div>
+          <table class="cleanup-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" 
+                           [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
+                           (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()"></th>
+                <th>Mã nhân viên</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees">
+                <td>
+                  <input type="checkbox" 
+                         [checked]="isRedundantEmployeeSelected(emp.employeeId)"
+                         (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
+                </td>
+                <td><strong>{{ emp.employeeId }}</strong></td>
+                <td>Dư thừa</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

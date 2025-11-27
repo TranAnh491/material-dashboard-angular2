@@ -133,8 +133,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   get outsideStockMaterials(): number {
-    // Đếm các materials được thêm mới khi scan (không có trong tồn kho ban đầu)
-    return this.allMaterials.filter(m => m.isNewMaterial === true).length;
+    // Đếm mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
+    return this.allMaterials.filter(m => {
+      if (m.isNewMaterial === true) return true;
+      // Tính stock hiện tại
+      const openingStockValue = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
+      const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
+      return currentStock === 0 || currentStock < 0;
+    }).length;
   }
 
   /**
@@ -235,7 +241,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } else if (this.filterMode === 'unchecked') {
       filtered = filtered.filter(m => m.stockCheck !== '✓');
     } else if (this.filterMode === 'outside') {
-      filtered = filtered.filter(m => m.isNewMaterial === true);
+      // Hiển thị mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
+      filtered = filtered.filter(m => {
+        if (m.isNewMaterial === true) return true;
+        // Tính stock hiện tại
+        const openingStockValue = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
+        const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
+        return currentStock === 0 || currentStock < 0;
+      });
     }
     
     // Then apply search
@@ -368,7 +381,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } else if (this.filterMode === 'unchecked') {
       filtered = filtered.filter(m => m.stockCheck !== '✓');
     } else if (this.filterMode === 'outside') {
-      filtered = filtered.filter(m => m.isNewMaterial === true);
+      // Hiển thị mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
+      filtered = filtered.filter(m => {
+        if (m.isNewMaterial === true) return true;
+        // Tính stock hiện tại
+        const openingStockValue = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
+        const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
+        return currentStock === 0 || currentStock < 0;
+      });
     }
     
     // Sort based on current sort mode
@@ -1285,6 +1305,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             po: matchingMaterial.poNumber,
             imd: matchingMaterial.imd
           });
+          
+          // Tính stock hiện tại: openingStock + quantity - exported - xt
+          const openingStockValue = matchingMaterial.openingStock !== null && matchingMaterial.openingStock !== undefined ? matchingMaterial.openingStock : 0;
+          const currentStock = openingStockValue + (matchingMaterial.quantity || 0) - (matchingMaterial.exported || 0) - (matchingMaterial.xt || 0);
+          
+          // Nếu stock = 0 hoặc không có trong tồn kho, đánh dấu là material ngoài tồn kho
+          if (currentStock === 0 || currentStock < 0) {
+            matchingMaterial.isNewMaterial = true;
+            console.log(`📌 Material có stock = ${currentStock}, đánh dấu là mã ngoài tồn kho`);
+          }
           
           // Update the material - CỘNG DỒN số lượng thay vì ghi đè
           matchingMaterial.stockCheck = '✓';

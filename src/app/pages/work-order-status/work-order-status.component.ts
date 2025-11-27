@@ -221,6 +221,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return factory.trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
+  // Helper method to check if factory is valid
+  private isValidFactory(factory: string): boolean {
+    if (!factory) return false;
+    const normalized = this.normalizeFactoryName(factory);
+    const validFactories = ['asm1', 'asm2', 'asm3', 'sample 1', 'sample 2'];
+    return validFactories.includes(normalized);
+  }
+
   // Helper method to reset all loading states
   resetLoadingStates(): void {
     this.isLoading = false;
@@ -230,7 +238,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log('🔄 Reset all loading states');
   }
 
-  onFileSelected(event: any): void {
+  async onFileSelected(event: any): Promise<void> {
     const file = event.target.files[0];
     if (file) {
       console.log('📁 File selected:', file.name, 'Size:', file.size, 'bytes');
@@ -252,8 +260,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
       
       console.log('✅ File validation passed, processing...');
-      this.readExcelFile(file).then((jsonData) => {
-        this.processExcelData(jsonData);
+      this.readExcelFile(file).then(async (jsonData) => {
+        await this.processExcelData(jsonData);
       }).catch((error) => {
         console.error('❌ Error reading Excel file:', error);
         alert(`❌ Lỗi khi đọc file Excel:\n${error.message || error}`);
@@ -1812,65 +1820,171 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     });
   }
 
-  processExcelData(jsonData: any[]): void {
+  async processExcelData(jsonData: any[]): Promise<void> {
     console.log('📋 Processing Excel data...');
     this.isLoading = true;
     
     try {
-              // Remove header row and convert to WorkOrder format
-        const dataRows = jsonData.slice(1); // Skip header row
-        const newWorkOrderData = dataRows.map((row: any, index: number) => ({
-          factory: row[0]?.toString() || this.selectedFactory, // First column is factory (ASM1/ASM2)
-          year: row[1] ? parseInt(row[1].toString()) : new Date().getFullYear(),
-          month: row[2] ? parseInt(row[2].toString()) : new Date().getMonth() + 1,
-          orderNumber: row[3]?.toString() || '',
-          productCode: row[4]?.toString() || '',
-          productionOrder: row[5]?.toString() || '',
-          quantity: row[6] ? parseInt(row[6].toString()) : 0,
-          customer: row[7]?.toString() || '',
-          isUrgent: row[8]?.toString().toLowerCase() === 'gấp' || row[8]?.toString().toLowerCase() === 'urgent',
-          deliveryDate: this.parseExcelDate(row[9]) || new Date(),
-          productionLine: row[10]?.toString() || '',
-          missingMaterials: row[11]?.toString() || '',
-          createdBy: row[12]?.toString() || '',
-          status: this.parseStatus(row[13]) || WorkOrderStatus.WAITING,
-          materialsComplete: row[14]?.toString().toLowerCase() === 'đủ' || row[14]?.toString().toLowerCase() === 'complete',
-          planReceivedDate: this.parseExcelDate(row[15]) || new Date(),
-          notes: row[16]?.toString() || '',
-          createdDate: new Date(),
-          lastUpdated: new Date()
-        } as WorkOrder));
+      // Remove header row and convert to WorkOrder format
+      const dataRows = jsonData.slice(1); // Skip header row
+      const newWorkOrderData = dataRows.map((row: any, index: number) => ({
+        factory: row[0]?.toString() || this.selectedFactory, // First column is factory (ASM1/ASM2)
+        year: row[1] ? parseInt(row[1].toString()) : new Date().getFullYear(),
+        month: row[2] ? parseInt(row[2].toString()) : new Date().getMonth() + 1,
+        orderNumber: row[3]?.toString() || '',
+        productCode: row[4]?.toString() || '',
+        productionOrder: row[5]?.toString()?.trim() || '', // Trim whitespace
+        quantity: row[6] ? parseInt(row[6].toString()) : 0,
+        customer: row[7]?.toString() || '',
+        isUrgent: row[8]?.toString().toLowerCase() === 'gấp' || row[8]?.toString().toLowerCase() === 'urgent',
+        deliveryDate: this.parseExcelDate(row[9]) || new Date(),
+        productionLine: row[10]?.toString() || '',
+        missingMaterials: row[11]?.toString() || '',
+        createdBy: row[12]?.toString() || '',
+        status: this.parseStatus(row[13]) || WorkOrderStatus.WAITING,
+        materialsComplete: row[14]?.toString().toLowerCase() === 'đủ' || row[14]?.toString().toLowerCase() === 'complete',
+        planReceivedDate: this.parseExcelDate(row[15]) || new Date(),
+        notes: row[16]?.toString() || '',
+        createdDate: new Date(),
+        lastUpdated: new Date()
+      } as WorkOrder)).filter(wo => wo.productionOrder); // Filter out empty LSX
 
       console.log('📋 Processed new work order data:', newWorkOrderData.length, 'items');
 
-      // Check for duplicate LSX (productionOrder) values
-      const existingLSX = this.workOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
+      // Check for duplicate LSX (productionOrder) values - KIỂM TRA VỚI FIREBASE THAY VÌ this.workOrders
+      const importedLSX = newWorkOrderData
+        .map(wo => wo.productionOrder?.trim())
+        .filter(lsx => lsx);
+      console.log('📋 LSX values to check (after trim):', importedLSX);
+      console.log('📋 Raw LSX values from Excel:', newWorkOrderData.map(wo => `"${wo.productionOrder}"`));
+      
+      // Check against Firebase for existing LSX (giống như importWorkOrdersFromExcel)
+      const lsxCheck = await this.checkExistingLSXInFirebase(importedLSX);
+      
+      console.log('📊 Firebase LSX Check Results:');
+      console.log('  - Existing in Firebase:', lsxCheck.existing);
+      console.log('  - New (not in Firebase):', lsxCheck.new);
+      console.log('  - Total imported LSX:', importedLSX.length);
+      console.log('  - Already exist:', lsxCheck.existing.length);
+      console.log('  - New:', lsxCheck.new.length);
+
+      // Check for duplicates within the import batch itself
+      const batchDuplicates: string[] = [];
+      const seenInBatch = new Set<string>();
+      
       const duplicates: string[] = [];
       const validWorkOrders: WorkOrder[] = [];
 
       for (const workOrder of newWorkOrderData) {
-        if (workOrder.productionOrder && existingLSX.includes(workOrder.productionOrder)) {
-          duplicates.push(workOrder.productionOrder);
-          console.warn(`⚠️ Duplicate LSX found: ${workOrder.productionOrder}`);
+        const lsx = workOrder.productionOrder?.trim();
+        if (!lsx) {
+          console.warn(`⚠️ Skipping work order with empty LSX:`, workOrder);
+          continue;
+        }
+        
+        // Check duplicate within batch (normalized)
+        const normalizedLsx = lsx.toUpperCase();
+        if (seenInBatch.has(normalizedLsx)) {
+          batchDuplicates.push(lsx);
+          console.warn(`⚠️ Duplicate LSX within import batch: "${lsx}"`);
+          continue;
+        }
+        seenInBatch.add(normalizedLsx);
+        
+        // Check against Firebase (normalized comparison)
+        // lsxCheck.existing now contains normalized values (uppercase, trimmed)
+        const isExisting = lsxCheck.existing.includes(normalizedLsx);
+        
+        if (isExisting) {
+          duplicates.push(lsx);
+          
+          // Find the matching work order to show details
+          const allWorkOrders = await this.loadAllWorkOrdersFromFirebase();
+          const matchingWO = allWorkOrders.find(wo => 
+            wo.productionOrder?.trim().toUpperCase() === normalizedLsx
+          );
+          
+          if (matchingWO) {
+            const locationInfo = `Factory: ${matchingWO.factory || 'N/A'}, Status: ${matchingWO.status || 'N/A'}, Year: ${matchingWO.year || 'N/A'}, Month: ${matchingWO.month || 'N/A'}`;
+            console.warn(`⚠️ LSX already exists in Firebase: "${lsx}"`);
+            console.warn(`   📍 Location: ${locationInfo}`);
+            
+            // Check if factory is valid
+            const isValidFactory = this.isValidFactory(matchingWO.factory || '');
+            
+            if (!isValidFactory) {
+              // Factory is invalid (e.g., ASM3), allow import
+              console.warn(`   ⚠️ LSX tồn tại ở factory không hợp lệ: "${matchingWO.factory}"`);
+              console.warn(`   ✅ Cho phép import lại vì factory không hợp lệ (chỉ có ASM1, ASM2, Sample 1, Sample 2)`);
+              validWorkOrders.push(workOrder);
+              console.log(`✅ LSX sẽ được import lại vì factory cũ không hợp lệ: "${lsx}"`);
+            } else {
+              // Factory is valid, check if it matches current filter
+              console.warn(`   🔍 This LSX may not appear in your current view because:`);
+              console.warn(`      - Current factory filter: "${this.selectedFactory}"`);
+              console.warn(`      - Current status filter: "${this.statusFilter}"`);
+              console.warn(`      - LSX exists in factory: "${matchingWO.factory || 'N/A'}"`);
+              console.warn(`      - LSX status: "${matchingWO.status || 'N/A'}"`);
+              
+              // Show user-friendly alert
+              alert(`⚠️ LSX "${lsx}" đã tồn tại trong Firebase!\n\n` +
+                    `📍 Thông tin LSX đã tồn tại:\n` +
+                    `   - Nhà máy: ${matchingWO.factory || 'N/A'}\n` +
+                    `   - Trạng thái: ${matchingWO.status || 'N/A'}\n` +
+                    `   - Năm: ${matchingWO.year || 'N/A'}\n` +
+                    `   - Tháng: ${matchingWO.month || 'N/A'}\n\n` +
+                    `💡 Lý do không thấy khi search:\n` +
+                    `   - Bạn đang filter theo nhà máy: "${this.selectedFactory}"\n` +
+                    `   - LSX này ở nhà máy: "${matchingWO.factory || 'N/A'}"\n\n` +
+                    `🔧 Giải pháp: Chuyển sang nhà máy "${matchingWO.factory || 'N/A'}" để xem LSX này.`);
+            }
+          } else {
+            console.warn(`⚠️ LSX already exists in Firebase: "${lsx}" (normalized: "${normalizedLsx}")`);
+          }
         } else {
           validWorkOrders.push(workOrder);
-          // Add to existing LSX list to prevent duplicates within the import batch
-          existingLSX.push(workOrder.productionOrder);
+          console.log(`✅ LSX is new and will be imported: "${lsx}" (normalized: "${normalizedLsx}")`);
         }
       }
 
+      // Show warnings
+      if (batchDuplicates.length > 0) {
+        const batchMessage = `⚠️ Tìm thấy ${batchDuplicates.length} LSX trùng lặp trong file:\n${batchDuplicates.join(', ')}`;
+        console.warn(batchMessage);
+      }
+
       if (duplicates.length > 0) {
-        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX trùng lặp:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders không trùng lặp.`;
+        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
         alert(duplicateMessage);
       }
 
       // Validate data before saving
       if (validWorkOrders.length === 0) {
-        throw new Error('No valid data found in Excel file (all LSX are duplicates)');
+        throw new Error('No valid data found in Excel file (all LSX are duplicates or already exist in Firebase)');
       }
 
+      // Get current user info for tracking who imported
+      const currentUser = await this.afAuth.currentUser;
+      const currentUserEmail = currentUser?.email || 'Unknown';
+      const currentUserDisplayName = currentUserEmail.split('@')[0] || 'Unknown';
+      const importTimestamp = new Date().toLocaleString('vi-VN');
+      
+      // Update createdBy for work orders to track who imported
+      for (const wo of validWorkOrders) {
+        const originalCreatedBy = wo.createdBy?.trim() || '';
+        if (!originalCreatedBy || originalCreatedBy === '') {
+          // No existing createdBy, set import info
+          wo.createdBy = `[Import: ${currentUserDisplayName} ${importTimestamp}]`;
+          console.log(`📝 Set createdBy for LSX ${wo.productionOrder}: ${wo.createdBy}`);
+        } else {
+          // Append import info if createdBy already exists from Excel
+          wo.createdBy = `${originalCreatedBy} [Import: ${currentUserDisplayName} ${importTimestamp}]`;
+          console.log(`📝 Updated createdBy for LSX ${wo.productionOrder}: ${wo.createdBy}`);
+        }
+      }
+      
       // Save each work order individually to ensure proper saving
-      this.saveWorkOrdersIndividually(validWorkOrders);
+      await this.saveWorkOrdersIndividually(validWorkOrders);
       
     } catch (error) {
       console.error('❌ Error processing Excel data:', error);
@@ -2491,20 +2605,64 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     try {
       // Get all existing work orders from Firebase
       const existingWorkOrders = await this.loadAllWorkOrdersFromFirebase();
-      const existingLSX = existingWorkOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
       
-      console.log('📊 Found existing LSX in Firebase:', existingLSX);
+      // Normalize existing LSX: trim and uppercase for comparison
+      // Also create a map for exact matching
+      const existingLSXMap = new Map<string, string>(); // normalized -> original
+      const existingLSXNormalized: string[] = [];
       
-      const existing: string[] = [];
+      existingWorkOrders.forEach(wo => {
+        if (wo.productionOrder) {
+          const trimmed = wo.productionOrder.trim();
+          const normalized = trimmed.toUpperCase();
+          if (normalized && !existingLSXMap.has(normalized)) {
+            existingLSXMap.set(normalized, trimmed);
+            existingLSXNormalized.push(normalized);
+          }
+        }
+      });
+      
+      console.log('📊 Found existing LSX in Firebase (normalized):', existingLSXNormalized.length, 'items');
+      console.log('📋 Sample existing LSX (first 10):', existingLSXNormalized.slice(0, 10));
+      
+      const existing: string[] = []; // Store normalized values for comparison
       const newLSX: string[] = [];
       
       for (const lsx of lsxValues) {
-        if (existingLSX.includes(lsx)) {
-          existing.push(lsx);
-          console.warn(`⚠️ LSX already exists in Firebase: ${lsx}`);
+        if (!lsx || !lsx.trim()) {
+          console.log(`⚠️ Skipping empty LSX: "${lsx}"`);
+          continue; // Skip empty LSX
+        }
+        
+        const trimmedLsx = lsx.trim();
+        const normalizedLsx = trimmedLsx.toUpperCase();
+        
+        console.log(`🔍 Checking LSX: "${trimmedLsx}" (normalized: "${normalizedLsx}")`);
+        
+        // Check with normalized comparison (case-insensitive, trimmed)
+        if (existingLSXNormalized.includes(normalizedLsx)) {
+          // Store normalized value for consistent comparison later
+          existing.push(normalizedLsx);
+          const originalLsx = existingLSXMap.get(normalizedLsx);
+          console.warn(`⚠️ LSX already exists in Firebase: "${trimmedLsx}" (normalized: "${normalizedLsx}", matched with: "${originalLsx}")`);
+          
+          // Debug: Show the exact match
+          const matchingWO = existingWorkOrders.find(wo => 
+            wo.productionOrder?.trim().toUpperCase() === normalizedLsx
+          );
+          if (matchingWO) {
+            console.log(`   📋 Matched Work Order:`, {
+              id: matchingWO.id,
+              productionOrder: matchingWO.productionOrder,
+              factory: matchingWO.factory,
+              year: matchingWO.year,
+              month: matchingWO.month,
+              normalized: matchingWO.productionOrder?.trim().toUpperCase()
+            });
+          }
         } else {
-          newLSX.push(lsx);
-          console.log(`✅ LSX is new: ${lsx}`);
+          newLSX.push(trimmedLsx);
+          console.log(`✅ LSX is new: "${trimmedLsx}" (normalized: "${normalizedLsx}")`);
         }
       }
       
@@ -2513,11 +2671,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         - Already exist: ${existing.length}
         - New: ${newLSX.length}`);
       
+      // Debug: Show all existing LSX if there are matches
+      if (existing.length > 0) {
+        console.log('📋 All existing LSX that matched:', existing);
+      }
+      
       return { existing, new: newLSX };
     } catch (error) {
       console.error('❌ Error checking existing LSX in Firebase:', error);
       // If we can't check Firebase, assume all are new to be safe
-      return { existing: [], new: lsxValues };
+      return { existing: [], new: lsxValues.filter(lsx => lsx && lsx.trim()) };
     }
   }
 
