@@ -195,6 +195,9 @@ export class TabPermissionService {
     // Location tab
     { key: 'location', name: 'Location' },
     
+    // Manage tab
+    { key: 'manage', name: 'Manage' },
+    
     // Manage Inventory tab
     { key: 'manage-inventory', name: 'Manage Inventory' },
     

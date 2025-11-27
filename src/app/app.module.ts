@@ -29,6 +29,7 @@ import { environment } from '../environments/environment';
 // Components
 import { LoginComponent } from './pages/login/login.component';
 import { FindRm1Component } from './pages/find-rm1/find-rm1.component';
+import { ManageComponent } from './pages/manage/manage.component';
 
 // Pipes
 import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
@@ -70,6 +71,7 @@ import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
     AdminLayoutComponent,
     LoginComponent,
     FindRm1Component,
+    ManageComponent,
     SanitizeHtmlPipe,
     // DocumentsComponent removed from here
   ],

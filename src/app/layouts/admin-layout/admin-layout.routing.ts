@@ -26,6 +26,7 @@ import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
+import { ManageComponent } from '../../pages/manage/manage.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 
@@ -63,6 +64,7 @@ export const AdminLayoutRoutes: Routes = [
 
 
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard] },
+  { path: 'manage',               component: ManageComponent, canActivate: [AuthGuard] },
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },

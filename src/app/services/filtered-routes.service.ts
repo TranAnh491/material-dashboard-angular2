@@ -88,6 +88,9 @@ export class FilteredRoutesService {
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       
+      // Manage route
+      '/manage': 'manage',
+      
       // Manage Inventory route
       '/manage-inventory': 'manage-inventory',
       

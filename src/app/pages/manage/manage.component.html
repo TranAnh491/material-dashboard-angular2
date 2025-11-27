@@ -1,0 +1,157 @@
+<div class="manage-container">
+  <div class="card">
+    <div class="card-header">
+      <h4 class="card-title">
+        <i class="material-icons">manage_search</i>
+        Manage Materials
+      </h4>
+    </div>
+    <div class="card-body">
+      <!-- Selection Controls -->
+      <div class="selection-controls">
+        <div class="form-group">
+          <label for="factory-select">Nhà máy:</label>
+          <select 
+            id="factory-select" 
+            class="form-control" 
+            [(ngModel)]="selectedFactory"
+            (change)="onFactoryChange()">
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="material-input">Mã nguyên liệu:</label>
+          <input 
+            id="material-input"
+            type="text" 
+            class="form-control" 
+            [(ngModel)]="materialCode"
+            (input)="onMaterialCodeChange()"
+            (keyup.enter)="searchMaterial()"
+            placeholder="Nhập mã nguyên liệu..."
+            style="text-transform: uppercase;">
+        </div>
+        
+        <div class="form-group">
+          <label for="location-input">Vị trí:</label>
+          <input 
+            id="location-input"
+            type="text" 
+            class="form-control" 
+            [(ngModel)]="locationSearch"
+            (input)="onLocationSearch()"
+            (keyup.enter)="searchByLocation()"
+            placeholder="Nhập vị trí..."
+            style="text-transform: uppercase;">
+        </div>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div *ngIf="isLoading" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Đang tải dữ liệu...</span>
+      </div>
+
+      <!-- Summary Table -->
+      <div *ngIf="!isLoading && summaryData.length > 0" class="summary-table-container">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã nguyên liệu</th>
+              <th>PO</th>
+              <th>IMD</th>
+              <th>Vị trí</th>
+              <th>Tồn kho</th>
+              <th>Standard Packing</th>
+              <th>Số cuộn</th>
+              <th>Trọng lượng cuộn (g)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of summaryData; let i = index">
+              <td class="text-center">{{ i + 1 }}</td>
+              <td>{{ item.materialCode }}</td>
+              <td>{{ item.poNumber }}</td>
+              <td>{{ item.imd }}</td>
+              <td>
+                <span 
+                  *ngFor="let loc of item.locations; let last = last" 
+                  class="location-badge"
+                  (click)="showLocationDetails(loc)"
+                  [title]="'Click để xem danh sách materials ở vị trí ' + loc">
+                  {{ loc }}<span *ngIf="!last">, </span>
+                </span>
+                <span *ngIf="item.locations.length === 0" class="text-muted">-</span>
+              </td>
+              <td class="text-right">{{ item.stock | number:'1.0-2' }}</td>
+              <td class="text-right">{{ item.standardPacking | number:'1.0-2' }}</td>
+              <td class="text-right">{{ item.numberOfRolls | number:'1.0-2' }}</td>
+              <td class="text-right">{{ item.totalWeight | number:'1.0-2' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- No Data Message -->
+      <div *ngIf="!isLoading && materialCode && summaryData.length === 0" class="no-data-message">
+        <i class="material-icons">info</i>
+        <p>Không tìm thấy dữ liệu cho mã nguyên liệu: <strong>{{ materialCode }}</strong></p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!isLoading && !materialCode && !locationSearch" class="empty-state">
+        <i class="material-icons">search</i>
+        <p>Vui lòng nhập mã nguyên liệu hoặc vị trí để tìm kiếm</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Location Details Modal -->
+<div *ngIf="showLocationModal" class="modal-overlay" (click)="closeLocationModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h4>Danh sách materials tại vị trí: <strong>{{ selectedLocation }}</strong></h4>
+      <button class="close-btn" (click)="closeLocationModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div *ngIf="isLoading" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Đang tải...</span>
+      </div>
+      <div *ngIf="!isLoading && locationMaterials.length === 0" class="no-data-message">
+        <p>Không có materials nào tại vị trí này</p>
+      </div>
+      <table *ngIf="!isLoading && locationMaterials.length > 0" class="table table-striped">
+        <thead>
+          <tr>
+            <th>Mã nguyên liệu</th>
+            <th>PO</th>
+            <th>IMD</th>
+            <th>Tồn kho</th>
+            <th>Standard Packing</th>
+            <th>Số cuộn</th>
+            <th>Trọng lượng (g)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let mat of locationMaterials">
+            <td>{{ mat.materialCode }}</td>
+            <td>{{ mat.poNumber }}</td>
+            <td>{{ getDisplayIMD(mat) }}</td>
+            <td class="text-right">{{ calculateStock(mat) | number:'1.0-2' }}</td>
+            <td class="text-right">{{ mat.standardPacking | number:'1.0-2' }}</td>
+            <td class="text-right">{{ (calculateStock(mat) / (mat.standardPacking || 1)) | number:'1.0-2' }}</td>
+            <td class="text-right">{{ (calculateStock(mat) * (mat.unitWeight || 0)) | number:'1.0-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
