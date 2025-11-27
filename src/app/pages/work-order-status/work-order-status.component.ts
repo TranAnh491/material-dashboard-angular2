@@ -538,15 +538,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const matchesMonth = true; // Show all months initially
       
       // Filter by selected factory - but be more flexible to handle missing factory data
-      const matchesFactory = !this.selectedFactory || 
-                           (wo.factory && this.normalizeFactoryName(wo.factory) === this.normalizeFactoryName(this.selectedFactory)) || 
-                           (!wo.factory && this.selectedFactory === 'ASM1'); // Default to ASM1 if no factory specified
-      
-      // Debug factory matching
-      if (this.selectedFactory && wo.factory) {
+      let matchesFactory = false;
+      if (!this.selectedFactory) {
+        matchesFactory = true; // No factory filter selected, show all
+      } else if (wo.factory) {
         const normalizedData = this.normalizeFactoryName(wo.factory);
         const normalizedSelected = this.normalizeFactoryName(this.selectedFactory);
-        console.log(`🔍 Factory comparison: "${wo.factory}" (normalized: "${normalizedData}") === "${this.selectedFactory}" (normalized: "${normalizedSelected}") = ${normalizedData === normalizedSelected}`);
+        matchesFactory = normalizedData === normalizedSelected;
+        
+        // Debug factory matching for ASM3
+        if (this.selectedFactory === 'ASM3' || wo.factory === 'ASM3' || wo.factory?.toUpperCase() === 'ASM3') {
+          console.log(`🔍 [ASM3 Debug] Factory comparison: "${wo.factory}" (normalized: "${normalizedData}") === "${this.selectedFactory}" (normalized: "${normalizedSelected}") = ${matchesFactory}`);
+        }
+      } else {
+        // No factory in work order, default to ASM1
+        matchesFactory = this.selectedFactory === 'ASM1';
       }
       
       // Apply done filter
@@ -559,6 +565,38 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       
       return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && matchesDoneFilter;
     });
+    
+    // Debug: Log factory distribution
+    const factoryCounts: { [key: string]: number } = {};
+    this.workOrders.forEach(wo => {
+      const factory = wo.factory || 'No Factory';
+      factoryCounts[factory] = (factoryCounts[factory] || 0) + 1;
+    });
+    console.log('📊 Factory distribution in all work orders:', factoryCounts);
+    
+    // Debug: Log ASM3 work orders
+    const asm3WorkOrders = this.workOrders.filter(wo => {
+      const normalized = this.normalizeFactoryName(wo.factory || '');
+      return normalized === 'asm3';
+    });
+    console.log(`🔍 Found ${asm3WorkOrders.length} ASM3 work orders in all data`);
+    if (asm3WorkOrders.length > 0 && this.selectedFactory === 'ASM3') {
+      console.log('📋 ASM3 work orders:', asm3WorkOrders.map(wo => ({
+        id: wo.id,
+        factory: wo.factory,
+        productionOrder: wo.productionOrder,
+        productCode: wo.productCode
+      })));
+    }
+    
+    // Debug: Log filtered results
+    const filteredFactoryCounts: { [key: string]: number } = {};
+    this.filteredWorkOrders.forEach(wo => {
+      const factory = wo.factory || 'No Factory';
+      filteredFactoryCounts[factory] = (filteredFactoryCounts[factory] || 0) + 1;
+    });
+    console.log(`📊 Filtered work orders (${this.filteredWorkOrders.length} total):`, filteredFactoryCounts);
+    console.log(`🏭 Selected factory: "${this.selectedFactory}"`);
     
     // Sort filtered results: urgent first, then by delivery date (earliest first)
     this.filteredWorkOrders.sort((a, b) => {
@@ -1963,26 +2001,6 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         throw new Error('No valid data found in Excel file (all LSX are duplicates or already exist in Firebase)');
       }
 
-      // Get current user info for tracking who imported
-      const currentUser = await this.afAuth.currentUser;
-      const currentUserEmail = currentUser?.email || 'Unknown';
-      const currentUserDisplayName = currentUserEmail.split('@')[0] || 'Unknown';
-      const importTimestamp = new Date().toLocaleString('vi-VN');
-      
-      // Update createdBy for work orders to track who imported
-      for (const wo of validWorkOrders) {
-        const originalCreatedBy = wo.createdBy?.trim() || '';
-        if (!originalCreatedBy || originalCreatedBy === '') {
-          // No existing createdBy, set import info
-          wo.createdBy = `[Import: ${currentUserDisplayName} ${importTimestamp}]`;
-          console.log(`📝 Set createdBy for LSX ${wo.productionOrder}: ${wo.createdBy}`);
-        } else {
-          // Append import info if createdBy already exists from Excel
-          wo.createdBy = `${originalCreatedBy} [Import: ${currentUserDisplayName} ${importTimestamp}]`;
-          console.log(`📝 Updated createdBy for LSX ${wo.productionOrder}: ${wo.createdBy}`);
-        }
-      }
-      
       // Save each work order individually to ensure proper saving
       await this.saveWorkOrdersIndividually(validWorkOrders);
       
