@@ -104,6 +104,7 @@
               <th>Cuộn lẻ</th>
               <th>Lượng lẻ</th>
               <th>Trọng lượng cuộn (g)</th>
+              <th>Ngày import</th>
             </tr>
           </thead>
           <tbody>
@@ -128,13 +129,14 @@
               <td class="text-right">{{ item.oddRolls | number:'1.2-2' }}</td>
               <td class="text-right">{{ item.oddQuantity | number:'1.0-2' }}</td>
               <td class="text-right">{{ item.totalWeight | number:'1.0-2' }}</td>
+              <td class="text-center">{{ item.lastActionDate ? (item.lastActionDate | date:'dd/MM/yyyy') : '-' }}</td>
             </tr>
             <!-- Dòng tổng -->
             <tr class="total-row" *ngIf="summaryData.length > 0">
               <td colspan="7" class="text-right"><strong>TỔNG:</strong></td>
               <td class="text-right"><strong>{{ totalEvenRolls | number:'1.0-0' }}</strong></td>
               <td class="text-right"><strong>{{ totalOddRolls | number:'1.2-2' }}</strong></td>
-              <td colspan="2"></td>
+              <td colspan="3"></td>
             </tr>
           </tbody>
         </table>

@@ -31,6 +31,7 @@ export interface MaterialSummary {
   oddQuantity: number; // Lượng lẻ = cuộn lẻ × standard packing
   totalWeight: number;
   locations: string[]; // Danh sách các vị trí
+  lastActionDate: Date | null; // Ngày import/cập nhật gần nhất
 }
 
 @Component({
@@ -379,6 +380,30 @@ export class ManageComponent implements OnInit, OnDestroy {
       const oddRolls = numberOfRolls - evenRolls; // Cuộn lẻ (phần thập phân)
       const oddQuantity = oddRolls * standardPacking; // Lượng lẻ
       
+      // Lấy ngày import/cập nhật gần nhất
+      let lastActionDate: Date | null = null;
+      if (material.importDate) {
+        lastActionDate = material.importDate instanceof Date ? material.importDate : new Date(material.importDate);
+      } else if ((material as any).lastUpdated) {
+        const lastUpdated = (material as any).lastUpdated;
+        if (lastUpdated?.toDate && typeof lastUpdated.toDate === 'function') {
+          lastActionDate = lastUpdated.toDate();
+        } else if (lastUpdated instanceof Date) {
+          lastActionDate = lastUpdated;
+        } else {
+          lastActionDate = new Date(lastUpdated);
+        }
+      } else if ((material as any).createdAt) {
+        const createdAt = (material as any).createdAt;
+        if (createdAt?.toDate && typeof createdAt.toDate === 'function') {
+          lastActionDate = createdAt.toDate();
+        } else if (createdAt instanceof Date) {
+          lastActionDate = createdAt;
+        } else {
+          lastActionDate = new Date(createdAt);
+        }
+      }
+      
       if (summaryMap.has(key)) {
         const existing = summaryMap.get(key)!;
         existing.stock += stock;
@@ -393,6 +418,10 @@ export class ManageComponent implements OnInit, OnDestroy {
         if (material.location && !existing.locations.includes(material.location)) {
           existing.locations.push(material.location);
         }
+        // Cập nhật lastActionDate nếu ngày mới hơn
+        if (lastActionDate && (!existing.lastActionDate || lastActionDate > existing.lastActionDate)) {
+          existing.lastActionDate = lastActionDate;
+        }
       } else {
         summaryMap.set(key, {
           materialCode: material.materialCode,
@@ -405,17 +434,34 @@ export class ManageComponent implements OnInit, OnDestroy {
           oddRolls: oddRolls,
           oddQuantity: oddQuantity,
           totalWeight: stock * unitWeight, // Từ catalog (giống tab utilization)
-          locations: material.location ? [material.location] : []
+          locations: material.location ? [material.location] : [],
+          lastActionDate: lastActionDate
         });
       }
     });
 
-    this.summaryData = Array.from(summaryMap.values()).sort((a, b) => {
-      if (a.poNumber !== b.poNumber) {
-        return a.poNumber.localeCompare(b.poNumber);
-      }
-      return a.imd.localeCompare(b.imd);
-    });
+    this.summaryData = Array.from(summaryMap.values());
+    
+    // Sắp xếp: nếu search theo vị trí thì sắp xếp theo ngày import (cũ nhất lên trên)
+    // Nếu search theo mã thì sắp xếp theo PO và IMD
+    if (this.locationSearch && !this.materialCode) {
+      // Search theo vị trí: sắp xếp theo ngày import (cũ nhất lên trên)
+      this.summaryData.sort((a, b) => {
+        if (!a.lastActionDate && !b.lastActionDate) return 0;
+        if (!a.lastActionDate) return 1; // Không có ngày thì xuống dưới
+        if (!b.lastActionDate) return -1; // Không có ngày thì xuống dưới
+        return a.lastActionDate.getTime() - b.lastActionDate.getTime(); // Cũ nhất lên trên
+      });
+      console.log(`📊 Sorted by import date (oldest first) for location search`);
+    } else {
+      // Search theo mã: sắp xếp theo PO và IMD
+      this.summaryData.sort((a, b) => {
+        if (a.poNumber !== b.poNumber) {
+          return a.poNumber.localeCompare(b.poNumber);
+        }
+        return a.imd.localeCompare(b.imd);
+      });
+    }
 
     console.log(`📊 Summary calculated: ${this.summaryData.length} unique PO/IMD combinations`);
   }
