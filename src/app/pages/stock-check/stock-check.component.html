@@ -268,6 +268,44 @@
     </div>
   </div>
 
+  <!-- Scan Success Popup -->
+  <div class="scan-success-popup" *ngIf="showScanSuccessPopup">
+    <div class="popup-content">
+      <div class="popup-icon success">
+        <i class="material-icons">check_circle</i>
+      </div>
+      <div class="popup-title">ĐÃ SCAN THÀNH CÔNG</div>
+      <div class="popup-info">
+        <div class="info-row">
+          <span class="info-label">Số thứ tự:</span>
+          <span class="info-value">{{ scannedSTT }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Mã nguyên liệu:</span>
+          <span class="info-value">{{ scannedMaterialCode }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">PO:</span>
+          <span class="info-value">{{ scannedPO }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Số lượng:</span>
+          <span class="info-value">{{ scannedQty }}</span>
+        </div>
+        <div class="info-row total-row">
+          <span class="info-label">Tổng đã scan:</span>
+          <span class="info-value">{{ scannedCount }} mã</span>
+        </div>
+      </div>
+      <div class="popup-actions">
+        <button class="close-popup-btn" (click)="closeScanSuccessPopup(true)">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Employee Scan Modal (after factory selection) -->
   <div class="scan-modal" *ngIf="showEmployeeScanModal">
     <div class="modal-content">

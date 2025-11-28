@@ -90,6 +90,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scanMessage = '';
   scanInput = '';
   scanHistory: string[] = [];
+  
+  // Scan success popup
+  showScanSuccessPopup = false;
+  scannedMaterialCode = '';
+  scannedSTT = 0;
+  scannedQty = 0;
+  scannedPO = '';
+  scannedCount = 0; // Đếm số mã đã scan trong session
 
   // Filter state
   filterMode: 'all' | 'checked' | 'unchecked' | 'outside' = 'all';
@@ -1400,6 +1408,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             console.log('⚠️ Could not load standardPacking for new material:', error);
           }
           
+          // Refresh view trước để có STT chính xác
+          this.applyFilter();
+          
+          // Tìm lại material sau khi filter để lấy STT chính xác
+          const updatedMaterial = this.filteredMaterials.find(m => 
+            m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() && 
+            m.poNumber.trim() === poNumber.trim() && 
+            m.imd.trim() === imd.trim()
+          ) || newMaterial;
+          
+          // Tăng counter số mã đã scan
+          this.scannedCount++;
+          
+          // Hiển thị popup thành công
+          this.scannedMaterialCode = materialCode;
+          this.scannedSTT = updatedMaterial.stt;
+          this.scannedQty = scannedQty;
+          this.scannedPO = poNumber;
+          this.showScanSuccessPopup = true;
+          
           // Add to history
           this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${quantity} (MỚI)`);
           if (this.scanHistory.length > 5) {
@@ -1411,10 +1439,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
           
+          // Tự động đóng popup sau 1.5 giây và focus lại input
+          setTimeout(() => {
+            this.closeScanSuccessPopup();
+          }, 1500);
+          
           // Update filtered materials và displayed materials (không block scan - async)
           setTimeout(() => {
-            this.applyFilter();
-            
             // Nếu đang ở filter mode 'all' hoặc 'outside', hiển thị material mới
             if (this.filterMode === 'all' || this.filterMode === 'outside') {
               // Tìm page chứa material mới
@@ -1466,6 +1497,35 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scanMessage = '';
     this.scanInput = '';
     this.scanHistory = [];
+    
+    // Hiển thị thông báo tổng số mã đã scan
+    if (this.scannedCount > 0) {
+      alert(`Đã scan kiểm kê: ${this.scannedCount} mã`);
+      this.scannedCount = 0; // Reset counter
+    }
+  }
+  
+  /**
+   * Close scan success popup
+   */
+  closeScanSuccessPopup(showAlert: boolean = false): void {
+    this.showScanSuccessPopup = false;
+    this.cdr.detectChanges();
+    
+    // Hiển thị thông báo tổng số mã đã scan nếu được yêu cầu (khi bấm nút đóng)
+    if (showAlert && this.scannedCount > 0) {
+      setTimeout(() => {
+        alert(`Đã scan kiểm kê: ${this.scannedCount} mã`);
+      }, 200);
+    }
+    
+    // Focus lại input để scan tiếp
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 100);
   }
 
   /**

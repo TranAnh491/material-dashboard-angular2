@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import * as XLSX from 'xlsx';
 
 export interface InventoryMaterial {
   id?: string;
@@ -25,6 +26,7 @@ export interface MaterialSummary {
   imd: string;
   stock: number;
   standardPacking: number;
+  unitWeight: number; // Thêm unitWeight để tính totalWeight đúng
   numberOfRolls: number; // Tổng số cuộn (giữ lại để tính tổng)
   evenRolls: number; // Cuộn chẵn (phần nguyên)
   oddRolls: number; // Cuộn lẻ (phần thập phân)
@@ -159,17 +161,31 @@ export class ManageComponent implements OnInit, OnDestroy {
             importDate = new Date();
           }
           
-          this.materials.push({
-            id: doc.id,
-            ...data,
-            importDate: importDate,
-            unitWeight: data.unitWeight || catalogItem?.unitWeight || 0,
-            standardPacking: data.standardPacking || catalogItem?.standardPacking || 1
-          });
-        });
-      }
+           // Đảm bảo các field số được parse đúng
+           const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+           const quantity = Number(data.quantity) || 0;
+           const exported = Number(data.exported) || 0;
+           const xt = Number(data.xt) || 0;
+           
+           this.materials.push({
+             id: doc.id,
+             ...data,
+             importDate: importDate,
+             openingStock: openingStock,
+             quantity: quantity,
+             exported: exported,
+             xt: xt,
+             unitWeight: data.unitWeight || catalogItem?.unitWeight || 0,
+             standardPacking: data.standardPacking || catalogItem?.standardPacking || 1
+           });
+           
+           // Debug log để kiểm tra
+           const calculatedStock = openingStock + quantity - exported - xt;
+           console.log(`📊 Material ${materialCode}: openingStock=${openingStock}, quantity=${quantity}, exported=${exported}, xt=${xt}, stock=${calculatedStock}`);
+         });
+       }
 
-      console.log(`✅ Found ${this.materials.length} records for location ${this.locationSearch}`);
+       console.log(`✅ Found ${this.materials.length} records for location ${this.locationSearch}`);
       this.calculateSummary();
     } catch (error) {
       console.error('❌ Error searching by location:', error);
@@ -266,40 +282,54 @@ export class ManageComponent implements OnInit, OnDestroy {
           .where('materialCode', '==', this.materialCode.toUpperCase().trim())
       ).get().toPromise();
 
-      this.materials = [];
-      if (snapshot) {
-        snapshot.forEach(doc => {
-          const data = doc.data() as any;
-          const materialCode = data.materialCode.toUpperCase().trim();
-          
-          // Get unitWeight and standardPacking from catalog
-          const catalogItem = this.catalogCache.get(materialCode);
-          
-          // Convert Firestore Timestamp to Date
-          let importDate: Date;
-          if (data.importDate) {
-            if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
-              importDate = data.importDate.toDate();
-            } else if (data.importDate instanceof Date) {
-              importDate = data.importDate;
-            } else {
-              importDate = new Date(data.importDate);
-            }
-          } else {
-            importDate = new Date();
-          }
-          
-          this.materials.push({
-            id: doc.id,
-            ...data,
-            importDate: importDate,
-            unitWeight: data.unitWeight || catalogItem?.unitWeight || 0,
-            standardPacking: data.standardPacking || catalogItem?.standardPacking || 1
-          });
-        });
-      }
+       this.materials = [];
+       if (snapshot) {
+         snapshot.forEach(doc => {
+           const data = doc.data() as any;
+           const materialCode = data.materialCode.toUpperCase().trim();
+           
+           // Get unitWeight and standardPacking from catalog
+           const catalogItem = this.catalogCache.get(materialCode);
+           
+           // Convert Firestore Timestamp to Date
+           let importDate: Date;
+           if (data.importDate) {
+             if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
+               importDate = data.importDate.toDate();
+             } else if (data.importDate instanceof Date) {
+               importDate = data.importDate;
+             } else {
+               importDate = new Date(data.importDate);
+             }
+           } else {
+             importDate = new Date();
+           }
+           
+           // Đảm bảo các field số được parse đúng
+           const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+           const quantity = Number(data.quantity) || 0;
+           const exported = Number(data.exported) || 0;
+           const xt = Number(data.xt) || 0;
+           
+           this.materials.push({
+             id: doc.id,
+             ...data,
+             importDate: importDate,
+             openingStock: openingStock,
+             quantity: quantity,
+             exported: exported,
+             xt: xt,
+             unitWeight: data.unitWeight || catalogItem?.unitWeight || 0,
+             standardPacking: data.standardPacking || catalogItem?.standardPacking || 1
+           });
+           
+           // Debug log để kiểm tra
+           const calculatedStock = openingStock + quantity - exported - xt;
+           console.log(`📊 Material ${materialCode}: openingStock=${openingStock}, quantity=${quantity}, exported=${exported}, xt=${xt}, stock=${calculatedStock}`);
+         });
+       }
 
-      console.log(`✅ Found ${this.materials.length} records for material ${this.materialCode}`);
+       console.log(`✅ Found ${this.materials.length} records for material ${this.materialCode}`);
       this.calculateSummary();
     } catch (error) {
       console.error('❌ Error searching material:', error);
@@ -354,11 +384,24 @@ export class ManageComponent implements OnInit, OnDestroy {
   }
 
   calculateStock(material: InventoryMaterial): number {
-    const openingStock = material.openingStock !== null && material.openingStock !== undefined ? material.openingStock : 0;
-    const quantity = material.quantity || 0;
-    const exported = material.exported || 0;
-    const xt = material.xt || 0;
-    return openingStock + quantity - exported - xt;
+    // Đảm bảo tất cả đều là số
+    const openingStock = material.openingStock !== null && material.openingStock !== undefined ? Number(material.openingStock) : 0;
+    const quantity = Number(material.quantity) || 0;
+    const exported = Number(material.exported) || 0;
+    const xt = Number(material.xt) || 0;
+    const stock = openingStock + quantity - exported - xt;
+    
+    // Debug log nếu có vấn đề
+    if (isNaN(stock)) {
+      console.error(`❌ Invalid stock calculation for ${material.materialCode}:`, {
+        openingStock: material.openingStock,
+        quantity: material.quantity,
+        exported: material.exported,
+        xt: material.xt
+      });
+    }
+    
+    return stock;
   }
 
   calculateSummary(): void {
@@ -366,13 +409,36 @@ export class ManageComponent implements OnInit, OnDestroy {
 
     this.materials.forEach(material => {
       const stock = this.calculateStock(material);
+      
+      // Debug log cho mã B041788
+      const materialCode = material.materialCode.toUpperCase().trim();
+      const isDebugMaterial = materialCode === 'B041788' && 
+                               material.poNumber === 'KZPO0825/0355';
+      
+      if (isDebugMaterial) {
+        console.log(`🔍 DEBUG B041788 - Material detail:`, {
+          id: material.id,
+          materialCode: materialCode,
+          poNumber: material.poNumber,
+          openingStock: material.openingStock,
+          quantity: material.quantity,
+          exported: material.exported,
+          xt: material.xt,
+          calculatedStock: stock,
+          location: material.location,
+          batchNumber: material.batchNumber,
+          importDate: material.importDate
+        });
+      }
+      
       if (stock <= 0) return; // Skip materials with zero or negative stock
 
       const imd = this.getDisplayIMD(material);
-      const key = `${material.poNumber}_${imd}`;
+      // Key phải bao gồm materialCode để tránh gộp nhầm các materials khác nhau
+      // Khi search theo vị trí, có thể có nhiều materials khác mã ở cùng vị trí
+      const key = `${materialCode}_${material.poNumber}_${imd}`;
       
       // Lấy standardPacking và unitWeight từ catalog (giống tab utilization)
-      const materialCode = material.materialCode.toUpperCase().trim();
       const catalogItem = this.catalogCache.get(materialCode);
       
       const standardPacking = catalogItem?.standardPacking || material.standardPacking || 1;
@@ -410,14 +476,19 @@ export class ManageComponent implements OnInit, OnDestroy {
       
       if (summaryMap.has(key)) {
         const existing = summaryMap.get(key)!;
+        const oldStock = existing.stock;
         existing.stock += stock;
         existing.numberOfRolls = existing.stock / existing.standardPacking;
         // Tính lại cuộn chẵn và lẻ
         existing.evenRolls = Math.floor(existing.numberOfRolls);
         existing.oddRolls = existing.numberOfRolls - existing.evenRolls;
         existing.oddQuantity = existing.oddRolls * existing.standardPacking;
-        // Tính lại totalWeight với unitWeight từ catalog
-        existing.totalWeight = existing.stock * unitWeight;
+        // Cập nhật unitWeight nếu có từ catalog (ưu tiên catalog)
+        if (catalogItem?.unitWeight) {
+          existing.unitWeight = catalogItem.unitWeight;
+        }
+        // Tính lại totalWeight với unitWeight đã lưu
+        existing.totalWeight = existing.stock * existing.unitWeight;
         // Thêm location nếu chưa có
         if (material.location && !existing.locations.includes(material.location)) {
           existing.locations.push(material.location);
@@ -426,6 +497,19 @@ export class ManageComponent implements OnInit, OnDestroy {
         if (lastActionDate && (!existing.lastActionDate || lastActionDate > existing.lastActionDate)) {
           existing.lastActionDate = lastActionDate;
         }
+        
+        if (isDebugMaterial) {
+          console.log(`🔍 DEBUG B041788 - After merge:`, {
+            key: key,
+            oldStock: oldStock,
+            addedStock: stock,
+            newTotalStock: existing.stock,
+            standardPacking: existing.standardPacking,
+            numberOfRolls: existing.numberOfRolls,
+            evenRolls: existing.evenRolls,
+            oddRolls: existing.oddRolls
+          });
+        }
       } else {
         summaryMap.set(key, {
           materialCode: material.materialCode,
@@ -433,6 +517,7 @@ export class ManageComponent implements OnInit, OnDestroy {
           imd: imd,
           stock: stock,
           standardPacking: standardPacking, // Từ catalog
+          unitWeight: unitWeight, // Từ catalog
           numberOfRolls: numberOfRolls,
           evenRolls: evenRolls,
           oddRolls: oddRolls,
@@ -441,10 +526,41 @@ export class ManageComponent implements OnInit, OnDestroy {
           locations: material.location ? [material.location] : [],
           lastActionDate: lastActionDate
         });
+        
+        if (isDebugMaterial) {
+          console.log(`🔍 DEBUG B041788 - New entry:`, {
+            key: key,
+            stock: stock,
+            standardPacking: standardPacking,
+            numberOfRolls: numberOfRolls,
+            evenRolls: evenRolls,
+            oddRolls: oddRolls
+          });
+        }
       }
     });
 
     this.summaryData = Array.from(summaryMap.values());
+    
+    // Debug log cho B041788 sau khi tính xong
+    const debugSummary = this.summaryData.find(s => 
+      s.materialCode === 'B041788' && s.poNumber === 'KZPO0825/0355'
+    );
+    if (debugSummary) {
+      console.log(`🔍 DEBUG B041788 - Final summary:`, {
+        materialCode: debugSummary.materialCode,
+        poNumber: debugSummary.poNumber,
+        imd: debugSummary.imd,
+        stock: debugSummary.stock,
+        standardPacking: debugSummary.standardPacking,
+        numberOfRolls: debugSummary.numberOfRolls,
+        evenRolls: debugSummary.evenRolls,
+        oddRolls: debugSummary.oddRolls,
+        oddQuantity: debugSummary.oddQuantity,
+        totalWeight: debugSummary.totalWeight,
+        locations: debugSummary.locations
+      });
+    }
     
     // Sắp xếp: nếu search theo vị trí thì sắp xếp theo ngày import (cũ nhất lên trên)
     // Nếu search theo mã thì sắp xếp theo PO và IMD
@@ -494,6 +610,65 @@ export class ManageComponent implements OnInit, OnDestroy {
   onPasswordKeyPress(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
       this.checkPassword();
+    }
+  }
+
+  downloadReport(): void {
+    if (this.summaryData.length === 0) {
+      alert('Không có dữ liệu để tải xuống!');
+      return;
+    }
+
+    try {
+      // Prepare data for Excel
+      const excelData = this.summaryData.map((item, index) => ({
+        'STT': index + 1,
+        'Mã nguyên liệu': item.materialCode,
+        'PO': item.poNumber,
+        'IMD': item.imd,
+        'Vị trí': item.locations.join('; '),
+        'Tồn kho': item.stock,
+        'Standard Packing': item.standardPacking,
+        'Cuộn chẵn': item.evenRolls,
+        'Cuộn lẻ': item.oddRolls.toFixed(3),
+        'Lượng lẻ': item.oddQuantity.toFixed(2),
+        'Trọng lượng cuộn (g)': item.totalWeight.toFixed(2),
+        'Ngày import': item.lastActionDate ? item.lastActionDate.toLocaleDateString('vi-VN') : 'N/A'
+      }));
+
+      // Add total row
+      excelData.push({
+        'STT': 0,
+        'Mã nguyên liệu': 'TỔNG',
+        'PO': '',
+        'IMD': '',
+        'Vị trí': '',
+        'Tồn kho': 0,
+        'Standard Packing': 0,
+        'Cuộn chẵn': this.totalEvenRolls,
+        'Cuộn lẻ': this.totalOddRolls.toFixed(3),
+        'Lượng lẻ': '',
+        'Trọng lượng cuộn (g)': '',
+        'Ngày import': ''
+      });
+
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+
+      // Generate filename
+      const factory = this.selectedFactory;
+      const searchType = this.materialCode ? `Material_${this.materialCode}` : `Location_${this.locationSearch}`;
+      const date = new Date().toISOString().split('T')[0];
+      const filename = `Manage_Report_${factory}_${searchType}_${date}.xlsx`;
+
+      // Write and download
+      XLSX.writeFile(wb, filename);
+      console.log(`✅ Report downloaded: ${filename}`);
+    } catch (error) {
+      console.error('❌ Error downloading report:', error);
+      alert(`Lỗi khi tải xuống report: ${error}`);
     }
   }
 }
