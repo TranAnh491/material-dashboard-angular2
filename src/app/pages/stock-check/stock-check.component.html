@@ -51,19 +51,10 @@
       </h2>
       
       <div class="top-bar-actions">
-        <!-- Mobile: Chỉ hiển thị 2 nút chính -->
-        <button class="back-btn mobile-only" (click)="backToSelection()" title="Quay lại">
-          <i class="material-icons">arrow_back</i>
-        </button>
-        
-        <button class="inventory-btn mobile-primary" (click)="startInventoryCheck()">
+        <!-- Mobile: Chỉ hiển thị nút KIỂM KÊ -->
+        <button class="inventory-btn mobile-only" (click)="startInventoryCheck()">
           <i class="material-icons">qr_code_scanner</i>
-          <span class="mobile-text">KIỂM KÊ</span>
-        </button>
-        
-        <button class="sort-btn mobile-secondary" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
-          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
-          <span class="mobile-text">SẮP XẾP</span>
+          <span>KIỂM KÊ</span>
         </button>
         
         <!-- Desktop: Hiển thị tất cả -->
@@ -85,6 +76,16 @@
         <button class="history-btn desktop-only" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
           <i class="material-icons">history</i>
           <span>LỊCH SỬ</span>
+        </button>
+        
+        <button class="inventory-btn desktop-only" (click)="startInventoryCheck()">
+          <i class="material-icons">qr_code_scanner</i>
+          KIỂM KÊ
+        </button>
+        
+        <button class="sort-btn desktop-only" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
+          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
+          <span>SẮP XẾP</span>
         </button>
         
         <button class="report-btn desktop-only" (click)="exportStockCheckReport()">
@@ -117,7 +118,48 @@
   <div class="data-section">
     <!-- Counter Boxes -->
     <div class="counter-boxes">
-      <div class="counter-box total-box clickable" 
+      <!-- Mobile: Chỉ hiển thị 3 counter boxes -->
+      <div class="counter-box total-box clickable mobile-only" 
+           [class.active]="filterMode === 'all'"
+           (click)="setFilterMode('all')"
+           title="Tổng mã">
+        <div class="counter-icon">
+          <i class="material-icons">inventory_2</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">TỔNG MÃ</div>
+          <div class="counter-value">{{ totalMaterials }}</div>
+        </div>
+      </div>
+
+      <div class="counter-box checked-box clickable mobile-only" 
+           [class.active]="filterMode === 'checked'"
+           (click)="setFilterMode('checked')"
+           title="Đã kiểm tra">
+        <div class="counter-icon">
+          <i class="material-icons">check_circle</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">ĐÃ KIỂM TRA</div>
+          <div class="counter-value">{{ checkedMaterials }}</div>
+        </div>
+      </div>
+
+      <div class="counter-box unchecked-box clickable mobile-only" 
+           [class.active]="filterMode === 'unchecked'"
+           (click)="setFilterMode('unchecked')"
+           title="Chưa kiểm tra">
+        <div class="counter-icon">
+          <i class="material-icons">radio_button_unchecked</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">CHƯA KIỂM TRA</div>
+          <div class="counter-value">{{ uncheckedMaterials }}</div>
+        </div>
+      </div>
+      
+      <!-- Desktop: Hiển thị tất cả counter boxes -->
+      <div class="counter-box total-box clickable desktop-only" 
            [class.active]="filterMode === 'all'"
            (click)="setFilterMode('all')"
            title="Click để hiển thị tất cả">
@@ -130,7 +172,7 @@
         </div>
       </div>
 
-      <div class="counter-box checked-box clickable" 
+      <div class="counter-box checked-box clickable desktop-only" 
            [class.active]="filterMode === 'checked'"
            (click)="setFilterMode('checked')"
            title="Click để hiển thị mã đã kiểm tra">
@@ -143,7 +185,7 @@
         </div>
       </div>
 
-      <div class="counter-box unchecked-box clickable" 
+      <div class="counter-box unchecked-box clickable desktop-only" 
            [class.active]="filterMode === 'unchecked'"
            (click)="setFilterMode('unchecked')"
            title="Click để hiển thị mã chưa kiểm tra">
@@ -156,7 +198,7 @@
         </div>
       </div>
 
-      <div class="counter-box outside-stock-box clickable" 
+      <div class="counter-box outside-stock-box clickable desktop-only" 
            [class.active]="filterMode === 'outside'"
            (click)="setFilterMode('outside')"
            title="Click để hiển thị mã ngoài tồn kho">
@@ -165,7 +207,7 @@
         </div>
         <div class="counter-info">
           <div class="counter-label">MÃ NGOÀI TỒN KHO</div>
-          <div class="counter-value">{{ outsideStockMaterials }}</div>
+          <div class="counter-value">{{ outsideStockMaterials.length }}</div>
         </div>
       </div>
     </div>
@@ -176,8 +218,8 @@
       <span>Loading data...</span>
     </div>
 
-    <!-- Table -->
-    <div class="table-container" *ngIf="!isLoading">
+    <!-- Table - Desktop only -->
+    <div class="table-container desktop-only" *ngIf="!isLoading">
       <table class="stock-table">
         <thead>
           <tr>
@@ -244,8 +286,8 @@
       </table>
     </div>
 
-    <!-- Pagination -->
-    <div class="pagination" *ngIf="!isLoading && displayedMaterials.length > 0">
+    <!-- Pagination - Desktop only -->
+    <div class="pagination desktop-only" *ngIf="!isLoading && displayedMaterials.length > 0">
       <button 
         class="page-btn" 
         (click)="previousPage()" 
@@ -265,8 +307,8 @@
       </button>
     </div>
 
-    <!-- No Data -->
-    <div class="no-data" *ngIf="!isLoading && displayedMaterials.length === 0">
+    <!-- No Data - Desktop only -->
+    <div class="no-data desktop-only" *ngIf="!isLoading && displayedMaterials.length === 0">
       <i class="material-icons">inbox</i>
       <p *ngIf="filterMode === 'all'">No data available</p>
       <p *ngIf="filterMode === 'checked'">Chưa có mã nào được kiểm tra</p>

@@ -2684,77 +2684,49 @@
     
     .counter-boxes {
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 10px;
+      margin-bottom: 20px;
       
       .counter-box {
-        padding: 12px 8px;
+        padding: 16px 12px;
+        
+        &.mobile-only {
+          display: flex !important;
+        }
+        
+        &.desktop-only {
+          display: none !important;
+        }
         
         .counter-icon {
-          width: 36px;
-          height: 36px;
+          width: 40px;
+          height: 40px;
           
           i.material-icons {
-            font-size: 24px;
+            font-size: 28px;
           }
         }
         
         .counter-info {
           .counter-label {
-            font-size: 10px;
-            margin-bottom: 4px;
+            font-size: 11px;
+            margin-bottom: 6px;
+            font-weight: 600;
           }
           
           .counter-value {
-            font-size: 20px;
+            font-size: 24px;
+            font-weight: 700;
           }
         }
       }
     }
     
     .data-section {
-      .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        
-        .stock-table {
-          font-size: 12px;
-          min-width: 800px; // Giữ bảng rộng để scroll ngang
-          
-          thead th {
-            padding: 8px 6px;
-            font-size: 11px;
-            white-space: nowrap;
-          }
-          
-          tbody td {
-            padding: 8px 6px;
-            font-size: 11px;
-            white-space: nowrap;
-          }
-        }
-      }
-      
-      .pagination {
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 10px;
-        
-        .page-info {
-          font-size: 12px;
-          order: 3;
-          width: 100%;
-          text-align: center;
-        }
-        
-        .page-btn {
-          padding: 8px 12px;
-          font-size: 12px;
-          
-          i.material-icons {
-            font-size: 18px;
-          }
-        }
+      .table-container.desktop-only,
+      .pagination.desktop-only,
+      .no-data.desktop-only {
+        display: none !important;
       }
     }
 
@@ -2850,57 +2822,26 @@
       }
       
       .top-bar-actions {
-        display: grid;
-        grid-template-columns: auto 1fr 1fr;
-        gap: 8px;
+        display: flex;
+        justify-content: center;
         width: 100%;
         
         .mobile-only {
           display: flex !important;
+          width: 100%;
+          padding: 16px 24px;
+          font-size: 18px;
+          font-weight: 700;
+          justify-content: center;
+          
+          i.material-icons {
+            font-size: 28px;
+            margin-right: 12px;
+          }
         }
         
         .desktop-only {
           display: none !important;
-        }
-        
-        .mobile-primary {
-          grid-column: 2 / 4;
-          width: 100%;
-          padding: 12px 16px;
-          font-size: 16px;
-          font-weight: 700;
-          
-          i.material-icons {
-            font-size: 24px;
-          }
-          
-          .mobile-text {
-            display: inline;
-            margin-left: 8px;
-          }
-        }
-        
-        .mobile-secondary {
-          grid-column: 1;
-          padding: 12px;
-          min-width: auto;
-          
-          i.material-icons {
-            font-size: 20px;
-          }
-          
-          .mobile-text {
-            display: none;
-          }
-        }
-        
-        .back-btn.mobile-only {
-          padding: 12px;
-          min-width: auto;
-          
-          i.material-icons {
-            font-size: 20px;
-          }
         }
       }
 
