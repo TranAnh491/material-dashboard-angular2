@@ -2602,7 +2602,161 @@
   }
 
   .stock-check-container {
-    padding: 10px;
+    padding: 8px;
+
+    .top-bar {
+      padding: 10px 12px;
+      gap: 8px;
+      
+      .factory-title {
+        font-size: 18px;
+        gap: 8px;
+        
+        i.material-icons {
+          font-size: 20px;
+        }
+        
+        .employee-id-display {
+          font-size: 12px;
+          margin-left: 8px;
+          
+          i.material-icons {
+            font-size: 16px;
+          }
+        }
+      }
+      
+      .top-bar-actions {
+        display: grid;
+        grid-template-columns: auto 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+        
+        .mobile-only {
+          display: flex;
+        }
+        
+        .desktop-only {
+          display: none !important;
+        }
+        
+        .mobile-primary {
+          grid-column: 2 / 4;
+          width: 100%;
+          padding: 12px 16px;
+          font-size: 16px;
+          font-weight: 700;
+          
+          i.material-icons {
+            font-size: 24px;
+          }
+          
+          .mobile-text {
+            display: inline;
+            margin-left: 8px;
+          }
+        }
+        
+        .mobile-secondary {
+          grid-column: 1;
+          padding: 12px;
+          min-width: auto;
+          
+          i.material-icons {
+            font-size: 20px;
+          }
+          
+          .mobile-text {
+            display: none;
+          }
+        }
+        
+        .back-btn.mobile-only {
+          padding: 12px;
+          min-width: auto;
+          
+          i.material-icons {
+            font-size: 20px;
+          }
+        }
+      }
+    }
+    
+    .counter-boxes {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+      
+      .counter-box {
+        padding: 12px 8px;
+        
+        .counter-icon {
+          width: 36px;
+          height: 36px;
+          
+          i.material-icons {
+            font-size: 24px;
+          }
+        }
+        
+        .counter-info {
+          .counter-label {
+            font-size: 10px;
+            margin-bottom: 4px;
+          }
+          
+          .counter-value {
+            font-size: 20px;
+          }
+        }
+      }
+    }
+    
+    .data-section {
+      .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        
+        .stock-table {
+          font-size: 12px;
+          min-width: 800px; // Giữ bảng rộng để scroll ngang
+          
+          thead th {
+            padding: 8px 6px;
+            font-size: 11px;
+            white-space: nowrap;
+          }
+          
+          tbody td {
+            padding: 8px 6px;
+            font-size: 11px;
+            white-space: nowrap;
+          }
+        }
+      }
+      
+      .pagination {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px;
+        
+        .page-info {
+          font-size: 12px;
+          order: 3;
+          width: 100%;
+          text-align: center;
+        }
+        
+        .page-btn {
+          padding: 8px 12px;
+          font-size: 12px;
+          
+          i.material-icons {
+            font-size: 18px;
+          }
+        }
+      }
+    }
 
     .inner-header {
       flex-wrap: wrap;
@@ -2674,7 +2828,7 @@
     }
 
     .top-bar {
-      gap: 10px;
+      gap: 8px;
       padding: 10px 12px;
 
       .factory-title {
@@ -2684,22 +2838,70 @@
         i.material-icons {
           font-size: 20px;
         }
+        
+        .employee-id-display {
+          font-size: 11px;
+          margin-left: 6px;
+          
+          i.material-icons {
+            font-size: 14px;
+          }
+        }
       }
       
       .top-bar-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      // Ẩn tất cả các nút trừ nút sắp xếp và kiểm kê
-      .back-btn,
-      .logout-btn,
-      .reset-btn,
-      .history-btn,
-      .report-btn,
-      .search-box {
-        display: none !important;
+        display: grid;
+        grid-template-columns: auto 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+        
+        .mobile-only {
+          display: flex !important;
+        }
+        
+        .desktop-only {
+          display: none !important;
+        }
+        
+        .mobile-primary {
+          grid-column: 2 / 4;
+          width: 100%;
+          padding: 12px 16px;
+          font-size: 16px;
+          font-weight: 700;
+          
+          i.material-icons {
+            font-size: 24px;
+          }
+          
+          .mobile-text {
+            display: inline;
+            margin-left: 8px;
+          }
+        }
+        
+        .mobile-secondary {
+          grid-column: 1;
+          padding: 12px;
+          min-width: auto;
+          
+          i.material-icons {
+            font-size: 20px;
+          }
+          
+          .mobile-text {
+            display: none;
+          }
+        }
+        
+        .back-btn.mobile-only {
+          padding: 12px;
+          min-width: auto;
+          
+          i.material-icons {
+            font-size: 20px;
+          }
+        }
       }
 
       // Chỉ hiển thị nút sắp xếp (AZ)

@@ -51,42 +51,48 @@
       </h2>
       
       <div class="top-bar-actions">
-        <button class="back-btn" (click)="backToSelection()" title="Quay lại chọn nhà máy">
+        <!-- Mobile: Chỉ hiển thị 2 nút chính -->
+        <button class="back-btn mobile-only" (click)="backToSelection()" title="Quay lại">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        
+        <button class="inventory-btn mobile-primary" (click)="startInventoryCheck()">
+          <i class="material-icons">qr_code_scanner</i>
+          <span class="mobile-text">KIỂM KÊ</span>
+        </button>
+        
+        <button class="sort-btn mobile-secondary" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
+          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
+          <span class="mobile-text">SẮP XẾP</span>
+        </button>
+        
+        <!-- Desktop: Hiển thị tất cả -->
+        <button class="back-btn desktop-only" (click)="backToSelection()" title="Quay lại chọn nhà máy">
           <i class="material-icons">arrow_back</i>
           <span>QUAY LẠI</span>
         </button>
         
-        <button class="logout-btn" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
+        <button class="logout-btn desktop-only" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
           <i class="material-icons">logout</i>
           <span>ĐĂNG XUẤT</span>
         </button>
         
-        <button class="reset-btn" (click)="openResetModal()" title="Reset stock check">
+        <button class="reset-btn desktop-only" (click)="openResetModal()" title="Reset stock check">
           <i class="material-icons">refresh</i>
           <span>RESET</span>
         </button>
         
-        <button class="history-btn" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
+        <button class="history-btn desktop-only" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
           <i class="material-icons">history</i>
           <span>LỊCH SỬ</span>
         </button>
         
-        <button class="inventory-btn" (click)="startInventoryCheck()">
-          <i class="material-icons">qr_code_scanner</i>
-          KIỂM KÊ
-        </button>
-        
-        <button class="sort-btn" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
-          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
-          <span>SẮP XẾP</span>
-        </button>
-        
-        <button class="report-btn" (click)="exportStockCheckReport()">
+        <button class="report-btn desktop-only" (click)="exportStockCheckReport()">
           <i class="material-icons">download</i>
           REPORT
         </button>
         
-        <div class="search-box">
+        <div class="search-box desktop-only">
           <i class="material-icons">search</i>
           <input 
             type="text" 
