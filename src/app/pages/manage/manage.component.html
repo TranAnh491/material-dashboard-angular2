@@ -80,6 +80,18 @@
             placeholder="Nhập vị trí..."
             style="text-transform: uppercase;">
         </div>
+        
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button 
+            class="btn btn-primary reload-btn" 
+            (click)="reloadData()"
+            [disabled]="!materialCode && !locationSearch"
+            title="Load lại dữ liệu">
+            <i class="material-icons">refresh</i>
+            Load lại
+          </button>
+        </div>
       </div>
 
       <!-- Loading Indicator -->

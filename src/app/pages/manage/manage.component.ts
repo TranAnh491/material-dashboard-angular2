@@ -90,7 +90,11 @@ export class ManageComponent implements OnInit, OnDestroy {
 
   onFactoryChange(): void {
     console.log('🏭 Factory changed to:', this.selectedFactory);
-    this.searchMaterial();
+    if (this.materialCode.trim()) {
+      this.searchMaterial();
+    } else if (this.locationSearch.trim()) {
+      this.searchByLocation();
+    }
   }
 
   onMaterialCodeChange(): void {
@@ -476,6 +480,14 @@ export class ManageComponent implements OnInit, OnDestroy {
     } else {
       this.passwordError = 'Mật khẩu không đúng!';
       this.password = '';
+    }
+  }
+
+  reloadData(): void {
+    if (this.materialCode.trim()) {
+      this.searchMaterial();
+    } else if (this.locationSearch.trim()) {
+      this.searchByLocation();
     }
   }
 
