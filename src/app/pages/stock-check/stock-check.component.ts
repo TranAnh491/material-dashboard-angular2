@@ -13,6 +13,7 @@ interface StockCheckMaterial {
   imd: string;
   stock: number;
   location: string;
+  actualLocation?: string; // Vị trí thực tế (scan)
   standardPacking?: string;
   stockCheck: string;
   qtyCheck: number | null;
@@ -84,12 +85,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   employeeScanInput = ''; // Input scan mã nhân viên
   
   // Scanner
-  scanStep: 'idle' | 'employee' | 'material' = 'idle';
+  scanStep: 'idle' | 'employee' | 'location' | 'material' = 'idle';
   scannedEmployeeId = '';
   showScanModal = false;
   scanMessage = '';
   scanInput = '';
   scanHistory: string[] = [];
+  currentScanLocation: string = ''; // Vị trí hiện tại đang kiểm kê
   
   // Scan success popup
   showScanSuccessPopup = false;
@@ -1219,12 +1221,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       return;
     }
     
-    // Đã có mã nhân viên, chỉ cần scan mã hàng
+    // Đã có mã nhân viên, mở modal và yêu cầu scan VỊ TRÍ trước
     this.showScanModal = true;
-    this.scanStep = 'material'; // Bỏ qua bước scan employee
+    this.scanStep = 'location'; // Bước 1: scan vị trí
     this.scannedEmployeeId = this.currentEmployeeId; // Dùng mã nhân viên đã đăng nhập
+    this.currentScanLocation = '';
     this.scanInput = '';
-    this.scanMessage = `ID: ${this.currentEmployeeId}\n\nScan mã hàng hóa`;
+    this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó mới SCAN MÃ HÀNG.`;
     this.scanHistory = [];
     
     // Focus input after modal opens
@@ -1244,6 +1247,27 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (!scannedData) return;
 
     console.log('📥 Scanned data:', scannedData);
+
+    // Bước 1: scan vị trí
+    if (this.scanStep === 'location') {
+      // Lưu vị trí hiện tại (ghi hoa, bỏ khoảng trắng dư)
+      this.currentScanLocation = scannedData.toUpperCase().trim();
+      this.scanHistory.push(`📍 Vị trí: ${this.currentScanLocation}`);
+      
+      // Chuyển sang bước scan mã hàng
+      this.scanStep = 'material';
+      this.scanInput = '';
+      this.scanMessage = `ID: ${this.currentEmployeeId}\nVị trí: ${this.currentScanLocation}\n\nScan MÃ HÀNG kiểm kê tại vị trí này.`;
+      
+      // Focus lại input để scan tiếp
+      setTimeout(() => {
+        const input = document.getElementById('scan-input') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 100);
+      return;
+    }
 
     if (this.scanStep === 'material') {
       // Đảm bảo có mã nhân viên từ currentEmployeeId
@@ -1329,6 +1353,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           matchingMaterial.idCheck = this.scannedEmployeeId;
           matchingMaterial.dateCheck = new Date();
           
+          // Gán vị trí thực tế (nếu đã scan vị trí)
+          if (this.currentScanLocation) {
+            matchingMaterial.actualLocation = this.currentScanLocation;
+          }
+          
           // Lấy số lượng mới scan
           const newQty = parseFloat(quantity) || 0;
           
@@ -1366,7 +1395,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             poNumber: poNumber,
             imd: imd,
             stock: 0, // Không có thông tin stock từ scan
-            location: '', // Không có thông tin location từ scan
+            location: '', // Vị trí trong tồn kho (không có từ scan)
+            actualLocation: this.currentScanLocation || '', // Vị trí thực tế từ scan
             standardPacking: '', // Sẽ tải sau nếu cần
             stockCheck: '✓',
             qtyCheck: scannedQty,
@@ -1497,6 +1527,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scanMessage = '';
     this.scanInput = '';
     this.scanHistory = [];
+    this.currentScanLocation = '';
     
     // Hiển thị thông báo tổng số mã đã scan
     if (this.scannedCount > 0) {

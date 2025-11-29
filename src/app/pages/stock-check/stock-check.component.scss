@@ -2723,12 +2723,18 @@
     }
     
     .data-section {
-      .table-container.desktop-only,
-      .pagination.desktop-only,
-      .no-data.desktop-only {
-        display: none !important;
-      }
+    .table-container.desktop-only,
+    .pagination.desktop-only,
+    .no-data.desktop-only {
+      display: none !important;
     }
+    }
+
+  // Highlight cột vị trí thực tế sai khác
+  .mismatch-location {
+    font-weight: 600;
+    color: #d32f2f;
+  }
 
     .inner-header {
       flex-wrap: wrap;

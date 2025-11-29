@@ -118,8 +118,8 @@
   <div class="data-section">
     <!-- Counter Boxes -->
     <div class="counter-boxes">
-      <!-- Mobile: Chỉ hiển thị 3 counter boxes -->
-      <div class="counter-box total-box clickable mobile-only" 
+      <!-- Unified (Desktop + Mobile): 3 counter boxes -->
+      <div class="counter-box total-box clickable" 
            [class.active]="filterMode === 'all'"
            (click)="setFilterMode('all')"
            title="Tổng mã">
@@ -132,7 +132,7 @@
         </div>
       </div>
 
-      <div class="counter-box checked-box clickable mobile-only" 
+      <div class="counter-box checked-box clickable" 
            [class.active]="filterMode === 'checked'"
            (click)="setFilterMode('checked')"
            title="Đã kiểm tra">
@@ -145,7 +145,7 @@
         </div>
       </div>
 
-      <div class="counter-box unchecked-box clickable mobile-only" 
+      <div class="counter-box unchecked-box clickable" 
            [class.active]="filterMode === 'unchecked'"
            (click)="setFilterMode('unchecked')"
            title="Chưa kiểm tra">
@@ -155,59 +155,6 @@
         <div class="counter-info">
           <div class="counter-label">CHƯA KIỂM TRA</div>
           <div class="counter-value">{{ uncheckedMaterials }}</div>
-        </div>
-      </div>
-      
-      <!-- Desktop: Hiển thị tất cả counter boxes -->
-      <div class="counter-box total-box clickable desktop-only" 
-           [class.active]="filterMode === 'all'"
-           (click)="setFilterMode('all')"
-           title="Click để hiển thị tất cả">
-        <div class="counter-icon">
-          <i class="material-icons">inventory_2</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">TỔNG MÃ</div>
-          <div class="counter-value">{{ totalMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box checked-box clickable desktop-only" 
-           [class.active]="filterMode === 'checked'"
-           (click)="setFilterMode('checked')"
-           title="Click để hiển thị mã đã kiểm tra">
-        <div class="counter-icon">
-          <i class="material-icons">check_circle</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">ĐÃ KIỂM TRA</div>
-          <div class="counter-value">{{ checkedMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box unchecked-box clickable desktop-only" 
-           [class.active]="filterMode === 'unchecked'"
-           (click)="setFilterMode('unchecked')"
-           title="Click để hiển thị mã chưa kiểm tra">
-        <div class="counter-icon">
-          <i class="material-icons">pending</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">CHƯA KIỂM TRA</div>
-          <div class="counter-value">{{ uncheckedMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box outside-stock-box clickable desktop-only" 
-           [class.active]="filterMode === 'outside'"
-           (click)="setFilterMode('outside')"
-           title="Click để hiển thị mã ngoài tồn kho">
-        <div class="counter-icon">
-          <i class="material-icons">warning</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">MÃ NGOÀI TỒN KHO</div>
-          <div class="counter-value">{{ outsideStockMaterials.length }}</div>
         </div>
       </div>
     </div>
@@ -228,7 +175,8 @@
             <th>PO</th>
             <th>IMD</th>
             <th>TỒN KHO</th>
-            <th>VỊ TRÍ</th>
+            <th>VỊ TRÍ (DỮ LIỆU)</th>
+            <th>VỊ TRÍ THỰC TẾ</th>
             <th>STANDARD PACKING</th>
             <th>STOCK CHECK</th>
             <th>QTY CHECK</th>
@@ -246,6 +194,14 @@
             <td>{{ material.imd }}</td>
             <td>{{ material.stock }}</td>
             <td>{{ material.location }}</td>
+            <td [ngClass]="{'mismatch-location': material.actualLocation && material.actualLocation !== material.location}">
+              <span *ngIf="material.actualLocation; else noActualLoc">
+                {{ material.actualLocation }}
+              </span>
+              <ng-template #noActualLoc>
+                <span style="color: #999;">-</span>
+              </ng-template>
+            </td>
             <td>{{ material.standardPacking || '-' }}</td>
             <td class="check-cell clickable" 
                 (click)="showMaterialDetail(material)"
