@@ -66,6 +66,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   criticalCount = 0;
   warningCount = 0;
 
+  // IQC Materials by Week
+  iqcWeekData: Array<{
+    week: string; // W32, W33, ...
+    count: number;
+  }> = [];
+  iqcLoading = false;
+
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
   rackWarningsRefreshInterval: any;
@@ -92,6 +99,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     // Auto refresh rack warnings every 4 hours
     this.rackWarningsRefreshInterval = setInterval(() => this.loadRackWarnings(), this.rackWarningsRefreshTime);
+    
+    // Load IQC materials by week
+    this.loadIQCByWeek();
     
     // Listen for factory changes from navbar
     window.addEventListener('factoryChanged', (event: any) => {
@@ -689,6 +699,161 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   getWarningStatusClass(status: 'warning' | 'critical'): string {
     return status === 'critical' ? 'status-critical' : 'status-warning';
+  }
+
+  // Load IQC Materials by Week (8 weeks)
+  async loadIQCByWeek() {
+    this.iqcLoading = true;
+    try {
+      // Get current week number (ISO week)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentWeek = this.getISOWeek(now);
+      
+      // Get 8 weeks (current week and 7 previous weeks)
+      const weeks: Array<{ week: string, weekNum: number, startDate: Date, endDate: Date }> = [];
+      for (let i = 7; i >= 0; i--) {
+        let weekNum = currentWeek - i;
+        let year = currentYear;
+        
+        // Handle year boundary
+        if (weekNum <= 0) {
+          year--;
+          const lastWeekOfYear = this.getISOWeek(new Date(year, 11, 31));
+          weekNum = lastWeekOfYear + weekNum;
+        }
+        
+        const weekDate = this.getDateFromISOWeek(year, weekNum);
+        const startDate = this.getStartOfWeek(weekDate);
+        const endDate = this.getEndOfWeek(weekDate);
+        weeks.push({
+          week: `W${weekNum}`,
+          weekNum: weekNum,
+          startDate: startDate,
+          endDate: endDate
+        });
+      }
+
+      // Load all materials with location = "IQC" (exact match)
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('location', '==', 'IQC')
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        this.iqcWeekData = weeks.map(w => ({ week: w.week, count: 0 }));
+        this.cdr.detectChanges();
+        return;
+      }
+
+      // Count unique materials per week
+      const weekCounts = new Map<string, Set<string>>();
+      weeks.forEach(w => {
+        weekCounts.set(w.week, new Set());
+      });
+
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        const location = (data.location || '').toUpperCase().trim();
+        
+        // Check if location is exactly IQC
+        if (location !== 'IQC') {
+          return;
+        }
+
+        // Get import date
+        let materialDate: Date;
+        if (data.importDate) {
+          if (data.importDate.toDate) {
+            materialDate = data.importDate.toDate();
+          } else if (data.importDate instanceof Date) {
+            materialDate = data.importDate;
+          } else if (data.importDate.seconds) {
+            materialDate = new Date(data.importDate.seconds * 1000);
+          } else {
+            materialDate = new Date(data.importDate);
+          }
+        } else {
+          // If no importDate, skip this material
+          return;
+        }
+
+        // Find which week this material belongs to
+        for (const week of weeks) {
+          if (materialDate >= week.startDate && materialDate <= week.endDate) {
+            // Create unique key: materialCode_PO_IMD
+            const materialCode = (data.materialCode || '').toUpperCase().trim();
+            const poNumber = (data.poNumber || '').trim();
+            const batchNumber = (data.batchNumber || '').trim();
+            const imd = this.getIMDFromDate(materialDate, batchNumber);
+            const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
+            
+            weekCounts.get(week.week)?.add(uniqueKey);
+            break; // Material can only belong to one week
+          }
+        }
+      });
+
+      // Convert to array format
+      this.iqcWeekData = weeks.map(w => ({
+        week: w.week,
+        count: weekCounts.get(w.week)?.size || 0
+      }));
+
+      console.log('📊 IQC Week Data:', this.iqcWeekData);
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error loading IQC by week:', error);
+      this.iqcWeekData = [];
+    } finally {
+      this.iqcLoading = false;
+    }
+  }
+
+  // Helper: Get ISO week number
+  private getISOWeek(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }
+
+  // Helper: Get date from ISO week
+  private getDateFromISOWeek(year: number, week: number): Date {
+    const simple = new Date(year, 0, 1 + (week - 1) * 7);
+    const dow = simple.getDay();
+    const ISOweekStart = simple;
+    if (dow <= 4) {
+      ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    } else {
+      ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    }
+    return ISOweekStart;
+  }
+
+  // Helper: Get start of week (Monday)
+  private getStartOfWeek(date: Date): Date {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    return new Date(d.setDate(diff));
+  }
+
+  // Helper: Get end of week (Sunday)
+  private getEndOfWeek(date: Date): Date {
+    const start = this.getStartOfWeek(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+
+  // Helper: Get IMD from date and batch number
+  private getIMDFromDate(date: Date, batchNumber: string): string {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear());
+    return `${day}${month}${year}`;
   }
 
 }

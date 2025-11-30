@@ -1221,14 +1221,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       return;
     }
     
-    // Đã có mã nhân viên, mở modal và yêu cầu scan VỊ TRÍ trước
-    this.showScanModal = true;
-    this.scanStep = 'location'; // Bước 1: scan vị trí
-    this.scannedEmployeeId = this.currentEmployeeId; // Dùng mã nhân viên đã đăng nhập
-    this.currentScanLocation = '';
-    this.scanInput = '';
-    this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó mới SCAN MÃ HÀNG.`;
-    this.scanHistory = [];
+    // Đã có mã nhân viên
+    // Nếu chưa có vị trí (lần đầu hoặc đã đóng modal), yêu cầu scan vị trí
+    // Nếu đã có vị trí (đang trong session), bỏ qua bước scan vị trí
+    if (!this.currentScanLocation) {
+      // Chưa có vị trí - yêu cầu scan vị trí trước
+      this.showScanModal = true;
+      this.scanStep = 'location'; // Bước 1: scan vị trí
+      this.scannedEmployeeId = this.currentEmployeeId;
+      this.scanInput = '';
+      this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
+      this.scanHistory = [];
+    } else {
+      // Đã có vị trí - bỏ qua bước scan vị trí, scan mã hàng luôn
+      this.showScanModal = true;
+      this.scanStep = 'material'; // Bỏ qua bước scan vị trí
+      this.scannedEmployeeId = this.currentEmployeeId;
+      this.scanInput = '';
+      this.scanMessage = `ID: ${this.currentEmployeeId}\nVị trí: ${this.currentScanLocation}\n\nScan MÃ HÀNG kiểm kê tại vị trí này.`;
+      this.scanHistory = [];
+    }
     
     // Focus input after modal opens
     setTimeout(() => {
@@ -1276,6 +1288,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         this.closeScanModal();
         alert('Vui lòng scan mã nhân viên trước!');
         this.showEmployeeScanModal = true;
+        return;
+      }
+      
+      // Đảm bảo đã có vị trí (nếu chưa có thì yêu cầu scan lại)
+      if (!this.currentScanLocation) {
+        // Nếu chưa có vị trí, chuyển về bước scan vị trí
+        this.scanStep = 'location';
+        this.scanInput = '';
+        this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
+        setTimeout(() => {
+          const input = document.getElementById('scan-input') as HTMLInputElement;
+          if (input) {
+            input.focus();
+          }
+        }, 100);
         return;
       }
       
@@ -1373,7 +1400,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             this.scanHistory.pop();
           }
           
-          this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\n\nScan mã tiếp theo`;
+          this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\nVị trí: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
           
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
@@ -1464,7 +1491,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             this.scanHistory.pop();
           }
           
-          this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\n\nScan mã tiếp theo`;
+          this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\nVị trí: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
           
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';

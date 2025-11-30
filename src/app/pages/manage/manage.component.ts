@@ -76,13 +76,12 @@ export class ManageComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     console.log('🚀 ManageComponent initialized');
-    // Check if password was already entered in this session
-    const passwordEntered = sessionStorage.getItem('manage-password-entered');
-    if (passwordEntered === 'true') {
-      this.showPasswordModal = false;
-    } else {
-      this.showPasswordModal = true;
-    }
+    // Always show password modal when component initializes
+    // Clear session storage to ensure password is required each time
+    sessionStorage.removeItem('manage-password-entered');
+    this.showPasswordModal = true;
+    this.password = '';
+    this.passwordError = '';
   }
 
   ngOnDestroy(): void {

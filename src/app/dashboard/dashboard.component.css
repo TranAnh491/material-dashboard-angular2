@@ -956,6 +956,120 @@
   box-shadow: 0 4px 20px var(--shadow-color);
 }
 
+/* IQC Week Box - Match Rack Utilization Warnings size */
+.iqc-week-container {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 20px;
+  margin-top: 20px;
+}
+
+.iqc-week-box {
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 100%;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  min-height: 178px;
+}
+
+.iqc-week-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+.iqc-week-box .box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.iqc-week-box .box-header h5 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iqc-week-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.iqc-weeks-row {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.iqc-week-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  padding: 8px 4px;
+}
+
+.iqc-week-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff9800; /* Màu cam */
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.iqc-week-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #000000; /* Màu đen */
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.iqc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  gap: 8px;
+  color: #6b7280;
+}
+
+.iqc-loading .material-icons {
+  font-size: 24px;
+  color: #ff9800;
+}
+
+.iqc-loading .rotating {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .rack-warnings-box .box-header {
   display: flex;
   justify-content: space-between;

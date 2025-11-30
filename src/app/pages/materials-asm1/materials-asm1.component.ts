@@ -69,6 +69,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Data properties
   inventoryMaterials: InventoryMaterial[] = [];
   filteredInventory: InventoryMaterial[] = [];
+  displayedInventory: InventoryMaterial[] = []; // Items to display on current page
+  
+  // Pagination
+  currentPage: number = 1;
+  itemsPerPage: number = 20;
+  totalPages: number = 1;
   
   // Loading state
   isLoading = false;
@@ -1060,7 +1066,50 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Mark duplicates
     this.markDuplicates();
     
+    // Update pagination and displayed inventory
+    this.updatePagination();
+    this.updateDisplayedInventory();
+    
     console.log('🔍 ASM1 filters applied. Items found:', this.filteredInventory.length);
+  }
+
+  // Update pagination
+  updatePagination(): void {
+    this.totalPages = Math.ceil(this.filteredInventory.length / this.itemsPerPage);
+    if (this.currentPage > this.totalPages && this.totalPages > 0) {
+      this.currentPage = 1;
+    }
+  }
+
+  // Update displayed inventory based on current page
+  updateDisplayedInventory(): void {
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    const endIndex = startIndex + this.itemsPerPage;
+    this.displayedInventory = this.filteredInventory.slice(startIndex, endIndex);
+  }
+
+  // Go to specific page
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+      this.updateDisplayedInventory();
+    }
+  }
+
+  // Next page
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+      this.updateDisplayedInventory();
+    }
+  }
+
+  // Previous page
+  previousPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      this.updateDisplayedInventory();
+    }
   }
 
   // New optimized search method
@@ -1128,10 +1177,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     
-    // Chỉ search khi có ít nhất 3 ký tự để tránh mất thời gian
-    if (searchTerm.length < 3) {
+    // Chỉ search khi có ít nhất 3 ký tự để tránh mất thời gian (trừ location search)
+    if (this.searchType !== 'location' && searchTerm.length < 3) {
       this.filteredInventory = [];
       console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
+      return;
+    }
+    
+    // Location search: cho phép từ 1 ký tự trở lên
+    if (this.searchType === 'location' && searchTerm.length < 1) {
+      this.filteredInventory = [];
       return;
     }
     
@@ -1141,36 +1196,41 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.searchProgress = 0;
     
     try {
-      console.log(`🔍 ASM1 Searching for: "${searchTerm}" - Loading from Firebase...`);
+      console.log(`🔍 ASM1 Searching for: "${searchTerm}" (type: ${this.searchType}) - Loading from Firebase...`);
       
       // IMPROVED: Query Firebase với nhiều điều kiện hơn để tìm kiếm toàn diện
       let querySnapshot;
       
-      // Thử tìm kiếm theo materialCode trước (chính xác nhất) - ASM1 only
-      this.searchProgress = 25;
-      querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-        ref.where('factory', '==', this.FACTORY)
-           .where('materialCode', '==', searchTerm)
-           .limit(50)
-      ).get().toPromise();
-      
-      // Nếu không tìm thấy, tìm kiếm theo pattern matching
-      if (!querySnapshot || querySnapshot.empty) {
-        console.log(`🔍 ASM1 No exact match for "${searchTerm}", trying pattern search...`);
-        this.searchProgress = 50;
+      // Tìm kiếm theo searchType
+      if (this.searchType === 'location') {
+        // Tìm kiếm theo location
+        this.searchProgress = 25;
+        const normalizedLocation = searchTerm.trim().toUpperCase();
+        console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}"...`);
         
+        // Thử exact match trước (chính xác nhất)
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
           ref.where('factory', '==', this.FACTORY)
-             .where('materialCode', '>=', searchTerm)
-             .where('materialCode', '<=', searchTerm + '\uf8ff')
-             .limit(100)
+             .where('location', '==', normalizedLocation)
+             .limit(200)
         ).get().toPromise();
-      }
-      
-      // Nếu vẫn không tìm thấy, tìm kiếm theo PO number
-      if (!querySnapshot || querySnapshot.empty) {
-        console.log(`🔍 ASM1 No pattern match for "${searchTerm}", trying PO search...`);
-        this.searchProgress = 75;
+        
+        // Nếu không tìm thấy với exact match, thử pattern matching
+        if (!querySnapshot || querySnapshot.empty) {
+          console.log(`🔍 ASM1 No exact match for location "${normalizedLocation}", trying pattern search...`);
+          this.searchProgress = 50;
+          
+          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+            ref.where('factory', '==', this.FACTORY)
+               .where('location', '>=', normalizedLocation)
+               .where('location', '<=', normalizedLocation + '\uf8ff')
+               .limit(200)
+          ).get().toPromise();
+        }
+      } else if (this.searchType === 'po') {
+        // Tìm kiếm theo PO number
+        this.searchProgress = 25;
+        console.log(`🔍 ASM1 Searching by PO: "${searchTerm}"...`);
         
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
           ref.where('factory', '==', this.FACTORY)
@@ -1178,6 +1238,53 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
              .where('poNumber', '<=', searchTerm + '\uf8ff')
              .limit(100)
         ).get().toPromise();
+        
+        // Nếu không tìm thấy, thử exact match
+        if (!querySnapshot || querySnapshot.empty) {
+          console.log(`🔍 ASM1 No pattern match for PO "${searchTerm}", trying exact match...`);
+          this.searchProgress = 50;
+          
+          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+            ref.where('factory', '==', this.FACTORY)
+               .where('poNumber', '==', searchTerm)
+               .limit(100)
+          ).get().toPromise();
+        }
+      } else {
+        // Tìm kiếm theo materialCode (default)
+        // Thử tìm kiếm theo materialCode trước (chính xác nhất) - ASM1 only
+        this.searchProgress = 25;
+        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+          ref.where('factory', '==', this.FACTORY)
+             .where('materialCode', '==', searchTerm)
+             .limit(50)
+        ).get().toPromise();
+        
+        // Nếu không tìm thấy, tìm kiếm theo pattern matching
+        if (!querySnapshot || querySnapshot.empty) {
+          console.log(`🔍 ASM1 No exact match for "${searchTerm}", trying pattern search...`);
+          this.searchProgress = 50;
+          
+          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+            ref.where('factory', '==', this.FACTORY)
+               .where('materialCode', '>=', searchTerm)
+               .where('materialCode', '<=', searchTerm + '\uf8ff')
+               .limit(100)
+          ).get().toPromise();
+        }
+        
+        // Nếu vẫn không tìm thấy, tìm kiếm theo PO number (fallback)
+        if (!querySnapshot || querySnapshot.empty) {
+          console.log(`🔍 ASM1 No pattern match for "${searchTerm}", trying PO search...`);
+          this.searchProgress = 75;
+          
+          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+            ref.where('factory', '==', this.FACTORY)
+               .where('poNumber', '>=', searchTerm)
+               .where('poNumber', '<=', searchTerm + '\uf8ff')
+               .limit(100)
+          ).get().toPromise();
+        }
       }
       
       if (querySnapshot && !querySnapshot.empty) {
@@ -1216,6 +1323,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Sắp xếp FIFO: Material Code -> PO (oldest first)
         this.sortInventoryFIFO();
+        
+        // Reset to page 1 and update pagination
+        this.currentPage = 1;
+        this.updatePagination();
+        this.updateDisplayedInventory();
         
         // 🔧 SIMPLIFIED: Exported quantities loaded directly from Firebase (no auto-update needed)
         console.log('✅ Search results exported quantities loaded directly from Firebase');

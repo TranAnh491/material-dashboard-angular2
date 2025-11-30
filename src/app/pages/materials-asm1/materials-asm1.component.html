@@ -297,7 +297,7 @@
 
     <!-- Mobile Card View -->
     <div class="mobile-cards-container" *ngIf="!isLoading">
-      <div class="mobile-card" *ngFor="let material of filteredInventory; trackBy: trackByFn; let i = index" 
+      <div class="mobile-card" *ngFor="let material of displayedInventory; trackBy: trackByFn; let i = index" 
            [class.duplicate-card]="material.isDuplicate"
            [class.iqc-card]="isIQCLocation(material.location)">
         
@@ -411,6 +411,26 @@
           </button>
         </div>
       </div>
+      
+      <!-- Mobile Pagination -->
+      <div class="pagination-container mobile-only" *ngIf="totalPages > 1">
+        <div class="pagination-info">
+          Trang {{currentPage}} / {{totalPages}} - {{displayedInventory.length}} / {{filteredInventory.length}} mã
+        </div>
+        <div class="pagination-controls">
+          <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <select class="page-selector" [(ngModel)]="currentPage" (change)="goToPage(currentPage)">
+            <option *ngFor="let page of [].constructor(totalPages); let i = index" [value]="i + 1">
+              {{i + 1}}
+            </option>
+          </select>
+          <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Desktop Table Container -->
@@ -443,7 +463,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredInventory; trackBy: trackByFn; let i = index" 
+          <tr *ngFor="let material of displayedInventory; trackBy: trackByFn; let i = index" 
               [class.duplicate-row]="material.isDuplicate"
               [class.iqc-row]="isIQCLocation(material.location)">
             <td class="qr-cell">

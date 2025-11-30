@@ -140,6 +140,34 @@
           </div>
         </div>
       </div>
+
+      <!-- IQC Materials by Week -->
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="iqc-week-container">
+          <div class="iqc-week-box">
+            <div class="box-header">
+              <h5>
+                <i class="material-icons" style="color: #ff9800;">inventory_2</i>
+                IQC Materials (8 Weeks)
+              </h5>
+            </div>
+            
+            <div class="iqc-week-summary" *ngIf="!iqcLoading">
+              <div class="iqc-weeks-row">
+                <div *ngFor="let week of iqcWeekData" class="iqc-week-item">
+                  <div class="iqc-week-count">{{ week.count }}</div>
+                  <div class="iqc-week-label">{{ week.week }}</div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="iqc-loading" *ngIf="iqcLoading">
+              <i class="material-icons rotating">refresh</i>
+              <span>Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Charts Section - 3 charts in a row -->
