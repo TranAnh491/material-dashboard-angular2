@@ -3,6 +3,7 @@ import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
+import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
   code: string;
@@ -72,6 +73,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     count: number;
   }> = [];
   iqcLoading = false;
+  
+  // IQC Materials Modal
+  showIQCMaterialsModal: boolean = false;
+  iqcMaterialsByWeek: Array<{
+    week: string;
+    weekNum: number;
+    startDate: Date;
+    endDate: Date;
+    materials: Array<{
+      materialCode: string;
+      poNumber: string;
+      imd: string;
+      stock: number;
+      location: string;
+    }>;
+  }> = [];
+  iqcMaterialsLoading: boolean = false;
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
@@ -898,6 +916,254 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = String(date.getFullYear());
     return `${day}${month}${year}`;
+  }
+
+  // Open IQC Materials Modal
+  openIQCMaterialsModal(): void {
+    this.showIQCMaterialsModal = true;
+    this.loadIQCMaterialsByWeek();
+  }
+
+  // Close IQC Materials Modal
+  closeIQCMaterialsModal(): void {
+    this.showIQCMaterialsModal = false;
+    this.iqcMaterialsByWeek = [];
+  }
+
+  // Load IQC Materials by Week for modal
+  async loadIQCMaterialsByWeek(): Promise<void> {
+    this.iqcMaterialsLoading = true;
+    try {
+      // Get current week number (ISO week)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentWeek = this.getISOWeek(now);
+      
+      // Get 8 weeks (current week and 7 previous weeks)
+      const weeks: Array<{ week: string, weekNum: number, startDate: Date, endDate: Date }> = [];
+      for (let i = 7; i >= 0; i--) {
+        let weekNum = currentWeek - i;
+        let year = currentYear;
+        
+        // Handle year boundary
+        if (weekNum <= 0) {
+          year--;
+          const lastWeekOfYear = this.getISOWeek(new Date(year, 11, 31));
+          weekNum = lastWeekOfYear + weekNum;
+        }
+        
+        const weekDate = this.getDateFromISOWeek(year, weekNum);
+        const startDate = this.getStartOfWeek(weekDate);
+        const endDate = this.getEndOfWeek(weekDate);
+        weeks.push({
+          week: `W${weekNum}`,
+          weekNum: weekNum,
+          startDate: startDate,
+          endDate: endDate
+        });
+      }
+
+      // Load all materials with location = "IQC" (exact match) - Filter by ASM1 factory
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+          .where('location', '==', 'IQC')
+      ).get().toPromise();
+
+      // Initialize materials array for each week
+      this.iqcMaterialsByWeek = weeks.map(w => ({
+        week: w.week,
+        weekNum: w.weekNum,
+        startDate: w.startDate,
+        endDate: w.endDate,
+        materials: []
+      }));
+
+      if (snapshot && !snapshot.empty) {
+        const materialsMap = new Map<string, Array<{
+          materialCode: string;
+          poNumber: string;
+          imd: string;
+          stock: number;
+          location: string;
+        }>>();
+
+        // Initialize map for each week
+        weeks.forEach(w => {
+          materialsMap.set(w.week, []);
+        });
+
+        snapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const location = (data.location || '').toUpperCase().trim();
+          
+          // Check if location is exactly IQC
+          if (location !== 'IQC') {
+            return;
+          }
+
+          // Calculate stock: openingStock + quantity - exported - xt
+          const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+          const quantity = Number(data.quantity) || 0;
+          const exported = Number(data.exported) || 0;
+          const xt = Number(data.xt) || 0;
+          const stock = openingStock + quantity - exported - xt;
+          
+          // Only count materials with stock > 0
+          if (stock <= 0) {
+            return;
+          }
+
+          // Get date for week calculation
+          let materialDate: Date | null = null;
+          
+          // Priority 1: importDate
+          if (data.importDate) {
+            if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
+              materialDate = data.importDate.toDate();
+            } else if (data.importDate instanceof Date) {
+              materialDate = data.importDate;
+            } else if (data.importDate.seconds) {
+              materialDate = new Date(data.importDate.seconds * 1000);
+            } else {
+              materialDate = new Date(data.importDate);
+            }
+          }
+          
+          // Priority 2: lastUpdated
+          if (!materialDate && data.lastUpdated) {
+            if (data.lastUpdated.toDate && typeof data.lastUpdated.toDate === 'function') {
+              materialDate = data.lastUpdated.toDate();
+            } else if (data.lastUpdated instanceof Date) {
+              materialDate = data.lastUpdated;
+            } else if (data.lastUpdated.seconds) {
+              materialDate = new Date(data.lastUpdated.seconds * 1000);
+            } else {
+              materialDate = new Date(data.lastUpdated);
+            }
+          }
+          
+          // Priority 3: createdAt
+          if (!materialDate && data.createdAt) {
+            if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+              materialDate = data.createdAt.toDate();
+            } else if (data.createdAt instanceof Date) {
+              materialDate = data.createdAt;
+            } else if (data.createdAt.seconds) {
+              materialDate = new Date(data.createdAt.seconds * 1000);
+            } else {
+              materialDate = new Date(data.createdAt);
+            }
+          }
+          
+          // If no date, skip this material
+          if (!materialDate) {
+            return;
+          }
+
+          // Find which week this material belongs to
+          for (const week of weeks) {
+            if (materialDate >= week.startDate && materialDate <= week.endDate) {
+              const materialCode = (data.materialCode || '').toUpperCase().trim();
+              const poNumber = (data.poNumber || '').trim();
+              const batchNumber = (data.batchNumber || '').trim();
+              const imd = this.getIMDFromDate(materialDate, batchNumber);
+              
+              // Check if material already exists in this week (unique by materialCode_PO_IMD)
+              const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
+              const weekMaterials = materialsMap.get(week.week) || [];
+              const existingIndex = weekMaterials.findIndex(m => 
+                m.materialCode === materialCode && 
+                m.poNumber === poNumber && 
+                m.imd === imd
+              );
+              
+              if (existingIndex >= 0) {
+                // Update stock if already exists
+                weekMaterials[existingIndex].stock += stock;
+              } else {
+                // Add new material
+                weekMaterials.push({
+                  materialCode: materialCode,
+                  poNumber: poNumber,
+                  imd: imd,
+                  stock: stock,
+                  location: 'IQC'
+                });
+              }
+              
+              materialsMap.set(week.week, weekMaterials);
+              break; // Material can only belong to one week
+            }
+          }
+        });
+
+        // Update iqcMaterialsByWeek with materials
+        this.iqcMaterialsByWeek = this.iqcMaterialsByWeek.map(weekData => ({
+          ...weekData,
+          materials: materialsMap.get(weekData.week) || []
+        }));
+      }
+
+      console.log('📊 IQC Materials by Week loaded:', this.iqcMaterialsByWeek);
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error loading IQC materials by week:', error);
+      this.iqcMaterialsByWeek = [];
+    } finally {
+      this.iqcMaterialsLoading = false;
+    }
+  }
+
+  // Download IQC Materials Report
+  downloadIQCMaterialsReport(): void {
+    if (this.iqcMaterialsByWeek.length === 0) {
+      alert('Không có dữ liệu để tải xuống!');
+      return;
+    }
+
+    try {
+      // Prepare data for Excel - one sheet per week
+      const wb = XLSX.utils.book_new();
+      
+      this.iqcMaterialsByWeek.forEach(weekData => {
+        const excelData = weekData.materials.map((material, index) => ({
+          'STT': index + 1,
+          'Mã hàng': material.materialCode,
+          'PO': material.poNumber,
+          'IMD': material.imd,
+          'Tồn kho': material.stock,
+          'Vị trí': material.location
+        }));
+
+        // Add header row with week info
+        const headerRow = [{
+          'STT': weekData.week,
+          'Mã hàng': `Từ ${weekData.startDate.toLocaleDateString('vi-VN')} đến ${weekData.endDate.toLocaleDateString('vi-VN')}`,
+          'PO': `Tổng: ${weekData.materials.length} mã`,
+          'IMD': '',
+          'Tồn kho': '',
+          'Vị trí': ''
+        }];
+        
+        const allData = [...headerRow, ...excelData];
+        
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(allData);
+        XLSX.utils.book_append_sheet(wb, ws, weekData.week);
+      });
+
+      // Generate filename
+      const date = new Date().toISOString().split('T')[0];
+      const filename = `IQC_Materials_Report_${date}.xlsx`;
+
+      // Write and download
+      XLSX.writeFile(wb, filename);
+      console.log(`✅ IQC Materials Report downloaded: ${filename}`);
+      alert(`✅ Đã tải báo cáo: ${filename}`);
+    } catch (error) {
+      console.error('❌ Error downloading IQC materials report:', error);
+      alert(`❌ Lỗi khi tải báo cáo: ${error.message}`);
+    }
   }
 
 }

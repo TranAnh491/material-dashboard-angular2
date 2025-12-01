@@ -144,7 +144,10 @@
       <!-- IQC Materials by Week -->
       <div class="col-lg-3 col-md-6 col-sm-6">
         <div class="iqc-week-container">
-          <div class="iqc-week-box">
+          <div class="iqc-week-box" 
+               (click)="openIQCMaterialsModal()"
+               style="cursor: pointer;"
+               title="Click để xem danh sách mã hàng IQC theo tuần">
             <div class="box-header">
               <h5>
                 <i class="material-icons" style="color: #ff9800;">inventory_2</i>
@@ -288,6 +291,73 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IQC Materials Modal -->
+<div class="modal-overlay" *ngIf="showIQCMaterialsModal" (click)="closeIQCMaterialsModal()">
+  <div class="modal-content iqc-materials-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons" style="color: #ff9800;">inventory_2</i>
+        Danh sách mã hàng IQC theo tuần
+      </h3>
+      <button class="close-btn" (click)="closeIQCMaterialsModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="iqc-modal-actions">
+        <button class="download-btn" (click)="downloadIQCMaterialsReport()" [disabled]="iqcMaterialsLoading || iqcMaterialsByWeek.length === 0">
+          <i class="material-icons">download</i>
+          Tải danh sách Excel
+        </button>
+      </div>
+      
+      <div class="iqc-loading" *ngIf="iqcMaterialsLoading">
+        <i class="material-icons rotating">refresh</i>
+        <span>Đang tải dữ liệu...</span>
+      </div>
+      
+      <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
+        <div *ngFor="let weekData of iqcMaterialsByWeek" class="iqc-week-section">
+          <div class="week-header">
+            <h4>{{ weekData.week }}</h4>
+            <span class="week-count">({{ weekData.materials.length }} mã)</span>
+          </div>
+          
+          <div class="materials-list" *ngIf="weekData.materials.length > 0">
+            <table class="materials-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Mã hàng</th>
+                  <th>PO</th>
+                  <th>IMD</th>
+                  <th>Tồn kho</th>
+                  <th>Vị trí</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let material of weekData.materials; let i = index">
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ material.materialCode }}</td>
+                  <td>{{ material.poNumber }}</td>
+                  <td>{{ material.imd }}</td>
+                  <td>{{ material.stock | number:'1.0-2' }}</td>
+                  <td>{{ material.location }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="no-materials" *ngIf="weekData.materials.length === 0">
+            <p>Không có mã hàng nào</p>
           </div>
         </div>
       </div>
