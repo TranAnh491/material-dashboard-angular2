@@ -83,6 +83,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
   statusFilter: string = 'all'; // Default to Tất cả
   
+  // Batch type filters - Hàng Trả / Hàng Nhập
+  filterReturnGoods: boolean = false; // Lọc hàng trả (batchNumber bắt đầu bằng TRA)
+  filterNormalGoods: boolean = false; // Lọc hàng nhập (không phải TRA)
+  
   // Sort filter
   sortBy: string = 'importDate'; // Default to Ngày nhập
   
@@ -104,6 +108,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   iqcEmployeeId: string = '';
   iqcEmployeeVerified: boolean = false;
   iqcStep: number = 1; // 1: Scan employee, 2: Scan material
+  
+  // Nhận hàng trả Modal properties
+  showReturnGoodsModal: boolean = false;
+  returnGoodsEmployeeInput: string = '';
+  returnGoodsEmployeeId: string = '';
+  returnGoodsEmployeeVerified: boolean = false;
+  returnGoodsStep: number = 1; // 1: Scan employee, 2: Scan QR code
+  returnGoodsQRInput: string = '';
+  returnGoodsScanResult: { success: boolean, message: string, material?: InboundMaterial } | null = null;
   
   // Physical Scanner properties (copy from outbound)
   isScannerInputActive: boolean = false;
@@ -347,8 +360,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const searchTermLower = this.searchTerm.toLowerCase();
       
       switch (this.searchType) {
-        case 'material':
-          // Search by material code or name
+        case 'materialCode':
+          // Search by material code
           filtered = filtered.filter(material => 
             material.materialCode.toLowerCase().includes(searchTermLower)
           );
@@ -356,6 +369,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         case 'batchNumber':
           filtered = filtered.filter(material => 
             material.batchNumber.toLowerCase().includes(searchTermLower)
+          );
+          break;
+        case 'location':
+          // Search by location
+          filtered = filtered.filter(material => 
+            material.location && material.location.toLowerCase().includes(searchTermLower)
           );
           break;
         case 'poNumber':
@@ -451,6 +470,24 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`  - Ngày kết thúc: ${end.toLocaleDateString('vi-VN')}`);
     } else {
       console.log(`⚠️ Không có khung thời gian lọc, hiển thị tất cả materials`);
+    }
+    
+    // Batch type filter - Hàng Trả / Hàng Nhập
+    if (this.filterReturnGoods || this.filterNormalGoods) {
+      const beforeBatchTypeFilter = filtered.length;
+      if (this.filterReturnGoods && !this.filterNormalGoods) {
+        // Chỉ lọc hàng trả (batchNumber bắt đầu bằng TRA)
+        filtered = filtered.filter(material => 
+          material.batchNumber && material.batchNumber.toUpperCase().startsWith('TRA')
+        );
+      } else if (this.filterNormalGoods && !this.filterReturnGoods) {
+        // Chỉ lọc hàng nhập (không phải TRA)
+        filtered = filtered.filter(material => 
+          !material.batchNumber || !material.batchNumber.toUpperCase().startsWith('TRA')
+        );
+      }
+      // Nếu cả 2 đều được tick, hiển thị tất cả (không lọc)
+      console.log(`📦 Batch type filter: Return=${this.filterReturnGoods}, Normal=${this.filterNormalGoods}, Before=${beforeBatchTypeFilter}, After=${filtered.length}`);
     }
     
     // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
@@ -932,6 +969,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         return 'Tìm kiếm theo mã hàng...';
       case 'batchNumber':
         return 'Tìm kiếm theo lô hàng...';
+      case 'location':
+        return 'Tìm kiếm theo vị trí...';
       case 'poNumber':
         return 'Tìm kiếm theo PO...';
       default:
@@ -1018,7 +1057,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.searchType = type;
     this.applyFilters();
   }
-  
+
+  // Batch type filter change handler
+  onBatchTypeFilterChange(): void {
+    console.log('📦 Batch type filter changed:', {
+      filterReturnGoods: this.filterReturnGoods,
+      filterNormalGoods: this.filterNormalGoods
+    });
+    this.applyFilters();
+  }
+
+  // Getter: Đếm số hàng trả đang chờ nhập (chưa isReceived)
+  get pendingReturnGoodsCount(): number {
+    return this.materials.filter(material => 
+      material.batchNumber && 
+      material.batchNumber.toUpperCase().startsWith('TRA') &&
+      !material.isReceived
+    ).length;
+  }
+
   changeStatusFilter(status: string): void {
     this.statusFilter = status;
     console.log(`🔄 Thay đổi bộ lọc trạng thái: ${status}`);
@@ -3677,5 +3734,218 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       default:
         return 'iqc-waiting';
     }
+  }
+
+  // Nhận hàng trả Modal methods
+  openReturnGoodsModal(): void {
+    console.log('📦 Opening Return Goods modal');
+    this.showReturnGoodsModal = true;
+    this.returnGoodsEmployeeInput = '';
+    this.returnGoodsQRInput = '';
+    this.returnGoodsEmployeeId = '';
+    this.returnGoodsEmployeeVerified = false;
+    this.returnGoodsStep = 1;
+    this.returnGoodsScanResult = null;
+    this.showDropdown = false;
+    
+    // Auto-focus on input after modal opens
+    setTimeout(() => {
+      const input = document.getElementById('returnGoodsEmployeeInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  }
+
+  closeReturnGoodsModal(): void {
+    console.log('📦 Closing Return Goods modal');
+    this.showReturnGoodsModal = false;
+    this.returnGoodsEmployeeInput = '';
+    this.returnGoodsQRInput = '';
+    this.returnGoodsEmployeeId = '';
+    this.returnGoodsEmployeeVerified = false;
+    this.returnGoodsStep = 1;
+    this.returnGoodsScanResult = null;
+  }
+
+  onReturnGoodsEmployeeInput(event: any): void {
+    const input = event.target;
+    const value = input.value;
+    if (value) {
+      // Tự động viết hoa và giới hạn 7 ký tự
+      this.returnGoodsEmployeeInput = value.toUpperCase().substring(0, 7);
+      input.value = this.returnGoodsEmployeeInput;
+    }
+  }
+
+  onReturnGoodsEmployeeKeyup(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.returnGoodsEmployeeInput.trim()) {
+      this.verifyReturnGoodsEmployee();
+    }
+  }
+
+  verifyReturnGoodsEmployee(): void {
+    const scannedData = this.returnGoodsEmployeeInput.trim();
+    console.log('👤 Verifying Return Goods employee - raw input:', scannedData);
+
+    if (!scannedData) {
+      alert('⚠️ Vui lòng nhập mã nhân viên');
+      return;
+    }
+
+    // Đọc 7 ký tự đầu tiên
+    const employeeId = scannedData.substring(0, 7).toUpperCase();
+    console.log('🔍 Extracted employee ID (first 7 chars):', employeeId);
+
+    if (employeeId.length >= 7) {
+      // Employee ID hợp lệ
+      this.returnGoodsEmployeeId = employeeId;
+      this.returnGoodsEmployeeVerified = true;
+      this.returnGoodsStep = 2;
+      this.returnGoodsEmployeeInput = '';
+      
+      console.log('✅ Return Goods employee verified:', employeeId);
+      
+      // Auto-focus for QR scan
+      setTimeout(() => {
+        const input = document.getElementById('returnGoodsQRInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 100);
+    } else {
+      alert('⚠️ Mã nhân viên phải có ít nhất 7 ký tự');
+      this.returnGoodsEmployeeInput = '';
+    }
+  }
+
+  onReturnGoodsQRKeyup(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.returnGoodsQRInput.trim()) {
+      this.processReturnGoodsScan();
+    }
+  }
+
+  async processReturnGoodsScan(): Promise<void> {
+    const scannedCode = this.returnGoodsQRInput.trim();
+    console.log('📦 Processing Return Goods scan:', scannedCode);
+
+    if (!scannedCode) {
+      alert('⚠️ Vui lòng nhập mã QR');
+      return;
+    }
+
+    // Parse QR code format: MaterialCode|PO|Quantity|BatchDate
+    // Example: B017431|KZPO1025/0194|100|19112025
+    const parts = scannedCode.split('|');
+    console.log('🔍 QR code parts:', parts);
+
+    if (parts.length < 3) {
+      this.returnGoodsScanResult = {
+        success: false,
+        message: '❌ Mã QR không đúng định dạng. Format: MaterialCode|PO|Quantity|Date'
+      };
+      this.returnGoodsQRInput = '';
+      return;
+    }
+
+    const materialCode = parts[0].trim();
+    const poNumber = parts[1].trim();
+    const quantity = parseFloat(parts[2].trim()) || 0;
+
+    console.log('🔍 Searching for TRA material:', { materialCode, poNumber, quantity });
+
+    // Tìm materials có batchNumber bắt đầu bằng "TRA"
+    const traMaterials = this.materials.filter(m => 
+      m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA')
+    );
+
+    console.log(`📊 Found ${traMaterials.length} TRA materials`);
+
+    // Tìm material khớp với mã, PO, và lượng
+    const foundMaterial = traMaterials.find(m => 
+      m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() &&
+      m.poNumber.trim() === poNumber.trim() &&
+      Math.abs(m.quantity - quantity) < 0.01 // So sánh số lượng (cho phép sai số nhỏ)
+    );
+
+    if (foundMaterial) {
+      console.log('✅ Found matching TRA material:', foundMaterial);
+
+      // Kiểm tra xem đã nhận chưa
+      if (foundMaterial.isReceived) {
+        this.returnGoodsScanResult = {
+          success: false,
+          message: '⚠️ Mã hàng này đã được nhận rồi',
+          material: foundMaterial
+        };
+      } else {
+        // Tự động check đã nhận
+        try {
+          const materialId = foundMaterial.id;
+          if (!materialId) {
+            throw new Error('Material không có ID');
+          }
+
+          // Update in Firestore
+          await this.firestore.collection('inbound-materials').doc(materialId).update({
+            isReceived: true,
+            updatedAt: new Date()
+          });
+
+          // Update local data
+          const materialIndex = this.materials.findIndex(m => m.id === materialId);
+          if (materialIndex !== -1) {
+            this.materials[materialIndex].isReceived = true;
+          }
+
+          console.log('✅ Material marked as received:', foundMaterial.materialCode);
+          
+          // Thêm vào inventory-materials collection (giống như onReceivedChange)
+          console.log('📦 Adding return goods material to inventory:', foundMaterial.materialCode);
+          this.addToInventory(foundMaterial);
+          
+          this.returnGoodsScanResult = {
+            success: true,
+            message: '✅ Đã nhận hàng thành công và đã thêm vào inventory!',
+            material: foundMaterial
+          };
+
+          // Refresh filtered materials
+          this.applyFilters();
+
+        } catch (error) {
+          console.error('❌ Error updating material:', error);
+          this.returnGoodsScanResult = {
+            success: false,
+            message: `❌ Lỗi cập nhật: ${error.message}`,
+            material: foundMaterial
+          };
+        }
+      }
+    } else {
+      console.log('❌ TRA material not found for:', { materialCode, poNumber, quantity });
+      console.log('📊 Available TRA materials:', traMaterials.map(m => ({
+        materialCode: m.materialCode,
+        poNumber: m.poNumber,
+        quantity: m.quantity,
+        batchNumber: m.batchNumber
+      })));
+      
+      this.returnGoodsScanResult = {
+        success: false,
+        message: '❌ Không tìm thấy mã hàng trong lô hàng TRA. Vui lòng kiểm tra lại mã QR.'
+      };
+    }
+
+    // Clear input for next scan
+    this.returnGoodsQRInput = '';
+    
+    // Auto-focus for next scan after a delay
+    setTimeout(() => {
+      const input = document.getElementById('returnGoodsQRInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 500);
   }
 }

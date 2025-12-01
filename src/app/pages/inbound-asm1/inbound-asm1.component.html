@@ -59,6 +59,37 @@
           IQC
         </button>
         
+        <!-- Nhận hàng trả Button -->
+        <button class="return-goods-btn" (click)="openReturnGoodsModal()">
+          <i class="material-icons">assignment_return</i>
+          Nhận hàng trả
+        </button>
+        
+        <!-- Filter Buttons: Hàng Trả / Hàng Nhập -->
+        <div class="batch-type-filters">
+          <label class="filter-checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="filterReturnGoods" 
+                   (change)="onBatchTypeFilterChange()"
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Hàng Trả</span>
+          </label>
+          <label class="filter-checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="filterNormalGoods" 
+                   (change)="onBatchTypeFilterChange()"
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Hàng Nhập</span>
+          </label>
+        </div>
+        
+        <!-- Return Goods Counter Box -->
+        <div class="return-goods-counter-box">
+          <i class="material-icons">assignment_return</i>
+          <span class="counter-label">Hàng trả chờ nhập:</span>
+          <span class="counter-value">{{ pendingReturnGoodsCount }}</span>
+        </div>
+        
         <!-- More Button with Dropdown -->
         <div class="dropdown">
           <button class="more-btn" (click)="toggleDropdown()">
@@ -148,6 +179,7 @@
                     (change)="changeSearchType($event.target.value)">
               <option value="materialCode">Mã Hàng</option>
               <option value="batchNumber">Lô Hàng</option>
+              <option value="location">Vị Trí</option>
             </select>
           </div>
           
@@ -716,6 +748,108 @@
       <div class="iqc-instructions" *ngIf="iqcStep === 2 && !scannedMaterial">
         <p><i class="material-icons">info</i> Quét mã QR trên tem material để bắt đầu kiểm tra</p>
         <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nhận hàng trả Modal -->
+<div class="modal-overlay" *ngIf="showReturnGoodsModal" (click)="closeReturnGoodsModal()">
+  <div class="modal-content return-goods-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📦 Nhận hàng trả (TRA)</h3>
+      <button class="close-btn" (click)="closeReturnGoodsModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step 1: Scan Employee ID -->
+      <div class="return-goods-scanner-section" *ngIf="returnGoodsStep === 1">
+        <label for="returnGoodsEmployeeInput">
+          <i class="material-icons">badge</i> 
+          Bước 1: Quét mã nhân viên (7 ký tự đầu tiên)
+        </label>
+        <input 
+          type="text" 
+          id="returnGoodsEmployeeInput"
+          [(ngModel)]="returnGoodsEmployeeInput"
+          placeholder="Quét hoặc nhập mã nhân viên..."
+          class="return-goods-scan-input"
+          (keyup)="onReturnGoodsEmployeeKeyup($event)"
+          (input)="onReturnGoodsEmployeeInput($event)"
+          maxlength="7"
+          autofocus>
+        
+        <button class="scan-submit-btn" (click)="verifyReturnGoodsEmployee()">
+          <i class="material-icons">verified_user</i>
+          Xác thực
+        </button>
+      </div>
+
+      <!-- Employee Verified Badge -->
+      <div class="employee-verified-badge" *ngIf="returnGoodsEmployeeVerified">
+        <i class="material-icons">check_circle</i>
+        <span>Nhân viên: <strong>{{ returnGoodsEmployeeId }}</strong></span>
+      </div>
+
+      <!-- Step 2: Scan QR Code -->
+      <div class="return-goods-scanner-section" *ngIf="returnGoodsStep === 2">
+        <label for="returnGoodsQRInput">
+          <i class="material-icons">qr_code_scanner</i>
+          Bước 2: Quét mã QR của hàng hóa
+        </label>
+        <input 
+          type="text" 
+          id="returnGoodsQRInput"
+          [(ngModel)]="returnGoodsQRInput"
+          placeholder="Quét hoặc nhập mã QR..."
+          class="return-goods-scan-input"
+          (keyup)="onReturnGoodsQRKeyup($event)"
+          autofocus>
+        
+        <button class="scan-submit-btn" (click)="processReturnGoodsScan()">
+          <i class="material-icons">qr_code_scanner</i>
+          Scan
+        </button>
+      </div>
+
+      <!-- Scan Result -->
+      <div class="return-goods-result" *ngIf="returnGoodsScanResult">
+        <div class="result-message" [ngClass]="returnGoodsScanResult.success ? 'success' : 'error'">
+          <i class="material-icons">{{ returnGoodsScanResult.success ? 'check_circle' : 'error' }}</i>
+          <span>{{ returnGoodsScanResult.message }}</span>
+        </div>
+        <div class="result-details" *ngIf="returnGoodsScanResult.material">
+          <div class="detail-row">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ returnGoodsScanResult.material.materialCode }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">PO:</span>
+            <span class="value">{{ returnGoodsScanResult.material.poNumber }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Lượng nhập:</span>
+            <span class="value">{{ returnGoodsScanResult.material.quantity }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Lô hàng:</span>
+            <span class="value">{{ returnGoodsScanResult.material.batchNumber }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="return-goods-instructions" *ngIf="returnGoodsStep === 1 && !returnGoodsEmployeeVerified">
+        <p><i class="material-icons">info</i> Quét mã nhân viên để bắt đầu nhận hàng trả</p>
+        <p><i class="material-icons">badge</i> Hệ thống sẽ đọc 7 ký tự đầu tiên của mã nhân viên</p>
+      </div>
+      
+      <div class="return-goods-instructions" *ngIf="returnGoodsStep === 2">
+        <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
+        <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
+        <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng TRA</p>
       </div>
     </div>
   </div>

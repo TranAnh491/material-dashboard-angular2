@@ -734,9 +734,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
       }
 
-      // Load all materials with location = "IQC" (exact match)
+      // Load all materials with location = "IQC" (exact match) - Filter by ASM1 factory
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('location', '==', 'IQC')
+        ref.where('factory', '==', 'ASM1')
+          .where('location', '==', 'IQC')
       ).get().toPromise();
 
       if (!snapshot || snapshot.empty) {
@@ -760,10 +761,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
           return;
         }
 
-        // Get import date
-        let materialDate: Date;
+        // Calculate stock: openingStock + quantity - exported - xt (giống Manage tab)
+        const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+        const quantity = Number(data.quantity) || 0;
+        const exported = Number(data.exported) || 0;
+        const xt = Number(data.xt) || 0;
+        const stock = openingStock + quantity - exported - xt;
+        
+        // Only count materials with stock > 0 (giống Manage tab)
+        if (stock <= 0) {
+          return;
+        }
+
+        // Get date for week calculation - use lastActionDate (giống Manage tab: lastActionDate)
+        // Priority: importDate > lastUpdated > createdAt
+        let materialDate: Date | null = null;
+        
+        // Priority 1: importDate (giống Manage tab dùng importDate cho lastActionDate)
         if (data.importDate) {
-          if (data.importDate.toDate) {
+          if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
             materialDate = data.importDate.toDate();
           } else if (data.importDate instanceof Date) {
             materialDate = data.importDate;
@@ -772,15 +788,43 @@ export class DashboardComponent implements OnInit, OnDestroy {
           } else {
             materialDate = new Date(data.importDate);
           }
-        } else {
-          // If no importDate, skip this material
+        }
+        
+        // Priority 2: lastUpdated (nếu không có importDate)
+        if (!materialDate && data.lastUpdated) {
+          if (data.lastUpdated.toDate && typeof data.lastUpdated.toDate === 'function') {
+            materialDate = data.lastUpdated.toDate();
+          } else if (data.lastUpdated instanceof Date) {
+            materialDate = data.lastUpdated;
+          } else if (data.lastUpdated.seconds) {
+            materialDate = new Date(data.lastUpdated.seconds * 1000);
+          } else {
+            materialDate = new Date(data.lastUpdated);
+          }
+        }
+        
+        // Priority 3: createdAt (nếu không có importDate và lastUpdated)
+        if (!materialDate && data.createdAt) {
+          if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+            materialDate = data.createdAt.toDate();
+          } else if (data.createdAt instanceof Date) {
+            materialDate = data.createdAt;
+          } else if (data.createdAt.seconds) {
+            materialDate = new Date(data.createdAt.seconds * 1000);
+          } else {
+            materialDate = new Date(data.createdAt);
+          }
+        }
+        
+        // If no date, skip this material
+        if (!materialDate) {
           return;
         }
 
         // Find which week this material belongs to
         for (const week of weeks) {
           if (materialDate >= week.startDate && materialDate <= week.endDate) {
-            // Create unique key: materialCode_PO_IMD
+            // Create unique key: materialCode_PO_IMD (giống Manage tab)
             const materialCode = (data.materialCode || '').toUpperCase().trim();
             const poNumber = (data.poNumber || '').trim();
             const batchNumber = (data.batchNumber || '').trim();
