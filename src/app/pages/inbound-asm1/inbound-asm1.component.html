@@ -90,71 +90,11 @@
           <span class="counter-value">{{ pendingReturnGoodsCount }}</span>
         </div>
         
-        <!-- More Button with Dropdown -->
-        <div class="dropdown">
-          <button class="more-btn" (click)="toggleDropdown()">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" [class.show]="showDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
-              <i class="material-icons">file_download</i>
-              Export to Excel
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate()">
-              <i class="material-icons">description</i>
-              Download Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile()">
-              <i class="material-icons">file_upload</i>
-              Import File
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadInboundReport()">
-              <i class="material-icons">assessment</i>
-              Download Report
-            </a>
-            
-            <a class="dropdown-item delete-all-item" href="javascript:void(0)" (click)="deleteAllMaterials()">
-              <i class="material-icons">delete_sweep</i>
-              Xóa tất cả
-            </a>
-            
-            <a class="dropdown-item delete-batch-item" href="javascript:void(0)" (click)="openDeleteByBatchModal()">
-              <i class="material-icons">delete_outline</i>
-              Xóa theo lô hàng
-            </a>
-            
-            <!-- Auto-hide Received Materials Toggle -->
-            <div class="dropdown-item toggle-item">
-              <label class="toggle-label">
-                <input type="checkbox" 
-                       [(ngModel)]="hideReceivedAfterNextDay" 
-                       (change)="applyFilters()"
-                       class="toggle-checkbox">
-                <span class="toggle-text">Ẩn mã đã nhận qua ngày hôm sau</span>
-              </label>
-            </div>
-            
-            <!-- Separator -->
-            <div class="dropdown-divider"></div>
-            
-            <!-- Reset, Refresh, Clear buttons -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="clearFilters()">
-              <i class="material-icons">clear</i>
-              Reset
-            </a>
-            
-            <a class="dropdown-item" href="javascript:void(0)" (click)="loadMaterials()">
-              <i class="material-icons">refresh</i>
-              Refresh
-            </a>
-            
-            <a class="dropdown-item" href="javascript:void(0)" (click)="clearBatchFilter()">
-              <i class="material-icons">filter_alt_off</i>
-              Clear Filter
-            </a>
-          </div>
-        </div>
+        <!-- More Button - Opens Popup -->
+        <button class="more-btn" (click)="openMorePopup()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
         
         <!-- Total Materials Counter -->
         <div class="total-counter-box">
@@ -850,6 +790,91 @@
         <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
         <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
         <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng TRA</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- More Options Popup -->
+<div class="modal-overlay" *ngIf="showMorePopup" (click)="closeMorePopup()">
+  <div class="modal-content more-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>⚙️ More Options</h3>
+      <button class="close-btn" (click)="closeMorePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body more-popup-body">
+      <!-- Export/Import Section -->
+      <div class="popup-section">
+        <h4 class="popup-section-title">Export/Import</h4>
+        <div class="popup-actions">
+          <button class="popup-action-btn" (click)="exportToExcel(); closeMorePopup()">
+            <i class="material-icons">file_download</i>
+            <span>Export to Excel</span>
+          </button>
+          <button class="popup-action-btn" (click)="downloadTemplate(); closeMorePopup()">
+            <i class="material-icons">description</i>
+            <span>Download Template</span>
+          </button>
+          <button class="popup-action-btn" (click)="importFileFromPopup()">
+            <i class="material-icons">file_upload</i>
+            <span>Import File</span>
+          </button>
+          <button class="popup-action-btn" (click)="downloadInboundReport(); closeMorePopup()">
+            <i class="material-icons">assessment</i>
+            <span>Download Report</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Delete Section -->
+      <div class="popup-section">
+        <h4 class="popup-section-title">Delete Options</h4>
+        <div class="popup-actions">
+          <button class="popup-action-btn delete-action" (click)="deleteAllMaterials(); closeMorePopup()">
+            <i class="material-icons">delete_sweep</i>
+            <span>Xóa tất cả</span>
+          </button>
+          <button class="popup-action-btn delete-batch-action" (click)="closeMorePopup(); openDeleteByBatchModal()">
+            <i class="material-icons">delete_outline</i>
+            <span>Xóa theo lô hàng</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Settings Section -->
+      <div class="popup-section">
+        <h4 class="popup-section-title">Settings</h4>
+        <div class="popup-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" 
+                   [(ngModel)]="hideReceivedAfterNextDay" 
+                   (change)="applyFilters()"
+                   class="toggle-checkbox">
+            <span class="toggle-text">Ẩn mã đã nhận qua ngày hôm sau</span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- Actions Section -->
+      <div class="popup-section">
+        <h4 class="popup-section-title">Actions</h4>
+        <div class="popup-actions">
+          <button class="popup-action-btn" (click)="clearFilters(); closeMorePopup()">
+            <i class="material-icons">clear</i>
+            <span>Reset</span>
+          </button>
+          <button class="popup-action-btn" (click)="loadMaterials(); closeMorePopup()">
+            <i class="material-icons">refresh</i>
+            <span>Refresh</span>
+          </button>
+          <button class="popup-action-btn" (click)="clearBatchFilter(); closeMorePopup()">
+            <i class="material-icons">filter_alt_off</i>
+            <span>Clear Filter</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

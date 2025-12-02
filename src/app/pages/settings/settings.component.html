@@ -7,42 +7,42 @@
         <div class="form-group">
           <label>Tên đăng nhập</label>
           <input type="text" [(ngModel)]="adminUsername" name="username" required>
-        </div>
+      </div>
         <div class="form-group">
           <label>Mật khẩu</label>
           <input type="password" [(ngModel)]="adminPassword" name="password" required>
         </div>
         <div *ngIf="loginError" class="error">{{ loginError }}</div>
         <button type="submit" [disabled]="!adminUsername || !adminPassword">Đăng nhập</button>
-      </form>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <!-- Settings Dashboard -->
+    <!-- Settings Dashboard -->
   <div *ngIf="isAdminLoggedIn" class="dashboard">
     <div class="header">
       <h1>Quản lý người dùng</h1>
       <button (click)="logout()">Đăng xuất</button>
-    </div>
-
+          </div>
+          
     <!-- Stats -->
     <div class="stats">
       <div class="stat-item">
         <div class="stat-number">{{ firebaseUsers.length }}</div>
         <div class="stat-label">Người dùng</div>
-      </div>
+            </div>
       <div class="stat-item">
         <div class="stat-number">{{ getAdminUsersCount() }}</div>
         <div class="stat-label">Quản trị viên</div>
-      </div>
-    </div>
-
+            </div>
+          </div>
+          
     <!-- Notifications -->
     <div *ngIf="newUserNotifications.length > 0" class="notifications">
       <div class="notifications-header">
         <h3>Tài khoản mới ({{ newUserNotifications.length }})</h3>
         <button (click)="markAllNotificationsAsReadPublic()">Đánh dấu đã đọc</button>
-      </div>
+            </div>
       <div class="notifications-list">
         <div *ngFor="let notification of newUserNotifications" class="notification-item">
           <div class="notification-info">
@@ -52,9 +52,9 @@
           </div>
           <button (click)="markNotificationAsRead(notification.id)">✓</button>
         </div>
-      </div>
-    </div>
-
+            </div>
+          </div>
+          
     <!-- Users Table -->
     <div class="users-section">
       <div class="section-header">
@@ -63,14 +63,14 @@
           <button (click)="saveAllPermissions()" [disabled]="firebaseUsers.length === 0">Lưu tất cả</button>
           <button (click)="cancelPermissionEdit()" [disabled]="firebaseUsers.length === 0">Hủy</button>
           <button (click)="refreshFirebaseUsers()">Làm mới</button>
-        </div>
-      </div>
+            </div>
+          </div>
 
       <div *ngIf="isLoadingFirebaseUsers" class="loading">Đang tải...</div>
       
       <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length === 0" class="empty">
         Chưa có người dùng nào
-      </div>
+            </div>
 
       <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="table-container">
         <table class="users-table">
@@ -93,73 +93,73 @@
             <tr *ngFor="let user of getSortedFirebaseUsers()">
               <td>{{ getEmployeeIdOnly(user) }}</td>
               <td>
-                <select *ngIf="isEditingPermissions" 
-                        [(ngModel)]="user.role" 
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.role" 
                         (change)="updateUserRole(user.uid, user.role)">
-                  <option value="Admin">Admin</option>
-                  <option value="Quản lý">Quản lý</option>
-                  <option value="User">User</option>
-                </select>
+                      <option value="Admin">Admin</option>
+                      <option value="Quản lý">Quản lý</option>
+                      <option value="User">User</option>
+                    </select>
                 <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
-              </td>
+                  </td>
               <td>
-                <select *ngIf="isEditingPermissions" 
-                        [(ngModel)]="user.department" 
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.department" 
                         (change)="updateUserDepartment(user.uid, user.department)">
                   <option value="">-</option>
-                  <option value="WH">WH</option>
-                  <option value="QA">QA</option>
-                  <option value="ENG">ENG</option>
-                  <option value="PLAN">PLAN</option>
-                  <option value="PD">PD</option>
-                  <option value="CS">CS</option>
-                  <option value="ACC">ACC</option>
-                </select>
+                      <option value="WH">WH</option>
+                      <option value="QA">QA</option>
+                      <option value="ENG">ENG</option>
+                      <option value="PLAN">PLAN</option>
+                      <option value="PD">PD</option>
+                      <option value="CS">CS</option>
+                      <option value="ACC">ACC</option>
+                    </select>
                 <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
-              </td>
+                  </td>
               <td>
-                <select *ngIf="isEditingPermissions" 
-                        [(ngModel)]="user.factory" 
+                    <select *ngIf="isEditingPermissions" 
+                            [(ngModel)]="user.factory" 
                         (change)="updateUserFactory(user.uid, user.factory)">
-                  <option value="ASM1">ASM1</option>
-                  <option value="ASM2">ASM2</option>
-                </select>
+                      <option value="ASM1">ASM1</option>
+                      <option value="ASM2">ASM2</option>
+                    </select>
                 <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
-              </td>
+                  </td>
               <td>{{ user.displayName || '-' }}</td>
               <td>
                 <input type="checkbox"
-                       [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
+                      [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
                        (change)="updateUserReadOnlyPermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
-              </td>
+                  </td>
               <td>
                 <input type="checkbox"
-                       [checked]="firebaseUserPermissions[user.uid] || false"
+                      [checked]="firebaseUserPermissions[user.uid] || false"
                        (change)="updateUserPermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
-              </td>
+                  </td>
               <td>
                 <input type="checkbox"
-                       [checked]="firebaseUserCompletePermissions[user.uid] || false"
+                      [checked]="firebaseUserCompletePermissions[user.uid] || false"
                        (change)="updateUserCompletePermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
-              </td>
+                  </td>
               <td>{{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}</td>
               <td>
                 <button (click)="deleteFirebaseUser(user)">Xóa</button>
               </td>
               <td *ngFor="let tab of availableTabs">
                 <input type="checkbox"
-                       [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
+                  [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                        (change)="updateUserTabPermission(user.uid, tab.key, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
               </td>
             </tr>
           </tbody>
-        </table>
-      </div>
-    </div>
+                </table>
+              </div>
+            </div>
 
     <!-- Employee Cleanup -->
     <div class="cleanup-section">
@@ -188,35 +188,35 @@
             <button (click)="selectAllRedundantEmployees()">Chọn tất cả</button>
             <button (click)="deselectAllRedundantEmployees()">Bỏ chọn</button>
             <button (click)="cleanupSelectedEmployees()" 
-                    [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
+                      [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
               Xóa đã chọn ({{ selectedRedundantEmployees.length }})
-            </button>
+              </button>
             <button (click)="cleanupAllRedundantEmployees()" [disabled]="isCleaningUp">Xóa tất cả</button>
           </div>
           <table class="cleanup-table">
-            <thead>
-              <tr>
+              <thead>
+                <tr>
                 <th><input type="checkbox" 
                            [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
                            (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()"></th>
-                <th>Mã nhân viên</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees">
-                <td>
-                  <input type="checkbox" 
-                         [checked]="isRedundantEmployeeSelected(emp.employeeId)"
-                         (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
-                </td>
+                  <th>Mã nhân viên</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees">
+                  <td>
+                    <input type="checkbox" 
+                           [checked]="isRedundantEmployeeSelected(emp.employeeId)"
+                           (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
+                  </td>
                 <td><strong>{{ emp.employeeId }}</strong></td>
                 <td>Dư thừa</td>
-              </tr>
-            </tbody>
-          </table>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</div>

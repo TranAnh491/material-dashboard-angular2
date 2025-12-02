@@ -363,13 +363,18 @@ iframe {
   padding: 0;
   margin: 0;
   height: 100vh;
-  overflow: hidden;
+  overflow: hidden; // Keep hidden for layout
   background: #ffffff;
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   z-index: 1;
+  
+  // Ensure excel-actions can show dropdown
+  > .excel-container > .excel-actions {
+    overflow: visible !important;
+  }
 }
 
 // Excel-like styling
@@ -377,7 +382,6 @@ iframe {
   background: #ffffff;
   border: 1px solid #dee2e6;
   border-radius: 0;
-  overflow: hidden;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -508,6 +512,9 @@ iframe {
   }
   
   .excel-header {
+    position: sticky;
+    top: 0;
+    z-index: 100; // Same as materials-asm1
     background: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
     padding: 16px 24px;
@@ -529,59 +536,53 @@ iframe {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: #cbd5e0 #f7fafc;
+    z-index: 1 !important; // Lower than dropdown to ensure dropdown appears above
   }
 }
 
-// Dropdown styling to fix z-index issues
+// Dropdown styling - Same as materials-asm1
 .dropdown {
   position: relative;
-  display: inline-block;
+  z-index: 10000 !important; // Very high to ensure dropdown appears above everything
   
   .dropdown-menu {
     position: absolute;
     top: 100%;
     left: 0;
-    z-index: 9999 !important; // High z-index to appear above header
-    min-width: 200px;
+    z-index: 10000 !important; // Very high z-index to appear above table
     background: #ffffff;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-    padding: 8px 0;
-    margin-top: 4px;
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-10px);
-    transition: all 0.2s ease;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+    padding: 4px 0;
+    display: none; // Hidden by default
+    // Ensure dropdown is not clipped by parent overflow
+    transform: translateZ(0); // Force GPU acceleration and new stacking context
+    will-change: transform; // Optimize rendering
     
     &.show {
-      opacity: 1;
-      visibility: visible;
-      transform: translateY(0);
+      display: block !important; // Show when active
     }
     
     .dropdown-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 16px;
-      color: #374151;
+      padding: 8px 16px; // Same as materials-asm1
+      color: #000000; // Same as materials-asm1
       text-decoration: none;
-      font-size: 14px;
-      transition: all 0.2s;
+      font-size: 13px !important; // Same as materials-asm1
+      cursor: pointer;
+      transition: background-color 0.2s;
       
       &:hover {
-        background: #f3f4f6;
-        color: #1f2937;
-      }
-      
-      &:active {
-        background: #e5e7eb;
+        background-color: #f8f9fa; // Same as materials-asm1
       }
       
       .material-icons {
-        font-size: 18px;
-        color: #6b7280;
+        font-size: 13px !important; // Same as materials-asm1
+        color: #000000; // Same as materials-asm1
       }
       
       // Special styling for delete all item
@@ -615,7 +616,7 @@ iframe {
     
     .dropdown-divider {
       height: 1px;
-      background: #e5e7eb;
+      background-color: #e5e7eb; // Same as materials-asm1
       margin: 4px 0;
     }
   }
@@ -629,6 +630,8 @@ iframe {
   font-family: Arial, sans-serif;
   font-size: 10px;
   min-width: 1200px;
+  position: relative;
+  z-index: 1 !important; // Low z-index to ensure dropdown appears above
   
   th, td {
     border: 1px solid #000000;
@@ -650,18 +653,23 @@ iframe {
     letter-spacing: 0.3px;
     position: sticky;
     top: 0;
-    z-index: 1000;
+    z-index: 10 !important; // Lower than dropdown (10000)
     border-bottom: 2px solid #f57c00;
     padding: 6px 4px;
     text-align: center;
     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
   }
   
-  tbody tr {
-    background-color: #f8f8f8;
+  tbody {
+    position: relative;
+    z-index: 1 !important; // Low z-index to ensure dropdown appears above
     
-    &:hover {
-      background: #eeeeee;
+    tr {
+      background-color: #f8f8f8;
+      
+      &:hover {
+        background: #eeeeee;
+      }
     }
   }
   
@@ -815,8 +823,12 @@ iframe {
 
 // Action controls
 .excel-actions {
+  position: sticky;
+  top: 60px; // Below header (same as materials-asm1)
+  z-index: 10000 !important; // Very high to ensure dropdown appears above table
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
+  overflow: visible !important; // Ensure dropdown is not clipped
   
   .action-controls {
     display: flex;
@@ -825,7 +837,7 @@ iframe {
     padding: 12px 20px;
     flex-wrap: wrap;
     position: relative;
-    z-index: 1500;
+    overflow: visible !important; // Ensure dropdown is not clipped
   }
 }
 
@@ -1227,24 +1239,31 @@ iframe {
 }
 
 // Horizontal Layout Styles - Copy from outbound
-  .action-controls-horizontal {
-    display: flex;
-    align-items: center;
+.action-controls-horizontal {
+  display: flex;
+  align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
     flex-wrap: nowrap;
     overflow-x: auto;
-    
-    // Ensure all direct children are properly aligned
-    > * {
-      display: flex;
-      align-items: center;
-      height: 40px;
-      box-sizing: border-box;
+    overflow-y: visible !important; // Allow dropdown to overflow vertically
+    position: relative;
+    z-index: 10000 !important; // Very high to ensure dropdown appears above table
+    // Prevent clipping of dropdown menu
+    clip-path: none !important;
+    // Ensure dropdown is not clipped by overflow
+    contain: none !important;
+  
+  // Ensure all direct children are properly aligned
+  > * {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    box-sizing: border-box;
       flex-shrink: 0;
-    }
+  }
   
   // Special handling for start-batch-container
   .start-batch-container {
@@ -1266,6 +1285,13 @@ iframe {
   .action-buttons {
     margin: 0;
     padding: 0;
+  }
+  
+  // Ensure dropdown is not clipped by overflow
+  .dropdown {
+    position: relative;
+    z-index: 10000 !important;
+    overflow: visible !important; // Allow dropdown to overflow
   }
 }
 
@@ -2621,6 +2647,130 @@ iframe {
       
       &:last-child {
         margin-bottom: 0;
+      }
+    }
+  }
+}
+
+// More Options Popup Modal
+.more-popup-content {
+  max-width: 600px;
+  width: 90%;
+  
+  .more-popup-body {
+    padding: 24px;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  
+  .popup-section {
+    margin-bottom: 32px;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+    
+    .popup-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 16px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .popup-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      
+      .popup-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: #ffffff;
+        border: 2px solid #d1d5db;
+        border-radius: 8px;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: left;
+        
+        &:hover {
+          background: #f9fafb;
+          border-color: #9ca3af;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .material-icons {
+          font-size: 20px;
+          color: #6b7280;
+        }
+        
+        span {
+          flex: 1;
+        }
+        
+        &.delete-action {
+          color: #dc2626;
+          border-color: #fca5a5;
+          
+          &:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+          }
+          
+          .material-icons {
+            color: #dc2626;
+          }
+        }
+        
+        &.delete-batch-action {
+          color: #f97316;
+          border-color: #fdba74;
+          
+          &:hover {
+            background: #fff7ed;
+            border-color: #fb923c;
+          }
+          
+          .material-icons {
+            color: #f97316;
+          }
+        }
+      }
+    }
+    
+    .popup-toggle {
+      padding: 12px 16px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      
+      .toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #374151;
+        
+        .toggle-checkbox {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+          accent-color: #3b82f6;
+        }
+        
+        .toggle-text {
+          user-select: none;
+        }
       }
     }
   }

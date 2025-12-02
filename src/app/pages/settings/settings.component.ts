@@ -567,11 +567,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
           this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
           console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}, readOnly=${data.hasReadOnlyPermission}`);
-                  } else {
-            this.firebaseUserPermissions[user.uid] = false; // Default to false
-            this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
-            this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-            console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=false (không xem gì cả)`);
+            } else {
+              this.firebaseUserPermissions[user.uid] = false; // Default to false
+              this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
+              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
+              console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=false (không xem gì cả)`);
           }
               } catch (error) {
           console.error('❌ Error loading permissions for user', user.email, ':', error);
@@ -597,10 +597,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
           const data = doc.data() as any;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
           console.log(`✅ Loaded read-only permission for ${user.email}: ${data.hasReadOnlyPermission}`);
-                  } else {
-            // User mới mặc định KHÔNG xem được gì cả
-            this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-            console.log(`✅ Default read-only permission for ${user.email}: false (không xem gì cả)`);
+            } else {
+              // User mới mặc định KHÔNG xem được gì cả
+              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
+              console.log(`✅ Default read-only permission for ${user.email}: false (không xem gì cả)`);
           }
               } catch (error) {
           console.error('❌ Error loading read-only permission for user', user.email, ':', error);
@@ -648,17 +648,17 @@ export class SettingsComponent implements OnInit, OnDestroy {
           const data = doc.data() as any;
           this.firebaseUserTabPermissions[user.uid] = data.tabPermissions || {};
           console.log(`✅ Loaded tab permissions for ${user.email}:`, data.tabPermissions);
-        } else {
-          // Tạo permissions mặc định cho user mới - KHÔNG có tab nào được tick
-          const defaultPermissions: { [key: string]: boolean } = {};
-          this.availableTabs.forEach(tab => {
-            // KHÔNG có tab nào được tick mặc định - user mới không xem được gì cả
-            defaultPermissions[tab.key] = false;
-          });
-          this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
-          
-          // Lưu vào Firestore
-          await this.createDefaultTabPermissionsForUser(user, defaultPermissions);
+          } else {
+            // Tạo permissions mặc định cho user mới - KHÔNG có tab nào được tick
+            const defaultPermissions: { [key: string]: boolean } = {};
+            this.availableTabs.forEach(tab => {
+              // KHÔNG có tab nào được tick mặc định - user mới không xem được gì cả
+              defaultPermissions[tab.key] = false;
+            });
+            this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
+            
+            // Lưu vào Firestore
+            await this.createDefaultTabPermissionsForUser(user, defaultPermissions);
         }
       } catch (error) {
         console.error('❌ Error loading tab permissions for user', user.email, ':', error);

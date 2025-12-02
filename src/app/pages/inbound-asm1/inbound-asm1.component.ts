@@ -1018,32 +1018,19 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // }
   
   // Dropdown functionality
-  showDropdown: boolean = false;
+  // More popup modal
+  showMorePopup: boolean = false;
   
   // Delete by batch modal
   showDeleteByBatchModal: boolean = false;
   batchToDelete: string = '';
   
-  toggleDropdown(): void {
-    this.showDropdown = !this.showDropdown;
-    
-    // Close dropdown when clicking outside
-    if (this.showDropdown) {
-      setTimeout(() => {
-        document.addEventListener('click', this.onDocumentClick.bind(this), { once: true });
-      }, 0);
-    }
+  openMorePopup(): void {
+    this.showMorePopup = true;
   }
   
-  closeDropdown(): void {
-    this.showDropdown = false;
-  }
-  
-  onDocumentClick(event: Event): void {
-    const target = event.target as HTMLElement;
-    if (!target.closest('.dropdown')) {
-      this.showDropdown = false;
-    }
+  closeMorePopup(): void {
+    this.showMorePopup = false;
   }
   
   // Search functionality
@@ -1075,7 +1062,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       !material.isReceived
     ).length;
   }
-
+  
   changeStatusFilter(status: string): void {
     this.statusFilter = status;
     console.log(`🔄 Thay đổi bộ lọc trạng thái: ${status}`);
@@ -1168,6 +1155,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     };
     fileInput.click();
+  }
+  
+  importFileFromPopup(): void {
+    // Close popup first
+    this.closeMorePopup();
+    
+    // Wait a bit for popup to close, then open file dialog
+    setTimeout(() => {
+      this.importFile();
+    }, 100);
   }
   
   onFileSelect(file: File): void {
@@ -1342,9 +1339,20 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const getNumberValue = (index: number): number => {
         const value = row[index];
         if (value === null || value === undefined || value === '') return 0;
-        // Parse as number and allow decimal points for quantity
-        const num = Number(value);
-        return isNaN(num) ? 0 : num; // Allow decimal numbers
+        
+        // Convert to string first
+        let valueStr = String(value).trim();
+        if (!valueStr) return 0;
+        
+        // Replace comma with dot for decimal separator (handle Vietnamese format like "35,64")
+        valueStr = valueStr.replace(/,/g, '.');
+        
+        // Remove any non-numeric characters except decimal point and negative sign
+        valueStr = valueStr.replace(/[^\d.-]/g, '');
+        
+        // Parse as number
+        const num = parseFloat(valueStr);
+        return isNaN(num) ? 0 : num;
       };
 
       // Map columns from template (now supports 10 columns)
@@ -1360,8 +1368,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const remarks = getValue(9);           // LƯU Ý
 
       if (!lotNumber || !materialCode || !poNumber || quantity <= 0) {
-        // Log materials bị skip
-        console.warn(`⚠️ SKIPPED: ${materialCode} - Missing: ${!lotNumber ? 'lotNumber' : ''} ${!materialCode ? 'materialCode' : ''} ${!poNumber ? 'poNumber' : ''} ${quantity <= 0 ? 'quantity' : ''}`);
+        // Log materials bị skip với thông tin chi tiết
+        const missing = [];
+        if (!lotNumber) missing.push('LÔ HÀNG/DNNK');
+        if (!materialCode) missing.push('MÃ HÀNG');
+        if (!poNumber) missing.push('SỐ P.O');
+        if (quantity <= 0) missing.push('LƯỢNG NHẬP');
+        console.warn(`⚠️ SKIPPED: ${materialCode || '(không có mã)'} - Missing: ${missing.join(', ')}`);
         return null;
       }
 
@@ -1700,7 +1713,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         alert(successMessage);
         
         // Close dropdown
-        this.showDropdown = false;
+        this.showMorePopup = false;
         
         // Reload materials to refresh the view
         this.loadMaterials();
@@ -3430,7 +3443,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   openDeleteByBatchModal(): void {
     this.showDeleteByBatchModal = true;
     this.batchToDelete = '';
-    this.showDropdown = false; // Close dropdown when opening modal
+    this.showMorePopup = false; // Close popup when opening modal
   }
   
   closeDeleteByBatchModal(): void {
@@ -3543,7 +3556,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.iqcEmployeeId = '';
     this.iqcEmployeeVerified = false;
     this.iqcStep = 1; // Reset to employee scan step
-    this.showDropdown = false;
+    this.showMorePopup = false;
     
     // Auto-focus on input after modal opens
     setTimeout(() => {
@@ -3746,7 +3759,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.returnGoodsEmployeeVerified = false;
     this.returnGoodsStep = 1;
     this.returnGoodsScanResult = null;
-    this.showDropdown = false;
+    this.showMorePopup = false;
     
     // Auto-focus on input after modal opens
     setTimeout(() => {
