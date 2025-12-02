@@ -34,6 +34,22 @@ export interface MaterialSummary {
   totalWeight: number;
   locations: string[]; // Danh sách các vị trí
   lastActionDate: Date | null; // Ngày import/cập nhật gần nhất
+  lastActivity: MaterialActivity | null; // Hoạt động gần nhất
+}
+
+export interface MaterialActivity {
+  id?: string;
+  materialCode: string;
+  poNumber?: string;
+  activityType: 'INBOUND' | 'OUTBOUND' | 'LOCATION_CHANGE';
+  activityDate: Date;
+  quantity?: number;
+  location?: string;
+  previousLocation?: string;
+  newLocation?: string;
+  factory?: string;
+  performedBy?: string;
+  notes?: string;
 }
 
 @Component({
@@ -54,6 +70,12 @@ export class ManageComponent implements OnInit, OnDestroy {
   showLocationModal: boolean = false;
   selectedLocation: string = '';
   locationMaterials: InventoryMaterial[] = [];
+  
+  // Activity History
+  activityHistory: MaterialActivity[] = [];
+  isLoadingActivities: boolean = false;
+  showActivityHistory: boolean = false;
+  activityLimit: number = 50; // Số lượng hoạt động hiển thị
   
   // Password protection
   showPasswordModal: boolean = true;
@@ -87,6 +109,248 @@ export class ManageComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  // Load activity history for all materials
+  async loadActivityHistory(): Promise<void> {
+    this.isLoadingActivities = true;
+    this.showActivityHistory = true;
+    
+    try {
+      const activities: MaterialActivity[] = [];
+      
+      // Load Inbound activities
+      const inboundSnapshot = await this.firestore.collection('inbound-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+          .where('isReceived', '==', true)
+          .orderBy('updatedAt', 'desc')
+          .limit(this.activityLimit)
+      ).get().toPromise();
+      
+      if (inboundSnapshot) {
+        inboundSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const activityDate = data.updatedAt?.toDate ? data.updatedAt.toDate() : 
+                              (data.updatedAt instanceof Date ? data.updatedAt : new Date(data.updatedAt));
+          
+          activities.push({
+            id: doc.id,
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            activityType: 'INBOUND',
+            activityDate: activityDate,
+            quantity: data.quantity || 0,
+            location: data.location || '',
+            factory: data.factory || this.selectedFactory,
+            performedBy: data.employeeIds?.[0] || 'System',
+            notes: `Nhập kho - Lô: ${data.batchNumber || ''}`
+          });
+        });
+      }
+      
+      // Load Outbound activities
+      const outboundSnapshot = await this.firestore.collection('outbound-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+          .orderBy('exportDate', 'desc')
+          .limit(this.activityLimit)
+      ).get().toPromise();
+      
+      if (outboundSnapshot) {
+        outboundSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const activityDate = data.exportDate?.toDate ? data.exportDate.toDate() : 
+                              (data.exportDate instanceof Date ? data.exportDate : new Date(data.exportDate));
+          
+          activities.push({
+            id: doc.id,
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            activityType: 'OUTBOUND',
+            activityDate: activityDate,
+            quantity: data.exportQuantity || data.quantity || 0,
+            location: data.location || '',
+            factory: data.factory || this.selectedFactory,
+            performedBy: data.exportedBy || data.employeeId || 'System',
+            notes: `Xuất kho - PO: ${data.productionOrder || ''}`
+          });
+        });
+      }
+      
+      // Load Location Change activities from inventory-materials
+      // Note: Location changes are tracked via lastModified field in inventory-materials
+      const inventorySnapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+          .where('lastModified', '!=', null)
+          .orderBy('lastModified', 'desc')
+          .limit(this.activityLimit)
+      ).get().toPromise();
+      
+      if (inventorySnapshot) {
+        inventorySnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          if (data.lastModified && data.modifiedBy === 'location-change-scanner') {
+            const activityDate = data.lastModified?.toDate ? data.lastModified.toDate() : 
+                                (data.lastModified instanceof Date ? data.lastModified : new Date(data.lastModified));
+            
+            activities.push({
+              id: doc.id,
+              materialCode: data.materialCode || '',
+              poNumber: data.poNumber || '',
+              activityType: 'LOCATION_CHANGE',
+              activityDate: activityDate,
+              location: data.location || '',
+              factory: data.factory || this.selectedFactory,
+              performedBy: data.modifiedBy || 'System',
+              notes: `Đổi vị trí sang: ${data.location || ''}`
+            });
+          }
+        });
+      }
+      
+      // Sort all activities by date (newest first)
+      activities.sort((a, b) => b.activityDate.getTime() - a.activityDate.getTime());
+      
+      // Limit to most recent activities
+      this.activityHistory = activities.slice(0, this.activityLimit);
+      
+      console.log(`✅ Loaded ${this.activityHistory.length} activities`);
+    } catch (error) {
+      console.error('❌ Error loading activity history:', error);
+      alert('Lỗi khi tải lịch sử hoạt động: ' + error.message);
+    } finally {
+      this.isLoadingActivities = false;
+    }
+  }
+  
+  toggleActivityHistory(): void {
+    this.showActivityHistory = !this.showActivityHistory;
+    if (this.showActivityHistory && this.activityHistory.length === 0) {
+      this.loadActivityHistory();
+    }
+  }
+  
+  getActivityTypeLabel(type: string): string {
+    switch (type) {
+      case 'INBOUND':
+        return '📥 Nhập kho';
+      case 'OUTBOUND':
+        return '📤 Xuất kho';
+      case 'LOCATION_CHANGE':
+        return '📍 Đổi vị trí';
+      default:
+        return type;
+    }
+  }
+  
+  getActivityTypeClass(type: string): string {
+    switch (type) {
+      case 'INBOUND':
+        return 'activity-inbound';
+      case 'OUTBOUND':
+        return 'activity-outbound';
+      case 'LOCATION_CHANGE':
+        return 'activity-location';
+      default:
+        return '';
+    }
+  }
+
+  // Load last activity for each material in summary
+  async loadLastActivitiesForSummary(): Promise<void> {
+    try {
+      // Load all recent activities and group by material code
+      const activitiesByMaterial = new Map<string, MaterialActivity>();
+      
+      // Load inbound activities (simplified - get all, filter and sort in code)
+      try {
+        const inboundSnapshot = await this.firestore.collection('inbound-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+            .limit(500)
+        ).get().toPromise();
+        
+        if (inboundSnapshot) {
+          inboundSnapshot.forEach(doc => {
+            const data = doc.data() as any;
+            // Only process if isReceived is true
+            if (!data.isReceived) return;
+            
+            const materialCode = (data.materialCode || '').toUpperCase().trim();
+            if (!materialCode) return;
+            
+            const activityDate = data.updatedAt?.toDate ? data.updatedAt.toDate() : 
+                                (data.updatedAt instanceof Date ? data.updatedAt : new Date(data.updatedAt));
+            
+            const key = materialCode;
+            if (!activitiesByMaterial.has(key) || 
+                activitiesByMaterial.get(key)!.activityDate < activityDate) {
+              activitiesByMaterial.set(key, {
+                id: doc.id,
+                materialCode: materialCode,
+                poNumber: data.poNumber || '',
+                activityType: 'INBOUND',
+                activityDate: activityDate,
+                quantity: data.quantity || 0,
+                location: data.location || '',
+                factory: data.factory || this.selectedFactory,
+                performedBy: data.employeeIds?.[0] || 'System',
+                notes: `Nhập kho - Lô: ${data.batchNumber || ''}`
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not load inbound activities:', error);
+      }
+      
+      // Load outbound activities (get all, sort in code)
+      try {
+        const outboundSnapshot = await this.firestore.collection('outbound-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+            .limit(500)
+        ).get().toPromise();
+        
+        if (outboundSnapshot) {
+          outboundSnapshot.forEach(doc => {
+            const data = doc.data() as any;
+            const materialCode = (data.materialCode || '').toUpperCase().trim();
+            if (!materialCode) return;
+            
+            const activityDate = data.exportDate?.toDate ? data.exportDate.toDate() : 
+                                (data.exportDate instanceof Date ? data.exportDate : new Date(data.exportDate));
+            
+            const key = materialCode;
+            const existing = activitiesByMaterial.get(key);
+            if (!existing || existing.activityDate < activityDate) {
+              activitiesByMaterial.set(key, {
+                id: doc.id,
+                materialCode: materialCode,
+                poNumber: data.poNumber || '',
+                activityType: 'OUTBOUND',
+                activityDate: activityDate,
+                quantity: data.exportQuantity || data.quantity || 0,
+                location: data.location || '',
+                factory: data.factory || this.selectedFactory,
+                performedBy: data.exportedBy || data.employeeId || 'System',
+                notes: `Xuất kho - PO: ${data.productionOrder || ''}`
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not load outbound activities:', error);
+      }
+      
+      // Map activities to summary items
+      this.summaryData.forEach(item => {
+        const activity = activitiesByMaterial.get(item.materialCode.toUpperCase().trim());
+        item.lastActivity = activity || null;
+      });
+      
+      console.log(`✅ Loaded activities for ${activitiesByMaterial.size} materials`);
+    } catch (error) {
+      console.error('❌ Error loading last activities:', error);
+      // Don't throw - just log error, activities are optional
+    }
   }
 
   onFactoryChange(): void {
@@ -185,7 +449,7 @@ export class ManageComponent implements OnInit, OnDestroy {
        }
 
        console.log(`✅ Found ${this.materials.length} records for location ${this.locationSearch}`);
-      this.calculateSummary();
+      await this.calculateSummary();
     } catch (error) {
       console.error('❌ Error searching by location:', error);
       alert(`Lỗi khi tìm kiếm: ${error}`);
@@ -329,7 +593,7 @@ export class ManageComponent implements OnInit, OnDestroy {
        }
 
        console.log(`✅ Found ${this.materials.length} records for material ${this.materialCode}`);
-      this.calculateSummary();
+      await this.calculateSummary();
     } catch (error) {
       console.error('❌ Error searching material:', error);
       alert(`Lỗi khi tìm kiếm: ${error}`);
@@ -403,7 +667,7 @@ export class ManageComponent implements OnInit, OnDestroy {
     return stock;
   }
 
-  calculateSummary(): void {
+  async calculateSummary(): Promise<void> {
     const summaryMap = new Map<string, MaterialSummary>();
 
     this.materials.forEach(material => {
@@ -523,7 +787,8 @@ export class ManageComponent implements OnInit, OnDestroy {
           oddQuantity: oddQuantity,
           totalWeight: stock * unitWeight, // Từ catalog (giống tab utilization)
           locations: material.location ? [material.location] : [],
-          lastActionDate: lastActionDate
+          lastActionDate: lastActionDate,
+          lastActivity: null // Will be loaded later
         });
         
         if (isDebugMaterial) {
@@ -540,6 +805,9 @@ export class ManageComponent implements OnInit, OnDestroy {
     });
 
     this.summaryData = Array.from(summaryMap.values());
+    
+    // Load last activity for each material
+    await this.loadLastActivitiesForSummary();
     
     // Debug log cho B041788 sau khi tính xong
     const debugSummary = this.summaryData.find(s => 

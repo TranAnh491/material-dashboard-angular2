@@ -35,13 +35,13 @@ export class FactoryAccessService {
                 if (data && data.factory && data.factory.trim() !== '') {
                   return this.calculateFactoryAccess(data.factory, data.role);
                 } else {
-                  // Nếu không có factory setting, mặc định cho phép truy cập tất cả nhà máy
-                  // Điều này đảm bảo user hiện tại không bị mất quyền truy cập
+                  // Nếu không có factory setting, mặc định KHÔNG cho phép truy cập
+                  // User cần được cấp quyền rõ ràng trong Settings
                   return {
-                    canAccessASM1: true,
-                    canAccessASM2: true,
-                    defaultFactory: 'ASM1',
-                    availableFactories: ['ASM1', 'ASM2']
+                    canAccessASM1: false,
+                    canAccessASM2: false,
+                    defaultFactory: '',
+                    availableFactories: []
                   };
                 }
               })
@@ -99,12 +99,12 @@ export class FactoryAccessService {
       case null:
       case undefined:
       default:
-        // Nếu không có factory setting hoặc factory rỗng, cho phép truy cập tất cả nhà máy
+        // Nếu không có factory setting hoặc factory rỗng, KHÔNG cho phép truy cập
         return {
-          canAccessASM1: true,
-          canAccessASM2: true,
-          defaultFactory: 'ASM1',
-          availableFactories: ['ASM1', 'ASM2']
+          canAccessASM1: false,
+          canAccessASM2: false,
+          defaultFactory: '',
+          availableFactories: []
         };
     }
   }

@@ -36,11 +36,17 @@ export class TabPermissionService {
             .valueChanges()
             .pipe(
               switchMap((data: any) => {
-                if (data && data.tabPermissions) {
+                // Kiểm tra xem user có document trong user-tab-permissions chưa
+                if (data && data.tabPermissions && typeof data.tabPermissions === 'object') {
                   // Nếu user có permissions được cấu hình cụ thể, sử dụng permissions đó
-                  return of(data.tabPermissions);
+                  // Đảm bảo Dashboard luôn được phép (tối thiểu)
+                  const permissions = { ...data.tabPermissions };
+                  if (!('dashboard' in permissions)) {
+                    permissions['dashboard'] = true;
+                  }
+                  return of(permissions);
                 } else {
-                  // Nếu không có permissions được cấu hình, tạo permissions dựa trên factory access
+                  // Nếu không có permissions được cấu hình, tạo permissions mặc định
                   return this.factoryAccessService.getCurrentUserFactoryAccess().pipe(
                     map(factoryAccess => this.generateDefaultPermissions(factoryAccess))
                   );
@@ -55,64 +61,35 @@ export class TabPermissionService {
   }
 
   // Tạo default permissions dựa trên factory access
+  // CHỈ tạo permissions tối thiểu - chỉ Dashboard, các tab khác phải được cấp quyền rõ ràng
   private generateDefaultPermissions(factoryAccess: any): { [key: string]: boolean } {
+    // CHỈ cho phép Dashboard mặc định, các tab khác phải được cấp quyền trong Settings
     const basePermissions = {
-      // Main tabs - luôn cho phép
-      'dashboard': true,
-      'work-order-status': true,
-      'shipment': true,
-      
-      // Manage Inventory tab - luôn cho phép
-      'manage-inventory': true,
-      
-      // Other tabs - luôn cho phép
-      'fg': true,
-      'label': true,
-      'index': true,
-      'utilization': true,
-      'find': true,
-      'layout': true,
-      'checklist': true,
-      'safety': true,
-      'equipment': true,
-      'task': true,
-      'settings': true,
-      
-      // Legacy permissions for backward compatibility
-      'materials': true,
-      
-      // Operation-specific permissions - mặc định cho phép
-      'inventory-delete': true,
-      'inventory-export': true,
-      'inventory-edit-hsd': true,
-      'inbound-add': true,
-      'inbound-edit': true,
-      'inbound-delete': true,
-      'inbound-generate-qr': true,
-      'inbound-export': true
+      'dashboard': true, // Chỉ dashboard được phép mặc định
+      // Tất cả các tab khác mặc định KHÔNG được phép (false hoặc không có trong object)
     };
 
     // Factory-specific permissions dựa trên quyền truy cập nhà máy
-    // Nếu user có quyền truy cập nhà máy, cho phép truy cập tabs tương ứng
+    // CHỈ cho phép khi có quyền truy cập RÕ RÀNG là true
     const factoryPermissions = {
       // Inbound tabs
-      'inbound-asm1': factoryAccess.canAccessASM1 !== false, // Cho phép nếu không bị chặn rõ ràng
-      'inbound-asm2': factoryAccess.canAccessASM2 !== false, // Cho phép nếu không bị chặn rõ ràng
+      'inbound-asm1': factoryAccess.canAccessASM1 === true, // Chỉ cho phép khi TRUE rõ ràng
+      'inbound-asm2': factoryAccess.canAccessASM2 === true, // Chỉ cho phép khi TRUE rõ ràng
       
       // Outbound tabs
-      'outbound-asm1': factoryAccess.canAccessASM1 !== false,
-      'outbound-asm2': factoryAccess.canAccessASM2 !== false,
+      'outbound-asm1': factoryAccess.canAccessASM1 === true,
+      'outbound-asm2': factoryAccess.canAccessASM2 === true,
       
       // Inventory tabs
-      'materials-asm1': factoryAccess.canAccessASM1 !== false,
-      'materials-asm2': factoryAccess.canAccessASM2 !== false,
-      'inventory-overview-asm1': factoryAccess.canAccessASM1 !== false,
+      'materials-asm1': factoryAccess.canAccessASM1 === true,
+      'materials-asm2': factoryAccess.canAccessASM2 === true,
+      'inventory-overview-asm1': factoryAccess.canAccessASM1 === true,
       
-      // Location tab - cho phép truy cập nếu có quyền truy cập ASM1
-      'location': factoryAccess.canAccessASM1 !== false,
+      // Location tab - chỉ cho phép khi có quyền truy cập ASM1
+      'location': factoryAccess.canAccessASM1 === true,
       
-      // Safety tab - cho phép truy cập nếu có quyền truy cập bất kỳ nhà máy nào
-      'safety': factoryAccess.canAccessASM1 !== false || factoryAccess.canAccessASM2 !== false
+      // Safety tab - chỉ cho phép khi có quyền truy cập ít nhất một nhà máy
+      'safety': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true
     };
 
     return { ...basePermissions, ...factoryPermissions };

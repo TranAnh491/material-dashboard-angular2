@@ -308,6 +308,59 @@
             border-bottom: 1px solid #e0e0e0;
             color: #000000;
             font-size: 14px;
+            
+            &.activity-cell {
+              max-width: 300px;
+              
+              .activity-info {
+                padding: 4px 0;
+                
+                .activity-type-badge {
+                  display: inline-block;
+                  padding: 2px 8px;
+                  border-radius: 8px;
+                  font-size: 11px;
+                  font-weight: 500;
+                  margin-bottom: 4px;
+                  
+                  &.activity-inbound {
+                    background: #e8f5e9;
+                    color: #2e7d32;
+                  }
+                  
+                  &.activity-outbound {
+                    background: #fff3e0;
+                    color: #e65100;
+                  }
+                  
+                  &.activity-location {
+                    background: #e3f2fd;
+                    color: #1565c0;
+                  }
+                }
+                
+                .activity-details {
+                  font-size: 11px;
+                  color: #666;
+                  margin-top: 4px;
+                  
+                  .activity-date {
+                    font-weight: 500;
+                    color: #333;
+                  }
+                  
+                  .activity-notes {
+                    margin-top: 2px;
+                    font-style: italic;
+                  }
+                  
+                  .activity-location {
+                    margin-top: 2px;
+                    color: #999;
+                  }
+                }
+              }
+            }
           }
           
           &.total-row {
@@ -493,6 +546,133 @@
   }
 }
 
+// Activity History Card Styles
+.activity-history-card {
+  margin-top: 24px;
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .btn-toggle {
+      padding: 8px 16px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #666;
+      transition: all 0.2s;
+      
+      &:hover {
+        background: #e0e0e0;
+      }
+      
+      &.active {
+        background: #1976d2;
+        color: white;
+        border-color: #1976d2;
+      }
+      
+      i.material-icons {
+        font-size: 18px;
+      }
+    }
+  }
+}
+
+// Activity History Table Styles
+.activity-history-table-container {
+  overflow-x: auto;
+  max-height: 600px;
+  overflow-y: auto;
+  
+  .activity-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    
+    thead {
+      position: sticky;
+      top: 0;
+      background: #f5f5f5;
+      z-index: 10;
+      
+      th {
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #333;
+        border-bottom: 2px solid #ddd;
+        white-space: nowrap;
+      }
+    }
+    
+    tbody {
+      tr {
+        transition: background-color 0.2s;
+        
+        &:hover {
+          background-color: #f9f9f9;
+        }
+        
+        &.activity-inbound {
+          border-left: 4px solid #4caf50;
+        }
+        
+        &.activity-outbound {
+          border-left: 4px solid #ff9800;
+        }
+        
+        &.activity-location {
+          border-left: 4px solid #2196f3;
+        }
+        
+        td {
+          padding: 10px 12px;
+          border-bottom: 1px solid #e0e0e0;
+          
+          &.activity-notes {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Activity Type Badge Styles
+.activity-type-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  
+  &.activity-inbound {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  
+  &.activity-outbound {
+    background: #fff3e0;
+    color: #e65100;
+  }
+  
+  &.activity-location {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+}
+
 // Responsive
 @media (max-width: 768px) {
   .manage-container {
@@ -517,4 +697,3 @@
     }
   }
 }
-
