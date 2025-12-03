@@ -2115,6 +2115,43 @@ iframe {
     font-size: 16px;
     color: #FF9800;
   }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.print-all-qr-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #4caf50;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 40px;
+  white-space: nowrap;
+  
+  &:hover:not(:disabled) {
+    background: #f1f8e9;
+    border-color: #388e3c;
+  }
+  
+  i {
+    font-size: 16px;
+    color: #4caf50;
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 // Batch type filters

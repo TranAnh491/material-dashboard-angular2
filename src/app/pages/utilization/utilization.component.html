@@ -116,6 +116,11 @@
               <span>Import Catalog</span>
             </button>
             
+            <button class="menu-item" (click)="openImportUnitWeightPopup(); showMoreMenu = false">
+              <i class="material-icons">edit</i>
+              <span>Import Unit Weight</span>
+            </button>
+            
             <button class="menu-item" (click)="exportMissingUnitWeight(); showMoreMenu = false">
               <i class="material-icons">warning</i>
               <span>Export Missing ({{ missingUnitWeightCount }})</span>
@@ -240,6 +245,94 @@
         </div>
         
         <p class="progress-note">⏳ Vui lòng đợi... Đang xử lý dữ liệu</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Unit Weight Popup -->
+  <div class="modal-overlay" *ngIf="showImportUnitWeightPopup" (click)="closeImportUnitWeightPopup()">
+    <div class="modal-content unit-weight-popup" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📝 Import Unit Weight</h3>
+        <button class="close-btn" (click)="closeImportUnitWeightPopup()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="form-group">
+          <label>
+            <i class="material-icons">qr_code</i>
+            Mã vật tư <span class="required">*</span>
+          </label>
+          <input 
+            type="text" 
+            [(ngModel)]="unitWeightForm.materialCode" 
+            (input)="calculateUnitWeight()"
+            placeholder="Nhập mã vật tư (ví dụ: B001003)"
+            class="form-control"
+            autocomplete="off">
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <i class="material-icons">inventory_2</i>
+            Số lượng <span class="required">*</span>
+          </label>
+          <input 
+            type="number" 
+            [(ngModel)]="unitWeightForm.quantity" 
+            (input)="calculateUnitWeight()"
+            placeholder="Nhập số lượng"
+            class="form-control"
+            step="0.01"
+            min="0.01"
+            autocomplete="off">
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <i class="material-icons">scale</i>
+            Trọng lượng tổng (gram) <span class="required">*</span>
+          </label>
+          <input 
+            type="number" 
+            [(ngModel)]="unitWeightForm.totalWeight" 
+            (input)="calculateUnitWeight()"
+            placeholder="Nhập trọng lượng tổng (gram)"
+            class="form-control"
+            step="0.01"
+            min="0.01"
+            autocomplete="off">
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <i class="material-icons">calculate</i>
+            Unit Weight (gram) <span class="readonly-label">(Tự tính)</span>
+          </label>
+          <input 
+            type="number" 
+            [(ngModel)]="unitWeightForm.unitWeight" 
+            placeholder="Tự động tính = Trọng lượng tổng / Số lượng"
+            class="form-control readonly"
+            readonly>
+          <small class="form-hint">Unit Weight = Trọng lượng tổng ÷ Số lượng</small>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-cancel" (click)="closeImportUnitWeightPopup()">
+          <i class="material-icons">close</i>
+          Hủy
+        </button>
+        <button 
+          class="btn btn-save" 
+          (click)="saveUnitWeight()"
+          [disabled]="!canSaveUnitWeight()">
+          <i class="material-icons">check</i>
+          Xong
+        </button>
       </div>
     </div>
   </div>

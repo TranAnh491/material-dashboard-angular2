@@ -71,6 +71,15 @@ export class UtilizationComponent implements OnInit, OnDestroy {
   
   // More menu
   showMoreMenu = false;
+  
+  // Import Unit Weight Popup
+  showImportUnitWeightPopup = false;
+  unitWeightForm = {
+    materialCode: '',
+    quantity: null as number | null,
+    totalWeight: null as number | null,
+    unitWeight: null as number | null
+  };
 
   constructor(
     private firestore: AngularFirestore,
@@ -927,5 +936,87 @@ export class UtilizationComponent implements OnInit, OnDestroy {
                    `${materialsWithoutWeight > 0 ? `\n⚠️ ${materialsWithoutWeight} vật tư chưa có unitWeight` : ''}`;
     
     alert(message);
+  }
+
+  // Import Unit Weight Popup Functions
+  openImportUnitWeightPopup(): void {
+    this.showImportUnitWeightPopup = true;
+    this.resetUnitWeightForm();
+  }
+
+  closeImportUnitWeightPopup(): void {
+    this.showImportUnitWeightPopup = false;
+    this.resetUnitWeightForm();
+  }
+
+  resetUnitWeightForm(): void {
+    this.unitWeightForm = {
+      materialCode: '',
+      quantity: null,
+      totalWeight: null,
+      unitWeight: null
+    };
+  }
+
+  calculateUnitWeight(): void {
+    const quantity = this.unitWeightForm.quantity;
+    const totalWeight = this.unitWeightForm.totalWeight;
+    
+    if (quantity && totalWeight && quantity > 0 && totalWeight > 0) {
+      this.unitWeightForm.unitWeight = totalWeight / quantity;
+    } else {
+      this.unitWeightForm.unitWeight = null;
+    }
+  }
+
+  canSaveUnitWeight(): boolean {
+    return !!(
+      this.unitWeightForm.materialCode?.trim() &&
+      this.unitWeightForm.quantity &&
+      this.unitWeightForm.quantity > 0 &&
+      this.unitWeightForm.totalWeight &&
+      this.unitWeightForm.totalWeight > 0 &&
+      this.unitWeightForm.unitWeight &&
+      this.unitWeightForm.unitWeight > 0
+    );
+  }
+
+  async saveUnitWeight(): Promise<void> {
+    if (!this.canSaveUnitWeight()) {
+      alert('❌ Vui lòng điền đầy đủ thông tin!');
+      return;
+    }
+
+    const materialCode = this.unitWeightForm.materialCode.trim().toUpperCase();
+    const unitWeight = this.unitWeightForm.unitWeight!;
+
+    try {
+      // Update materials collection in Firebase (same as import catalog)
+      const materialRef = this.firestore.collection('materials').doc(materialCode);
+      
+      // Use set with merge: true to update or create
+      await materialRef.set({
+        materialCode: materialCode,
+        unitWeight: unitWeight,
+        updatedAt: new Date()
+      }, { merge: true });
+      
+      console.log(`✅ Updated unitWeight for ${materialCode}: ${unitWeight} gram`);
+
+      // Reload catalog cache
+      await this.loadCatalog();
+
+      // Show success message
+      alert(`✅ Đã cập nhật unit weight thành công!\n\n` +
+            `Mã: ${materialCode}\n` +
+            `Unit Weight: ${unitWeight.toFixed(2)} gram\n\n` +
+            `Dữ liệu đã được lưu và sẽ tự động cập nhật trong bảng.`);
+
+      // Close popup
+      this.closeImportUnitWeightPopup();
+    } catch (error: any) {
+      console.error('❌ Error saving unit weight:', error);
+      alert(`❌ Lỗi khi lưu unit weight:\n${error.message || error}`);
+    }
   }
 } 

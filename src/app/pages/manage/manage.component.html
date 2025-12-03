@@ -39,14 +39,23 @@
         <i class="material-icons">manage_search</i>
         MANAGE MATERIALS
       </h4>
-      <button 
-        class="btn btn-download" 
-        (click)="downloadReport()"
-        [disabled]="summaryData.length === 0"
-        title="Tải report Excel">
-        <i class="material-icons">download</i>
-        Tải Report
-      </button>
+      <div class="header-actions">
+        <button 
+          class="btn btn-import" 
+          (click)="importPriceFile()"
+          title="Import file giá vật tư">
+          <i class="material-icons">file_upload</i>
+          Import File
+        </button>
+        <button 
+          class="btn btn-download" 
+          (click)="downloadReport()"
+          [disabled]="summaryData.length === 0"
+          title="Tải report Excel">
+          <i class="material-icons">download</i>
+          Tải Report
+        </button>
+      </div>
     </div>
     <div class="card-body">
       <!-- Selection Controls -->
@@ -102,6 +111,39 @@
         </div>
       </div>
 
+      <!-- Top Filter Buttons -->
+      <div class="top-filter-controls">
+        <label>Lọc theo giá trị:</label>
+        <button 
+          class="btn btn-filter" 
+          [class.active]="topFilter === null"
+          (click)="applyTopFilter(null)"
+          [disabled]="summaryData.length === 0">
+          Tất cả
+        </button>
+        <button 
+          class="btn btn-filter" 
+          [class.active]="topFilter === 20"
+          (click)="applyTopFilter(20)"
+          [disabled]="summaryData.length === 0">
+          Top 20
+        </button>
+        <button 
+          class="btn btn-filter" 
+          [class.active]="topFilter === 30"
+          (click)="applyTopFilter(30)"
+          [disabled]="summaryData.length === 0">
+          Top 30
+        </button>
+        <button 
+          class="btn btn-filter" 
+          [class.active]="topFilter === 50"
+          (click)="applyTopFilter(50)"
+          [disabled]="summaryData.length === 0">
+          Top 50
+        </button>
+      </div>
+
       <!-- Loading Indicator -->
       <div *ngIf="isLoading" class="loading-indicator">
         <div class="spinner"></div>
@@ -119,6 +161,7 @@
               <th>IMD</th>
               <th>Vị trí</th>
               <th>Tồn kho</th>
+              <th>Giá trị</th>
               <th>Standard Packing</th>
               <th>Cuộn chẵn</th>
               <th>Cuộn lẻ</th>
@@ -145,6 +188,12 @@
                 <span *ngIf="item.locations.length === 0" class="text-muted">-</span>
               </td>
               <td class="text-right">{{ item.stock | number:'1.0-2' }}</td>
+              <td class="text-right">
+                <span *ngIf="item.materialValue !== undefined && item.materialValue > 0">
+                  {{ item.materialValue | number:'1.0-2' }}
+                </span>
+                <span *ngIf="item.materialValue === undefined || item.materialValue === 0" class="text-muted">-</span>
+              </td>
               <td class="text-right">{{ item.standardPacking | number:'1.0-2' }}</td>
               <td class="text-right">{{ item.evenRolls | number:'1.0-0' }}</td>
               <td class="text-right">{{ item.oddRolls | number:'1.2-2' }}</td>
@@ -167,7 +216,9 @@
             </tr>
             <!-- Dòng tổng -->
             <tr class="total-row" *ngIf="summaryData.length > 0">
-              <td colspan="7" class="text-right"><strong>TỔNG:</strong></td>
+              <td colspan="6" class="text-right"><strong>TỔNG:</strong></td>
+              <td class="text-right"><strong>{{ totalMaterialValue | number:'1.0-2' }}</strong></td>
+              <td class="text-right"></td>
               <td class="text-right"><strong>{{ totalEvenRolls | number:'1.0-0' }}</strong></td>
               <td class="text-right"><strong>{{ totalOddRolls | number:'1.2-2' }}</strong></td>
               <td colspan="4"></td>

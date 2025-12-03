@@ -667,6 +667,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         console.log(`✅ No duplicate found, using original batch number: ${finalBatchNumber}`);
       }
     
+    // Xử lý location đặc biệt cho hàng trả (TRA)
+    // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành F62 khi thêm vào inventory
+    let inventoryLocation = material.location;
+    if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
+      inventoryLocation = 'F62';
+      console.log(`🔄 Đổi location từ TRA sang F62 cho material ${material.materialCode} (lô hàng: ${material.batchNumber})`);
+    }
+    
     const inventoryMaterial = {
       factory: 'ASM1',
       importDate: material.importDate,
@@ -678,7 +686,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       unit: material.unit,
       exported: 0, // Initially no exports
       stock: material.quantity, // Initial stock = quantity
-      location: material.location,
+      location: inventoryLocation, // Đã xử lý đặc biệt cho hàng trả
       type: material.type,
       expiryDate: material.expiryDate,
       qualityCheck: material.qualityCheck,
@@ -2023,6 +2031,331 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('Error generating QR codes:', error);
+      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+    }
+  }
+
+  getPrintableMaterialsCount(): number {
+    return this.filteredMaterials.filter(m => 
+      m.rollsOrBags && m.rollsOrBags > 0
+    ).length;
+  }
+
+  async printAllQRCodes(): Promise<void> {
+    if (!this.canGenerateQR) {
+      alert('Bạn không có quyền tạo QR code');
+      return;
+    }
+
+    // Lọc các materials có thể in (có rollsOrBags > 0)
+    const printableMaterials = this.filteredMaterials.filter(m => 
+      m.rollsOrBags && m.rollsOrBags > 0
+    );
+
+    if (printableMaterials.length === 0) {
+      alert('Không có material nào có thể in QR code! Vui lòng nhập lượng đơn vị trước.');
+      return;
+    }
+
+    // Xác nhận trước khi in
+    const confirmMessage = `Bạn muốn in tất cả QR codes?\n\nSố lượng materials: ${printableMaterials.length}\n\nBạn có chắc chắn muốn tiếp tục?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      // Thu thập tất cả QR codes từ tất cả materials
+      const allQRCodes: Array<{
+        materialCode: string;
+        poNumber: string;
+        unitNumber: number;
+        qrData: string;
+        batchNumber: string;
+      }> = [];
+
+      for (const material of printableMaterials) {
+        const rollsOrBags = parseFloat(material.rollsOrBags.toString()) || 1;
+        const totalQuantity = material.quantity;
+        
+        const fullUnits = Math.floor(totalQuantity / rollsOrBags);
+        const remainingQuantity = totalQuantity % rollsOrBags;
+        
+        const batchNumber = material.importDate ? 
+          (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : 
+          new Date().toLocaleDateString('en-GB').split('/').join('');
+        
+        // Thêm full units
+        for (let i = 0; i < fullUnits; i++) {
+          allQRCodes.push({
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            unitNumber: rollsOrBags,
+            qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`,
+            batchNumber: batchNumber
+          });
+        }
+        
+        // Thêm remaining quantity nếu có
+        if (remainingQuantity > 0) {
+          allQRCodes.push({
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            unitNumber: remainingQuantity,
+            qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`,
+            batchNumber: batchNumber
+          });
+        }
+      }
+
+      if (allQRCodes.length === 0) {
+        alert('Không có QR code nào để in!');
+        return;
+      }
+
+      // Get current user info
+      const user = await this.afAuth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+      const totalPages = allQRCodes.length;
+      
+      // Generate QR code images
+      const qrImages = await Promise.all(
+        allQRCodes.map(async (qr, index) => {
+          const qrData = qr.qrData;
+          const qrImage = await QRCode.toDataURL(qrData, {
+            width: 240, // 30mm = 240px (8px/mm)
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          return {
+            ...qr,
+            qrImage,
+            index: index + 1,
+            pageNumber: index + 1,
+            totalPages: totalPages,
+            printDate: printDate,
+            printedBy: currentUser
+          };
+        })
+      );
+
+      // Create print window with all QR codes
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title>In tất cả QR codes</title>
+              <style>
+                * {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-sizing: border-box !important;
+                }
+                
+                body { 
+                  font-family: Arial, sans-serif; 
+                  margin: 0 !important; 
+                  padding: 0 !important;
+                  background: white !important;
+                  overflow: hidden !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                .qr-container { 
+                  display: flex !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  border: 1px solid #000 !important; 
+                  width: 57mm !important; 
+                  height: 32mm !important; 
+                  page-break-inside: avoid !important;
+                  background: white !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-section {
+                  width: 30mm !important;
+                  height: 30mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  border-right: 1px solid #ccc !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .qr-image {
+                  width: 28mm !important;
+                  height: 28mm !important;
+                  display: block !important;
+                }
+                
+                .info-section {
+                  flex: 1 !important;
+                  padding: 1mm !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  font-size: 9.6px !important;
+                  line-height: 1.1 !important;
+                  box-sizing: border-box !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row {
+                  margin: 0.3mm 0 !important;
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row.small {
+                  font-size: 8.4px !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row.small.page-number {
+                  font-size: 10.08px !important;
+                  color: #000000 !important;
+                }
+                
+                .qr-grid {
+                  text-align: center !important;
+                  display: flex !important;
+                  flex-direction: row !important;
+                  flex-wrap: wrap !important;
+                  align-items: flex-start !important;
+                  justify-content: flex-start !important;
+                  gap: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  width: 57mm !important;
+                  height: 32mm !important;
+                }
+                
+                @media print {
+                  body { 
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @page {
+                    margin: 0 !important;
+                    size: 57mm 32mm !important;
+                    padding: 0 !important;
+                  }
+                  
+                  .qr-container { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    width: 57mm !important; 
+                    height: 32mm !important; 
+                    page-break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                  }
+                  
+                  .qr-section {
+                    width: 30mm !important;
+                    height: 30mm !important;
+                  }
+                  
+                  .qr-image {
+                    width: 28mm !important;
+                    height: 28mm !important;
+                  }
+                  
+                  .info-section {
+                    font-size: 9.6px !important;
+                    padding: 1mm !important;
+                    color: #000000 !important;
+                  }
+                  
+                  .info-row.small {
+                    font-size: 8.4px !important;
+                    color: #000000 !important;
+                  }
+                  
+                  .info-row.small.page-number {
+                    font-size: 10.08px !important;
+                    color: #000000 !important;
+                  }
+                  
+                  .qr-grid {
+                    gap: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 57mm !important;
+                    height: 32mm !important;
+                  }
+                  
+                  @media screen {
+                    body::before,
+                    body::after,
+                    header,
+                    footer,
+                    nav,
+                    .browser-ui {
+                      display: none !important;
+                    }
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-grid">
+                ${qrImages.map(qr => `
+                  <div class="qr-container">
+                    <div class="qr-section">
+                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                    </div>
+                    <div class="info-section">
+                      <div>
+                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row">PO: ${qr.poNumber}</div>
+                        <div class="info-row">Ngày: ${qr.batchNumber}</div>
+                        <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
+                      </div>
+                      <div>
+                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">NV: ${qr.printedBy}</div>
+                        <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <script>
+                window.onload = function() {
+                  document.title = '';
+                  
+                  const style = document.createElement('style');
+                  style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } body::before, body::after, header, footer, nav, .browser-ui { display: none !important; } }';
+                  document.head.appendChild(style);
+                  
+                  const elementsToRemove = document.querySelectorAll('header, footer, nav, .browser-ui');
+                  elementsToRemove.forEach(el => el.remove());
+                  
+                  setTimeout(() => {
+                    window.print();
+                  }, 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+        
+        console.log(`✅ Đã tạo ${allQRCodes.length} QR codes để in`);
+        alert(`✅ Đã tạo ${allQRCodes.length} QR codes để in từ ${printableMaterials.length} materials!\n\nCửa sổ in sẽ tự động mở.`);
+      }
+    } catch (error) {
+      console.error('Error generating all QR codes:', error);
       alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }

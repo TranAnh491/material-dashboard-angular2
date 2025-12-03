@@ -65,6 +65,15 @@
           Nhận hàng trả
         </button>
         
+        <!-- In toàn bộ QR Button -->
+        <button class="print-all-qr-btn" 
+                (click)="printAllQRCodes()"
+                [disabled]="!canGenerateQR || getPrintableMaterialsCount() === 0"
+                [title]="getPrintableMaterialsCount() === 0 ? 'Không có material nào có thể in QR' : 'In tất cả QR codes trong danh sách'">
+          <i class="material-icons">print</i>
+          In toàn bộ
+        </button>
+        
         <!-- Filter Buttons: Hàng Trả / Hàng Nhập -->
         <div class="batch-type-filters">
           <label class="filter-checkbox-label">

@@ -35,6 +35,8 @@ export interface MaterialSummary {
   locations: string[]; // Danh sách các vị trí
   lastActionDate: Date | null; // Ngày import/cập nhật gần nhất
   lastActivity: MaterialActivity | null; // Hoạt động gần nhất
+  materialValue?: number; // Giá trị = stock * unitPrice
+  unitPrice?: number; // Đơn giá đơn vị từ file import
 }
 
 export interface MaterialActivity {
@@ -50,6 +52,16 @@ export interface MaterialActivity {
   factory?: string;
   performedBy?: string;
   notes?: string;
+}
+
+export interface MaterialPrice {
+  materialCode: string;
+  materialName: string;
+  unit: string; // Đvt
+  endingStock: number; // Tồn cuối kỳ
+  endingBalance: number; // Số dư cuối kỳ
+  unitPrice: number; // Đơn giá đơn vị = Số dư cuối kỳ / Tồn cuối kỳ
+  importedAt: Date;
 }
 
 @Component({
@@ -77,6 +89,11 @@ export class ManageComponent implements OnInit, OnDestroy {
   showActivityHistory: boolean = false;
   activityLimit: number = 50; // Số lượng hoạt động hiển thị
   
+  // Material Prices
+  materialPrices: Map<string, MaterialPrice> = new Map();
+  topFilter: number | null = null; // null, 20, 30, 50
+  originalSummaryData: MaterialSummary[] = []; // Lưu dữ liệu gốc để filter
+  
   // Password protection
   showPasswordModal: boolean = true;
   password: string = '';
@@ -96,7 +113,7 @@ export class ManageComponent implements OnInit, OnDestroy {
 
   constructor(private firestore: AngularFirestore) {}
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     console.log('🚀 ManageComponent initialized');
     // Always show password modal when component initializes
     // Clear session storage to ensure password is required each time
@@ -104,6 +121,9 @@ export class ManageComponent implements OnInit, OnDestroy {
     this.showPasswordModal = true;
     this.password = '';
     this.passwordError = '';
+    
+    // Load material prices
+    await this.loadMaterialPrices();
   }
 
   ngOnDestroy(): void {
@@ -760,6 +780,12 @@ export class ManageComponent implements OnInit, OnDestroy {
         if (lastActionDate && (!existing.lastActionDate || lastActionDate > existing.lastActionDate)) {
           existing.lastActionDate = lastActionDate;
         }
+        // Cập nhật giá trị nếu có price data
+        const price = this.materialPrices.get(materialCode);
+        if (price && price.unitPrice > 0) {
+          existing.unitPrice = price.unitPrice;
+          existing.materialValue = existing.stock * price.unitPrice;
+        }
         
         if (isDebugMaterial) {
           console.log(`🔍 DEBUG B041788 - After merge:`, {
@@ -788,8 +814,18 @@ export class ManageComponent implements OnInit, OnDestroy {
           totalWeight: stock * unitWeight, // Từ catalog (giống tab utilization)
           locations: material.location ? [material.location] : [],
           lastActionDate: lastActionDate,
-          lastActivity: null // Will be loaded later
+          lastActivity: null, // Will be loaded later
+          materialValue: undefined, // Will be calculated after loading prices
+          unitPrice: undefined
         });
+        
+        // Calculate material value if price is available
+        const price = this.materialPrices.get(materialCode);
+        if (price && price.unitPrice > 0) {
+          const summaryItem = summaryMap.get(key)!;
+          summaryItem.unitPrice = price.unitPrice;
+          summaryItem.materialValue = stock * price.unitPrice;
+        }
         
         if (isDebugMaterial) {
           console.log(`🔍 DEBUG B041788 - New entry:`, {
@@ -809,6 +845,9 @@ export class ManageComponent implements OnInit, OnDestroy {
     // Load last activity for each material
     await this.loadLastActivitiesForSummary();
     
+    // Update with prices if available
+    this.updateSummaryWithPrices();
+    
     // Debug log cho B041788 sau khi tính xong
     const debugSummary = this.summaryData.find(s => 
       s.materialCode === 'B041788' && s.poNumber === 'KZPO0825/0355'
@@ -825,32 +864,45 @@ export class ManageComponent implements OnInit, OnDestroy {
         oddRolls: debugSummary.oddRolls,
         oddQuantity: debugSummary.oddQuantity,
         totalWeight: debugSummary.totalWeight,
-        locations: debugSummary.locations
+        locations: debugSummary.locations,
+        materialValue: debugSummary.materialValue
       });
     }
     
     // Sắp xếp: nếu search theo vị trí thì sắp xếp theo ngày import (cũ nhất lên trên)
     // Nếu search theo mã thì sắp xếp theo PO và IMD
-    if (this.locationSearch && !this.materialCode) {
-      // Search theo vị trí: sắp xếp theo ngày import (cũ nhất lên trên)
-      this.summaryData.sort((a, b) => {
-        if (!a.lastActionDate && !b.lastActionDate) return 0;
-        if (!a.lastActionDate) return 1; // Không có ngày thì xuống dưới
-        if (!b.lastActionDate) return -1; // Không có ngày thì xuống dưới
-        return a.lastActionDate.getTime() - b.lastActionDate.getTime(); // Cũ nhất lên trên
-      });
-      console.log(`📊 Sorted by import date (oldest first) for location search`);
-    } else {
-      // Search theo mã: sắp xếp theo PO và IMD
-      this.summaryData.sort((a, b) => {
-        if (a.poNumber !== b.poNumber) {
-          return a.poNumber.localeCompare(b.poNumber);
-        }
-        return a.imd.localeCompare(b.imd);
-      });
+    // NHƯNG nếu đang filter theo Top N, thì không sort lại (để giữ nguyên thứ tự theo giá trị)
+    if (this.topFilter === null || this.topFilter === 0) {
+      if (this.locationSearch && !this.materialCode) {
+        // Search theo vị trí: sắp xếp theo ngày import (cũ nhất lên trên)
+        this.summaryData.sort((a, b) => {
+          if (!a.lastActionDate && !b.lastActionDate) return 0;
+          if (!a.lastActionDate) return 1; // Không có ngày thì xuống dưới
+          if (!b.lastActionDate) return -1; // Không có ngày thì xuống dưới
+          return a.lastActionDate.getTime() - b.lastActionDate.getTime(); // Cũ nhất lên trên
+        });
+        console.log(`📊 Sorted by import date (oldest first) for location search`);
+      } else {
+        // Search theo mã: sắp xếp theo PO và IMD
+        this.summaryData.sort((a, b) => {
+          if (a.poNumber !== b.poNumber) {
+            return a.poNumber.localeCompare(b.poNumber);
+          }
+          return a.imd.localeCompare(b.imd);
+        });
+      }
     }
 
     console.log(`📊 Summary calculated: ${this.summaryData.length} unique PO/IMD combinations`);
+    console.log(`💰 Materials with value: ${this.summaryData.filter(m => m.materialValue && m.materialValue > 0).length}`);
+    
+    // Save original data for filtering (always update original data - deep copy để tránh reference)
+    this.originalSummaryData = this.summaryData.map(item => ({ ...item }));
+    
+    // Apply filter if active
+    if (this.topFilter !== null && this.topFilter > 0) {
+      this.applyTopFilter(this.topFilter);
+    }
   }
 
   checkPassword(): void {
@@ -872,6 +924,246 @@ export class ManageComponent implements OnInit, OnDestroy {
     } else if (this.locationSearch.trim()) {
       this.searchByLocation();
     }
+  }
+
+  // Import Price File
+  importPriceFile(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls,.csv';
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.processPriceFile(file);
+      }
+    };
+    fileInput.click();
+  }
+
+  async processPriceFile(file: File): Promise<void> {
+    try {
+      this.isLoading = true;
+      console.log('📁 Processing price file:', file.name);
+
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      console.log('📦 Parsed', jsonData.length, 'rows from Excel');
+
+      if (jsonData.length === 0) {
+        alert('❌ File không có dữ liệu!');
+        this.isLoading = false;
+        return;
+      }
+
+      // Parse price data - Template format: Mã vật tư, Tên vật tư, Đvt, Tồn cuối kỳ, Số dư cuối kỳ
+      const prices: MaterialPrice[] = [];
+      for (const row of jsonData) {
+        // Read columns exactly as in template
+        const materialCode = (row['Mã vật tư'] || row['Mã Vật Tư'] || row['Mã vật tư'] || row['materialCode'] || '').toString().trim().toUpperCase();
+        const materialName = (row['Tên vật tư'] || row['Tên Vật Tư'] || row['Tên vật tư'] || row['materialName'] || '').toString().trim();
+        const unit = (row['Đvt'] || row['ĐVT'] || row['unit'] || '').toString().trim();
+        const endingStock = this.parseNumber(row['Tồn cuối kỳ'] || row['Tồn Cuối Kỳ'] || row['Tồn cuối kỳ'] || row['endingStock'] || 0);
+        const endingBalance = this.parseNumber(row['Số dư cuối kỳ'] || row['Số Dư Cuối Kỳ'] || row['Số dư cuối kỳ'] || row['endingBalance'] || 0);
+
+        // Skip empty rows
+        if (!materialCode || materialCode === '') continue;
+
+        // Calculate unit price = Số dư cuối kỳ / Tồn cuối kỳ
+        const unitPrice = endingStock > 0 ? endingBalance / endingStock : 0;
+
+        prices.push({
+          materialCode: materialCode,
+          materialName: materialName,
+          unit: unit,
+          endingStock: endingStock,
+          endingBalance: endingBalance,
+          unitPrice: unitPrice,
+          importedAt: new Date()
+        });
+      }
+
+      console.log(`✅ Parsed ${prices.length} price records`);
+
+      // Save to Firebase (overwrite)
+      await this.savePricesToFirebase(prices);
+
+      // Reload prices
+      await this.loadMaterialPrices();
+
+      // Reload and update summary with prices
+      if (this.materialCode.trim()) {
+        await this.searchMaterial();
+      } else if (this.locationSearch.trim()) {
+        await this.searchByLocation();
+      } else {
+        // If no search, just update existing summary
+        this.updateSummaryWithPrices();
+      }
+
+      alert(`✅ Đã import thành công ${prices.length} giá vật tư!`);
+    } catch (error) {
+      console.error('❌ Error importing price file:', error);
+      alert(`❌ Lỗi khi import file: ${error.message || error}`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  parseNumber(value: any): number {
+    if (value === null || value === undefined || value === '') return 0;
+    let valueStr = String(value).trim();
+    if (!valueStr) return 0;
+    
+    // Excel format: numbers with comma as thousands separator (e.g., "145,485.00" or "1,881,160,087")
+    // Remove all commas (thousands separator) first
+    valueStr = valueStr.replace(/,/g, '');
+    
+    // Remove any non-numeric characters except decimal point and negative sign
+    valueStr = valueStr.replace(/[^\d.-]/g, '');
+    
+    const num = parseFloat(valueStr);
+    return isNaN(num) ? 0 : num;
+  }
+
+  async savePricesToFirebase(prices: MaterialPrice[]): Promise<void> {
+    try {
+      // Delete all existing prices first (overwrite)
+      const existingSnapshot = await this.firestore.collection('material-prices').get().toPromise();
+      if (existingSnapshot && existingSnapshot.docs.length > 0) {
+        const batch = this.firestore.firestore.batch();
+        existingSnapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+        console.log(`🗑️ Deleted ${existingSnapshot.docs.length} existing price records`);
+      }
+
+      // Add new prices
+      const batchSize = 500;
+      for (let i = 0; i < prices.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const batchPrices = prices.slice(i, i + batchSize);
+        
+        batchPrices.forEach(price => {
+          const docRef = this.firestore.collection('material-prices').doc(price.materialCode).ref;
+          batch.set(docRef, price);
+        });
+        
+        await batch.commit();
+        console.log(`💾 Saved batch ${Math.floor(i / batchSize) + 1} with ${batchPrices.length} prices`);
+      }
+
+      console.log(`✅ Saved ${prices.length} price records to Firebase`);
+    } catch (error) {
+      console.error('❌ Error saving prices to Firebase:', error);
+      throw error;
+    }
+  }
+
+  async loadMaterialPrices(): Promise<void> {
+    try {
+      const snapshot = await this.firestore.collection('material-prices').get().toPromise();
+      this.materialPrices.clear();
+      
+      if (snapshot) {
+        snapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const price: MaterialPrice = {
+            materialCode: data.materialCode || doc.id,
+            materialName: data.materialName || '',
+            unit: data.unit || '',
+            endingStock: data.endingStock || 0,
+            endingBalance: data.endingBalance || 0,
+            unitPrice: data.unitPrice || 0,
+            importedAt: data.importedAt?.toDate ? data.importedAt.toDate() : new Date(data.importedAt || Date.now())
+          };
+          this.materialPrices.set(price.materialCode.toUpperCase().trim(), price);
+        });
+      }
+      
+      console.log(`✅ Loaded ${this.materialPrices.size} material prices`);
+    } catch (error) {
+      console.error('❌ Error loading material prices:', error);
+    }
+  }
+
+  updateSummaryWithPrices(): void {
+    this.summaryData.forEach(item => {
+      const price = this.materialPrices.get(item.materialCode.toUpperCase().trim());
+      if (price) {
+        item.unitPrice = price.unitPrice;
+        item.materialValue = item.stock * price.unitPrice;
+      } else {
+        item.unitPrice = undefined;
+        item.materialValue = undefined;
+      }
+    });
+  }
+
+  applyTopFilter(limit: number | null): void {
+    console.log(`🔝 applyTopFilter called with limit: ${limit}`);
+    console.log(`📊 originalSummaryData length: ${this.originalSummaryData.length}`);
+    console.log(`📊 current summaryData length: ${this.summaryData.length}`);
+    
+    this.topFilter = limit;
+    
+    if (limit === null || limit === 0) {
+      // Show all - restore original data
+      this.summaryData = [...this.originalSummaryData];
+      console.log(`✅ Restored all data: ${this.summaryData.length} materials`);
+    } else {
+      // Filter to top N by material value
+      // Only show materials that have materialValue
+      const dataWithValue = [...this.originalSummaryData].filter(item => {
+        const hasValue = item.materialValue !== undefined && item.materialValue !== null && item.materialValue > 0;
+        if (!hasValue) {
+          console.log(`⚠️ Material ${item.materialCode} (PO: ${item.poNumber}) has no materialValue:`, item.materialValue);
+        }
+        return hasValue;
+      });
+      
+      console.log(`📦 Materials with value: ${dataWithValue.length} out of ${this.originalSummaryData.length}`);
+      
+      if (dataWithValue.length === 0) {
+        alert(`⚠️ Không có material nào có giá trị (materialValue) để lọc!\n\nVui lòng import file giá trước.`);
+        this.summaryData = [...this.originalSummaryData];
+        this.topFilter = null;
+        return;
+      }
+      
+      // Sort by material value (descending - highest first)
+      const sortedData = dataWithValue.sort((a, b) => {
+        const valueA = a.materialValue || 0;
+        const valueB = b.materialValue || 0;
+        return valueB - valueA; // Descending
+      });
+      
+      // Take top N
+      this.summaryData = sortedData.slice(0, limit);
+      
+      console.log(`🔝 Filtered to top ${limit}: ${this.summaryData.length} materials`);
+      console.log(`📊 Top materials:`, this.summaryData.slice(0, 5).map(m => ({
+        code: m.materialCode,
+        po: m.poNumber,
+        value: m.materialValue
+      })));
+    }
+    
+    // Update total material value after filtering
+    this.updateTotalMaterialValue();
+  }
+
+  updateTotalMaterialValue(): void {
+    const total = this.summaryData.reduce((sum, item) => sum + (item.materialValue || 0), 0);
+    console.log(`💰 Total material value: ${total}`);
+  }
+
+  get totalMaterialValue(): number {
+    return this.summaryData.reduce((sum, item) => sum + (item.materialValue || 0), 0);
   }
 
   onPasswordKeyPress(event: KeyboardEvent): void {
