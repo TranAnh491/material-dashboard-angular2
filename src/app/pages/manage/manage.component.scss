@@ -727,6 +727,17 @@
   }
 }
 
+// Stock Check Cell Styles
+.stock-check-cell {
+  min-width: 150px;
+  text-align: center;
+  
+  .stock-check-date {
+    font-size: 12px;
+    color: #333;
+  }
+}
+
 // Responsive
 @media (max-width: 768px) {
   .manage-container {

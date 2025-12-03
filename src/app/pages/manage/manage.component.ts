@@ -20,6 +20,13 @@ export interface InventoryMaterial {
   unitWeight?: number;
 }
 
+export interface StockCheckInfo {
+  stockCheck: string; // Trạng thái: OK, NG, etc.
+  qtyCheck: number; // Số lượng đã kiểm
+  idCheck: string; // ID người kiểm
+  dateCheck: Date | null; // Ngày kiểm
+}
+
 export interface MaterialSummary {
   materialCode: string;
   poNumber: string;
@@ -37,6 +44,7 @@ export interface MaterialSummary {
   lastActivity: MaterialActivity | null; // Hoạt động gần nhất
   materialValue?: number; // Giá trị = stock * unitPrice
   unitPrice?: number; // Đơn giá đơn vị từ file import
+  stockCheck?: StockCheckInfo | null; // Thông tin stock check
 }
 
 export interface MaterialActivity {
@@ -93,6 +101,9 @@ export class ManageComponent implements OnInit, OnDestroy {
   materialPrices: Map<string, MaterialPrice> = new Map();
   topFilter: number | null = null; // null, 20, 30, 50
   originalSummaryData: MaterialSummary[] = []; // Lưu dữ liệu gốc để filter
+  
+  // Stock Check Data
+  stockCheckData: Map<string, StockCheckInfo> = new Map(); // Key: materialCode_PO_IMD
   
   // Password protection
   showPasswordModal: boolean = true;
@@ -273,6 +284,18 @@ export class ManageComponent implements OnInit, OnDestroy {
       default:
         return '';
     }
+  }
+
+  getStockCheckStatusClass(status: string): string {
+    const statusUpper = status?.toUpperCase() || '';
+    if (statusUpper.includes('OK') || statusUpper.includes('PASS')) {
+      return 'stock-check-ok';
+    } else if (statusUpper.includes('NG') || statusUpper.includes('FAIL')) {
+      return 'stock-check-ng';
+    } else if (statusUpper.includes('CHECK') || statusUpper.includes('KIỂM')) {
+      return 'stock-check-pending';
+    }
+    return 'stock-check-default';
   }
 
   // Load last activity for each material in summary
@@ -848,6 +871,9 @@ export class ManageComponent implements OnInit, OnDestroy {
     // Update with prices if available
     this.updateSummaryWithPrices();
     
+    // Load stock check data
+    await this.loadStockCheckData();
+    
     // Debug log cho B041788 sau khi tính xong
     const debugSummary = this.summaryData.find(s => 
       s.materialCode === 'B041788' && s.poNumber === 'KZPO0825/0355'
@@ -1155,6 +1181,13 @@ export class ManageComponent implements OnInit, OnDestroy {
     
     // Update total material value after filtering
     this.updateTotalMaterialValue();
+    
+    // Re-assign stock check data after filtering
+    this.summaryData.forEach(item => {
+      const key = `${item.materialCode}_${item.poNumber}_${item.imd}`;
+      const stockCheck = this.stockCheckData.get(key);
+      item.stockCheck = stockCheck || null;
+    });
   }
 
   updateTotalMaterialValue(): void {
@@ -1164,6 +1197,53 @@ export class ManageComponent implements OnInit, OnDestroy {
 
   get totalMaterialValue(): number {
     return this.summaryData.reduce((sum, item) => sum + (item.materialValue || 0), 0);
+  }
+
+  async loadStockCheckData(): Promise<void> {
+    try {
+      console.log('📋 Loading stock check data...');
+      this.stockCheckData.clear();
+      
+      const snapshotDocId = `${this.selectedFactory}_stock_check_current`;
+      const doc = await this.firestore
+        .collection('stock-check-snapshot')
+        .doc(snapshotDocId)
+        .get()
+        .toPromise();
+
+      if (doc && doc.exists) {
+        const data = doc.data() as any;
+        const checkedMaterials = data.materials || [];
+        
+        console.log(`📋 Loaded ${checkedMaterials.length} stock check records`);
+        
+        // Map stock check data by materialCode_PO_IMD
+        checkedMaterials.forEach((item: any) => {
+          const key = `${item.materialCode}_${item.poNumber}_${item.imd}`;
+          const stockCheckInfo: StockCheckInfo = {
+            stockCheck: item.stockCheck || '',
+            qtyCheck: item.qtyCheck || 0,
+            idCheck: item.idCheck || '',
+            dateCheck: item.dateCheck?.toDate ? item.dateCheck.toDate() : 
+                      (item.dateCheck ? new Date(item.dateCheck) : null)
+          };
+          this.stockCheckData.set(key, stockCheckInfo);
+        });
+        
+        // Assign stock check info to summary data
+        this.summaryData.forEach(item => {
+          const key = `${item.materialCode}_${item.poNumber}_${item.imd}`;
+          const stockCheck = this.stockCheckData.get(key);
+          item.stockCheck = stockCheck || null;
+        });
+        
+        console.log(`✅ Stock check data loaded and assigned to ${this.summaryData.filter(s => s.stockCheck).length} materials`);
+      } else {
+        console.log('ℹ️ No stock check snapshot found');
+      }
+    } catch (error) {
+      console.error('❌ Error loading stock check data:', error);
+    }
   }
 
   onPasswordKeyPress(event: KeyboardEvent): void {

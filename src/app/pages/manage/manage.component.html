@@ -169,6 +169,7 @@
               <th>Trọng lượng cuộn (g)</th>
               <th>Ngày import</th>
               <th>Lịch sử gần nhất</th>
+              <th>Stock Check</th>
             </tr>
           </thead>
           <tbody>
@@ -213,6 +214,12 @@
                 </div>
                 <span *ngIf="!item.lastActivity" class="text-muted">-</span>
               </td>
+              <td class="stock-check-cell">
+                <span *ngIf="item.stockCheck && item.stockCheck.dateCheck" class="stock-check-date">
+                  {{ item.stockCheck.dateCheck | date:'dd/MM/yyyy HH:mm' }}
+                </span>
+                <span *ngIf="!item.stockCheck || !item.stockCheck.dateCheck" class="text-muted">-</span>
+              </td>
             </tr>
             <!-- Dòng tổng -->
             <tr class="total-row" *ngIf="summaryData.length > 0">
@@ -221,7 +228,7 @@
               <td class="text-right"></td>
               <td class="text-right"><strong>{{ totalEvenRolls | number:'1.0-0' }}</strong></td>
               <td class="text-right"><strong>{{ totalOddRolls | number:'1.2-2' }}</strong></td>
-              <td colspan="4"></td>
+              <td colspan="5"></td>
             </tr>
           </tbody>
         </table>
