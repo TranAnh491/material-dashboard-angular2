@@ -98,6 +98,17 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   showSuccessNotification = false;
   successMessage = '';
   
+  // Store Material Modal (Cất NVL)
+  showStoreMaterialModal = false;
+  storeMaterialQRInput = '';
+  scannedMaterialCodeForStore = '';
+  foundMaterialsForStore: any[] = []; // Các materials tìm được theo materialCode
+  selectedMaterialForStore: any = null; // Material được chọn để cất
+  suggestedLocations: string[] = []; // Danh sách vị trí hiện tại của material
+  selectedTargetLocation = ''; // Vị trí đích được chọn
+  isSearchingMaterial = false;
+  storeMaterialStep: 'scan' | 'select' | 'choose-location' | 'confirm' = 'scan';
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -1452,5 +1463,196 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         reject(new Error(`Element ${selector} not found`));
       }, 5000);
     });
+  }
+
+  // Store Material (Cất NVL) Functions
+  openStoreMaterialModal(): void {
+    this.showStoreMaterialModal = true;
+    this.storeMaterialStep = 'scan';
+    this.storeMaterialQRInput = '';
+    this.scannedMaterialCodeForStore = '';
+    this.foundMaterialsForStore = [];
+    this.selectedMaterialForStore = null;
+    this.suggestedLocations = [];
+    this.selectedTargetLocation = '';
+    this.isSearchingMaterial = false;
+    
+    // Force change detection để đảm bảo modal đã render
+    this.cdr.detectChanges();
+    
+    // Auto focus vào input sau khi modal mở
+    setTimeout(() => {
+      const input = document.getElementById('storeMaterialQRInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        // Không select() để người dùng có thể scan ngay
+        console.log('✅ Input focused for store material');
+      } else {
+        console.log('⚠️ Input not found, retrying...');
+        // Retry sau 200ms nếu chưa tìm thấy
+        setTimeout(() => {
+          const retryInput = document.getElementById('storeMaterialQRInput') as HTMLInputElement;
+          if (retryInput) {
+            retryInput.focus();
+            console.log('✅ Input focused on retry');
+          }
+        }, 200);
+      }
+    }, 150);
+  }
+
+  closeStoreMaterialModal(): void {
+    this.showStoreMaterialModal = false;
+    this.storeMaterialStep = 'scan';
+    this.storeMaterialQRInput = '';
+    this.scannedMaterialCodeForStore = '';
+    this.foundMaterialsForStore = [];
+    this.selectedMaterialForStore = null;
+    this.suggestedLocations = [];
+    this.selectedTargetLocation = '';
+    this.isSearchingMaterial = false;
+  }
+
+  async processStoreMaterialQR(): Promise<void> {
+    const qrCode = this.storeMaterialQRInput.trim();
+    if (!qrCode) {
+      alert('⚠️ Vui lòng nhập hoặc scan mã QR');
+      return;
+    }
+
+    this.isSearchingMaterial = true;
+    this.scannedMaterialCodeForStore = qrCode;
+
+    try {
+      // Parse QR code: MaterialCode|PO|Quantity|Date
+      const parts = qrCode.split('|');
+      let materialCode = '';
+
+      if (parts.length >= 1) {
+        materialCode = parts[0].trim().substring(0, 7); // Lấy 7 ký tự đầu
+      } else {
+        materialCode = qrCode.trim().substring(0, 7);
+      }
+
+      if (!materialCode) {
+        alert('❌ Không thể đọc mã hàng từ QR code');
+        this.isSearchingMaterial = false;
+        return;
+      }
+
+      console.log(`🔍 Searching for material: ${materialCode}`);
+
+      // Tìm tất cả materials có materialCode này trong inventory-materials
+      const snapshot = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1')
+             .where('materialCode', '==', materialCode)
+        )
+        .get()
+        .toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
+        this.isSearchingMaterial = false;
+        return;
+      }
+
+      // Lấy tất cả materials tìm được
+      this.foundMaterialsForStore = [];
+      const locationSet = new Set<string>();
+
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        
+        // Tính stock đúng cách: openingStock + quantity - exported - xt
+        const openingStockValue = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+        const quantity = Number(data.quantity) || 0;
+        const exported = Number(data.exported) || 0;
+        const xt = Number(data.xt) || 0;
+        const calculatedStock = openingStockValue + quantity - exported - xt;
+        
+        const material = {
+          id: doc.id,
+          materialCode: data.materialCode || '',
+          poNumber: data.poNumber || '',
+          location: data.location || '',
+          stock: calculatedStock, // Sử dụng stock đã tính
+          openingStock: data.openingStock,
+          quantity: quantity,
+          exported: exported,
+          xt: xt,
+          batchNumber: data.batchNumber || '',
+          importDate: data.importDate
+        };
+        this.foundMaterialsForStore.push(material);
+        
+        if (material.location && material.location.trim() !== '') {
+          locationSet.add(material.location);
+        }
+      });
+
+      // Tạo danh sách vị trí gợi ý (unique locations)
+      this.suggestedLocations = Array.from(locationSet).sort();
+
+      console.log(`✅ Found ${this.foundMaterialsForStore.length} materials at ${this.suggestedLocations.length} locations`);
+
+      // Nếu chỉ có 1 material duy nhất
+      if (this.foundMaterialsForStore.length === 1) {
+        this.selectedMaterialForStore = this.foundMaterialsForStore[0];
+        
+        // Nếu chỉ có 1 vị trí - thông báo scan vị trí tiếp theo
+        if (this.suggestedLocations.length === 1) {
+          alert(`✅ Tìm thấy material: ${materialCode}\n\nMaterial này đang ở vị trí: ${this.suggestedLocations[0]}\n\nVui lòng scan hoặc nhập vị trí tiếp theo để chuyển đến.`);
+        }
+        
+        // Luôn chuyển sang bước chọn vị trí
+        this.storeMaterialStep = 'choose-location';
+      } else {
+        // Có nhiều materials - cho chọn
+        this.storeMaterialStep = 'select';
+      }
+
+      this.storeMaterialQRInput = '';
+      this.isSearchingMaterial = false;
+    } catch (error) {
+      console.error('❌ Error searching material:', error);
+      alert(`❌ Lỗi khi tìm kiếm material: ${error}`);
+      this.isSearchingMaterial = false;
+    }
+  }
+
+  selectMaterialForStore(material: any): void {
+    this.selectedMaterialForStore = material;
+    this.storeMaterialStep = 'choose-location';
+  }
+
+  async confirmStoreMaterial(): Promise<void> {
+    if (!this.selectedMaterialForStore || !this.selectedTargetLocation) {
+      alert('⚠️ Vui lòng chọn material và vị trí đích');
+      return;
+    }
+
+    try {
+      // Cập nhật location trong Firebase
+      await this.firestore
+        .collection('inventory-materials')
+        .doc(this.selectedMaterialForStore.id)
+        .update({
+          location: this.selectedTargetLocation,
+          lastModified: new Date(),
+          modifiedBy: 'store-material-scanner'
+        });
+
+      alert(`✅ Đã cất material thành công!\n\n` +
+            `Mã hàng: ${this.selectedMaterialForStore.materialCode}\n` +
+            `PO: ${this.selectedMaterialForStore.poNumber}\n` +
+            `Vị trí mới: ${this.selectedTargetLocation}`);
+
+      // Đóng modal và reset
+      this.closeStoreMaterialModal();
+    } catch (error) {
+      console.error('❌ Error storing material:', error);
+      alert(`❌ Lỗi khi cất material: ${error}`);
+    }
   }
 }

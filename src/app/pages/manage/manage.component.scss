@@ -732,9 +732,22 @@
   min-width: 150px;
   text-align: center;
   
-  .stock-check-date {
-    font-size: 12px;
-    color: #333;
+  .stock-check-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    
+    .stock-check-date {
+      font-size: 12px;
+      color: #333;
+      font-weight: 500;
+    }
+    
+    .stock-check-account {
+      font-size: 11px;
+      color: #666;
+      font-style: italic;
+    }
   }
 }
 

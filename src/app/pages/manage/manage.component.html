@@ -215,9 +215,14 @@
                 <span *ngIf="!item.lastActivity" class="text-muted">-</span>
               </td>
               <td class="stock-check-cell">
-                <span *ngIf="item.stockCheck && item.stockCheck.dateCheck" class="stock-check-date">
-                  {{ item.stockCheck.dateCheck | date:'dd/MM/yyyy HH:mm' }}
-                </span>
+                <div *ngIf="item.stockCheck && item.stockCheck.dateCheck" class="stock-check-info">
+                  <div class="stock-check-date">
+                    {{ item.stockCheck.dateCheck | date:'dd/MM/yyyy HH:mm' }}
+                  </div>
+                  <div class="stock-check-account" *ngIf="item.stockCheck.idCheck">
+                    {{ item.stockCheck.idCheck }}
+                  </div>
+                </div>
                 <span *ngIf="!item.stockCheck || !item.stockCheck.dateCheck" class="text-muted">-</span>
               </td>
             </tr>

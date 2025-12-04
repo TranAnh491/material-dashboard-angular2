@@ -51,6 +51,10 @@
           
           <!-- Action Buttons -->
           <div class="action-buttons">
+            <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Cất nguyên vật liệu">
+              <i class="material-icons">inventory</i>
+              Cất NVL
+            </button>
             <button class="change-location-btn-desktop" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
               <i class="material-icons">swap_horiz</i>
               Change Location
@@ -64,6 +68,11 @@
         
         <!-- Mobile Controls -->
         <div class="mobile-controls">
+          <!-- Store Material Button -->
+          <button class="store-material-btn mobile" (click)="openStoreMaterialModal()" title="Cất nguyên vật liệu">
+            <i class="material-icons">inventory</i>
+            Cất NVL
+          </button>
           <!-- Change Location Button -->
           <button class="change-location-btn" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
             <i class="material-icons">swap_horiz</i>
@@ -145,7 +154,7 @@
     </div>
 
     <!-- Table Container -->
-    <div class="table-container" *ngIf="!isLoading">
+    <div class="table-container desktop-only" *ngIf="!isLoading">
       <!-- Table -->
       <table class="excel-table">
         <thead>
@@ -604,5 +613,168 @@
   <div class="notification-content">
     <i class="material-icons">check_circle</i>
     <span>{{ successMessage }}</span>
+  </div>
+</div>
+
+<!-- Store Material Modal (Cất NVL) -->
+<div class="modal-overlay" *ngIf="showStoreMaterialModal" (click)="closeStoreMaterialModal()">
+  <div class="modal-content store-material-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">inventory</i>
+        Cất Nguyên Vật Liệu
+      </h3>
+      <button class="close-btn" (click)="closeStoreMaterialModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step 1: Scan QR -->
+      <div *ngIf="storeMaterialStep === 'scan'" class="store-step">
+        <div class="step-title">
+          <h4>Bước 1: Scan mã QR mã hàng cần cất</h4>
+        </div>
+        
+        <div class="scan-input-container">
+          <input 
+            type="text" 
+            id="storeMaterialQRInput"
+            [(ngModel)]="storeMaterialQRInput"
+            (keyup.enter)="processStoreMaterialQR()"
+            placeholder="Quét hoặc nhập mã QR..."
+            class="scan-input"
+            autofocus
+            [disabled]="isSearchingMaterial">
+          
+          <button 
+            class="scan-btn"
+            (click)="processStoreMaterialQR()"
+            [disabled]="isSearchingMaterial || !storeMaterialQRInput.trim()">
+            <i class="material-icons">{{ isSearchingMaterial ? 'hourglass_empty' : 'qr_code_scanner' }}</i>
+            {{ isSearchingMaterial ? 'Đang tìm...' : 'Tìm kiếm' }}
+          </button>
+        </div>
+        
+        <div *ngIf="isSearchingMaterial" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Đang tìm kiếm material...</span>
+        </div>
+      </div>
+
+      <!-- Step 2: Select Material (nếu có nhiều materials) -->
+      <div *ngIf="storeMaterialStep === 'select'" class="store-step">
+        <div class="step-title">
+          <h4>Bước 2: Chọn material cần cất</h4>
+          <p class="step-description">Tìm thấy {{ foundMaterialsForStore.length }} materials với mã: <strong>{{ scannedMaterialCodeForStore.split('|')[0] }}</strong></p>
+        </div>
+        
+        <div class="materials-list">
+          <div 
+            *ngFor="let material of foundMaterialsForStore" 
+            class="material-item"
+            [class.selected]="selectedMaterialForStore?.id === material.id"
+            (click)="selectMaterialForStore(material)">
+            <div class="material-info">
+              <div class="material-code">{{ material.materialCode }}</div>
+              <div class="material-details">
+                <span>PO: {{ material.poNumber }}</span>
+                <span>Vị trí hiện tại: <strong>{{ material.location || 'Chưa có' }}</strong></span>
+                <span>Tồn kho: {{ material.stock | number:'1.0-2' }}</span>
+              </div>
+            </div>
+            <i class="material-icons">chevron_right</i>
+          </div>
+        </div>
+        
+        <div class="suggested-locations" *ngIf="suggestedLocations.length > 0">
+          <p class="locations-title">📍 Các vị trí hiện tại:</p>
+          <div class="location-badges">
+            <span *ngFor="let loc of suggestedLocations" class="location-badge">{{ loc }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Choose Target Location -->
+      <div *ngIf="storeMaterialStep === 'choose-location'" class="store-step">
+        <div class="step-title">
+          <h4>Bước 3: Chọn vị trí đích</h4>
+          <p class="step-description" *ngIf="selectedMaterialForStore">
+            Material: <strong>{{ selectedMaterialForStore.materialCode }}</strong> (PO: {{ selectedMaterialForStore.poNumber }})
+          </p>
+        </div>
+        
+        <div class="current-location-info" *ngIf="selectedMaterialForStore">
+          <p>📍 Vị trí hiện tại: <strong>{{ selectedMaterialForStore.location || 'Chưa có' }}</strong></p>
+        </div>
+        
+        <div class="suggested-locations" *ngIf="suggestedLocations.length > 0">
+          <p class="locations-title">💡 Gợi ý vị trí:</p>
+          <div class="location-options">
+            <button 
+              *ngFor="let loc of suggestedLocations"
+              class="location-option-btn"
+              [class.selected]="selectedTargetLocation === loc"
+              (click)="selectedTargetLocation = loc">
+              {{ loc }}
+            </button>
+          </div>
+        </div>
+        
+        <div class="custom-location-input">
+          <label>Nhập hoặc scan vị trí mới:</label>
+          <input 
+            type="text" 
+            [(ngModel)]="selectedTargetLocation"
+            placeholder="Nhập hoặc scan vị trí mới..."
+            class="location-input"
+            autofocus>
+          <p class="location-hint" *ngIf="suggestedLocations.length === 1">
+            💡 Material đang ở vị trí: <strong>{{ suggestedLocations[0] }}</strong>. Vui lòng scan vị trí tiếp theo.
+          </p>
+        </div>
+      </div>
+
+      <!-- Step 4: Confirm -->
+      <div *ngIf="storeMaterialStep === 'confirm'" class="store-step">
+        <div class="step-title">
+          <h4>Bước 4: Xác nhận</h4>
+        </div>
+        
+        <div class="confirm-info" *ngIf="selectedMaterialForStore">
+          <div class="info-row">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ selectedMaterialForStore.materialCode }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">PO:</span>
+            <span class="value">{{ selectedMaterialForStore.poNumber }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Vị trí hiện tại:</span>
+            <span class="value">{{ selectedMaterialForStore.location || 'Chưa có' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Vị trí mới:</span>
+            <span class="value highlight">{{ selectedTargetLocation }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn btn-cancel" (click)="closeStoreMaterialModal()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button 
+        *ngIf="storeMaterialStep === 'choose-location'"
+        class="btn btn-confirm"
+        (click)="confirmStoreMaterial()"
+        [disabled]="!selectedTargetLocation.trim()">
+        <i class="material-icons">check</i>
+        Xác nhận
+      </button>
+    </div>
   </div>
 </div>
