@@ -1640,6 +1640,122 @@
       }
     }
     
+    .material-info-card {
+      background-color: #f8f9fa;
+      border: 2px solid #000000;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+      
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 14px;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        .label {
+          font-weight: 500;
+          color: #555;
+          min-width: 120px;
+        }
+        
+        .value {
+          font-weight: 600;
+          color: #000;
+          text-align: right;
+          
+          &.highlight-current {
+            color: #4caf50;
+            font-size: 15px;
+          }
+        }
+      }
+    }
+    
+    .other-locations-section {
+      margin-top: 20px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #e3f2fd;
+      border: 1px solid #2196f3;
+      border-radius: 4px;
+      
+      .locations-title {
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 12px;
+        font-size: 14px;
+      }
+      
+      .location-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        
+        .location-option-btn {
+          padding: 10px 16px;
+          background: white;
+          border: 2px solid #2196f3;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #1976d2;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          
+          &:hover {
+            border-color: #4caf50;
+            background: #f1f8e9;
+            color: #2e7d32;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          
+          &.selected {
+            background: #4caf50;
+            color: white;
+            border-color: #4caf50;
+            font-weight: 600;
+          }
+          
+          &.current-location {
+            border-color: #ff9800;
+            background: #fff3e0;
+            color: #e65100;
+            
+            .current-badge {
+              font-size: 11px;
+              font-weight: 400;
+              opacity: 0.8;
+            }
+            
+            &:hover {
+              border-color: #f57c00;
+              background: #ffe0b2;
+            }
+            
+            &.selected {
+              background: #4caf50;
+              color: white;
+              border-color: #4caf50;
+              
+              .current-badge {
+                color: white;
+              }
+            }
+          }
+        }
+      }
+    }
+    
     .current-location-info {
       padding: 12px;
       background: #fff3e0;

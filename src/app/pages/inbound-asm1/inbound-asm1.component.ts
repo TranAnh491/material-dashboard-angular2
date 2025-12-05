@@ -30,6 +30,7 @@ export interface InboundMaterial {
   unitWeight?: number; // Trọng lượng đơn vị (gram) - max 2 decimals
   remarks: string;
   hasQRGenerated?: boolean; // Track if QR code has been generated
+  scannedQuantity?: number; // Số lượng đã scan (cộng dồn)
   createdAt?: Date;
   updatedAt?: Date;
   
@@ -117,6 +118,26 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   returnGoodsStep: number = 1; // 1: Scan employee, 2: Scan QR code
   returnGoodsQRInput: string = '';
   returnGoodsScanResult: { success: boolean, message: string, material?: InboundMaterial } | null = null;
+  
+  // Kiểm hàng về Modal properties (tương tự nhận hàng trả)
+  showInspectionScanModal: boolean = false;
+  inspectionEmployeeId: string = '';
+  inspectionEmployeeVerified: boolean = false;
+  inspectionBatchNumber: string = '';
+  inspectionQRInput: string = '';
+  inspectionScanResult: { success: boolean, message: string, material?: InboundMaterial, errorDetail?: string } | null = null;
+  
+  // Danh sách các materials đã scan trong modal
+  scannedMaterialsList: Array<{
+    material: InboundMaterial;
+    scannedQuantity: number;
+    totalQuantity: number;
+    remainingQuantity: number;
+    isComplete: boolean;
+  }> = [];
+  
+  // Map để lưu số lượng đã scan cho mỗi material (key: materialId, value: scannedQuantity)
+  materialScannedQuantity: Map<string, number> = new Map();
   
   // Physical Scanner properties (copy from outbound)
   isScannerInputActive: boolean = false;
@@ -262,6 +283,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             supplier: data.supplier || '',
             remarks: data.remarks || '',
             hasQRGenerated: data.hasQRGenerated || false,
+            scannedQuantity: data.scannedQuantity || 0,
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
           } as InboundMaterial;
@@ -518,8 +540,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     // Filter by current batch when processing
     if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
-      filtered = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
-      console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}`);
+      const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
+      console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
+      
+      // Chỉ hiển thị 1 dòng đại diện cho lô hàng - lấy material đầu tiên
+      if (batchMaterials.length > 0) {
+        filtered = [batchMaterials[0]];
+        console.log(`📦 Showing only 1 representative row for batch: ${this.currentBatchNumber} (Material: ${batchMaterials[0].materialCode})`);
+      } else {
+        filtered = [];
+      }
     }
     
     // Sort based on selected sort option
@@ -3714,13 +3744,303 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         batchNumber: this.selectedBatch
       });
       
-      // Đóng modal và hiển thị giao diện đã lọc
+      // Đóng modal batch và mở modal scan kiểm hàng
       this.isBatchScanningMode = false;
+      this.showBatchModal = false;
       
-      // Hiển thị thông báo thành công
-      alert(`✅ Bắt đầu kiểm tra!\nMã nhân viên: ${this.employeeCode}\nLô hàng: ${this.selectedBatch}\n\nGiao diện đã được lọc để hiển thị materials của lô hàng này.`);
+      // Thiết lập thông tin cho modal scan kiểm hàng
+      this.inspectionEmployeeId = this.employeeCode;
+      this.inspectionEmployeeVerified = true;
+      this.inspectionBatchNumber = this.selectedBatch;
+      this.inspectionQRInput = '';
+      this.inspectionScanResult = null;
+      this.scannedMaterialsList = []; // Reset danh sách khi bắt đầu kiểm tra
+      
+      // Mở modal scan kiểm hàng
+      this.showInspectionScanModal = true;
+      
+      // Lọc materials theo lô hàng
+      this.currentBatchNumber = this.selectedBatch;
+      this.applyFilters();
+      
+      // Auto focus vào input sau khi modal mở
+      setTimeout(() => {
+        const input = document.getElementById('inspectionQRInput') as HTMLInputElement;
+        if (input) {
+          input.focus();
+        }
+      }, 300);
       
       console.log(`🎯 Đã chuyển sang chế độ kiểm tra lô hàng: ${this.selectedBatch}`);
+    }
+  }
+  
+  // Đóng modal scan kiểm hàng
+  closeInspectionScanModal(): void {
+    this.showInspectionScanModal = false;
+    this.inspectionQRInput = '';
+    this.inspectionScanResult = null;
+    this.scannedMaterialsList = []; // Reset danh sách khi đóng modal
+  }
+  
+  // Tạo QR data từ material (giống như khi in QR)
+  private generateQRDataFromMaterial(material: InboundMaterial, quantity: number): string {
+    // Tạo batchNumber từ importDate (giống logic in QR)
+    const batchNumber = material.importDate 
+      ? (typeof material.importDate === 'string' 
+          ? material.importDate 
+          : material.importDate.toLocaleDateString('en-GB').split('/').join(''))
+      : new Date().toLocaleDateString('en-GB').split('/').join('');
+    
+    // Format: MaterialCode|PO|Quantity|Date
+    return `${material.materialCode}|${material.poNumber}|${quantity}|${batchNumber}`;
+  }
+
+  // Xử lý scan QR code khi kiểm hàng
+  async processInspectionScan(): Promise<void> {
+    const scannedCode = this.inspectionQRInput.trim();
+    console.log('📦 Processing Inspection scan:', scannedCode);
+
+    if (!scannedCode) {
+      alert('⚠️ Vui lòng nhập mã QR');
+      return;
+    }
+
+    console.log('🔍 Searching for material with QR data:', scannedCode);
+
+    // Tìm materials trong lô hàng đã chọn
+    const batchMaterials = this.materials.filter(m => 
+      m.batchNumber === this.inspectionBatchNumber
+    );
+
+    console.log(`📊 Found ${batchMaterials.length} materials in batch ${this.inspectionBatchNumber}`);
+
+    // Tìm material bằng cách so sánh QR data được tạo từ material với QR được scan
+    let foundMaterial: InboundMaterial | undefined = undefined;
+    
+    for (const material of batchMaterials) {
+      if (!material.rollsOrBags || material.rollsOrBags <= 0) {
+        continue; // Skip materials without rollsOrBags
+      }
+
+      const rollsOrBags = parseFloat(material.rollsOrBags.toString()) || 1;
+      const totalQuantity = material.quantity;
+      const fullUnits = Math.floor(totalQuantity / rollsOrBags);
+      const remainingQuantity = totalQuantity % rollsOrBags;
+
+      // Kiểm tra với các QR codes có thể có (full units và remaining nếu có)
+      for (let i = 0; i < fullUnits; i++) {
+        const qrData = this.generateQRDataFromMaterial(material, rollsOrBags);
+        if (qrData === scannedCode) {
+          foundMaterial = material;
+          break;
+        }
+      }
+      
+      if (foundMaterial) break;
+      
+      if (remainingQuantity > 0) {
+        const qrData = this.generateQRDataFromMaterial(material, remainingQuantity);
+        if (qrData === scannedCode) {
+          foundMaterial = material;
+          break;
+        }
+      }
+    }
+
+    if (foundMaterial) {
+      console.log('✅ Found matching material:', foundMaterial);
+
+      // Kiểm tra xem đã nhận chưa
+      if (foundMaterial.isReceived) {
+        this.inspectionScanResult = {
+          success: false,
+          message: '⚠️ Mã hàng này đã được nhận rồi',
+          material: foundMaterial
+        };
+      } else {
+        try {
+          const materialId = foundMaterial.id;
+          if (!materialId) {
+            throw new Error('Material không có ID');
+          }
+
+          // Parse QR code để lấy số lượng đã scan
+          const parts = scannedCode.split('|');
+          const scannedQty = parseFloat(parts[2]?.trim() || '0') || 0;
+          
+          console.log(`📊 Parsed scanned quantity: ${scannedQty} from QR code`);
+
+          // Lấy số lượng đã scan hiện tại từ material (từ Firestore hoặc local)
+          const currentScannedQty = foundMaterial.scannedQuantity || 0;
+          const newScannedQty = currentScannedQty + scannedQty;
+          const totalQuantity = foundMaterial.quantity;
+
+          console.log(`📊 Current scanned: ${currentScannedQty}, Adding: ${scannedQty}, New total: ${newScannedQty}, Required: ${totalQuantity}`);
+
+          // Cập nhật số lượng đã scan
+          await this.firestore.collection('inbound-materials').doc(materialId).update({
+            scannedQuantity: newScannedQty,
+            updatedAt: new Date()
+          });
+
+          // Update local data
+          const materialIndex = this.materials.findIndex(m => m.id === materialId);
+          if (materialIndex !== -1) {
+            this.materials[materialIndex].scannedQuantity = newScannedQty;
+            foundMaterial.scannedQuantity = newScannedQty; // Cập nhật material object
+          }
+
+          // Kiểm tra nếu đã đủ số lượng
+          const isComplete = newScannedQty >= totalQuantity;
+          const remainingQty = Math.max(0, totalQuantity - newScannedQty);
+          
+          // Cập nhật hoặc thêm vào danh sách scanned materials
+          const existingIndex = this.scannedMaterialsList.findIndex(item => item.material.id === materialId);
+          const scannedItem = {
+            material: foundMaterial,
+            scannedQuantity: newScannedQty,
+            totalQuantity: totalQuantity,
+            remainingQuantity: remainingQty,
+            isComplete: isComplete
+          };
+          
+          if (existingIndex >= 0) {
+            // Cập nhật item đã có
+            this.scannedMaterialsList[existingIndex] = scannedItem;
+          } else {
+            // Thêm item mới
+            this.scannedMaterialsList.push(scannedItem);
+          }
+          
+          if (isComplete) {
+            // Đủ số lượng - tick "đã nhận"
+            await this.firestore.collection('inbound-materials').doc(materialId).update({
+              isReceived: true,
+              scannedQuantity: newScannedQty,
+              updatedAt: new Date()
+            });
+
+            // Update local data
+            if (materialIndex !== -1) {
+              this.materials[materialIndex].isReceived = true;
+              foundMaterial.isReceived = true;
+            }
+
+            console.log('✅ Material marked as received:', foundMaterial.materialCode);
+            
+            // Thêm vào inventory-materials collection
+            console.log('📦 Adding material to inventory:', foundMaterial.materialCode);
+            this.addToInventory(foundMaterial);
+            
+            this.inspectionScanResult = {
+              success: true,
+              message: `✅ Đã nhận hàng thành công (${newScannedQty}/${totalQuantity}) và đã thêm vào inventory!`,
+              material: foundMaterial
+            };
+          } else {
+            // Chưa đủ - chỉ cập nhật số lượng đã scan
+            this.inspectionScanResult = {
+              success: true,
+              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}`,
+              material: foundMaterial
+            };
+          }
+
+          // Refresh filtered materials
+          this.applyFilters();
+
+        } catch (error: any) {
+          console.error('❌ Error updating material:', error);
+          this.inspectionScanResult = {
+            success: false,
+            message: `❌ Lỗi cập nhật: ${error.message}`,
+            material: foundMaterial
+          };
+        }
+      }
+    } else {
+      console.log('❌ Material not found for QR code:', scannedCode);
+      console.log('📊 Available materials in batch:', batchMaterials.map(m => ({
+        materialCode: m.materialCode,
+        poNumber: m.poNumber,
+        quantity: m.quantity,
+        batchNumber: m.batchNumber,
+        rollsOrBags: m.rollsOrBags
+      })));
+      
+      // Debug: In ra các QR codes có thể có
+      console.log('🔍 Debug - Possible QR codes for materials in batch:');
+      const sampleQRs: string[] = [];
+      for (const material of batchMaterials.slice(0, 3)) { // Chỉ in 3 materials đầu tiên để debug
+        if (material.rollsOrBags && material.rollsOrBags > 0) {
+          const rollsOrBags = parseFloat(material.rollsOrBags.toString()) || 1;
+          const qrData = this.generateQRDataFromMaterial(material, rollsOrBags);
+          console.log(`  - ${material.materialCode}: ${qrData}`);
+          sampleQRs.push(`${material.materialCode} (${material.poNumber}): ${qrData}`);
+        }
+      }
+      
+      // Tạo thông báo lỗi chi tiết
+      let errorMessage = `❌ Scan sai - Không tìm thấy mã hàng trong lô hàng ${this.inspectionBatchNumber}.\n\n`;
+      errorMessage += `📋 QR code đã scan: ${scannedCode}\n\n`;
+      
+      // Parse QR code để tìm lỗi cụ thể
+      const parts = scannedCode.split('|');
+      if (parts.length < 4) {
+        errorMessage += `❌ Lỗi: Format QR code không đúng!\n`;
+        errorMessage += `   Format đúng: MaterialCode|PO|Quantity|Date\n`;
+        errorMessage += `   Format scan: ${parts.length} phần (thiếu ${4 - parts.length} phần)\n\n`;
+      } else {
+        const scannedMaterialCode = parts[0]?.trim() || '';
+        const scannedPO = parts[1]?.trim() || '';
+        
+        // Kiểm tra mã hàng có trong batch không
+        const materialCodeExists = batchMaterials.some(m => m.materialCode === scannedMaterialCode);
+        const poExists = batchMaterials.some(m => m.poNumber === scannedPO);
+        
+        if (!materialCodeExists && !poExists) {
+          errorMessage += `❌ Lỗi: Mã hàng "${scannedMaterialCode}" và PO "${scannedPO}" không có trong lô hàng này.\n\n`;
+        } else if (!materialCodeExists) {
+          errorMessage += `❌ Lỗi: Mã hàng "${scannedMaterialCode}" không có trong lô hàng này.\n`;
+          errorMessage += `   PO "${scannedPO}" có tồn tại nhưng mã hàng không khớp.\n\n`;
+        } else if (!poExists) {
+          errorMessage += `❌ Lỗi: PO "${scannedPO}" không khớp với mã hàng "${scannedMaterialCode}" trong lô hàng này.\n\n`;
+        } else {
+          errorMessage += `❌ Lỗi: Mã hàng và PO có trong lô hàng nhưng QR code không khớp định dạng.\n\n`;
+        }
+      }
+      
+      if (sampleQRs.length > 0) {
+        errorMessage += `📝 Ví dụ QR code đúng trong lô hàng:\n`;
+        sampleQRs.slice(0, 2).forEach(qr => {
+          errorMessage += `   • ${qr}\n`;
+        });
+      }
+      
+      this.inspectionScanResult = {
+        success: false,
+        message: errorMessage,
+        errorDetail: `QR code không khớp với lô hàng ${this.inspectionBatchNumber}`
+      };
+    }
+
+    // Clear input for next scan
+    this.inspectionQRInput = '';
+    
+    // Auto-focus for next scan after a delay
+    setTimeout(() => {
+      const input = document.getElementById('inspectionQRInput') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 500);
+  }
+  
+  // Xử lý keyup event cho input QR scan
+  onInspectionQRKeyup(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.processInspectionScan();
     }
   }
 

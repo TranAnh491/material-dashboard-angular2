@@ -168,7 +168,6 @@
               <th>Lượng lẻ</th>
               <th>Trọng lượng cuộn (g)</th>
               <th>Ngày import</th>
-              <th>Lịch sử gần nhất</th>
               <th>Stock Check</th>
             </tr>
           </thead>
@@ -201,19 +200,6 @@
               <td class="text-right">{{ item.oddQuantity | number:'1.0-2' }}</td>
               <td class="text-right">{{ item.totalWeight | number:'1.0-2' }}</td>
               <td class="text-center">{{ item.lastActionDate ? (item.lastActionDate | date:'dd/MM/yyyy') : '-' }}</td>
-              <td class="activity-cell">
-                <div *ngIf="item.lastActivity" class="activity-info" [class]="getActivityTypeClass(item.lastActivity.activityType)">
-                  <div class="activity-type-badge" [class]="getActivityTypeClass(item.lastActivity.activityType)">
-                    {{ getActivityTypeLabel(item.lastActivity.activityType) }}
-                  </div>
-                  <div class="activity-details">
-                    <div class="activity-date">{{ item.lastActivity.activityDate | date:'dd/MM/yyyy HH:mm' }}</div>
-                    <div class="activity-notes" *ngIf="item.lastActivity.notes">{{ item.lastActivity.notes }}</div>
-                    <div class="activity-location" *ngIf="item.lastActivity.location">Vị trí: {{ item.lastActivity.location }}</div>
-                  </div>
-                </div>
-                <span *ngIf="!item.lastActivity" class="text-muted">-</span>
-              </td>
               <td class="stock-check-cell">
                 <div *ngIf="item.stockCheck && item.stockCheck.dateCheck" class="stock-check-info">
                   <div class="stock-check-date">
@@ -233,7 +219,7 @@
               <td class="text-right"></td>
               <td class="text-right"><strong>{{ totalEvenRolls | number:'1.0-0' }}</strong></td>
               <td class="text-right"><strong>{{ totalOddRolls | number:'1.2-2' }}</strong></td>
-              <td colspan="5"></td>
+              <td colspan="4"></td>
             </tr>
           </tbody>
         </table>

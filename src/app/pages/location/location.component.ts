@@ -1527,9 +1527,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // Parse QR code: MaterialCode|PO|Quantity|Date
       const parts = qrCode.split('|');
       let materialCode = '';
+      let poNumber = '';
 
-      if (parts.length >= 1) {
+      if (parts.length >= 2) {
         materialCode = parts[0].trim().substring(0, 7); // Lấy 7 ký tự đầu
+        poNumber = parts[1].trim(); // PO number
+      } else if (parts.length >= 1) {
+        materialCode = parts[0].trim().substring(0, 7);
       } else {
         materialCode = qrCode.trim().substring(0, 7);
       }
@@ -1540,10 +1544,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      console.log(`🔍 Searching for material: ${materialCode}`);
+      console.log(`🔍 Searching for material: ${materialCode}, PO: ${poNumber || 'N/A'}`);
 
-      // Tìm tất cả materials có materialCode này trong inventory-materials
-      const snapshot = await this.firestore
+      // Tìm tất cả materials có materialCode này trong inventory-materials (để lấy các vị trí khác)
+      const allMaterialsSnapshot = await this.firestore
         .collection('inventory-materials', ref =>
           ref.where('factory', '==', 'ASM1')
              .where('materialCode', '==', materialCode)
@@ -1551,17 +1555,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .get()
         .toPromise();
 
-      if (!snapshot || snapshot.empty) {
+      if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
         alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
         this.isSearchingMaterial = false;
         return;
       }
 
-      // Lấy tất cả materials tìm được
-      this.foundMaterialsForStore = [];
+      // Lấy tất cả materials để tìm các vị trí khác
+      const allMaterials: any[] = [];
       const locationSet = new Set<string>();
+      let matchedMaterial: any = null;
 
-      snapshot.forEach(doc => {
+      allMaterialsSnapshot.forEach(doc => {
         const data = doc.data() as any;
         
         // Tính stock đúng cách: openingStock + quantity - exported - xt
@@ -1576,7 +1581,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           materialCode: data.materialCode || '',
           poNumber: data.poNumber || '',
           location: data.location || '',
-          stock: calculatedStock, // Sử dụng stock đã tính
+          stock: calculatedStock,
           openingStock: data.openingStock,
           quantity: quantity,
           exported: exported,
@@ -1584,36 +1589,67 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           batchNumber: data.batchNumber || '',
           importDate: data.importDate
         };
-        this.foundMaterialsForStore.push(material);
+
+        allMaterials.push(material);
         
+        // Thu thập tất cả các vị trí
         if (material.location && material.location.trim() !== '') {
           locationSet.add(material.location);
         }
+
+        // Tìm material khớp với QR code (materialCode + PO)
+        if (material.materialCode === materialCode) {
+          if (poNumber && material.poNumber === poNumber) {
+            // Khớp cả materialCode và PO
+            matchedMaterial = material;
+          } else if (!poNumber && !matchedMaterial) {
+            // Nếu không có PO trong QR code, lấy material đầu tiên
+            matchedMaterial = material;
+          }
+        }
       });
 
-      // Tạo danh sách vị trí gợi ý (unique locations)
-      this.suggestedLocations = Array.from(locationSet).sort();
-
-      console.log(`✅ Found ${this.foundMaterialsForStore.length} materials at ${this.suggestedLocations.length} locations`);
-
-      // Nếu chỉ có 1 material duy nhất
-      if (this.foundMaterialsForStore.length === 1) {
-        this.selectedMaterialForStore = this.foundMaterialsForStore[0];
-        
-        // Nếu chỉ có 1 vị trí - thông báo scan vị trí tiếp theo
-        if (this.suggestedLocations.length === 1) {
-          alert(`✅ Tìm thấy material: ${materialCode}\n\nMaterial này đang ở vị trí: ${this.suggestedLocations[0]}\n\nVui lòng scan hoặc nhập vị trí tiếp theo để chuyển đến.`);
-        }
-        
-        // Luôn chuyển sang bước chọn vị trí
-        this.storeMaterialStep = 'choose-location';
-      } else {
-        // Có nhiều materials - cho chọn
-        this.storeMaterialStep = 'select';
+      // Nếu không tìm thấy material khớp chính xác, lấy material đầu tiên
+      if (!matchedMaterial && allMaterials.length > 0) {
+        matchedMaterial = allMaterials[0];
+        console.log(`⚠️ Không tìm thấy material khớp chính xác, sử dụng material đầu tiên`);
       }
 
+      if (!matchedMaterial) {
+        alert(`❌ Không tìm thấy material khớp với QR code`);
+        this.isSearchingMaterial = false;
+        return;
+      }
+
+      // Chỉ hiển thị material được scan (khớp với QR code)
+      this.foundMaterialsForStore = [matchedMaterial];
+      this.selectedMaterialForStore = matchedMaterial;
+
+      // Tạo danh sách tất cả các vị trí hiện có của cùng materialCode
+      // Bao gồm tất cả các vị trí (không loại bỏ vị trí hiện tại)
+      // Sắp xếp và loại bỏ trùng lặp
+      const allLocations = Array.from(locationSet).filter(loc => loc && loc.trim() !== '').sort();
+      this.suggestedLocations = allLocations;
+
+      console.log(`✅ Found material: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber})`);
+      console.log(`📍 Material hiện tại ở vị trí: ${matchedMaterial.location || 'Chưa có'}`);
+      console.log(`📍 Tất cả các vị trí hiện có của mã hàng này: ${allLocations.join(', ') || 'Không có'}`);
+
+      // Chuyển sang bước chọn vị trí
+      this.storeMaterialStep = 'choose-location';
+      
+      // Clear và focus vào input để sẵn sàng scan/nhập vị trí mới
+      this.selectedTargetLocation = '';
       this.storeMaterialQRInput = '';
       this.isSearchingMaterial = false;
+      
+      // Auto focus vào input vị trí sau khi modal render
+      setTimeout(() => {
+        const locationInput = document.querySelector('.location-input') as HTMLInputElement;
+        if (locationInput) {
+          locationInput.focus();
+        }
+      }, 200);
     } catch (error) {
       console.error('❌ Error searching material:', error);
       alert(`❌ Lỗi khi tìm kiếm material: ${error}`);

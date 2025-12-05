@@ -392,92 +392,141 @@
        (change)="onFileSelect($event)">
 
 <!-- Batch Start Modal -->
-<div class="modal-overlay" *ngIf="showBatchModal" (click)="closeBatchModal()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>🚀 Bắt đầu kiểm lô hàng</h3>
+<div class="modal-overlay batch-modal-overlay" *ngIf="showBatchModal" (click)="closeBatchModal()">
+  <div class="modal-content batch-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header batch-modal-header">
+      <div class="header-left">
+        <div class="header-icon">
+          <i class="material-icons">inventory_2</i>
+        </div>
+        <div class="header-text">
+          <h3>Bắt đầu kiểm lô hàng</h3>
+          <p class="header-subtitle">Quy trình kiểm tra và nhận hàng nhập kho</p>
+        </div>
+      </div>
       <button class="close-btn" (click)="closeBatchModal()">
         <i class="material-icons">close</i>
       </button>
     </div>
     
-    <div class="modal-body">
+    <div class="modal-body batch-modal-body">
       <!-- Thay scanner bằng input trực tiếp -->
-      <div class="scanner-section" *ngIf="isBatchScanningMode">
-        <div class="employee-input-section">
-          <label for="employeeCodeInput">Nhập mã nhân viên:</label>
-          <input 
-            type="text" 
-            id="employeeCodeInput"
-            [(ngModel)]="employeeCode"
-            placeholder="Nhập mã nhân viên..."
-            class="employee-input uppercase-input"
-            [disabled]="isEmployeeCodeSaved"
-            (input)="onEmployeeCodeInput($event)"
-            (keyup)="onEmployeeCodeKeyup($event)">
-          
-          <button 
-            class="save-btn" 
-            (click)="saveEmployeeCode()"
-            [disabled]="!employeeCode || isEmployeeCodeSaved">
-            <i class="material-icons">save</i>
-            Save
-          </button>
-        </div>
-
-        <!-- Hiển thị trạng thái mã nhân viên -->
-        <div class="employee-status" *ngIf="isEmployeeCodeSaved">
-          <i class="material-icons success">check_circle</i>
-          <span>Mã nhân viên: {{ employeeCode }}</span>
-        </div>
-
-        <!-- Dropdown chọn lô hàng/DNNK -->
-        <div class="batch-selection-section" *ngIf="isEmployeeCodeSaved">
-          <label for="batchSelect">Chọn mã lô hàng/DNNK:</label>
-          
-          <!-- Debug info -->
-          <div class="debug-info" style="font-size: 12px; color: #666; margin-bottom: 8px;">
-            <span>Debug: {{ availableBatches.length }} batches available</span>
-            <br>
-            <span>Factory: {{ selectedFactory }}</span>
-            <br>
-            <span>Total in collection: {{ availableBatches.length }}</span>
+      <div class="scanner-section batch-scanner-section" *ngIf="isBatchScanningMode">
+        <!-- Step 1: Nhập mã nhân viên -->
+        <div class="step-container">
+          <div class="step-header">
+            <div class="step-number">1</div>
+            <div class="step-title">
+              <h4>Nhập mã nhân viên</h4>
+              <p>Nhập hoặc quét mã nhân viên để xác thực</p>
+            </div>
           </div>
           
-          <select 
-            id="batchSelect"
-            [(ngModel)]="selectedBatch"
-            class="batch-select"
-            (change)="onBatchSelectionChange()">
-            <option value="">-- Chọn lô hàng/DNNK --</option>
-            <option 
-              *ngFor="let batch of availableBatches" 
-              [value]="batch.batchNumber">
-              {{ batch.batchNumber }}
-            </option>
-          </select>
-          
-          <!-- Show if no batches available -->
-          <div *ngIf="availableBatches.length === 0" style="color: #f44336; font-size: 12px; margin-top: 4px;">
-            ⚠️ Không có lô hàng nào khả dụng
+          <div class="employee-input-section">
+            <div class="input-wrapper">
+              <i class="material-icons input-icon">badge</i>
+              <input 
+                type="text" 
+                id="employeeCodeInput"
+                [(ngModel)]="employeeCode"
+                placeholder="Nhập mã nhân viên (VD: ASP0106)"
+                class="employee-input uppercase-input modern-input"
+                [disabled]="isEmployeeCodeSaved"
+                (input)="onEmployeeCodeInput($event)"
+                (keyup)="onEmployeeCodeKeyup($event)"
+                (keyup.enter)="saveEmployeeCode()">
+            </div>
+            
+            <button 
+              class="save-btn modern-btn" 
+              (click)="saveEmployeeCode()"
+              [disabled]="!employeeCode || isEmployeeCodeSaved">
+              <i class="material-icons">{{ isEmployeeCodeSaved ? 'check_circle' : 'save' }}</i>
+              {{ isEmployeeCodeSaved ? 'Đã lưu' : 'Lưu' }}
+            </button>
+          </div>
+
+          <!-- Hiển thị trạng thái mã nhân viên -->
+          <div class="employee-status-badge" *ngIf="isEmployeeCodeSaved">
+            <i class="material-icons">check_circle</i>
+            <div class="status-info">
+              <span class="status-label">Mã nhân viên đã xác thực:</span>
+              <span class="status-value">{{ employeeCode }}</span>
+            </div>
           </div>
         </div>
 
-        <!-- Nút bắt đầu kiểm tra -->
-        <div class="start-inspection-section" *ngIf="selectedBatch">
-          <button 
-            class="start-inspection-btn" 
-            (click)="startInspection()">
-            <i class="material-icons">play_arrow</i>
-            Bắt đầu kiểm tra
-          </button>
+        <!-- Step 2: Chọn lô hàng -->
+        <div class="step-container" *ngIf="isEmployeeCodeSaved">
+          <div class="step-header">
+            <div class="step-number">2</div>
+            <div class="step-title">
+              <h4>Chọn lô hàng/DNNK</h4>
+              <p>Chọn lô hàng cần kiểm tra từ danh sách</p>
+            </div>
+          </div>
+
+          <div class="batch-selection-section">
+            <div class="input-wrapper">
+              <i class="material-icons input-icon">inventory</i>
+              <select 
+                id="batchSelect"
+                [(ngModel)]="selectedBatch"
+                class="batch-select modern-select"
+                (change)="onBatchSelectionChange()">
+                <option value="">-- Chọn lô hàng/DNNK --</option>
+                <option 
+                  *ngFor="let batch of availableBatches" 
+                  [value]="batch.batchNumber">
+                  {{ batch.batchNumber }}
+                </option>
+              </select>
+            </div>
+            
+            <!-- Show if no batches available -->
+            <div class="warning-message" *ngIf="availableBatches.length === 0">
+              <i class="material-icons">warning</i>
+              <span>Không có lô hàng nào khả dụng</span>
+            </div>
+            
+            <!-- Show batch info if selected -->
+            <div class="batch-info-card" *ngIf="selectedBatch">
+              <i class="material-icons">info</i>
+              <div class="info-content">
+                <span class="info-label">Lô hàng đã chọn:</span>
+                <span class="info-value">{{ selectedBatch }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Bắt đầu kiểm tra -->
+        <div class="step-container" *ngIf="selectedBatch">
+          <div class="step-header">
+            <div class="step-number">3</div>
+            <div class="step-title">
+              <h4>Sẵn sàng bắt đầu</h4>
+              <p>Nhấn nút bên dưới để bắt đầu quá trình kiểm tra</p>
+            </div>
+          </div>
+
+          <div class="start-inspection-section">
+            <button 
+              class="start-inspection-btn modern-btn primary-btn" 
+              (click)="startInspection()">
+              <i class="material-icons">play_arrow</i>
+              <span>Bắt đầu kiểm tra</span>
+            </button>
+          </div>
         </div>
 
         <!-- Nút dừng -->
-        <button class="done-btn" (click)="stopBatchScanningMode()" title="Dừng chế độ scan">
-          <i class="material-icons">stop</i>
-          Dừng
-        </button>
+        <div class="modal-footer batch-modal-footer">
+          <button class="done-btn modern-btn secondary-btn" (click)="stopBatchScanningMode()" title="Dừng chế độ scan">
+            <i class="material-icons">stop</i>
+            <span>Dừng</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -799,6 +848,104 @@
         <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
         <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
         <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng TRA</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Kiểm hàng về Scan Modal -->
+<div class="modal-overlay" *ngIf="showInspectionScanModal" (click)="closeInspectionScanModal()">
+  <div class="modal-content return-goods-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📦 Kiểm hàng về - Lô hàng: {{ inspectionBatchNumber }}</h3>
+      <button class="close-btn" (click)="closeInspectionScanModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Employee Verified Badge -->
+      <div class="employee-verified-badge" *ngIf="inspectionEmployeeVerified">
+        <i class="material-icons">check_circle</i>
+        <span>Nhân viên: <strong>{{ inspectionEmployeeId }}</strong></span>
+      </div>
+
+      <!-- Scan QR Code -->
+      <div class="return-goods-scanner-section">
+        <label for="inspectionQRInput">
+          <i class="material-icons">qr_code_scanner</i>
+          Quét mã QR của hàng hóa
+        </label>
+        <input 
+          type="text" 
+          id="inspectionQRInput"
+          [(ngModel)]="inspectionQRInput"
+          placeholder="Quét hoặc nhập mã QR..."
+          class="return-goods-scan-input"
+          (keyup)="onInspectionQRKeyup($event)"
+          autofocus>
+        
+        <button class="scan-submit-btn" (click)="processInspectionScan()">
+          <i class="material-icons">qr_code_scanner</i>
+          Scan
+        </button>
+      </div>
+
+      <!-- Scan Result Message -->
+      <div class="return-goods-result" *ngIf="inspectionScanResult">
+        <div class="result-message" [ngClass]="inspectionScanResult.success ? 'success' : 'error'">
+          <i class="material-icons">{{ inspectionScanResult.success ? 'check_circle' : 'error' }}</i>
+          <span>{{ inspectionScanResult.message }}</span>
+        </div>
+        <div class="error-detail" *ngIf="!inspectionScanResult.success && inspectionScanResult.errorDetail">
+          <p>{{ inspectionScanResult.errorDetail }}</p>
+        </div>
+      </div>
+
+      <!-- Danh sách Materials đã scan -->
+      <div class="scanned-materials-list" *ngIf="scannedMaterialsList.length > 0">
+        <h4 class="list-title">
+          <i class="material-icons">list</i>
+          Danh sách mã hàng đã scan ({{ scannedMaterialsList.length }})
+        </h4>
+        <div class="materials-grid">
+          <div 
+            *ngFor="let item of scannedMaterialsList" 
+            class="material-item"
+            [ngClass]="{ 'complete': item.isComplete }">
+            <div class="material-header">
+              <div class="material-code">{{ item.material.materialCode }}</div>
+              <div class="material-po">PO: {{ item.material.poNumber }}</div>
+              <div class="complete-badge" *ngIf="item.isComplete">
+                <i class="material-icons">check_circle</i>
+                <span>Đã duyệt</span>
+              </div>
+            </div>
+            <div class="material-quantity-info">
+              <div class="quantity-row">
+                <span class="label">Số lượng nhập:</span>
+                <span class="value">{{ item.totalQuantity | number:'1.2-2' }}</span>
+              </div>
+              <div class="quantity-row">
+                <span class="label">Đã scan:</span>
+                <span class="value scanned">{{ item.scannedQuantity | number:'1.2-2' }}</span>
+              </div>
+              <div class="quantity-row">
+                <span class="label">Còn lại:</span>
+                <span class="value remaining" [ngClass]="{ 'zero': item.remainingQuantity === 0 }">
+                  {{ item.remainingQuantity | number:'1.2-2' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="return-goods-instructions">
+        <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
+        <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
+        <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng {{ inspectionBatchNumber }}</p>
       </div>
     </div>
   </div>

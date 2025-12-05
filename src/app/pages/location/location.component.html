@@ -662,76 +662,62 @@
         </div>
       </div>
 
-      <!-- Step 2: Select Material (nếu có nhiều materials) -->
-      <div *ngIf="storeMaterialStep === 'select'" class="store-step">
-        <div class="step-title">
-          <h4>Bước 2: Chọn material cần cất</h4>
-          <p class="step-description">Tìm thấy {{ foundMaterialsForStore.length }} materials với mã: <strong>{{ scannedMaterialCodeForStore.split('|')[0] }}</strong></p>
-        </div>
-        
-        <div class="materials-list">
-          <div 
-            *ngFor="let material of foundMaterialsForStore" 
-            class="material-item"
-            [class.selected]="selectedMaterialForStore?.id === material.id"
-            (click)="selectMaterialForStore(material)">
-            <div class="material-info">
-              <div class="material-code">{{ material.materialCode }}</div>
-              <div class="material-details">
-                <span>PO: {{ material.poNumber }}</span>
-                <span>Vị trí hiện tại: <strong>{{ material.location || 'Chưa có' }}</strong></span>
-                <span>Tồn kho: {{ material.stock | number:'1.0-2' }}</span>
-              </div>
-            </div>
-            <i class="material-icons">chevron_right</i>
-          </div>
-        </div>
-        
-        <div class="suggested-locations" *ngIf="suggestedLocations.length > 0">
-          <p class="locations-title">📍 Các vị trí hiện tại:</p>
-          <div class="location-badges">
-            <span *ngFor="let loc of suggestedLocations" class="location-badge">{{ loc }}</span>
-          </div>
-        </div>
-      </div>
 
-      <!-- Step 3: Choose Target Location -->
+      <!-- Step 2: Choose Target Location -->
       <div *ngIf="storeMaterialStep === 'choose-location'" class="store-step">
         <div class="step-title">
-          <h4>Bước 3: Chọn vị trí đích</h4>
+          <h4>Bước 2: Chọn vị trí đích</h4>
           <p class="step-description" *ngIf="selectedMaterialForStore">
             Material: <strong>{{ selectedMaterialForStore.materialCode }}</strong> (PO: {{ selectedMaterialForStore.poNumber }})
           </p>
         </div>
         
-        <div class="current-location-info" *ngIf="selectedMaterialForStore">
-          <p>📍 Vị trí hiện tại: <strong>{{ selectedMaterialForStore.location || 'Chưa có' }}</strong></p>
+        <!-- Material Info -->
+        <div class="material-info-card" *ngIf="selectedMaterialForStore">
+          <div class="info-row">
+            <span class="label">Mã hàng:</span>
+            <span class="value">{{ selectedMaterialForStore.materialCode }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">PO:</span>
+            <span class="value">{{ selectedMaterialForStore.poNumber }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Vị trí hiện tại:</span>
+            <span class="value highlight-current">{{ selectedMaterialForStore.location || 'Chưa có' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Tồn kho:</span>
+            <span class="value">{{ selectedMaterialForStore.stock | number:'1.0-2' }}</span>
+          </div>
         </div>
         
-        <div class="suggested-locations" *ngIf="suggestedLocations.length > 0">
-          <p class="locations-title">💡 Gợi ý vị trí:</p>
+        <!-- All Current Locations (clickable) -->
+        <div class="other-locations-section" *ngIf="suggestedLocations.length > 0">
+          <p class="locations-title">📍 Các vị trí hiện có của mã hàng này (bấm để chọn):</p>
           <div class="location-options">
             <button 
               *ngFor="let loc of suggestedLocations"
               class="location-option-btn"
               [class.selected]="selectedTargetLocation === loc"
+              [class.current-location]="selectedMaterialForStore?.location === loc"
               (click)="selectedTargetLocation = loc">
               {{ loc }}
+              <span *ngIf="selectedMaterialForStore?.location === loc" class="current-badge">(hiện tại)</span>
             </button>
           </div>
         </div>
         
         <div class="custom-location-input">
-          <label>Nhập hoặc scan vị trí mới:</label>
+          <label>Hoặc nhập/scan vị trí mới:</label>
           <input 
             type="text" 
+            id="targetLocationInput"
             [(ngModel)]="selectedTargetLocation"
+            (keyup.enter)="confirmStoreMaterial()"
             placeholder="Nhập hoặc scan vị trí mới..."
             class="location-input"
             autofocus>
-          <p class="location-hint" *ngIf="suggestedLocations.length === 1">
-            💡 Material đang ở vị trí: <strong>{{ suggestedLocations[0] }}</strong>. Vui lòng scan vị trí tiếp theo.
-          </p>
         </div>
       </div>
 
