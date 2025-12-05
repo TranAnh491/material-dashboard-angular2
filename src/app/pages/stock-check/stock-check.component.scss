@@ -24,7 +24,6 @@
   .selection-header {
     text-align: center;
     margin-bottom: 60px;
-    animation: fadeInDown 0.6s ease-out;
 
     h1 {
       color: #ffffff;
@@ -57,7 +56,6 @@
     flex-wrap: wrap;
     justify-content: center;
     max-width: 1000px;
-    animation: fadeInUp 0.6s ease-out 0.2s both;
 
     .factory-card {
       position: relative;
@@ -67,7 +65,6 @@
       border-radius: 24px;
       padding: 40px 30px;
       cursor: pointer;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -88,7 +85,6 @@
         bottom: 0;
         background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
         opacity: 0;
-        transition: opacity 0.4s ease;
         z-index: 1;
       }
 
@@ -107,7 +103,6 @@
           transparent 70%
         );
         transform: translateX(-100%) translateY(-100%);
-        transition: transform 0.8s ease;
         z-index: 2;
       }
 
@@ -128,7 +123,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.4s ease;
         box-shadow: 
           0 8px 16px rgba(0, 0, 0, 0.2),
           inset 0 2px 4px rgba(255, 255, 255, 0.3);
@@ -136,7 +130,6 @@
         i {
           font-size: 64px;
           color: #ffffff;
-          transition: all 0.4s ease;
         }
       }
 
@@ -146,7 +139,6 @@
         color: #ffffff;
         margin: 0;
         text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        transition: all 0.4s ease;
       }
 
       .card-subtitle {
@@ -154,7 +146,6 @@
         color: rgba(255, 255, 255, 0.9);
         margin: 0;
         font-weight: 400;
-        transition: all 0.4s ease;
       }
 
       .card-arrow {
@@ -171,7 +162,6 @@
         justify-content: center;
         opacity: 0;
         transform: translateX(-20px);
-        transition: all 0.4s ease;
 
         i {
           font-size: 28px;
@@ -199,7 +189,6 @@
 
       // Hover effects
       &:hover {
-        transform: translateY(-10px) scale(1.03);
         box-shadow: 
           0 20px 40px rgba(0, 0, 0, 0.4),
           0 8px 16px rgba(0, 0, 0, 0.3);
@@ -213,18 +202,12 @@
         }
 
         .card-icon {
-          transform: scale(1.1) rotate(5deg);
           box-shadow: 
             0 12px 24px rgba(0, 0, 0, 0.3),
             inset 0 2px 4px rgba(255, 255, 255, 0.4);
-
-          i {
-            transform: scale(1.1);
-          }
         }
 
         .card-title {
-          transform: scale(1.05);
           text-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
         }
 
@@ -236,7 +219,6 @@
 
       // Active press effect
       &:active {
-        transform: translateY(-5px) scale(1.01);
         box-shadow: 
           0 10px 20px rgba(0, 0, 0, 0.3),
           0 4px 8px rgba(0, 0, 0, 0.2);
@@ -291,7 +273,6 @@
       font-size: 14px;
       font-weight: 600;
       cursor: pointer !important;
-      transition: all 0.3s ease;
       border-radius: 6px;
       white-space: nowrap;
       flex-shrink: 0;
@@ -317,11 +298,6 @@
       &:hover {
         background: #000000;
         color: #ffffff;
-        transform: translateX(-3px);
-      }
-
-      &:active {
-        transform: translateX(-1px);
       }
     }
     
@@ -332,7 +308,6 @@
       
       &:hover {
         background: linear-gradient(135deg, #e53935, #c62828);
-        transform: translateX(-3px);
       }
     }
     
@@ -343,7 +318,6 @@
       
       &:hover {
         background: linear-gradient(135deg, #fb8c00, #ef6c00);
-        transform: translateX(-3px);
       }
     }
     
@@ -354,7 +328,6 @@
       
       &:hover {
         background: linear-gradient(135deg, #8e24aa, #6a1b9a);
-        transform: translateX(-3px);
       }
     }
 
@@ -393,7 +366,6 @@
         font-size: 14px;
         font-weight: 600;
         box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
-        animation: fadeIn 0.3s ease-out;
         
         i.material-icons {
           font-size: 18px;
@@ -423,7 +395,6 @@
       cursor: pointer !important;
       font-size: 14px;
       font-weight: normal;
-      transition: all 0.2s;
       white-space: nowrap;
       flex-shrink: 0;
       position: relative;
@@ -454,12 +425,7 @@
 
       &:hover {
         background: #F57C00;
-        transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
-      }
-
-      &:active {
-        transform: translateY(0);
       }
     }
 
@@ -470,7 +436,6 @@
 
       &:hover {
         background: linear-gradient(145deg, #5CB85C, #4CAF50);
-        transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
       }
     }
@@ -530,7 +495,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.2s;
         flex-shrink: 0;
         position: relative;
         z-index: 1003;
@@ -596,7 +560,6 @@
         font-weight: 600;
         letter-spacing: 1px;
         cursor: pointer !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
         z-index: 1001 !important;
         pointer-events: auto !important;
@@ -611,7 +574,6 @@
 
         i.material-icons {
           font-size: 24px;
-          transition: transform 0.3s ease;
         }
 
         span {
@@ -637,7 +599,6 @@
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           opacity: 0;
-          transition: opacity 0.3s ease;
         }
 
         // Shine effect
@@ -655,11 +616,9 @@
             transparent 70%
           );
           transform: translateX(-100%) translateY(-100%) rotate(45deg);
-          transition: transform 0.6s ease;
         }
 
         &:hover {
-          transform: translateY(-2px);
           box-shadow: 
             0 8px 16px rgba(0, 0, 0, 0.15),
             0 4px 6px rgba(0, 0, 0, 0.1),
@@ -672,10 +631,6 @@
           &::after {
             transform: translateX(100%) translateY(100%) rotate(45deg);
           }
-
-          i.material-icons {
-            transform: rotate(15deg) scale(1.1);
-          }
         }
 
         &.active {
@@ -686,14 +641,12 @@
             0 4px 10px rgba(33, 150, 243, 0.3),
             inset 0 1px 3px rgba(255, 255, 255, 0.2),
             inset 0 -2px 4px rgba(0, 0, 0, 0.2);
-          transform: translateY(-2px) scale(1.02);
           font-weight: 700;
           
           // Active glow effect
           &::before {
             background: linear-gradient(145deg, #64B5F6, #42A5F5);
             opacity: 1;
-            animation: pulse-border 2s ease-in-out infinite;
           }
 
           &::after {
@@ -705,17 +658,12 @@
             );
           }
 
-          i.material-icons {
-            animation: rotate-icon 3s ease-in-out infinite;
-          }
-
           span {
             font-weight: 700;
           }
         }
 
         &:active {
-          transform: translateY(0) scale(0.98);
           box-shadow: 
             0 2px 4px rgba(0, 0, 0, 0.1),
             inset 0 2px 4px rgba(0, 0, 0, 0.15);
@@ -807,11 +755,9 @@
           background: #ffffff;
           border-radius: 8px;
           text-align: center;
-          transition: all 0.3s ease;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
           &:hover {
-            transform: translateY(-3px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
           }
 
@@ -844,7 +790,6 @@
         padding: 15px 20px;
         border: 2px solid #000000;
         background: #ffffff;
-        transition: all 0.2s;
         position: relative;
 
         &.clickable {
@@ -852,7 +797,6 @@
           user-select: none;
 
           &:hover {
-            transform: translateY(-2px);
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
           }
 
@@ -1011,9 +955,6 @@
         font-size: 16px;
       }
 
-      .rotating {
-        animation: rotate 2s linear infinite;
-      }
     }
 
     .table-container {
@@ -1071,16 +1012,10 @@
 
                 &.clickable {
                   cursor: pointer;
-                  transition: all 0.2s ease;
                   position: relative;
 
                   &:hover {
                     background: #f0f0f0;
-                    transform: scale(1.05);
-                  }
-
-                  &:active {
-                    transform: scale(0.98);
                   }
                 }
 
@@ -1100,11 +1035,9 @@
               
               &.history-cell {
                 cursor: pointer;
-                transition: all 0.2s ease;
                 
                 &:hover {
                   background: #f0f0f0;
-                  transform: scale(1.1);
                   
                   i {
                     color: #9c27b0;
@@ -1114,7 +1047,6 @@
                 i {
                   font-size: 24px;
                   color: #666;
-                  transition: all 0.2s ease;
                 }
               }
               
@@ -1193,7 +1125,6 @@
         color: #000000;
         cursor: pointer;
         font-size: 14px;
-        transition: background 0.2s;
 
         &:hover:not(:disabled) {
           background: #f5f5f5;
@@ -1298,8 +1229,6 @@
 
           &:hover i {
             color: #f5f5f5;
-            transform: rotate(90deg);
-            transition: transform 0.3s ease;
           }
         }
       }
@@ -1367,11 +1296,9 @@
               border: 2px solid #000000;
               background: #ffffff;
               border-radius: 8px;
-              transition: all 0.2s ease;
 
               &:hover {
                 background: #f9f9f9;
-                transform: translateX(5px);
                 box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
               }
               
@@ -1482,7 +1409,6 @@
           color: #000000;
           font-size: 14px;
           cursor: pointer;
-          transition: all 0.2s;
           border-radius: 4px;
 
           &:hover {
@@ -1554,11 +1480,9 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s ease;
 
           &:hover {
             background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
           }
 
           i {
@@ -1625,7 +1549,6 @@
             i {
               font-size: 48px;
               color: #9c27b0;
-              animation: spin 1s linear infinite;
             }
 
             p {
@@ -1648,11 +1571,9 @@
               border: 2px solid #000000;
               background: #ffffff;
               border-radius: 8px;
-              transition: all 0.2s ease;
 
               &:hover {
                 background: #f9f9f9;
-                transform: translateX(5px);
               }
 
               .history-icon {
@@ -1739,11 +1660,9 @@
           font-weight: 700;
           text-transform: uppercase;
           cursor: pointer;
-          transition: all 0.2s ease;
 
           &:hover {
             background: #e0e0e0;
-            transform: translateY(-2px);
           }
         }
       }
@@ -1811,11 +1730,9 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s ease;
 
           &:hover {
             background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
           }
 
           i {
@@ -1837,11 +1754,10 @@
           padding: 40px;
           gap: 15px;
 
-          i {
-            font-size: 48px;
-            color: #ff9800;
-            animation: spin 1s linear infinite;
-          }
+            i {
+              font-size: 48px;
+              color: #ff9800;
+            }
 
           p {
             font-size: 16px;
@@ -1890,11 +1806,9 @@
             border: 2px solid #000000;
             border-radius: 12px;
             background: #ffffff;
-            transition: all 0.2s ease;
 
             &:hover {
               background: #f9f9f9;
-              transform: translateY(-2px);
               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             }
 
@@ -1965,11 +1879,9 @@
               font-weight: 700;
               text-transform: uppercase;
               cursor: pointer;
-              transition: all 0.2s ease;
 
               &:hover {
                 background: linear-gradient(135deg, #45A049, #3d8b40);
-                transform: scale(1.05);
                 box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
               }
 
@@ -1998,11 +1910,9 @@
           font-weight: 700;
           text-transform: uppercase;
           cursor: pointer;
-          transition: all 0.2s ease;
 
           &:hover {
             background: #e0e0e0;
-            transform: translateY(-2px);
           }
         }
       }
@@ -2029,7 +1939,6 @@
       display: flex;
       flex-direction: column;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      animation: fadeInUp 0.3s ease-out;
       
       .modal-header {
         display: flex;
@@ -2059,7 +1968,6 @@
           cursor: pointer;
           padding: 4px;
           color: #666;
-          transition: color 0.2s;
           
           &:hover {
             color: #000;
@@ -2147,7 +2055,6 @@
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s ease;
           
           &:hover:not(:disabled) {
             background: #000;
@@ -2172,27 +2079,20 @@
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s ease;
           text-transform: uppercase;
           
           i {
             font-size: 18px;
-            
-            &.rotating {
-              animation: spin 1s linear infinite;
-            }
           }
           
           &:hover:not(:disabled) {
             background: linear-gradient(135deg, #fb8c00, #ef6c00);
-            transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
           }
           
           &:disabled {
             opacity: 0.6;
             cursor: not-allowed;
-            transform: none;
           }
         }
       }
@@ -2206,7 +2106,6 @@
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 3000;
-    animation: popupFadeIn 0.3s ease-out;
     
     .popup-content {
       background: #ffffff;
@@ -2301,7 +2200,6 @@
           display: flex;
           align-items: center;
           gap: 8px;
-          transition: background-color 0.2s;
           
           &:hover {
             background-color: #1565c0;
@@ -2315,16 +2213,6 @@
     }
   }
   
-  @keyframes popupFadeIn {
-    from {
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(0.9);
-    }
-    to {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-  }
 
   .scan-modal {
     position: fixed;
@@ -2420,7 +2308,6 @@
           background: #000000;
           color: #ffffff;
           cursor: pointer;
-          transition: all 0.2s;
 
           i {
             font-size: 24px;
@@ -2472,7 +2359,6 @@
           color: #000000;
           font-size: 14px;
           cursor: pointer;
-          transition: all 0.2s;
 
           &:hover {
             background: #000000;
@@ -2484,57 +2370,6 @@
   }
 }
 
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pulse-border {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-@keyframes rotate-icon {
-  0%, 100% {
-    transform: rotate(0deg) scale(1);
-  }
-  25% {
-    transform: rotate(-5deg) scale(1.05);
-  }
-  75% {
-    transform: rotate(5deg) scale(1.05);
-  }
-}
-
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
 // Responsive
 @media (max-width: 768px) {
