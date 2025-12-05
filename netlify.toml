@@ -5,10 +5,9 @@
   # Output directory for built files (files are built directly in dist/)
   publish = "dist"
   
-  # Node.js version for build
+  # Node.js version for build (Netlify will use .nvmrc file)
   [build.environment]
-    NODE_VERSION = "18"
-    NPM_VERSION = "9"
+    NPM_VERSION = "8"
 
 # Redirect rules for Angular routing
 [[redirects]]
