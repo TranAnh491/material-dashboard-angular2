@@ -89,6 +89,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   showPermissionModal = false;
   selectedUser: User | null = null;
   tempTabPermissions: { [key: string]: boolean } = {};
+  tempReadOnlyPermission: boolean = false;
 
   
 
@@ -1246,6 +1247,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.tempTabPermissions[tab.key] = false;
       }
     });
+    // Load read-only permission
+    this.tempReadOnlyPermission = this.firebaseUserReadOnlyPermissions[user.uid] || false;
     this.showPermissionModal = true;
   }
 
@@ -1254,6 +1257,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.showPermissionModal = false;
     this.selectedUser = null;
     this.tempTabPermissions = {};
+    this.tempReadOnlyPermission = false;
   }
 
   // Lưu permissions cho user
@@ -1263,8 +1267,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       // Cập nhật local data
       this.firebaseUserTabPermissions[this.selectedUser.uid] = { ...this.tempTabPermissions };
+      this.firebaseUserReadOnlyPermissions[this.selectedUser.uid] = this.tempReadOnlyPermission;
 
-      // Lưu vào Firestore
+      // Lưu tab permissions vào Firestore
       await this.firestore.collection('user-tab-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
         email: this.selectedUser.email,
@@ -1273,11 +1278,56 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       }, { merge: true });
 
+      // Lưu read-only permission vào Firestore
+      await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
+        uid: this.selectedUser.uid,
+        email: this.selectedUser.email,
+        displayName: this.selectedUser.displayName || '',
+        hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
+        hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
+        hasReadOnlyPermission: this.tempReadOnlyPermission,
+        updatedAt: new Date()
+      }, { merge: true });
+
       console.log(`✅ Saved permissions for ${this.selectedUser.email}`);
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);
       alert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
+    }
+  }
+
+  // Xóa user từ modal
+  async deleteUserFromModal(): Promise<void> {
+    if (!this.selectedUser) return;
+
+    if (confirm(`Bạn có chắc chắn muốn xóa user ${this.selectedUser.email}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
+      try {
+        console.log(`🗑️ Starting deletion of user: ${this.selectedUser.email} (${this.selectedUser.uid})`);
+        
+        // Sử dụng service để xóa hoàn toàn
+        await this.firebaseAuthService.deleteUser(this.selectedUser.uid);
+        
+        // Remove from local arrays
+        this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== this.selectedUser!.uid);
+        delete this.firebaseUserPermissions[this.selectedUser.uid];
+        delete this.firebaseUserCompletePermissions[this.selectedUser.uid];
+        delete this.firebaseUserReadOnlyPermissions[this.selectedUser.uid];
+        delete this.firebaseUserDepartments[this.selectedUser.uid];
+        delete this.firebaseUserTabPermissions[this.selectedUser.uid];
+        
+        // Show success message
+        alert(`✅ Đã xóa thành công user ${this.selectedUser.email}!`);
+        
+        // Đóng modal
+        this.closePermissionModal();
+        
+        console.log(`📊 Updated user count: ${this.firebaseUsers.length}`);
+        
+      } catch (error) {
+        console.error('❌ Error deleting Firebase user:', error);
+        alert(`❌ Có lỗi xảy ra khi xóa user ${this.selectedUser.email}:\n${error}`);
+      }
     }
   }
 

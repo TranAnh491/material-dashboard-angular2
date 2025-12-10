@@ -883,6 +883,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             mat.idCheck = checkedItem.idCheck || '';
             mat.dateCheck = checkedItem.dateCheck?.toDate ? checkedItem.dateCheck.toDate() : 
                            (checkedItem.dateCheck ? new Date(checkedItem.dateCheck) : null);
+            mat.actualLocation = checkedItem.actualLocation || ''; // Load vị trí thực tế từ Firebase
             matchedCount++;
           }
         }
@@ -993,9 +994,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           qtyCheck: (existing.qtyCheck || 0) + newQty,
           idCheck: material.idCheck,
           dateCheck: material.dateCheck || new Date(),
+          actualLocation: material.actualLocation || existing.actualLocation || '', // Lưu vị trí thực tế
           updatedAt: new Date()
         };
         material.qtyCheck = checkedMaterials[existingIndex].qtyCheck;
+        // Cập nhật actualLocation từ Firebase
+        material.actualLocation = checkedMaterials[existingIndex].actualLocation;
       } else {
         // Thêm mới
         checkedMaterials.push({
@@ -1005,6 +1009,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           qtyCheck: newQty,
           idCheck: material.idCheck,
           dateCheck: material.dateCheck || new Date(),
+          actualLocation: material.actualLocation || '', // Lưu vị trí thực tế
           updatedAt: new Date()
         });
         material.qtyCheck = newQty;

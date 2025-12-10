@@ -282,6 +282,10 @@
       min-height: 36px;
       transform: translateZ(0);
       text-transform: uppercase;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent; // Ngăn highlight khi tap trên mobile
+      touch-action: manipulation; // Ngăn double-tap zoom và double click
       
       i, span {
         pointer-events: none;
@@ -298,6 +302,10 @@
       &:hover {
         background: #000000;
         color: #ffffff;
+      }
+      
+      &:active {
+        transform: translateZ(0) scale(0.98); // Hiệu ứng nhấn nhẹ
       }
     }
     
@@ -380,6 +388,15 @@
       gap: 12px;
       flex-wrap: wrap;
       width: 100%;
+      
+      // Mặc định: desktop-only hiển thị, mobile-only ẩn
+      .mobile-only {
+        display: none !important;
+      }
+      
+      .desktop-only {
+        display: flex !important;
+      }
     }
 
     .inventory-btn,
@@ -403,6 +420,10 @@
       min-height: 36px;
       transform: translateZ(0);
       text-transform: uppercase;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent; // Ngăn highlight khi tap trên mobile
+      touch-action: manipulation; // Ngăn double-tap zoom và double click
       
       i {
         pointer-events: none;
@@ -411,6 +432,10 @@
       &:hover {
         background: #000000;
         color: #ffffff;
+      }
+      
+      &:active {
+        transform: translateZ(0) scale(0.98); // Hiệu ứng nhấn nhẹ
       }
 
       i {

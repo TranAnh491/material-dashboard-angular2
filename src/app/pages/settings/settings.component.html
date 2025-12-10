@@ -118,6 +118,15 @@
               <strong>Bộ phận:</strong> {{ selectedUser.department || '-' }}
             </div>
           </div>
+          <div class="read-only-permission">
+            <label class="read-only-checkbox">
+              <input 
+                type="checkbox" 
+                [checked]="tempReadOnlyPermission"
+                (change)="tempReadOnlyPermission = $event.target.checked">
+              <span><strong>Chỉ xem</strong> - Nhân viên này chỉ được xem, không được sửa</span>
+            </label>
+          </div>
           <div class="tabs-permissions">
             <h4>Quyền truy cập các tab:</h4>
             <div class="tabs-grid">
@@ -134,6 +143,7 @@
           </div>
         </div>
         <div class="modal-footer">
+          <button class="btn-delete" (click)="deleteUserFromModal()">Xóa</button>
           <button class="btn-cancel" (click)="closePermissionModal()">Hủy</button>
           <button class="btn-save" (click)="saveUserPermissions()">Lưu</button>
         </div>
