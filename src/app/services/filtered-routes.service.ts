@@ -57,8 +57,8 @@ export class FilteredRoutesService {
     const tabKey = this.getTabKeyFromRoute(route.path);
     
     if (!tabKey) {
-      // Nếu không xác định được tab key, cho phép truy cập
-      return true;
+      // Nếu không xác định được tab key, KHÔNG cho phép truy cập (để bảo mật)
+      return false;
     }
 
     // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
@@ -66,9 +66,14 @@ export class FilteredRoutesService {
       return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
-    // Kiểm tra permission - cho phép nếu có permission rõ ràng là true
-    // hoặc nếu không có permission được cấu hình (mặc định cho phép)
-    return permissions[tabKey] === true || permissions[tabKey] === undefined;
+    // Đặc biệt cho Manage - chỉ Admin mới có quyền
+    if (tabKey === 'manage') {
+      return userRole === 'Admin';
+    }
+
+    // Kiểm tra permission - CHỈ cho phép nếu có permission rõ ràng là true
+    // Nếu false hoặc undefined → KHÔNG cho phép (user mới đăng ký phải chờ duyệt)
+    return permissions[tabKey] === true;
   }
 
   // Map route path sang tab key
@@ -82,35 +87,37 @@ export class FilteredRoutesService {
       '/inbound-asm1': 'inbound-asm1',
       '/outbound-asm1': 'outbound-asm1',
       '/materials-asm1': 'materials-asm1',
+      '/inventory-overview-asm1': 'inventory-overview-asm1',
       
       // ASM2 routes
       '/inbound-asm2': 'inbound-asm2',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       
-      // Manage route
-      '/manage': 'manage',
+      // ASM1 FG routes
+      '/fg-in': 'fg-in',
+      '/fg-out': 'fg-out',
+      '/fg-preparing': 'fg-preparing',
+      '/fg-inventory': 'fg-inventory',
       
-      // Manage Inventory route
-      '/manage-inventory': 'manage-inventory',
-      
-      // Legacy routes
-      '#materials': 'materials',
-      '/inbound-materials': 'materials',
-      '/outbound-materials': 'materials',
-
       // Other routes
-      '/fg': 'fg',
+      '/location': 'location',
+      '/manage': 'manage',
+      '/stock-check': 'stock-check',
       '/label': 'label',
-      '/bm': 'bm',
       '/index': 'index',
       '/utilization': 'utilization',
-      '/find': 'find',
-      '/layout': 'layout',
+      '/find-rm1': 'find-rm1',
       '/checklist': 'checklist',
+      '/safety': 'safety',
       '/equipment': 'equipment',
-      '/task': 'task',
-      '/settings': 'settings'
+      '/qc': 'qc',
+      '/settings': 'settings',
+      
+      // Legacy routes (for backward compatibility)
+      '#materials': 'materials',
+      '/inbound-materials': 'materials',
+      '/outbound-materials': 'materials'
     };
 
     return tabKeyMap[path] || null;

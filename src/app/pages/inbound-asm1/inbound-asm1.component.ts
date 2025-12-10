@@ -726,6 +726,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       supplier: material.supplier,
       remarks: material.remarks,
       source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
+      iqcStatus: 'CHỜ KIỂM', // 🆕 Trạng thái IQC mặc định khi thêm vào inventory
       createdAt: new Date(),
       updatedAt: new Date()
     };

@@ -42,6 +42,7 @@ export interface InventoryMaterial {
   isDuplicate?: boolean;
   importStatus?: string;
   source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
+  iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
   
   // Edit states
   isEditingOpeningStock?: boolean;
@@ -338,7 +339,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
               openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
               xt: data.xt || 0, // Initialize XT field for old materials
-              source: data.source || 'manual' // Set default source for old materials
+              source: data.source || 'manual', // Set default source for old materials
+              iqcStatus: data.iqcStatus || undefined // Load IQC status from Firestore
             };
             
             // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
@@ -1453,6 +1455,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Status helper methods
   getStatusClass(item: InventoryMaterial): string {
+    // Không hiển thị IQC status trong cột Trạng thái nữa
     if (item.isCompleted) return 'status-completed';
     if (item.isDuplicate) return 'status-duplicate';
     if (item.importStatus === 'Import') return 'status-import';
@@ -1460,10 +1463,33 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   getStatusText(item: InventoryMaterial): string {
+    // Không hiển thị IQC status trong cột Trạng thái nữa
     if (item.isCompleted) return 'Hoàn thành';
     if (item.isDuplicate) return 'Trùng lặp';
     if (item.importStatus === 'Import') return 'Import';
     return 'Hoạt động';
+  }
+
+  // Hàm riêng cho IQC Status
+  getIQCStatusClass(item: InventoryMaterial): string {
+    if (!item.iqcStatus) return '';
+    
+    switch (item.iqcStatus) {
+      case 'PASS':
+        return 'status-iqc-pass';
+      case 'NG':
+        return 'status-iqc-ng';
+      case 'ĐẶC CÁCH':
+        return 'status-iqc-special';
+      case 'CHỜ XÁC NHẬN':
+        return 'status-iqc-pending';
+      default:
+        return 'status-iqc-default';
+    }
+  }
+
+  getIQCStatusText(item: InventoryMaterial): string {
+    return item.iqcStatus || '-';
   }
 
   getExpiryDateText(expiryDate: Date): string {

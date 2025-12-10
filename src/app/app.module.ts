@@ -30,6 +30,7 @@ import { environment } from '../environments/environment';
 import { LoginComponent } from './pages/login/login.component';
 import { FindRm1Component } from './pages/find-rm1/find-rm1.component';
 import { ManageComponent } from './pages/manage/manage.component';
+import { QCComponent } from './pages/qc/qc.component';
 
 // Pipes
 import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
@@ -72,6 +73,7 @@ import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
     LoginComponent,
     FindRm1Component,
     ManageComponent,
+    QCComponent,
     SanitizeHtmlPipe,
     // DocumentsComponent removed from here
   ],

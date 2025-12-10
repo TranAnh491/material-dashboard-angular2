@@ -91,17 +91,6 @@
     <form [formGroup]="signupForm" (ngSubmit)="onSignup()" *ngIf="isSignup">
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Full Name' : 'Họ tên' }}</mat-label>
-          <input matInput formControlName="displayName" 
-                 [placeholder]="currentLanguage === 'en' ? 'Enter full name' : 'Nhập họ tên'">
-          <mat-error *ngIf="signupForm.get('displayName')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Full name is required' : 'Họ tên là bắt buộc' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
-
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
           <mat-label>{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã số nhân viên' }}</mat-label>
           <input matInput formControlName="employeeId" 
                  [placeholder]="currentLanguage === 'en' ? 'Enter employee ID (ASP + 4 digits)' : 'Nhập mã số nhân viên (ASP + 4 số)'">
@@ -129,36 +118,6 @@
           </mat-select>
           <mat-error *ngIf="signupForm.get('department')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Department is required' : 'Bộ phận là bắt buộc' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
-
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Factory' : 'Nhà máy' }}</mat-label>
-          <mat-select formControlName="factory" 
-                     [placeholder]="currentLanguage === 'en' ? 'Select factory' : 'Chọn nhà máy'">
-            <mat-option value="ASM1">ASM1</mat-option>
-            <mat-option value="ASM2">ASM2</mat-option>
-            <mat-option value="ASM3">ASM3</mat-option>
-          </mat-select>
-          <mat-error *ngIf="signupForm.get('factory')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Factory is required' : 'Nhà máy là bắt buộc' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
-
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Role' : 'Vai trò' }}</mat-label>
-          <mat-select formControlName="role" 
-                     [placeholder]="currentLanguage === 'en' ? 'Select role' : 'Chọn vai trò'">
-            <mat-option value="User">User</mat-option>
-            <mat-option value="Quản lý">Quản lý</mat-option>
-            <mat-option value="Admin">Admin</mat-option>
-          </mat-select>
-          <mat-error *ngIf="signupForm.get('role')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Role is required' : 'Vai trò là bắt buộc' }}
           </mat-error>
         </mat-form-field>
       </div>

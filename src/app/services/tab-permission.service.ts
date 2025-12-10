@@ -39,17 +39,13 @@ export class TabPermissionService {
                 // Kiểm tra xem user có document trong user-tab-permissions chưa
                 if (data && data.tabPermissions && typeof data.tabPermissions === 'object') {
                   // Nếu user có permissions được cấu hình cụ thể, sử dụng permissions đó
-                  // Đảm bảo Dashboard luôn được phép (tối thiểu)
-                  const permissions = { ...data.tabPermissions };
-                  if (!('dashboard' in permissions)) {
-                    permissions['dashboard'] = true;
-                  }
-                  return of(permissions);
+                  // KHÔNG tự động thêm Dashboard nữa - phải được cấp quyền rõ ràng
+                  return of({ ...data.tabPermissions });
                 } else {
-                  // Nếu không có permissions được cấu hình, tạo permissions mặc định
-                  return this.factoryAccessService.getCurrentUserFactoryAccess().pipe(
-                    map(factoryAccess => this.generateDefaultPermissions(factoryAccess))
-                  );
+                  // Nếu không có permissions được cấu hình, trả về TẤT CẢ false (không xem được gì)
+                  // User mới đăng ký phải chờ admin duyệt trong Settings
+                  console.log(`⚠️ No tab permissions found for user ${user.uid}, returning empty permissions (chờ duyệt)`);
+                  return of({});
                 }
               })
             );
@@ -175,20 +171,15 @@ export class TabPermissionService {
     // Manage tab
     { key: 'manage', name: 'Manage' },
     
-    // Manage Inventory tab
-    { key: 'manage-inventory', name: 'Manage Inventory' },
-    
     // Other tabs
-    { key: 'fg', name: 'Finished Goods' },
+    { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
     { key: 'utilization', name: 'Utilization' },
-    { key: 'find', name: 'Find' },
-    { key: 'layout', name: 'Layout' },
     { key: 'checklist', name: 'Safety & Quality' },
     { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
-    { key: 'task', name: 'Flow Work' },
+    { key: 'qc', name: 'Quality' },
     { key: 'settings', name: 'Settings' }
   ];
 } 

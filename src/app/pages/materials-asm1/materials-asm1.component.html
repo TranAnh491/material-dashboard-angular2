@@ -458,6 +458,7 @@
             <th>Lưu ý</th>
             <th>Standard Packing</th>
             <th>Trạng thái</th>
+            <th>IQC Status</th>
             <th>Xóa</th>
             <th>Factory</th>
           </tr>
@@ -597,6 +598,14 @@
                     [class]="getStatusClass(material)">
                 {{ getStatusText(material) }}
               </span>
+            </td>
+            <td class="iqc-status-cell">
+              <span class="badge" 
+                    *ngIf="material.iqcStatus"
+                    [class]="getIQCStatusClass(material)">
+                {{ getIQCStatusText(material) }}
+              </span>
+              <span *ngIf="!material.iqcStatus" class="no-iqc-status">-</span>
             </td>
             <td class="delete-cell">
               <button class="delete-btn" 

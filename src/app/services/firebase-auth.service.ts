@@ -222,9 +222,46 @@ export class FirebaseAuthService {
 
     await userRef.set(userData);
 
+    // Tạo tab permissions với TẤT CẢ false cho user mới (chờ duyệt)
+    await this.createDefaultTabPermissionsForNewUser(userData);
+
     // Tạo thông báo cho tài khoản mới (trừ tài khoản đặc biệt)
     if (user.uid !== 'special-steve-uid') {
       await this.notificationService.createNewUserNotification(userData);
+    }
+  }
+
+  // Tạo tab permissions mặc định cho user mới - TẤT CẢ đều false (chờ duyệt)
+  private async createDefaultTabPermissionsForNewUser(userData: User): Promise<void> {
+    try {
+      // Danh sách tất cả các tabs
+      const allTabs = [
+        'dashboard', 'work-order-status', 'shipment',
+        'inbound-asm1', 'inbound-asm2', 'outbound-asm1', 'outbound-asm2',
+        'materials-asm1', 'materials-asm2', 'inventory-overview-asm1',
+        'location', 'manage', 'stock-check', 'label', 'index', 'utilization',
+        'find-rm1', 'checklist', 'safety', 'equipment', 'qc', 'settings'
+      ];
+
+      // Tạo permissions object với TẤT CẢ false
+      const tabPermissions: { [key: string]: boolean } = {};
+      allTabs.forEach(tab => {
+        tabPermissions[tab] = false;
+      });
+
+      // Lưu vào Firestore
+      await this.firestore.collection('user-tab-permissions').doc(userData.uid).set({
+        uid: userData.uid,
+        email: userData.email,
+        displayName: userData.displayName || '',
+        tabPermissions: tabPermissions,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      console.log(`✅ Created default tab permissions for new user ${userData.email} - TẤT CẢ tabs = false (chờ duyệt)`);
+    } catch (error) {
+      console.error(`❌ Error creating default tab permissions for ${userData.email}:`, error);
     }
   }
 

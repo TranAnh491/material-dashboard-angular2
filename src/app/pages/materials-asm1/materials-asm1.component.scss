@@ -134,6 +134,55 @@
   color: #666666 !important;
 }
 
+// IQC Status styles
+.status-iqc-pass {
+  background: #d4edda !important;
+  color: #155724 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-ng {
+  background: #f8d7da !important;
+  color: #721c24 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-special {
+  background: #fff3cd !important;
+  color: #856404 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-pending {
+  background: #d1ecf1 !important;
+  color: #0c5460 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-default {
+  background: #e9ecef !important;
+  color: #495057 !important;
+}
+
+// IQC Status column styling
+.iqc-status-cell {
+  text-align: center;
+  padding: 8px 4px;
+  
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  
+  .no-iqc-status {
+    color: #999;
+    font-size: 12px;
+  }
+}
+
 // Loading spinner minimal
 .loading-spinner {
   color: #333333;

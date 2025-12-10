@@ -1,0 +1,422 @@
+<!-- Employee Verification Modal -->
+<div class="modal-overlay" *ngIf="showEmployeeModal" style="z-index: 2000;">
+  <div class="modal-content employee-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">badge</i>
+        Xác thực nhân viên
+      </h3>
+    </div>
+    
+    <div class="modal-body">
+      <div class="employee-verify-section">
+        <p class="verify-instruction">Vui lòng quét mã nhân viên để truy cập tab QC</p>
+        <div class="employee-input-wrapper">
+          <input 
+            type="text" 
+            id="employee-scan-input"
+            class="employee-scan-input"
+            [(ngModel)]="employeeScanInput"
+            (keyup.enter)="verifyEmployee()"
+            placeholder="Quét hoặc nhập mã nhân viên (VD: ASP0106)"
+            autofocus>
+          <button class="verify-btn" (click)="verifyEmployee()">
+            <i class="material-icons">verified_user</i>
+            Xác thực
+          </button>
+        </div>
+      <div class="employee-status" *ngIf="isEmployeeVerified">
+        <i class="material-icons">check_circle</i>
+        <span>Đã xác thực: <strong>{{ currentEmployeeName || currentEmployeeId }}</strong> ({{ currentEmployeeId }})</span>
+      </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main-content" *ngIf="!showEmployeeModal">
+  <div class="excel-container">
+    <!-- Excel-like Header -->
+    <div class="excel-header">
+      <h4><i class="material-icons">assignment_turned_in</i> Quality</h4>
+      <!-- Employee Info Display in Header -->
+      <div class="employee-info-display-header" *ngIf="isEmployeeVerified">
+        <i class="material-icons">person</i>
+        <span>Nhân viên đang làm: <strong>{{ currentEmployeeName }}</strong> ({{ currentEmployeeId }})</span>
+      </div>
+    </div>
+    
+    <!-- Action Buttons Container -->
+    <div class="action-buttons-container">
+      <button class="iqc-btn" (click)="openIQCModal()">
+        <i class="material-icons">check_circle</i>
+        IQC
+      </button>
+      
+      <div class="more-button-wrapper">
+        <button class="more-btn" (click)="toggleMoreMenu()" (blur)="closeMoreMenu()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
+        <div class="more-menu" *ngIf="showMoreMenu" (click)="$event.stopPropagation()">
+          <button class="menu-item" (click)="loadQCReport()">
+            <i class="material-icons">description</i>
+            Tải Report Kiểm
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Stats Boxes -->
+    <div class="stats-container">
+      <!-- Pending QC Count Box -->
+      <div class="pending-qc-box">
+        <div class="pending-qc-content">
+          <i class="material-icons">pending_actions</i>
+          <div class="pending-qc-info">
+            <div class="pending-qc-label">Mã hàng chờ kiểm</div>
+            <div class="pending-qc-count">{{ pendingQCCount }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Today Checked Count Box -->
+      <div class="today-checked-box" (click)="showTodayCheckedMaterials()">
+        <div class="today-checked-content">
+          <i class="material-icons">check_circle</i>
+          <div class="today-checked-info">
+            <div class="today-checked-label">Đã kiểm hôm nay</div>
+            <div class="today-checked-count">{{ todayCheckedCount }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Pending Confirm Count Box -->
+      <div class="pending-confirm-box">
+        <div class="pending-confirm-content">
+          <i class="material-icons">schedule</i>
+          <div class="pending-confirm-info">
+            <div class="pending-confirm-label">Chờ Xác Nhận</div>
+            <div class="pending-confirm-count">{{ pendingConfirmCount }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Recent Checked Materials List -->
+    <div class="recent-checked-section">
+      <h4 class="section-header">
+        <i class="material-icons">history</i>
+        20 mã vừa được kiểm tra gần đây nhất
+      </h4>
+      
+      <div class="recent-materials-container" *ngIf="!isLoadingRecent">
+        <table class="recent-materials-table" *ngIf="recentCheckedMaterials.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Trạng thái</th>
+              <th>Người kiểm</th>
+              <th>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let material of recentCheckedMaterials; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ material.materialCode }}</td>
+              <td>{{ material.poNumber }}</td>
+              <td>{{ material.batchNumber }}</td>
+              <td>
+                <span class="status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus)">
+                  {{ material.iqcStatus }}
+                </span>
+              </td>
+              <td>{{ material.checkedBy }}</td>
+              <td>{{ material.checkedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-recent" *ngIf="recentCheckedMaterials.length === 0">
+          <i class="material-icons">info</i>
+          <p>Chưa có mã hàng nào được kiểm tra</p>
+        </div>
+      </div>
+      
+      <div class="loading-recent" *ngIf="isLoadingRecent">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IQC Modal -->
+<div class="modal-overlay" *ngIf="showIQCModal" (click)="closeIQCModal()">
+  <div class="modal-content iqc-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">check_circle</i>
+        IQC - Kiểm tra chất lượng
+      </h3>
+      <button class="close-btn" (click)="closeIQCModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Scan Input Section -->
+      <div class="scan-section">
+        <label class="scan-label">
+          <i class="material-icons">qr_code_scanner</i>
+          Scan mã hàng (QR Code)
+        </label>
+        <div class="scan-input-container">
+          <input 
+            type="text" 
+            id="iqc-scan-input"
+            class="scan-input"
+            [(ngModel)]="iqcScanInput"
+            (keyup.enter)="processIQCScan()"
+            placeholder="Định dạng: MaterialCode|PO|Quantity|IMD"
+            autofocus>
+          <button class="scan-btn" (click)="processIQCScan()">
+            <i class="material-icons">search</i>
+            Tìm
+          </button>
+        </div>
+      </div>
+      
+      <!-- Scanned Material Info -->
+      <div class="scanned-material-section" *ngIf="scannedMaterial">
+        <h4 class="section-title">
+          <i class="material-icons">inventory</i>
+          Thông tin mã hàng
+        </h4>
+        <div class="material-info-card">
+          <div class="info-row">
+            <span class="info-label">Mã hàng:</span>
+            <span class="info-value">{{ scannedMaterial.materialCode }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Số P.O:</span>
+            <span class="info-value">{{ scannedMaterial.poNumber }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Lô hàng:</span>
+            <span class="info-value">{{ scannedMaterial.batchNumber }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">IMD:</span>
+            <span class="info-value">{{ getDisplayIMD(scannedMaterial) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Lượng nhập:</span>
+            <span class="info-value">{{ scannedMaterial.quantity | number:'1.2-2' }} {{ scannedMaterial.unit }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Trạng thái hiện tại:</span>
+            <span class="info-value status-badge" [ngClass]="getIQCStatusClass(scannedMaterial.iqcStatus || 'CHỜ KIỂM')">
+              {{ getStatusLabel(scannedMaterial.iqcStatus) }}
+            </span>
+          </div>
+        </div>
+        
+        <!-- IQC Status Selection -->
+        <div class="iqc-status-section">
+          <h4 class="section-title">
+            <i class="material-icons">assignment_turned_in</i>
+            Chọn trạng thái IQC
+          </h4>
+          <div class="status-options">
+            <button 
+              class="status-btn" 
+              [class.selected]="selectedIQCStatus === 'PASS'"
+              (click)="selectedIQCStatus = 'PASS'">
+              <i class="material-icons">check_circle</i>
+              PASS
+            </button>
+            <button 
+              class="status-btn status-ng" 
+              [class.selected]="selectedIQCStatus === 'NG'"
+              (click)="selectedIQCStatus = 'NG'">
+              <i class="material-icons">cancel</i>
+              NG
+            </button>
+            <button 
+              class="status-btn status-special" 
+              [class.selected]="selectedIQCStatus === 'ĐẶC CÁCH'"
+              (click)="selectedIQCStatus = 'ĐẶC CÁCH'">
+              <i class="material-icons">stars</i>
+              ĐẶC CÁCH
+            </button>
+            <button 
+              class="status-btn status-pending" 
+              [class.selected]="selectedIQCStatus === 'CHỜ KIỂM'"
+              (click)="selectedIQCStatus = 'CHỜ KIỂM'">
+              <i class="material-icons">schedule</i>
+              CHỜ KIỂM
+            </button>
+            <button 
+              class="status-btn status-pending" 
+              [class.selected]="selectedIQCStatus === 'CHỜ XÁC NHẬN'"
+              (click)="selectedIQCStatus = 'CHỜ XÁC NHẬN'">
+              <i class="material-icons">schedule</i>
+              CHỜ XÁC NHẬN
+            </button>
+          </div>
+          
+          <button class="update-btn" (click)="updateIQCStatus()">
+            <i class="material-icons">save</i>
+            Cập nhật trạng thái
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeIQCModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Today Checked Materials Modal -->
+<div class="modal-overlay" *ngIf="showTodayCheckedModal" (click)="closeTodayCheckedModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">check_circle</i>
+        Mã hàng đã kiểm hôm nay
+      </h3>
+      <button class="close-btn" (click)="closeTodayCheckedModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="report-content" *ngIf="!isLoadingReport">
+        <table class="report-table" *ngIf="todayCheckedMaterials.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã nhân viên</th>
+              <th>Mã hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Trạng thái</th>
+              <th>Thời gian kiểm</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let material of todayCheckedMaterials; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ material.checkedBy }}</td>
+              <td>{{ material.materialCode }}</td>
+              <td>{{ material.poNumber }}</td>
+              <td>{{ material.batchNumber }}</td>
+              <td>
+                <span class="status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus)">
+                  {{ material.iqcStatus }}
+                </span>
+              </td>
+              <td>{{ material.checkedAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-report" *ngIf="todayCheckedMaterials.length === 0">
+          <i class="material-icons">info</i>
+          <p>Không có mã hàng nào được kiểm hôm nay</p>
+        </div>
+      </div>
+      
+      <div class="loading-report" *ngIf="isLoadingReport">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeTodayCheckedModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- QC Report Modal -->
+<div class="modal-overlay" *ngIf="showReportModal" (click)="closeReportModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">description</i>
+        Báo cáo kiểm QC hôm nay
+      </h3>
+      <button class="close-btn" (click)="closeReportModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="report-actions">
+        <button class="download-btn" (click)="downloadQCReport()" [disabled]="qcReports.length === 0">
+          <i class="material-icons">download</i>
+          Tải Excel
+        </button>
+      </div>
+      
+      <div class="report-content" *ngIf="!isLoadingReport">
+        <table class="report-table" *ngIf="qcReports.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã nhân viên</th>
+              <th>Mã hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Trạng thái</th>
+              <th>Thời gian kiểm</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let report of qcReports; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ report.checkedBy }}</td>
+              <td>{{ report.materialCode }}</td>
+              <td>{{ report.poNumber }}</td>
+              <td>{{ report.batchNumber }}</td>
+              <td>
+                <span class="status-badge" [ngClass]="getIQCStatusClass(report.iqcStatus)">
+                  {{ report.iqcStatus }}
+                </span>
+              </td>
+              <td>{{ report.checkedAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-report" *ngIf="qcReports.length === 0">
+          <i class="material-icons">info</i>
+          <p>Không có dữ liệu kiểm hôm nay</p>
+        </div>
+      </div>
+      
+      <div class="loading-report" *ngIf="isLoadingReport">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeReportModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+

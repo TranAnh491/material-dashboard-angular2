@@ -50,12 +50,11 @@ export const ROUTES: RouteInfo[] = [
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
   { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: '' },
   { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
+  { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
   { path: '/safety', title: 'Safety Stock', icon: 'security', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 
   { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
-  { path: '/find', title: 'Layout', icon: 'search', class: '' },
-  { path: '/layout', title: '3D Map', icon: '3d_rotation', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
   { path: '/settings', title: 'Settings', icon: 'settings', class: '' }

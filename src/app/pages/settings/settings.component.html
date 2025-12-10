@@ -55,44 +55,113 @@
             </div>
           </div>
           
-    <!-- Users Table -->
+    <!-- Users List -->
     <div class="users-section">
       <div class="section-header">
         <h3>Danh sách người dùng</h3>
         <div class="actions">
-          <button (click)="saveAllPermissions()" [disabled]="firebaseUsers.length === 0">Lưu tất cả</button>
-          <button (click)="cancelPermissionEdit()" [disabled]="firebaseUsers.length === 0">Hủy</button>
           <button (click)="refreshFirebaseUsers()">Làm mới</button>
-            </div>
-          </div>
+        </div>
+      </div>
 
       <div *ngIf="isLoadingFirebaseUsers" class="loading">Đang tải...</div>
       
       <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length === 0" class="empty">
         Chưa có người dùng nào
-            </div>
+      </div>
 
-      <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0" class="table-container">
-        <table class="users-table">
+      <!-- Danh sách đã duyệt -->
+      <div *ngIf="!isLoadingFirebaseUsers && getApprovedUsers().length > 0" class="users-list-section">
+        <h4>Đã duyệt ({{ getApprovedUsers().length }})</h4>
+        <div class="users-list">
+          <div *ngFor="let user of getApprovedUsers()" class="user-item" (click)="openPermissionModal(user)">
+            <div class="user-info">
+              <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
+              <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
+              <div class="user-department">{{ user.department || '-' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Danh sách chờ duyệt -->
+      <div *ngIf="!isLoadingFirebaseUsers && getPendingUsers().length > 0" class="users-list-section pending-section">
+        <h4>Chờ duyệt ({{ getPendingUsers().length }})</h4>
+        <div class="users-list">
+          <div *ngFor="let user of getPendingUsers()" class="user-item pending" (click)="openPermissionModal(user)">
+            <div class="user-info">
+              <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
+              <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
+              <div class="user-department">{{ user.department || '-' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permission Modal -->
+    <div *ngIf="showPermissionModal && selectedUser" class="modal-overlay" (click)="closePermissionModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Quản lý quyền truy cập</h3>
+          <button class="close-btn" (click)="closePermissionModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="user-detail">
+            <div class="detail-row">
+              <strong>Mã nhân viên:</strong> {{ getEmployeeIdOnly(selectedUser) }}
+            </div>
+            <div class="detail-row">
+              <strong>Tên:</strong> {{ selectedUser.displayName || '-' }}
+            </div>
+            <div class="detail-row">
+              <strong>Bộ phận:</strong> {{ selectedUser.department || '-' }}
+            </div>
+          </div>
+          <div class="tabs-permissions">
+            <h4>Quyền truy cập các tab:</h4>
+            <div class="tabs-grid">
+              <div *ngFor="let tab of availableTabs" class="tab-permission-item">
+                <label class="tab-checkbox">
+                  <input 
+                    type="checkbox" 
+                    [checked]="tempTabPermissions[tab.key] || false"
+                    (change)="toggleTabPermission(tab.key)">
+                  <span>{{ tab.name }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" (click)="closePermissionModal()">Hủy</button>
+          <button class="btn-save" (click)="saveUserPermissions()">Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Old Users Table (Hidden for now) -->
+    <div *ngIf="false" class="table-container">
+      <table class="users-table">
           <thead>
             <tr>
-              <th>Tài khoản</th>
-              <th>Vai trò</th>
-              <th>Bộ phận</th>
-              <th>Nhà máy</th>
-              <th>Tên</th>
-              <th>Chỉ xem</th>
-              <th>Xóa</th>
-              <th>Hoàn thành</th>
-              <th>Đăng nhập gần nhất</th>
-              <th>Thao tác</th>
-              <th *ngFor="let tab of availableTabs">{{ tab.name }}</th>
+              <th class="col-account">Tài khoản</th>
+              <th class="col-role">Vai trò</th>
+              <th class="col-department">Bộ phận</th>
+              <th class="col-factory">Nhà máy</th>
+              <th class="col-name sticky-name">Tên</th>
+              <th class="col-checkbox">Chỉ xem</th>
+              <th class="col-checkbox">Xóa</th>
+              <th class="col-checkbox">Hoàn thành</th>
+              <th class="col-lastlogin">Đăng nhập gần nhất</th>
+              <th class="col-action">Thao tác</th>
+              <th *ngFor="let tab of availableTabs" class="col-tab">{{ tab.name }}</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let user of getSortedFirebaseUsers()">
-              <td>{{ getEmployeeIdOnly(user) }}</td>
-              <td>
+              <td class="col-account">{{ getEmployeeIdOnly(user) }}</td>
+              <td class="col-role">
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.role" 
                         (change)="updateUserRole(user.uid, user.role)">
@@ -102,7 +171,7 @@
                     </select>
                 <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
                   </td>
-              <td>
+              <td class="col-department">
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.department" 
                         (change)="updateUserDepartment(user.uid, user.department)">
@@ -117,7 +186,7 @@
                     </select>
                 <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
                   </td>
-              <td>
+              <td class="col-factory">
                     <select *ngIf="isEditingPermissions" 
                             [(ngModel)]="user.factory" 
                         (change)="updateUserFactory(user.uid, user.factory)">
@@ -126,30 +195,30 @@
                     </select>
                 <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
                   </td>
-              <td>{{ user.displayName || '-' }}</td>
-              <td>
+              <td class="col-name sticky-name">{{ user.displayName || '-' }}</td>
+              <td class="col-checkbox">
                 <input type="checkbox"
                       [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
                        (change)="updateUserReadOnlyPermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
                   </td>
-              <td>
+              <td class="col-checkbox">
                 <input type="checkbox"
                       [checked]="firebaseUserPermissions[user.uid] || false"
                        (change)="updateUserPermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
                   </td>
-              <td>
+              <td class="col-checkbox">
                 <input type="checkbox"
                       [checked]="firebaseUserCompletePermissions[user.uid] || false"
                        (change)="updateUserCompletePermission(user.uid, $event.target.checked)"
                        [disabled]="!isEditingPermissions">
                   </td>
-              <td>{{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}</td>
-              <td>
+              <td class="col-lastlogin">{{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}</td>
+              <td class="col-action">
                 <button (click)="deleteFirebaseUser(user)">Xóa</button>
               </td>
-              <td *ngFor="let tab of availableTabs">
+              <td *ngFor="let tab of availableTabs" class="col-tab">
                 <input type="checkbox"
                   [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
                        (change)="updateUserTabPermission(user.uid, tab.key, $event.target.checked)"
@@ -215,7 +284,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
           </div>
         </div>
       </div>

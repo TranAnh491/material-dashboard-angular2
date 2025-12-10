@@ -29,12 +29,12 @@ export class LoginComponent implements OnInit {
 
     this.signupForm = this.fb.group({
       employeeId: ['', [Validators.required, Validators.pattern(/^ASP\d{4}$/)]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
-      confirmPassword: ['', [Validators.required]],
-      displayName: ['', [Validators.required]],
       department: ['', [Validators.required]],
-      factory: ['', [Validators.required]],
-      role: ['User', [Validators.required]]
+      password: ['', [Validators.required, Validators.minLength(6)]],
+      confirmPassword: ['', [Validators.required]]
+      // Role luôn mặc định là 'User', không cho phép chọn
+      // Factory mặc định để trống
+      // DisplayName mặc định để trống
     });
   }
 
@@ -101,7 +101,7 @@ export class LoginComponent implements OnInit {
 
   async onSignup(): Promise<void> {
     if (this.signupForm.valid) {
-      const { employeeId, password, confirmPassword, displayName, department, factory, role } = this.signupForm.value;
+      const { employeeId, password, confirmPassword, department } = this.signupForm.value;
       
       if (password !== confirmPassword) {
         this.showMessage(
@@ -114,7 +114,12 @@ export class LoginComponent implements OnInit {
       this.loading = true;
       try {
         // Chuyển đổi mã số nhân viên thành email để đăng ký
+        // Role luôn mặc định là 'User'
+        // Factory và displayName để trống (mặc định)
         const email = `${employeeId}@asp.com`;
+        const role = 'User'; // Mặc định luôn là User
+        const displayName = ''; // Không cần họ tên
+        const factory = ''; // Không cần nhà máy
         await this.authService.signUp(email, password, displayName, department, factory, role);
         this.showMessage(
           this.currentLanguage === 'en' ? 'Registration successful!' : 'Đăng ký thành công!', 
