@@ -30,11 +30,9 @@ export class FilteredRoutesService {
   // Lọc routes dựa trên permissions và vai trò
   private filterRoutesByPermissions(routes: RouteInfo[], permissions: { [key: string]: boolean }, userRole: string | null): RouteInfo[] {
     return routes.filter(route => {
-      // Kiểm tra quyền truy cập cho route chính
-      const hasAccess = this.hasAccessToRoute(route, permissions, userRole);
-      
-      if (hasAccess && route.children) {
-        // Nếu có quyền truy cập và có children, lọc children
+      // Nếu route có children và path rỗng (parent route như ASM1 RM, ASM2 RM)
+      // Không check permission cho parent, chỉ check children
+      if (route.children && route.children.length > 0 && (!route.path || route.path === '')) {
         const filteredChildren = this.filterRoutesByPermissions(route.children, permissions, userRole);
         if (filteredChildren.length > 0) {
           // Tạo route mới với children đã được lọc
@@ -48,7 +46,26 @@ export class FilteredRoutesService {
         }
       }
       
-      return hasAccess;
+      // Nếu route có children nhưng cũng có path cụ thể, check cả parent và children
+      if (route.children && route.children.length > 0) {
+        const hasAccess = this.hasAccessToRoute(route, permissions, userRole);
+        if (hasAccess) {
+          const filteredChildren = this.filterRoutesByPermissions(route.children, permissions, userRole);
+          if (filteredChildren.length > 0) {
+            return {
+              ...route,
+              children: filteredChildren
+            };
+          } else {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+      
+      // Route không có children, check permission bình thường
+      return this.hasAccessToRoute(route, permissions, userRole);
     });
   }
 
