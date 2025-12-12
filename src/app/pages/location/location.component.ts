@@ -19,6 +19,25 @@ export interface LocationItem {
   updatedAt?: Date;
 }
 
+export interface CustomerCode {
+  id?: string;
+  no: number;
+  customer: string;
+  group: string;
+  code: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface FGLocation {
+  id?: string;
+  stt: number;
+  viTri: string;
+  qrCode: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 @Component({
   selector: 'app-location',
   templateUrl: './location.component.html',
@@ -109,6 +128,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   isSearchingMaterial = false;
   storeMaterialStep: 'scan' | 'select' | 'choose-location' | 'confirm' = 'scan';
   
+  // FG Location Modal
+  showFGModal = false;
+  fgLocations: FGLocation[] = [];
+  filteredFGLocations: FGLocation[] = [];
+  fgSearchTerm = '';
+  
+  // Customer Codes
+  customerCodes: CustomerCode[] = [];
+  filteredCustomerCodes: CustomerCode[] = [];
+  customerSearchTerm = '';
+  showCustomerModal = false;
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -132,6 +163,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnInit() {
     this.checkPermissions();
     this.loadLocationData();
+    this.loadCustomerCodes();
     
     // Close dropdown when clicking outside
     document.addEventListener('click', () => {
@@ -1057,6 +1089,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return item.id || index.toString();
   }
 
+  trackByFG(index: number, item: FGLocation): string {
+    return item.id || index.toString();
+  }
+
   // Change Location Modal Methods
   openChangeLocationModal(): void {
     this.showChangeLocationModal = true;
@@ -1691,4 +1727,402 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       alert(`❌ Lỗi khi cất material: ${error}`);
     }
   }
+
+  // ==================== CUSTOMER CODE METHODS ====================
+
+  // Import Customer Codes
+  importCustomerCodes() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.processImportCustomerFile(file);
+      }
+    };
+    input.click();
+  }
+
+  // Process imported customer file
+  private processImportCustomerFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        console.log('📋 Imported customer data:', jsonData);
+        
+        // Skip header row (row 1) and process all data from row 2 onwards
+        const customers = [];
+        const codes = new Set<string>(); // Track codes to prevent duplicates
+        
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (row && row.length >= 4 && row[0] && row[0].toString().trim()) {
+            const no = parseInt(row[0].toString().trim()) || i;
+            const customer = row[1] ? row[1].toString().trim() : '';
+            const group = row[2] ? row[2].toString().trim() : '';
+            const code = row[3] ? row[3].toString().trim() : '';
+            
+            if (customer && code) {
+              // Check for duplicates within import data
+              if (codes.has(code)) {
+                console.log(`❌ Duplicate in import data: ${code}`);
+                continue;
+              }
+              
+              // Check for duplicates with existing data
+              const existingDuplicate = this.customerCodes.find(item => item.code === code);
+              if (existingDuplicate) {
+                console.log(`❌ Duplicate with existing: ${code}`);
+                continue;
+              }
+              
+              codes.add(code);
+              customers.push({
+                no: no,
+                customer: customer,
+                group: group || '',
+                code: code,
+                createdAt: new Date()
+              });
+              console.log(`✅ Valid customer added: ${code} - ${customer}`);
+            }
+          }
+        }
+        
+        console.log(`📊 Total valid customers found: ${customers.length}`);
+        
+        if (customers.length > 0) {
+          this.saveImportedCustomerCodes(customers);
+        } else {
+          alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề: No, Customer, Group, Code\n- Từ dòng 2 trở đi phải có dữ liệu đầy đủ');
+        }
+      } catch (error) {
+        console.error('Error processing customer file:', error);
+        alert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Save imported customer codes to database
+  private saveImportedCustomerCodes(customers: Omit<CustomerCode, 'id'>[]) {
+    const batch = this.firestore.firestore.batch();
+    
+    customers.forEach(customer => {
+      const docRef = this.firestore.collection('customer-codes').doc().ref;
+      batch.set(docRef, customer);
+    });
+    
+    batch.commit().then(() => {
+      console.log(`✅ Imported ${customers.length} customer codes`);
+      alert(`✅ Đã import thành công ${customers.length} mã khách hàng!`);
+      this.loadCustomerCodes();
+    }).catch(error => {
+      console.error('Error importing customer codes:', error);
+      alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
+    });
+  }
+
+  // Load customer codes from database
+  loadCustomerCodes() {
+    this.firestore.collection('customer-codes', ref => ref.orderBy('no', 'asc'))
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.customerCodes = actions.map(action => ({
+          id: action.payload.doc.id,
+          ...action.payload.doc.data() as CustomerCode
+        }));
+        // Cập nhật filteredCustomerCodes ngay sau khi load
+        this.filteredCustomerCodes = [...this.customerCodes];
+      });
+  }
+
+  // Download customer code template
+  downloadCustomerTemplate() {
+    try {
+      const templateData = [
+        ['No', 'Customer', 'Group', 'Code'], // Header row
+        [1, 'Customer A', 'Group 1', 'CUST001'],
+        [2, 'Customer B', 'Group 1', 'CUST002'],
+        [3, 'Customer C', 'Group 2', 'CUST003'],
+        [4, 'Customer D', 'Group 2', 'CUST004'],
+        [5, 'Customer E', 'Group 3', 'CUST005']
+      ];
+
+      const ws: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(templateData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Customer Code Template');
+      
+      XLSX.writeFile(wb, 'Customer_Code_Template.xlsx');
+    } catch (error) {
+      console.error('Error creating customer template:', error);
+      alert('Lỗi khi tạo template. Vui lòng thử lại.');
+    }
+  }
+
+  // ==================== FG LOCATION METHODS ====================
+
+  // Open FG Location Modal
+  openFGModal() {
+    this.showFGModal = true;
+    this.loadFGLocations();
+    this.isDropdownOpen = false;
+  }
+
+  // Close FG Location Modal
+  closeFGModal() {
+    this.showFGModal = false;
+    this.fgSearchTerm = '';
+    this.filteredFGLocations = [...this.fgLocations];
+  }
+
+  // Load FG Locations from database
+  loadFGLocations() {
+    this.firestore.collection('fg-locations', ref => ref.orderBy('stt', 'asc'))
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.fgLocations = actions.map(action => ({
+          id: action.payload.doc.id,
+          ...action.payload.doc.data() as FGLocation
+        }));
+        this.filteredFGLocations = [...this.fgLocations];
+      });
+  }
+
+  // Search FG Locations
+  onFGSearchInput(event: any) {
+    const term = event.target.value.toLowerCase();
+    this.fgSearchTerm = term;
+    
+    if (!term || term.trim().length < 1) {
+      this.filteredFGLocations = [...this.fgLocations];
+    } else {
+      this.filteredFGLocations = this.fgLocations.filter(item => {
+        return (
+          item.stt.toString().includes(term) ||
+          item.viTri.toLowerCase().includes(term) ||
+          item.qrCode.toLowerCase().includes(term)
+        );
+      });
+    }
+  }
+
+  // Clear FG Search
+  clearFGSearch() {
+    this.fgSearchTerm = '';
+    this.filteredFGLocations = [...this.fgLocations];
+  }
+
+  // ==================== CUSTOMER MODAL METHODS ====================
+
+  // Open Customer Modal
+  openCustomerModal() {
+    this.showCustomerModal = true;
+    this.loadCustomerCodes();
+  }
+
+  // Close Customer Modal
+  closeCustomerModal() {
+    this.showCustomerModal = false;
+    this.customerSearchTerm = '';
+    this.filteredCustomerCodes = [...this.customerCodes];
+  }
+
+  // Search Customer Codes
+  onCustomerSearchInput(event: any) {
+    const term = event.target.value.toLowerCase();
+    this.customerSearchTerm = term;
+    
+    if (!term || term.trim().length < 1) {
+      this.filteredCustomerCodes = [...this.customerCodes];
+    } else {
+      this.filteredCustomerCodes = this.customerCodes.filter(item => {
+        return (
+          item.no.toString().includes(term) ||
+          item.customer.toLowerCase().includes(term) ||
+          item.group.toLowerCase().includes(term) ||
+          item.code.toLowerCase().includes(term)
+        );
+      });
+    }
+  }
+
+  // Clear Customer Search
+  clearCustomerSearch() {
+    this.customerSearchTerm = '';
+    this.filteredCustomerCodes = [...this.customerCodes];
+  }
+
+  // Print Customer Label
+  async printCustomerLabel(customer: CustomerCode) {
+    try {
+      // Tạo mã QR từ customer code
+      const qrImage = await QRCode.toDataURL(customer.code, {
+        width: 400,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+
+      // Tạo nội dung để in label với kích thước 100mm x 130mm
+      // Code text ở trên, QR code ở dưới, mỗi phần chiếm 50% chiều cao
+      // Cả tem quay 90 độ để hiển thị dọc
+      const printContent = `
+        <div class="customer-label" style="
+          width: 100mm; 
+          height: 130mm; 
+          border: 1px solid #000; 
+          display: flex; 
+          flex-direction: column;
+          align-items: stretch;
+          justify-content: center;
+          padding: 0;
+          box-sizing: border-box;
+          font-family: Arial, sans-serif;
+          background: white;
+        ">
+          <!-- Code text chiếm 50% phía trên, quay dọc -->
+          <div class="code-section" style="
+            width: 100mm;
+            height: 65mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-bottom: 1px solid #000;
+            box-sizing: border-box;
+          ">
+            <div style="
+              font-size: 48px; 
+              font-weight: bold; 
+              color: #000;
+              font-family: 'Arial', sans-serif;
+              letter-spacing: 3px;
+              width: 100%;
+              height: 100%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              writing-mode: vertical-rl;
+              text-orientation: mixed;
+              transform: rotate(180deg);
+            ">
+              ${customer.code}
+            </div>
+          </div>
+          
+          <!-- QR Code chiếm 50% phía dưới, kích thước 50mm x 50mm, căn giữa -->
+          <div class="qr-section" style="
+            width: 100mm; 
+            height: 65mm; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            overflow: hidden;
+            box-sizing: border-box;
+          ">
+            <img src="${qrImage}" 
+                 alt="QR Code for ${customer.code}" 
+                 style="
+                   width: 50mm; 
+                   height: 50mm; 
+                   object-fit: contain;
+                 "
+                 title="QR Code: ${customer.code}">
+          </div>
+        </div>
+      `;
+    
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="UTF-8">
+              <title></title>
+              <style>
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
+                
+                html, body {
+                  width: 100mm;
+                  height: 130mm;
+                  margin: 0;
+                  padding: 0;
+                  overflow: hidden;
+                  font-family: Arial, sans-serif;
+                  background: white;
+                }
+                
+                .customer-label {
+                  width: 100mm;
+                  height: 130mm;
+                  margin: 0;
+                  padding: 0;
+                  box-shadow: none;
+                }
+                
+                @media print {
+                  * {
+                    margin: 0;
+                    padding: 0;
+                  }
+                  
+                  html, body {
+                    width: 100mm;
+                    height: 130mm;
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                  }
+                  
+                  .customer-label {
+                    margin: 0;
+                    padding: 0;
+                    box-shadow: none;
+                  }
+                  
+                  @page {
+                    size: 100mm 130mm;
+                    margin: 0;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              ${printContent}
+              <script>
+                window.onload = function() {
+                  window.print();
+                  window.onafterprint = function() {
+                    window.close();
+                  };
+                };
+              </script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error printing customer label:', error);
+      alert('❌ Lỗi khi in tem khách hàng');
+    }
+  }
 }
+

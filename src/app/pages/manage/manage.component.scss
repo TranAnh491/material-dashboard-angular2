@@ -23,6 +23,9 @@
   .password-modal-header {
     padding: 20px;
     border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     
     h4 {
       margin: 0;
@@ -35,6 +38,26 @@
       i.material-icons {
         font-size: 24px;
         color: #1976d2;
+      }
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      transition: color 0.2s;
+      
+      &:hover {
+        color: #333;
+      }
+      
+      i.material-icons {
+        font-size: 24px;
       }
     }
   }

@@ -32,6 +32,20 @@
                 Template Vị Trí
               </a>
               <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="importCustomerCodes()">
+                <i class="material-icons">file_upload</i>
+                Import mã khách hàng
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCustomerTemplate()">
+                <i class="material-icons">description</i>
+                Template mã khách hàng
+              </a>
+              <div class="dropdown-divider"></div>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="openFGModal()">
+                <i class="material-icons">check_circle_outline</i>
+                FG
+              </a>
+              <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
                 <i class="material-icons">add_circle</i>
                 Initialize Sample Data
@@ -62,6 +76,10 @@
             <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
               <i class="material-icons">refresh</i>
               Refresh
+            </button>
+            <button class="customer-btn" (click)="openCustomerModal()" title="Danh sách mã khách hàng">
+              <i class="material-icons">people</i>
+              Customer
             </button>
           </div>
         </div>
@@ -760,6 +778,153 @@
         [disabled]="!selectedTargetLocation.trim()">
         <i class="material-icons">check</i>
         Xác nhận
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- FG Location Modal -->
+<div class="modal-overlay" *ngIf="showFGModal" (click)="closeFGModal()">
+  <div class="modal-content fg-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h4>
+        <i class="material-icons">check_circle_outline</i>
+        Danh mục Vị trí Thành phẩm (FG)
+      </h4>
+      <button class="close-btn" (click)="closeFGModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Search Box -->
+      <div class="search-box">
+        <i class="material-icons">search</i>
+        <input 
+          type="text" 
+          placeholder="Tìm kiếm vị trí FG..."
+          [(ngModel)]="fgSearchTerm"
+          (input)="onFGSearchInput($event)"
+          class="search-input">
+        <button class="clear-search-btn" *ngIf="fgSearchTerm" (click)="clearFGSearch()">
+          <i class="material-icons">clear</i>
+        </button>
+      </div>
+      
+      <!-- FG Locations Table -->
+      <div class="table-container">
+        <table class="fg-table">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Vị trí</th>
+              <th>QR Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of filteredFGLocations; trackBy: trackByFG">
+              <td>{{ item.stt }}</td>
+              <td>{{ item.viTri }}</td>
+              <td>{{ item.qrCode }}</td>
+            </tr>
+            <tr *ngIf="filteredFGLocations.length === 0">
+              <td colspan="3" class="no-data">
+                <i class="material-icons">info</i>
+                Không tìm thấy vị trí FG nào
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Total Count -->
+      <div class="total-info">
+        <span>Tổng: {{ filteredFGLocations.length }} vị trí FG</span>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn btn-cancel" (click)="closeFGModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Modal -->
+<div class="modal-overlay" *ngIf="showCustomerModal" (click)="closeCustomerModal()">
+  <div class="modal-content customer-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h4>
+        <i class="material-icons">people</i>
+        Danh sách Mã Khách Hàng
+      </h4>
+      <button class="close-btn" (click)="closeCustomerModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Search Box -->
+      <div class="search-box">
+        <i class="material-icons">search</i>
+        <input 
+          type="text" 
+          placeholder="Tìm kiếm mã khách hàng..."
+          [(ngModel)]="customerSearchTerm"
+          (input)="onCustomerSearchInput($event)"
+          class="search-input">
+        <button class="clear-search-btn" *ngIf="customerSearchTerm" (click)="clearCustomerSearch()">
+          <i class="material-icons">clear</i>
+        </button>
+      </div>
+      
+      <!-- Customer Codes Table -->
+      <div class="table-container">
+        <table class="customer-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Customer</th>
+              <th>Group</th>
+              <th>Code</th>
+              <th>Label</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let customer of filteredCustomerCodes">
+              <td>{{ customer.no }}</td>
+              <td>{{ customer.customer }}</td>
+              <td>{{ customer.group }}</td>
+              <td>{{ customer.code }}</td>
+              <td>
+                <button class="label-btn" (click)="printCustomerLabel(customer)" title="In tem">
+                  <i class="material-icons">print</i>
+                  Label
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="filteredCustomerCodes.length === 0">
+              <td colspan="5" class="no-data">
+                <i class="material-icons">info</i>
+                Không tìm thấy mã khách hàng nào
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Total Count -->
+      <div class="total-info">
+        <span>Tổng: {{ filteredCustomerCodes.length }} mã khách hàng</span>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn btn-cancel" (click)="closeCustomerModal()">
+        <i class="material-icons">close</i>
+        Đóng
       </button>
     </div>
   </div>

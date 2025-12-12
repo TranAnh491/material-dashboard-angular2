@@ -73,8 +73,10 @@ export class QCComponent implements OnInit, OnDestroy {
   showMoreMenu: boolean = false;
   showReportModal: boolean = false;
   showTodayCheckedModal: boolean = false;
+  showPendingQCModal: boolean = false;
   qcReports: any[] = [];
   todayCheckedMaterials: any[] = [];
+  pendingQCMaterials: any[] = [];
   isLoadingReport: boolean = false;
   
   private destroy$ = new Subject<void>();
@@ -589,6 +591,12 @@ export class QCComponent implements OnInit, OnDestroy {
     return status;
   }
   
+  // Close Employee Modal
+  closeEmployeeModal(): void {
+    this.showEmployeeModal = false;
+    this.employeeScanInput = '';
+  }
+
   // Verify employee before accessing QC tab
   async verifyEmployee(): Promise<void> {
     if (!this.employeeScanInput.trim()) {
@@ -722,21 +730,24 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // Load pending QC count from Firestore (real-time)
   loadPendingQCCount(): void {
-    console.log('📊 Loading pending QC count...');
+    console.log('📊 Loading pending QC count (only location = IQC)...');
     
+    // Try query with location filter first
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
          .where('iqcStatus', '==', 'CHỜ KIỂM')
+         .where('location', '==', 'IQC')
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
         this.pendingQCCount = snapshot.length;
-        console.log(`📊 Pending QC count: ${this.pendingQCCount}`);
+        console.log(`📊 Pending QC count (location = IQC): ${this.pendingQCCount}`);
       },
       error: (error) => {
-        console.error('❌ Error loading pending QC count:', error);
-        // Fallback: try without where clause and count manually
+        console.error('❌ Error loading pending QC count with location filter:', error);
+        console.log('🔄 Falling back to manual filter...');
+        // Fallback: try without location where clause and filter manually
         this.loadPendingQCCountFallback();
       }
     });
@@ -897,9 +908,10 @@ export class QCComponent implements OnInit, OnDestroy {
       next: (snapshot) => {
         this.pendingQCCount = snapshot.filter(doc => {
           const data = doc.payload.doc.data() as any;
-          return data.iqcStatus === 'CHỜ KIỂM';
+          // Filter: iqcStatus === 'CHỜ KIỂM' AND location === 'IQC'
+          return data.iqcStatus === 'CHỜ KIỂM' && data.location === 'IQC';
         }).length;
-        console.log(`📊 Pending QC count (fallback): ${this.pendingQCCount}`);
+        console.log(`📊 Pending QC count (fallback, location = IQC): ${this.pendingQCCount}`);
       },
       error: (error) => {
         console.error('❌ Error loading pending QC count (fallback):', error);
@@ -1036,6 +1048,70 @@ export class QCComponent implements OnInit, OnDestroy {
   closeReportModal(): void {
     this.showReportModal = false;
     this.qcReports = [];
+  }
+
+  // Show pending QC materials modal
+  async showPendingQCMaterials(): Promise<void> {
+    this.showPendingQCModal = true;
+    this.isLoadingReport = true;
+    
+    try {
+      console.log('📊 Loading pending QC materials...');
+      
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        this.pendingQCMaterials = [];
+        this.isLoadingReport = false;
+        return;
+      }
+      
+      this.pendingQCMaterials = snapshot.docs
+        .map(doc => {
+          const data = doc.data() as any;
+          const iqcStatus = data.iqcStatus;
+          const location = data.location || '';
+          
+          // Filter: Only materials with status 'CHỜ KIỂM' AND location === 'IQC'
+          if (iqcStatus === 'CHỜ KIỂM' && location === 'IQC') {
+            return {
+              id: doc.id,
+              materialCode: data.materialCode || '',
+              materialName: data.materialName || '',
+              poNumber: data.poNumber || '',
+              batchNumber: data.batchNumber || '',
+              quantity: data.quantity || 0,
+              unit: data.unit || '',
+              location: location,
+              importDate: data.importDate?.toDate ? data.importDate.toDate() : null,
+              receivedDate: data.receivedDate?.toDate ? data.receivedDate.toDate() : null,
+              iqcStatus: iqcStatus
+            };
+          }
+          return null;
+        })
+        .filter(material => material !== null)
+        .sort((a, b) => {
+          // Sort by import date (newest first)
+          const dateA = a!.importDate || a!.receivedDate || new Date(0);
+          const dateB = b!.importDate || b!.receivedDate || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        });
+      
+      console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC materials`);
+      this.isLoadingReport = false;
+    } catch (error) {
+      console.error('❌ Error loading pending QC materials:', error);
+      alert('❌ Lỗi khi tải danh sách mã hàng chờ kiểm');
+      this.isLoadingReport = false;
+    }
+  }
+
+  closePendingQCModal(): void {
+    this.showPendingQCModal = false;
+    this.pendingQCMaterials = [];
   }
 }
 

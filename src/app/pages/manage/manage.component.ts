@@ -944,6 +944,14 @@ export class ManageComponent implements OnInit, OnDestroy {
     }
   }
 
+  closePasswordModal(): void {
+    this.showPasswordModal = false;
+    this.passwordError = '';
+    this.password = '';
+    // Navigate away or just close the modal
+    // User can close without entering password if they opened by mistake
+  }
+
   reloadData(): void {
     if (this.materialCode.trim()) {
       this.searchMaterial();

@@ -2460,6 +2460,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   onLocationChange(material: InventoryMaterial): void {
     if (!this.canEdit) return;
+    
+    // Nếu location là F62 hoặc F62TRA, tự động set iqcStatus = 'Pass'
+    if ((material.location === 'F62' || material.location === 'F62TRA') && material.iqcStatus !== 'Pass') {
+      material.iqcStatus = 'Pass';
+      console.log(`✅ Auto-set IQC status to Pass for ${material.materialCode} (location: ${material.location})`);
+    }
+    
     this.updateMaterialInFirebase(material);
   }
 
@@ -2498,6 +2505,16 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     if (material.location) {
       updateData.location = material.location;
+    }
+    
+    // Nếu location là F62 hoặc F62TRA, tự động set iqcStatus = 'Pass'
+    if ((material.location === 'F62' || material.location === 'F62TRA') && material.iqcStatus !== 'Pass') {
+      material.iqcStatus = 'Pass';
+      updateData.iqcStatus = 'Pass';
+      console.log(`✅ Auto-set IQC status to Pass for ${material.materialCode} (location: ${material.location})`);
+    } else if (material.iqcStatus) {
+      // Nếu có iqcStatus, cập nhật vào Firebase
+      updateData.iqcStatus = material.iqcStatus;
     }
     
     if (material.type) {

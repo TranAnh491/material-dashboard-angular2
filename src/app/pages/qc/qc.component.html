@@ -6,6 +6,9 @@
         <i class="material-icons">badge</i>
         Xác thực nhân viên
       </h3>
+      <button class="close-btn" (click)="closeEmployeeModal()" title="Tắt">
+        <i class="material-icons">close</i>
+      </button>
     </div>
     
     <div class="modal-body">
@@ -34,7 +37,7 @@
   </div>
 </div>
 
-<div class="main-content" *ngIf="!showEmployeeModal">
+<div class="main-content" *ngIf="!showEmployeeModal && isEmployeeVerified">
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
@@ -70,7 +73,7 @@
     <!-- Stats Boxes -->
     <div class="stats-container">
       <!-- Pending QC Count Box -->
-      <div class="pending-qc-box">
+      <div class="pending-qc-box" (click)="showPendingQCMaterials()">
         <div class="pending-qc-content">
           <i class="material-icons">pending_actions</i>
           <div class="pending-qc-info">
@@ -342,6 +345,68 @@
     
     <div class="modal-footer">
       <button class="close-modal-btn" (click)="closeTodayCheckedModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Pending QC Materials Modal -->
+<div class="modal-overlay" *ngIf="showPendingQCModal" (click)="closePendingQCModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">pending_actions</i>
+        Danh sách mã hàng chờ kiểm
+      </h3>
+      <button class="close-btn" (click)="closePendingQCModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="report-content" *ngIf="!isLoadingReport">
+        <table class="report-table" *ngIf="pendingQCMaterials.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã hàng</th>
+              <th>Tên hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Số lượng</th>
+              <th>Vị trí</th>
+              <th>Ngày nhập</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let material of pendingQCMaterials; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ material.materialCode }}</td>
+              <td>{{ material.materialName }}</td>
+              <td>{{ material.poNumber }}</td>
+              <td>{{ material.batchNumber }}</td>
+              <td>{{ material.quantity | number:'1.2-2' }} {{ material.unit }}</td>
+              <td>{{ material.location }}</td>
+              <td>{{ (material.importDate || material.receivedDate) | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-report" *ngIf="pendingQCMaterials.length === 0">
+          <i class="material-icons">info</i>
+          <p>Không có mã hàng nào chờ kiểm</p>
+        </div>
+      </div>
+      
+      <div class="loading-report" *ngIf="isLoadingReport">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closePendingQCModal()">
         <i class="material-icons">close</i>
         Đóng
       </button>

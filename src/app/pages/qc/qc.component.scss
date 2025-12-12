@@ -161,6 +161,14 @@
   padding: 16px 20px;
   cursor: default;
   
+  &.pending-qc-box {
+    cursor: pointer;
+    
+    &:hover {
+      background: #fff3e0;
+    }
+  }
+  
   .pending-qc-content,
   .today-checked-content,
   .pending-confirm-content {
