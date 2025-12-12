@@ -129,6 +129,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   materialHistoryList: any[] = [];
   isLoadingHistory = false;
 
+  // Locations from Location tab (for validation)
+  validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
+
   // Counters
   get totalMaterials(): number {
     return this.allMaterials.length;
@@ -446,6 +449,71 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.displayedMaterials = [];
     this.currentPage = 1;
     this.filterMode = 'all';
+    
+    // Load valid locations from Location tab
+    this.loadValidLocations();
+  }
+
+  /**
+   * Load valid locations from Location tab (collection 'locations')
+   */
+  loadValidLocations(): void {
+    try {
+      this.firestore.collection('locations')
+        .valueChanges()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((locations: any[]) => {
+          // Extract viTri field from locations
+          this.validLocations = locations
+            .map(loc => loc.viTri ? loc.viTri.trim().toUpperCase() : '')
+            .filter(loc => loc !== ''); // Remove empty locations
+          
+          console.log(`✅ Loaded ${this.validLocations.length} valid locations from Location tab`);
+        }, error => {
+          console.error('❌ Error loading locations:', error);
+          this.validLocations = []; // Fallback to empty array
+        });
+    } catch (error) {
+      console.error('❌ Error loading valid locations:', error);
+      this.validLocations = [];
+    }
+  }
+
+  /**
+   * Validate location format and existence
+   * Location must:
+   * 1. Start with letter D-Z
+   * 2. Followed by numbers
+   * 3. Exist in validLocations list from Location tab
+   */
+  validateLocation(location: string): { isValid: boolean; errorMessage?: string } {
+    const locationUpper = location.trim().toUpperCase();
+    
+    // Check 1: Must start with letter D-Z
+    if (!/^[D-Z]/.test(locationUpper)) {
+      return {
+        isValid: false,
+        errorMessage: `❌ Vị trí không hợp lệ!\n\nVị trí phải bắt đầu bằng chữ cái từ D đến Z.\n\nVị trí đã quét: ${locationUpper}`
+      };
+    }
+    
+    // Check 2: Must be followed by numbers
+    if (!/^[D-Z]\d+/.test(locationUpper)) {
+      return {
+        isValid: false,
+        errorMessage: `❌ Vị trí không hợp lệ!\n\nVị trí phải bắt đầu bằng chữ cái (D-Z) và theo sau là số.\n\nVị trí đã quét: ${locationUpper}`
+      };
+    }
+    
+    // Check 3: Must exist in validLocations list
+    if (this.validLocations.length > 0 && !this.validLocations.includes(locationUpper)) {
+      return {
+        isValid: false,
+        errorMessage: `❌ Vị trí không tồn tại!\n\nVị trí "${locationUpper}" không có trong danh sách vị trí từ tab Location.\n\nVui lòng kiểm tra lại hoặc thêm vị trí này vào tab Location trước.`
+      };
+    }
+    
+    return { isValid: true };
   }
 
   ngOnDestroy(): void {
@@ -1267,8 +1335,29 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
     // Bước 1: scan vị trí
     if (this.scanStep === 'location') {
-      // Lưu vị trí hiện tại (ghi hoa, bỏ khoảng trắng dư)
-      this.currentScanLocation = scannedData.toUpperCase().trim();
+      const locationUpper = scannedData.toUpperCase().trim();
+      
+      // Validate location
+      const validation = this.validateLocation(locationUpper);
+      
+      if (!validation.isValid) {
+        // Invalid location - show error and clear input
+        alert(validation.errorMessage || '❌ Vị trí không hợp lệ!');
+        this.scanInput = '';
+        this.scanMessage = `ID: ${this.currentEmployeeId}\n\n❌ Vị trí không hợp lệ!\n\nVui lòng SCAN LẠI VỊ TRÍ.\n\nYêu cầu:\n- Bắt đầu bằng chữ cái D-Z\n- Theo sau là số\n- Phải có trong danh sách vị trí từ tab Location`;
+        
+        // Focus lại input để scan lại
+        setTimeout(() => {
+          const input = document.getElementById('scan-input') as HTMLInputElement;
+          if (input) {
+            input.focus();
+          }
+        }, 100);
+        return;
+      }
+      
+      // Location is valid - save and proceed
+      this.currentScanLocation = locationUpper;
       this.scanHistory.push(`📍 Vị trí: ${this.currentScanLocation}`);
       
       // Chuyển sang bước scan mã hàng
