@@ -1,0 +1,274 @@
+<div class="inventory-overview-container">
+  <!-- Header -->
+  <div class="header">
+    <h4>RM2 INVENTORY OVERVIEW</h4>
+    <p class="subtitle">Xem toàn bộ tồn kho RM2</p>
+  </div>
+
+  <!-- Control Bar -->
+  <div class="control-bar">
+    <!-- Search -->
+    <div class="search-section">
+      <input 
+        type="text" 
+        [(ngModel)]="searchTerm" 
+        (input)="applyFilters()"
+        placeholder="Tìm kiếm mã hàng, PO..."
+        class="search-input"
+      >
+      <button class="clear-btn" (click)="clearSearch()" title="Xóa tìm kiếm">
+        <i class="material-icons">clear</i>
+      </button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button class="refresh-btn" (click)="refreshData()" [disabled]="isLoading" title="Làm mới dữ liệu">
+        <i class="material-icons">refresh</i>
+        Refresh
+      </button>
+      
+      
+      <!-- More Actions Dropdown -->
+      <div class="more-actions-dropdown">
+        <button 
+          class="more-btn" 
+          (click)="toggleMoreActionsDropdown()"
+          title="Thêm tùy chọn"
+        >
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
+        <div class="dropdown-menu" [class.show]="isMoreActionsDropdownOpen">
+          <a class="dropdown-item" href="javascript:void(0)" (click)="importLinkQData()">
+            <i class="material-icons">file_upload</i>
+            Import LinkQ
+          </a>
+          
+          <!-- LinkQ File History Section -->
+          <div class="dropdown-divider" *ngIf="linkQFiles.length > 0"></div>
+          <div class="dropdown-header" *ngIf="linkQFiles.length > 0">
+            <i class="material-icons">history</i>
+            Lịch sử file gần nhất
+          </div>
+          <a class="dropdown-item file-history-item" 
+             *ngFor="let file of linkQFiles.slice(0, 3); trackBy: trackByFile"
+             href="javascript:void(0)"
+             [class.current-file]="file.id === currentLinkQFileId"
+             (click)="loadLinkQFileData(file.id)">
+            <div class="file-info">
+              <div class="file-name">{{ file.fileName }}</div>
+              <div class="file-details">
+                {{ file.uploadDate | date:'dd/MM/yyyy HH:mm' }} • 
+                {{ file.processedItems }}/{{ file.totalItems }} items
+              </div>
+            </div>
+            <i class="material-icons" *ngIf="file.id === currentLinkQFileId">check_circle</i>
+          </a>
+          
+          <div class="dropdown-divider" *ngIf="linkQFiles.length > 0"></div>
+          
+          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadLinkQTemplate()">
+            <i class="material-icons">description</i>
+            Template LinkQ
+          </a>
+          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadLinkQComparisonReport()">
+            <i class="material-icons">assessment</i>
+            Compare LinkQ
+          </a>
+          
+          <div class="dropdown-divider"></div>
+          
+          <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
+            <i class="material-icons">file_download</i>
+            Export Excel
+          </a>
+          
+          <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFullReport()">
+            <i class="material-icons">assessment</i>
+            Tải báo cáo
+          </a>
+          
+          <!-- Refresh LinkQ Data Only -->
+          <a class="dropdown-item" href="javascript:void(0)" (click)="refreshLinkQDataOnly()" *ngIf="isLinkQDataLoaded">
+            <i class="material-icons">refresh</i>
+            Refresh LinkQ Data
+          </a>
+          
+          <!-- Recalculate LinkQ Comparison -->
+          <a class="dropdown-item" href="javascript:void(0)" (click)="recalculateLinkQComparison()" *ngIf="isLinkQDataLoaded">
+            <i class="material-icons">calculate</i>
+            Recalculate Comparison
+          </a>
+        </div>
+      </div>
+      
+      <!-- Export Excel button removed -->
+      
+      <!-- Filter Toggle -->
+      <button 
+        class="filter-btn" 
+        [class.active]="currentFilterMode !== 'all'"
+        (click)="cycleFilterMode()"
+        title="Chuyển đổi chế độ lọc"
+      >
+        <i class="material-icons">{{ getFilterModeIcon() }}</i>
+        {{ getFilterModeText() }}
+      </button>
+      
+      <!-- Group By Dropdown -->
+      <div class="group-by-dropdown">
+        <button 
+          class="group-by-btn" 
+          [class.active]="groupByType !== 'po'"
+          (click)="toggleGroupByDropdown()"
+          title="Chọn cách nhóm dữ liệu"
+        >
+          <i class="material-icons">group_work</i>
+          {{ groupByType === 'po' ? 'Theo PO' : 'Theo Mã Hàng' }}
+        </button>
+        <div class="dropdown-menu" [class.show]="isGroupByDropdownOpen">
+          <a class="dropdown-item" href="javascript:void(0)" (click)="setGroupByType('po')">
+            <i class="material-icons">receipt</i>
+            Theo PO
+          </a>
+          <a class="dropdown-item" href="javascript:void(0)" (click)="setGroupByType('material')">
+            <i class="material-icons">inventory</i>
+            Theo Mã Hàng
+          </a>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Summary Bar -->
+  <div class="summary-bar">
+    <div class="summary-item">
+      <span class="label">Tổng:</span>
+      <span class="value">{{ totalItemsCount }} mã</span>
+    </div>
+    
+    <div class="summary-item" [class.has-negative]="negativeStockCount > 0">
+      <span class="label">Mã âm:</span>
+      <span class="value">{{ negativeStockCount }} mã</span>
+    </div>
+    
+    <div class="summary-item" *ngIf="isLinkQDataLoaded" [class.has-difference]="linkQDifferenceCount > 0">
+      <span class="label">Mã lệch:</span>
+      <span class="value">{{ linkQDifferenceCount }} mã</span>
+    </div>
+    
+    <div class="summary-item">
+      <span class="label">Đang hiển thị:</span>
+      <span class="value">{{ filteredItems.length }} mã</span>
+    </div>
+    
+    <!-- Auto-refresh status -->
+    <div class="summary-item" style="color: #666; font-style: italic;">
+      <span class="label">Auto-refresh:</span>
+      <span class="value">Tắt (chỉ F5 thủ công)</span>
+    </div>
+    
+    <!-- Comparison status -->
+    <div class="summary-item" *ngIf="isLinkQDataLoaded && groupByType === 'material'" style="color: #ff6b35; font-weight: bold;">
+      <span class="label">⚠️ Comparison:</span>
+      <span class="value">Đã tính toán lại</span>
+    </div>
+    
+    <!-- Rounding info -->
+    <div class="summary-item" *ngIf="isLinkQDataLoaded" style="color: #666; font-style: italic;">
+      <span class="label">📊 Rounding:</span>
+      <span class="value">Số chẵn</span>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container" *ngIf="!isLoading">
+    <table class="inventory-table">
+      <thead>
+        <tr>
+          <th>Mã hàng</th>
+          <th *ngIf="groupByType === 'po'">PO</th>
+          <th *ngIf="groupByType === 'po'">Tồn đầu</th>
+          <th *ngIf="groupByType === 'po'">NK</th>
+          <th *ngIf="groupByType === 'po'">Đã xuất</th>
+          <th *ngIf="groupByType === 'po'">XT</th>
+          <th>Tồn kho</th>
+          <th>Vị trí</th>
+          <th *ngIf="isLinkQDataLoaded">LinkQ</th>
+          <th *ngIf="isLinkQDataLoaded">So Sánh</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of paginatedItems; trackBy: trackByItem" [class.negative-row]="item.isNegative">
+          <td class="material-code-cell">{{ item.materialCode }}</td>
+          <td *ngIf="groupByType === 'po'" class="po-cell">{{ item.poNumber }}</td>
+          <td *ngIf="groupByType === 'po'" class="opening-stock-cell">{{ item.openingStock | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="quantity-cell">{{ item.quantity | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="exported-cell">{{ item.exported | number:'1.0-3' }}</td>
+          <td *ngIf="groupByType === 'po'" class="xt-cell">{{ item.xt | number:'1.0-3' }}</td>
+          <td class="stock-cell" [class.negative-stock]="item.isNegative">
+            {{ item.currentStock | number:'1.0-3' }}
+          </td>
+          <td class="location-cell">{{ item.location || '-' }}</td>
+          <td *ngIf="isLinkQDataLoaded" class="linkq-cell">
+            {{ item.linkQStock !== undefined ? (item.linkQStock | number:'1.0-3') : '-' }}
+          </td>
+          <td *ngIf="isLinkQDataLoaded" class="comparison-cell" [class.has-difference]="item.hasDifference">
+            <span *ngIf="item.stockDifference !== undefined" [class.positive]="item.stockDifference > 0" [class.negative]="item.stockDifference < 0">
+              {{ item.stockDifference > 0 ? '+' : '' }}{{ item.stockDifference | number:'1.0-3' }}
+            </span>
+            <span *ngIf="item.stockDifference === undefined">-</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="filteredItems.length === 0">
+      <i class="material-icons">inventory_2</i>
+      <h3>Không có dữ liệu</h3>
+      <p *ngIf="searchTerm || showOnlyNegativeStock">
+        Không tìm thấy mã hàng nào phù hợp với bộ lọc hiện tại.
+      </p>
+      <p *ngIf="!searchTerm && !showOnlyNegativeStock">
+        Không có dữ liệu tồn kho để hiển thị.
+      </p>
+      <button class="clear-filters-btn" (click)="clearSearch()" *ngIf="searchTerm || showOnlyNegativeStock">
+        Xóa bộ lọc
+      </button>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="totalPages > 1">
+    <button 
+      class="page-btn" 
+      [disabled]="currentPage === 1"
+      (click)="changePage(currentPage - 1)"
+      title="Trang trước"
+    >
+      <i class="material-icons">chevron_left</i>
+    </button>
+    
+    <span class="page-info">
+      Trang {{ currentPage }} / {{ totalPages }}
+    </span>
+    
+    <button 
+      class="page-btn" 
+      [disabled]="currentPage === totalPages"
+      (click)="changePage(currentPage + 1)"
+      title="Trang sau"
+    >
+      <i class="material-icons">chevron_right</i>
+    </button>
+  </div>
+</div>

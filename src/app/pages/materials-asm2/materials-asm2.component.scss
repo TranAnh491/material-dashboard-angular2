@@ -15,15 +15,6 @@
   }
 }
 
-// ASM2 minimal white/black theme
-.excel-header h4 {
-  color: #333333; // Black text
-  background: none;
-  -webkit-background-clip: unset;
-  -webkit-text-fill-color: unset;
-  background-clip: unset;
-}
-
 // Styling for read-only exported column
 .readonly-cell {
   background-color: #f8f9fa !important;
@@ -61,52 +52,20 @@
   }
 }
 
-// Styling for opening stock input
-.opening-stock-input {
-  width: 100%;
-  padding: 4px 8px;
-  border: 1px solid #dee2e6;
+// Styling for new buttons (kept for backward compatibility)
+.sync-outbound-btn {
+  margin-left: 4px;
   border-radius: 3px;
-  font-size: 13px;
-  text-align: center;
+  transition: all 0.2s ease;
   
-  &:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-  }
-  
-  &::placeholder {
-    color: #6c757d;
-    font-style: italic;
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
   }
 }
 
-// Styling for editable export cell
-.editable-export-cell {
-  background-color: #fff3cd !important;
-  border: 1px solid #ffeaa7 !important;
-  
-  input {
-    width: 100%;
-    padding: 4px 8px;
-    border: 1px solid #ffeaa7;
-    border-radius: 3px;
-    font-size: 13px;
-    text-align: center;
-    background-color: #fff;
-    
-    &:focus {
-      outline: none;
-      border-color: #f39c12;
-      box-shadow: 0 0 0 2px rgba(243, 156, 18, 0.25);
-    }
-  }
-}
-
-// Styling for consolidate button
-.consolidate-btn {
-  background: linear-gradient(135deg, #6f42c1, #e83e8c) !important;
+.sync-outbound-all-btn {
+  background: linear-gradient(135deg, #28a745, #20c997) !important;
   color: white !important;
   border: none;
   border-radius: 4px;
@@ -118,121 +77,32 @@
   margin-left: 8px;
   
   &:hover {
-    background: linear-gradient(135deg, #5a32a3, #d63384) !important;
+    background: linear-gradient(135deg, #218838, #1ea080) !important;
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(111, 66, 193, 0.3);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
   }
   
   &:active {
     transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(111, 66, 193, 0.3);
+    box-shadow: 0 1px 2px rgba(40, 167, 69, 0.3);
   }
 }
 
-// Styling for consolidation message
-.consolidation-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  margin: 16px 0;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  
-  &.success {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-  }
-  
-  &.info {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-  }
-  
-  .close-message {
-    background: none;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    padding: 4px;
-    margin-left: auto;
-    border-radius: 3px;
-    
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.1);
-    }
-  }
+// ASM1 minimal white/black theme
+.excel-header h4 {
+  color: #000000; // Pure black text
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
+  font-weight: normal !important;
 }
 
-// Styling for search type selector
-.search-type-selector {
-  margin-right: 16px;
-  
-  .search-type-dropdown {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 13px;
-    color: #495057;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
-    
-    &:hover {
-      background-color: #e9ecef;
-      border-color: #adb5bd;
-    }
-    
-    i {
-      font-size: 16px;
-    }
-  }
-}
-
-// Styling for search suggestions
-.search-suggestions {
-  margin: 20px 0;
-  
-  h5 {
-    margin-bottom: 12px;
-    color: #495057;
-    font-size: 14px;
-  }
-  
-  .suggestion-tags {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    
-    .suggestion-tag {
-      background: #e9ecef;
-      color: #495057;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      
-      &:hover {
-        background: #007bff;
-        color: white;
-        transform: translateY(-1px);
-      }
-    }
-  }
-}
-
-.factory-asm2 {
+.factory-asm1 {
   background: #ffffff !important; // White background
-  color: #333333 !important; // Black text
-  font-weight: 400 !important;
-  border-left: 1px solid #cccccc !important;
+  color: #000000 !important; // Pure black text
+  font-weight: normal !important;
+  border-left: 2px solid #000000 !important;
 }
 
 // Search results counter minimal
@@ -264,12 +134,90 @@
   color: #666666 !important;
 }
 
+// IQC Status styles
+.status-iqc-pass {
+  background: #d4edda !important;
+  color: #155724 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-ng {
+  background: #f8d7da !important;
+  color: #721c24 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-special {
+  background: #fff3cd !important;
+  color: #856404 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-pending {
+  background: #d1ecf1 !important;
+  color: #0c5460 !important;
+  font-weight: 500 !important;
+}
+
+.status-iqc-default {
+  background: #e9ecef !important;
+  color: #495057 !important;
+}
+
+// IQC Status column styling
+.iqc-status-cell {
+  text-align: center;
+  padding: 8px 4px;
+  
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  
+  .no-iqc-status {
+    color: #999;
+    font-size: 12px;
+  }
+}
+
 // Loading spinner minimal
 .loading-spinner {
   color: #333333;
   
   i {
     color: #333333 !important;
+  }
+  
+  // 🚀 OPTIMIZATION: Search progress bar
+  .search-progress {
+    margin-top: 15px;
+    width: 100%;
+    max-width: 300px;
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4caf50, #8bc34a);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+      }
+    }
+    
+    .progress-text {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
   }
 }
 
@@ -285,10 +233,17 @@
   }
 }
 
-// Table header minimal
+// TABLE HEADER - CHỈ 1 CHỖ DUY NHẤT QUY ĐỊNH
 .excel-table th {
-  background: #f5f5f5 !important; // Màu xám nhạt thay vì đen
-  color: #000000 !important; // Màu đen thay vì trắng
+  background: #ffffff !important;
+  color: #000000 !important;
+  white-space: nowrap !important;
+  text-transform: uppercase !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  padding: 8px 4px !important;
+  border: 1px solid #e0e0e0;
 }
 
 // Row styling minimal
@@ -296,7 +251,7 @@
   background: rgba(0, 0, 0, 0.05) !important;
 }
 
-/* Search-First Approach Styling for ASM2 */
+/* Search-First Approach Styling for ASM1 */
 .empty-state {
   display: flex;
   justify-content: center;
@@ -310,18 +265,18 @@
     
     .material-icons {
       font-size: 64px;
-      color: #333333;
+      color: #000000;
       margin-bottom: 20px;
     }
     
     h3 {
-      color: #333333;
+      color: #000000;
       margin-bottom: 16px;
       font-size: 24px;
     }
     
     p {
-      color: #666666;
+      color: #333333;
       font-size: 16px;
       margin-bottom: 32px;
       line-height: 1.5;
@@ -331,7 +286,7 @@
       margin-bottom: 32px;
       
       h5 {
-        color: #333333;
+        color: #000000;
         margin-bottom: 16px;
         font-size: 16px;
       }
@@ -344,19 +299,19 @@
         
         .suggestion-tag {
           background: #f5f5f5;
-          color: #333333;
+          color: #000000;
           padding: 8px 16px;
           border-radius: 20px;
           cursor: pointer;
           transition: all 0.3s;
           font-size: 14px;
-          border: 1px solid #cccccc;
+          border: 1px solid #000000;
           
           &:hover {
-            background: #333333;
+            background: #000000;
             color: #ffffff;
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(51, 51, 51, 0.3);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
           }
         }
       }
@@ -376,12 +331,12 @@
         
         .material-icons {
           font-size: 24px;
-          color: #333333;
+          color: #000000;
           margin-bottom: 0;
         }
         
         span {
-          color: #666666;
+          color: #333333;
           font-size: 14px;
           font-weight: 500;
         }
@@ -408,18 +363,18 @@
     }
     
     h4 {
-      color: #333333;
+      color: #000000;
       margin-bottom: 12px;
       font-size: 20px;
     }
     
     p {
-      color: #666666;
+      color: #333333;
       font-size: 16px;
       margin-bottom: 24px;
       
       strong {
-        color: #333333;
+        color: #000000;
       }
     }
     
@@ -428,16 +383,16 @@
       background: #f5f5f5;
       padding: 20px;
       border-radius: 8px;
-      border-left: 4px solid #333333;
+      border-left: 4px solid #000000;
       
       h6 {
-        color: #333333;
+        color: #000000;
         margin-bottom: 12px;
         font-size: 16px;
       }
       
       ul {
-        color: #666666;
+        color: #333333;
         margin: 0;
         padding-left: 20px;
         
@@ -462,22 +417,22 @@
     
     .material-icons {
       font-size: 48px;
-      color: #333333;
+      color: #000000;
       margin-bottom: 16px;
     }
     
     h4 {
-      color: #333333;
+      color: #000000;
       margin-bottom: 12px;
       font-size: 20px;
     }
     
     p {
-      color: #666666;
+      color: #333333;
       font-size: 16px;
       
       strong {
-        color: #333333;
+        color: #000000;
       }
     }
   }
@@ -556,6 +511,19 @@
   text-overflow: ellipsis;
 }
 
+// Remove the :has() selector approach
+// .number-cell {
+//   // Existing styles...
+//   
+//   // Special handling for Rolls/Bags column
+//   &:has(.editable-input) {
+//     width: 100px; // Fixed width for Rolls/Bags column
+//     min-width: 100px;
+//     max-width: 100px;
+//     text-align: center;
+//   }
+// }
+
 // Specific styling for Rolls/Bags column
 .rolls-bags-cell {
   width: 100px !important; // Fixed width for Rolls/Bags column
@@ -604,26 +572,296 @@
   padding: 4px 6px;
   
   .standard-packing-value {
-    font-weight: 600;
+    font-weight: normal !important;
     color: #1976d2;
     padding: 4px 8px;
     background: #e3f2fd;
     border-radius: 4px;
     display: inline-block;
     min-width: 40px;
-    font-size: 11px;
+    font-size: 13px !important;
   }
+}
+
+// Giao diện phẳng cho cột Vị trí
+.location-cell {
+  width: 113px !important; // Bằng cột Tồn kho
+  min-width: 113px !important;
+  max-width: 113px !important;
+}
+
+.location-input {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 4px 6px !important;
+  font-size: 13px !important;
+  text-align: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  
+  &:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #f8f9fa !important;
+  }
+  
+  &:hover {
+    background: #f8f9fa !important;
+  }
+}
+
+// ========================================
+// CỘT ĐỘ RỘNG - CHỈ 1 CHỖ DUY NHẤT QUY ĐỊNH
+// ========================================
+
+// Cột Vị trí (12) - Bằng cột Tồn kho
+.excel-table th:nth-child(12),
+.excel-table td:nth-child(12) {
+  width: 113px !important;
+  min-width: 113px !important;
+  max-width: 113px !important;
+}
+
+// CSS cho input trong cột Vị trí
+.excel-table td:nth-child(12) .location-input,
+.excel-table td:nth-child(12) .editable-cell {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+// Display value styling (clickable numbers)
+.display-value {
+  cursor: pointer;
+  padding: 4px 6px;
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+  }
+}
+
+// Giao diện phẳng cho cột Tồn đầu - giống hệt cột Vị trí
+.opening-stock-input {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 4px 6px !important;
+  font-size: 12px !important;
+  text-align: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  
+  &:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #f8f9fa !important;
+  }
+  
+  &:hover {
+    background: #f8f9fa !important;
+  }
+}
+
+// Cột Loại Hình - kích thước bằng cột Vị trí
+.type-cell {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  text-align: center;
+  padding: 4px 6px;
+  font-weight: normal !important;
 }
 
 // Horizontal Layout Styles - Copy from inbound
 .action-controls-horizontal {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 8px 12px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  
+  // All elements same height
+  > * {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  
+  // Buttons: compact style
+  button {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 36px;
+    
+    &:hover {
+      background: #f1f5f9;
+    }
+    
+    .material-icons {
+      font-size: 18px;
+      margin-right: 4px;
+    }
+  }
+  
+  // Inputs
+  .search-input {
+    height: 36px;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 150px;
+  }
+  
+  // Counter boxes
+  .negative-stock-counter-box,
+  .total-counter-box,
+  .total-stock-counter-box {
+    height: 36px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid;
+    background: white;
+    
+    .material-icons {
+      font-size: 18px;
+      margin-right: 4px;
+    }
+  }
+  
+  .negative-stock-counter-box {
+    border-color: #FF9800;
+    color: #FF9800;
+  }
+  
+  .total-counter-box {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    cursor: pointer;
+    
+    &:hover {
+      background: #f1f5f9;
+    }
+    
+    &.active-filter {
+      background: #dbeafe;
+      border-color: #3b82f6;
+    }
+  }
+  
+  .total-stock-counter-box {
+    border-color: #10b981;
+    color: #10b981;
+  }
+  
+  .search-type-btn {
+    padding: 6px 12px;
+    background: white;
+    border: 1px solid #ddd;
+    color: #000;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #f1f5f9;
+    }
+    
+    .material-icons {
+      font-size: 18px;
+      margin: 0;
+    }
+  }
+  
+  .clear-search-btn {
+    padding: 6px;
+    background: white;
+    border: 1px solid #ddd;
+    color: #666;
+    border-radius: 4px;
+    cursor: pointer;
+    height: 36px;
+    width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    &:hover {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+    
+    .material-icons {
+      font-size: 18px;
+      margin: 0;
+    }
+  }
+  
+  .reset-btn {
+    padding: 6px 12px;
+    background: white;
+    border: 1px solid #ddd;
+    color: #000;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #fef3c7;
+      border-color: #f59e0b;
+    }
+    
+    .material-icons {
+      font-size: 18px;
+      margin: 0;
+    }
+  }
+  
+  .catalog-ready-icon {
+    height: 36px;
+    width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #10b981;
+    
+    .material-icons {
+      font-size: 20px;
+    }
+  }
 }
 
 // More Button styling
@@ -632,50 +870,200 @@
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  background: #6b7280;
-  color: white;
-  border: none;
+  background: white;
+  color: #000;
+  border: 1px solid #6b7280;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s;
-  height: 32px; // Fixed height to match filter buttons
-  display: flex;
-  align-items: center;
+  transition: all 0.2s;
+  height: 36px;
   justify-content: center;
+  box-shadow: 0 2px 4px rgba(107, 114, 128, 0.2);
   
   &:hover {
     background: #4b5563;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(107, 114, 128, 0.3);
   }
   
   i {
-    font-size: 16px;
+    font-size: 18px;
   }
 }
+
+
 
 // Total counter box styling
 .total-counter-box {
   background: #ffffff;
   color: #000000;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
   min-width: 140px;
   text-align: center;
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 36px; // Đồng bộ với negative-stock-counter-box
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
   
   i {
-    font-size: 16px;
+    font-size: 18px;
     color: #000000;
   }
   
   span {
     white-space: nowrap;
     font-weight: 600;
+  }
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  // Clickable state
+  &.clickable {
+    cursor: pointer;
+    
+    &:hover {
+      background: #f8f9fa;
+      border-color: #3b82f6;
+    }
+    
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  }
+  
+  // Active filter state (showing only negative stock)
+  &.active-filter {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1e40af;
+    
+    i {
+      color: #1e40af;
+    }
+    
+    &:hover {
+      background: #bfdbfe;
+    }
+  }
+}
+
+// Total stock counter box styling
+.total-stock-counter-box {
+  background: #ffffff;
+  color: #000000;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px !important;
+  font-weight: normal !important;
+  min-width: 160px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px; // Đồng bộ với các box khác
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  flex-shrink: 0; // Không cho phép co lại
+  
+  i {
+    font-size: 13px !important;
+    color: #000000;
+  }
+  
+  span {
+    white-space: nowrap;
+    font-weight: normal !important;
+  }
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Export lock box styling
+.export-lock-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  .export-lock-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #6b7280;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px !important;
+    font-weight: normal !important;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    height: 36px;
+    
+    i {
+      font-size: 16px;
+      color: white;
+    }
+    
+    span {
+      white-space: nowrap;
+    }
+    
+    &:hover {
+      background: #4b5563;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    // Unlocked state
+    &.unlocked {
+      background: #10b981;
+      
+      &:hover {
+        background: #059669;
+      }
+    }
+  }
+}
+
+
+
+// Editable export cell styling
+.editable-export-cell {
+  .export-input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    font-size: 13px !important;
+    text-align: center;
+    background: #fff;
+    transition: all 0.2s ease;
+    
+    &:focus {
+      outline: none;
+      border-color: #0056b3;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    
+    &:hover {
+      border-color: #0056b3;
+    }
   }
 }
 
@@ -687,7 +1075,7 @@
     padding: 6px 10px;
     border: 1px solid #d1d5db;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 13px !important;
     width: 200px;
     background: white;
     height: 32px;
@@ -700,7 +1088,7 @@
     
     &::placeholder {
       color: #9ca3af;
-      font-size: 11px;
+      font-size: 13px !important;
     }
   }
   
@@ -764,17 +1152,18 @@
   }
   
   .search-type-dropdown {
-    padding: 6px 12px;
+    padding: 6px 8px;
     border: 1px solid #d1d5db;
     background: #ffffff;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 12px !important;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     color: #000000;
-    min-width: 120px;
+    min-width: 80px;
+    max-width: 80px;
     justify-content: space-between;
     height: 32px;
     
@@ -799,7 +1188,7 @@
     
     .dropdown-item {
       padding: 8px 12px;
-      font-size: 12px;
+      font-size: 13px !important;
       color: #000000;
       display: flex;
       align-items: center;
@@ -810,7 +1199,7 @@
       }
       
       i {
-        font-size: 14px;
+        font-size: 13px !important;
       }
     }
   }
@@ -830,7 +1219,7 @@
     background: #ffffff;
     color: #000000;
     font-weight: 500;
-    font-size: 12px;
+    font-size: 13px !important;
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -848,21 +1237,74 @@
       color: #000000;
     }
   }
+  
+
+  
+
 }
 
-// Catalog ready icon
-.catalog-ready-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  
-  i {
-    font-size: 20px;
-    color: #10b981;
+// Negative stock counter box - Di chuyển lên trên cùng để lấp đầy khoảng trống header
+    .negative-stock-counter-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #fef3c7; // Light yellow background
+    color: #92400e; // Dark orange text
+    border: 1px solid #f59e0b; // Orange border
+    border-radius: 6px;
+    font-weight: normal !important;
+    font-size: 13px !important;
+    height: 36px;
+    transition: all 0.3s ease;
+    margin-right: 12px;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    
+    i {
+      font-size: 13px !important;
+      color: #f59e0b; // Orange icon
+    }
+    
+    span {
+      white-space: nowrap;
+      font-weight: normal !important;
+    }
+    
+    // When there are negative stocks
+    &.has-negative {
+      background: #ffebee; // Light red background
+      color: #d32f2f; // Dark red text
+      border-color: #f44336; // Red border
+      box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+      
+      i {
+        color: #f44336; // Red icon
+      }
+    }
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+      
+      &.has-negative {
+        box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+      }
+    }
   }
-}
+
+// Catalog ready icon
+  .catalog-ready-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    
+    i {
+      font-size: 13px !important;
+      color: #10b981;
+    }
+  }
 
 // Dropdown menu styling
 .dropdown {
@@ -882,7 +1324,7 @@
     
     .dropdown-item {
       padding: 8px 16px;
-      font-size: 14px;
+      font-size: 13px !important;
       color: #000000;
       display: flex;
       align-items: center;
@@ -895,7 +1337,7 @@
       }
       
       i {
-        font-size: 18px;
+        font-size: 13px !important;
         color: #000000;
       }
     }
@@ -906,7 +1348,7 @@
       margin: 4px 0;
     }
     
-    .text-danger {
+    .danger-item {
       color: #dc3545 !important;
       border-left: 3px solid #dc3545 !important;
       font-weight: 600;
@@ -930,16 +1372,28 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
   
   &:hover {
     background: #f5f5f5;
+    transform: translateY(-1px);
   }
+}
+
+
+
+// Scan button specific styling
+.scan-change-btn {
+  color: #2196F3;
+  font-weight: 600;
   
-  i {
-    font-size: 18px;
-    color: #666;
+  &:hover {
+    background: #e3f2fd;
+    color: #1976d2;
   }
 }
 
@@ -951,19 +1405,456 @@
   color: #333333;
 }
 
-// Responsive design
+// Mobile-first responsive design
 @media (max-width: 768px) {
   .excel-header h4 {
     font-size: 16px;
   }
   
+  .action-controls-horizontal {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .desktop-search-section {
+    display: none;
+  }
+  
+  .mobile-search-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    
+    .search-type-selector {
+      flex-shrink: 0;
+      min-width: 80px; // Thu nhỏ box chọn
+      max-width: 80px;
+    }
+    
+  .search-box {
+    flex: 1;
+    min-width: 0;
+    max-width: 300px; // Giới hạn chiều rộng tối đa
+    
+    .search-input {
+      width: 100%;
+      max-width: 250px; // Giới hạn chiều rộng input để không che nút reset
+    }
+  }
+  }
+  
+  // Mobile stats section - HIDDEN on mobile
+  .mobile-stats-section {
+    display: none;
+  }
+  
+  // Desktop stats section - HIDDEN on mobile
+  .desktop-stats-section {
+    display: none;
+  }
+  
+  .negative-stock-counter-box {
+    background: #fef3c7;
+    border-color: #f59e0b;
+    color: #92400e;
+    
+    &.has-negative {
+      background: #ffebee;
+      border-color: #f44336;
+      color: #d32f2f;
+    }
+  }
+  
+  .total-counter-box {
+    background: #e3f2fd;
+    border-color: #2196f3;
+    color: #1976d2;
+    
+    &.active-filter {
+      background: #dbeafe;
+      border-color: #3b82f6;
+    }
+  }
+  
+  .total-stock-counter-box {
+    background: #f3e5f5;
+    border-color: #9c27b0;
+    color: #7b1fa2;
+  }
+  
+  // Mobile stats dropdown - hidden on mobile, shown on desktop
+  .mobile-stats-dropdown {
+    position: relative;
+    
+    .stats-toggle-btn {
+      background: #6b7280;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      
+      &:hover {
+        background: #4b5563;
+      }
+      
+      i {
+        font-size: 18px;
+      }
+    }
+    
+    .mobile-stats-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      min-width: 200px;
+      display: none;
+      
+      &.show {
+        display: block;
+      }
+      
+      .mobile-stat-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        i {
+          font-size: 16px;
+        }
+        
+        span {
+          font-weight: 500;
+        }
+      }
+    }
+  }
+  
+  .mobile-menu-btn {
+    display: block;
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    
+    i {
+      font-size: 20px;
+    }
+  }
+  
+  .desktop-only {
+    display: none !important;
+  }
+  
+  .table-container {
+    display: none;
+  }
+  
+  .mobile-cards-container {
+    display: block;
+    padding: 10px;
+  }
+  
+  .mobile-card {
+    background: white;
+    border: 2px solid #000000;
+    border-radius: 0px;
+    margin-bottom: 15px;
+    box-shadow: none;
+    
+    &.duplicate-card {
+      border-left: 4px solid #ffc107;
+    }
+    
+    &.iqc-card {
+      border-left: 4px solid #28a745;
+    }
+  }
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 2px solid #000000;
+    background: #f8f9fa;
+    
+    .material-info {
+      flex: 1;
+      
+      .material-code {
+        margin: 0;
+        font-size: 18px;
+        font-weight: bold;
+        color: #000000;
+        border: 1px solid #000000;
+        padding: 8px;
+        text-align: center;
+      }
+      
+      .po-number {
+        margin: 5px 0 0 0;
+        font-size: 14px;
+        color: #000000;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
+        font-weight: bold;
+      }
+    }
+    
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      
+      button {
+        background: #007bff;
+        color: white;
+        border: 2px solid #000000;
+        padding: 8px;
+        border-radius: 0px;
+        cursor: pointer;
+        
+        &:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+        
+        i {
+          font-size: 18px;
+        }
+      }
+    }
+  }
+  
+  .card-content {
+    padding: 15px;
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      
+      .label {
+        font-weight: 500;
+        color: #000000;
+        min-width: 100px;
+        font-size: 14px;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
+      }
+      
+      .value {
+        color: #000000;
+        font-size: 14px;
+        font-weight: bold;
+        border: 1px solid #000000;
+        padding: 6px;
+        text-align: center;
+        min-width: 80px;
+        
+        &.negative-stock {
+          color: #dc3545;
+          font-weight: bold;
+        }
+      }
+      
+      .mobile-input {
+        border: 2px solid #000000;
+        border-radius: 0px;
+        padding: 6px 8px;
+        font-size: 14px;
+        width: 120px;
+        color: #000000;
+        font-weight: bold;
+        
+        &.location-input {
+          width: 120px;
+        }
+        
+        &:focus {
+          outline: none;
+          border-color: #007bff;
+          box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+      }
+      
+      // Đặc biệt cho dòng vị trí - thêm nút Change
+      &.location-row {
+        .mobile-input.location-input {
+          width: 100px;
+          margin-right: 8px;
+        }
+        
+        .scan-btn {
+          background: #007bff;
+          color: white;
+          border: 2px solid #000000;
+          padding: 6px 8px;
+          border-radius: 0px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: bold;
+          
+          i {
+            font-size: 14px;
+          }
+        }
+      }
+    }
+  }
+  
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-top: 1px solid #000000;
+    background: #f8f9fa;
+    
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #000000;
+      border: 1px solid #000000;
+    }
+    
+    .delete-btn {
+      display: none; // Ẩn nút xóa trên mobile
+    }
+  }
+  
   .search-box .search-input {
-    width: 200px;
+    width: 100%;
+    max-width: 250px; // Giới hạn chiều rộng input để không che nút reset
+  }
+  
+  // Ẩn icon cạnh box nhập liệu trên mobile
+  .search-box .clear-search-btn {
+    display: none;
+  }
+  
+  .search-box .search-warning {
+    display: none;
   }
   
   .action-buttons {
-    flex-wrap: wrap;
+    display: none; // Ẩn hoàn toàn trên mobile
+  }
+}
+
+// Desktop styles
+@media (min-width: 769px) {
+  .mobile-menu-btn {
+    display: none;
+  }
+  
+  .mobile-search-section {
+    display: none;
+  }
+  
+  .mobile-stats-section {
+    display: none;
+  }
+  
+  .mobile-cards-container {
+    display: none;
+  }
+  
+  .desktop-only {
+    display: block;
+  }
+  
+  .desktop-search-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  
+  // Hiển thị action buttons trên desktop
+  .action-buttons {
+    display: flex;
     gap: 8px;
+  }
+  
+  // Hiển thị icon cạnh box nhập liệu trên desktop
+  .search-box .clear-search-btn {
+    display: flex;
+  }
+  
+  .search-box .search-warning {
+    display: flex;
+  }
+  
+  // Desktop stats section
+  .desktop-stats-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  // Show individual stats boxes on desktop
+  .desktop-stats-section .negative-stock-counter-box,
+  .desktop-stats-section .total-counter-box,
+  .desktop-stats-section .total-stock-counter-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    
+    i {
+      font-size: 18px;
+    }
+    
+    span {
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
   }
 }
 
@@ -1034,6 +1925,71 @@
     margin: 0;
     padding: 8px 0;
   }
+  
+  .consolidation-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px auto 0;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 500;
+    max-width: 600px;
+    position: relative;
+    animation: slideDown 0.3s ease-out;
+    
+    &.success {
+      background: rgba(76, 175, 80, 0.9);
+      color: white;
+      border: 2px solid rgba(76, 175, 80, 0.3);
+    }
+    
+    &.info {
+      background: rgba(33, 150, 243, 0.9);
+      color: white;
+      border: 2px solid rgba(33, 150, 243, 0.3);
+    }
+    
+    i {
+      font-size: 18px;
+    }
+    
+    .close-message {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      
+      i {
+        font-size: 16px;
+      }
+    }
+  }
+  
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 // Fixed action buttons section
@@ -1066,12 +2022,6 @@
     z-index: 10;
     
     th {
-      background: #f5f5f5 !important; // Màu xám nhạt thay vì đen
-      color: #000000 !important; // Màu đen thay vì trắng
-      border: 1px solid #e0e0e0; // Viền xám nhạt thay vì đen
-      padding: 12px 8px;
-      text-align: center;
-      font-weight: 600;
       position: sticky;
       top: 0;
     }
@@ -1091,15 +2041,18 @@
       border: 1px solid #e0e0e0;
       padding: 8px;
       text-align: center;
+      font-size: 13px !important;
+      font-weight: normal !important;
+      font-family: inherit;
     }
   }
   
   // Thu nhỏ kích thước các cột cụ thể
-  th:nth-child(6), // Cột "Đã xuất"
-  td:nth-child(6) {
-    width: 80px;
-    min-width: 80px;
-    max-width: 80px;
+  th:nth-child(9), // Cột "Đã xuất"
+  td:nth-child(9) {
+    width: 113px; // Bằng chiều rộng cột Mã hàng
+    min-width: 113px;
+    max-width: 113px;
     
     // Style giống cột "Vị trí" - luôn có thể chỉnh sửa
     .editable-cell {
@@ -1107,7 +2060,7 @@
       padding: 4px 6px;
       border: 1px solid #ccc;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px !important;
       text-align: center;
       background: #fff;
       transition: all 0.2s ease;
@@ -1124,41 +2077,331 @@
     }
   }
   
-  th:nth-child(9), // Cột "Loại Hình"
-  td:nth-child(9) {
+  th:nth-child(14), // Cột "Loại Hình"
+  td:nth-child(14) {
     width: 80px;
     min-width: 80px;
     max-width: 80px;
   }
   
-  th:nth-child(8), // Cột "Vị trí"
-  td:nth-child(8) {
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
+
+  // Cột Tồn Đầu, NK, Đã Xuất, Tồn Kho - cùng chiều rộng với cột Mã Hàng
+  th:nth-child(7), // Cột "Tồn đầu"
+  td:nth-child(7),
+  th:nth-child(8), // Cột "NK"
+  td:nth-child(8),
+  th:nth-child(9), // Cột "Đã xuất"
+  td:nth-child(9),
+  th:nth-child(10), // Cột "XT"
+  td:nth-child(10),
+  th:nth-child(11), // Cột "Tồn kho"
+  td:nth-child(11) {
+    width: 113px !important;
+    min-width: 113px !important;
+    max-width: 113px !important;
+    text-align: center;
+  }
+  
+  // Cột Tồn đầu - giao diện giống hệt cột Vị trí
+  th:nth-child(7), // Cột "Tồn đầu"
+  td:nth-child(7) {
+    .opening-stock-input {
+      border: none !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      padding: 4px 6px !important;
+      font-size: 13px !important;
+      text-align: center !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      
+      &:focus {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: #f8f9fa !important;
+      }
+      
+      &:hover {
+        background: #f8f9fa !important;
+      }
+    }
   }
 }
 
-// Giao diện phẳng cho cột Vị trí RM2
-.location-input {
-  border: none !important;
-  background: transparent !important;
-  border-radius: 0 !important;
-  padding: 4px 6px !important;
-  font-size: 12px !important;
-  text-align: center !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
+// Danger item styling for delete all button
+  .dropdown-item.danger-item {
+    color: #dc3545 !important;
+    border-left: 3px solid #dc3545 !important;
+    font-weight: normal !important;
+    
+    &:hover {
+      background-color: #f8d7da !important;
+      color: #721c24 !important;
+    }
+    
+    i {
+      color: #dc3545 !important;
+    }
+  }
+
+// Pagination Styles
+.pagination-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 20px;
+  border-top: 1px solid #dee2e6;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dee2e6;
+  background: #ffffff;
+  color: #495057;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
   
-  &:focus {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    background: #f8f9fa !important;
+  &:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: #adb5bd;
   }
   
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  i.material-icons {
+    font-size: 20px;
+  }
+}
+
+.page-selector {
+  padding: 6px 12px;
+  border: 1px solid #dee2e6;
+  background: #ffffff;
+  color: #495057;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 100px;
+  
   &:hover {
-    background: #f8f9fa !important;
+    border-color: #adb5bd;
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+}
+
+@media (max-width: 768px) {
+  .pagination-container {
+    padding: 12px;
+    gap: 8px;
+  }
+  
+  .pagination-info {
+    font-size: 12px;
+  }
+  
+  .page-btn {
+    width: 32px;
+    height: 32px;
+    
+    i.material-icons {
+      font-size: 18px;
+    }
+  }
+  
+  .page-selector {
+    font-size: 12px;
+    padding: 5px 10px;
+    min-width: 80px;
+  }
+}
+
+// Modal overlay for popups
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: #f3f4f6;
+      color: #111827;
+    }
+    
+    .material-icons {
+      font-size: 24px;
+    }
+  }
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+// More Options Popup Modal
+.more-popup-content {
+  max-width: 600px;
+  width: 90%;
+  
+  .more-popup-body {
+    padding: 24px;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  
+  .popup-section {
+    margin-bottom: 32px;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+    
+    .popup-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 16px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .popup-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      
+      .popup-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: #ffffff;
+        border: 2px solid #d1d5db;
+        border-radius: 8px;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: left;
+        
+        &:hover {
+          background: #f9fafb;
+          border-color: #9ca3af;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .material-icons {
+          font-size: 20px;
+          color: #6b7280;
+        }
+        
+        span {
+          flex: 1;
+        }
+        
+        &.delete-action {
+          color: #dc2626;
+          border-color: #fca5a5;
+          
+          &:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+          }
+          
+          .material-icons {
+            color: #dc2626;
+          }
+        }
+        
+        &.warning-action {
+          color: #ea580c;
+          border-color: #fdba74;
+          
+          &:hover {
+            background: #fff7ed;
+            border-color: #fb923c;
+          }
+          
+          .material-icons {
+            color: #ea580c;
+          }
+        }
+      }
+    }
   }
 }
 

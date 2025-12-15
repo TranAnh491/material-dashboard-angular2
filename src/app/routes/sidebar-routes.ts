@@ -30,7 +30,8 @@ export const ROUTES: RouteInfo[] = [
     children: [
       { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'IB', class: '' },
       { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'OB', class: '' },
-      { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' }
+      { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' },
+      { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'IO', class: '' }
     ]
   },
   { 

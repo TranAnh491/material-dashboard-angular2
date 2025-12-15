@@ -43,11 +43,11 @@ export interface InboundMaterial {
 }
 
 @Component({
-  selector: 'app-inbound-asm2',
-  templateUrl: './inbound-asm2.component.html',
-  styleUrls: ['./inbound-asm2.component.scss']
+  selector: 'app-inbound-asm1',
+  templateUrl: './inbound-asm1.component.html',
+  styleUrls: ['./inbound-asm1.component.scss']
 })
-export class InboundASM2Component implements OnInit, OnDestroy {
+export class InboundASM1Component implements OnInit, OnDestroy {
   private batchCounter = 1; // Counter cho batch
   
   // Tạo batch tự động theo format tuần + số thứ tự
@@ -73,9 +73,9 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   searchTerm: string = '';
   searchType: string = 'materialCode'; // Default to Mã Hàng
   
-  // Factory filter - Fixed to ASM2
-  selectedFactory: string = 'ASM2';
-  availableFactories: string[] = ['ASM2'];
+  // Factory filter - Fixed to ASM1
+  selectedFactory: string = 'ASM1';
+  availableFactories: string[] = ['ASM1'];
   
   // Time range filter
   startDate: string = '';
@@ -202,13 +202,13 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   private loadPermissions(): void {
     this.afAuth.authState.pipe(takeUntil(this.destroy$)).subscribe(user => {
       if (user) {
-        // Load user permissions for ASM2
+        // Load user permissions for ASM1
         this.canAddMaterials = true;
         this.canEditMaterials = true;
         this.canDeleteMaterials = true;
         this.canGenerateQR = true;
         this.canExportData = true;
-        console.log(`✅ ${this.selectedFactory} Inbound permissions loaded`);
+        console.log('✅ ASM1 Inbound permissions loaded');
       }
     });
   }
@@ -231,16 +231,15 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = '';
     
-    console.log(`📦 Loading ${this.selectedFactory} inbound materials (pending only)...`);
+    console.log('📦 Loading ASM1 inbound materials (pending only)...');
     this.tryLoadFromCollection('inbound-materials');
   }
   
   private tryLoadFromCollection(collectionName: string): void {
-    console.log(`🔍 Trying collection: ${collectionName} for factory: ${this.selectedFactory}`);
+    console.log(`🔍 Trying collection: ${collectionName}`);
     
     this.firestore.collection(collectionName, ref => 
-      ref.where('factory', '==', this.selectedFactory)
-         .where('isReceived', '==', false)
+      ref.where('isReceived', '==', false)
          .limit(1000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
@@ -259,13 +258,13 @@ export class InboundASM2Component implements OnInit, OnDestroy {
           console.log('📄 Sample document:', snapshot[0].payload.doc.data());
         }
         
-        // Filter and sort client-side
+        // Filter for ASM1 factory and sort client-side
         const allMaterials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
           console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}, isReceived: ${data.isReceived}, batch: ${data.batchNumber}, material: ${data.materialCode}`);
           return {
             id: doc.payload.doc.id,
-            factory: data.factory || this.selectedFactory,
+            factory: data.factory || 'ASM1',
             importDate: data.importDate?.toDate() || new Date(),
             internalBatch: data.internalBatch || '', // Load internalBatch từ database
             batchNumber: data.batchNumber || '',
@@ -294,10 +293,10 @@ export class InboundASM2Component implements OnInit, OnDestroy {
         console.log(`🏭 Factory values found:`, allMaterials.map(m => m.factory));
         console.log(`🏭 Received status found:`, allMaterials.map(m => ({ materialCode: m.materialCode, isReceived: m.isReceived })));
         
-        // Filter by factory
-        const factoryMaterials = allMaterials.filter(material => material.factory === this.selectedFactory);
-        console.log(`🏭 ${this.selectedFactory} materials after factory filter: ${factoryMaterials.length}`);
-        console.log(`🏭 ${this.selectedFactory} materials:`, factoryMaterials.map(m => ({ 
+        // Filter ASM1 materials
+        const asm1Materials = allMaterials.filter(material => material.factory === 'ASM1');
+        console.log(`🏭 ASM1 materials after factory filter: ${asm1Materials.length}`);
+        console.log(`🏭 ASM1 materials:`, asm1Materials.map(m => ({ 
           materialCode: m.materialCode, 
           batchNumber: m.batchNumber, 
           internalBatch: m.internalBatch,
@@ -305,7 +304,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
           importDate: m.importDate
         })));
         
-        this.materials = factoryMaterials.sort((a, b) => {
+        this.materials = asm1Materials.sort((a, b) => {
             // Sort by import date first (oldest first)
             const dateCompare = a.importDate.getTime() - b.importDate.getTime();
             if (dateCompare !== 0) return dateCompare;
@@ -314,7 +313,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             return a.createdAt.getTime() - b.createdAt.getTime();
           });
         
-        console.log(`✅ ${this.selectedFactory} materials after filter: ${this.materials.length}`);
+        console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
         
         // Load unitWeight từ danh mục materials nếu chưa có
         this.loadUnitWeightsFromCatalog();
@@ -375,7 +374,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   applyFilters(): void {
     let filtered = [...this.materials];
     
-    // Always filter by selected factory only
+    // Always filter by ASM1 only
     filtered = filtered.filter(material => material.factory === this.selectedFactory);
     
     // Apply search filter based on search type
@@ -544,10 +543,10 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
       console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
       
-      // Hiển thị TẤT CẢ materials trong lô hàng (không chỉ 1 dòng đại diện)
+      // Chỉ hiển thị 1 dòng đại diện cho lô hàng - lấy material đầu tiên
       if (batchMaterials.length > 0) {
-        filtered = batchMaterials;
-        console.log(`📦 Showing all ${batchMaterials.length} materials for batch: ${this.currentBatchNumber}`);
+        filtered = [batchMaterials[0]];
+        console.log(`📦 Showing only 1 representative row for batch: ${this.currentBatchNumber} (Material: ${batchMaterials[0].materialCode})`);
       } else {
         filtered = [];
       }
@@ -707,7 +706,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     }
     
     const inventoryMaterial = {
-      factory: this.selectedFactory,
+      factory: 'ASM1',
       importDate: material.importDate,
       receivedDate: new Date(), // When moved to inventory
       batchNumber: finalBatchNumber, // Ngày nhập + sequence number nếu duplicate
@@ -735,7 +734,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     // Add to inventory-materials collection (no notification)
     this.firestore.collection('inventory-materials').add(inventoryMaterial)
       .then(() => {
-        console.log(`✅ ${material.materialCode} added to Inventory ${this.selectedFactory} with batch number: ${finalBatchNumber}`);
+        console.log(`✅ ${material.materialCode} added to Inventory ASM1 with batch number: ${finalBatchNumber}`);
           
           // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
           this.updateStandardPackingFromInbound(material);
@@ -764,7 +763,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       console.log(`  - Inventory batchNumber: ${inventoryBatchNumber} (chỉ ngày nhập)`);
       
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.selectedFactory)
+        ref.where('factory', '==', 'ASM1')
            .where('materialCode', '==', material.materialCode)
            .where('poNumber', '==', material.poNumber)
            .where('source', '==', 'inbound')
@@ -835,7 +834,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     }
   }
 
-  // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
+  // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound ASM1
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
       console.log(`📦 Updating Standard Packing for ${material.materialCode} from Inbound data...`);
@@ -1014,7 +1013,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       case 'poNumber':
         return 'Tìm kiếm theo PO...';
       default:
-        return `Tìm kiếm ${this.selectedFactory}...`;
+        return 'Tìm kiếm ASM1...';
     }
   }
   
@@ -1436,7 +1435,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       
       return {
         id: '',
-        factory: this.selectedFactory, // Auto-filled
+        factory: 'ASM1', // Auto-filled
         importDate: new Date(), // Auto-filled
         internalBatch: internalBatch, // Auto-generated batch (tuần + số thứ tự)
         batchNumber: lotNumber, // Lô hàng từ file import
@@ -1736,7 +1735,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     
     Promise.all(deletePromises)
       .then(() => {
-        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ASM2`);
+        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ASM1`);
         if (materialsInInventory.length > 0) {
           console.log(`ℹ️ Note: ${materialsInInventory.length} materials remain in inventory with received status`);
         }
@@ -1821,15 +1820,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
       // Get current user info
       const user = await this.afAuth.currentUser;
-      const userEmail = user ? user.email || user.uid : 'UNKNOWN';
-      // Extract username before @ and convert to uppercase
-      const currentUser = userEmail.includes('@') ? userEmail.split('@')[0].toUpperCase() : userEmail.toUpperCase();
-      // Format date as DD/MM/YY
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = String(now.getFullYear()).slice(-2);
-      const printDate = `DATE: ${day}/${month}/${year}`;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
       const totalPages = qrCodes.length;
       
       // Generate QR code images
@@ -2036,9 +2028,9 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                           <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
                         </div>
                         <div>
-                          <div class="info-row small">${qr.printDate}</div>
-                          <div class="info-row small">${qr.printedBy}</div>
-                          <div class="info-row small page-number">${qr.pageNumber}/${qr.totalPages}</div>
+                          <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                          <div class="info-row small">NV: ${qr.printedBy}</div>
+                          <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
                         </div>
                       </div>
                     </div>
@@ -2153,15 +2145,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
       // Get current user info
       const user = await this.afAuth.currentUser;
-      const userEmail = user ? user.email || user.uid : 'UNKNOWN';
-      // Extract username before @ and convert to uppercase  
-      const currentUser = userEmail.includes('@') ? userEmail.split('@')[0].toUpperCase() : userEmail.toUpperCase();
-      // Format date as DD/MM/YY
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = String(now.getFullYear()).slice(-2);
-      const printDate = `DATE: ${day}/${month}/${year}`;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
       const totalPages = allQRCodes.length;
       
       // Generate QR code images
@@ -2368,9 +2353,9 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                         <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
                       </div>
                       <div>
-                        <div class="info-row small">${qr.printDate}</div>
-                        <div class="info-row small">${qr.printedBy}</div>
-                        <div class="info-row small page-number">${qr.pageNumber}/${qr.totalPages}</div>
+                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">NV: ${qr.printedBy}</div>
+                        <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
                       </div>
                     </div>
                   </div>
@@ -2420,7 +2405,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     
     // Create a new empty material
     const newMaterial: InboundMaterial = {
-      factory: this.selectedFactory,
+      factory: 'ASM1',
       importDate: new Date(),
       batchNumber: '',
       materialCode: '',
@@ -2469,7 +2454,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       
       // Optimize data for smaller file size
       const exportData = this.filteredMaterials.map(material => ({
-        'Factory': material.factory || this.selectedFactory,
+        'Factory': material.factory || 'ASM1',
         'Date': material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('vi-VN', {
           day: '2-digit',
           month: '2-digit',
@@ -2585,8 +2570,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       ['LÔ HÀNG/ DNNK', 'MÃ HÀNG', 'SỐ P.O', 'LƯỢNG NHẬP', 'LOẠI HÌNH', 'NHÀ CUNG CẤP', 'VỊ TRÍ', 'HSD (dd/mm/yyyy)', 'LƯỢNG ĐƠN VỊ', 'LƯU Ý'],
-      ['RM2-B001', 'RM2-MAT001', 'RM2-PO001', 100.5, 'Raw Material', 'Supplier A', 'IQC', '31/12/2025', 10.5, 'Ghi chú mẫu'],
-      ['RM2-B002', 'RM2-MAT002', 'RM2-PO002', 50.25, 'Raw Material', 'Supplier B', 'IQC', '30/11/2025', 5.25, 'Ghi chú mẫu']
+      ['RM1-B001', 'RM1-MAT001', 'RM1-PO001', 100.5, 'Raw Material', 'Supplier A', 'IQC', '31/12/2025', 10.5, 'Ghi chú mẫu'],
+      ['RM1-B002', 'RM1-MAT002', 'RM1-PO002', 50.25, 'Raw Material', 'Supplier B', 'IQC', '30/11/2025', 5.25, 'Ghi chú mẫu']
     ];
     
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -2609,7 +2594,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
     
-    XLSX.writeFile(workbook, 'ASM2_Import_Template.xlsx');
+    XLSX.writeFile(workbook, 'ASM1_Import_Template.xlsx');
   }
 
   // Download Inbound Report - Lịch sử kiểm lô hàng
@@ -2650,7 +2635,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       
       // Tạo tên file với timestamp
       const timestamp = new Date().toISOString().split('T')[0];
-      const fileName = `ASM2_Inbound_Report_${timestamp}.xlsx`;
+      const fileName = `ASM1_Inbound_Report_${timestamp}.xlsx`;
       
       // Download file
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Inbound_Report');
@@ -3680,44 +3665,28 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       console.log('📦 Loading available batches...');
       console.log('🔍 Factory filter:', this.selectedFactory);
       
-      // Tạo ngày 1/12/2025 làm mốc filter (ở client-side)
-      const filterDate = new Date('2025-12-01T00:00:00');
-      console.log('📅 Filtering batches from:', filterDate.toLocaleDateString('vi-VN'));
-      
-      // Query để lấy tất cả lô hàng chờ nhận (không filter date ở server)
+      // Query để lấy tất cả lô hàng chờ nhận
       const snapshot = await this.firestore.collection('inbound-materials', ref => 
         ref.where('factory', '==', this.selectedFactory)
            .where('isReceived', '==', false)
-           .limit(1000)
+           .limit(1000) // Tăng limit để lấy nhiều hơn
       ).get().toPromise();
 
       console.log('📊 Raw snapshot:', snapshot);
       console.log('📊 Snapshot empty?', snapshot?.empty);
 
       if (snapshot && !snapshot.empty) {
-        // Lấy danh sách unique batch numbers (group theo batchNumber)
-        const batchMap = new Map<string, {batchNumber: string, materialCode: string, importDate: Date}>();
-        
-        snapshot.docs.forEach(doc => {
+        // Lấy tất cả lô hàng chờ nhận
+        this.availableBatches = snapshot.docs.map(doc => {
           const data = doc.data() as any;
-          const batchNumber = data.batchNumber || '';
-          const importDate = data.importDate ? new Date(data.importDate.seconds * 1000) : new Date();
-          
-          // Filter theo ngày ở client-side
-          if (batchNumber && !batchMap.has(batchNumber) && importDate >= filterDate) {
-            batchMap.set(batchNumber, {
-              batchNumber: batchNumber,
-              materialCode: data.materialCode || '',
-              importDate: importDate
-            });
-          }
-        });
+          return {
+            batchNumber: data.batchNumber || '',
+            materialCode: data.materialCode || '',
+            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date()
+          };
+        }).sort((a, b) => b.importDate.getTime() - a.importDate.getTime()); // Sắp xếp theo ngày mới nhất
         
-        // Convert map to array và sắp xếp
-        this.availableBatches = Array.from(batchMap.values())
-          .sort((a, b) => b.importDate.getTime() - a.importDate.getTime()); // Sắp xếp theo ngày mới nhất
-        
-        console.log(`✅ Loaded ${this.availableBatches.length} unique batches (from ${snapshot.docs.length} materials, filtered from 1/12/2025):`, this.availableBatches);
+        console.log(`✅ Loaded ${this.availableBatches.length} available batches:`, this.availableBatches);
       } else {
         console.log('⚠️ No available batches found');
         this.availableBatches = [];
@@ -4151,7 +4120,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     
     // Find materials with the specified batch number
     const materialsToDelete = this.materials.filter(m => 
-      m.batchNumber === batchNumber && m.factory === this.selectedFactory
+      m.batchNumber === batchNumber && m.factory === 'ASM1'
     );
     
     if (materialsToDelete.length === 0) {

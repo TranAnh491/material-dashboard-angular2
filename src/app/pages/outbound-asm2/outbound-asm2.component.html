@@ -3,52 +3,198 @@
     <div class="excel-header">
       <h4>📤 OUTBOUND ASM2</h4>
     </div>
+    <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-                 <!-- Scanner Input for Batch Mode -->
-         <div class="scanner-input-group">
-           <input type="text" 
-                  #scannerInput
-                  [(ngModel)]="scannerBuffer"
-                  (keydown)="onScannerKeydown($event)"
-                  (blur)="onScannerInputBlur()"
-                  placeholder="Quét barcode/QR code..."
-                  class="scanner-input"
-                  [class.active]="isScannerInputActive">
-         </div>
+        <!-- Mobile Scanner Method Selection -->
+        <div class="mobile-scanner-selection" *ngIf="isMobile">
+          <div class="scanner-method-buttons">
+            <button class="method-btn" 
+                    [class.active]="selectedScanMethod === 'camera'"
+                    (click)="selectScanMethod('camera')"
+                    title="Sử dụng Camera để quét QR">
+              <i class="material-icons">camera_alt</i>
+              <span>Camera</span>
+            </button>
+            <button class="method-btn" 
+                    [class.active]="selectedScanMethod === 'scanner'"
+                    (click)="selectScanMethod('scanner')"
+                    title="Sử dụng Scanner vật lý">
+              <i class="material-icons">qr_code_scanner</i>
+              <span>Scanner</span>
+            </button>
+            <button class="start-btn-mobile" 
+                    [disabled]="!selectedScanMethod"
+                    (click)="selectedScanMethod === 'scanner' ? startBatchScanningMode() : startCameraScanning()"
+                    title="Bắt đầu chế độ scan">
+              <i class="material-icons">play_arrow</i>
+              <span>Start</span>
+            </button>
+          </div>
+        </div>
 
-         <!-- Simple Start/Stop Controls -->
-         <div class="scan-controls" *ngIf="!isBatchScanningMode">
-           <button class="start-btn" 
-                   (click)="startBatchScanningMode()"
-                   title="Bắt đầu chế độ scan">
-             <i class="material-icons">play_arrow</i>
-             Start
-           </button>
-         </div>
+        <!-- Scanner Input for Batch Mode - Always Active for Setup Modal -->
+        <div class="scanner-input-group" [class.mobile-hidden]="selectedScanMethod === 'camera'">
+          <input type="text" 
+                 #scannerInput
+                 [(ngModel)]="scannerBuffer"
+                 (keydown)="onScannerKeydown($event)"
+                 (blur)="onScannerInputBlur()"
+                 placeholder="Quét barcode/QR code..."
+                 class="scanner-input"
+                 [class.active]="isScannerInputActive || showScanningSetupModal"
+                 autocomplete="off">
+        </div>
 
-         <!-- Active Scanning Status -->
-         <div class="scan-status" *ngIf="isBatchScanningMode">
-           <div class="status-display">
-             <span class="status-item" [class.scanned]="isEmployeeIdScanned">
-               <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
-               {{ batchEmployeeId || 'Chưa scan mã nhân viên' }}
-             </span>
-             <span class="status-item" [class.scanned]="isProductionOrderScanned">
-               <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
-               {{ batchProductionOrder || 'Chưa scan LSX' }}
-             </span>
-           </div>
-           <button class="done-btn" 
-                   (click)="stopBatchScanningMode()"
-                   title="Dừng chế độ scan">
-             <i class="material-icons">stop</i>
-             Done
-           </button>
-         </div>
+        <!-- LSX Search Box - Desktop and Mobile -->
+        <div class="lsx-search-box" *ngIf="!isBatchScanningMode">
+          <input type="text" 
+                 class="lsx-search-input"
+                 [(ngModel)]="searchProductionOrder"
+                 (keyup.enter)="searchByProductionOrder()"
+                 [placeholder]="isMobile ? 'Nhập LSX (vd: KZLSX1125/0040)' : 'Nhập LSX để xem (ví dụ: KZLSX1125/0040)'"
+                 title="Nhập lệnh sản xuất và nhấn Enter">
+          <button class="search-btn" 
+                  (click)="searchByProductionOrder()"
+                  [disabled]="!searchProductionOrder || !searchProductionOrder.trim()"
+                  title="Tìm kiếm LSX">
+            <i class="material-icons">search</i>
+          </button>
+          <button class="clear-search-btn" 
+                  *ngIf="selectedProductionOrder"
+                  (click)="clearProductionOrderFilter()"
+                  title="Xóa và ẩn dữ liệu">
+            <i class="material-icons">clear</i>
+          </button>
+        </div>
+
+        <!-- Simple Start/Stop Controls -->
+        <div class="scan-controls" *ngIf="!isBatchScanningMode && !isMobile">
+          <button class="start-btn" 
+                  (click)="startBatchScanningMode()"
+                  title="Bắt đầu chế độ scan">
+            <i class="material-icons">play_arrow</i>
+            Start
+          </button>
+        </div>
+
+        <!-- Desktop Scanning Controls -->
+        <div class="scan-controls-desktop" *ngIf="isBatchScanningMode && !isMobile">
+          <!-- Saving Progress Indicator -->
+          <div class="saving-indicator" *ngIf="isSavingBatchData">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang cập nhật dữ liệu...</span>
+          </div>
+          
+          <div class="scan-status-desktop" *ngIf="!isSavingBatchData">
+            <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
+              <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+              <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
+            </div>
+            <div class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
+              <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+              <span>Nhân viên: {{ batchEmployeeId || 'Chưa scan' }}</span>
+            </div>
+          </div>
+          
+          <div class="scan-buttons-desktop" *ngIf="!isSavingBatchData">
+            <button class="review-btn-desktop" 
+                    (click)="showScanReview()"
+                    title="Xem danh sách đã scan"
+                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+              <i class="material-icons">list</i>
+              Review ({{ pendingScanData.length }})
+            </button>
+            <button class="done-btn-desktop" 
+                    (click)="stopBatchScanningMode()"
+                    title="Hoàn thành và lưu tất cả">
+              <i class="material-icons">done</i>
+              Done ({{ pendingScanData.length }})
+            </button>
+          </div>
+        </div>
+
+        <!-- Mobile Controls Only - Status info removed (using desktop status) -->
+        <div class="scan-status-mobile" *ngIf="isBatchScanningMode">
+          <!-- Mobile Saving Progress Indicator -->
+          <div class="saving-indicator-mobile" *ngIf="isSavingBatchData">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang cập nhật dữ liệu...</span>
+          </div>
+          
+          <div class="status-row" *ngIf="!isSavingBatchData">
+            <button class="review-btn-mobile" 
+                    (click)="showScanReview()"
+                    title="Xem danh sách đã scan"
+                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+              <i class="material-icons">list</i>
+              <span>Review ({{ pendingScanData.length }})</span>
+            </button>
+            <button class="done-btn-mobile" 
+                    (click)="stopBatchScanningMode()"
+                    title="Dừng chế độ scan và lưu tất cả">
+              <i class="material-icons">done</i>
+              <span>Done ({{ pendingScanData.length }})</span>
+            </button>
+            <button class="stop-camera-btn-mobile" 
+                    (click)="stopCameraScanning()"
+                    title="Tắt camera"
+                    *ngIf="isMobile && selectedScanMethod === 'camera'">
+              <i class="material-icons">videocam_off</i>
+              <span>Tắt Camera</span>
+            </button>
+          </div>
+          
+          <!-- 🔧 SỬA LỖI: Thêm dòng chữ hướng dẫn khi đã scan đủ LSX và mã nhân viên -->
+          <div class="scan-instruction" *ngIf="isProductionOrderScanned && isEmployeeIdScanned">
+            <i class="material-icons">info</i>
+            <span>Được phép scan xuất kho sau khi scan xong lệnh sản xuất và mã nhân viên</span>
+            
+            <!-- Camera scanning controls for materials -->
+            <div class="material-scan-controls" *ngIf="selectedScanMethod === 'camera'">
+              <button class="camera-scan-btn" 
+                      (click)="startMaterialCameraScanning()"
+                      title="Mở camera để quét mã hàng">
+                <i class="material-icons">camera_alt</i>
+                <span>Quét Mã Hàng</span>
+              </button>
+              
+              <button class="review-btn" 
+                      (click)="showScanReview()"
+                      title="Xem danh sách đã quét"
+                      *ngIf="pendingScanData.length > 0">
+                <i class="material-icons">list</i>
+                <span>Xem Danh Sách ({{ pendingScanData.length }})</span>
+              </button>
+              
+              <button class="save-btn" 
+                      (click)="saveScannedData()"
+                      title="Lưu dữ liệu vào outbound"
+                      *ngIf="pendingScanData.length > 0">
+                <i class="material-icons">save</i>
+                <span>Lưu ({{ pendingScanData.length }})</span>
+              </button>
+              
+              <button class="stop-camera-btn" 
+                      (click)="stopCameraScanning()"
+                      title="Tắt camera">
+                <i class="material-icons">videocam_off</i>
+                <span>Tắt Camera</span>
+              </button>
+              
+              <button class="reset-btn" 
+                      (click)="resetScanningData()"
+                      title="Bắt đầu lại từ đầu">
+                <i class="material-icons">refresh</i>
+                <span>Bắt Đầu Lại</span>
+              </button>
+              
+            </div>
+          </div>
+        </div>
         
         <!-- More Dropdown -->
-        <div class="dropdown" #dropdown>
+        <div class="dropdown" #dropdown [class.mobile-hidden]="isMobile">
           <button class="more-btn" type="button" (click)="toggleDropdown()">
             <i class="material-icons">more_vert</i>
             More
@@ -56,31 +202,35 @@
           <div class="dropdown-menu" [class.show]="isDropdownOpen">
             <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
               <i class="material-icons">download</i>
-              Export Excel
+              Export Tất Cả Dữ Liệu
             </a>
+            
             <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
               <i class="material-icons">add</i>
               Thêm Material
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadReport(); closeDropdown()">
-              <i class="material-icons">description</i>
-              Tải báo cáo
+            
+            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadMonthlyHistory(); closeDropdown()">
+              <i class="material-icons">calendar_month</i>
+              Tải Dữ Liệu Theo Tháng
             </a>
+            
             <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
               <i class="material-icons">cleaning_services</i>
               Làm sạch dữ liệu
             </a>
           </div>
         </div>
-
+        
+        
         <!-- Refresh Button -->
-        <button class="refresh-btn" (click)="loadMaterials()">
+        <button class="refresh-btn" (click)="loadMaterials()" [class.mobile-hidden]="isMobile">
           <i class="material-icons">refresh</i>
           Refresh
         </button>
 
         <!-- Date Range Selector -->
-        <div class="date-range-selector">
+        <div class="date-range-selector" [class.mobile-hidden]="isMobile">
           <input type="date" 
                  [(ngModel)]="startDate" 
                  (change)="onDateRangeChange()"
@@ -92,12 +242,35 @@
                  (change)="onDateRangeChange()"
                  class="date-input"
                  title="Đến ngày">
+          
+          <!-- Toggle for hiding previous day's scan history -->
+          <div class="history-toggle">
+            <label class="toggle-label">
+              <input type="checkbox" 
+                     [(ngModel)]="hidePreviousDayHistory"
+                     (change)="toggleHidePreviousDayHistory()"
+                     class="toggle-checkbox">
+              <span class="toggle-text">
+                <i class="material-icons">{{ hidePreviousDayHistory ? 'visibility_off' : 'visibility' }}</i>
+                {{ hidePreviousDayHistory ? 'Ẩn lịch sử cũ' : 'Hiện tất cả' }}
+              </span>
+            </label>
+          </div>
+          
+          <!-- Reset to today button -->
+          <button class="today-btn" 
+                  (click)="resetToToday()"
+                  title="Reset về ngày hôm nay">
+            <i class="material-icons">today</i>
+            Hôm nay
+          </button>
         </div>
 
-        <!-- Factory Badge -->
-        <span class="factory-badge asm2-badge">ASM2</span>
+        <!-- Factory Badge - 🔧 SỬA LỖI: Ẩn box ASM1 -->
+        <!-- <span class="factory-badge asm1-badge">ASM1</span> -->
         
-        <!-- REMOVED: Negative stock counter - không còn cần thiết
+        <!-- Negative stock counter -->
+        <!-- REMOVED: Negative stock counter - Không cần tính stock để scan nhanh -->
       </div>
     </div>
     <div class="loading-container" *ngIf="isLoading">
@@ -111,50 +284,91 @@
       {{errorMessage}}
     </div>
     <div class="excel-body" *ngIf="!isLoading">
-      <table class="excel-table">
+      <!-- Desktop Table - Full Columns -->
+      <table class="excel-table desktop-table" *ngIf="!isMobile">
         <thead>
           <tr>
-            <th>Factory</th>
-            <th>#</th>
-            <th>Mã hàng</th>
-            <th>Số PO</th>
-            <th>Xuất</th>
-            <!-- REMOVED: Tồn kho - không còn cần thiết
-            <th>Thời gian bắt đầu</th>
-            <th>Thời gian thực hiện</th>
-            <th>Mã nhân viên</th>
-            <th>Lệnh sản xuất</th>
-            <th>Xóa</th>
+            <th class="col-factory">Factory</th>
+            <th class="col-index">#</th>
+            <th class="col-date">Ngày xuất</th>
+            <th class="col-material">Mã hàng</th>
+            <th class="col-po">Số PO</th>
+            <th class="col-batch">IMD</th>
+            <th class="col-quantity">Xuất</th>
+            <th class="col-employee">Mã nhân viên</th>
+            <th class="col-production">Lệnh sản xuất</th>
+            <th class="col-delete">Xóa</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
-            <td class="factory-cell factory-asm2">ASM2</td>
-            <td class="row-header">{{(currentPage - 1) * itemsPerPage + i + 1}}</td>
-            <td class="code-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.materialCode" (change)="updateMaterial(material)">
+            <td class="factory-cell readonly-cell">
+              {{material.factory || 'ASM1'}}
             </td>
-            <td class="po-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.poNumber" (change)="updateMaterial(material)">
+            <td class="index-cell readonly-cell">
+              {{i + 1}}
             </td>
-            <td class="number-cell">
-              <input type="number" class="editable-input" [(ngModel)]="material.exportQuantity" (change)="updateMaterial(material)">
+            <td class="date-cell readonly-cell">
+              {{material.createdAt | date:'dd/MM/yyyy HH:mm'}}
             </td>
-            <!-- REMOVED: Tồn kho - không còn cần thiết
-            <!-- REMOVED: Ngày xuất - không còn cần thiết
-            <td class="duration-cell">
-              <span class="duration-display">{{ calculateDuration(material) }}</span>
+            <td class="code-cell readonly-cell">
+              {{material.materialCode}}
             </td>
-            <td class="employee-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.employeeId" (change)="updateMaterial(material)" placeholder="Mã nhân viên">
+            <td class="po-cell readonly-cell">
+              {{material.poNumber}}
             </td>
-            <td class="production-order-cell">
-              <input type="text" class="editable-input" [(ngModel)]="material.productionOrder" (change)="updateMaterial(material)" placeholder="Lệnh sản xuất">
+            <td class="batch-cell readonly-cell">
+              {{material.importDate || 'N/A'}}
             </td>
-            <td class="action-cell">
-              <button class="action-btn delete-btn" (click)="deleteMaterial(material)">
+            <td class="number-cell readonly-cell">
+              {{material.exportQuantity}}
+            </td>
+            <td class="employee-cell readonly-cell">
+              {{getDisplayEmployeeId(material.employeeId)}}
+            </td>
+            <td class="production-order-cell readonly-cell">
+              {{material.productionOrder || 'N/A'}}
+            </td>
+            <td class="delete-cell">
+              <button class="delete-btn" (click)="deleteMaterial(material)" title="Xóa">
                 <i class="material-icons">delete</i>
               </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Mobile Table - 6 Columns -->
+      <table class="excel-table mobile-optimized" *ngIf="isMobile">
+        <thead>
+          <tr>
+            <th class="col-material">Mã hàng</th>
+            <th class="col-po">Số PO</th>
+            <th class="col-batch">IMD</th>
+            <th class="col-quantity">Xuất</th>
+            <th class="col-employee">Mã nhân viên</th>
+            <th class="col-production">Lệnh sản xuất</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+            <td class="code-cell readonly-cell">
+              {{material.materialCode}}
+            </td>
+            <td class="po-cell readonly-cell">
+              {{material.poNumber}}
+            </td>
+            <td class="batch-cell readonly-cell">
+              {{material.importDate || 'N/A'}}
+            </td>
+            <td class="number-cell readonly-cell">
+              {{material.exportQuantity}}
+            </td>
+            <td class="employee-cell readonly-cell">
+              {{getDisplayEmployeeId(material.employeeId)}}
+            </td>
+            <td class="production-order-cell readonly-cell">
+              {{material.productionOrder || 'N/A'}}
             </td>
           </tr>
         </tbody>
@@ -174,7 +388,152 @@
     </div>
   </div>
 
-  <!-- QR Scanner Modal - Removed since we auto-export now -->
-  <!-- <div class="qr-scanner-modal" *ngIf="isCameraScanning || lastScannedData"> -->
-</div>
+  <!-- QR Scanner Modal is now handled by QRScannerModalComponent -->
 
+  <!-- Professional Scanning Setup Modal -->
+  <div class="professional-scanning-modal" *ngIf="showScanningSetupModal">
+    <div class="modal-overlay" (click)="closeScanningSetupModal()"></div>
+    <div class="modal-content large-modal">
+      <div class="modal-header">
+        <h3>Quét Xuất Kho - RM1 Outbound</h3>
+        <button class="close-btn" (click)="closeScanningSetupModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Step 1: Scan LSX -->
+        <div class="scan-step" *ngIf="scanningSetupStep === 'lsx'">
+          <div class="step-header">
+            <div class="step-number">1</div>
+            <div class="step-title">
+              <h4>Quét Lệnh Sản Xuất (LSX)</h4>
+              <p>Vui lòng quét mã lệnh sản xuất để bắt đầu</p>
+            </div>
+          </div>
+          
+          <div class="scan-input-section">
+            <div class="scan-instruction-text">
+              <i class="material-icons">qr_code_scanner</i>
+              <p>Vui lòng quét mã lệnh sản xuất (LSX)</p>
+              <small>Hệ thống sẽ tự động chuyển sang bước tiếp theo sau khi quét</small>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Step 2: Scan Employee ID -->
+        <div class="scan-step" *ngIf="scanningSetupStep === 'employee'">
+          <div class="step-header">
+            <div class="step-number">2</div>
+            <div class="step-title">
+              <h4>Quét Mã Nhân Viên</h4>
+              <p>Vui lòng quét mã nhân viên thực hiện</p>
+            </div>
+          </div>
+          
+          <!-- LSX already scanned info -->
+          <div class="scan-complete-info">
+            <i class="material-icons success-icon">check_circle</i>
+            <p>✅ Đã quét LSX: <strong>{{ batchProductionOrder }}</strong></p>
+          </div>
+          
+          <div class="scan-input-section">
+            <div class="scan-instruction-text">
+              <i class="material-icons">qr_code_scanner</i>
+              <p>Vui lòng quét mã nhân viên</p>
+              <small>Hệ thống sẽ tự động bắt đầu scan hàng sau khi quét mã nhân viên</small>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Pending Scan Data Section -->
+        <div class="pending-data-section" *ngIf="pendingScanData.length > 0">
+          <h4>Danh Sách Đã Scan ({{ pendingScanData.length }})</h4>
+          <div class="scan-list">
+            <div class="scan-item" *ngFor="let item of pendingScanData; let i = index">
+              <div class="scan-item-header">
+                <span class="scan-index">#{{ i + 1 }}</span>
+                <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
+              </div>
+              <div class="scan-item-details">
+                <div class="scan-detail">
+                  <strong>Mã hàng:</strong> {{ item.materialCode }}
+                </div>
+                <div class="scan-detail">
+                  <strong>PO:</strong> {{ item.poNumber }}
+                </div>
+                <div class="scan-detail">
+                  <strong>Số lượng:</strong> {{ item.quantity }} KG
+                </div>
+                <div class="scan-detail" *ngIf="item.importDate">
+                  <strong>IMD:</strong> {{ item.importDate }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="cancel-btn" (click)="closeScanningSetupModal()">
+          <i class="material-icons">cancel</i>
+          Hủy
+        </button>
+        <button class="confirm-btn" 
+                *ngIf="pendingScanData.length > 0" 
+                (click)="confirmAndSave()">
+          <i class="material-icons">save</i>
+          Lưu ({{ pendingScanData.length }})
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan Review Modal -->
+  <div class="scan-review-modal" *ngIf="showScanReviewModal" (click)="closeScanReview()">
+    <div class="scan-review-content" (click)="$event.stopPropagation()">
+      <div class="scan-review-header">
+        <h3>Danh Sách Đã Scan ({{ pendingScanData.length }})</h3>
+        <button class="close-btn" (click)="closeScanReview()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <!-- Removed duplicate LSX and Employee info - already shown in main status -->
+      
+      <div class="scan-review-list">
+        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index">
+          <div class="scan-item-header">
+            <span class="scan-index">#{{ i + 1 }}</span>
+            <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
+          </div>
+          <div class="scan-item-details">
+            <div class="scan-detail">
+              <strong>Mã hàng:</strong> {{ item.materialCode }}
+            </div>
+            <div class="scan-detail">
+              <strong>PO:</strong> {{ item.poNumber }}
+            </div>
+            <div class="scan-detail">
+              <strong>Số lượng:</strong> {{ item.quantity }} KG
+            </div>
+            <div class="scan-detail" *ngIf="item.importDate">
+              <strong>IMD:</strong> {{ item.importDate }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="scan-review-footer">
+        <button class="cancel-btn" (click)="closeScanReview()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+        <button class="confirm-btn" (click)="confirmAndSave()">
+          <i class="material-icons">save</i>
+          Xác Nhận & Lưu
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -110,6 +110,7 @@ export class FilteredRoutesService {
       '/inbound-asm2': 'inbound-asm2',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
+      '/inventory-overview-asm2': 'inventory-overview-asm2',
       
       // ASM1 FG routes
       '/fg-in': 'fg-in',

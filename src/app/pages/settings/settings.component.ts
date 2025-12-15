@@ -53,6 +53,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'inbound-asm2', name: 'RM2 Inbound' },
     { key: 'outbound-asm2', name: 'RM2 Outbound' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
+    { key: 'inventory-overview-asm2', name: 'RM2 Overview' },
     
     // Other tabs
     { key: 'location', name: 'Location' },

@@ -164,6 +164,7 @@ export class TabPermissionService {
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
+    { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
     
     // Location tab
     { key: 'location', name: 'Location' },
