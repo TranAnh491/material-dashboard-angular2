@@ -72,6 +72,16 @@ export interface MaterialPrice {
   importedAt: Date;
 }
 
+export interface ScanResult {
+  materialCode: string;
+  poNumber: string;
+  batchNumber: string;
+  meters: number;
+  kilograms: number;
+  location: string;
+  importDate: Date;
+}
+
 @Component({
   selector: 'app-manage',
   templateUrl: './manage.component.html',
@@ -101,6 +111,12 @@ export class ManageComponent implements OnInit, OnDestroy {
   materialPrices: Map<string, MaterialPrice> = new Map();
   topFilter: number | null = null; // null, 20, 30, 50
   originalSummaryData: MaterialSummary[] = []; // Lưu dữ liệu gốc để filter
+  
+  // Scan Modal
+  showScanModal: boolean = false;
+  scanInput: string = '';
+  scanResult: ScanResult | null = null;
+  scanError: string = '';
   
   // Stock Check Data
   stockCheckData: Map<string, StockCheckInfo> = new Map(); // Key: materialCode_PO_IMD
@@ -950,6 +966,136 @@ export class ManageComponent implements OnInit, OnDestroy {
     this.password = '';
     // Navigate away or just close the modal
     // User can close without entering password if they opened by mistake
+  }
+
+  // Scan Modal Methods
+  openScanModal(): void {
+    this.showScanModal = true;
+    this.scanInput = '';
+    this.scanResult = null;
+    this.scanError = '';
+  }
+
+  closeScanModal(): void {
+    this.showScanModal = false;
+    this.scanInput = '';
+    this.scanResult = null;
+    this.scanError = '';
+  }
+
+  async processScan(): Promise<void> {
+    if (!this.scanInput || this.scanInput.trim() === '') {
+      this.scanError = 'Vui lòng nhập hoặc quét mã QR';
+      return;
+    }
+
+    this.scanError = '';
+    this.scanResult = null;
+
+    try {
+      console.log('🔍 Processing scan:', this.scanInput);
+
+      // Parse QR code - Format expected: MATERIALCODE|PO|BATCH|METERS|KG|LOCATION
+      // Or search in inventory-materials collection
+      const parts = this.scanInput.split('|');
+      
+      if (parts.length >= 4) {
+        // QR code contains all info
+        const materialCode = parts[0]?.trim() || '';
+        const poNumber = parts[1]?.trim() || '';
+        const batchNumber = parts[2]?.trim() || '';
+        const meters = parseFloat(parts[3]) || 0;
+        const kilograms = parseFloat(parts[4]) || 0;
+        const location = parts[5]?.trim() || '';
+        
+        this.scanResult = {
+          materialCode: materialCode,
+          poNumber: poNumber,
+          batchNumber: batchNumber,
+          meters: meters,
+          kilograms: kilograms,
+          location: location,
+          importDate: new Date()
+        };
+        
+        console.log('✅ Scan result from QR:', this.scanResult);
+      } else {
+        // Search in inventory-materials by material code or batch number
+        const searchTerm = this.scanInput.trim().toUpperCase();
+        
+        const snapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+             .limit(100)
+        ).get().toPromise();
+
+        if (snapshot && !snapshot.empty) {
+          let found = false;
+          
+          for (const doc of snapshot.docs) {
+            const data = doc.data() as any;
+            const materialCode = (data.materialCode || '').toUpperCase();
+            const batchNumber = (data.batchNumber || '').toUpperCase();
+            
+            if (materialCode === searchTerm || batchNumber === searchTerm) {
+              // Calculate stock
+              const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+              const quantity = Number(data.quantity) || 0;
+              const exported = Number(data.exported) || 0;
+              const xt = Number(data.xt) || 0;
+              const stock = openingStock + quantity - exported - xt;
+              
+              if (stock <= 0) continue;
+              
+              // Get unit weight from catalog
+              const catalogItem = this.catalogCache.get(materialCode);
+              const unitWeight = catalogItem?.unitWeight || 0;
+              
+              // Calculate meters and kg
+              // Assuming: stock is in meters, kg = stock * unitWeight / 1000
+              const meters = stock;
+              const kilograms = (stock * unitWeight) / 1000;
+              
+              // Get import date
+              let importDate = new Date();
+              if (data.importDate) {
+                if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
+                  importDate = data.importDate.toDate();
+                } else if (data.importDate instanceof Date) {
+                  importDate = data.importDate;
+                } else if (data.importDate.seconds) {
+                  importDate = new Date(data.importDate.seconds * 1000);
+                } else {
+                  importDate = new Date(data.importDate);
+                }
+              }
+              
+              this.scanResult = {
+                materialCode: data.materialCode || '',
+                poNumber: data.poNumber || '',
+                batchNumber: data.batchNumber || '',
+                meters: meters,
+                kilograms: kilograms,
+                location: data.location || '',
+                importDate: importDate
+              };
+              
+              found = true;
+              console.log('✅ Scan result from database:', this.scanResult);
+              break;
+            }
+          }
+          
+          if (!found) {
+            this.scanError = `Không tìm thấy thông tin cho mã: ${searchTerm}`;
+          }
+        } else {
+          this.scanError = 'Không tìm thấy dữ liệu trong hệ thống';
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing scan:', error);
+      this.scanError = `Lỗi khi xử lý: ${error.message}`;
+    }
   }
 
   reloadData(): void {

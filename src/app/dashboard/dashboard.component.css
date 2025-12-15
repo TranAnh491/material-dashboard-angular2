@@ -1382,3 +1382,50 @@
 .iqc-loading i {
   font-size: 24px;
 }
+
+/* Mobile Logout Button */
+.mobile-logout-btn {
+  display: none; /* Hidden by default on desktop */
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.btn-logout-mobile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-logout-mobile:hover {
+  background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-logout-mobile:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(231, 76, 60, 0.4);
+}
+
+.btn-logout-mobile i {
+  font-size: 20px;
+}
+
+/* Show logout button only on mobile (max-width: 768px) */
+@media (max-width: 768px) {
+  .mobile-logout-btn {
+    display: block;
+  }
+}

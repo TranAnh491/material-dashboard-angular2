@@ -1,3 +1,5 @@
+@import './manage-scan-modal.scss';
+
 // Password Modal Styles
 .password-modal-overlay {
   position: fixed;
@@ -168,6 +170,7 @@
         align-items: center;
       }
       
+      .btn-scan,
       .btn-download,
       .btn-import {
         padding: 10px 20px;
@@ -195,6 +198,14 @@
         
         i.material-icons {
           font-size: 18px;
+        }
+      }
+      
+      .btn-scan {
+        background-color: #4caf50;
+        
+        &:hover:not(:disabled) {
+          background-color: #45a049;
         }
       }
       

@@ -44,6 +44,13 @@
       </h4>
       <div class="header-actions">
         <button 
+          class="btn btn-scan" 
+          (click)="openScanModal()"
+          title="Scan QR code cuộn dây">
+          <i class="material-icons">qr_code_scanner</i>
+          Scan
+        </button>
+        <button 
           class="btn btn-import" 
           (click)="importPriceFile()"
           title="Import file giá vật tư">
@@ -284,6 +291,84 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Scan QR Code Modal -->
+<div *ngIf="showScanModal" class="scan-modal-overlay">
+  <div class="scan-modal-content">
+    <div class="scan-modal-header">
+      <h4>
+        <i class="material-icons">qr_code_scanner</i>
+        Scan QR Code Cuộn Dây
+      </h4>
+      <button class="close-btn" (click)="closeScanModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="scan-modal-body">
+      <!-- Scan Input -->
+      <div class="scan-input-section">
+        <label>Quét mã QR cuộn dây:</label>
+        <input 
+          type="text" 
+          class="form-control scan-input"
+          [(ngModel)]="scanInput"
+          (keyup.enter)="processScan()"
+          placeholder="Quét hoặc nhập mã QR..."
+          autofocus>
+        <button class="btn btn-primary mt-2" (click)="processScan()">
+          <i class="material-icons">search</i>
+          Xác nhận
+        </button>
+      </div>
+
+      <!-- Scan Result -->
+      <div *ngIf="scanResult" class="scan-result-section">
+        <div class="result-card">
+          <h5>
+            <i class="material-icons">check_circle</i>
+            Thông tin cuộn dây
+          </h5>
+          <div class="result-details">
+            <div class="result-row">
+              <span class="label">Mã hàng:</span>
+              <span class="value">{{ scanResult.materialCode }}</span>
+            </div>
+            <div class="result-row">
+              <span class="label">PO Number:</span>
+              <span class="value">{{ scanResult.poNumber }}</span>
+            </div>
+            <div class="result-row">
+              <span class="label">Batch Number:</span>
+              <span class="value">{{ scanResult.batchNumber }}</span>
+            </div>
+            <div class="result-row highlight">
+              <span class="label">Số mét:</span>
+              <span class="value">{{ scanResult.meters | number:'1.2-2' }} m</span>
+            </div>
+            <div class="result-row highlight">
+              <span class="label">Số kg:</span>
+              <span class="value">{{ scanResult.kilograms | number:'1.2-2' }} kg</span>
+            </div>
+            <div class="result-row">
+              <span class="label">Vị trí:</span>
+              <span class="value">{{ scanResult.location }}</span>
+            </div>
+            <div class="result-row">
+              <span class="label">Ngày nhập:</span>
+              <span class="value">{{ scanResult.importDate | date:'dd/MM/yyyy' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div *ngIf="scanError" class="scan-error">
+        <i class="material-icons">error</i>
+        {{ scanError }}
+      </div>
     </div>
   </div>
 </div>

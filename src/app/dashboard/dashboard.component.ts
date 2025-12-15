@@ -1166,4 +1166,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Logout method for mobile
+  logout(): void {
+    // Clear session storage
+    sessionStorage.clear();
+    localStorage.clear();
+    
+    // Redirect to login page
+    window.location.href = '/login';
+  }
+
 }
