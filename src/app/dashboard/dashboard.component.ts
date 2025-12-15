@@ -1,8 +1,10 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
+import { FirebaseAuthService } from '../services/firebase-auth.service';
 import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
@@ -96,7 +98,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   rackWarningsRefreshInterval: any;
   rackWarningsRefreshTime = 14400000; // 4 tiếng
 
-  constructor(private firestore: AngularFirestore, private safetyService: SafetyService, private cdr: ChangeDetectorRef) { }
+  constructor(
+    private firestore: AngularFirestore, 
+    private safetyService: SafetyService, 
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private authService: FirebaseAuthService
+  ) { }
 
   ngOnInit() {
     // Load selected factory from localStorage
@@ -1167,13 +1175,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   // Logout method for mobile
-  logout(): void {
-    // Clear session storage
-    sessionStorage.clear();
-    localStorage.clear();
+  async logout(): Promise<void> {
+    console.log('🚪 Logging out...');
     
-    // Redirect to login page
-    window.location.href = '/login';
+    try {
+      // 1. Sign out from Firebase Auth first (IMPORTANT!)
+      await this.authService.signOut();
+      console.log('✅ Firebase auth signed out');
+      
+      // 2. Clear session storage and local storage
+      sessionStorage.clear();
+      localStorage.clear();
+      console.log('✅ Storage cleared');
+      
+      // 3. Navigate to login page using Angular Router (for hash routing)
+      await this.router.navigate(['/login']);
+      console.log('✅ Redirected to login page');
+      
+    } catch (error) {
+      console.error('❌ Error in logout:', error);
+      
+      // Fallback: Clear everything and force redirect
+      sessionStorage.clear();
+      localStorage.clear();
+      window.location.hash = '#/login';
+      window.location.reload();
+    }
   }
 
 }
