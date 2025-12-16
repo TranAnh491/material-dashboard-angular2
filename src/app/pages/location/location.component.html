@@ -890,6 +890,7 @@
               <th>Group</th>
               <th>Code</th>
               <th>Label</th>
+              <th>Xóa</th>
             </tr>
           </thead>
           <tbody>
@@ -904,9 +905,14 @@
                   Label
                 </button>
               </td>
+              <td>
+                <button class="delete-btn" (click)="deleteCustomerCode(customer)" title="Xóa mã này">
+                  <i class="material-icons">delete</i>
+                </button>
+              </td>
             </tr>
             <tr *ngIf="filteredCustomerCodes.length === 0">
-              <td colspan="5" class="no-data">
+              <td colspan="6" class="no-data">
                 <i class="material-icons">info</i>
                 Không tìm thấy mã khách hàng nào
               </td>

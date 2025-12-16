@@ -1756,10 +1756,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         console.log('📋 Imported customer data:', jsonData);
+        console.log('ℹ️ IMPORT MODE: New codes will OVERWRITE existing codes');
         
         // Skip header row (row 1) and process all data from row 2 onwards
         const customers = [];
-        const codes = new Set<string>(); // Track codes to prevent duplicates
+        const codes = new Set<string>(); // Track codes to prevent duplicates within import file
         
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i] as any[];
@@ -1770,33 +1771,45 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             const code = row[3] ? row[3].toString().trim() : '';
             
             if (customer && code) {
-              // Check for duplicates within import data
+              // Check for duplicates within import data only (use last occurrence)
               if (codes.has(code)) {
-                console.log(`❌ Duplicate in import data: ${code}`);
-                continue;
+                console.log(`⚠️ Duplicate in import file: ${code} - Will use last occurrence`);
+                // Remove previous entry with same code
+                const existingIndex = customers.findIndex(c => c.code === code);
+                if (existingIndex >= 0) {
+                  customers.splice(existingIndex, 1);
+                }
               }
               
-              // Check for duplicates with existing data
-              const existingDuplicate = this.customerCodes.find(item => item.code === code);
-              if (existingDuplicate) {
-                console.log(`❌ Duplicate with existing: ${code}`);
-                continue;
+              // Check if code exists in database
+              const existingItem = this.customerCodes.find(item => item.code === code);
+              if (existingItem) {
+                console.log(`🔄 Code exists in database: ${code} - Will UPDATE`);
+                customers.push({
+                  id: existingItem.id, // Keep existing ID to update
+                  no: no,
+                  customer: customer,
+                  group: group || '',
+                  code: code,
+                  updatedAt: new Date()
+                });
+              } else {
+                console.log(`✅ New code: ${code} - Will ADD`);
+                customers.push({
+                  no: no,
+                  customer: customer,
+                  group: group || '',
+                  code: code,
+                  createdAt: new Date()
+                });
               }
               
               codes.add(code);
-              customers.push({
-                no: no,
-                customer: customer,
-                group: group || '',
-                code: code,
-                createdAt: new Date()
-              });
-              console.log(`✅ Valid customer added: ${code} - ${customer}`);
             }
           }
         }
         
-        console.log(`📊 Total valid customers found: ${customers.length}`);
+        console.log(`📊 Total valid customers: ${customers.length} (includes both new and updates)`);
         
         if (customers.length > 0) {
           this.saveImportedCustomerCodes(customers);
@@ -1811,23 +1824,73 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     reader.readAsArrayBuffer(file);
   }
 
-  // Save imported customer codes to database
-  private saveImportedCustomerCodes(customers: Omit<CustomerCode, 'id'>[]) {
+  // Save imported customer codes to database (ADD new or UPDATE existing)
+  private saveImportedCustomerCodes(customers: any[]) {
     const batch = this.firestore.firestore.batch();
+    let addCount = 0;
+    let updateCount = 0;
     
     customers.forEach(customer => {
-      const docRef = this.firestore.collection('customer-codes').doc().ref;
-      batch.set(docRef, customer);
+      if (customer.id) {
+        // UPDATE existing document
+        const docRef = this.firestore.collection('customer-codes').doc(customer.id).ref;
+        const updateData = {
+          no: customer.no,
+          customer: customer.customer,
+          group: customer.group,
+          code: customer.code,
+          updatedAt: new Date()
+        };
+        batch.update(docRef, updateData);
+        updateCount++;
+        console.log(`🔄 Updating: ${customer.code}`);
+      } else {
+        // ADD new document
+        const docRef = this.firestore.collection('customer-codes').doc().ref;
+        const newData = {
+          no: customer.no,
+          customer: customer.customer,
+          group: customer.group,
+          code: customer.code,
+          createdAt: new Date()
+        };
+        batch.set(docRef, newData);
+        addCount++;
+        console.log(`➕ Adding: ${customer.code}`);
+      }
     });
     
     batch.commit().then(() => {
-      console.log(`✅ Imported ${customers.length} customer codes`);
-      alert(`✅ Đã import thành công ${customers.length} mã khách hàng!`);
+      console.log(`✅ Import complete: ${addCount} added, ${updateCount} updated`);
+      alert(`✅ Import thành công!\n- Thêm mới: ${addCount} mã\n- Cập nhật: ${updateCount} mã\n- Tổng: ${customers.length} mã`);
       this.loadCustomerCodes();
     }).catch(error => {
       console.error('Error importing customer codes:', error);
       alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
     });
+  }
+
+  // Delete single customer code
+  deleteCustomerCode(customer: CustomerCode) {
+    if (!confirm(`⚠️ Xóa mã khách hàng?\n\nCustomer: ${customer.customer}\nCode: ${customer.code}\n\nBạn có chắc muốn xóa?`)) {
+      return;
+    }
+
+    if (!customer.id) {
+      alert('❌ Không tìm thấy ID của mã khách hàng!');
+      return;
+    }
+
+    this.firestore.collection('customer-codes').doc(customer.id).delete()
+      .then(() => {
+        console.log(`✅ Deleted customer code: ${customer.code}`);
+        alert(`✅ Đã xóa mã khách hàng: ${customer.code}`);
+        // Data will auto-reload via subscription in loadCustomerCodes()
+      })
+      .catch(error => {
+        console.error('❌ Error deleting customer code:', error);
+        alert('Lỗi khi xóa. Vui lòng thử lại.');
+      });
   }
 
   // Load customer codes from database
