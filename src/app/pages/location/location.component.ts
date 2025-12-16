@@ -2045,26 +2045,33 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         <div class="customer-label" style="
           width: 100mm; 
           height: 130mm; 
-          border: 1px solid #000; 
+          border: 2px solid #000; 
           display: flex; 
           flex-direction: column;
           align-items: stretch;
-          justify-content: center;
           padding: 0;
+          margin: 0;
           box-sizing: border-box;
           font-family: Arial, sans-serif;
           background: white;
+          position: relative;
         ">
-          <!-- Code text chiếm 50% phía trên, quay dọc -->
+          <!-- Code text chiếm chính xác 65mm phía trên -->
           <div class="code-section" style="
-            width: 100mm;
+            width: 100%;
             height: 65mm;
+            min-height: 65mm;
+            max-height: 65mm;
+            flex-shrink: 0;
+            flex-grow: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
-            border-bottom: 1px solid #000;
+            border-bottom: 2px solid #000;
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
           ">
             <div style="
               font-size: 48px; 
@@ -2072,8 +2079,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
               color: #000;
               font-family: 'Arial', sans-serif;
               letter-spacing: 3px;
-              width: 100%;
-              height: 100%;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -2085,15 +2090,21 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             </div>
           </div>
           
-          <!-- QR Code chiếm 50% phía dưới, kích thước 50mm x 50mm, căn giữa -->
+          <!-- QR Code chiếm chính xác 65mm phía dưới -->
           <div class="qr-section" style="
-            width: 100mm; 
-            height: 65mm; 
+            width: 100%;
+            height: 65mm;
+            min-height: 65mm;
+            max-height: 65mm;
+            flex-shrink: 0;
+            flex-grow: 0;
             display: flex; 
             align-items: center; 
             justify-content: center;
             overflow: hidden;
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
           ">
             <img src="${qrImage}" 
                  alt="QR Code for ${customer.code}" 
