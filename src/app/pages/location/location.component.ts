@@ -2114,7 +2114,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           <html>
             <head>
               <meta charset="UTF-8">
-              <title></title>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Customer Label</title>
               <style>
                 * {
                   margin: 0;
@@ -2144,6 +2145,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
                   * {
                     margin: 0;
                     padding: 0;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
                   }
                   
                   html, body {
@@ -2165,16 +2168,30 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
                     margin: 0;
                   }
                 }
+                
+                /* Hide browser default headers and footers */
+                @page {
+                  margin: 0;
+                }
+                
+                body {
+                  margin: 0;
+                }
               </style>
             </head>
             <body>
               ${printContent}
               <script>
                 window.onload = function() {
-                  window.print();
-                  window.onafterprint = function() {
-                    window.close();
-                  };
+                  // Show instruction alert before printing
+                  alert('⚠️ QUAN TRỌNG:\\n\\nTrong hộp thoại Print:\\n1. Mở "More settings"\\n2. TẮT "Headers and footers"\\n3. Nhấn Print');
+                  
+                  setTimeout(function() {
+                    window.print();
+                    window.onafterprint = function() {
+                      window.close();
+                    };
+                  }, 100);
                 };
               </script>
             </body>
