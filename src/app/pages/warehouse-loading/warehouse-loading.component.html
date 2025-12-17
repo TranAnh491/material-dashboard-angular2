@@ -1,0 +1,176 @@
+<div class="warehouse-loading-container">
+  <!-- Factory Selection Screen -->
+  <div class="factory-selection" *ngIf="!selectedFactory">
+    <div class="selection-card">
+      <h2>📊 Warehouse Loading Report</h2>
+      <p class="subtitle">Chọn nhà máy để xem báo cáo sử dụng không gian kho</p>
+      
+      <div class="factory-buttons">
+        <button class="factory-btn asm1" (click)="selectFactory('ASM1')">
+          <i class="material-icons">factory</i>
+          <span>ASM1</span>
+          <small>Nhà máy 1</small>
+        </button>
+        
+        <button class="factory-btn asm2" (click)="selectFactory('ASM2')">
+          <i class="material-icons">factory</i>
+          <span>ASM2</span>
+          <small>Nhà máy 2</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner">
+      <i class="material-icons rotating">sync</i>
+      <p>Đang tải dữ liệu {{selectedFactory}}...</p>
+    </div>
+  </div>
+
+  <!-- Warehouse Report Screen -->
+  <div class="warehouse-report" *ngIf="selectedFactory && !isLoading && warehouseStats">
+    <!-- Header -->
+    <div class="report-header">
+      <button class="back-btn" (click)="backToSelection()">
+        <i class="material-icons">arrow_back</i>
+        Quay lại
+      </button>
+      <h2>📊 Warehouse Loading Report - {{selectedFactory}}</h2>
+      <button class="export-btn" (click)="exportToExcel()">
+        <i class="material-icons">download</i>
+        Export Excel
+      </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+      <div class="stat-card primary">
+        <i class="material-icons">inventory_2</i>
+        <div class="stat-content">
+          <h3>{{warehouseStats.totalMaterials}}</h3>
+          <p>Tổng số mã hàng</p>
+        </div>
+      </div>
+
+      <div class="stat-card success">
+        <i class="material-icons">place</i>
+        <div class="stat-content">
+          <h3>{{warehouseStats.usedLocations}}</h3>
+          <p>Vị trí đang sử dụng</p>
+        </div>
+      </div>
+
+      <div class="stat-card warning">
+        <i class="material-icons">place</i>
+        <div class="stat-content">
+          <h3>{{warehouseStats.emptyLocations}}</h3>
+          <p>Vị trí còn trống</p>
+        </div>
+      </div>
+
+      <div class="stat-card info">
+        <i class="material-icons">assessment</i>
+        <div class="stat-content">
+          <h3>{{warehouseStats.utilizationRate | number:'1.1-1'}}%</h3>
+          <p>Tỷ lệ sử dụng</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Utilization Bar -->
+    <div class="utilization-section">
+      <h3>Sử dụng không gian kho</h3>
+      <div class="utilization-bar-container">
+        <div class="utilization-bar">
+          <div class="utilization-fill" 
+               [style.width.%]="warehouseStats.utilizationRate"
+               [class.low]="warehouseStats.utilizationRate < 50"
+               [class.medium]="warehouseStats.utilizationRate >= 50 && warehouseStats.utilizationRate < 80"
+               [class.high]="warehouseStats.utilizationRate >= 80">
+          </div>
+        </div>
+        <div class="utilization-labels">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
+        </div>
+      </div>
+      <div class="utilization-stats">
+        <div class="stat-item">
+          <span class="stat-dot used"></span>
+          <span>Đã sử dụng: {{warehouseStats.usedLocations}} vị trí ({{warehouseStats.utilizationRate | number:'1.1-1'}}%)</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-dot empty"></span>
+          <span>Còn trống: {{warehouseStats.emptyLocations}} vị trí ({{100 - warehouseStats.utilizationRate | number:'1.1-1'}}%)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Locations Chart (Simple Bar Chart) -->
+    <div class="chart-section">
+      <h3>Top 20 vị trí có nhiều mã hàng nhất</h3>
+      <div class="bar-chart">
+        <div class="bar-item" *ngFor="let stat of warehouseStats.locationStats.slice(0, 20); let i = index">
+          <div class="bar-label">{{stat.location}}</div>
+          <div class="bar-wrapper">
+            <div class="bar-fill" 
+                 [style.width.%]="(stat.totalItems / warehouseStats.locationStats[0].totalItems) * 100">
+              <span class="bar-value">{{stat.totalItems}}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location Details Table -->
+    <div class="table-section">
+      <h3>Chi tiết theo vị trí ({{warehouseStats.locationStats.length}} vị trí)</h3>
+      <div class="table-wrapper">
+        <table class="details-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Vị trí</th>
+              <th>Số lượng mã hàng</th>
+              <th>Tổng số lượng</th>
+              <th>Danh sách mã hàng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let stat of warehouseStats.locationStats; let i = index">
+              <td>{{i + 1}}</td>
+              <td><strong>{{stat.location}}</strong></td>
+              <td>{{stat.totalItems}}</td>
+              <td>{{stat.totalQuantity | number:'1.0-0'}}</td>
+              <td class="materials-cell">
+                <span class="material-chip" *ngFor="let material of stat.materials.slice(0, 5)">
+                  {{material}}
+                </span>
+                <span class="more-indicator" *ngIf="stat.materials.length > 5">
+                  +{{stat.materials.length - 5}} more
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Data State -->
+  <div class="no-data" *ngIf="selectedFactory && !isLoading && !warehouseStats">
+    <i class="material-icons">inventory</i>
+    <h3>Không có dữ liệu</h3>
+    <p>Không tìm thấy dữ liệu kho cho {{selectedFactory}}</p>
+    <button class="back-btn" (click)="backToSelection()">
+      <i class="material-icons">arrow_back</i>
+      Quay lại chọn nhà máy
+    </button>
+  </div>
+</div>
+

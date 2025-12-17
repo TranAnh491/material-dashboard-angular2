@@ -120,6 +120,7 @@ export class FilteredRoutesService {
       
       // Other routes
       '/location': 'location',
+      '/warehouse-loading': 'warehouse-loading',
       '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',

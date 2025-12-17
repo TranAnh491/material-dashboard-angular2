@@ -49,6 +49,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/label', title: 'Label', icon: 'label', class: '' },
   { path: '/find-rm1', title: 'Find RM1', icon: 'search', class: '' },
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
+  { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', class: '' },
   { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: '' },
   { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
   { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
