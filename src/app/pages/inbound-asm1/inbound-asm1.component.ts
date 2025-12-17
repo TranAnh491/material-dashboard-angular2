@@ -318,6 +318,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // Load unitWeight từ danh mục materials nếu chưa có
         this.loadUnitWeightsFromCatalog();
         
+        // Load rollsOrBags từ danh mục Firebase nếu chưa có
+        this.loadRollsOrBagsFromCatalog();
+        
         // Log materials by batch for debugging
         const materialsByBatch = this.materials.reduce((acc, material) => {
           const batch = material.batchNumber;
@@ -1020,6 +1023,78 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
+  // 🆕 Lưu rollsOrBags vào danh mục Firebase (material-rolls-bags collection)
+  private async saveRollsOrBagsToCatalog(materialCode: string, rollsOrBags: number): Promise<void> {
+    try {
+      if (!materialCode || !rollsOrBags || rollsOrBags <= 0) {
+        console.log(`⚠️ Skipping save rollsOrBags - invalid data: materialCode=${materialCode}, rollsOrBags=${rollsOrBags}`);
+        return;
+      }
+      
+      console.log(`💾 Saving rollsOrBags to catalog: ${materialCode} = ${rollsOrBags}`);
+      
+      // Lưu vào collection 'material-rolls-bags' với key là materialCode
+      // Số mới sẽ đè số cũ (set thay vì update)
+      await this.firestore.collection('material-rolls-bags').doc(materialCode).set({
+        materialCode: materialCode,
+        rollsOrBags: rollsOrBags,
+        updatedAt: new Date()
+      }, { merge: true }); // merge: true để không ghi đè các field khác nếu có
+      
+      console.log(`✅ Saved rollsOrBags to catalog: ${materialCode} = ${rollsOrBags}`);
+      
+    } catch (error) {
+      console.error(`❌ Error saving rollsOrBags to catalog for ${materialCode}:`, error);
+      // Không throw error để không ảnh hưởng đến việc update material
+    }
+  }
+  
+  // 🆕 Load rollsOrBags từ danh mục Firebase và áp dụng vào materials
+  private async loadRollsOrBagsFromCatalog(): Promise<void> {
+    try {
+      console.log('📦 Loading rollsOrBags from catalog...');
+      
+      // Load từ collection 'material-rolls-bags'
+      const snapshot = await this.firestore.collection('material-rolls-bags').get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        console.log('ℹ️ No rollsOrBags data in catalog');
+        return;
+      }
+      
+      const catalogMap = new Map<string, number>();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data && data['rollsOrBags'] && data['rollsOrBags'] > 0) {
+          catalogMap.set(doc.id, data['rollsOrBags']);
+        }
+      });
+      
+      console.log(`📚 Loaded ${catalogMap.size} rollsOrBags from catalog`);
+      
+      // Fill rollsOrBags vào materials nếu chưa có
+      let filledCount = 0;
+      this.materials.forEach(material => {
+        if (catalogMap.has(material.materialCode)) {
+          const catalogValue = catalogMap.get(material.materialCode)!;
+          // Chỉ fill nếu material chưa có rollsOrBags hoặc rollsOrBags = 0
+          if (!material.rollsOrBags || material.rollsOrBags === 0) {
+            material.rollsOrBags = catalogValue;
+            filledCount++;
+            console.log(`✅ Loaded rollsOrBags from catalog: ${material.materialCode} = ${catalogValue}`);
+          }
+        }
+      });
+      
+      if (filledCount > 0) {
+        console.log(`✅ Filled ${filledCount} rollsOrBags from catalog`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error loading rollsOrBags from catalog:', error);
+    }
+  }
+  
   onStatusFilterChange(): void {
     // this.currentPage = 1; // Removed pagination
     this.applyFilters();
@@ -1595,9 +1670,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         
         alert(message);
         
-        // Add new materials to current list instead of reloading all
-        console.log(`➕ Adding new materials to current list...`);
-        this.addNewMaterialsToList(materials);
+        // 🔧 FIX: KHÔNG gọi addNewMaterialsToList() vì snapshotChanges() đã tự động load rồi
+        // Nếu gọi thêm sẽ bị duplicate x2
+        // this.addNewMaterialsToList(materials); // ← COMMENTED OUT
+        console.log(`✅ Import completed. snapshotChanges() will auto-load new materials.`);
       } else {
         alert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
       }
@@ -1642,6 +1718,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       updatedAt: material.updatedAt
     }).then(() => {
       console.log(`✅ Material ${material.materialCode} updated successfully`);
+      
+      // 🆕 Lưu rollsOrBags vào danh mục Firebase nếu có giá trị
+      if (material.rollsOrBags && material.rollsOrBags > 0 && material.materialCode) {
+        this.saveRollsOrBagsToCatalog(material.materialCode, material.rollsOrBags);
+      }
+      
       if (material.isReceived) {
         console.log(`ℹ️ Note: ${material.materialCode} is already in inventory, changes here won't affect inventory data`);
       }

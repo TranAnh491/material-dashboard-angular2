@@ -53,12 +53,6 @@
           </div>
         </div>
         
-        <!-- IQC Button -->
-        <button class="iqc-btn" (click)="openIQCModal()">
-          <i class="material-icons">check_circle</i>
-          IQC
-        </button>
-        
         <!-- Nhận hàng trả Button -->
         <button class="return-goods-btn" (click)="openReturnGoodsModal()">
           <i class="material-icons">assignment_return</i>
@@ -316,10 +310,11 @@
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
                      (change)="updateMaterial(material)"
+                     (blur)="updateMaterial(material)"
                      step="0.01"
                      min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị'">
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị (tự động lưu vào danh mục)'">
             </td>
             <td class="supplier-cell">
               <input type="text" 
