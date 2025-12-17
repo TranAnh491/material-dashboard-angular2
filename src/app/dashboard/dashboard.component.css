@@ -13,10 +13,6 @@
 .card-chart {
   border-radius: 1rem;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s ease;
-}
-.card-chart:hover {
-  transform: translateY(-3px);
 }
 
 .card-title {
@@ -135,12 +131,7 @@
 .card.card-stats {
   border-radius: 1rem;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
   padding-top: 1rem;
-}
-.card.card-stats:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
 .card-header-icon {
@@ -162,18 +153,7 @@
   color: #000;
 }
 
-/* 🔄 Bounce animation */
-.animate-icon {
-  animation: bounce 1.6s infinite ease-in-out;
-}
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
-}
+/* 🔄 Bounce animation - Removed */
 
 /* 📌 Optional: Table border radius */
 .table, .workorder-status-table {
@@ -386,10 +366,7 @@
     border: none;
   }
 
-  /* Animation Adjustments */
-  .animate-icon {
-    animation-duration: 2s; /* Slower animation for better mobile performance */
-  }
+  /* Animation Adjustments - Removed */
 
   /* Touch Optimizations */
   .card.card-stats,
@@ -677,14 +654,9 @@
   width: 100%; /* Full width of column */
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
   min-height: 178px; /* Match Rack Warnings box height */
 }
 
-.safety-stock-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px var(--shadow-color);
-}
 
 .box-header {
   display: flex;
@@ -724,14 +696,11 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  transition: all 0.3s ease;
 }
 
 .refresh-btn:hover {
   background: var(--text-primary);
   color: var(--bg-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--shadow-color);
 }
 
 .refresh-btn:focus {
@@ -771,7 +740,6 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  transition: all 0.3s ease;
   margin: 2px; /* Reduced margin */
 }
 
@@ -786,7 +754,6 @@
   border-radius: 50%;
   background: #000000;
   opacity: 0;
-  transition: opacity 0.3s ease;
   display: none; /* Hide the black dot */
 }
 
@@ -947,7 +914,6 @@
   width: 100%; /* Full width of column */
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
   min-height: 178px;
 }
 
@@ -971,16 +937,11 @@
   width: 100%;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
   height: 178px;
   display: flex;
   flex-direction: column;
 }
 
-.iqc-week-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px var(--shadow-color);
-}
 
 .iqc-week-box .box-header {
   display: flex;
@@ -1063,18 +1024,7 @@
   color: #ff9800;
 }
 
-.iqc-loading .rotating {
-  animation: rotate 2s linear infinite;
-}
-
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* @keyframes rotate - Removed */
 
 .rack-warnings-box .box-header {
   display: flex;
@@ -1174,18 +1124,9 @@
   font-size: 24px;
 }
 
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* @keyframes rotate - Removed */
 
-.rotating {
-  animation: rotate 1s linear infinite;
-}
+/* .rotating - Removed */
 
 /* IQC Materials Modal */
 .modal-overlay {
@@ -1273,7 +1214,6 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
 .download-btn:hover:not(:disabled) {
@@ -1405,7 +1345,6 @@
   font-weight: 600;
   box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
 .btn-logout-mobile:hover {

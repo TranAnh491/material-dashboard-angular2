@@ -442,10 +442,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private createCharts() {
     // Cập nhật dữ liệu thực tế cho 3 box chart
-    const months = ['May', 'Jun' , 'Jul', 'Aug', 'Sep', 'Oct'];
-    const matAccuracy = [99.88, 99.9, 99.93, 99.80, 99.91, 99.87];
+    const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
+    const matAccuracy = [99.9, 99.93, 99.80, 99.91, 99.87, 99.86];
     const fgAccuracy = [100, 100, 100, 100, 100, 100];
-    const fgTurnover = [1.33, 1.14, 1.48, 1.6, 1.15, 1.36];
+    const fgTurnover = [1.14, 1.48, 1.6, 1.15, 1.36, 1.26];
 
     this.createChart('dailySalesChart', 'Materials Accuracy (%)', months, matAccuracy, '#4caf50', { min: 99, max: 100 });
     this.createChart('websiteViewsChart', 'Finished Goods Accuracy (%)', months, fgAccuracy, '#ff9800');
