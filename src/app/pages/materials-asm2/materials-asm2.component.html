@@ -420,12 +420,12 @@
               <button class="delete-btn" 
                       *ngIf="canDelete"
                       (click)="deleteInventoryItem(material)"
-                      title="Xóa item này khỏi ASM1 Inventory">
+                      title="Xóa item này khỏi ASM2 Inventory">
                 <i class="material-icons">delete</i>
               </button>
             </td>
-            <td class="factory-cell factory-asm1">
-              ASM1
+            <td class="factory-cell factory-asm2">
+              ASM2
             </td>
           </tr>
         </tbody>
@@ -435,8 +435,8 @@
       <div class="empty-state" *ngIf="!searchTerm && filteredInventory.length === 0 && !isLoading">
         <div class="empty-state-content">
           <i class="material-icons">search</i>
-          <h3>🔍 Tìm kiếm ASM1 Inventory</h3>
-          <p>Nhập từ khóa để tìm kiếm materials trong ASM1 inventory</p>
+          <h3>🔍 Tìm kiếm ASM2 Inventory</h3>
+          <p>Nhập từ khóa để tìm kiếm materials trong ASM2 inventory</p>
           
           <!-- Search Suggestions -->
           <div class="search-suggestions">
@@ -452,7 +452,7 @@
           <div class="quick-stats">
             <div class="stat-item">
               <i class="material-icons">factory</i>
-              <span>ASM1 Factory</span>
+              <span>ASM2 Factory</span>
             </div>
             <div class="stat-item">
               <i class="material-icons">inventory</i>
@@ -471,7 +471,7 @@
         <div class="no-results-content">
           <i class="material-icons">search_off</i>
           <h4>🔍 Không tìm thấy kết quả</h4>
-          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong ASM1</p>
+          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong ASM2</p>
           
           <!-- Search Tips -->
           <div class="search-tips">
@@ -479,7 +479,7 @@
             <ul>
               <li>Kiểm tra chính tả</li>
               <li>Thử tìm kiếm với ít ký tự hơn</li>
-              <li>Kiểm tra factory filter (ASM1)</li>
+              <li>Kiểm tra factory filter (ASM2)</li>
               <li>Thử tìm kiếm theo PO number</li>
             </ul>
           </div>
@@ -491,7 +491,7 @@
         <div class="loading-content">
           <i class="material-icons rotating">sync</i>
           <h4>🔍 Đang tìm kiếm...</h4>
-          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong ASM1 inventory</p>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong ASM2 inventory</p>
         </div>
       </div>
     </div>
@@ -544,7 +544,7 @@
       <div class="popup-section">
         <h4 class="popup-section-title">📊 Reports</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn" (click)="downloadFIFOReportASM1(); closeMorePopup()">
+          <button class="popup-action-btn" (click)="downloadFIFOReportASM2(); closeMorePopup()">
             <i class="material-icons">assessment</i>
             <span>Download FIFO Report ASM2</span>
           </button>

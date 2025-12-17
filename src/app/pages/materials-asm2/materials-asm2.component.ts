@@ -148,7 +148,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     
     // Load catalog first for material names mapping
     this.loadCatalogFromFirebase().then(() => {
-      console.log('📚 ASM1 Catalog loaded, inventory ready for search');
+      console.log('📚 ASM2 Catalog loaded, inventory ready for search');
     });
     this.loadPermissions();
     
@@ -164,7 +164,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // 🔍 DEBUG: Check outbound data on init
     this.debugOutboundDataOnInit();
     
-    console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
+    console.log('✅ ASM2 Materials component initialized - Search setup will happen after data loads');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
   }
 
@@ -193,7 +193,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Download inventory stock data from Firebase as Excel file
   async loadInventoryStockFromFirebase(): Promise<void> {
-    console.log('📦 Downloading ASM1 inventory stock from Firebase as Excel...');
+    console.log('📦 Downloading ASM2 inventory stock from Firebase as Excel...');
     this.isLoading = true;
     
     try {
@@ -314,12 +314,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`📦 Loading ${this.FACTORY} inventory from Firebase...`);
     this.isLoading = true;
     
-    // 🚀 OPTIMIZATION: Add limit and orderBy for faster loading
+    // 🚀 OPTIMIZATION: Use limit without orderBy to avoid Firebase index requirement
     console.log('🔍 Setting up Firebase subscription for inventory-materials...');
     this.firestore.collection('inventory-materials', ref => 
       ref.where('factory', '==', this.FACTORY)
-         .orderBy('importDate', 'desc')
-         .limit(1000) // Limit to 1000 items for faster initial load
+         .limit(2000) // Limit to 2000 items - orderBy removed to avoid index
     )
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
@@ -345,12 +344,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             
             // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
             if (data.batchNumber && (data.batchNumber.includes('01') || data.batchNumber.includes('02') || data.batchNumber.includes('03'))) {
-              console.log(`🔍 DEBUG: Found material with sequence batchNumber:`, {
-                materialCode: material.materialCode,
-                poNumber: material.poNumber,
-                batchNumber: data.batchNumber,
-                source: data.source
-              });
+              // console.log removed for performance
             }
             
             // Apply catalog data if available
@@ -364,19 +358,26 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
                 const standardPacking = catalogItem.standardPacking;
                 if (standardPacking && standardPacking > 0) {
                   material.rollsOrBags = standardPacking.toString();
-                  console.log(`🔄 Auto-filled rollsOrBags from Standard Packing: ${material.materialCode} = ${standardPacking}`);
+                  // console.log removed for performance
                 }
               }
             }
             
             return material;
           })
-          .filter(material => material.factory === this.FACTORY); // Double check ASM2 only
+          .filter(material => material.factory === this.FACTORY) // Double check ASM2 only
+          .sort((a, b) => {
+            // Client-side sorting by importDate (newest first)
+            const dateA = a.importDate ? new Date(a.importDate).getTime() : 0;
+            const dateB = b.importDate ? new Date(b.importDate).getTime() : 0;
+            return dateB - dateA;
+          });
 
         // Set filteredInventory to show all loaded items initially
         this.filteredInventory = [...this.inventoryMaterials];
-        console.log(`🔍 DEBUG: Loaded ${this.inventoryMaterials.length} inventory materials`);
-        console.log(`🔍 DEBUG: First material:`, this.inventoryMaterials[0]);
+        // DEBUG logs removed for performance
+        // console.log(`🔍 DEBUG: Loaded ${this.inventoryMaterials.length} inventory materials`);
+        // console.log(`🔍 DEBUG: First material:`, this.inventoryMaterials[0]);
         
         // Gộp dòng trùng lặp TRƯỚC KHI xử lý outbound
         console.log('🔄 Consolidating duplicate materials...');
@@ -505,7 +506,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           index++;
         });
       } else {
-        console.log('⚠️ No outbound records found for ASM1');
+        console.log('⚠️ No outbound records found for ASM2');
       }
       
     } catch (error) {
@@ -1117,7 +1118,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // New optimized search method
   onSearchInput(event: any): void {
     let searchTerm = event.target.value;
-    console.log('🔍 ASM1 Search input:', searchTerm);
+    console.log('🔍 ASM2 Search input:', searchTerm);
     
     // Auto-convert to uppercase (only if different to avoid infinite loop)
     if (searchTerm && searchTerm !== searchTerm.toUpperCase()) {
@@ -1160,7 +1161,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.showOnlyNegativeStock = false;
     
     // Return to initial state - no data displayed
-    console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
+    console.log('🧹 ASM2 Search cleared, returning to initial state (no data displayed)');
   }
 
   // Change search type
@@ -1190,7 +1191,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // Chỉ search khi có ít nhất 3 ký tự để tránh mất thời gian (trừ location search)
     if (this.searchType !== 'location' && searchTerm.length < 3) {
       this.filteredInventory = [];
-      console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
+      console.log(`⏰ ASM2 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
       return;
     }
     
@@ -1206,7 +1207,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.searchProgress = 0;
     
     try {
-      console.log(`🔍 ASM1 Searching for: "${searchTerm}" (type: ${this.searchType}) - Loading from Firebase...`);
+      console.log(`🔍 ASM2 Searching for: "${searchTerm}" (type: ${this.searchType}) - Loading from Firebase...`);
       
       // IMPROVED: Query Firebase với nhiều điều kiện hơn để tìm kiếm toàn diện
       let querySnapshot;
@@ -1216,7 +1217,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         // Tìm kiếm theo location
         this.searchProgress = 25;
         const normalizedLocation = searchTerm.trim().toUpperCase();
-        console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}"...`);
+        console.log(`🔍 ASM2 Searching by location: "${normalizedLocation}"...`);
         
         // Thử exact match trước (chính xác nhất)
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -1227,7 +1228,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Nếu không tìm thấy với exact match, thử pattern matching
         if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No exact match for location "${normalizedLocation}", trying pattern search...`);
+          console.log(`🔍 ASM2 No exact match for location "${normalizedLocation}", trying pattern search...`);
           this.searchProgress = 50;
           
           querySnapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -1240,7 +1241,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       } else if (this.searchType === 'po') {
         // Tìm kiếm theo PO number
         this.searchProgress = 25;
-        console.log(`🔍 ASM1 Searching by PO: "${searchTerm}"...`);
+        console.log(`🔍 ASM2 Searching by PO: "${searchTerm}"...`);
         
         querySnapshot = await this.firestore.collection('inventory-materials', ref => 
           ref.where('factory', '==', this.FACTORY)
@@ -1251,7 +1252,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Nếu không tìm thấy, thử exact match
         if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No pattern match for PO "${searchTerm}", trying exact match...`);
+          console.log(`🔍 ASM2 No pattern match for PO "${searchTerm}", trying exact match...`);
           this.searchProgress = 50;
           
           querySnapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -1272,7 +1273,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Nếu không tìm thấy, tìm kiếm theo pattern matching
         if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No exact match for "${searchTerm}", trying pattern search...`);
+          console.log(`🔍 ASM2 No exact match for "${searchTerm}", trying pattern search...`);
           this.searchProgress = 50;
           
           querySnapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -1285,7 +1286,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Nếu vẫn không tìm thấy, tìm kiếm theo PO number (fallback)
         if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No pattern match for "${searchTerm}", trying PO search...`);
+          console.log(`🔍 ASM2 No pattern match for "${searchTerm}", trying PO search...`);
           this.searchProgress = 75;
           
           querySnapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -1342,7 +1343,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         // 🔧 SIMPLIFIED: Exported quantities loaded directly from Firebase (no auto-update needed)
         console.log('✅ Search results exported quantities loaded directly from Firebase');
         
-        console.log(`✅ ASM1 Search completed: ${this.filteredInventory.length} results from ${this.inventoryMaterials.length} loaded items`);
+        console.log(`✅ ASM2 Search completed: ${this.filteredInventory.length} results from ${this.inventoryMaterials.length} loaded items`);
         
         // Debug: Log tất cả material codes tìm được
         const materialCodes = this.filteredInventory.map(item => item.materialCode);
@@ -1352,7 +1353,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         // No results found
         this.inventoryMaterials = [];
         this.filteredInventory = [];
-        console.log(`🔍 ASM1 No results found for: "${searchTerm}" after trying all search methods`);
+        console.log(`🔍 ASM2 No results found for: "${searchTerm}" after trying all search methods`);
       }
       
     } catch (error) {
@@ -2339,8 +2340,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  downloadFIFOReportASM1(): void {
-    console.log('Download FIFO report for ASM1');
+  downloadFIFOReportASM2(): void {
+    console.log('Download FIFO report for ASM2');
   }
 
   // Delete single inventory item
@@ -2360,7 +2361,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     
-    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM1 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
+    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM2 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
       console.log(`✅ User confirmed deletion of ${material.materialCode}`);
       
       try {
@@ -2418,7 +2419,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       // Show loading
       this.isLoading = true;
       
-      // Get all ASM1 inventory documents
+      // Get all ASM2 inventory documents
       const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.FACTORY)
       ).get().toPromise();
@@ -2430,7 +2431,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       }
 
       const totalItems = inventoryQuery.docs.length;
-      console.log(`🗑️ Starting deletion of ${totalItems} ASM1 inventory items...`);
+      console.log(`🗑️ Starting deletion of ${totalItems} ASM2 inventory items...`);
       
       // Delete all documents in batches
       const batchSize = 500; // Firestore batch limit
@@ -2463,7 +2464,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       alert(`✅ Đã xóa thành công ${totalItems} items tồn kho ASM1!\n\n` +
             `Bạn có thể import lại dữ liệu mới.`);
       
-      console.log(`✅ Successfully deleted all ${totalItems} ASM1 inventory items`);
+      console.log(`✅ Successfully deleted all ${totalItems} ASM2 inventory items`);
       
     } catch (error) {
       console.error('❌ Error deleting all inventory:', error);
@@ -3117,7 +3118,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           console.log(`📦 Outbound: ${data.materialCode} - PO: ${data.poNumber} - Quantity: ${data.exportQuantity || data.exported || data.quantity || 'N/A'} - Date: ${data.exportDate}`);
         });
       } else {
-        console.log('⚠️ No outbound records found for ASM1');
+        console.log('⚠️ No outbound records found for ASM2');
         
         // Kiểm tra xem có collection nào khác không
         console.log('🔍 Checking other possible collections...');
@@ -4424,7 +4425,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
       // Show confirmation dialog
       const confirmed = confirm(
-        `🔄 RESET ASM1 INVENTORY\n\n` +
+        `🔄 RESET ASM2 INVENTORY\n\n` +
         `Tìm thấy ${zeroStockItems.length} mã hàng có tồn kho = 0\n\n` +
         `Bạn có muốn xóa tất cả những mã hàng này không?\n\n` +
         `⚠️ Hành động này không thể hoàn tác!`
@@ -4899,11 +4900,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     
     // 🔧 SIMPLIFIED: Exported quantity được lưu trực tiếp vào Firebase từ outbound scan
     console.log('✅ Exported quantities loaded directly from Firebase (no auto-update needed)');
-    console.log(`🔍 DEBUG: First material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
+    // console.log(`🔍 DEBUG: First material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
     
     this.isLoading = false;
     
-    console.log(`✅ Loaded ${this.inventoryMaterials.length} ASM1 inventory items`);
+    console.log(`✅ Loaded ${this.inventoryMaterials.length} ASM2 inventory items`);
     console.log(`🔍 DEBUG: After auto-update, first material exported: ${this.inventoryMaterials[0]?.exported || 0}`);
   }
 
@@ -5128,7 +5129,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
 
     try {
-      console.log('📊 Exporting ASM1 inventory data to Excel...');
+      console.log('📊 Exporting ASM2 inventory data to Excel...');
       
       // Optimize data for smaller file size
       const exportData = this.filteredInventory.map(material => ({
@@ -5189,7 +5190,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const fileName = `ASM2_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       
-      console.log('✅ ASM1 inventory data exported to Excel');
+      console.log('✅ ASM2 inventory data exported to Excel');
       alert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
       
     } catch (error) {

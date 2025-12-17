@@ -2028,9 +2028,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Print Customer Label
   async printCustomerLabel(customer: CustomerCode) {
     try {
-      // Tạo mã QR từ customer code
+      // Tạo mã QR từ customer code với độ phân giải cao
       const qrImage = await QRCode.toDataURL(customer.code, {
-        width: 400,
+        width: 800,
         margin: 1,
         color: {
           dark: '#000000',
@@ -2045,63 +2045,57 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         <div class="customer-label" style="
           width: 100mm; 
           height: 130mm; 
-          border: 2px solid #000; 
+          border: none; 
           display: flex; 
           flex-direction: column;
-          align-items: stretch;
-          padding: 0;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5mm;
           margin: 0;
           box-sizing: border-box;
           font-family: Arial, sans-serif;
           background: white;
           position: relative;
         ">
-          <!-- Code text chiếm chính xác 65mm phía trên -->
+          <!-- Code text - Flexible height -->
           <div class="code-section" style="
-            width: 100%;
-            height: 65mm;
-            min-height: 65mm;
-            max-height: 65mm;
-            flex-shrink: 0;
-            flex-grow: 0;
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
-            border-bottom: 2px solid #000;
+            border: none;
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            overflow: visible;
           ">
             <div style="
-              font-size: 48px; 
+              font-size: 96px; 
               font-weight: bold; 
               color: #000;
               font-family: 'Arial', sans-serif;
-              letter-spacing: 3px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
+              letter-spacing: 6px;
+              display: inline-block;
               writing-mode: vertical-rl;
               text-orientation: mixed;
               transform: rotate(180deg);
+              white-space: nowrap;
             ">
               ${customer.code}
             </div>
           </div>
           
-          <!-- QR Code chiếm chính xác 65mm phía dưới -->
+          <!-- Spacer - Fixed gap -->
+          <div style="height: 10mm; flex-shrink: 0;"></div>
+          
+          <!-- QR Code - Fixed size -->
           <div class="qr-section" style="
-            width: 100%;
-            height: 65mm;
-            min-height: 65mm;
-            max-height: 65mm;
             flex-shrink: 0;
-            flex-grow: 0;
             display: flex; 
             align-items: center; 
             justify-content: center;
-            overflow: hidden;
+            overflow: visible;
             box-sizing: border-box;
             margin: 0;
             padding: 0;
@@ -2109,9 +2103,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             <img src="${qrImage}" 
                  alt="QR Code for ${customer.code}" 
                  style="
-                   width: 50mm; 
-                   height: 50mm; 
+                   width: 60mm !important; 
+                   height: 60mm !important;
+                   min-width: 60mm;
+                   min-height: 60mm;
+                   max-width: 60mm;
+                   max-height: 60mm;
                    object-fit: contain;
+                   display: block;
+                   border: none;
                  "
                  title="QR Code: ${customer.code}">
           </div>
@@ -2128,65 +2128,72 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
               <title>Customer Label</title>
               <style>
+                @page {
+                  size: 100mm 130mm;
+                  margin: 0mm;
+                  padding: 0mm;
+                }
+                
                 * {
                   margin: 0;
                   padding: 0;
                   box-sizing: border-box;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                  color-adjust: exact;
                 }
                 
-                html, body {
+                html {
                   width: 100mm;
                   height: 130mm;
                   margin: 0;
                   padding: 0;
+                }
+                
+                body {
+                  width: 100mm;
+                  height: 130mm;
+                  margin: 0 !important;
+                  padding: 0 !important;
                   overflow: hidden;
                   font-family: Arial, sans-serif;
                   background: white;
+                  transform-origin: top left;
+                  transform: scale(1);
                 }
                 
                 .customer-label {
-                  width: 100mm;
-                  height: 130mm;
-                  margin: 0;
-                  padding: 0;
+                  width: 100mm !important;
+                  height: 130mm !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
                   box-shadow: none;
+                  border: none;
+                  position: absolute;
+                  top: 0;
+                  left: 0;
                 }
                 
                 @media print {
-                  * {
-                    margin: 0;
-                    padding: 0;
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
+                  @page {
+                    size: 100mm 130mm;
+                    margin: 0mm;
                   }
                   
                   html, body {
                     width: 100mm;
                     height: 130mm;
-                    margin: 0;
-                    padding: 0;
-                    overflow: hidden;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: visible;
                   }
                   
                   .customer-label {
-                    margin: 0;
-                    padding: 0;
-                    box-shadow: none;
+                    width: 100mm !important;
+                    height: 130mm !important;
+                    page-break-after: avoid;
+                    page-break-inside: avoid;
                   }
-                  
-                  @page {
-                    size: 100mm 130mm;
-                    margin: 0;
-                  }
-                }
-                
-                /* Hide browser default headers and footers */
-                @page {
-                  margin: 0;
-                }
-                
-                body {
-                  margin: 0;
                 }
               </style>
             </head>
@@ -2195,7 +2202,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
               <script>
                 window.onload = function() {
                   // Show instruction alert before printing
-                  alert('⚠️ QUAN TRỌNG:\\n\\nTrong hộp thoại Print:\\n1. Mở "More settings"\\n2. TẮT "Headers and footers"\\n3. Nhấn Print');
+                  alert('⚠️ QUAN TRỌNG:\\n\\nTrong hộp thoại Print:\\n1. Mở "More settings"\\n2. TẮT "Headers and footers"\\n3. Đặt Scale = 100% (Default)\\n4. Margins = None\\n5. Nhấn Print');
                   
                   setTimeout(function() {
                     window.print();
