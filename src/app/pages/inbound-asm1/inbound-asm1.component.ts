@@ -679,78 +679,106 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Add material to Inventory when received
   private addToInventory(material: InboundMaterial): void {
     console.log(`Adding ${material.materialCode} to Inventory ASM1...`);
+    console.log(`📊 Material data:`, {
+      materialCode: material.materialCode,
+      poNumber: material.poNumber,
+      quantity: material.quantity,
+      importDate: material.importDate,
+      location: material.location,
+      batchNumber: material.batchNumber
+    });
     
     // 🔧 SỬA LỖI: batchNumber trong inventory chỉ là ngày nhập, không có số lô hàng
     // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
     const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
     
+    console.log(`📋 Inventory batch number: ${inventoryBatchNumber}`);
+    
     // 🔧 SỬA LỖI: Kiểm tra duplicate trước khi add và lấy batchNumber với sequence
     // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
     // Nếu duplicate, thêm số thứ tự vào cuối batchNumber (01, 02, 03...)
-    this.checkForDuplicateInInventory(material, inventoryBatchNumber).then(result => {
-      const finalBatchNumber = result.sequenceNumber;
+    this.checkForDuplicateInInventory(material, inventoryBatchNumber)
+      .then(result => {
+        const finalBatchNumber = result.sequenceNumber;
+        
+        if (result.isDuplicate) {
+          console.log(`⚠️ Duplicate detected for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
+          console.log(`  - Using new batch number with sequence: ${finalBatchNumber}`);
+        } else {
+          console.log(`✅ No duplicate found, using original batch number: ${finalBatchNumber}`);
+        }
       
-      if (result.isDuplicate) {
-        console.log(`⚠️ Duplicate detected for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
-        console.log(`  - Using new batch number with sequence: ${finalBatchNumber}`);
-      } else {
-        console.log(`✅ No duplicate found, using original batch number: ${finalBatchNumber}`);
-      }
-    
-    // Xử lý location đặc biệt cho hàng trả (TRA)
-    // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành F62 khi thêm vào inventory
-    let inventoryLocation = material.location;
-    if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
-      inventoryLocation = 'F62';
-      console.log(`🔄 Đổi location từ TRA sang F62 cho material ${material.materialCode} (lô hàng: ${material.batchNumber})`);
-    }
-    
-    const inventoryMaterial = {
-      factory: 'ASM1',
-      importDate: material.importDate,
-      receivedDate: new Date(), // When moved to inventory
-      batchNumber: finalBatchNumber, // Ngày nhập + sequence number nếu duplicate
-      materialCode: material.materialCode,
-      poNumber: material.poNumber,
-      quantity: material.quantity,
-      unit: material.unit,
-      exported: 0, // Initially no exports
-      stock: material.quantity, // Initial stock = quantity
-      location: inventoryLocation, // Đã xử lý đặc biệt cho hàng trả
-      type: material.type,
-      expiryDate: material.expiryDate,
-      qualityCheck: material.qualityCheck,
-      isReceived: true,
-      notes: material.notes,
-      rollsOrBags: material.rollsOrBags,
-      supplier: material.supplier,
-      remarks: material.remarks,
-      source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
-      iqcStatus: (inventoryLocation === 'F62' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM', // 🆕 Nếu location là F62 hoặc F62TRA thì mặc định là Pass, nếu không thì CHỜ KIỂM
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    // Add to inventory-materials collection (no notification)
-    this.firestore.collection('inventory-materials').add(inventoryMaterial)
-      .then(() => {
-        console.log(`✅ ${material.materialCode} added to Inventory ASM1 with batch number: ${finalBatchNumber}`);
-          
-          // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
-          this.updateStandardPackingFromInbound(material);
-          
-          // 🆕 Cập nhật Unit Weight vào danh mục materials
-          this.updateUnitWeightFromInbound(material);
-          
+        // Xử lý location đặc biệt cho hàng trả (TRA)
+        // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành F62 khi thêm vào inventory
+        let inventoryLocation = material.location;
+        if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
+          inventoryLocation = 'F62';
+          console.log(`🔄 Đổi location từ TRA sang F62 cho material ${material.materialCode} (lô hàng: ${material.batchNumber})`);
+        }
+        
+        const inventoryMaterial = {
+          factory: 'ASM1',
+          importDate: material.importDate,
+          receivedDate: new Date(), // When moved to inventory
+          batchNumber: finalBatchNumber, // Ngày nhập + sequence number nếu duplicate
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          quantity: material.quantity,
+          unit: material.unit,
+          exported: 0, // Initially no exports
+          stock: material.quantity, // Initial stock = quantity
+          location: inventoryLocation, // Đã xử lý đặc biệt cho hàng trả
+          type: material.type,
+          expiryDate: material.expiryDate,
+          qualityCheck: material.qualityCheck,
+          isReceived: true,
+          notes: material.notes,
+          rollsOrBags: material.rollsOrBags,
+          supplier: material.supplier,
+          remarks: material.remarks,
+          source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
+          iqcStatus: (inventoryLocation === 'F62' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM', // 🆕 Nếu location là F62 hoặc F62TRA thì mặc định là Pass, nếu không thì CHỜ KIỂM
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        console.log(`📦 Inventory material object created:`, inventoryMaterial);
+        console.log(`🔥 Adding to Firestore collection 'inventory-materials'...`);
+        
+        // Add to inventory-materials collection (no notification)
+        return this.firestore.collection('inventory-materials').add(inventoryMaterial);
+      })
+      .then((docRef) => {
+        console.log(`✅ ${material.materialCode} added to Inventory ASM1 successfully! Doc ID: ${docRef?.id}`);
+        
+        // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
+        this.updateStandardPackingFromInbound(material);
+        
+        // 🆕 Cập nhật Unit Weight vào danh mục materials
+        this.updateUnitWeightFromInbound(material);
+        
         // No notification shown - silent operation
       })
       .catch((error) => {
-        console.error('❌ Error adding to inventory:', error);
+        console.error('❌ Error in addToInventory process:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          code: error.code,
+          stack: error.stack,
+          material: {
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            importDate: material.importDate
+          }
+        });
+        
         // Revert the checkbox if failed
         material.isReceived = false;
         this.updateMaterial(material);
-        });
-    });
+        
+        // Show error to user
+        alert(`❌ Lỗi khi thêm vào inventory:\n\nMã hàng: ${material.materialCode}\nLỗi: ${error.message}`);
+      });
   }
 
   // 🔧 SỬA LỖI: Kiểm tra duplicate trong inventory và trả về số thứ tự cần thêm
@@ -3872,24 +3900,18 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           
           console.log(`📊 Parsed scanned quantity: ${scannedQty} from QR code`);
 
-          // Lấy số lượng đã scan hiện tại từ material (từ Firestore hoặc local)
+          // Lấy số lượng đã scan hiện tại từ material (từ memory - KHÔNG query Firebase)
           const currentScannedQty = foundMaterial.scannedQuantity || 0;
           const newScannedQty = currentScannedQty + scannedQty;
           const totalQuantity = foundMaterial.quantity;
 
           console.log(`📊 Current scanned: ${currentScannedQty}, Adding: ${scannedQty}, New total: ${newScannedQty}, Required: ${totalQuantity}`);
 
-          // Cập nhật số lượng đã scan
-          await this.firestore.collection('inbound-materials').doc(materialId).update({
-            scannedQuantity: newScannedQty,
-            updatedAt: new Date()
-          });
-
-          // Update local data
+          // 🚀 OPTIMIZE: Update local data NGAY LẬP TỨC (không đợi Firebase)
           const materialIndex = this.materials.findIndex(m => m.id === materialId);
           if (materialIndex !== -1) {
             this.materials[materialIndex].scannedQuantity = newScannedQty;
-            foundMaterial.scannedQuantity = newScannedQty; // Cập nhật material object
+            foundMaterial.scannedQuantity = newScannedQty;
           }
 
           // Kiểm tra nếu đã đủ số lượng
@@ -3915,30 +3937,46 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           }
           
           if (isComplete) {
-            // Đủ số lượng - tick "đã nhận"
-            await this.firestore.collection('inbound-materials').doc(materialId).update({
-              isReceived: true,
-              scannedQuantity: newScannedQty,
-              updatedAt: new Date()
-            });
-
-            // Update local data
+            // 🚀 OPTIMIZE: Update local data trước (UI update ngay)
             if (materialIndex !== -1) {
               this.materials[materialIndex].isReceived = true;
               foundMaterial.isReceived = true;
             }
 
-            console.log('✅ Material marked as received:', foundMaterial.materialCode);
+            console.log('✅ Material marked as received (locally):', foundMaterial.materialCode);
             
-            // Thêm vào inventory-materials collection
-            console.log('📦 Adding material to inventory:', foundMaterial.materialCode);
-            this.addToInventory(foundMaterial);
-            
+            // 🚀 OPTIMIZE: Update UI ngay
             this.inspectionScanResult = {
               success: true,
-              message: `✅ Đã nhận hàng thành công (${newScannedQty}/${totalQuantity}) và đã thêm vào inventory!`,
+              message: `✅ Đã nhận hàng thành công (${newScannedQty}/${totalQuantity})!`,
               material: foundMaterial
             };
+            
+            // Refresh filtered materials NGAY
+            this.applyFilters();
+            
+            // 🔥 Update Firebase trong background (không block UI)
+            this.firestore.collection('inbound-materials').doc(materialId).update({
+              isReceived: true,
+              scannedQuantity: newScannedQty,
+              updatedAt: new Date()
+            }).then(() => {
+              console.log('📤 Firebase updated successfully (background)');
+              
+              // Thêm vào inventory sau khi update Firebase thành công
+              console.log('📦 Adding material to inventory (background):', foundMaterial.materialCode);
+              this.addToInventory(foundMaterial);
+            }).catch(error => {
+              console.error('❌ Firebase update failed:', error);
+              // Revert local changes if Firebase fails
+              if (materialIndex !== -1) {
+                this.materials[materialIndex].isReceived = false;
+                this.materials[materialIndex].scannedQuantity = currentScannedQty;
+              }
+              alert(`❌ Lỗi cập nhật: ${error.message}`);
+              this.applyFilters();
+            });
+            
           } else {
             // Chưa đủ - chỉ cập nhật số lượng đã scan
             this.inspectionScanResult = {
@@ -3946,10 +3984,20 @@ export class InboundASM1Component implements OnInit, OnDestroy {
               message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}`,
               material: foundMaterial
             };
+            
+            // Refresh UI ngay
+            this.applyFilters();
+            
+            // Update Firebase trong background
+            this.firestore.collection('inbound-materials').doc(materialId).update({
+              scannedQuantity: newScannedQty,
+              updatedAt: new Date()
+            }).then(() => {
+              console.log('📤 Scanned quantity updated in Firebase (background)');
+            }).catch(error => {
+              console.error('❌ Firebase update failed:', error);
+            });
           }
-
-          // Refresh filtered materials
-          this.applyFilters();
 
         } catch (error: any) {
           console.error('❌ Error updating material:', error);
@@ -4026,21 +4074,23 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       };
     }
 
-    // Clear input for next scan
+    // 🚀 OPTIMIZE: Clear input NGAY để sẵn sàng scan tiếp
     this.inspectionQRInput = '';
     
-    // Auto-focus for next scan after a delay
+    // 🚀 OPTIMIZE: Auto-focus ngay lập tức (không delay 500ms)
     setTimeout(() => {
       const input = document.getElementById('inspectionQRInput') as HTMLInputElement;
       if (input) {
         input.focus();
+        input.select(); // Select text để clear nhanh nếu có
       }
-    }, 500);
+    }, 100); // Giảm từ 500ms → 100ms
   }
   
   // Xử lý keyup event cho input QR scan
   onInspectionQRKeyup(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
+      event.preventDefault(); // 🚀 Prevent default Enter behavior
       this.processInspectionScan();
     }
   }

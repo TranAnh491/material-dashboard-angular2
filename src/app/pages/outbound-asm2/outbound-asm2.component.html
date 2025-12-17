@@ -303,7 +303,7 @@
         <tbody>
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
             <td class="factory-cell readonly-cell">
-              {{material.factory || 'ASM1'}}
+              {{material.factory || selectedFactory}}
             </td>
             <td class="index-cell readonly-cell">
               {{i + 1}}

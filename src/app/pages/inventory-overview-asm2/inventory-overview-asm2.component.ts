@@ -36,6 +36,7 @@ interface LinkQFileInfo {
   processedItems: number;
   skippedItems: number;
   userId?: string;
+  factory?: string; // 🔧 ADD: Factory để phân biệt ASM1/ASM2
   // Add actual LinkQ data storage
   linkQData?: { [materialCode: string]: number };
 }
@@ -116,13 +117,13 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   // Check user permissions
   private async checkPermissions(): Promise<void> {
     try {
-      console.log('🔐 Checking permissions for inventory-overview-asm1...');
+      console.log('🔐 Checking permissions for inventory-overview-asm2...');
       
       // Use canAccessTab method instead of checkTabPermission
-      this.tabPermissionService.canAccessTab('inventory-overview-asm1').subscribe(
+      this.tabPermissionService.canAccessTab('inventory-overview-asm2').subscribe(
         (hasAccess: boolean) => {
           this.hasAccess = hasAccess;
-          console.log(`🔐 Tab permission result for 'inventory-overview-asm1': ${this.hasAccess}`);
+          console.log(`🔐 Tab permission result for 'inventory-overview-asm2': ${this.hasAccess}`);
           
           if (!this.hasAccess) {
             console.warn('⚠️ User does not have access to this tab');
@@ -153,8 +154,8 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   }
 
   // Load inventory overview data
-  // QUAN TRỌNG: Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo RM1 Inventory Overview 
-  // hiển thị chính xác những gì có trong RM1 Inventory (không dư, không thiếu)
+  // QUAN TRỌNG: Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo RM2 Inventory Overview 
+  // hiển thị chính xác những gì có trong RM2 Inventory (không dư, không thiếu)
   private async loadInventoryOverview(): Promise<void> {
     // Remove permission check for debugging
     // if (!this.hasAccess) return;
@@ -1584,8 +1585,18 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   // Load LinkQ file history from Firebase
   private async loadLinkQFileHistory(): Promise<void> {
     try {
-      console.log('📥 Loading LinkQ file history...');
-      const snapshot = await this.firestore.collection('linkQFiles').ref.orderBy('uploadDate', 'desc').limit(10).get();
+      console.log('📥 Loading LinkQ file history for ASM2...');
+      const snapshot = await this.firestore.collection('linkQFiles', ref =>
+        ref.where('factory', '==', 'ASM2')
+           .orderBy('uploadDate', 'desc')
+           .limit(10)
+      ).get().toPromise();
+      
+      if (!snapshot) {
+        this.linkQFiles = [];
+        return;
+      }
+      
       this.linkQFiles = snapshot.docs.map(doc => {
         const data = doc.data() as any;
         return {
@@ -1596,6 +1607,7 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
           processedItems: data.processedItems || 0,
           skippedItems: data.skippedItems || 0,
           userId: data.userId || '',
+          factory: data.factory || 'ASM2',
           // Add actual LinkQ data storage
           linkQData: data.linkQData || {}
         } as LinkQFileInfo;
@@ -1653,7 +1665,7 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   // Save LinkQ file info to Firebase
   private async saveLinkQFileToFirebase(fileName: string, totalItems: number, processedItems: number, skippedItems: number): Promise<void> {
     try {
-      console.log('📤 Saving LinkQ file info to Firebase...');
+      console.log('📤 Saving LinkQ file info to Firebase for ASM2...');
       const newDocRef = await this.firestore.collection('linkQFiles').add({
         fileName: fileName,
         uploadDate: new Date(),
@@ -1661,6 +1673,7 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
         processedItems: processedItems,
         skippedItems: skippedItems,
         userId: 'current_user_id', // Replace with actual user ID
+        factory: 'ASM2', // 🔧 ADD: Phân biệt factory
         // Add actual LinkQ data storage
         linkQData: Object.fromEntries(this.linkQData)
       });

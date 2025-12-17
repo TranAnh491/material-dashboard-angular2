@@ -730,7 +730,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       console.log('✅ ASM2 outbound material added');
       this.loadMaterials();
     } catch (error) {
-      console.error('❌ Error adding ASM1 outbound material:', error);
+      console.error('❌ Error adding ASM2 outbound material:', error);
       this.errorMessage = 'Lỗi thêm material: ' + error.message;
     }
   }
@@ -2123,9 +2123,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   }
 
   // Persistence helpers safeguard
-  private restorePendingFromStorage(): void {
+  private   restorePendingFromStorage(): void {
     try {
-      const raw = localStorage.getItem('rm1OutboundPending');
+      const raw = localStorage.getItem('rm2OutboundPending');
       if (raw) {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) {
@@ -2136,9 +2136,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     } catch {}
   }
 
-  private savePendingToStorage(): void {
+  private   savePendingToStorage(): void {
     try {
-      localStorage.setItem('rm1OutboundPending', JSON.stringify(this.pendingScanData));
+      localStorage.setItem('rm2OutboundPending', JSON.stringify(this.pendingScanData));
     } catch {}
   }
 

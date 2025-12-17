@@ -152,8 +152,15 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     });
     this.loadPermissions();
     
-    // Load inventory data and setup search after data is loaded
-    this.loadInventoryAndSetupSearch();
+    // 🔧 FIX: KHÔNG tự động load inventory - chỉ load khi search
+    // Setup search mechanism only (không gọi loadInventoryFromFirebase)
+    console.log('🔍 Setting up search mechanism...');
+    this.setupDebouncedSearch();
+    console.log('✅ Search mechanism setup completed');
+    
+    // Initialize empty arrays
+    this.inventoryMaterials = [];
+    this.filteredInventory = [];
     
     // Initialize negative stock count and total stock count
     this.updateNegativeStockCount();
@@ -161,11 +168,16 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     // 🆕 Load catalog once when component initializes
     this.loadCatalogOnce();
     
-    // 🔍 DEBUG: Check outbound data on init
-    this.debugOutboundDataOnInit();
+    // 🔍 DEBUG: Check outbound data on init (không block UI)
+    // this.debugOutboundDataOnInit(); // Comment out để tránh tự động load
     
-    console.log('✅ ASM2 Materials component initialized - Search setup will happen after data loads');
-    console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
+    console.log('✅ ASM2 Materials component initialized - Waiting for user search');
+    console.log('🔍 DEBUG: ngOnInit - Component initialization completed (NO AUTO LOAD)');
+    
+    // Hiển thị thông báo cho user
+    setTimeout(() => {
+      console.log('💡 ASM2: Vui lòng nhập mã hàng hoặc PO để tìm kiếm');
+    }, 500);
   }
 
   ngAfterViewInit(): void {
@@ -314,107 +326,76 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`📦 Loading ${this.FACTORY} inventory from Firebase...`);
     this.isLoading = true;
     
-    // 🚀 OPTIMIZATION: Use limit without orderBy to avoid Firebase index requirement
-    console.log('🔍 Setting up Firebase subscription for inventory-materials...');
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', this.FACTORY)
-         .limit(2000) // Limit to 2000 items - orderBy removed to avoid index
-    )
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        console.log(`🔍 Firebase subscription received ${actions.length} actions`);
-        
-        this.inventoryMaterials = actions
-          .map(action => {
-            const data = action.payload.doc.data() as any;
-            const id = action.payload.doc.id;
-            const material = {
-              id: id,
-              ...data,
-              factory: this.FACTORY, // Force ASM2
-              importDate: this.parseImportDate(data.importDate),
-              receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
-              expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
-              openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
-              xt: data.xt || 0, // Initialize XT field for old materials
-              source: data.source || 'manual', // Set default source for old materials
-              iqcStatus: data.iqcStatus || undefined // Load IQC status from Firestore
-            };
+    try {
+      // 🔧 FIX: Dùng .get() thay vì snapshotChanges() để KHÔNG realtime sync
+      // Tránh vòng lặp vô tận: load → consolidate → save → trigger load lại!
+      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('factory', '==', this.FACTORY)
+           .limit(2000)
+      ).get().toPromise();
+      
+      console.log(`📦 Loaded ${snapshot?.size || 0} materials from Firebase`);
+      
+      this.inventoryMaterials = (snapshot?.docs || [])
+        .map(doc => {
+          const data = doc.data() as any;
+          const material = {
+            id: doc.id,
+            ...data,
+            factory: this.FACTORY, // Force ASM2
+            importDate: this.parseImportDate(data.importDate),
+            receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
+            expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+            openingStock: data.openingStock || null,
+            xt: data.xt || 0,
+            source: data.source || 'manual',
+            iqcStatus: data.iqcStatus || undefined
+          };
+          
+          // Apply catalog data if available
+          if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
+            const catalogItem = this.catalogCache.get(material.materialCode)!;
+            material.materialName = catalogItem.materialName;
+            material.unit = catalogItem.unit;
             
-            // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
-            if (data.batchNumber && (data.batchNumber.includes('01') || data.batchNumber.includes('02') || data.batchNumber.includes('03'))) {
-              // console.log removed for performance
-            }
-            
-            // Apply catalog data if available
-            if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
-              const catalogItem = this.catalogCache.get(material.materialCode)!;
-              material.materialName = catalogItem.materialName;
-              material.unit = catalogItem.unit;
-              
-              // Tự động điền rollsOrBags từ Standard Packing nếu trống
-              if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
-                const standardPacking = catalogItem.standardPacking;
-                if (standardPacking && standardPacking > 0) {
-                  material.rollsOrBags = standardPacking.toString();
-                  // console.log removed for performance
-                }
+            // Tự động điền rollsOrBags từ Standard Packing nếu trống
+            if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
+              const standardPacking = catalogItem.standardPacking;
+              if (standardPacking && standardPacking > 0) {
+                material.rollsOrBags = standardPacking.toString();
               }
             }
-            
-            return material;
-          })
-          .filter(material => material.factory === this.FACTORY) // Double check ASM2 only
-          .sort((a, b) => {
-            // Client-side sorting by importDate (newest first)
-            const dateA = a.importDate ? new Date(a.importDate).getTime() : 0;
-            const dateB = b.importDate ? new Date(b.importDate).getTime() : 0;
-            return dateB - dateA;
-          });
-
-        // Set filteredInventory to show all loaded items initially
-        this.filteredInventory = [...this.inventoryMaterials];
-        // DEBUG logs removed for performance
-        // console.log(`🔍 DEBUG: Loaded ${this.inventoryMaterials.length} inventory materials`);
-        // console.log(`🔍 DEBUG: First material:`, this.inventoryMaterials[0]);
-        
-        // Gộp dòng trùng lặp TRƯỚC KHI xử lý outbound
-        console.log('🔄 Consolidating duplicate materials...');
-        
-        // Kiểm tra xem có dòng trùng lặp không
-        const materialPoMap = new Map<string, InventoryMaterial[]>();
-        this.inventoryMaterials.forEach(material => {
-          const key = `${material.materialCode}_${material.poNumber}`;
-          if (!materialPoMap.has(key)) {
-            materialPoMap.set(key, []);
           }
-          materialPoMap.get(key)!.push(material);
+          
+          return material;
+        })
+        .filter(material => material.factory === this.FACTORY)
+        .sort((a, b) => {
+          const dateA = a.importDate ? new Date(a.importDate).getTime() : 0;
+          const dateB = b.importDate ? new Date(b.importDate).getTime() : 0;
+          return dateB - dateA;
         });
-        
-        const duplicateGroups = Array.from(materialPoMap.values()).filter(group => group.length > 1);
-        
-        if (duplicateGroups.length > 0) {
-          console.log(`⚠️ Found ${duplicateGroups.length} duplicate groups, auto-consolidating...`);
-          
-          // Gộp dòng tự động khi load toàn bộ inventory
-          this.autoConsolidateOnLoad().then(() => {
-            // Tiếp tục xử lý sau khi gộp xong
-            this.continueAfterConsolidation();
-          });
-        } else {
-          console.log('✅ No duplicate groups found, proceeding with normal flow...');
-          // Gộp dòng bình thường (chỉ local)
-          this.consolidateInventoryData();
-          
-          // Tiếp tục xử lý
-          this.continueAfterConsolidation();
-        }
-      }, error => {
-        console.error(`❌ Error loading ${this.FACTORY} inventory:`, error);
-        console.error('❌ Error details:', error.message);
-        this.isLoading = false;
-      });
+
+      // Set filteredInventory to show all loaded items
+      this.filteredInventory = [...this.inventoryMaterials];
+      
+      // 🔧 FIX: Chỉ consolidate LOCAL, KHÔNG save lại Firebase để tránh vòng lặp
+      console.log('🔄 Consolidating duplicate materials (LOCAL ONLY)...');
+      this.consolidateInventoryData(); // Chỉ gộp local, không save
+      
+      // Update UI
+      this.applyFilters();
+      this.updateNegativeStockCount();
+      this.updateTotalStockCount();
+      
+      console.log(`✅ Loaded ${this.inventoryMaterials.length} materials successfully`);
+      
+    } catch (error) {
+      console.error(`❌ Error loading ${this.FACTORY} inventory:`, error);
+      this.filteredInventory = [];
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   // Parse importDate from various formats
@@ -470,18 +451,17 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return new Date();
   }
 
-  // Load inventory and setup search mechanism
+  // Load inventory and setup search mechanism - KHÔNG TỰ LOAD NỮA
   private loadInventoryAndSetupSearch(): void {
-    console.log('📦 Setting up search mechanism and loading inventory data...');
+    console.log('📦 Setting up search mechanism WITHOUT auto-loading inventory...');
     
     // Setup search mechanism immediately
     console.log('🔍 Setting up search mechanism...');
     this.setupDebouncedSearch();
-    console.log('✅ Search mechanism setup completed');
+    console.log('✅ Search mechanism setup completed - Ready for user search');
     
-    // 🔧 FIX: Load inventory data immediately
-    console.log('🔍 Loading inventory data...');
-    this.loadInventoryFromFirebase();
+    // 🔧 FIX: KHÔNG tự động load inventory data - chỉ load khi user search
+    // this.loadInventoryFromFirebase(); // COMMENTED OUT - Only load on search now
   }
 
   // Debug function to check outbound data on init
@@ -1073,7 +1053,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.updatePagination();
     this.updateDisplayedInventory();
     
-    console.log('🔍 ASM1 filters applied. Items found:', this.filteredInventory.length);
+    console.log('🔍 ASM2 filters applied. Items found:', this.filteredInventory.length);
   }
 
   // Update pagination
@@ -1299,7 +1279,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       }
       
       if (querySnapshot && !querySnapshot.empty) {
-        console.log(`✅ ASM1 Found ${querySnapshot.docs.length} documents from Firebase`);
+        console.log(`✅ ASM2 Found ${querySnapshot.docs.length} documents from Firebase`);
         
         // Process search results
         this.inventoryMaterials = querySnapshot.docs.map(doc => {
@@ -1347,7 +1327,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // Debug: Log tất cả material codes tìm được
         const materialCodes = this.filteredInventory.map(item => item.materialCode);
-        console.log(`🔍 ASM1 Found material codes:`, materialCodes);
+        console.log(`🔍 ASM2 Found material codes:`, materialCodes);
         
       } else {
         // No results found
@@ -1802,7 +1782,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         // Lưu ý: Cột "Đã xuất" chỉ có thể chỉnh sửa khi user có quyền Xóa và đã mở khóa
         // không phụ thuộc vào canExport permission
         
-        console.log('🔑 ASM1 Permissions loaded:', {
+        console.log('🔑 ASM2 Permissions loaded:', {
           canView: this.canView,
           canEdit: this.canEdit,
           canExport: this.canExport,
@@ -2346,7 +2326,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Delete single inventory item
   async deleteInventoryItem(material: InventoryMaterial): Promise<void> {
-    console.log('🗑️ ASM1 deleteInventoryItem called for:', material.materialCode);
+    console.log('🗑️ ASM2 deleteInventoryItem called for:', material.materialCode);
     
     // Check permissions
     if (!this.canDelete) {
@@ -2361,8 +2341,15 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     
+    // 🔧 SAFETY CHECK: Verify factory before delete to prevent cross-factory deletion
+    if (material.factory !== this.FACTORY) {
+      console.error(`❌ SAFETY CHECK FAILED: Trying to delete ${material.factory} item from ${this.FACTORY} component`);
+      alert(`❌ LỖI BẢO MẬT: Không thể xóa item từ ${material.factory} trong ${this.FACTORY} component!`);
+      return;
+    }
+    
     if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM2 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
-      console.log(`✅ User confirmed deletion of ${material.materialCode}`);
+      console.log(`✅ ASM2: User confirmed deletion of ${material.materialCode}`);
       
       try {
         // Show loading
@@ -2395,14 +2382,14 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // Delete all inventory for ASM1
+  // Delete all inventory for ASM2
   async deleteAllInventory(): Promise<void> {
     try {
       // Confirm deletion with user
       const confirmDelete = confirm(
-        '⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ tồn kho ASM1?\n\n' +
+        '⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ tồn kho ASM2?\n\n' +
         'Thao tác này sẽ:\n' +
-        '• Xóa tất cả dữ liệu tồn kho ASM1\n' +
+        '• Xóa tất cả dữ liệu tồn kho ASM2\n' +
         '• Không thể hoàn tác\n' +
         '• Cần import lại toàn bộ dữ liệu\n\n' +
         'Nhập "DELETE" để xác nhận:'
@@ -2410,7 +2397,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       
       if (!confirmDelete) return;
       
-      const userInput = prompt('Nhập "DELETE" để xác nhận xóa toàn bộ tồn kho ASM1:');
+      const userInput = prompt('Nhập "DELETE" để xác nhận xóa toàn bộ tồn kho ASM2:');
       if (userInput !== 'DELETE') {
         alert('❌ Xác nhận không đúng. Thao tác bị hủy.');
         return;
@@ -2419,19 +2406,20 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       // Show loading
       this.isLoading = true;
       
-      // Get all ASM2 inventory documents
+      // 🔧 SAFETY: Get all ASM2 inventory documents with factory filter
+      console.log(`🔍 Loading all ASM2 materials for deletion (factory=${this.FACTORY})...`);
       const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.FACTORY)
       ).get().toPromise();
       
       if (!inventoryQuery || inventoryQuery.empty) {
-        alert('✅ Không có dữ liệu tồn kho ASM1 để xóa.');
+        alert('✅ Không có dữ liệu tồn kho ASM2 để xóa.');
         this.isLoading = false;
         return;
       }
 
       const totalItems = inventoryQuery.docs.length;
-      console.log(`🗑️ Starting deletion of ${totalItems} ASM2 inventory items...`);
+      console.log(`🗑️ ASM2: Starting deletion of ${totalItems} inventory items...`);
       
       // Delete all documents in batches
       const batchSize = 500; // Firestore batch limit
@@ -2453,7 +2441,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       for (const batch of batches) {
         await batch.commit();
         deletedCount += batchSize;
-        console.log(`✅ Deleted batch: ${deletedCount}/${totalItems} items`);
+        console.log(`✅ ASM2: Deleted batch: ${deletedCount}/${totalItems} items`);
       }
       
       // Clear local data
@@ -2461,10 +2449,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       this.filteredInventory = [];
       
       // Show success message
-      alert(`✅ Đã xóa thành công ${totalItems} items tồn kho ASM1!\n\n` +
+      alert(`✅ Đã xóa thành công ${totalItems} items tồn kho ASM2!\n\n` +
             `Bạn có thể import lại dữ liệu mới.`);
       
-      console.log(`✅ Successfully deleted all ${totalItems} ASM2 inventory items`);
+      console.log(`✅ ASM2: Successfully deleted all ${totalItems} inventory items`);
       
     } catch (error) {
       console.error('❌ Error deleting all inventory:', error);
@@ -2626,7 +2614,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     console.log(`🔍 DEBUG: Update data to Firebase:`, updateData);
     
     this.firestore.collection('inventory-materials').doc(material.id).update(updateData).then(() => {
-      console.log(`✅ ASM1 Material updated successfully: ${material.materialCode}`);
+      console.log(`✅ ASM2 Material updated successfully: ${material.materialCode}`);
       console.log(`📊 Stock updated: ${this.calculateCurrentStock(material)} (Quantity: ${material.quantity} - Exported: ${material.exported} - XT: ${material.xt || 0})`);
       
       // Update negative stock count for real-time display
@@ -3110,7 +3098,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         .limit(10)
         .get();
       
-      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
+      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM2`);
       
       if (!outboundSnapshot.empty) {
         outboundSnapshot.forEach(doc => {
@@ -3158,7 +3146,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         .limit(10)
         .get();
       
-      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
+      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM2`);
       
       if (!outboundSnapshot.empty) {
         console.log('\n📋 Outbound Records:');
@@ -3182,7 +3170,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         .limit(10)
         .get();
       
-      console.log(`📊 Found ${inventorySnapshot.size} inventory records for ASM1`);
+      console.log(`📊 Found ${inventorySnapshot.size} inventory records for ASM2`);
       
       if (!inventorySnapshot.empty) {
         console.log('\n📋 Inventory Records:');
@@ -3940,7 +3928,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         .limit(5)
         .get();
       
-      console.log(`🔍 Debug: Found ${outboundSnapshot.size} outbound records for ASM1`);
+      console.log(`🔍 Debug: Found ${outboundSnapshot.size} outbound records for ASM2`);
       if (!outboundSnapshot.empty) {
         outboundSnapshot.forEach(doc => {
           const data = doc.data() as any;
@@ -4238,7 +4226,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Print QR Code for inventory items
   async printQRCode(material: InventoryMaterial): Promise<void> {
     try {
-      console.log('🏷️ Generating QR code for ASM1 material:', material.materialCode);
+      console.log('🏷️ Generating QR code for ASM2 material:', material.materialCode);
       
       // Kiểm tra Rolls/Bags trước khi tạo QR
       const rollsOrBagsValue = material.rollsOrBags;
@@ -4333,7 +4321,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
-      console.log(`📦 Generated ${qrCodes.length} QR codes for ASM1${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
+      console.log(`📦 Generated ${qrCodes.length} QR codes for ASM2${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
 
       // Generate QR code images
       const qrImages = await Promise.all(
@@ -4362,7 +4350,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       this.createQRPrintWindow(qrImages, material, isPartialLabel);
       
     } catch (error) {
-      console.error('❌ Error generating QR code for ASM1:', error);
+      console.error('❌ Error generating QR code for ASM2:', error);
       alert('❌ Lỗi khi tạo QR code: ' + error.message);
     }
   }
@@ -4419,7 +4407,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       );
 
       if (zeroStockItems.length === 0) {
-        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM1');
+        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM2');
         return;
       }
 
@@ -4435,7 +4423,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
-      console.log(`🗑️ Starting reset for ASM1: ${zeroStockItems.length} items to delete`);
+      console.log(`🗑️ Starting reset for ASM2: ${zeroStockItems.length} items to delete`);
 
       // Delete items in batches
       const batchSize = 50;
@@ -4455,7 +4443,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         await batch.commit();
         deletedCount += currentBatch.length;
 
-        console.log(`✅ ASM1 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockItems.length}`);
+        console.log(`✅ ASM2 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockItems.length}`);
 
         // Small delay between batches
         if (i + batchSize < zeroStockItems.length) {
@@ -4463,14 +4451,110 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         }
       }
 
-      alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM1`);
+      alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM2`);
 
       // Reload inventory data
       await this.loadInventoryFromFirebase();
 
     } catch (error) {
-      console.error('❌ Error during ASM1 reset:', error);
-      alert(`❌ Lỗi khi reset ASM1: ${error.message}`);
+      console.error('❌ Error during ASM2 reset:', error);
+      alert(`❌ Lỗi khi reset ASM2: ${error.message}`);
+    }
+  }
+
+  // Reset ALL Stock - Delete ALL inventory items (for complete reset before new import)
+  async resetAllStock(): Promise<void> {
+    try {
+      // Load all ASM2 materials from Firebase
+      console.log('🔍 Loading all ASM2 materials for reset...');
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.FACTORY)
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert('✅ Không có dữ liệu tồn kho nào trong ASM2');
+        return;
+      }
+
+      const totalItems = snapshot.docs.length;
+
+      // Show confirmation dialog with strong warning
+      const confirmed = confirm(
+        `⚠️ CẢNH BÁO: XÓA TOÀN BỘ TỒN KHO ASM2 ⚠️\n\n` +
+        `Tìm thấy ${totalItems} mã hàng trong ASM2\n\n` +
+        `Bạn có CHẮC CHẮN muốn xóa TẤT CẢ tồn kho không?\n\n` +
+        `🔴 Hành động này sẽ xóa toàn bộ dữ liệu!\n` +
+        `🔴 Không thể hoàn tác!\n` +
+        `🔴 Chỉ dùng khi muốn reset hoàn toàn trước khi import mới!\n\n` +
+        `Nhấn OK để tiếp tục hoặc Cancel để hủy.`
+      );
+
+      if (!confirmed) {
+        console.log('❌ User cancelled reset operation');
+        return;
+      }
+
+      // Second confirmation for extra safety
+      const doubleConfirmed = confirm(
+        `🔴 XÁC NHẬN LẦN CUỐI 🔴\n\n` +
+        `Bạn THỰC SỰ muốn xóa ${totalItems} mã hàng?\n\n` +
+        `Đây là cơ hội cuối cùng để hủy bỏ!\n\n` +
+        `Nhấn OK để XÓA HOÀN TOÀN hoặc Cancel để giữ lại dữ liệu.`
+      );
+
+      if (!doubleConfirmed) {
+        console.log('❌ User cancelled reset operation at second confirmation');
+        return;
+      }
+
+      console.log(`🗑️ Starting COMPLETE reset for ASM2: ${totalItems} items to delete`);
+      this.isLoading = true;
+
+      // Delete all items in batches
+      const batchSize = 100;
+      let deletedCount = 0;
+      const allDocs = snapshot.docs;
+
+      for (let i = 0; i < allDocs.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const currentBatch = allDocs.slice(i, i + batchSize);
+
+        currentBatch.forEach(doc => {
+          const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+          batch.delete(docRef);
+        });
+
+        await batch.commit();
+        deletedCount += currentBatch.length;
+
+        console.log(`✅ ASM2 Complete Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${totalItems}`);
+
+        // Small delay between batches
+        if (i + batchSize < allDocs.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      console.log(`✅ Complete reset finished: ${deletedCount} items deleted`);
+      
+      // Clear local data
+      this.inventoryMaterials = [];
+      this.filteredInventory = [];
+      this.updateNegativeStockCount();
+      this.updateTotalStockCount();
+      
+      this.isLoading = false;
+
+      alert(
+        `✅ Reset hoàn thành!\n\n` +
+        `Đã xóa ${deletedCount} mã hàng từ ASM2\n\n` +
+        `Bạn có thể import dữ liệu mới ngay bây giờ.`
+      );
+
+    } catch (error) {
+      console.error('❌ Error during ASM2 complete reset:', error);
+      this.isLoading = false;
+      alert(`❌ Lỗi khi reset toàn bộ ASM2: ${error.message}`);
     }
   }
 
@@ -4656,7 +4740,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     `);
 
     printWindow.document.close();
-    console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
+    console.log(`✅ QR labels created for ASM2 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
   }
 
   // 🆕 Load catalog once when component initializes (no real-time updates)
