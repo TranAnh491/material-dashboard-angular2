@@ -49,6 +49,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard] },
   { path: 'warehouse-loading',    loadChildren: () => import('../../pages/warehouse-loading/warehouse-loading.module').then(m => m.WarehouseLoadingModule), canActivate: [AuthGuard] },
+  { path: 'trace-back',           loadChildren: () => import('../../pages/trace-back/trace-back.module').then(m => m.TraceBackModule), canActivate: [AuthGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard] },
   { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard] },
   { path: 'fg-out',               loadChildren: () => import('../../pages/fg-out/fg-out.module').then(m => m.FgOutModule), canActivate: [AuthGuard] },

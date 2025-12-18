@@ -172,6 +172,9 @@ export class TabPermissionService {
     // Warehouse Loading tab
     { key: 'warehouse-loading', name: 'Loading' },
     
+    // Trace Back tab
+    { key: 'trace-back', name: 'Trace Back' },
+    
     // Manage tab
     { key: 'manage', name: 'Manage' },
     

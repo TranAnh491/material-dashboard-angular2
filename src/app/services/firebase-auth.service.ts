@@ -239,7 +239,7 @@ export class FirebaseAuthService {
         'dashboard', 'work-order-status', 'shipment',
         'inbound-asm1', 'inbound-asm2', 'outbound-asm1', 'outbound-asm2',
         'materials-asm1', 'materials-asm2', 'inventory-overview-asm1',
-        'location', 'warehouse-loading', 'manage', 'stock-check', 'label', 'index', 'utilization',
+        'location', 'warehouse-loading', 'trace-back', 'manage', 'stock-check', 'label', 'index', 'utilization',
         'find-rm1', 'checklist', 'safety', 'equipment', 'qc', 'settings'
       ];
 

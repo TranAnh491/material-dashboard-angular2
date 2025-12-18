@@ -121,6 +121,7 @@ export class FilteredRoutesService {
       // Other routes
       '/location': 'location',
       '/warehouse-loading': 'warehouse-loading',
+      '/trace-back': 'trace-back',
       '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',

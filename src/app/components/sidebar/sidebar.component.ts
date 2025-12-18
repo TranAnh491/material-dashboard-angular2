@@ -101,6 +101,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       '/find-rm1',           // Tab 16
       '/location',           // Tab 17
       '/warehouse-loading',  // Tab Loading
+      '/trace-back',         // Tab Trace Back
       '/stock-check',        // Tab 18
       '/safety'              // Tab 20
     ];

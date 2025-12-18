@@ -50,6 +50,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/find-rm1', title: 'Find RM1', icon: 'search', class: '' },
   { path: '/location', title: 'Location', icon: 'location_on', class: '' },
   { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', class: '' },
+  { path: '/trace-back', title: 'Trace Back', icon: 'track_changes', class: '' },
   { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: '' },
   { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
   { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },

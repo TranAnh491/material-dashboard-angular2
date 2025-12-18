@@ -58,6 +58,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Other tabs
     { key: 'location', name: 'Location' },
     { key: 'warehouse-loading', name: 'Loading' },
+    { key: 'trace-back', name: 'Trace Back' },
     { key: 'manage', name: 'Manage' },
     { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },

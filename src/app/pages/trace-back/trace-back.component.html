@@ -1,0 +1,181 @@
+<div class="trace-back-container">
+  <!-- Header -->
+  <div class="header-section">
+    <h2>🔍 Trace Back - Truy vết nguyên liệu</h2>
+    <p class="subtitle">Quét mã hàng để xem lịch sử di chuyển và xử lý</p>
+  </div>
+
+  <!-- Factory Selection -->
+  <div class="factory-selection">
+    <label>Chọn nhà máy:</label>
+    <div class="factory-buttons">
+      <button 
+        class="factory-btn" 
+        [class.active]="selectedFactory === 'ASM1'"
+        (click)="onFactoryChange('ASM1')">
+        ASM1
+      </button>
+      <button 
+        class="factory-btn" 
+        [class.active]="selectedFactory === 'ASM2'"
+        (click)="onFactoryChange('ASM2')">
+        ASM2
+      </button>
+    </div>
+  </div>
+
+  <!-- Scanner Input -->
+  <div class="scanner-section">
+    <label for="scanInput">Quét mã hàng:</label>
+    <div class="scan-input-wrapper">
+      <input 
+        type="text" 
+        id="scanInput"
+        class="scan-input"
+        [(ngModel)]="scanInput"
+        (keydown)="onScanInput($event)"
+        (input)="onScanInputChange()"
+        placeholder="Quét QR code hoặc nhập mã hàng..."
+        [disabled]="isLoading">
+      <button 
+        class="clear-btn" 
+        (click)="clearTrace()"
+        *ngIf="traceRows.length > 0">
+        <i class="material-icons">clear</i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div class="loading-indicator" *ngIf="isLoading">
+    <i class="material-icons">hourglass_empty</i>
+    <span>Đang tải dữ liệu...</span>
+  </div>
+
+  <!-- Material Info - Inbound Information -->
+  <div class="material-info" *ngIf="inboundInfo && !isLoading">
+    <h3>📦 Thông tin lúc nhập</h3>
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="info-label">Mã hàng:</span>
+        <span class="info-value">{{ inboundInfo.materialCode }}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">PO:</span>
+        <span class="info-value">{{ inboundInfo.poNumber }}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">IMD:</span>
+        <span class="info-value">{{ inboundInfo.imd }}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Số lượng:</span>
+        <span class="info-value">{{ inboundInfo.quantity | number }}</span>
+      </div>
+      <div class="info-item" *ngIf="inboundInfo.employeeIds && inboundInfo.employeeIds.length > 0">
+        <span class="info-label">Mã nhân viên:</span>
+        <span class="info-value">{{ inboundInfo.employeeIds.join(', ') }}</span>
+      </div>
+      <div class="info-item" *ngIf="inboundInfo.rollsOrBags > 0">
+        <span class="info-label">Số cuộn:</span>
+        <span class="info-value">{{ inboundInfo.rollsOrBags | number }}</span>
+      </div>
+      <div class="info-item" *ngIf="inboundInfo.batchNumber">
+        <span class="info-label">Lô hàng nhập:</span>
+        <span class="info-value">{{ inboundInfo.batchNumber }}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Ngày nhập:</span>
+        <span class="info-value">{{ formatDate(inboundInfo.importDate) }}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Chờ QC pass:</span>
+        <span class="info-value" [class.waiting]="inboundInfo.qcWaitTime === 'Chưa QC'">{{ inboundInfo.qcWaitTime }}</span>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Material Code Only (if no inbound info) -->
+  <div class="material-info" *ngIf="materialCode && !inboundInfo && !isLoading">
+    <h3>{{ materialName || materialCode }}</h3>
+    <p class="material-code">Mã hàng: {{ materialCode }}</p>
+  </div>
+
+  <!-- Trace Table -->
+  <div class="trace-table-container" *ngIf="traceRows.length > 0 && !isLoading">
+    <h3>📋 Dòng thời gian</h3>
+    
+    <div class="table-wrapper">
+      <table class="trace-table">
+        <thead>
+          <tr>
+            <th *ngIf="getAvailableColumns().includes('date')">Ngày</th>
+            <th *ngIf="getAvailableColumns().includes('type')">Loại</th>
+            <th *ngIf="getAvailableColumns().includes('materialCode')">Mã hàng</th>
+            <th *ngIf="getAvailableColumns().includes('poNumber')">PO</th>
+            <th *ngIf="getAvailableColumns().includes('imd')">IMD</th>
+            <th *ngIf="getAvailableColumns().includes('batch')">Batch</th>
+            <th *ngIf="getAvailableColumns().includes('quantityIn')">Lượng nhập</th>
+            <th *ngIf="getAvailableColumns().includes('quantityOut')">Lượng xuất</th>
+            <th *ngIf="getAvailableColumns().includes('productionOrder')">Lệnh sản xuất</th>
+            <th *ngIf="getAvailableColumns().includes('stock')">Tồn kho</th>
+            <th *ngIf="getAvailableColumns().includes('qc')">QC</th>
+            <th *ngIf="getAvailableColumns().includes('employee')">Người thực hiện</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of traceRows" 
+              [class.inbound-row]="row.type === 'inbound'" 
+              [class.outbound-row]="row.type === 'outbound'" 
+              [class.qc-row]="row.type === 'qc'"
+              [class.stock-row]="row.type === 'inventory'">
+            <td *ngIf="getAvailableColumns().includes('date')">{{ formatDate(row.date) }}</td>
+            <td *ngIf="getAvailableColumns().includes('type')">
+              <span class="type-badge" 
+                    [class.inbound]="row.type === 'inbound'" 
+                    [class.outbound]="row.type === 'outbound'" 
+                    [class.qc]="row.type === 'qc'"
+                    [class.stock]="row.type === 'inventory'">
+                {{ getEventTypeLabel(row.type) }}
+              </span>
+            </td>
+            <td *ngIf="getAvailableColumns().includes('materialCode')">{{ row.materialCode }}</td>
+            <td *ngIf="getAvailableColumns().includes('poNumber')">{{ row.poNumber || '-' }}</td>
+            <td *ngIf="getAvailableColumns().includes('imd')">{{ row.imd || '-' }}</td>
+            <td *ngIf="getAvailableColumns().includes('batch')">{{ row.batch || '-' }}</td>
+            <td *ngIf="getAvailableColumns().includes('quantityIn')" class="number-cell">
+              <span *ngIf="row.quantityIn !== undefined">{{ row.quantityIn | number }}</span>
+              <span *ngIf="row.quantityIn === undefined">-</span>
+            </td>
+            <td *ngIf="getAvailableColumns().includes('quantityOut')" class="number-cell">
+              <span *ngIf="row.quantityOut !== undefined">{{ row.quantityOut | number }}</span>
+              <span *ngIf="row.quantityOut === undefined">-</span>
+            </td>
+            <td *ngIf="getAvailableColumns().includes('productionOrder')">{{ row.productionOrder || '-' }}</td>
+            <td *ngIf="getAvailableColumns().includes('stock')" class="number-cell">
+              <span *ngIf="row.stock !== undefined">{{ row.stock | number }}</span>
+              <span *ngIf="row.stock === undefined">-</span>
+            </td>
+            <td *ngIf="getAvailableColumns().includes('qc')">
+              <span *ngIf="row.type === 'qc'">{{ row.qc || '-' }}</span>
+              <span *ngIf="row.type !== 'qc'">-</span>
+            </td>
+            <td *ngIf="getAvailableColumns().includes('employee')">{{ row.employee || '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- No Data Message -->
+  <div class="no-data" *ngIf="traceRows.length === 0 && materialCode && !isLoading">
+    <i class="material-icons">info</i>
+    <p>Không tìm thấy dữ liệu cho mã hàng: {{ materialCode }}</p>
+  </div>
+
+  <!-- Initial Message -->
+  <div class="initial-message" *ngIf="traceRows.length === 0 && !materialCode && !isLoading">
+    <i class="material-icons">qr_code_scanner</i>
+    <p>Vui lòng quét mã hàng để xem lịch sử truy vết</p>
+  </div>
+</div>
