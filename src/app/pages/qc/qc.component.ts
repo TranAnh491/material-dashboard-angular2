@@ -86,8 +86,26 @@ export class QCComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     // Không cần load materials ban đầu, chỉ load khi scan
     console.log('📦 QC Component initialized - ready for scanning');
-    // Block access until employee is verified
-    // Load pending QC count and today's checked count after employee verified
+    
+    // 🔧 FIX: Khôi phục currentEmployeeId từ localStorage nếu có
+    const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
+    const savedEmployeeName = localStorage.getItem('qc_currentEmployeeName');
+    if (savedEmployeeId && savedEmployeeName) {
+      this.currentEmployeeId = savedEmployeeId;
+      this.currentEmployeeName = savedEmployeeName;
+      this.isEmployeeVerified = true;
+      this.showEmployeeModal = false;
+      console.log('✅ Restored employee from localStorage:', savedEmployeeId, savedEmployeeName);
+      
+      // Load counts and recent materials after employee verified
+      this.loadPendingQCCount();
+      this.loadTodayCheckedCount();
+      this.loadPendingConfirmCount();
+      this.loadRecentCheckedMaterials();
+    } else {
+      // Block access until employee is verified
+      this.showEmployeeModal = true;
+    }
   }
   
   ngOnDestroy(): void {
@@ -327,10 +345,27 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // IQC Modal functions
   openIQCModal(): void {
+    // 🔧 FIX: Kiểm tra currentEmployeeId khi mở modal
+    if (!this.currentEmployeeId || this.currentEmployeeId.trim() === '') {
+      // Khôi phục từ localStorage nếu có
+      const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
+      const savedEmployeeName = localStorage.getItem('qc_currentEmployeeName');
+      if (savedEmployeeId && savedEmployeeName) {
+        this.currentEmployeeId = savedEmployeeId;
+        this.currentEmployeeName = savedEmployeeName;
+        this.isEmployeeVerified = true;
+        console.log('✅ Restored employee from localStorage when opening IQC modal');
+      } else {
+        alert('⚠️ Vui lòng xác thực nhân viên trước khi kiểm!');
+        this.showEmployeeModal = true;
+        return;
+      }
+    }
+    
     this.showIQCModal = true;
     this.iqcScanInput = '';
     this.scannedMaterial = null;
-    this.selectedIQCStatus = 'CHỜ KIỂM';
+    this.selectedIQCStatus = 'CHỜ XÁC NHẬN'; // 🔧 FIX: Set default status
     
     // Auto-focus scan input after modal opens
     setTimeout(() => {
@@ -519,6 +554,13 @@ export class QCComponent implements OnInit, OnDestroy {
       return;
     }
     
+    // 🔧 FIX: Kiểm tra currentEmployeeId trước khi update
+    if (!this.currentEmployeeId || this.currentEmployeeId.trim() === '') {
+      alert('❌ Lỗi: Không tìm thấy mã nhân viên!\n\nVui lòng xác thực lại nhân viên trước khi kiểm.');
+      console.error('❌ currentEmployeeId is empty:', this.currentEmployeeId);
+      return;
+    }
+    
     const materialId = this.scannedMaterial.id;
     if (!materialId) {
       alert('❌ Không tìm thấy ID của material');
@@ -528,6 +570,7 @@ export class QCComponent implements OnInit, OnDestroy {
     // Lưu thông tin trước khi reset
     const statusToUpdate = this.selectedIQCStatus;
     const materialToUpdate = { ...this.scannedMaterial };
+    const employeeIdToSave = this.currentEmployeeId.trim(); // Đảm bảo không có khoảng trắng
     
     // Update local data ngay lập tức để UI responsive
     const index = this.materials.findIndex(m => m.id === materialId);
@@ -536,31 +579,48 @@ export class QCComponent implements OnInit, OnDestroy {
       this.materials[index].updatedAt = new Date();
     }
     
-    // Đóng modal ngay lập tức (không chờ Firestore)
-    this.scannedMaterial = null;
-    this.iqcScanInput = '';
-    this.selectedIQCStatus = 'CHỜ KIỂM';
-    this.closeIQCModal();
-    
-    // Update Firestore ở background (không chờ)
+    // 🔧 FIX: Update Firestore TRƯỚC khi đóng modal để đảm bảo lưu thành công
     const now = new Date();
-    this.firestore.collection('inventory-materials').doc(materialId).update({
-      iqcStatus: statusToUpdate,
-      updatedAt: now,
-      qcCheckedBy: this.currentEmployeeId,
-      qcCheckedAt: now
-    }).then(() => {
-      console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} at ${now.toISOString()}`);
-      // Real-time listeners sẽ tự động cập nhật danh sách và counts
-    }).catch((error) => {
+    console.log(`💾 Updating IQC status: Material=${materialId}, Status=${statusToUpdate}, Employee=${employeeIdToSave}, Time=${now.toISOString()}`);
+    
+    try {
+      // Update Firestore và CHỜ kết quả
+      await this.firestore.collection('inventory-materials').doc(materialId).update({
+        iqcStatus: statusToUpdate,
+        updatedAt: now,
+        qcCheckedBy: employeeIdToSave, // 🔧 FIX: Đảm bảo lưu đúng employee ID
+        qcCheckedAt: now
+      });
+      
+      console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
+      
+      // Chỉ đóng modal và reset sau khi Firestore update thành công
+      this.scannedMaterial = null;
+      this.iqcScanInput = '';
+      this.selectedIQCStatus = 'CHỜ KIỂM';
+      this.closeIQCModal();
+      
+      // Refresh counts và recent materials
+      this.loadPendingQCCount();
+      this.loadTodayCheckedCount();
+      this.loadPendingConfirmCount();
+      this.loadRecentCheckedMaterials();
+      
+      // Hiển thị thông báo thành công
+      console.log(`✅ IQC status updated successfully: ${statusToUpdate}`);
+      
+    } catch (error) {
       console.error('❌ Error updating IQC status:', error);
+      
       // Revert local change nếu Firestore update thất bại
       if (index >= 0) {
         this.materials[index].iqcStatus = materialToUpdate.iqcStatus;
         this.materials[index].updatedAt = materialToUpdate.updatedAt || new Date();
       }
-      alert('❌ Lỗi khi cập nhật trạng thái IQC. Vui lòng thử lại.');
-    });
+      
+      // Hiển thị lỗi chi tiết
+      alert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nLỗi: ${error}\n\nVui lòng thử lại.`);
+    }
   }
   
   getIQCStatusClass(status: string): string {
@@ -632,7 +692,12 @@ export class QCComponent implements OnInit, OnDestroy {
       this.showEmployeeModal = false;
       this.employeeScanInput = '';
       
+      // 🔧 FIX: Lưu currentEmployeeId vào localStorage để khôi phục khi refresh
+      localStorage.setItem('qc_currentEmployeeId', employeeId);
+      localStorage.setItem('qc_currentEmployeeName', this.currentEmployeeName);
+      
       console.log('✅ Employee verified:', employeeId, 'Name:', employeeName);
+      console.log('💾 Saved to localStorage for persistence');
       
       // Load counts and recent materials after employee verified
       this.loadPendingQCCount();

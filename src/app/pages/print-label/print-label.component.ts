@@ -2347,20 +2347,42 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         this.scheduleData[labelIndex].tinhTrang = status;
         this.scheduleData[labelIndex].statusUpdateTime = new Date();
 
-        // Update in Firebase
-        const querySnapshot = await this.firestore.collection('schedule')
-          .ref
-          .where('maTem', '==', this.scannedLabel.maTem)
-          .where('lenhSanXuat', '==', this.scannedLabel.lenhSanXuat)
-          .get();
+        // 🔧 FIX: Update in Firebase collection 'print-schedules' (not 'schedule')
+        const snapshot = await this.firestore.collection('print-schedules', ref => 
+          ref.orderBy('importedAt', 'desc').limit(1)
+        ).get().toPromise();
 
-        if (!querySnapshot.empty) {
-          const doc = querySnapshot.docs[0];
-          await doc.ref.update({
-            tinhTrang: status,
-            statusUpdateTime: new Date()
-          });
-          console.log('✅ Firebase updated successfully');
+        if (snapshot && !snapshot.empty) {
+          const latestDoc = snapshot.docs[0];
+          const docId = latestDoc.id;
+          const docData = latestDoc.data() as any;
+          
+          if (docData.data && Array.isArray(docData.data)) {
+            // Tìm và update item trong array
+            const dataArray = docData.data as any[];
+            const itemIndex = dataArray.findIndex((item: any) => 
+              item.maTem === this.scannedLabel!.maTem &&
+              item.lenhSanXuat === this.scannedLabel!.lenhSanXuat
+            );
+
+            if (itemIndex !== -1) {
+              // Update item trong array
+              dataArray[itemIndex].tinhTrang = status;
+              dataArray[itemIndex].statusUpdateTime = new Date();
+              
+              // Update document trong Firebase
+              await this.firestore.collection('print-schedules').doc(docId).update({
+                data: dataArray,
+                lastUpdated: new Date()
+              });
+              
+              console.log(`✅ Firebase updated successfully: ${this.scannedLabel.maTem} -> ${status}`);
+            } else {
+              console.warn(`⚠️ Item not found in Firebase array: ${this.scannedLabel.maTem}`);
+            }
+          }
+        } else {
+          console.warn('⚠️ No print-schedules document found');
         }
 
         alert(`✅ Đã cập nhật trạng thái "${status}" cho tem ${this.scannedLabel.maTem}`);
@@ -2368,6 +2390,9 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         // Reset for next scan
         this.scannedLabel = null;
         this.iqcScanInput = '';
+        
+        // 🔧 FIX: Reload data from Firebase để đảm bảo sync sau khi update
+        this.loadDataFromFirebase();
         
         // Focus input for next scan
         setTimeout(() => {
