@@ -30,6 +30,14 @@ interface StockCheckMaterial {
   
   // Flag để đánh dấu material được thêm mới khi scan (không có trong tồn kho)
   isNewMaterial?: boolean;
+  
+  // Thông tin đổi vị trí
+  locationChangeInfo?: {
+    hasChanged: boolean; // Đã đổi vị trí hay chưa
+    newLocation: string; // Vị trí mới (hiện tại)
+    changeDate?: Date; // Ngày đổi vị trí
+    changedBy?: string; // Người đổi (nếu có)
+  };
 }
 
 interface StockCheckData {
@@ -143,6 +151,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   get uncheckedMaterials(): number {
     return this.totalMaterials - this.checkedMaterials;
+  }
+
+  get locationChangedMaterials(): number {
+    // Đếm số lượng materials đã đổi vị trí
+    return this.allMaterials.filter(m => 
+      m.locationChangeInfo?.hasChanged === true
+    ).length;
   }
 
   get outsideStockMaterials(): number {
@@ -690,7 +705,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             xt: mat.xt || 0,
             importDate: mat.importDate ? mat.importDate.toDate() : null,
             batchNumber: mat.batchNumber || '',
-            id: mat.id || ''
+            id: mat.id || '',
+            // Thông tin đổi vị trí
+            lastModified: mat.lastModified ? (mat.lastModified.toDate ? mat.lastModified.toDate() : new Date(mat.lastModified)) : null,
+            modifiedBy: mat.modifiedBy || ''
           });
         });
 
@@ -727,6 +745,20 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           const stock = openingStockValue + (mat.quantity || 0) - (mat.exported || 0) - (mat.xt || 0);
           const standardPacking = standardPackingMap.get(mat.materialCode) || '';
           
+          // Kiểm tra xem material có đổi vị trí không
+          const hasLocationChange = mat.modifiedBy === 'location-change-scanner' && mat.lastModified;
+          const locationChangeInfo = hasLocationChange ? {
+            hasChanged: true,
+            newLocation: mat.location,
+            changeDate: mat.lastModified,
+            changedBy: mat.modifiedBy || 'Hệ thống'
+          } : {
+            hasChanged: false,
+            newLocation: mat.location,
+            changeDate: undefined,
+            changedBy: undefined
+          };
+          
           return {
             stt: index + 1,
             materialCode: mat.materialCode,
@@ -744,7 +776,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             exported: mat.exported,
             xt: mat.xt,
             importDate: mat.importDate,
-            batchNumber: mat.batchNumber
+            batchNumber: mat.batchNumber,
+            locationChangeInfo: locationChangeInfo
           };
         });
         

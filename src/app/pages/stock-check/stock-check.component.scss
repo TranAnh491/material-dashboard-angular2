@@ -903,6 +903,20 @@
           }
         }
 
+        &.location-change-box {
+          border-color: #4CAF50;
+
+          .counter-icon i {
+            color: #4CAF50;
+          }
+
+          .counter-value {
+            color: #4CAF50;
+          }
+
+          background: #e8f5e9;
+        }
+
         &.unchecked-box {
           border-color: #ff6600;
 
@@ -2543,7 +2557,7 @@
     }
     
     .counter-boxes {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin-bottom: 20px;
       
@@ -2594,6 +2608,48 @@
   .mismatch-location {
     font-weight: 600;
     color: #d32f2f;
+  }
+
+  // Cột Đổi vị trí
+  .location-change-cell {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-width: 150px;
+    
+    &.has-location-change {
+      background-color: #e8f5e9; // Nền xanh nhạt khi có đổi vị trí
+      border-left: 3px solid #4CAF50;
+    }
+    
+    .location-change-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      
+      .location-change-location {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        color: #2e7d32;
+        
+        i.material-icons {
+          font-size: 16px;
+        }
+      }
+      
+      .location-change-date {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: #666;
+        
+        i.material-icons {
+          font-size: 14px;
+        }
+      }
+    }
   }
 
     .inner-header {

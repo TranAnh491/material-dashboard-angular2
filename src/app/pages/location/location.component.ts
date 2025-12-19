@@ -1427,11 +1427,22 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    // 🔧 FIX: Kiểm tra thông tin đầy đủ và lưu vào biến local
+    if (!this.foundRM1Item.id) {
+      alert('❌ Lỗi: Không tìm thấy ID của mã hàng. Vui lòng scan lại.');
+      return;
+    }
+
+    // 🔧 FIX: Lưu thông tin vào biến local để tránh mất dữ liệu
+    const materialCode = this.foundRM1Item.materialCode || this.foundRM1Item.parsedData?.materialCode || 'N/A';
+    const poNumber = this.foundRM1Item.poNumber || this.foundRM1Item.parsedData?.poNumber || 'N/A';
+    const imd = this.foundRM1Item.parsedData?.imd || this.foundRM1Item.imd || 'N/A';
+
     // Show confirmation dialog
     const confirmMessage = `🔄 Xác nhận thay đổi vị trí:\n\n` +
-      `Mã hàng: ${this.foundRM1Item.materialCode}\n` +
-      `PO: ${this.foundRM1Item.poNumber}\n` +
-      `IMD: ${this.foundRM1Item.parsedData.imd}\n\n` +
+      `Mã hàng: ${materialCode}\n` +
+      `PO: ${poNumber}\n` +
+      `IMD: ${imd}\n\n` +
       `Từ: ${this.currentLocation}\n` +
       `Đến: ${formattedLocation}\n\n` +
       `Bạn có chắc chắn muốn thay đổi?`;
@@ -1445,7 +1456,26 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       console.log(`🔄 Updating location in Firebase...`);
       
-      const docRef = this.firestore.collection('inventory-materials').doc(this.foundRM1Item.id);
+      // 🔧 FIX: Kiểm tra foundRM1Item trước khi sử dụng
+      if (!this.foundRM1Item) {
+        console.error('❌ foundRM1Item is null or undefined');
+        alert('❌ Lỗi: Không tìm thấy thông tin mã hàng. Vui lòng scan lại.');
+        return;
+      }
+
+      // 🔧 FIX: Lưu thông tin vào biến local để tránh mất dữ liệu
+      const materialId = this.foundRM1Item.id;
+      const materialCode = this.foundRM1Item.materialCode || this.foundRM1Item.parsedData?.materialCode || 'N/A';
+      const poNumber = this.foundRM1Item.poNumber || this.foundRM1Item.parsedData?.poNumber || 'N/A';
+      const imd = this.foundRM1Item.parsedData?.imd || this.foundRM1Item.imd || 'N/A';
+
+      if (!materialId) {
+        console.error('❌ Material ID is missing');
+        alert('❌ Lỗi: Không tìm thấy ID của mã hàng. Vui lòng scan lại.');
+        return;
+      }
+      
+      const docRef = this.firestore.collection('inventory-materials').doc(materialId);
       
       await docRef.update({
         location: newLocation,
@@ -1456,9 +1486,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`✅ Location updated successfully!`);
       
       alert(`✅ Đã cập nhật vị trí thành công!\n\n` +
-        `Mã hàng: ${this.foundRM1Item.materialCode}\n` +
-        `PO: ${this.foundRM1Item.poNumber}\n` +
-        `IMD: ${this.foundRM1Item.parsedData.imd}\n` +
+        `Mã hàng: ${materialCode}\n` +
+        `PO: ${poNumber}\n` +
+        `IMD: ${imd}\n` +
         `Vị trí mới: ${newLocation}`);
 
       // Reset and close modal

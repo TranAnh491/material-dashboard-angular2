@@ -145,6 +145,17 @@
         </div>
       </div>
 
+      <div class="counter-box location-change-box" 
+           title="Đã đổi vị trí">
+        <div class="counter-icon">
+          <i class="material-icons">swap_horiz</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">ĐỔI VỊ TRÍ</div>
+          <div class="counter-value">{{ locationChangedMaterials }}</div>
+        </div>
+      </div>
+
       <div class="counter-box unchecked-box clickable" 
            [class.active]="filterMode === 'unchecked'"
            (click)="setFilterMode('unchecked')"
@@ -177,6 +188,7 @@
             <th>TỒN KHO</th>
             <th>VỊ TRÍ (DỮ LIỆU)</th>
             <th>VỊ TRÍ THỰC TẾ</th>
+            <th>ĐỔI VỊ TRÍ</th>
             <th>STANDARD PACKING</th>
             <th>STOCK CHECK</th>
             <th>QTY CHECK</th>
@@ -199,6 +211,23 @@
                 {{ material.actualLocation }}
               </span>
               <ng-template #noActualLoc>
+                <span style="color: #999;">-</span>
+              </ng-template>
+            </td>
+            <td class="location-change-cell" [ngClass]="{'has-location-change': material.locationChangeInfo?.hasChanged}">
+              <div *ngIf="material.locationChangeInfo?.hasChanged; else noLocationChange">
+                <div class="location-change-info">
+                  <div class="location-change-location">
+                    <i class="material-icons" style="font-size: 16px; color: #4CAF50;">swap_horiz</i>
+                    <strong>{{ material.locationChangeInfo.newLocation }}</strong>
+                  </div>
+                  <div class="location-change-date" *ngIf="material.locationChangeInfo.changeDate">
+                    <i class="material-icons" style="font-size: 14px; color: #666;">schedule</i>
+                    {{ material.locationChangeInfo.changeDate | date:'dd/MM/yyyy HH:mm' }}
+                  </div>
+                </div>
+              </div>
+              <ng-template #noLocationChange>
                 <span style="color: #999;">-</span>
               </ng-template>
             </td>
