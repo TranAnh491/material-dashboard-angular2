@@ -127,37 +127,100 @@
       </div>
     </div>
 
-    <!-- Location Details Table -->
+    <!-- Location Details Table - Separated by Warehouse Type -->
     <div class="table-section">
       <h3>Chi tiết theo vị trí ({{warehouseStats.locationStats.length}} vị trí)</h3>
-      <div class="table-wrapper">
-        <table class="details-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Vị trí</th>
-              <th>Số lượng mã hàng</th>
-              <th>Tổng số lượng</th>
-              <th>Danh sách mã hàng</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let stat of warehouseStats.locationStats; let i = index">
-              <td>{{i + 1}}</td>
-              <td><strong>{{stat.location}}</strong></td>
-              <td>{{stat.totalItems}}</td>
-              <td>{{stat.totalQuantity | number:'1.0-0'}}</td>
-              <td class="materials-cell">
-                <span class="material-chip" *ngFor="let material of stat.materials.slice(0, 5)">
-                  {{material}}
-                </span>
-                <span class="more-indicator" *ngIf="stat.materials.length > 5">
-                  +{{stat.materials.length - 5}} more
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      
+      <!-- Kho thường Section -->
+      <div class="warehouse-section" *ngIf="normalWarehouseStats.length > 0">
+        <h4 class="section-title warehouse-normal-title">
+          <i class="material-icons">warehouse</i>
+          Kho thường ({{normalWarehouseStats.length}} vị trí)
+        </h4>
+        <div class="table-wrapper">
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Vị trí (đã gom)</th>
+                <th>Số lượng mã hàng</th>
+                <th>Tổng số lượng</th>
+                <th>Vị trí gốc</th>
+                <th>Danh sách mã hàng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let stat of normalWarehouseStats; let i = index">
+                <td>{{i + 1}}</td>
+                <td><strong>{{stat.location}}</strong></td>
+                <td>{{stat.totalItems}}</td>
+                <td>{{stat.totalQuantity | number:'1.0-0'}}</td>
+                <td class="original-locations-cell">
+                  <span class="location-chip" *ngFor="let origLoc of stat.originalLocations.slice(0, 3)">
+                    {{origLoc}}
+                  </span>
+                  <span class="more-indicator" *ngIf="stat.originalLocations.length > 3">
+                    +{{stat.originalLocations.length - 3}} vị trí
+                  </span>
+                </td>
+                <td class="materials-cell">
+                  <span class="material-chip" *ngFor="let material of stat.materials.slice(0, 5)">
+                    {{material}}
+                  </span>
+                  <span class="more-indicator" *ngIf="stat.materials.length > 5">
+                    +{{stat.materials.length - 5}} more
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Kho lạnh Section -->
+      <div class="warehouse-section" *ngIf="coldWarehouseStats.length > 0">
+        <h4 class="section-title warehouse-cold-title">
+          <i class="material-icons">ac_unit</i>
+          Kho lạnh ({{coldWarehouseStats.length}} vị trí)
+        </h4>
+        <div class="table-wrapper">
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Vị trí (đã gom)</th>
+                <th>Số lượng mã hàng</th>
+                <th>Tổng số lượng</th>
+                <th>Vị trí gốc</th>
+                <th>Danh sách mã hàng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let stat of coldWarehouseStats; let i = index">
+                <td>{{i + 1}}</td>
+                <td><strong>{{stat.location}}</strong></td>
+                <td>{{stat.totalItems}}</td>
+                <td>{{stat.totalQuantity | number:'1.0-0'}}</td>
+                <td class="original-locations-cell">
+                  <span class="location-chip" *ngFor="let origLoc of stat.originalLocations.slice(0, 3)">
+                    {{origLoc}}
+                  </span>
+                  <span class="more-indicator" *ngIf="stat.originalLocations.length > 3">
+                    +{{stat.originalLocations.length - 3}} vị trí
+                  </span>
+                </td>
+                <td class="materials-cell">
+                  <span class="material-chip" *ngFor="let material of stat.materials.slice(0, 5)">
+                    {{material}}
+                  </span>
+                  <span class="more-indicator" *ngIf="stat.materials.length > 5">
+                    +{{stat.materials.length - 5}} more
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

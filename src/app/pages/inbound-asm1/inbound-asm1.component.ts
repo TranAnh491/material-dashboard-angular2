@@ -1902,14 +1902,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       
       // Add full units
       // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
-      const batchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
+      const importDateStr = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
       
       for (let i = 0; i < fullUnits; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${batchNumber}`
+          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${importDateStr}`
         });
       }
       
@@ -1919,7 +1919,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${batchNumber}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${importDateStr}`
         });
       }
 
@@ -1930,9 +1930,19 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
       // Get current user info
       const user = await this.afAuth.currentUser;
-      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const currentUserEmail = user ? user.email || user.uid : 'UNKNOWN';
+      // Format email: asp0106@asp.com -> ASP0106
+      const currentUser = currentUserEmail.includes('@') 
+        ? currentUserEmail.split('@')[0].toUpperCase() 
+        : currentUserEmail.toUpperCase();
       const printDate = new Date().toLocaleDateString('vi-VN');
       const totalPages = qrCodes.length;
+      
+      // Check if batchNumber contains TRA PD or TRA EN
+      const materialBatchNumber = material.batchNumber || '';
+      const hasTRA_PD = materialBatchNumber.toUpperCase().includes('TRA PD');
+      const hasTRA_EN = materialBatchNumber.toUpperCase().includes('TRA EN');
+      const iconType = hasTRA_PD ? 'PD' : (hasTRA_EN ? 'EN' : null);
       
       // Generate QR code images
       const qrImages = await Promise.all(
@@ -1953,7 +1963,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             pageNumber: index + 1,
             totalPages: totalPages,
             printDate: printDate,
-            printedBy: currentUser
+            printedBy: currentUser,
+            iconType: iconType // PD or EN or null
           };
         })
       );
@@ -2017,25 +2028,55 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   flex-direction: column !important;
                   justify-content: space-between !important;
                   font-size: 9.6px !important; /* Tăng 20% từ 8px */
-                  line-height: 1.1 !important;
+                  line-height: 1.2 !important;
                   box-sizing: border-box !important;
                   color: #000000 !important; /* Tất cả text màu đen */
+                  text-align: left !important;
                 }
                 
                 .info-row {
-                  margin: 0.3mm 0 !important;
+                  margin: 0.2mm 0 !important;
                   font-weight: bold !important;
                   color: #000000 !important; /* Tất cả text màu đen */
+                  text-align: left !important;
+                  display: block !important;
+                  white-space: nowrap !important;
+                  font-family: Arial, sans-serif !important;
+                  letter-spacing: 0 !important;
                 }
                 
                 .info-row.small {
                   font-size: 8.4px !important; /* Tăng 20% từ 7px */
                   color: #000000 !important; /* Đổi từ #666 thành đen */
+                  text-align: left !important;
+                  font-family: Arial, sans-serif !important;
+                  letter-spacing: 0 !important;
                 }
                 
                 .info-row.small.page-number {
                   font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
                   color: #000000 !important; /* Màu đen */
+                }
+                
+                .icon-badge {
+                  position: absolute !important;
+                  bottom: 1mm !important;
+                  right: 1mm !important;
+                  width: 6mm !important;
+                  height: 6mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  background: #000000 !important;
+                  color: #FFFFFF !important;
+                  border-radius: 2mm !important;
+                  font-size: 10px !important;
+                  font-weight: bold !important;
+                  z-index: 10 !important;
+                }
+                
+                .qr-container {
+                  position: relative !important;
                 }
                 
                 .qr-grid {
@@ -2090,16 +2131,45 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     font-size: 9.6px !important; /* Tăng 20% từ 8px */
                     padding: 1mm !important;
                     color: #000000 !important; /* Tất cả text màu đen */
+                    text-align: left !important;
+                  }
+                  
+                  .info-row {
+                    text-align: left !important;
+                    display: block !important;
+                    white-space: nowrap !important;
                   }
                   
                   .info-row.small {
                     font-size: 8.4px !important; /* Tăng 20% từ 7px */
                     color: #000000 !important; /* Đổi từ #666 thành đen */
+                    text-align: left !important;
                   }
                   
                   .info-row.small.page-number {
                     font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
                     color: #000000 !important; /* Màu đen */
+                  }
+                  
+                  .icon-badge {
+                    position: absolute !important;
+                    bottom: 1mm !important;
+                    right: 1mm !important;
+                    width: 6mm !important;
+                    height: 6mm !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    background: #000000 !important;
+                    color: #FFFFFF !important;
+                    border-radius: 2mm !important;
+                    font-size: 10px !important;
+                    font-weight: bold !important;
+                    z-index: 10 !important;
+                  }
+                  
+                  .qr-container {
+                    position: relative !important;
                   }
                   
                   .qr-grid {
@@ -2138,11 +2208,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                           <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
                         </div>
                         <div>
-                          <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                          <div class="info-row small">Date: ${qr.printDate}</div>
                           <div class="info-row small">NV: ${qr.printedBy}</div>
                           <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
                         </div>
                       </div>
+                      ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                     </div>
                   `).join('')}
                 </div>
@@ -2255,9 +2326,22 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
       // Get current user info
       const user = await this.afAuth.currentUser;
-      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const currentUserEmail = user ? user.email || user.uid : 'UNKNOWN';
+      // Format email: asp0106@asp.com -> ASP0106
+      const currentUser = currentUserEmail.includes('@') 
+        ? currentUserEmail.split('@')[0].toUpperCase() 
+        : currentUserEmail.toUpperCase();
       const printDate = new Date().toLocaleDateString('vi-VN');
       const totalPages = allQRCodes.length;
+      
+      // Create a map to find material by materialCode and poNumber for batchNumber lookup
+      const materialMap = new Map<string, InboundMaterial>();
+      printableMaterials.forEach(m => {
+        const key = `${m.materialCode}_${m.poNumber}`;
+        if (!materialMap.has(key)) {
+          materialMap.set(key, m);
+        }
+      });
       
       // Generate QR code images
       const qrImages = await Promise.all(
@@ -2271,6 +2355,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
               light: '#FFFFFF'
             }
           });
+          
+          // Find corresponding material to get batchNumber
+          const materialKey = `${qr.materialCode}_${qr.poNumber}`;
+          const material = materialMap.get(materialKey);
+          const materialBatchNumber = material?.batchNumber || '';
+          const hasTRA_PD = materialBatchNumber.toUpperCase().includes('TRA PD');
+          const hasTRA_EN = materialBatchNumber.toUpperCase().includes('TRA EN');
+          const iconType = hasTRA_PD ? 'PD' : (hasTRA_EN ? 'EN' : null);
+          
           return {
             ...qr,
             qrImage,
@@ -2278,8 +2371,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             pageNumber: index + 1,
             totalPages: totalPages,
             printDate: printDate,
-            printedBy: currentUser
-          };
+            printedBy: currentUser,
+            iconType: iconType // PD or EN or null
+          } as any;
         })
       );
 
@@ -2342,25 +2436,55 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   flex-direction: column !important;
                   justify-content: space-between !important;
                   font-size: 9.6px !important;
-                  line-height: 1.1 !important;
+                  line-height: 1.2 !important;
                   box-sizing: border-box !important;
                   color: #000000 !important;
+                  text-align: left !important;
                 }
                 
                 .info-row {
-                  margin: 0.3mm 0 !important;
+                  margin: 0.2mm 0 !important;
                   font-weight: bold !important;
                   color: #000000 !important;
+                  text-align: left !important;
+                  display: block !important;
+                  white-space: nowrap !important;
+                  font-family: Arial, sans-serif !important;
+                  letter-spacing: 0 !important;
                 }
                 
                 .info-row.small {
                   font-size: 8.4px !important;
                   color: #000000 !important;
+                  text-align: left !important;
+                  font-family: Arial, sans-serif !important;
+                  letter-spacing: 0 !important;
                 }
                 
                 .info-row.small.page-number {
                   font-size: 10.08px !important;
                   color: #000000 !important;
+                }
+                
+                .icon-badge {
+                  position: absolute !important;
+                  bottom: 1mm !important;
+                  right: 1mm !important;
+                  width: 6mm !important;
+                  height: 6mm !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  background: #000000 !important;
+                  color: #FFFFFF !important;
+                  border-radius: 2mm !important;
+                  font-size: 10px !important;
+                  font-weight: bold !important;
+                  z-index: 10 !important;
+                }
+                
+                .qr-container {
+                  position: relative !important;
                 }
                 
                 .qr-grid {
@@ -2415,16 +2539,52 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     font-size: 9.6px !important;
                     padding: 1mm !important;
                     color: #000000 !important;
+                    text-align: left !important;
+                    line-height: 1.2 !important;
+                  }
+                  
+                  .info-row {
+                    text-align: left !important;
+                    display: block !important;
+                    white-space: nowrap !important;
+                    font-family: Arial, sans-serif !important;
+                    letter-spacing: 0 !important;
+                    margin: 0.2mm 0 !important;
                   }
                   
                   .info-row.small {
                     font-size: 8.4px !important;
                     color: #000000 !important;
+                    text-align: left !important;
+                    font-family: Arial, sans-serif !important;
+                    letter-spacing: 0 !important;
                   }
                   
                   .info-row.small.page-number {
                     font-size: 10.08px !important;
                     color: #000000 !important;
+                    text-align: left !important;
+                  }
+                  
+                  .icon-badge {
+                    position: absolute !important;
+                    bottom: 1mm !important;
+                    right: 1mm !important;
+                    width: 6mm !important;
+                    height: 6mm !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    background: #000000 !important;
+                    color: #FFFFFF !important;
+                    border-radius: 2mm !important;
+                    font-size: 10px !important;
+                    font-weight: bold !important;
+                    z-index: 10 !important;
+                  }
+                  
+                  .qr-container {
+                    position: relative !important;
                   }
                   
                   .qr-grid {
@@ -2463,11 +2623,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                         <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
                       </div>
                       <div>
-                        <div class="info-row small">Ngày in: ${qr.printDate}</div>
+                        <div class="info-row small">Date: ${qr.printDate}</div>
                         <div class="info-row small">NV: ${qr.printedBy}</div>
                         <div class="info-row small page-number">Số: ${qr.pageNumber}/${qr.totalPages}</div>
                       </div>
                     </div>
+                    ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                   </div>
                 `).join('')}
               </div>

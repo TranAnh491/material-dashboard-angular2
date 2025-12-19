@@ -6,9 +6,12 @@ import * as XLSX from 'xlsx';
 
 interface LocationStats {
   location: string;
+  normalizedLocation: string; // Vị trí đã chuẩn hóa (3 hoặc 4 chữ)
+  warehouseType: 'Kho thường' | 'Kho lạnh'; // Phân loại kho
   totalItems: number;
   totalQuantity: number;
   materials: string[]; // List of material codes
+  originalLocations: string[]; // Danh sách vị trí gốc được gom lại
 }
 
 interface WarehouseStats {
@@ -40,6 +43,10 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
   chartLabels: string[] = [];
   chartData: number[] = [];
   
+  // Separated location stats by warehouse type
+  normalWarehouseStats: LocationStats[] = [];
+  coldWarehouseStats: LocationStats[] = [];
+  
   constructor(
     private firestore: AngularFirestore
   ) {}
@@ -58,6 +65,60 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
     this.selectedFactory = factory;
     console.log(`📍 Factory selected: ${factory}`);
     this.loadWarehouseData();
+  }
+
+  // 🔧 FIX: Chuẩn hóa vị trí theo quy tắc mới
+  private normalizeLocation(location: string): { normalized: string; warehouseType: 'Kho thường' | 'Kho lạnh' } {
+    if (!location || location.trim() === '') {
+      return { normalized: 'Unknown', warehouseType: 'Kho thường' };
+    }
+
+    // Loại bỏ khoảng trắng và chuyển thành chữ hoa
+    const cleanLocation = location.trim().toUpperCase();
+    
+    // Lấy ký tự đầu tiên
+    const firstChar = cleanLocation.charAt(0);
+    
+    // 🔧 FIX: Bỏ tất cả dấu chấm, dấu phẩy, dấu đóng mở ngoặc và khoảng trắng
+    const withoutSpecialChars = cleanLocation.replace(/[.,()\[\]\s]/g, '');
+    
+    // 🔧 FIX: Xử lý đặc biệt cho K và J - chỉ lấy ký tự K hoặc J
+    if (firstChar === 'K' || firstChar === 'J') {
+      const normalized = firstChar;
+      const warehouseType = 'Kho lạnh'; // K và J là kho lạnh
+      console.log(`📍 Normalized (Special): "${location}" → "${normalized}" (${warehouseType})`);
+      return { normalized, warehouseType };
+    }
+    
+    // Xác định loại kho và số ký tự cần lấy
+    // A-G: Kho thường (3 ký tự)
+    // H-W (trừ K, J): Kho lạnh (4 ký tự chữ và số)
+    const isNormalWarehouse = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].includes(firstChar);
+    const charCount = isNormalWarehouse ? 3 : 4;
+    
+    // Lấy số ký tự đầu tiên (chữ và số) sau khi đã bỏ dấu đặc biệt
+    let normalized = '';
+    let charCountCollected = 0;
+    
+    for (let i = 0; i < withoutSpecialChars.length && charCountCollected < charCount; i++) {
+      const char = withoutSpecialChars[i];
+      // Chỉ lấy chữ và số
+      if (/[A-Z0-9]/.test(char)) {
+        normalized += char;
+        charCountCollected++;
+      }
+    }
+    
+    // Đảm bảo có đủ ký tự (nếu thiếu thì pad với số 0)
+    if (normalized.length < charCount) {
+      normalized = normalized.padEnd(charCount, '0');
+    }
+    
+    const warehouseType = isNormalWarehouse ? 'Kho thường' : 'Kho lạnh';
+    
+    console.log(`📍 Normalized: "${location}" → "${normalized}" (${warehouseType}, ${charCount} chars)`);
+    
+    return { normalized, warehouseType };
   }
 
   // Load warehouse data from Firebase
@@ -82,38 +143,56 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
 
       console.log(`✅ Loaded ${snapshot.docs.length} materials from ${this.selectedFactory}`);
 
-      // Process data
+      // 🔧 FIX: Process data với chuẩn hóa vị trí và gom nhóm
       const locationMap = new Map<string, LocationStats>();
       let totalQuantity = 0;
 
       snapshot.docs.forEach(doc => {
         const data = doc.data() as any;
-        const location = data.location || 'Unknown';
+        const originalLocation = data.location || 'Unknown';
         const materialCode = data.materialCode || '';
         const quantity = data.quantity || 0;
 
         totalQuantity += quantity;
 
-        if (!locationMap.has(location)) {
-          locationMap.set(location, {
-            location: location,
+        // Chuẩn hóa vị trí
+        const { normalized, warehouseType } = this.normalizeLocation(originalLocation);
+        
+        // Sử dụng vị trí đã chuẩn hóa làm key
+        if (!locationMap.has(normalized)) {
+          locationMap.set(normalized, {
+            location: normalized, // Hiển thị vị trí đã chuẩn hóa
+            normalizedLocation: normalized,
+            warehouseType: warehouseType,
             totalItems: 0,
             totalQuantity: 0,
-            materials: []
+            materials: [],
+            originalLocations: [] // Lưu danh sách vị trí gốc
           });
         }
 
-        const stats = locationMap.get(location)!;
+        const stats = locationMap.get(normalized)!;
         stats.totalItems++;
         stats.totalQuantity += quantity;
         if (!stats.materials.includes(materialCode)) {
           stats.materials.push(materialCode);
         }
+        // Thêm vị trí gốc vào danh sách (không trùng lặp)
+        if (!stats.originalLocations.includes(originalLocation)) {
+          stats.originalLocations.push(originalLocation);
+        }
       });
 
       // Convert to array and sort
       const locationStats = Array.from(locationMap.values())
-        .sort((a, b) => b.totalItems - a.totalItems);
+        .sort((a, b) => {
+          // Sắp xếp theo loại kho trước (Kho thường trước, Kho lạnh sau)
+          if (a.warehouseType !== b.warehouseType) {
+            return a.warehouseType === 'Kho thường' ? -1 : 1;
+          }
+          // Sau đó sắp xếp theo ABC (theo vị trí)
+          return a.location.localeCompare(b.location);
+        });
 
       // Calculate stats
       const usedLocations = locationStats.length;
@@ -123,6 +202,15 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
       const totalLocations = this.estimateTotalLocations(usedLocations);
       const emptyLocations = totalLocations - usedLocations;
       const utilizationRate = totalLocations > 0 ? (usedLocations / totalLocations) * 100 : 0;
+
+      // Separate by warehouse type
+      this.normalWarehouseStats = locationStats
+        .filter(stat => stat.warehouseType === 'Kho thường')
+        .sort((a, b) => a.location.localeCompare(b.location)); // Sort ABC
+      
+      this.coldWarehouseStats = locationStats
+        .filter(stat => stat.warehouseType === 'Kho lạnh')
+        .sort((a, b) => a.location.localeCompare(b.location)); // Sort ABC
 
       this.warehouseStats = {
         totalLocations: totalLocations,
@@ -175,9 +263,11 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
     try {
       // Prepare data for Excel
       const excelData = this.warehouseStats.locationStats.map(stat => ({
-        'Vị trí': stat.location,
+        'Vị trí (đã gom)': stat.location,
+        'Loại kho': stat.warehouseType,
         'Số lượng mã hàng': stat.totalItems,
         'Tổng số lượng': stat.totalQuantity,
+        'Vị trí gốc': stat.originalLocations.join(', '),
         'Mã hàng': stat.materials.join(', ')
       }));
 
@@ -208,6 +298,8 @@ export class WarehouseLoadingComponent implements OnInit, OnDestroy {
     this.warehouseStats = null;
     this.chartLabels = [];
     this.chartData = [];
+    this.normalWarehouseStats = [];
+    this.coldWarehouseStats = [];
   }
 }
 
