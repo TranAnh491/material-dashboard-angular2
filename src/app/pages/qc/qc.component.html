@@ -56,16 +56,23 @@
         IQC
       </button>
       
-      <div class="more-button-wrapper">
-        <button class="more-btn" (click)="toggleMoreMenu()" (blur)="closeMoreMenu()">
-          <i class="material-icons">more_vert</i>
-          More
+      <div class="right-buttons-wrapper">
+        <button class="logout-btn" (click)="logout()" title="Đăng xuất">
+          <i class="material-icons">logout</i>
+          Đăng xuất
         </button>
-        <div class="more-menu" *ngIf="showMoreMenu" (click)="$event.stopPropagation()">
-          <button class="menu-item" (click)="loadQCReport()">
-            <i class="material-icons">description</i>
-            Tải Report Kiểm
+        
+        <div class="more-button-wrapper">
+          <button class="more-btn" (click)="toggleMoreMenu()" (blur)="closeMoreMenu()">
+            <i class="material-icons">more_vert</i>
+            More
           </button>
+          <div class="more-menu" *ngIf="showMoreMenu" (click)="$event.stopPropagation()">
+            <button class="menu-item" (click)="loadQCReport()">
+              <i class="material-icons">description</i>
+              Tải Report Kiểm
+            </button>
+          </div>
         </div>
       </div>
     </div>

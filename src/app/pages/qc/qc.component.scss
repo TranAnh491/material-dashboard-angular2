@@ -83,10 +83,41 @@
       font-size: 20px;
     }
   }
+
+  .right-buttons-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+
+  .logout-btn {
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #ff9800;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    &:hover {
+      background: #fff3e0;
+    }
+    
+    &:active {
+      background: #ffe0b2;
+    }
+    
+    .material-icons {
+      font-size: 20px;
+    }
+  }
   
   .more-button-wrapper {
     position: relative;
-    margin-left: auto;
     
     .more-btn {
       background: #ffffff;

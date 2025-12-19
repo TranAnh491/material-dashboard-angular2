@@ -744,10 +744,10 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Load recent checked materials (last 20)
+  // Load recent checked materials (last 20) - chỉ hiển thị materials được người dùng kiểm, không hiển thị auto-pass
   loadRecentCheckedMaterials(): void {
     this.isLoadingRecent = true;
-    console.log('📊 Loading recent checked materials...');
+    console.log('📊 Loading recent checked materials (chỉ materials được người dùng kiểm)...');
     
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
@@ -761,16 +761,30 @@ export class QCComponent implements OnInit, OnDestroy {
             const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
             const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
             const iqcStatus = data.iqcStatus;
+            const qcCheckedBy = data.qcCheckedBy || '';
+            const location = (data.location || '').toUpperCase();
             
-            // Only include materials that have been checked (not 'CHỜ KIỂM')
-            if (iqcStatus && iqcStatus !== 'CHỜ KIỂM' && (qcCheckedAt || updatedAt)) {
+            // 🔧 Chỉ hiển thị materials được người dùng kiểm (có qcCheckedBy)
+            // Loại bỏ materials được tự động pass (location F62/F62TRA hoặc không có qcCheckedBy)
+            const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+            const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
+            
+            // Chỉ include materials:
+            // 1. Có iqcStatus và không phải 'CHỜ KIỂM'
+            // 2. Có qcCheckedBy (được người dùng kiểm)
+            // 3. Có qcCheckedAt (có thời gian kiểm)
+            // 4. Không phải auto-pass
+            if (iqcStatus && 
+                iqcStatus !== 'CHỜ KIỂM' && 
+                hasUserChecked && 
+                !isAutoPass) {
               return {
                 materialCode: data.materialCode || '',
                 poNumber: data.poNumber || '',
                 batchNumber: data.batchNumber || '',
                 iqcStatus: iqcStatus,
-                checkedBy: data.qcCheckedBy || 'N/A',
-                checkedAt: qcCheckedAt || updatedAt
+                checkedBy: qcCheckedBy,
+                checkedAt: qcCheckedAt
               };
             }
             return null;
@@ -784,7 +798,7 @@ export class QCComponent implements OnInit, OnDestroy {
         
         this.recentCheckedMaterials = recentMaterials;
         this.isLoadingRecent = false;
-        console.log(`✅ Loaded ${this.recentCheckedMaterials.length} recent checked materials`);
+        console.log(`✅ Loaded ${this.recentCheckedMaterials.length} recent checked materials (chỉ materials được người dùng kiểm)`);
       },
       error: (error) => {
         console.error('❌ Error loading recent checked materials:', error);
@@ -1177,6 +1191,39 @@ export class QCComponent implements OnInit, OnDestroy {
   closePendingQCModal(): void {
     this.showPendingQCModal = false;
     this.pendingQCMaterials = [];
+  }
+
+  // Logout method - chỉ đăng xuất khỏi tab QC, không đăng xuất khỏi web
+  logout(): void {
+    console.log('🚪 Đăng xuất khỏi tab QC...');
+    
+    // 1. Reset employee verification state
+    this.isEmployeeVerified = false;
+    this.currentEmployeeId = '';
+    this.currentEmployeeName = '';
+    this.employeeScanInput = '';
+    this.showEmployeeModal = true; // Hiển thị lại modal xác nhận nhân viên
+    
+    // 2. Clear localStorage chỉ liên quan đến QC
+    localStorage.removeItem('qc_currentEmployeeId');
+    localStorage.removeItem('qc_currentEmployeeName');
+    
+    // 3. Reset các modal và state khác
+    this.showMoreMenu = false;
+    this.showIQCModal = false;
+    this.showReportModal = false;
+    this.showTodayCheckedModal = false;
+    this.showPendingQCModal = false;
+    this.iqcScanInput = '';
+    this.scannedMaterial = null;
+    
+    // 4. Reset counts
+    this.pendingQCCount = 0;
+    this.todayCheckedCount = 0;
+    this.pendingConfirmCount = 0;
+    this.recentCheckedMaterials = [];
+    
+    console.log('✅ Đã đăng xuất khỏi tab QC. Vui lòng quét lại mã nhân viên để tiếp tục.');
   }
 }
 
