@@ -915,6 +915,11 @@
           }
 
           background: #e8f5e9;
+
+          &.active {
+            background: #c8e6c9;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
+          }
         }
 
         &.unchecked-box {

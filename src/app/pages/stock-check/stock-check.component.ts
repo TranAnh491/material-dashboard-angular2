@@ -110,7 +110,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scannedCount = 0; // Đếm số mã đã scan trong session
 
   // Filter state
-  filterMode: 'all' | 'checked' | 'unchecked' | 'outside' = 'all';
+  filterMode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' = 'all';
   
   // Search
   searchInput: string = '';
@@ -150,7 +150,18 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   get uncheckedMaterials(): number {
-    return this.totalMaterials - this.checkedMaterials;
+    // 🔧 Công thức: Tổng mã - (Đã kiểm tra + Đổi vị trí)
+    // Lưu ý: Nếu 1 mã có ở cả 2 thì chỉ tính 1 lần (không double count)
+    const checkedOrLocationChanged = new Set<string>();
+    
+    this.allMaterials.forEach(m => {
+      const key = `${m.materialCode}_${m.poNumber}_${m.imd}`;
+      if (m.stockCheck === '✓' || m.locationChangeInfo?.hasChanged === true) {
+        checkedOrLocationChanged.add(key);
+      }
+    });
+    
+    return this.totalMaterials - checkedOrLocationChanged.size;
   }
 
   get locationChangedMaterials(): number {
@@ -174,7 +185,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /**
    * Set filter mode
    */
-  setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside'): void {
+  setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change'): void {
     this.filterMode = mode;
     this.applyFilter();
   }
@@ -277,6 +288,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
         return currentStock === 0 || currentStock < 0;
       });
+    } else if (this.filterMode === 'location-change') {
+      // Hiển thị các mã đã đổi vị trí
+      filtered = filtered.filter(m => m.locationChangeInfo?.hasChanged === true);
     }
     
     // Then apply search
@@ -408,6 +422,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       filtered = filtered.filter(m => m.stockCheck === '✓');
     } else if (this.filterMode === 'unchecked') {
       filtered = filtered.filter(m => m.stockCheck !== '✓');
+    } else if (this.filterMode === 'location-change') {
+      // Hiển thị các mã đã đổi vị trí
+      filtered = filtered.filter(m => m.locationChangeInfo?.hasChanged === true);
     } else if (this.filterMode === 'outside') {
       // Hiển thị mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
       filtered = filtered.filter(m => {

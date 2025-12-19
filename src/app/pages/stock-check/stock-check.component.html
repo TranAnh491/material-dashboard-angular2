@@ -145,8 +145,10 @@
         </div>
       </div>
 
-      <div class="counter-box location-change-box" 
-           title="Đã đổi vị trí">
+      <div class="counter-box location-change-box clickable" 
+           [class.active]="filterMode === 'location-change'"
+           (click)="setFilterMode('location-change')"
+           title="Đã đổi vị trí - Click để xem danh sách">
         <div class="counter-icon">
           <i class="material-icons">swap_horiz</i>
         </div>
