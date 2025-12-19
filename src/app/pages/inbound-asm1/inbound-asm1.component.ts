@@ -304,13 +304,23 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           importDate: m.importDate
         })));
         
+        // 🔧 Sắp xếp theo nguyên tắc cố định:
+        // 1. Ngày nhập (ngày cũ nhất lên đầu) - ưu tiên cao nhất
+        // 2. Lô hàng/DNNK (batchNumber) - ưu tiên thứ 2
+        // 3. Mã hàng (materialCode) theo A, B, C - ưu tiên thứ 3
         this.materials = asm1Materials.sort((a, b) => {
-            // Sort by import date first (oldest first)
+            // 1. Sắp xếp theo ngày nhập (ngày cũ nhất lên đầu)
             const dateCompare = a.importDate.getTime() - b.importDate.getTime();
             if (dateCompare !== 0) return dateCompare;
             
-            // If same date, sort by creation time (import order)
-            return a.createdAt.getTime() - b.createdAt.getTime();
+            // 2. Nếu cùng ngày, sắp xếp theo Lô hàng/DNNK (batchNumber)
+            const batchA = a.batchNumber || '';
+            const batchB = b.batchNumber || '';
+            const batchCompare = batchA.localeCompare(batchB);
+            if (batchCompare !== 0) return batchCompare;
+            
+            // 3. Nếu cùng ngày và cùng lô hàng, sắp xếp theo mã hàng (A, B, C)
+            return a.materialCode.localeCompare(b.materialCode);
           });
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
@@ -555,27 +565,23 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     }
     
-    // Sort based on selected sort option
+    // 🔧 Sắp xếp theo nguyên tắc cố định:
+    // 1. Ngày nhập (ngày cũ nhất lên đầu) - ưu tiên cao nhất
+    // 2. Lô hàng/DNNK (batchNumber) - ưu tiên thứ 2
+    // 3. Mã hàng (materialCode) theo A, B, C - ưu tiên thứ 3
     filtered.sort((a, b) => {
-      switch (this.sortBy) {
-        case 'batchNumber':
-          // Sort by batch number (A-Z)
-          return a.batchNumber.localeCompare(b.batchNumber);
-        case 'materialCode':
-          // Sort by material code (A-Z)
-          return a.materialCode.localeCompare(b.materialCode);
-        case 'createdAt':
-          // Sort by creation time (oldest first)
-          return a.createdAt.getTime() - b.createdAt.getTime();
-        case 'importDate':
-        default:
-          // Sort by import date first (oldest first)
-          const dateCompare = a.importDate.getTime() - b.importDate.getTime();
-          if (dateCompare !== 0) return dateCompare;
-          
-          // If same date, sort by creation time (import order)
-          return a.createdAt.getTime() - b.createdAt.getTime();
-      }
+      // 1. Sắp xếp theo ngày nhập (ngày cũ nhất lên đầu)
+      const dateCompare = a.importDate.getTime() - b.importDate.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      
+      // 2. Nếu cùng ngày, sắp xếp theo Lô hàng/DNNK (batchNumber)
+      const batchA = a.batchNumber || '';
+      const batchB = b.batchNumber || '';
+      const batchCompare = batchA.localeCompare(batchB);
+      if (batchCompare !== 0) return batchCompare;
+      
+      // 3. Nếu cùng ngày và cùng lô hàng, sắp xếp theo mã hàng (A, B, C)
+      return a.materialCode.localeCompare(b.materialCode);
     });
     
     this.filteredMaterials = filtered;
