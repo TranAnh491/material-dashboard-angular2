@@ -799,6 +799,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
           return;
         }
 
+        // 🔧 Chỉ tính materials có IQC status là "Chờ kiểm" hoặc "CHỜ KIỂM"
+        const iqcStatus = (data.iqcStatus || '').trim();
+        if (iqcStatus !== 'Chờ kiểm' && iqcStatus !== 'CHỜ KIỂM' && iqcStatus !== 'Chờ kiểm tra' && iqcStatus !== 'CHỜ XÁC NHẬN') {
+          return;
+        }
+
         // Get date for week calculation - use lastActionDate (giống Manage tab: lastActionDate)
         // Priority: importDate > lastUpdated > createdAt
         let materialDate: Date | null = null;
@@ -1018,6 +1024,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
           
           // Only count materials with stock > 0
           if (stock <= 0) {
+            return;
+          }
+
+          // 🔧 Chỉ tính materials có IQC status là "Chờ kiểm" hoặc "CHỜ KIỂM"
+          const iqcStatus = (data.iqcStatus || '').trim();
+          if (iqcStatus !== 'Chờ kiểm' && iqcStatus !== 'CHỜ KIỂM' && iqcStatus !== 'Chờ kiểm tra' && iqcStatus !== 'CHỜ XÁC NHẬN') {
             return;
           }
 
