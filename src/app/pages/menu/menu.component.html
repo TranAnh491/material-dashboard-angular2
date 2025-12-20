@@ -19,13 +19,11 @@
     <h5 class="menu-category-title">Main</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Main'" 
+        <div *ngIf="tab.category === 'Main' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-main" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -36,13 +34,11 @@
     <h5 class="menu-category-title">ASM1 RM</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM1 RM'" 
+        <div *ngIf="tab.category === 'ASM1 RM' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-asm1-rm" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -53,13 +49,11 @@
     <h5 class="menu-category-title">ASM2 RM</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM2 RM'" 
+        <div *ngIf="tab.category === 'ASM2 RM' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-asm2-rm" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -70,13 +64,11 @@
     <h5 class="menu-category-title">ASM1 FG</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM1 FG'" 
+        <div *ngIf="tab.category === 'ASM1 FG' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-asm1-fg" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -87,13 +79,11 @@
     <h5 class="menu-category-title">Tools & Operations</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Tools'" 
+        <div *ngIf="tab.category === 'Tools' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-tools" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -104,13 +94,11 @@
     <h5 class="menu-category-title">Admin & Reports</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Admin'" 
+        <div *ngIf="tab.category === 'Admin' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-admin" 
-             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
-          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
