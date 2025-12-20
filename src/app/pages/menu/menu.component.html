@@ -1,16 +1,17 @@
 <div class="menu-container">
   <div class="menu-header">
-    <div class="header-top">
-      <h1 class="menu-title">
-        <i class="material-icons">apps</i>
-        Menu
-      </h1>
+    <div class="header-content">
+      <div class="header-left">
+        <img src="assets/img/logo.png" alt="Airspeed Logo" class="header-logo">
+        <div class="header-text">
+          <p class="menu-subtitle">Warehouse Management System</p>
+        </div>
+      </div>
       <button class="logout-btn" (click)="logout()" title="Đăng xuất">
         <i class="material-icons">logout</i>
         <span>Đăng xuất</span>
       </button>
     </div>
-    <p class="menu-subtitle">Chọn chức năng để bắt đầu</p>
   </div>
 
   <!-- Dashboard First -->
@@ -20,9 +21,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'Main'" 
              class="menu-item menu-item-main" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -35,9 +38,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'ASM1 RM'" 
              class="menu-item menu-item-asm1-rm" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -50,9 +55,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'ASM2 RM'" 
              class="menu-item menu-item-asm2-rm" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -65,9 +72,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'ASM1 FG'" 
              class="menu-item menu-item-asm1-fg" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -80,9 +89,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'Tools'" 
              class="menu-item menu-item-tools" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>
@@ -95,9 +106,11 @@
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'Admin'" 
              class="menu-item menu-item-admin" 
+             [class.desktop-only]="isDesktopOnly(tab.path)"
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>
           <span>{{tab.title}}</span>
+          <span *ngIf="isMobile && isDesktopOnly(tab.path)" class="desktop-badge">Desktop</span>
         </div>
       </ng-container>
     </div>

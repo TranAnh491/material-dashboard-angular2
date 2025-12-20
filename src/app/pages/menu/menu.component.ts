@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 
@@ -8,6 +8,28 @@ import { FirebaseAuthService } from '../../services/firebase-auth.service';
   styleUrls: ['./menu.component.scss']
 })
 export class MenuComponent implements OnInit {
+  
+  isMobile: boolean = false;
+  
+  // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
+  desktopOnlyTabs: string[] = [
+    '/work-order-status',
+    '/shipment',
+    '/inventory-overview-asm1',
+    '/inventory-overview-asm2',
+    '/fg-in',
+    '/fg-out',
+    '/fg-preparing',
+    '/fg-inventory',
+    '/qc',
+    '/label',
+    '/index',
+    '/utilization',
+    '/checklist',
+    '/equipment',
+    '/manage',
+    '/settings'
+  ];
   
   menuTabs = [
     // Dashboard - First
@@ -60,6 +82,26 @@ export class MenuComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
+    this.detectMobileDevice();
+  }
+  
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any): void {
+    this.detectMobileDevice();
+  }
+  
+  private detectMobileDevice(): void {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isMobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    const isMobileScreen = window.innerWidth <= 768;
+    const isPDA = /pda|handheld|mobile|android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    const isSmallScreen = window.innerWidth <= 1024;
+    
+    this.isMobile = isMobileUserAgent || isMobileScreen || isPDA || isSmallScreen;
+  }
+  
+  isDesktopOnly(path: string): boolean {
+    return this.desktopOnlyTabs.includes(path);
   }
   
   navigateToTab(path: string): void {

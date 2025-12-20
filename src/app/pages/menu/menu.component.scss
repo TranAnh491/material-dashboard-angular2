@@ -8,55 +8,83 @@
 }
 
 .menu-header {
-  text-align: center;
-  margin-bottom: 40px;
-  padding-bottom: 30px;
-  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 50px;
+  padding: 30px 0;
+  border-bottom: 3px solid #e0e0e0;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.header-top {
+.header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-logo {
+  height: 120px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .menu-title {
-  font-size: 2.5rem;
-  font-weight: 600;
-  color: #000000;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #1976D2;
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 15px;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
 
-  .material-icons {
-    font-size: 2.5rem;
-    color: #333333;
-  }
+.menu-subtitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1976D2;
+  margin: 0;
+  letter-spacing: 0.5px;
 }
 
 .logout-btn {
-  background: #333333;
+  background: linear-gradient(135deg, #D32F2F 0%, #C62828 100%);
   color: #ffffff;
-  border: 1px solid #333333;
-  border-radius: 4px;
-  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 24px;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(211, 47, 47, 0.3);
 
   &:hover {
-    background: #444444;
-    border-color: #444444;
+    background: linear-gradient(135deg, #E53935 0%, #D32F2F 100%);
+    box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
+    transform: translateY(-2px);
   }
 
   &:active {
-    background: #222222;
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(211, 47, 47, 0.3);
   }
 
   .material-icons {
@@ -67,12 +95,6 @@
   span {
     color: #ffffff;
   }
-}
-
-.menu-subtitle {
-  font-size: 1rem;
-  color: #666666;
-  margin: 0;
 }
 
 .menu-section {
@@ -279,6 +301,30 @@
   }
 }
 
+// Desktop Only Indicator
+.menu-item.desktop-only {
+  opacity: 0.7;
+  position: relative;
+  
+  .desktop-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #666666;
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
 // Responsive - Tablet
 @media (max-width: 1024px) {
   .menu-grid {
@@ -295,12 +341,12 @@
     font-size: 42px;
   }
   
-  .menu-title {
-    font-size: 2rem;
-    
-    .material-icons {
-      font-size: 2rem;
-    }
+  .header-logo {
+    height: 100px;
+  }
+  
+  .menu-subtitle {
+    font-size: 1.3rem;
   }
 }
 
@@ -315,24 +361,36 @@
     padding-bottom: 20px;
   }
 
-  .header-top {
+  .header-content {
     flex-direction: column;
-    gap: 15px;
+    gap: 20px;
     align-items: center;
+    text-align: center;
   }
   
-  .menu-title {
-    font-size: 1.8rem;
-    
-    .material-icons {
-      font-size: 1.8rem;
-    }
+  .header-left {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .header-logo {
+    height: 90px;
+  }
+  
+  .menu-subtitle {
+    font-size: 1.1rem;
   }
 
   .logout-btn {
     width: 100%;
-    max-width: 200px;
+    max-width: 100px;
     justify-content: center;
+    padding: 6px 12px;
+    font-size: 0.5rem;
+    
+    .material-icons {
+      font-size: 10px;
+    }
   }
   
   .menu-subtitle {
@@ -373,11 +431,21 @@
     padding: 20px 10px;
   }
   
-  .menu-title {
-    font-size: 1.5rem;
+  .header-logo {
+    height: 80px;
+  }
+  
+  .menu-subtitle {
+    font-size: 1rem;
+  }
+  
+  .logout-btn {
+    padding: 5px 10px;
+    font-size: 0.45rem;
+    max-width: 100px;
     
     .material-icons {
-      font-size: 1.5rem;
+      font-size: 10px;
     }
   }
   
