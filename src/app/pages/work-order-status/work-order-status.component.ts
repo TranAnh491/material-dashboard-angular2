@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
 import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
 import { Subject, firstValueFrom } from 'rxjs';
@@ -161,7 +162,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private userPermissionService: UserPermissionService,
     private factoryAccessService: FactoryAccessService,
     private qrScannerService: QRScannerService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private router: Router
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -3532,6 +3534,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.error('❌ Error updating work order in Firebase:', error);
       throw error;
     }
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
   }
 
 } 

@@ -204,6 +204,26 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return currentPath === '/dashboard';
     }
 
+    isMenuPage(): boolean {
+      var currentPath = this.location.prepareExternalUrl(this.location.path());
+      if(currentPath.charAt(0) === '#'){
+          currentPath = currentPath.slice( 1 );
+      }
+      return currentPath === '/menu' || currentPath === '/';
+    }
+
+    isQCPage(): boolean {
+      var currentPath = this.location.prepareExternalUrl(this.location.path());
+      if(currentPath.charAt(0) === '#'){
+          currentPath = currentPath.slice( 1 );
+      }
+      return currentPath === '/qc';
+    }
+
+    goToMenu(): void {
+      this.router.navigate(['/menu']);
+    }
+
     async signOut(): Promise<void> {
       try {
         await this.authService.signOut();

@@ -55,8 +55,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm2', name: 'RM2 Overview' },
     
+    // ASM1 FG tabs
+    { key: 'fg-in', name: 'FG In' },
+    { key: 'fg-out', name: 'FG Out' },
+    { key: 'fg-preparing', name: 'FG Check' },
+    { key: 'fg-inventory', name: 'FG Inventory' },
+    
     // Other tabs
     { key: 'location', name: 'Location' },
+    { key: 'find-rm1', name: 'Find RM1' },
     { key: 'warehouse-loading', name: 'Loading' },
     { key: 'trace-back', name: 'Trace Back' },
     { key: 'manage', name: 'Manage' },
@@ -691,16 +698,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
     try {
-      // User mới đăng ký: TẤT CẢ đều false - không xem được gì, nằm ở danh sách chờ duyệt
-      // Chỉ khi admin duyệt thì mới được cấp quyền
-      const finalPermissions: { [key: string]: boolean } = { ...defaultPermissions };
+      // User mới đăng ký: CHỈ Dashboard = true, các tab khác = false (chờ duyệt)
+      // Chỉ khi admin duyệt thì mới được cấp quyền cho các tab khác
+      const finalPermissions: { [key: string]: boolean } = {};
       
-      // Đảm bảo tất cả tabs đều false
+      // CHỈ Dashboard được phép mặc định, các tab khác đều false
       this.availableTabs.forEach(tab => {
-        finalPermissions[tab.key] = false;
+        finalPermissions[tab.key] = tab.key === 'dashboard';
       });
       
-      console.log(`✅ Created default tab permissions for ${user.email} - TẤT CẢ tabs = false (chờ duyệt)`);
+      console.log(`✅ Created default tab permissions for ${user.email} - CHỈ Dashboard = true, các tab khác = false (chờ duyệt)`);
       
       await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
         uid: user.uid,

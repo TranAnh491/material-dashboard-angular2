@@ -1,19 +1,12 @@
-.main-panel {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
+// Admin Layout Styles
+
+.sidebar-hidden {
+  .sidebar {
+    display: none;
+  }
 }
 
-.content-area {
-    flex-grow: 1;
-    /* The router-outlet will be placed here */
-}
-
-/* Ensure the routed component inside content-area also fills the space */
-.content-area > :first-child {
-    height: 100%;
-}
-
-app-navbar, .footer-wrapper {
-    flex-shrink: 0;
+.main-panel.full-width {
+  width: 100% !important;
+  margin-left: 0 !important;
 }

@@ -2374,7 +2374,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
               await this.firestore.collection('print-schedules').doc(docId).update({
                 data: dataArray,
                 lastUpdated: new Date()
-              });
+          });
               
               console.log(`✅ Firebase updated successfully: ${this.scannedLabel.maTem} -> ${status}`);
             } else {

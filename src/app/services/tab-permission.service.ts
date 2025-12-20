@@ -166,8 +166,17 @@ export class TabPermissionService {
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
     { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
     
+    // ASM1 FG tabs
+    { key: 'fg-in', name: 'FG In' },
+    { key: 'fg-out', name: 'FG Out' },
+    { key: 'fg-preparing', name: 'FG Check' },
+    { key: 'fg-inventory', name: 'FG Inventory' },
+    
     // Location tab
     { key: 'location', name: 'Location' },
+    
+    // Find RM1 tab
+    { key: 'find-rm1', name: 'Find RM1' },
     
     // Warehouse Loading tab
     { key: 'warehouse-loading', name: 'Loading' },

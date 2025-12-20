@@ -49,6 +49,30 @@
     font-size: 18px;
 }
 
+/* Home Button Styles */
+.btn-home {
+    background: transparent !important;
+    color: #000000 !important;
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    border-radius: 4px !important;
+    padding: 8px 12px !important;
+    min-width: auto !important;
+    box-shadow: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.btn-home:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.btn-home .material-icons {
+    font-size: 16px; /* 80% of 20px */
+    color: #000000 !important;
+}
+
 /* Giảm khoảng cách giữa các icon trong navbar */
 .navbar-nav {
     gap: 0px;

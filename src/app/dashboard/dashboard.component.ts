@@ -98,6 +98,47 @@ export class DashboardComponent implements OnInit, OnDestroy {
   rackWarningsRefreshInterval: any;
   rackWarningsRefreshTime = 14400000; // 4 tiếng
 
+  // Menu tabs for icon grid
+  menuTabs = [
+    // ASM1 RM
+    { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
+    { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'arrow_upward', category: 'ASM1 RM' },
+    { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', category: 'ASM1 RM' },
+    { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'assessment', category: 'ASM1 RM' },
+    
+    // ASM2 RM
+    { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'arrow_downward', category: 'ASM2 RM' },
+    { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'arrow_upward', category: 'ASM2 RM' },
+    { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', category: 'ASM2 RM' },
+    { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'assessment', category: 'ASM2 RM' },
+    
+    // ASM1 FG
+    { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM1 FG' },
+    { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM1 FG' },
+    { path: '/fg-preparing', title: 'FG Check', icon: 'checklist', category: 'ASM1 FG' },
+    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM1 FG' },
+    
+    // Tools & Operations
+    { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Tools' },
+    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Tools' },
+    { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
+    { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Tools' },
+    { path: '/location', title: 'Location', icon: 'location_on', category: 'Tools' },
+    { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', category: 'Tools' },
+    { path: '/trace-back', title: 'Trace Back', icon: 'track_changes', category: 'Tools' },
+    { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', category: 'Tools' },
+    { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', category: 'Tools' },
+    { path: '/safety', title: 'Safety Stock', icon: 'security', category: 'Tools' },
+    
+    // Admin & Reports
+    { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
+    { path: '/utilization', title: 'Utilization', icon: 'assessment', category: 'Admin' },
+    { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
+    { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
+    { path: '/manage', title: 'Manage', icon: 'manage_search', category: 'Admin' },
+    { path: '/settings', title: 'Settings', icon: 'settings', category: 'Admin' }
+  ];
+
   constructor(
     private firestore: AngularFirestore, 
     private safetyService: SafetyService, 
@@ -105,6 +146,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private authService: FirebaseAuthService
   ) { }
+  
+  navigateToTab(path: string): void {
+    this.router.navigate([path]);
+  }
 
   ngOnInit() {
     // Load selected factory from localStorage

@@ -1,9 +1,9 @@
 <div class="wrapper">
-    <div class="sidebar">
+    <div class="sidebar" style="display: none;">
         <app-sidebar></app-sidebar>
         <div class="sidebar-background"></div>
     </div>
-    <div class="main-panel">
+    <div class="main-panel" style="width: 100%; margin-left: 0;">
         <app-navbar *ngIf="shouldShowNavbar()" (factoryChanged)="onFactoryChanged($event)"></app-navbar>
         <div class="content-area">
             <router-outlet></router-outlet>

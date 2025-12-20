@@ -15,6 +15,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   private lastPoppedUrl: string;
   private yScrollStack: number[] = [];
   public isDashboard = false;
+  public isMenuPage = false;
   private psMainPanel: PerfectScrollbar;
   private psSidebar: PerfectScrollbar;
 
@@ -30,6 +31,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
         filter(event => event instanceof NavigationEnd)
       ).subscribe((event: NavigationEnd) => {
         this.isDashboard = event.urlAfterRedirects === '/dashboard';
+        this.isMenuPage = event.urlAfterRedirects === '/menu' || event.urlAfterRedirects === '/';
       });
 
       const isWindows = navigator.platform.indexOf('Win') > -1 ? true : false;

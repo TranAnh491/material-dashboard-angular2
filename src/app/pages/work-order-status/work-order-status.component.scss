@@ -1582,6 +1582,34 @@ textarea.mat-input-element {
     gap: 10px;
     flex-wrap: wrap;
     
+    .btn-home-workorder {
+      background: transparent;
+      color: #000000;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      padding: 12px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.7);
+      }
+      
+      &:active {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      
+      .material-icons {
+        font-size: 16px; /* 80% of 20px */
+        color: #000000;
+      }
+    }
+    
     .btn {
       display: flex;
       align-items: center;

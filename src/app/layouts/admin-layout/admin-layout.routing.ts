@@ -29,16 +29,18 @@ import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { ManageComponent } from '../../pages/manage/manage.component';
 import { QCComponent } from '../../pages/qc/qc.component';
+import { MenuComponent } from '../../pages/menu/menu.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 
 export const AdminLayoutRoutes: Routes = [
   { 
     path: '', 
-    redirectTo: 'dashboard', 
+    redirectTo: 'menu', 
     pathMatch: 'full',
     canActivate: [AuthGuard]
   },
+  { path: 'menu',                 component: MenuComponent, canActivate: [AuthGuard] },
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard] },
   { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard] },
   { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard] },

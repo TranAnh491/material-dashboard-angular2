@@ -115,6 +115,34 @@
       font-size: 20px;
     }
   }
+
+  .home-btn {
+    background: transparent;
+    color: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.7);
+    }
+    
+    &:active {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .material-icons {
+      font-size: 16px; /* 80% of 20px */
+      color: #000000;
+    }
+  }
   
   .more-button-wrapper {
     position: relative;

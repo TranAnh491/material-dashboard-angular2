@@ -125,6 +125,10 @@
             <div class="row function-selection-row">
               <div class="col-md-12">
                 <div class="function-buttons">
+                  <button class="btn btn-home-workorder" (click)="goToMenu()" title="Về Menu">
+                    <i class="material-icons">home</i>
+                    Home
+                  </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFactory === 'ASM1'"
                           (click)="selectFactory('ASM1')"

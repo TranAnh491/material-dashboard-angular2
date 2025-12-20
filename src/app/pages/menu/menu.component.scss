@@ -1,0 +1,411 @@
+// Menu Page - Monochrome Design
+.menu-container {
+  min-height: 100vh;
+  background: #ffffff;
+  padding: 40px 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.menu-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.menu-title {
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: #000000;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+
+  .material-icons {
+    font-size: 2.5rem;
+    color: #333333;
+  }
+}
+
+.logout-btn {
+  background: #333333;
+  color: #ffffff;
+  border: 1px solid #333333;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #444444;
+    border-color: #444444;
+  }
+
+  &:active {
+    background: #222222;
+  }
+
+  .material-icons {
+    font-size: 20px;
+    color: #ffffff;
+  }
+
+  span {
+    color: #ffffff;
+  }
+}
+
+.menu-subtitle {
+  font-size: 1rem;
+  color: #666666;
+  margin: 0;
+}
+
+.menu-section {
+  margin-bottom: 40px;
+}
+
+.menu-category-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #000000;
+  margin: 0 0 20px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  &::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+  }
+}
+
+// Category title colors
+.menu-section:nth-of-type(1) .menu-category-title::before {
+  background: #1976D2; // Main - Blue
+}
+
+.menu-section:nth-of-type(2) .menu-category-title::before {
+  background: #388E3C; // ASM1 RM - Green
+}
+
+.menu-section:nth-of-type(3) .menu-category-title::before {
+  background: #00ACC1; // ASM2 RM - Cyan
+}
+
+.menu-section:nth-of-type(4) .menu-category-title::before {
+  background: #F57C00; // ASM1 FG - Orange
+}
+
+.menu-section:nth-of-type(5) .menu-category-title::before {
+  background: #7B1FA2; // Tools - Purple
+}
+
+.menu-section:nth-of-type(6) .menu-category-title::before {
+  background: #D32F2F; // Admin - Red
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 20px;
+}
+
+.menu-item {
+  background: #ffffff;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 25px 20px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 120px;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.menu-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.menu-item:active {
+  transform: translateY(-2px);
+}
+
+.menu-item .material-icons {
+  font-size: 48px;
+  transition: transform 0.3s ease;
+}
+
+.menu-item:hover .material-icons {
+  transform: scale(1.1);
+}
+
+.menu-item span {
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.3;
+}
+
+// Main Category - SAP Blue
+.menu-item-main {
+  border-color: #1976D2;
+  
+  .material-icons {
+    color: #1976D2;
+  }
+  
+  span {
+    color: #1976D2;
+  }
+  
+  &:hover {
+    background: #E3F2FD;
+    border-color: #1565C0;
+  }
+}
+
+// ASM1 RM Category - SAP Green
+.menu-item-asm1-rm {
+  border-color: #388E3C;
+  
+  .material-icons {
+    color: #388E3C;
+  }
+  
+  span {
+    color: #388E3C;
+  }
+  
+  &:hover {
+    background: #E8F5E9;
+    border-color: #2E7D32;
+  }
+}
+
+// ASM2 RM Category - SAP Cyan
+.menu-item-asm2-rm {
+  border-color: #00ACC1;
+  
+  .material-icons {
+    color: #00ACC1;
+  }
+  
+  span {
+    color: #00ACC1;
+  }
+  
+  &:hover {
+    background: #E0F7FA;
+    border-color: #0097A7;
+  }
+}
+
+// ASM1 FG Category - SAP Orange
+.menu-item-asm1-fg {
+  border-color: #F57C00;
+  
+  .material-icons {
+    color: #F57C00;
+  }
+  
+  span {
+    color: #F57C00;
+  }
+  
+  &:hover {
+    background: #FFF3E0;
+    border-color: #E65100;
+  }
+}
+
+// Tools Category - SAP Purple
+.menu-item-tools {
+  border-color: #7B1FA2;
+  
+  .material-icons {
+    color: #7B1FA2;
+  }
+  
+  span {
+    color: #7B1FA2;
+  }
+  
+  &:hover {
+    background: #F3E5F5;
+    border-color: #6A1B9A;
+  }
+}
+
+// Admin Category - SAP Red
+.menu-item-admin {
+  border-color: #D32F2F;
+  
+  .material-icons {
+    color: #D32F2F;
+  }
+  
+  span {
+    color: #D32F2F;
+  }
+  
+  &:hover {
+    background: #FFEBEE;
+    border-color: #C62828;
+  }
+}
+
+// Responsive - Tablet
+@media (max-width: 1024px) {
+  .menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 15px;
+  }
+  
+  .menu-item {
+    padding: 20px 15px;
+    min-height: 110px;
+  }
+  
+  .menu-item .material-icons {
+    font-size: 42px;
+  }
+  
+  .menu-title {
+    font-size: 2rem;
+    
+    .material-icons {
+      font-size: 2rem;
+    }
+  }
+}
+
+// Responsive - Mobile
+@media (max-width: 768px) {
+  .menu-container {
+    padding: 30px 15px;
+  }
+  
+  .menu-header {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+  }
+
+  .header-top {
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+  }
+  
+  .menu-title {
+    font-size: 1.8rem;
+    
+    .material-icons {
+      font-size: 1.8rem;
+    }
+  }
+
+  .logout-btn {
+    width: 100%;
+    max-width: 200px;
+    justify-content: center;
+  }
+  
+  .menu-subtitle {
+    font-size: 0.9rem;
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+  }
+  
+  .menu-item {
+    padding: 18px 12px;
+    min-height: 95px;
+  }
+  
+  .menu-item .material-icons {
+    font-size: 36px;
+  }
+  
+  .menu-item span {
+    font-size: 0.9rem;
+  }
+  
+  .menu-category-title {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+  }
+  
+  .menu-section {
+    margin-bottom: 30px;
+  }
+}
+
+// Responsive - Small Mobile
+@media (max-width: 480px) {
+  .menu-container {
+    padding: 20px 10px;
+  }
+  
+  .menu-title {
+    font-size: 1.5rem;
+    
+    .material-icons {
+      font-size: 1.5rem;
+    }
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+    gap: 10px;
+  }
+  
+  .menu-item {
+    padding: 15px 10px;
+    min-height: 85px;
+  }
+  
+  .menu-item .material-icons {
+    font-size: 32px;
+  }
+  
+  .menu-item span {
+    font-size: 0.8rem;
+  }
+  
+  .menu-category-title {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+  
+  .menu-section {
+    margin-bottom: 25px;
+  }
+}
+

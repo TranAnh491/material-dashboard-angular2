@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { Router } from '@angular/router';
 
 export interface InventoryMaterial {
   id?: string;
@@ -81,7 +82,10 @@ export class QCComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
   
-  constructor(private firestore: AngularFirestore) {}
+  constructor(
+    private firestore: AngularFirestore,
+    private router: Router
+  ) {}
   
   ngOnInit(): void {
     // Không cần load materials ban đầu, chỉ load khi scan
@@ -1224,6 +1228,10 @@ export class QCComponent implements OnInit, OnDestroy {
     this.recentCheckedMaterials = [];
     
     console.log('✅ Đã đăng xuất khỏi tab QC. Vui lòng quét lại mã nhân viên để tiếp tục.');
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
   }
 }
 
