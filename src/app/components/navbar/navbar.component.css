@@ -61,6 +61,7 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    z-index: 1000 !important;
 }
 
 .btn-home:hover {
@@ -71,6 +72,37 @@
 .btn-home .material-icons {
     font-size: 16px; /* 80% of 20px */
     color: #000000 !important;
+}
+
+/* Mobile Home Button - Always Visible */
+@media (max-width: 768px) {
+    .btn-home {
+        position: fixed !important;
+        top: 10px !important;
+        right: 10px !important;
+        z-index: 9999 !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        border: 1px solid rgba(0, 0, 0, 0.2) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+        padding: 10px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    .btn-home .material-icons {
+        font-size: 20px !important;
+        color: #000000 !important;
+    }
+    
+    /* Đảm bảo navbar không ẩn nút Home trên mobile */
+    .navbar .container-fluid {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+    }
 }
 
 /* Giảm khoảng cách giữa các icon trong navbar */

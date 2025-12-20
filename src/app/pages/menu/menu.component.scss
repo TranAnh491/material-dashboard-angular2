@@ -18,7 +18,7 @@
 
 .header-content {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   max-width: 1200px;
   margin: 0 auto;
@@ -99,6 +99,15 @@
 
 .menu-section {
   margin-bottom: 40px;
+}
+
+.menu-footer {
+  margin-top: 60px;
+  padding-top: 40px;
+  border-top: 2px solid #e0e0e0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .menu-category-title {
@@ -380,7 +389,12 @@
   .menu-subtitle {
     font-size: 1.1rem;
   }
-
+  
+  .menu-footer {
+    margin-top: 40px;
+    padding-top: 30px;
+  }
+  
   .logout-btn {
     width: 100%;
     max-width: 100px;
@@ -437,6 +451,11 @@
   
   .menu-subtitle {
     font-size: 1rem;
+  }
+  
+  .menu-footer {
+    margin-top: 30px;
+    padding-top: 20px;
   }
   
   .logout-btn {

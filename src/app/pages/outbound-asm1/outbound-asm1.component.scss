@@ -284,11 +284,17 @@
   .excel-header {
     padding: 15px;
     text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
     
     h4 {
       font-size: 18px !important;
       margin: 0;
+      flex: 1;
     }
+    
   }
   
   .excel-actions {
@@ -486,7 +492,12 @@
   background: #ffffff; 
   border-bottom: 1px solid #e0e0e0; 
   padding: 16px 24px; 
-  flex-shrink: 0; 
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  
 }
 
 .excel-header h4 { 
@@ -494,7 +505,9 @@
   font-size: 18px; 
   font-weight: normal; 
   color: #000000; 
-  font-family: inherit; 
+  font-family: inherit;
+  flex: 1;
+  text-align: center;
 }
 
 .excel-body { 
