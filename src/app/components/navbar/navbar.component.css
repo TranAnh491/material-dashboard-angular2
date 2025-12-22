@@ -92,6 +92,8 @@
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
+        margin-left: 0 !important;
+        order: 0 !important;
     }
     
     .btn-home .material-icons {
@@ -104,6 +106,14 @@
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
+    }
+    
+    /* Đảm bảo nút Home luôn hiển thị trên mobile, không bị ảnh hưởng bởi collapse */
+    .navbar .btn-home {
+        position: fixed !important;
+        top: 10px !important;
+        right: 10px !important;
+        z-index: 9999 !important;
     }
 }
 
