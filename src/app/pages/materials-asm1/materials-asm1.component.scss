@@ -1804,6 +1804,10 @@
   background: #ffffff;
   border-bottom: 2px solid #000000;
   padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
   
   h4 {
     margin: 0;

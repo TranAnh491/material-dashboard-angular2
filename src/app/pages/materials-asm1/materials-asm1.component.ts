@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -140,8 +141,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
     private excelImportService: ExcelImportService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
