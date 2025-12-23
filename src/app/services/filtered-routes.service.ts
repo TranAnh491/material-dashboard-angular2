@@ -132,6 +132,7 @@ export class FilteredRoutesService {
       '/safety': 'safety',
       '/equipment': 'equipment',
       '/qc': 'qc',
+      '/wh-security': 'wh-security',
       '/settings': 'settings',
       
       // Legacy routes (for backward compatibility)

@@ -59,6 +59,8 @@ import { StockCheckComponent } from '../../pages/stock-check/stock-check.compone
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
+import { QCComponent } from '../../pages/qc/qc.component';
+import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 
 import { ChartComponent } from '../../pages/chart/chart.component';
@@ -117,6 +119,8 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     SettingsComponent,
     PrintLabelComponent,
     IndexComponent,
+    QCComponent,
+    WhSecurityComponent,
 
     ChartComponent
   ],

@@ -65,6 +65,7 @@ export class MenuComponent implements OnInit {
     { path: '/warehouse-loading', title: 'Loading', icon: 'storage', category: 'Tools' },
     { path: '/trace-back', title: 'Trace Back', icon: 'timeline', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'checklist', category: 'Tools' },
+    { path: '/wh-security', title: 'WH Security', icon: 'security', category: 'Tools' },
     { path: '/safety', title: 'Safety Stock', icon: 'shield', category: 'Tools' },
     
     // Admin & Reports

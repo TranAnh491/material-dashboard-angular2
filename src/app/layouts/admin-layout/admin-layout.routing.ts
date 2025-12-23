@@ -29,6 +29,7 @@ import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { ManageComponent } from '../../pages/manage/manage.component';
 import { QCComponent } from '../../pages/qc/qc.component';
+import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
@@ -73,6 +74,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard] },
   { path: 'manage',               component: ManageComponent, canActivate: [AuthGuard] },
   { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard] },
+  { path: 'wh-security',          component: WhSecurityComponent, canActivate: [AuthGuard] },
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard] },

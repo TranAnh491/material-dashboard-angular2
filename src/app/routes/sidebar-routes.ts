@@ -54,6 +54,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: '' },
   { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
   { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
+  { path: '/wh-security', title: 'WH Security', icon: 'security', class: '' },
   { path: '/safety', title: 'Safety Stock', icon: 'security', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 

@@ -75,6 +75,9 @@ export class QCComponent implements OnInit, OnDestroy {
   showReportModal: boolean = false;
   showTodayCheckedModal: boolean = false;
   showPendingQCModal: boolean = false;
+  showDownloadModal: boolean = false;
+  selectedMonth: string = '';
+  selectedYear: string = '';
   qcReports: any[] = [];
   todayCheckedMaterials: any[] = [];
   pendingQCMaterials: any[] = [];
@@ -87,9 +90,25 @@ export class QCComponent implements OnInit, OnDestroy {
     private router: Router
   ) {}
   
+  getYearOptions(): number[] {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentYear; i >= currentYear - 5; i--) {
+      years.push(i);
+    }
+    return years;
+  }
+  
   ngOnInit(): void {
     // Không cần load materials ban đầu, chỉ load khi scan
     console.log('📦 QC Component initialized - ready for scanning');
+    
+    // Close more menu when clicking outside
+    document.addEventListener('click', (event: any) => {
+      if (this.showMoreMenu && !event.target.closest('.more-button-wrapper')) {
+        this.showMoreMenu = false;
+      }
+    });
     
     // 🔧 FIX: Khôi phục currentEmployeeId từ localStorage nếu có
     const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
@@ -574,7 +593,7 @@ export class QCComponent implements OnInit, OnDestroy {
     // Lưu thông tin trước khi reset
     const statusToUpdate = this.selectedIQCStatus;
     const materialToUpdate = { ...this.scannedMaterial };
-    const employeeIdToSave = this.currentEmployeeId.trim(); // Đảm bảo không có khoảng trắng
+    const employeeIdToSave = this.currentEmployeeId.trim();
     
     // Update local data ngay lập tức để UI responsive
     const index = this.materials.findIndex(m => m.id === materialId);
@@ -583,37 +602,36 @@ export class QCComponent implements OnInit, OnDestroy {
       this.materials[index].updatedAt = new Date();
     }
     
-    // 🔧 FIX: Update Firestore TRƯỚC khi đóng modal để đảm bảo lưu thành công
+    // Update local counts immediately (optimistic update)
+    this.updateLocalCounts(statusToUpdate, materialToUpdate);
+    
+    // ĐÓNG MODAL NGAY LẬP TỨC (trước khi await Firestore)
+    this.scannedMaterial = null;
+    this.iqcScanInput = '';
+    this.selectedIQCStatus = 'CHỜ KIỂM';
+    this.showIQCModal = false; // Đóng modal ngay lập tức
+    
+    // Update Firestore bất đồng bộ (không chờ)
     const now = new Date();
     console.log(`💾 Updating IQC status: Material=${materialId}, Status=${statusToUpdate}, Employee=${employeeIdToSave}, Time=${now.toISOString()}`);
     
-    try {
-      // Update Firestore và CHỜ kết quả
-      await this.firestore.collection('inventory-materials').doc(materialId).update({
-        iqcStatus: statusToUpdate,
-        updatedAt: now,
-        qcCheckedBy: employeeIdToSave, // 🔧 FIX: Đảm bảo lưu đúng employee ID
-        qcCheckedAt: now
-      });
-      
+    // Fire and forget - không chờ kết quả để UI responsive
+    this.firestore.collection('inventory-materials').doc(materialId).update({
+      iqcStatus: statusToUpdate,
+      updatedAt: now,
+      qcCheckedBy: employeeIdToSave,
+      qcCheckedAt: now
+    }).then(() => {
       console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
       
-      // Chỉ đóng modal và reset sau khi Firestore update thành công
-      this.scannedMaterial = null;
-      this.iqcScanInput = '';
-      this.selectedIQCStatus = 'CHỜ KIỂM';
-      this.closeIQCModal();
-      
-      // Refresh counts và recent materials
-      this.loadPendingQCCount();
-      this.loadTodayCheckedCount();
-      this.loadPendingConfirmCount();
-      this.loadRecentCheckedMaterials();
-      
-      // Hiển thị thông báo thành công
-      console.log(`✅ IQC status updated successfully: ${statusToUpdate}`);
-      
-    } catch (error) {
+      // Refresh counts và recent materials sau khi update thành công (chạy background)
+      setTimeout(() => {
+        this.loadPendingQCCount();
+        this.loadTodayCheckedCount();
+        this.loadPendingConfirmCount();
+        this.loadRecentCheckedMaterials();
+      }, 500); // Delay lâu hơn để tránh query quá nhiều
+    }).catch((error) => {
       console.error('❌ Error updating IQC status:', error);
       
       // Revert local change nếu Firestore update thất bại
@@ -622,9 +640,68 @@ export class QCComponent implements OnInit, OnDestroy {
         this.materials[index].updatedAt = materialToUpdate.updatedAt || new Date();
       }
       
-      // Hiển thị lỗi chi tiết
-      alert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nLỗi: ${error}\n\nVui lòng thử lại.`);
+      // Revert counts
+      this.updateLocalCounts(materialToUpdate.iqcStatus || 'CHỜ KIỂM', materialToUpdate);
+      
+      // Hiển thị lỗi
+      alert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nVui lòng thử lại.`);
+    });
+  }
+  
+  // Update local counts immediately (optimistic update)
+  updateLocalCounts(newStatus: string, material: InventoryMaterial): void {
+    const oldStatus = material.iqcStatus || 'CHỜ KIỂM';
+    
+    // Update pending QC count
+    if (oldStatus === 'CHỜ KIỂM' && newStatus !== 'CHỜ KIỂM') {
+      // Material is no longer pending, decrease count
+      if (this.pendingQCCount > 0) {
+        this.pendingQCCount--;
+      }
     }
+    
+    // Update today checked count
+    if (newStatus !== 'CHỜ KIỂM') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const now = new Date();
+      if (now >= today) {
+        this.todayCheckedCount++;
+      }
+    }
+    
+    // Update pending confirm count
+    if (oldStatus === 'CHỜ XÁC NHẬN' && newStatus !== 'CHỜ XÁC NHẬN') {
+      // If previous status was CHỜ XÁC NHẬN and now changed, decrease
+      if (this.pendingConfirmCount > 0) {
+        this.pendingConfirmCount--;
+      }
+    } else if (oldStatus !== 'CHỜ XÁC NHẬN' && newStatus === 'CHỜ XÁC NHẬN') {
+      // If new status is CHỜ XÁC NHẬN, increase
+      this.pendingConfirmCount++;
+    }
+    
+    // Update recent checked materials (add to top)
+    if (newStatus !== 'CHỜ KIỂM' && this.currentEmployeeId) {
+      const recentItem = {
+        materialCode: material.materialCode || '',
+        poNumber: material.poNumber || '',
+        batchNumber: material.batchNumber || '',
+        iqcStatus: newStatus,
+        checkedBy: this.currentEmployeeId,
+        checkedAt: new Date()
+      };
+      
+      // Add to beginning of array
+      this.recentCheckedMaterials.unshift(recentItem);
+      // Keep only last 20
+      if (this.recentCheckedMaterials.length > 20) {
+        this.recentCheckedMaterials = this.recentCheckedMaterials.slice(0, 20);
+      }
+    }
+    
+    // Apply filters to update displayed list
+    this.applyFilters();
   }
   
   getIQCStatusClass(status: string): string {
@@ -748,36 +825,31 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Load recent checked materials (last 20) - chỉ hiển thị materials được người dùng kiểm, không hiển thị auto-pass
+  // Load recent checked materials (one-time query, not subscription)
   loadRecentCheckedMaterials(): void {
     this.isLoadingRecent = true;
-    console.log('📊 Loading recent checked materials (chỉ materials được người dùng kiểm)...');
     
+    // Use get() for one-time query (faster than subscription)
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
-    ).snapshotChanges()
+         .orderBy('qcCheckedAt', 'desc')
+         .limit(100) // Get more to filter, then take top 20
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        const recentMaterials = snapshot
+        const recentMaterials = snapshot.docs
           .map(doc => {
-            const data = doc.payload.doc.data() as any;
+            const data = doc.data() as any;
             const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
-            const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
             const iqcStatus = data.iqcStatus;
             const qcCheckedBy = data.qcCheckedBy || '';
             const location = (data.location || '').toUpperCase();
             
-            // 🔧 Chỉ hiển thị materials được người dùng kiểm (có qcCheckedBy)
-            // Loại bỏ materials được tự động pass (location F62/F62TRA hoặc không có qcCheckedBy)
+            // Chỉ hiển thị materials được người dùng kiểm
             const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
             const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
             
-            // Chỉ include materials:
-            // 1. Có iqcStatus và không phải 'CHỜ KIỂM'
-            // 2. Có qcCheckedBy (được người dùng kiểm)
-            // 3. Có qcCheckedAt (có thời gian kiểm)
-            // 4. Không phải auto-pass
             if (iqcStatus && 
                 iqcStatus !== 'CHỜ KIỂM' && 
                 hasUserChecked && 
@@ -794,15 +866,10 @@ export class QCComponent implements OnInit, OnDestroy {
             return null;
           })
           .filter(material => material !== null)
-          .sort((a, b) => {
-            // Sort by checked time (newest first)
-            return b!.checkedAt.getTime() - a!.checkedAt.getTime();
-          })
           .slice(0, 20); // Get only last 20
         
         this.recentCheckedMaterials = recentMaterials;
         this.isLoadingRecent = false;
-        console.log(`✅ Loaded ${this.recentCheckedMaterials.length} recent checked materials (chỉ materials được người dùng kiểm)`);
       },
       error: (error) => {
         console.error('❌ Error loading recent checked materials:', error);
@@ -811,90 +878,81 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
   
-  // Load pending QC count from Firestore (real-time)
+  // Load pending QC count from Firestore (one-time query, not subscription)
   loadPendingQCCount(): void {
-    console.log('📊 Loading pending QC count (only location = IQC)...');
-    
-    // Try query with location filter first
+    // Use get() instead of snapshotChanges() for one-time query (faster)
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
          .where('iqcStatus', '==', 'CHỜ KIỂM')
          .where('location', '==', 'IQC')
-    ).snapshotChanges()
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingQCCount = snapshot.length;
-        console.log(`📊 Pending QC count (location = IQC): ${this.pendingQCCount}`);
+        this.pendingQCCount = snapshot.size;
       },
       error: (error) => {
-        console.error('❌ Error loading pending QC count with location filter:', error);
-        console.log('🔄 Falling back to manual filter...');
-        // Fallback: try without location where clause and filter manually
-        this.loadPendingQCCountFallback();
+        console.error('❌ Error loading pending QC count:', error);
+        // Fallback: calculate from local materials
+        this.pendingQCCount = this.materials.filter(m => 
+          m.iqcStatus === 'CHỜ KIỂM' && m.location === 'IQC'
+        ).length;
       }
     });
   }
   
-  // Load today's checked count
+  // Load today's checked count (one-time query)
   loadTodayCheckedCount(): void {
-    console.log('📊 Loading today checked count...');
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Load all ASM1 materials and filter those checked today
+    // Use get() for one-time query (faster than subscription)
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
-    ).snapshotChanges()
+         .where('qcCheckedAt', '>=', today)
+         .where('qcCheckedAt', '<', tomorrow)
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.todayCheckedCount = snapshot.filter(doc => {
-          const data = doc.payload.doc.data() as any;
-          const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-          const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
-          const iqcStatus = data.iqcStatus;
-          
-          // Material is checked today if:
-          // 1. Has iqcStatus and it's not 'CHỜ KIỂM'
-          // 2. Was updated today
-          if (iqcStatus && iqcStatus !== 'CHỜ KIỂM' && (updatedAt || qcCheckedAt)) {
-            const checkDate = qcCheckedAt || updatedAt;
-            return checkDate >= today && checkDate < tomorrow;
-          }
-          return false;
+        // Count only materials with status != 'CHỜ KIỂM'
+        this.todayCheckedCount = snapshot.docs.filter(doc => {
+          const data = doc.data() as any;
+          return data.iqcStatus && data.iqcStatus !== 'CHỜ KIỂM';
         }).length;
-        
-        console.log(`📊 Today checked count: ${this.todayCheckedCount}`);
       },
       error: (error) => {
         console.error('❌ Error loading today checked count:', error);
-        this.todayCheckedCount = 0;
+        // Fallback: calculate from local materials
+        this.todayCheckedCount = this.materials.filter(m => {
+          if (!m.iqcStatus || m.iqcStatus === 'CHỜ KIỂM') return false;
+          const checkDate = m.updatedAt || new Date();
+          return checkDate >= today && checkDate < tomorrow;
+        }).length;
       }
     });
   }
   
-  // Load pending confirm count (CHỜ XÁC NHẬN)
+  // Load pending confirm count (one-time query)
   loadPendingConfirmCount(): void {
-    console.log('📊 Loading pending confirm count...');
-    
+    // Use get() for one-time query (faster)
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
          .where('iqcStatus', '==', 'CHỜ XÁC NHẬN')
-    ).snapshotChanges()
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingConfirmCount = snapshot.length;
-        console.log(`📊 Pending confirm count: ${this.pendingConfirmCount}`);
+        this.pendingConfirmCount = snapshot.size;
       },
       error: (error) => {
         console.error('❌ Error loading pending confirm count:', error);
-        // Fallback: count manually
-        this.loadPendingConfirmCountFallback();
+        // Fallback: calculate from local materials
+        this.pendingConfirmCount = this.materials.filter(m => 
+          m.iqcStatus === 'CHỜ XÁC NHẬN'
+        ).length;
       }
     });
   }
@@ -920,7 +978,7 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
   
-  // Show today checked materials modal
+  // Show today checked materials modal - chỉ hiển thị materials được user kiểm (có qcCheckedBy)
   async showTodayCheckedMaterials(): Promise<void> {
     this.showTodayCheckedModal = true;
     this.isLoadingReport = true;
@@ -931,8 +989,11 @@ export class QCComponent implements OnInit, OnDestroy {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       
+      // Query materials checked today with qcCheckedBy (user checked, not auto-pass)
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
+           .where('qcCheckedAt', '>=', today)
+           .where('qcCheckedAt', '<', tomorrow)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -944,22 +1005,30 @@ export class QCComponent implements OnInit, OnDestroy {
       this.todayCheckedMaterials = snapshot.docs
         .map(doc => {
           const data = doc.data() as any;
-          const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
           const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
           const iqcStatus = data.iqcStatus;
+          const qcCheckedBy = data.qcCheckedBy || '';
+          const location = (data.location || '').toUpperCase();
           
-          if (iqcStatus && iqcStatus !== 'CHỜ KIỂM' && (updatedAt || qcCheckedAt)) {
-            const checkDate = qcCheckedAt || updatedAt;
-            if (checkDate >= today && checkDate < tomorrow) {
-              return {
-                materialCode: data.materialCode || '',
-                poNumber: data.poNumber || '',
-                batchNumber: data.batchNumber || '',
-                iqcStatus: iqcStatus,
-                checkedBy: data.qcCheckedBy || 'N/A',
-                checkedAt: checkDate
-              };
-            }
+          // Chỉ lấy materials:
+          // 1. Có qcCheckedBy (được user kiểm, không phải auto-pass)
+          // 2. Có iqcStatus và không phải 'CHỜ KIỂM'
+          // 3. Không phải auto-pass (location F62/F62TRA với Pass và không có qcCheckedBy)
+          const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+          const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
+          
+          if (iqcStatus && 
+              iqcStatus !== 'CHỜ KIỂM' && 
+              hasUserChecked && 
+              !isAutoPass) {
+            return {
+              materialCode: data.materialCode || '',
+              poNumber: data.poNumber || '',
+              batchNumber: data.batchNumber || '',
+              iqcStatus: iqcStatus,
+              checkedBy: qcCheckedBy,
+              checkedAt: qcCheckedAt
+            };
           }
           return null;
         })
@@ -968,7 +1037,7 @@ export class QCComponent implements OnInit, OnDestroy {
           return b!.checkedAt.getTime() - a!.checkedAt.getTime();
         });
       
-      console.log(`✅ Loaded ${this.todayCheckedMaterials.length} materials checked today`);
+      console.log(`✅ Loaded ${this.todayCheckedMaterials.length} materials checked today by users`);
       this.isLoadingReport = false;
     } catch (error) {
       console.error('❌ Error loading today checked materials:', error);
@@ -1010,6 +1079,134 @@ export class QCComponent implements OnInit, OnDestroy {
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+  
+  openDownloadModal(): void {
+    this.showDownloadModal = true;
+    this.closeMoreMenu();
+    // Set default to current month
+    const now = new Date();
+    this.selectedYear = now.getFullYear().toString();
+    this.selectedMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+  }
+  
+  closeDownloadModal(): void {
+    this.showDownloadModal = false;
+    this.selectedMonth = '';
+    this.selectedYear = '';
+  }
+  
+  async downloadMonthlyReport(): Promise<void> {
+    if (!this.selectedMonth || !this.selectedYear) {
+      alert('Vui lòng chọn tháng và năm');
+      return;
+    }
+    
+    this.isLoadingReport = true;
+    
+    try {
+      // Calculate start and end of selected month
+      const year = parseInt(this.selectedYear);
+      const month = parseInt(this.selectedMonth);
+      const startDate = new Date(year, month - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(year, month, 1);
+      endDate.setHours(0, 0, 0, 0);
+      
+      // Query materials checked in selected month (only user checked, not auto-pass)
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+           .where('qcCheckedAt', '>=', startDate)
+           .where('qcCheckedAt', '<', endDate)
+           .orderBy('qcCheckedAt', 'desc')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        alert('Không có dữ liệu kiểm trong tháng này');
+        this.isLoadingReport = false;
+        return;
+      }
+      
+      // Filter only user-checked materials (not auto-pass)
+      const reportData = snapshot.docs
+        .map(doc => {
+          const data = doc.data() as any;
+          const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
+          const iqcStatus = data.iqcStatus;
+          const qcCheckedBy = data.qcCheckedBy || '';
+          const location = (data.location || '').toUpperCase();
+          
+          const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+          const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
+          
+          if (iqcStatus && 
+              iqcStatus !== 'CHỜ KIỂM' && 
+              hasUserChecked && 
+              !isAutoPass) {
+            return {
+              materialCode: data.materialCode || '',
+              poNumber: data.poNumber || '',
+              batchNumber: data.batchNumber || '',
+              materialName: data.materialName || '',
+              quantity: data.quantity || 0,
+              unit: data.unit || '',
+              iqcStatus: iqcStatus,
+              checkedBy: qcCheckedBy,
+              checkedAt: qcCheckedAt
+            };
+          }
+          return null;
+        })
+        .filter(item => item !== null);
+      
+      if (reportData.length === 0) {
+        alert('Không có dữ liệu kiểm trong tháng này');
+        this.isLoadingReport = false;
+        return;
+      }
+      
+      // Export to Excel
+      import('xlsx').then(XLSX => {
+        const wsData = [
+          ['STT', 'Mã hàng', 'Tên hàng', 'Số P.O', 'Lô hàng', 'Số lượng', 'Đơn vị', 'Trạng thái', 'Người kiểm', 'Thời gian kiểm']
+        ];
+        
+        reportData.forEach((item: any, index: number) => {
+          wsData.push([
+            index + 1,
+            item.materialCode,
+            item.materialName,
+            item.poNumber,
+            item.batchNumber,
+            item.quantity,
+            item.unit,
+            item.iqcStatus,
+            item.checkedBy,
+            item.checkedAt.toLocaleString('vi-VN')
+          ]);
+        });
+        
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'QC Report');
+        
+        const fileName = `QC_Report_${this.selectedMonth}_${this.selectedYear}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+        
+        console.log(`✅ Exported ${reportData.length} records to ${fileName}`);
+        this.isLoadingReport = false;
+        this.closeDownloadModal();
+      }).catch(error => {
+        console.error('❌ Error exporting Excel:', error);
+        alert('Lỗi khi xuất file Excel');
+        this.isLoadingReport = false;
+      });
+      
+    } catch (error) {
+      console.error('❌ Error loading monthly report:', error);
+      alert('Lỗi khi tải dữ liệu');
+      this.isLoadingReport = false;
+    }
   }
   
   // Load QC Report

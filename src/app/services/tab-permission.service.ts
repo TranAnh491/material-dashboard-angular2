@@ -196,6 +196,7 @@ export class TabPermissionService {
     { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
+    { key: 'wh-security', name: 'WH Security' },
     { key: 'settings', name: 'Settings' }
   ];
 } 

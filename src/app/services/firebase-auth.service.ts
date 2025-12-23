@@ -241,7 +241,7 @@ export class FirebaseAuthService {
         'materials-asm1', 'materials-asm2', 'inventory-overview-asm1',
         'fg-in', 'fg-out', 'fg-preparing', 'fg-inventory',
         'location', 'warehouse-loading', 'trace-back', 'manage', 'stock-check', 'label', 'index', 'utilization',
-        'find-rm1', 'checklist', 'safety', 'equipment', 'qc', 'settings'
+        'find-rm1', 'checklist', 'safety', 'equipment', 'qc', 'wh-security', 'settings'
       ];
 
       // Tạo permissions object - CHỈ Dashboard = true, các tab khác = false

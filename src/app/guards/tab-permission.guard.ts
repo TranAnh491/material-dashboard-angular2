@@ -66,6 +66,8 @@ export class TabPermissionGuard implements CanActivate {
       '/layout-3d': 'layout',
       '/checklist': 'checklist',
       '/equipment': 'equipment',
+      '/qc': 'qc',
+      '/wh-security': 'wh-security',
       '/task': 'task',
       '/settings': 'settings'
     };

@@ -75,6 +75,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
+    { key: 'wh-security', name: 'WH Security' },
     { key: 'settings', name: 'Settings' }
   ];
   // Firebase user tab permissions

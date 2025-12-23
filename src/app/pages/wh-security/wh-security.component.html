@@ -1,0 +1,258 @@
+<div class="main-content">
+  <div class="excel-container">
+    <!-- Header -->
+    <div class="excel-header">
+      <h4><i class="material-icons">security</i> WH Security</h4>
+      <div class="header-actions">
+        <button class="btn-action btn-more" (click)="toggleMoreMenu()">
+          <i class="material-icons">more_vert</i>
+          <span class="desktop-only">More</span>
+        </button>
+        <!-- More Menu Popup -->
+        <div class="more-menu-popup" *ngIf="showMoreMenu">
+          <button class="more-menu-item" (click)="openImportModal(); closeMoreMenu()">
+            <i class="material-icons">file_upload</i>
+            <span>Import</span>
+          </button>
+          <button class="more-menu-item" (click)="exportToExcel(); closeMoreMenu()">
+            <i class="material-icons">file_download</i>
+            <span>Export</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button class="btn-scan btn-check" (click)="openScanModal('IN')">
+        <i class="material-icons">qr_code_scanner</i>
+        <span>Check</span>
+      </button>
+    </div>
+    
+    <!-- Filters -->
+    <div class="filters-section">
+      <div class="search-box">
+        <i class="material-icons">search</i>
+        <input 
+          type="text" 
+          [(ngModel)]="searchTerm"
+          (input)="onSearchChange()"
+          placeholder="Tìm kiếm mã NV, tên, bộ phận...">
+      </div>
+      <div class="filter-group">
+        <select [(ngModel)]="typeFilter" (change)="onFilterChange()" class="filter-select">
+          <option value="all">Tất cả</option>
+          <option value="IN">Vào kho</option>
+          <option value="OUT">Ra khỏi kho</option>
+        </select>
+        <select [(ngModel)]="dateFilter" (change)="onFilterChange()" class="filter-select">
+          <option value="today">Hôm nay</option>
+          <option value="week">7 ngày</option>
+          <option value="month">30 ngày</option>
+          <option value="all">Tất cả</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="loading-container">
+      <div class="spinner"></div>
+      <p>Đang tải dữ liệu...</p>
+    </div>
+    
+    <!-- Error Message -->
+    <div *ngIf="errorMessage" class="error-message">
+      <i class="material-icons">error</i>
+      {{ errorMessage }}
+    </div>
+    
+    <!-- Desktop Table -->
+    <div class="table-container desktop-only" *ngIf="!isLoading && filteredAccessList.length > 0">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Mã NV</th>
+            <th>Tên</th>
+            <th>Bộ phận</th>
+            <th>Ngày</th>
+            <th>Loại</th>
+            <th>Thời gian</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of filteredAccessList; let i = index" [class.type-in]="item.type === 'IN'" [class.type-out]="item.type === 'OUT'">
+            <td>{{ i + 1 }}</td>
+            <td>{{ item.employeeId }}</td>
+            <td>{{ item.employeeName }}</td>
+            <td>{{ item.department }}</td>
+            <td>{{ formatDate(item.accessDate) }}</td>
+            <td>
+              <span class="badge" [class.badge-in]="item.type === 'IN'" [class.badge-out]="item.type === 'OUT'">
+                {{ item.type === 'IN' ? 'Vào kho' : 'Ra khỏi kho' }}
+              </span>
+            </td>
+            <td>{{ formatDateTime(item.createdAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Mobile Cards -->
+    <div class="mobile-cards mobile-only" *ngIf="!isLoading && filteredAccessList.length > 0">
+      <div class="access-card" *ngFor="let item of filteredAccessList" [class.type-in]="item.type === 'IN'" [class.type-out]="item.type === 'OUT'">
+        <div class="card-header">
+          <span class="badge" [class.badge-in]="item.type === 'IN'" [class.badge-out]="item.type === 'OUT'">
+            {{ item.type === 'IN' ? 'Vào kho' : 'Ra khỏi kho' }}
+          </span>
+          <span class="card-date">{{ formatDateTime(item.createdAt) }}</span>
+        </div>
+        <div class="card-body">
+          <div class="card-row">
+            <span class="label">Mã NV:</span>
+            <span class="value">{{ item.employeeId }}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">Tên:</span>
+            <span class="value">{{ item.employeeName }}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">Bộ phận:</span>
+            <span class="value">{{ item.department }}</span>
+          </div>
+          <div class="card-row">
+            <span class="label">Ngày:</span>
+            <span class="value">{{ formatDate(item.accessDate) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Empty State -->
+    <div *ngIf="!isLoading && filteredAccessList.length === 0" class="empty-state">
+      <i class="material-icons">inbox</i>
+      <p>Không có dữ liệu</p>
+    </div>
+  </div>
+</div>
+
+<!-- Scan Modal -->
+<div class="modal-overlay" *ngIf="showScanModal" (click)="closeScanModal()">
+  <div class="modal-content scan-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">qr_code_scanner</i>
+        {{ scanType === 'IN' ? 'Vào kho' : 'Ra khỏi kho' }}
+      </h3>
+      <button class="close-btn" (click)="closeScanModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="scan-input-section">
+        <label>Quét hoặc nhập mã nhân viên:</label>
+        <input 
+          type="text" 
+          [(ngModel)]="scanInput"
+          (keyup.enter)="processScan()"
+          placeholder="ASP0106-TRAN TUAN ANH-Bo Phan Kho-24/12/2018"
+          autofocus>
+        <div class="scan-buttons">
+          <button class="btn-camera" (click)="startCameraScan()">
+            <i class="material-icons">camera_alt</i>
+            Quét bằng camera
+          </button>
+          <button class="btn-confirm" (click)="processScan()">
+            <i class="material-icons">check</i>
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" *ngIf="showImportModal" (click)="closeImportModal()">
+  <div class="modal-content import-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">file_upload</i>
+        Import danh sách ra vào kho
+      </h3>
+      <button class="close-btn" (click)="closeImportModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="import-tabs">
+        <button class="tab-btn" [class.active]="importMode === 'text'" (click)="importMode = 'text'; importPreview = []">
+          <i class="material-icons">text_fields</i>
+          Nhập text
+        </button>
+        <button class="tab-btn" [class.active]="importMode === 'file'" (click)="importMode = 'file'; importPreview = []">
+          <i class="material-icons">insert_drive_file</i>
+          Upload file
+        </button>
+      </div>
+      
+      <!-- Text Import -->
+      <div *ngIf="importMode === 'text'" class="import-section">
+        <label>Nhập danh sách (mỗi dòng một bản ghi):</label>
+        <textarea 
+          [(ngModel)]="importText"
+          placeholder="ASP0106-TRAN TUAN ANH-Bo Phan Kho-24/12/2018-IN&#10;ASP0107-NGUYEN VAN B-Bo Phan Kho-25/12/2018-OUT"
+          rows="10"></textarea>
+        <button class="btn-process" (click)="processTextImport()">
+          <i class="material-icons">refresh</i>
+          Xử lý
+        </button>
+      </div>
+      
+      <!-- File Import -->
+      <div *ngIf="importMode === 'file'" class="import-section">
+        <label>Chọn file Excel hoặc Text:</label>
+        <input 
+          type="file" 
+          (change)="onFileSelected($event)"
+          accept=".xlsx,.xls,.txt,.csv">
+        <p class="file-info" *ngIf="importFile">
+          Đã chọn: {{ importFile.name }}
+        </p>
+      </div>
+      
+      <!-- Preview -->
+      <div *ngIf="importPreview.length > 0" class="import-preview">
+        <h4>Preview ({{ importPreview.length }} bản ghi):</h4>
+        <div class="preview-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã NV</th>
+                <th>Tên</th>
+                <th>Bộ phận</th>
+                <th>Ngày</th>
+                <th>Loại</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of importPreview">
+                <td>{{ item.employeeId }}</td>
+                <td>{{ item.employeeName }}</td>
+                <td>{{ item.department }}</td>
+                <td>{{ formatDate(item.accessDate) }}</td>
+                <td>{{ item.type === 'IN' ? 'Vào kho' : 'Ra khỏi kho' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button class="btn-confirm-import" (click)="confirmImport()">
+          <i class="material-icons">check_circle</i>
+          Xác nhận import ({{ importPreview.length }} bản ghi)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
