@@ -907,19 +907,34 @@ export class QCComponent implements OnInit, OnDestroy {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Use get() for one-time query (faster than subscription)
+    // Chỉ dùng factory filter, filter date và user-checked trong memory để tránh cần index
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
-         .where('qcCheckedAt', '>=', today)
-         .where('qcCheckedAt', '<', tomorrow)
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        // Count only materials with status != 'CHỜ KIỂM'
+        // Count only user-checked materials (not auto-pass) checked today
         this.todayCheckedCount = snapshot.docs.filter(doc => {
           const data = doc.data() as any;
-          return data.iqcStatus && data.iqcStatus !== 'CHỜ KIỂM';
+          const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
+          const iqcStatus = data.iqcStatus;
+          const qcCheckedBy = data.qcCheckedBy || '';
+          const location = (data.location || '').toUpperCase();
+          
+          // Filter by date range in memory
+          if (!qcCheckedAt || qcCheckedAt < today || qcCheckedAt >= tomorrow) {
+            return false;
+          }
+          
+          // Only count user-checked (not auto-pass)
+          const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+          const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
+          
+          return iqcStatus && 
+                 iqcStatus !== 'CHỜ KIỂM' && 
+                 hasUserChecked && 
+                 !isAutoPass;
         }).length;
       },
       error: (error) => {
@@ -988,11 +1003,9 @@ export class QCComponent implements OnInit, OnDestroy {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       
-      // Query materials checked today with qcCheckedBy (user checked, not auto-pass)
+      // Chỉ dùng factory filter, filter date range trong memory để tránh cần index
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
-           .where('qcCheckedAt', '>=', today)
-           .where('qcCheckedAt', '<', tomorrow)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -1001,6 +1014,7 @@ export class QCComponent implements OnInit, OnDestroy {
         return;
       }
       
+      // Filter by date range, user-checked materials (not auto-pass) in memory
       this.todayCheckedMaterials = snapshot.docs
         .map(doc => {
           const data = doc.data() as any;
@@ -1008,6 +1022,11 @@ export class QCComponent implements OnInit, OnDestroy {
           const iqcStatus = data.iqcStatus;
           const qcCheckedBy = data.qcCheckedBy || '';
           const location = (data.location || '').toUpperCase();
+          
+          // Filter by date range in memory
+          if (!qcCheckedAt || qcCheckedAt < today || qcCheckedAt >= tomorrow) {
+            return null;
+          }
           
           // Chỉ lấy materials:
           // 1. Có qcCheckedBy (được user kiểm, không phải auto-pass)
