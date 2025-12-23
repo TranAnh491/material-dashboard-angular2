@@ -144,61 +144,28 @@
     }
   }
   
-  .more-button-wrapper {
-    position: relative;
+  .more-btn {
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #ff9800;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     
-    .more-btn {
-      background: #ffffff;
-      color: #000000;
-      border: 2px solid #ff9800;
-      padding: 10px 20px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 500;
-      
-      &:hover {
-        background: #fff3e0;
-      }
-      
-      .material-icons {
-        font-size: 20px;
-      }
+    &:hover {
+      background: #fff3e0;
     }
     
-    .more-menu {
-      position: absolute;
-      top: 100%;
-      right: 0;
-      margin-top: 8px;
-      background: white;
-      border: 2px solid #ff9800;
-      min-width: 200px;
-      z-index: 100;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      
-      .menu-item {
-        width: 100%;
-        padding: 12px 16px;
-        text-align: left;
-        border: none;
-        background: white;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        color: #000000;
-        
-        &:hover {
-          background: #fff3e0;
-        }
-        
-        .material-icons {
-          font-size: 20px;
-          color: #ff9800;
-        }
-      }
+    &:active {
+      background: #ffe0b2;
+    }
+    
+    .material-icons {
+      font-size: 20px;
     }
   }
 }
@@ -833,9 +800,197 @@
 }
 
 // Report Modal
+.more-menu-modal {
+  max-width: 400px;
+  width: 90%;
+  
+  .modal-body {
+    padding: 20px;
+  }
+  
+  .more-menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    
+    .menu-option-btn {
+      width: 100%;
+      padding: 16px 20px;
+      background: #ffffff;
+      border: 2px solid #ff9800;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: 500;
+      color: #000000;
+      transition: all 0.3s;
+      
+      &:hover {
+        background: #fff3e0;
+        border-color: #ff9800;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      
+      &:active {
+        transform: translateY(0);
+      }
+      
+      .material-icons {
+        font-size: 24px;
+        color: #ff9800;
+      }
+      
+      span {
+        flex: 1;
+        text-align: left;
+      }
+    }
+  }
+}
+
 .report-modal-content {
-  max-width: 1000px;
+  max-width: 600px;
+  width: 90%;
   max-height: 90vh;
+  
+  .download-section {
+    padding: 20px 0;
+    
+    .download-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      border-radius: 4px;
+      margin-bottom: 24px;
+      
+      .material-icons {
+        color: #2196f3;
+        font-size: 20px;
+      }
+      
+      p {
+        margin: 0;
+        color: #1976d2;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
+    
+    .date-selector-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+      
+      .date-selector-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        
+        .date-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 14px;
+          font-weight: 500;
+          color: #333;
+          
+          .material-icons {
+            font-size: 18px;
+            color: #666;
+          }
+        }
+        
+        .date-select {
+          padding: 12px 16px;
+          border: 2px solid #dee2e6;
+          border-radius: 8px;
+          font-size: 15px;
+          background: #ffffff;
+          color: #333;
+          cursor: pointer;
+          transition: all 0.3s;
+          
+          &:hover {
+            border-color: #ff9800;
+          }
+          
+          &:focus {
+            outline: none;
+            border-color: #ff9800;
+            box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+          }
+        }
+      }
+    }
+    
+    .download-btn-primary {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 6px rgba(255, 152, 0, 0.2);
+      
+      &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(255, 152, 0, 0.3);
+      }
+      
+      &:active:not(:disabled) {
+        transform: translateY(0);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .material-icons {
+        font-size: 22px;
+      }
+    }
+  }
+  
+  .loading-report {
+    text-align: center;
+    padding: 40px 20px;
+    
+    .loading-spinner {
+      margin-bottom: 16px;
+      
+      .material-icons {
+        font-size: 48px;
+        color: #ff9800;
+        
+        &.rotating {
+          animation: spin 1s linear infinite;
+        }
+      }
+    }
+    
+    p {
+      color: #666;
+      font-size: 15px;
+    }
+  }
   
   .report-actions {
     margin-bottom: 16px;
@@ -931,6 +1086,42 @@
 
 
 // Recent Checked Materials Section
+.recent-checked-toggle-section {
+  padding: 16px 20px;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+  
+  .toggle-recent-btn {
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #ff9800;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    transition: all 0.3s;
+    width: 100%;
+    justify-content: center;
+    
+    &:hover {
+      background: #fff3e0;
+      border-color: #ff9800;
+    }
+    
+    &:active {
+      background: #ffe0b2;
+    }
+    
+    .material-icons {
+      font-size: 20px;
+    }
+  }
+}
+
 .recent-checked-section {
   margin: 20px 20px 0 20px;
   

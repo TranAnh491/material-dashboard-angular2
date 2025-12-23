@@ -66,18 +66,10 @@
           Đăng xuất
         </button>
         
-        <div class="more-button-wrapper">
-          <button class="more-btn" (click)="toggleMoreMenu()">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="more-menu-popup" *ngIf="showMoreMenu" (click)="$event.stopPropagation()">
-            <button class="menu-item" (click)="openDownloadModal()">
-              <i class="material-icons">download</i>
-              Tải về
-            </button>
-          </div>
-        </div>
+        <button class="more-btn" (click)="openMoreMenu()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
       </div>
     </div>
     
@@ -117,6 +109,61 @@
       </div>
     </div>
     
+    <!-- Recent Checked Materials Toggle Button -->
+    <div class="recent-checked-toggle-section">
+      <button class="toggle-recent-btn" (click)="toggleRecentChecked()">
+        <i class="material-icons">{{ showRecentChecked ? 'expand_less' : 'expand_more' }}</i>
+        <span>{{ showRecentChecked ? 'Ẩn' : 'Hiển thị' }} 20 mã được kiểm gần nhất</span>
+      </button>
+    </div>
+    
+    <!-- Recent Checked Materials List -->
+    <div class="recent-checked-section" *ngIf="showRecentChecked">
+      <h4 class="section-header">
+        <i class="material-icons">history</i>
+        20 mã vừa được kiểm tra gần đây nhất
+      </h4>
+      
+      <div class="recent-materials-container" *ngIf="!isLoadingRecent">
+        <table class="recent-materials-table" *ngIf="recentCheckedMaterials.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Trạng thái</th>
+              <th>Người kiểm</th>
+              <th>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let material of recentCheckedMaterials; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ material.materialCode }}</td>
+              <td>{{ material.poNumber }}</td>
+              <td>{{ material.batchNumber }}</td>
+              <td>
+                <span class="status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus)">
+                  {{ material.iqcStatus }}
+                </span>
+              </td>
+              <td>{{ material.checkedBy }}</td>
+              <td>{{ material.checkedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-recent" *ngIf="recentCheckedMaterials.length === 0">
+          <i class="material-icons">info</i>
+          <p>Chưa có mã hàng nào được kiểm tra</p>
+        </div>
+      </div>
+      
+      <div class="loading-recent" *ngIf="isLoadingRecent">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -378,6 +425,30 @@
   </div>
 </div>
 
+<!-- More Menu Popup Modal -->
+<div class="modal-overlay" *ngIf="showMoreMenu" (click)="closeMoreMenu()">
+  <div class="modal-content more-menu-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">more_vert</i>
+        More
+      </h3>
+      <button class="close-btn" (click)="closeMoreMenu()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="more-menu-options">
+        <button class="menu-option-btn" (click)="openDownloadModal(); closeMoreMenu()">
+          <i class="material-icons">download</i>
+          <span>Tải về</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Download Monthly Report Modal -->
 <div class="modal-overlay" *ngIf="showDownloadModal" (click)="closeDownloadModal()">
   <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
@@ -393,41 +464,59 @@
     
     <div class="modal-body">
       <div class="download-section">
-        <label class="download-label">Chọn tháng:</label>
-        <div class="date-selectors">
-          <select [(ngModel)]="selectedMonth" class="month-select">
-            <option value="">-- Chọn tháng --</option>
-            <option value="01">Tháng 1</option>
-            <option value="02">Tháng 2</option>
-            <option value="03">Tháng 3</option>
-            <option value="04">Tháng 4</option>
-            <option value="05">Tháng 5</option>
-            <option value="06">Tháng 6</option>
-            <option value="07">Tháng 7</option>
-            <option value="08">Tháng 8</option>
-            <option value="09">Tháng 9</option>
-            <option value="10">Tháng 10</option>
-            <option value="11">Tháng 11</option>
-            <option value="12">Tháng 12</option>
-          </select>
+        <div class="download-info">
+          <i class="material-icons">info_outline</i>
+          <p>Chọn tháng và năm để tải về báo cáo kiểm QC</p>
+        </div>
+        
+        <div class="date-selector-group">
+          <div class="date-selector-item">
+            <label class="date-label">
+              <i class="material-icons">calendar_today</i>
+              Tháng
+            </label>
+            <select [(ngModel)]="selectedMonth" class="date-select">
+              <option value="">-- Chọn tháng --</option>
+              <option value="01">Tháng 1</option>
+              <option value="02">Tháng 2</option>
+              <option value="03">Tháng 3</option>
+              <option value="04">Tháng 4</option>
+              <option value="05">Tháng 5</option>
+              <option value="06">Tháng 6</option>
+              <option value="07">Tháng 7</option>
+              <option value="08">Tháng 8</option>
+              <option value="09">Tháng 9</option>
+              <option value="10">Tháng 10</option>
+              <option value="11">Tháng 11</option>
+              <option value="12">Tháng 12</option>
+            </select>
+          </div>
           
-          <select [(ngModel)]="selectedYear" class="year-select">
-            <option value="">-- Chọn năm --</option>
-            <option *ngFor="let year of getYearOptions()" [value]="year">{{ year }}</option>
-          </select>
+          <div class="date-selector-item">
+            <label class="date-label">
+              <i class="material-icons">event</i>
+              Năm
+            </label>
+            <select [(ngModel)]="selectedYear" class="date-select">
+              <option value="">-- Chọn năm --</option>
+              <option *ngFor="let year of getYearOptions()" [value]="year">{{ year }}</option>
+            </select>
+          </div>
         </div>
         
         <button 
-          class="download-btn" 
+          class="download-btn-primary" 
           (click)="downloadMonthlyReport()" 
           [disabled]="!selectedMonth || !selectedYear || isLoadingReport">
           <i class="material-icons">download</i>
-          {{ isLoadingReport ? 'Đang tải...' : 'Tải về Excel' }}
+          <span>{{ isLoadingReport ? 'Đang tải dữ liệu...' : 'Tải về Excel' }}</span>
         </button>
       </div>
       
       <div class="loading-report" *ngIf="isLoadingReport">
-        <i class="material-icons rotating">sync</i>
+        <div class="loading-spinner">
+          <i class="material-icons rotating">sync</i>
+        </div>
         <p>Đang tải dữ liệu...</p>
       </div>
     </div>

@@ -69,8 +69,9 @@ export class QCComponent implements OnInit, OnDestroy {
   // Recent checked materials
   recentCheckedMaterials: any[] = [];
   isLoadingRecent: boolean = false;
+  showRecentChecked: boolean = false;
   
-  // More menu
+  // More menu (popup modal)
   showMoreMenu: boolean = false;
   showReportModal: boolean = false;
   showTodayCheckedModal: boolean = false;
@@ -102,13 +103,6 @@ export class QCComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     // Không cần load materials ban đầu, chỉ load khi scan
     console.log('📦 QC Component initialized - ready for scanning');
-    
-    // Close more menu when clicking outside
-    document.addEventListener('click', (event: any) => {
-      if (this.showMoreMenu && !event.target.closest('.more-button-wrapper')) {
-        this.showMoreMenu = false;
-      }
-    });
     
     // 🔧 FIX: Khôi phục currentEmployeeId từ localStorage nếu có
     const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
@@ -829,11 +823,10 @@ export class QCComponent implements OnInit, OnDestroy {
   loadRecentCheckedMaterials(): void {
     this.isLoadingRecent = true;
     
-    // Use get() for one-time query (faster than subscription)
+    // Query without orderBy to avoid index requirement, then sort in memory
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
-         .orderBy('qcCheckedAt', 'desc')
-         .limit(100) // Get more to filter, then take top 20
+         .limit(500) // Get more to filter, then sort and take top 20
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -866,6 +859,10 @@ export class QCComponent implements OnInit, OnDestroy {
             return null;
           })
           .filter(material => material !== null)
+          .sort((a, b) => {
+            // Sort by checked time (newest first) in memory
+            return b!.checkedAt.getTime() - a!.checkedAt.getTime();
+          })
           .slice(0, 20); // Get only last 20
         
         this.recentCheckedMaterials = recentMaterials;
@@ -874,6 +871,8 @@ export class QCComponent implements OnInit, OnDestroy {
       error: (error) => {
         console.error('❌ Error loading recent checked materials:', error);
         this.isLoadingRecent = false;
+        // Show empty state on error
+        this.recentCheckedMaterials = [];
       }
     });
   }
@@ -1072,13 +1071,21 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
   
-  // More menu functions
-  toggleMoreMenu(): void {
-    this.showMoreMenu = !this.showMoreMenu;
+  // More menu functions (popup modal)
+  openMoreMenu(): void {
+    this.showMoreMenu = true;
   }
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+  
+  toggleRecentChecked(): void {
+    this.showRecentChecked = !this.showRecentChecked;
+    // Load data when showing for the first time
+    if (this.showRecentChecked && this.recentCheckedMaterials.length === 0) {
+      this.loadRecentCheckedMaterials();
+    }
   }
   
   openDownloadModal(): void {
@@ -1114,11 +1121,9 @@ export class QCComponent implements OnInit, OnDestroy {
       endDate.setHours(0, 0, 0, 0);
       
       // Query materials checked in selected month (only user checked, not auto-pass)
+      // Chỉ dùng factory filter, filter date range trong memory để tránh cần index
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
-           .where('qcCheckedAt', '>=', startDate)
-           .where('qcCheckedAt', '<', endDate)
-           .orderBy('qcCheckedAt', 'desc')
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -1127,7 +1132,7 @@ export class QCComponent implements OnInit, OnDestroy {
         return;
       }
       
-      // Filter only user-checked materials (not auto-pass)
+      // Filter by date range, user-checked materials (not auto-pass) and sort in memory
       const reportData = snapshot.docs
         .map(doc => {
           const data = doc.data() as any;
@@ -1135,6 +1140,11 @@ export class QCComponent implements OnInit, OnDestroy {
           const iqcStatus = data.iqcStatus;
           const qcCheckedBy = data.qcCheckedBy || '';
           const location = (data.location || '').toUpperCase();
+          
+          // Filter by date range in memory
+          if (!qcCheckedAt || qcCheckedAt < startDate || qcCheckedAt >= endDate) {
+            return null;
+          }
           
           const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
           const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
@@ -1157,7 +1167,11 @@ export class QCComponent implements OnInit, OnDestroy {
           }
           return null;
         })
-        .filter(item => item !== null);
+        .filter(item => item !== null)
+        .sort((a, b) => {
+          // Sort by checked time (newest first) in memory
+          return b!.checkedAt.getTime() - a!.checkedAt.getTime();
+        });
       
       if (reportData.length === 0) {
         alert('Không có dữ liệu kiểm trong tháng này');
