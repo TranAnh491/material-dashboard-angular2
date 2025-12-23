@@ -98,7 +98,7 @@
       </div>
       
       <!-- Pending Confirm Count Box -->
-      <div class="pending-confirm-box">
+      <div class="pending-confirm-box" (click)="showPendingConfirmMaterials()">
         <div class="pending-confirm-content">
           <i class="material-icons">schedule</i>
           <div class="pending-confirm-info">
@@ -356,6 +356,71 @@
     
     <div class="modal-footer">
       <button class="close-modal-btn" (click)="closeTodayCheckedModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Pending Confirm Materials Modal -->
+<div class="modal-overlay" *ngIf="showPendingConfirmModal" (click)="closePendingConfirmModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">schedule</i>
+        Mã hàng chờ xác nhận
+      </h3>
+      <button class="close-btn" (click)="closePendingConfirmModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="report-content" *ngIf="!isLoadingReport">
+        <table class="report-table" *ngIf="pendingConfirmMaterials.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã hàng</th>
+              <th>Tên hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Số lượng</th>
+              <th>Đơn vị</th>
+              <th>Người kiểm</th>
+              <th>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let material of pendingConfirmMaterials; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ material.materialCode }}</td>
+              <td>{{ material.materialName }}</td>
+              <td>{{ material.poNumber }}</td>
+              <td>{{ material.batchNumber }}</td>
+              <td>{{ material.quantity }}</td>
+              <td>{{ material.unit }}</td>
+              <td>{{ material.qcCheckedBy }}</td>
+              <td>{{ material.updatedAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="empty-report" *ngIf="pendingConfirmMaterials.length === 0">
+          <i class="material-icons">inbox</i>
+          <p>Không có mã hàng nào chờ xác nhận</p>
+        </div>
+      </div>
+      <div class="loading-report" *ngIf="isLoadingReport">
+        <div class="loading-spinner">
+          <i class="material-icons rotating">sync</i>
+        </div>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closePendingConfirmModal()">
         <i class="material-icons">close</i>
         Đóng
       </button>

@@ -76,12 +76,14 @@ export class QCComponent implements OnInit, OnDestroy {
   showReportModal: boolean = false;
   showTodayCheckedModal: boolean = false;
   showPendingQCModal: boolean = false;
+  showPendingConfirmModal: boolean = false;
   showDownloadModal: boolean = false;
   selectedMonth: string = '';
   selectedYear: string = '';
   qcReports: any[] = [];
   todayCheckedMaterials: any[] = [];
   pendingQCMaterials: any[] = [];
+  pendingConfirmMaterials: any[] = [];
   isLoadingReport: boolean = false;
   
   private destroy$ = new Subject<void>();
@@ -1427,6 +1429,74 @@ export class QCComponent implements OnInit, OnDestroy {
     this.pendingQCMaterials = [];
   }
 
+  // Show pending confirm materials modal
+  async showPendingConfirmMaterials(): Promise<void> {
+    this.showPendingConfirmModal = true;
+    this.isLoadingReport = true;
+    
+    try {
+      console.log('📊 Loading pending confirm materials...');
+      
+      // Chỉ dùng factory filter, filter status trong memory để tránh cần index
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+      
+      if (!snapshot || snapshot.empty) {
+        this.pendingConfirmMaterials = [];
+        this.isLoadingReport = false;
+        return;
+      }
+      
+      // Filter materials with status 'CHỜ XÁC NHẬN' in memory
+      this.pendingConfirmMaterials = snapshot.docs
+        .map(doc => {
+          const data = doc.data() as any;
+          const iqcStatus = data.iqcStatus;
+          
+          // Filter: Only materials with status 'CHỜ XÁC NHẬN'
+          if (iqcStatus === 'CHỜ XÁC NHẬN') {
+            const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
+            const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+            
+            return {
+              id: doc.id,
+              materialCode: data.materialCode || '',
+              materialName: data.materialName || '',
+              poNumber: data.poNumber || '',
+              batchNumber: data.batchNumber || '',
+              quantity: data.quantity || 0,
+              unit: data.unit || '',
+              iqcStatus: iqcStatus,
+              qcCheckedBy: data.qcCheckedBy || '',
+              qcCheckedAt: qcCheckedAt,
+              updatedAt: updatedAt
+            };
+          }
+          return null;
+        })
+        .filter(material => material !== null)
+        .sort((a, b) => {
+          // Sort by updated date (newest first)
+          const dateA = a!.updatedAt || a!.qcCheckedAt || new Date(0);
+          const dateB = b!.updatedAt || b!.qcCheckedAt || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        });
+      
+      console.log(`✅ Loaded ${this.pendingConfirmMaterials.length} pending confirm materials`);
+      this.isLoadingReport = false;
+    } catch (error) {
+      console.error('❌ Error loading pending confirm materials:', error);
+      alert('❌ Lỗi khi tải danh sách mã hàng chờ xác nhận');
+      this.isLoadingReport = false;
+    }
+  }
+
+  closePendingConfirmModal(): void {
+    this.showPendingConfirmModal = false;
+    this.pendingConfirmMaterials = [];
+  }
+
   // Logout method - chỉ đăng xuất khỏi tab QC, không đăng xuất khỏi web
   logout(): void {
     console.log('🚪 Đăng xuất khỏi tab QC...');
@@ -1448,6 +1518,7 @@ export class QCComponent implements OnInit, OnDestroy {
     this.showReportModal = false;
     this.showTodayCheckedModal = false;
     this.showPendingQCModal = false;
+    this.showPendingConfirmModal = false;
     this.iqcScanInput = '';
     this.scannedMaterial = null;
     
