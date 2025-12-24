@@ -1108,6 +1108,16 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .material-icons.rotating {
+      animation: rotate 1s linear infinite;
+    }
+    gap: 6px;
     transition: all 0.2s;
     cursor: pointer;
     

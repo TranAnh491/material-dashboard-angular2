@@ -265,9 +265,12 @@
         
         <!-- Action Buttons -->
         <div class="action-buttons">
-          <button class="reset-btn" (click)="resetZeroStock()" title="Xóa hàng có tồn kho = 0">
-            <i class="material-icons">restart_alt</i>
-            Reset
+          <button class="reset-btn" 
+                  (click)="resetZeroStock()" 
+                  [disabled]="isResetting"
+                  title="Xóa hàng có tồn kho = 0 (chạy ngầm)">
+            <i class="material-icons" [class.rotating]="isResetting">{{ isResetting ? 'sync' : 'restart_alt' }}</i>
+            {{ isResetting ? 'Đang xóa...' : 'Reset' }}
           </button>
         </div>
         

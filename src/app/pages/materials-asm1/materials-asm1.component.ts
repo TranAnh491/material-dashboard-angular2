@@ -81,6 +81,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Loading state
   isLoading = false;
   isCatalogLoading = false;
+  isResetting = false; // Loading state for reset operation
   
   // Consolidation status
   consolidationMessage = '';
@@ -4339,67 +4340,117 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
-  // Reset function - Delete items with zero stock
+  // Reset function - Delete items with zero stock (runs in background, queries directly from Firebase)
   async resetZeroStock(): Promise<void> {
-    try {
-      // Find all items with stock = 0
-      const zeroStockItems = this.inventoryMaterials.filter(item => 
-        item.factory === this.FACTORY && this.calculateCurrentStock(item) === 0
-      );
-
-      if (zeroStockItems.length === 0) {
-        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM1');
-        return;
-      }
-
-      // Show confirmation dialog
+    // Show confirmation dialog first
       const confirmed = confirm(
         `🔄 RESET ASM1 INVENTORY\n\n` +
-        `Tìm thấy ${zeroStockItems.length} mã hàng có tồn kho = 0\n\n` +
-        `Bạn có muốn xóa tất cả những mã hàng này không?\n\n` +
-        `⚠️ Hành động này không thể hoàn tác!`
+        `Bạn có muốn xóa tất cả mã hàng có tồn kho = 0 không?\n\n` +
+        `⚠️ Hành động này không thể hoàn tác!\n\n` +
+        `💡 Quá trình sẽ chạy ngầm, không ảnh hưởng đến hiệu suất.`
       );
 
       if (!confirmed) {
         return;
       }
 
-      console.log(`🗑️ Starting reset for ASM1: ${zeroStockItems.length} items to delete`);
+      // Start background process
+      this.isResetting = true;
+      console.log('🗑️ Starting background reset for ASM1...');
+
+      // Run in background (don't await, let it run async)
+      this.performBackgroundReset().catch(error => {
+        console.error('❌ Error during background reset:', error);
+        alert(`❌ Lỗi khi reset ASM1: ${error.message}`);
+        this.isResetting = false;
+      });
+  }
+
+  // Background reset process - queries directly from Firebase
+  private async performBackgroundReset(): Promise<void> {
+    try {
+      // Query all ASM1 materials directly from Firebase
+      console.log('📡 Querying all ASM1 materials from Firebase...');
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.FACTORY)
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert('✅ Không có mã hàng nào trong ASM1');
+        this.isResetting = false;
+        return;
+      }
+
+      console.log(`📦 Found ${snapshot.size} materials, checking for zero stock...`);
+
+      // Calculate stock for each item and find zero stock items
+      const zeroStockDocs: any[] = [];
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const openingStock = data.openingStock !== null && data.openingStock !== undefined ? data.openingStock : 0;
+        const quantity = data.quantity || 0;
+        const exported = data.exported || 0;
+        const xt = data.xt || 0;
+        
+        // Calculate current stock: openingStock + quantity - exported - xt
+        const currentStock = openingStock + quantity - exported - xt;
+        
+        if (currentStock === 0) {
+          zeroStockDocs.push(doc);
+        }
+      });
+
+      if (zeroStockDocs.length === 0) {
+        alert('✅ Không có mã hàng nào có tồn kho = 0 trong ASM1');
+        this.isResetting = false;
+        return;
+      }
+
+      console.log(`🗑️ Found ${zeroStockDocs.length} items with zero stock, starting deletion...`);
 
       // Delete items in batches
       const batchSize = 50;
       let deletedCount = 0;
 
-      for (let i = 0; i < zeroStockItems.length; i += batchSize) {
+      for (let i = 0; i < zeroStockDocs.length; i += batchSize) {
         const batch = this.firestore.firestore.batch();
-        const currentBatch = zeroStockItems.slice(i, i + batchSize);
+        const currentBatch = zeroStockDocs.slice(i, i + batchSize);
 
-        currentBatch.forEach(item => {
-          if (item.id) {
-            const docRef = this.firestore.collection('inventory-materials').doc(item.id).ref;
-            batch.delete(docRef);
-          }
+        currentBatch.forEach(doc => {
+          const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+          batch.delete(docRef);
         });
 
         await batch.commit();
         deletedCount += currentBatch.length;
 
-        console.log(`✅ ASM1 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockItems.length}`);
+        console.log(`✅ ASM1 Reset batch ${Math.floor(i/batchSize) + 1} completed: ${deletedCount}/${zeroStockDocs.length}`);
 
-        // Small delay between batches
-        if (i + batchSize < zeroStockItems.length) {
+        // Small delay between batches to avoid overwhelming Firebase
+        if (i + batchSize < zeroStockDocs.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
+      console.log(`✅ Reset completed! Deleted ${deletedCount} items with zero stock`);
       alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedCount} mã hàng có tồn kho = 0 từ ASM1`);
 
-      // Reload inventory data
-      await this.loadInventoryFromFirebase();
+      // Clear local data if it exists (optional, to keep UI in sync)
+      if (this.inventoryMaterials.length > 0) {
+        this.inventoryMaterials = this.inventoryMaterials.filter(item => {
+          const stock = this.calculateCurrentStock(item);
+          return stock !== 0;
+        });
+        this.applyFilters();
+      }
+
+      this.isResetting = false;
 
     } catch (error) {
-      console.error('❌ Error during ASM1 reset:', error);
+      console.error('❌ Error during background reset:', error);
       alert(`❌ Lỗi khi reset ASM1: ${error.message}`);
+      this.isResetting = false;
     }
   }
 
