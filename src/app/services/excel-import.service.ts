@@ -17,6 +17,7 @@ export interface StockImportItem {
   quantity: number;
   type: string;
   location: string;
+  openingStock?: number | null; // Tồn đầu
 }
 
 export interface InventoryMaterial {
@@ -28,9 +29,11 @@ export interface InventoryMaterial {
   materialCode: string;
   materialName?: string;
   poNumber: string;
+  openingStock?: number | null; // Tồn đầu - nhập tay được, có thể null
   quantity: number;
   unit: string;
   exported?: number;
+  xt?: number; // Số lượng cần xuất (nhập tay)
   stock?: number;
   location: string;
   type: string;
@@ -41,9 +44,12 @@ export interface InventoryMaterial {
   rollsOrBags: string;
   supplier: string;
   remarks: string;
+  standardPacking?: number;
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
+  source?: 'inbound' | 'manual' | 'import';
+  iqcStatus?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -157,28 +163,55 @@ export class ExcelImportService {
               const firstSheetName = workbook.SheetNames[0];
               const worksheet = workbook.Sheets[firstSheetName];
               
-              // Optimize JSON conversion
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+              // Convert to JSON with header row for column mapping
+              const jsonDataWithHeader = XLSX.utils.sheet_to_json(worksheet, { 
                 header: 1,
                 defval: '',
                 blankrows: false
               });
               
+              // Get header row (first row)
+              const headerRow = jsonDataWithHeader[0] as any[];
+              if (!headerRow || headerRow.length === 0) {
+                throw new Error('File Excel không có header row');
+              }
+              
+              // Find column indices by header names
+              const getColumnIndex = (headerName: string): number => {
+                const normalizedName = headerName.toLowerCase().trim();
+                return headerRow.findIndex((h: any) => 
+                  h && h.toString().toLowerCase().trim() === normalizedName
+                );
+              };
+              
+              const factoryIdx = getColumnIndex('Factory') >= 0 ? getColumnIndex('Factory') : getColumnIndex('Nhà máy');
+              const materialCodeIdx = getColumnIndex('Mã hàng') >= 0 ? getColumnIndex('Mã hàng') : getColumnIndex('Material Code');
+              const poNumberIdx = getColumnIndex('PO Number') >= 0 ? getColumnIndex('PO Number') : getColumnIndex('PO');
+              const quantityIdx = getColumnIndex('Số lượng') >= 0 ? getColumnIndex('Số lượng') : getColumnIndex('Quantity');
+              const typeIdx = getColumnIndex('Loại hình') >= 0 ? getColumnIndex('Loại hình') : getColumnIndex('Type');
+              const locationIdx = getColumnIndex('Vị trí') >= 0 ? getColumnIndex('Vị trí') : getColumnIndex('Location');
+              const openingStockIdx = getColumnIndex('Tồn đầu') >= 0 ? getColumnIndex('Tồn đầu') : getColumnIndex('Opening Stock');
+              
               const stockItems: StockImportItem[] = [];
               
-              // Skip header row and process data
-              for (let i = 1; i < jsonData.length; i++) {
-                const row = jsonData[i] as any[];
+              // Process data rows (skip header row)
+              for (let i = 1; i < jsonDataWithHeader.length; i++) {
+                const row = jsonDataWithHeader[i] as any[];
                 
                 // Validate required fields
-                if (this.isValidStockRow(row)) {
+                if (this.isValidStockRow(row, materialCodeIdx, poNumberIdx, quantityIdx)) {
+                  const openingStockValue = openingStockIdx >= 0 && row[openingStockIdx] !== undefined && row[openingStockIdx] !== '' 
+                    ? this.parseNumber(row[openingStockIdx]) 
+                    : null;
+                  
                   stockItems.push({
-                    factory: this.cleanString(row[0]) || 'ASM1',
-                    materialCode: this.cleanString(row[1]),
-                    poNumber: this.cleanString(row[2]),
-                    quantity: this.parseNumber(row[3]),
-                    type: this.cleanString(row[4]) || '',
-                    location: this.cleanString(row[5])?.toUpperCase() || 'DEFAULT'
+                    factory: (factoryIdx >= 0 ? this.cleanString(row[factoryIdx]) : null) || 'ASM2',
+                    materialCode: this.cleanString(row[materialCodeIdx]),
+                    poNumber: this.cleanString(row[poNumberIdx]),
+                    quantity: this.parseNumber(row[quantityIdx]),
+                    type: (typeIdx >= 0 ? this.cleanString(row[typeIdx]) : null) || '',
+                    location: (locationIdx >= 0 ? this.cleanString(row[locationIdx])?.toUpperCase() : null) || 'DEFAULT',
+                    openingStock: openingStockValue !== null && openingStockValue !== undefined ? openingStockValue : null
                   });
                 }
               }
@@ -285,18 +318,22 @@ export class ExcelImportService {
    * Create inventory item from stock data
    */
   private createInventoryItem(stockItem: StockImportItem): InventoryMaterial {
+    const openingStock = stockItem.openingStock !== null && stockItem.openingStock !== undefined ? stockItem.openingStock : null;
+    const currentStock = (openingStock || 0) + stockItem.quantity;
+    
     return {
-      factory: stockItem.factory || 'ASM1',
+      factory: stockItem.factory || 'ASM2',
       importDate: new Date(),
       receivedDate: new Date(),
       batchNumber: `IMPORT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       materialCode: stockItem.materialCode,
       materialName: stockItem.materialCode,
       poNumber: stockItem.poNumber,
+      openingStock: openingStock,
       quantity: stockItem.quantity,
       unit: 'PCS',
       exported: 0,
-      stock: stockItem.quantity,
+      stock: currentStock,
       location: stockItem.location,
       type: stockItem.type,
       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
@@ -318,9 +355,14 @@ export class ExcelImportService {
    * Update existing inventory item with new data
    */
   private async updateExistingItem(existing: InventoryMaterial, stockItem: StockImportItem): Promise<InventoryMaterial> {
+    const openingStock = stockItem.openingStock !== null && stockItem.openingStock !== undefined ? stockItem.openingStock : existing.openingStock;
+    const currentStock = (openingStock || 0) + stockItem.quantity - (existing.exported || 0) - (existing.xt || 0);
+    
     const updatedItem: InventoryMaterial = {
       ...existing,
+      openingStock: openingStock,
       quantity: stockItem.quantity,
+      stock: currentStock,
       receivedDate: new Date(),
       isReceived: true,
       notes: `Updated from Excel: ${existing.notes}`,
@@ -342,12 +384,12 @@ export class ExcelImportService {
   /**
    * Validate stock row data
    */
-  private isValidStockRow(row: any[]): boolean {
+  private isValidStockRow(row: any[], materialCodeIdx: number, poNumberIdx: number, quantityIdx: number): boolean {
     return row && 
-           row.length >= 3 && 
-           this.cleanString(row[1]) && // materialCode
-           this.cleanString(row[2]) && // poNumber
-           this.parseNumber(row[3]) > 0; // quantity
+           row.length > Math.max(materialCodeIdx, poNumberIdx, quantityIdx) && 
+           this.cleanString(row[materialCodeIdx]) && // materialCode
+           this.cleanString(row[poNumberIdx]) && // poNumber
+           this.parseNumber(row[quantityIdx]) >= 0; // quantity (allow 0)
   }
 
   /**

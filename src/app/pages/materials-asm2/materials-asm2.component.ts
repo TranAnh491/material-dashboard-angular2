@@ -2263,6 +2263,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         {
           'Mã hàng': 'B001003',
           'PO Number': 'KZP00001/0001',
+          'Tồn đầu': 50,
           'Số lượng': 100,
           'Đơn vị': 'PCS',
           'Vị trí': 'A1',
@@ -2275,6 +2276,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         {
           'Mã hàng': 'P0123',
           'PO Number': 'KZP00002/0002',
+          'Tồn đầu': 0,
           'Số lượng': 200,
           'Đơn vị': 'KG',
           'Vị trí': 'B2',
@@ -2294,6 +2296,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       worksheet['!cols'] = [
         { wch: 15 },  // Mã hàng
         { wch: 18 },  // PO Number
+        { wch: 12 },  // Tồn đầu
         { wch: 12 },  // Số lượng
         { wch: 10 },  // Đơn vị
         { wch: 10 },  // Vị trí
