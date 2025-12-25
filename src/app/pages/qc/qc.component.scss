@@ -1210,14 +1210,66 @@
   }
 }
 
-// Mobile responsive - Hide on mobile
+// Mobile responsive - Cho phép hiển thị trên mobile/tablet
 @media (max-width: 991px) {
   .main-content {
-    display: none;
+    padding: 10px;
   }
   
   .stats-container {
     flex-direction: column;
+    gap: 10px;
+  }
+  
+  .excel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    
+    h4 {
+      font-size: 18px;
+    }
+    
+    .employee-info-display-header {
+      font-size: 12px;
+    }
+  }
+  
+  .action-buttons-container {
+    flex-direction: column;
+    gap: 10px;
+    
+    .right-buttons-wrapper {
+      margin-left: 0;
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+  
+  .excel-table-container {
+    overflow-x: auto;
+    max-height: calc(100vh - 400px);
+  }
+  
+  .excel-table {
+    font-size: 12px;
+    
+    th, td {
+      padding: 8px 6px;
+    }
+  }
+  
+  .iqc-modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .modal-body {
+    padding: 15px;
+  }
+  
+  .status-options {
+    grid-template-columns: 1fr;
   }
 }
 
