@@ -29,12 +29,27 @@ export class FirebaseAuthService {
     private firestore: AngularFirestore,
     private notificationService: NotificationService
   ) {
-    // Lắng nghe trạng thái đăng nhập
+    // Lắng nghe trạng thái đăng nhập và kiểm tra user có trong settings
     this.user$ = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
-          // User đã đăng nhập
-          return this.firestore.doc<User>(`users/${user.uid}`).valueChanges();
+          // User đã đăng nhập - lắng nghe thay đổi trong collection users
+          return this.firestore.doc<User>(`users/${user.uid}`).valueChanges().pipe(
+            switchMap(userData => {
+              // Nếu user bị xóa khỏi settings (userData = null), tự động đăng xuất
+              if (!userData) {
+                console.log(`❌ User ${user.email} không còn trong settings, tự động đăng xuất...`);
+                // Đăng xuất tự động
+                this.afAuth.signOut().then(() => {
+                  console.log(`✅ Đã đăng xuất user ${user.email} do không còn trong settings`);
+                }).catch(error => {
+                  console.error('❌ Lỗi khi đăng xuất tự động:', error);
+                });
+                return of(null);
+              }
+              return of(userData);
+            })
+          );
         } else {
           // User chưa đăng nhập
           return of(null);
@@ -64,7 +79,17 @@ export class FirebaseAuthService {
     try {
       const credential = await this.afAuth.signInWithEmailAndPassword(email, password);
       
-      // Cập nhật thông tin user trong Firestore
+      // KIỂM TRA: User phải có trong collection 'users' (đã được duyệt trong settings) mới cho phép đăng nhập
+      const userDoc = await this.firestore.collection('users').doc(credential.user.uid).get().toPromise();
+      
+      if (!userDoc || !userDoc.exists) {
+        // User không có trong settings, đăng xuất ngay và từ chối đăng nhập
+        console.log(`❌ User ${credential.user.email} không có trong settings, từ chối đăng nhập`);
+        await this.afAuth.signOut();
+        throw new Error('Tài khoản chưa được duyệt. Vui lòng liên hệ quản trị viên.');
+      }
+      
+      // User có trong settings, cập nhật thông tin đăng nhập
       await this.updateUserLoginInfo(credential.user);
       
       // Lưu login history
@@ -72,8 +97,12 @@ export class FirebaseAuthService {
       
       console.log('✅ Đăng nhập thành công:', credential.user.uid);
       return credential;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Đăng nhập thất bại:', error);
+      // Nếu là lỗi tự tạo, throw lại
+      if (error.message && error.message.includes('chưa được duyệt')) {
+        throw error;
+      }
       throw error;
     }
   }
@@ -275,21 +304,15 @@ export class FirebaseAuthService {
     const doc = await userRef.get().toPromise();
     
     if (doc?.exists) {
-      // User đã tồn tại, chỉ cập nhật lastLoginAt
+      // User đã tồn tại trong settings, chỉ cập nhật lastLoginAt
       await userRef.update({
         lastLoginAt: new Date()
       });
     } else {
-      // User chưa tồn tại, tạo mới
-      const userData: User = {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: new Date(),
-        lastLoginAt: new Date()
-      };
-      await userRef.set(userData);
+      // User chưa tồn tại - KHÔNG tự động tạo mới
+      // Chỉ user đã được admin duyệt trong settings mới được phép đăng nhập
+      // Điều này đã được kiểm tra trong signIn method trước khi gọi updateUserLoginInfo
+      console.warn(`⚠️ User ${user.uid} không tồn tại trong settings khi cập nhật login info`);
     }
   }
 
