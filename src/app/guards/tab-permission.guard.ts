@@ -154,6 +154,7 @@ export class TabPermissionGuard implements CanActivate {
       '/equipment': 'equipment',
       '/qc': 'qc',
       '/wh-security': 'wh-security',
+      '/rm1-delivery': 'rm1-delivery',
       '/settings': 'settings',
       
       // Menu route - cho phép truy cập (không cần permission)

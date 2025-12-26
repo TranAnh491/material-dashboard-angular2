@@ -133,6 +133,7 @@ export class FilteredRoutesService {
       '/equipment': 'equipment',
       '/qc': 'qc',
       '/wh-security': 'wh-security',
+      '/rm1-delivery': 'rm1-delivery',
       '/settings': 'settings',
       
       // Legacy routes (for backward compatibility)

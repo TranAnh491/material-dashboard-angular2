@@ -4576,7 +4576,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     printWindow.document.write(`
       <html>
         <head>
-          <title>QR Label - ASM1 - ${material.materialCode}</title>
+          <title>QR Label - ASM2 - ${material.materialCode}</title>
           <style>
             * {
               margin: 0 !important;
@@ -4725,7 +4725,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
                   <div class="info-row">${qr.materialCode}</div>
                   <div class="info-row">${qr.poNumber}</div>
                   <div class="info-row">${qr.unitNumber}</div>
-                  <div class="info-row small">ASM1</div>
+                  <div class="info-row small">ASM2</div>
                   <div class="info-row small">${currentDate}</div>
                 </div>
               </div>

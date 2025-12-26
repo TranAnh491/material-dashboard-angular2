@@ -1,0 +1,249 @@
+<div class="delivery-container">
+  <!-- Header -->
+  <div class="delivery-header">
+    <h2>
+      <i class="material-icons">local_shipping</i>
+      RM1 Delivery
+    </h2>
+    <div class="header-actions">
+      <button class="menu-btn" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Menu
+      </button>
+    </div>
+  </div>
+
+  <!-- Employee Verification Modal -->
+  <div class="modal-overlay" *ngIf="showEmployeeModal && currentStep === 'employee'">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">badge</i>
+          Xác thực nhân viên
+        </h3>
+      </div>
+      <div class="modal-body">
+        <div class="scan-section">
+          <label>
+            <i class="material-icons">qr_code_scanner</i>
+            Quét hoặc nhập mã nhân viên (VD: ASP0106)
+          </label>
+          <div class="scan-input-container">
+            <input 
+              type="text" 
+              class="scan-input"
+              [(ngModel)]="employeeScanInput"
+              (keyup.enter)="verifyEmployee()"
+              placeholder="ASP0106"
+              autofocus>
+            <button class="scan-btn" (click)="verifyEmployee()">
+              <i class="material-icons">verified_user</i>
+              Xác thực
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="delivery-content" *ngIf="currentStep !== 'employee'">
+    
+    <!-- Mode Selection -->
+    <div class="mode-selection" *ngIf="currentStep === 'mode'">
+      <h3>Chọn chức năng:</h3>
+      <div class="mode-buttons">
+        <button class="mode-btn mode-kiem-tra" (click)="selectMode('kiem-tra')">
+          <i class="material-icons">check_circle</i>
+          <span>Kiểm tra</span>
+          <p>Scan LSX và các mã nguyên liệu</p>
+        </button>
+        <button class="mode-btn mode-giao-hang" (click)="selectMode('giao-hang')">
+          <i class="material-icons">local_shipping</i>
+          <span>Giao hàng</span>
+          <p>Scan LSX và Line nhận</p>
+        </button>
+      </div>
+    </div>
+
+    <!-- Employee Info Display -->
+    <div class="employee-info" *ngIf="isEmployeeVerified && currentStep !== 'mode'">
+      <i class="material-icons">person</i>
+      <span>Nhân viên: <strong>{{ currentEmployeeName }} ({{ currentEmployeeId }})</strong></span>
+    </div>
+
+    <!-- LSX Scan Section -->
+    <div class="scan-section" *ngIf="currentStep === 'lsx'">
+      <h3>
+        <i class="material-icons">description</i>
+        Quét LSX
+      </h3>
+      <div class="scan-input-container">
+        <input 
+          type="text" 
+          class="scan-input"
+          [(ngModel)]="lsxScanInput"
+          (keyup.enter)="onLsxScan()"
+          placeholder="Quét hoặc nhập LSX"
+          autofocus>
+        <button class="scan-btn" (click)="onLsxScan()">
+          <i class="material-icons">check</i>
+          Xác nhận
+        </button>
+      </div>
+      <div class="scan-status" *ngIf="isLsxScanned">
+        <i class="material-icons">check_circle</i>
+        <span>LSX: <strong>{{ currentLsx }}</strong></span>
+      </div>
+    </div>
+
+    <!-- Materials Scan Section (Kiểm tra) -->
+    <div class="scan-section" *ngIf="currentStep === 'materials' && selectedMode === 'kiem-tra'">
+      <h3>
+        <i class="material-icons">inventory</i>
+        Quét mã nguyên liệu
+      </h3>
+      <div class="scan-input-container">
+        <input 
+          type="text" 
+          class="scan-input"
+          [(ngModel)]="materialScanInput"
+          (keyup.enter)="onMaterialScan()"
+          placeholder="Quét hoặc nhập mã nguyên liệu"
+          autofocus>
+        <button class="scan-btn" (click)="onMaterialScan()">
+          <i class="material-icons">add</i>
+          Thêm
+        </button>
+      </div>
+      
+      <!-- Scanned Materials List -->
+      <div class="materials-list" *ngIf="scannedMaterials.length > 0">
+        <h4>Danh sách nguyên liệu đã quét ({{ scannedMaterials.length }})</h4>
+        <div class="materials-table">
+          <table>
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã nguyên liệu</th>
+                <th>PO</th>
+                <th>Số lượng</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let material of scannedMaterials; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td>{{ material.materialCode }}</td>
+                <td>{{ material.poNumber || '-' }}</td>
+                <td>{{ material.quantity || '-' }}</td>
+                <td>
+                  <button class="remove-btn" (click)="removeMaterial(i)">
+                    <i class="material-icons">delete</i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="done-btn" (click)="onDone()" [disabled]="scannedMaterials.length === 0">
+          <i class="material-icons">check_circle</i>
+          Done
+        </button>
+      </div>
+    </div>
+
+    <!-- Receive Line Scan Section (Giao hàng) -->
+    <div class="scan-section" *ngIf="currentStep === 'receiveLine' && selectedMode === 'giao-hang'">
+      <h3>
+        <i class="material-icons">vertical_align_center</i>
+        Quét Line nhận
+      </h3>
+      <div class="scan-input-container">
+        <input 
+          type="text" 
+          class="scan-input"
+          [(ngModel)]="receiveLineScanInput"
+          (keyup.enter)="onReceiveLineScan()"
+          placeholder="Quét hoặc nhập Line nhận"
+          autofocus>
+        <button class="scan-btn" (click)="onReceiveLineScan()">
+          <i class="material-icons">check</i>
+          Xác nhận
+        </button>
+      </div>
+      <div class="scan-status" *ngIf="currentReceiveLine">
+        <i class="material-icons">check_circle</i>
+        <span>Line nhận: <strong>{{ currentReceiveLine }}</strong></span>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="done-btn" (click)="onDone()" [disabled]="!currentReceiveLine">
+          <i class="material-icons">check_circle</i>
+          Done
+        </button>
+      </div>
+    </div>
+
+    <!-- Reset Button -->
+    <div class="reset-section" *ngIf="currentStep !== 'mode'">
+      <button class="reset-btn" (click)="resetForm()">
+        <i class="material-icons">refresh</i>
+        Bắt đầu lại
+      </button>
+    </div>
+  </div>
+
+  <!-- Delivery History -->
+  <div class="history-section">
+    <h3>
+      <i class="material-icons">history</i>
+      Lịch sử giao hàng
+    </h3>
+    <div class="history-table" *ngIf="!isLoadingHistory">
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Chức năng</th>
+            <th>Nhân viên</th>
+            <th>LSX</th>
+            <th>Nguyên liệu</th>
+            <th>Line nhận</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let record of deliveryHistory">
+            <td>{{ formatDate(record.timestamp) }}</td>
+            <td>
+              <span [class]="'mode-badge mode-' + record.mode">
+                {{ record.mode === 'kiem-tra' ? 'Kiểm tra' : 'Giao hàng' }}
+              </span>
+            </td>
+            <td>{{ record.employeeName || record.employeeId }}</td>
+            <td>{{ record.lsx }}</td>
+            <td>
+              <span *ngIf="record.materials && record.materials.length > 0">
+                {{ record.materials.length }} mã
+              </span>
+              <span *ngIf="!record.materials || record.materials.length === 0">-</span>
+            </td>
+            <td>{{ record.receiveLine || '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="empty-state" *ngIf="deliveryHistory.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Chưa có lịch sử giao hàng</p>
+      </div>
+    </div>
+    <div class="loading-state" *ngIf="isLoadingHistory">
+      <i class="material-icons rotating">refresh</i>
+      <p>Đang tải...</p>
+    </div>
+  </div>
+</div>
+

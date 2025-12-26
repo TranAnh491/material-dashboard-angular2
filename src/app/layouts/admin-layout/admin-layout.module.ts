@@ -61,6 +61,7 @@ import { PrintLabelComponent } from '../../pages/print-label/print-label.compone
 import { IndexComponent } from '../../pages/index/index.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
+import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 
 import { ChartComponent } from '../../pages/chart/chart.component';
@@ -121,6 +122,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     IndexComponent,
     QCComponent,
     WhSecurityComponent,
+    Rm1DeliveryComponent,
 
     ChartComponent
   ],
