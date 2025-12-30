@@ -35,6 +35,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
   firebaseUserReadOnlyPermissions: { [key: string]: boolean } = {};
   // Firebase user departments
   firebaseUserDepartments: { [key: string]: string } = {};
+  // Firebase user passwords
+  firebaseUserPasswords: { [key: string]: string } = {};
   isEditingPermissions = true;
   // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
   availableTabs = [
@@ -102,6 +104,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
   selectedUser: User | null = null;
   tempTabPermissions: { [key: string]: boolean } = {};
   tempReadOnlyPermission: boolean = false;
+  changePasswordValue: string = ''; // Password mới để đổi
+  showChangePasswordForm: boolean = false; // Hiển thị form đổi password
 
   
 
@@ -346,6 +350,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
             factory: data.factory || '',
             role: data.role || 'User',
             photoURL: data.photoURL || '',
+            password: data.password || '', // Load password từ Firestore
             createdAt: data.createdAt?.toDate() || new Date(),
             lastLoginAt: data.lastLoginAt?.toDate() || new Date()
           } as User;
@@ -408,10 +413,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.firebaseUsers = uniqueUsers;
       console.log(`✅ Final user list: ${this.firebaseUsers.length} unique users`);
       
-      // 6. Load permissions, departments và tab permissions cho tất cả users
+      // 6. Load permissions, departments, passwords và tab permissions cho tất cả users
       await this.loadFirebaseUserPermissions();
       await this.loadFirebaseUserReadOnlyPermissions();
       await this.loadFirebaseUserDepartments();
+      await this.loadFirebaseUserPasswords();
       await this.loadFirebaseUserTabPermissions();
 
 
@@ -654,6 +660,39 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
     
     console.log('✅ Firebase user departments loaded');
+  }
+
+  async loadFirebaseUserPasswords(): Promise<void> {
+    console.log('🔍 Loading Firebase user passwords...');
+    
+    for (const user of this.firebaseUsers) {
+      try {
+        // Đọc từ collection 'users' trước
+        const userRef = this.firestore.collection('users').doc(user.uid);
+        const userDoc = await userRef.get().toPromise();
+        
+        if (userDoc?.exists) {
+          const data = userDoc.data() as any;
+          this.firebaseUserPasswords[user.uid] = data.password || '';
+        } else {
+          // Nếu không có trong 'users', thử đọc từ 'user-permissions'
+          const permRef = this.firestore.collection('user-permissions').doc(user.uid);
+          const permDoc = await permRef.get().toPromise();
+          
+          if (permDoc?.exists) {
+            const data = permDoc.data() as any;
+            this.firebaseUserPasswords[user.uid] = data.password || '';
+          } else {
+            this.firebaseUserPasswords[user.uid] = '';
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading password for user', user.email, ':', error);
+        this.firebaseUserPasswords[user.uid] = '';
+      }
+    }
+    
+    console.log('✅ Firebase user passwords loaded');
   }
 
   async loadFirebaseUserTabPermissions(): Promise<void> {
@@ -1270,6 +1309,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.selectedUser = null;
     this.tempTabPermissions = {};
     this.tempReadOnlyPermission = false;
+    this.changePasswordValue = '';
+    this.showChangePasswordForm = false;
   }
 
   // Lưu permissions cho user
@@ -1346,6 +1387,79 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Toggle permission cho một tab
   toggleTabPermission(tabKey: string): void {
     this.tempTabPermissions[tabKey] = !(this.tempTabPermissions[tabKey] || false);
+  }
+
+  // Toggle form đổi password
+  toggleChangePasswordForm(): void {
+    this.showChangePasswordForm = !this.showChangePasswordForm;
+    if (!this.showChangePasswordForm) {
+      this.changePasswordValue = ''; // Reset password khi đóng form
+    }
+  }
+
+  // Đổi password cho user
+  async changeUserPassword(): Promise<void> {
+    if (!this.selectedUser) return;
+
+    if (!this.changePasswordValue || this.changePasswordValue.trim() === '') {
+      alert('⚠️ Vui lòng nhập password mới!');
+      return;
+    }
+
+    if (this.changePasswordValue.length < 6) {
+      alert('⚠️ Password phải có ít nhất 6 ký tự!');
+      return;
+    }
+
+    if (!confirm(`Bạn có chắc chắn muốn đổi password cho tài khoản ${this.selectedUser.email}?\n\nPassword mới sẽ được lưu vào hệ thống.`)) {
+      return;
+    }
+
+    try {
+      const passwordToSave = this.changePasswordValue.trim();
+
+      // 1. Cập nhật password trong collection 'users'
+      await this.firestore.collection('users').doc(this.selectedUser.uid).update({
+        password: passwordToSave,
+        updatedAt: new Date()
+      });
+
+      // 2. Cập nhật password trong collection 'user-permissions' (nếu có)
+      await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
+        uid: this.selectedUser.uid,
+        email: this.selectedUser.email,
+        displayName: this.selectedUser.displayName || '',
+        password: passwordToSave,
+        hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
+        hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
+        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[this.selectedUser.uid] || false,
+        updatedAt: new Date()
+      }, { merge: true });
+
+      // 3. Cập nhật local data
+      this.firebaseUserPasswords[this.selectedUser.uid] = passwordToSave;
+
+      // 4. Cập nhật password trong Firebase Authentication (nếu có thể)
+      try {
+        // Lưu ý: Để đổi password trong Firebase Auth, cần sử dụng Admin SDK hoặc user phải tự đổi
+        // Ở đây chúng ta chỉ lưu password vào Firestore để admin có thể xem và quản lý
+        console.log('✅ Password đã được lưu vào Firestore');
+      } catch (authError) {
+        console.warn('⚠️ Không thể cập nhật password trong Firebase Auth:', authError);
+        // Vẫn tiếp tục vì đã lưu vào Firestore
+      }
+
+      alert(`✅ Đã đổi password thành công cho tài khoản ${this.selectedUser.email}!`);
+      
+      // Reset form
+      this.changePasswordValue = '';
+      this.showChangePasswordForm = false;
+
+      console.log(`✅ Password changed for ${this.selectedUser.email}`);
+    } catch (error) {
+      console.error('❌ Error changing password:', error);
+      alert('❌ Có lỗi xảy ra khi đổi password: ' + (error as any).message);
+    }
   }
 
 

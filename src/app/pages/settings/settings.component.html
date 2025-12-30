@@ -117,6 +117,25 @@
             <div class="detail-row">
               <strong>Bộ phận:</strong> {{ selectedUser.department || '-' }}
             </div>
+            <div class="detail-row">
+              <strong>Password:</strong> {{ firebaseUserPasswords[selectedUser.uid] || '-' }}
+              <button class="btn-change-password" (click)="toggleChangePasswordForm()" type="button">
+                {{ showChangePasswordForm ? 'Hủy' : 'Đổi password' }}
+              </button>
+            </div>
+            <div *ngIf="showChangePasswordForm" class="change-password-form">
+              <div class="form-group">
+                <label>Password mới:</label>
+                <input 
+                  type="password" 
+                  [(ngModel)]="changePasswordValue" 
+                  placeholder="Nhập password mới (tối thiểu 6 ký tự)"
+                  class="password-input">
+              </div>
+              <button class="btn-save-password" (click)="changeUserPassword()" type="button">
+                Lưu password mới
+              </button>
+            </div>
           </div>
           <div class="read-only-permission">
             <label class="read-only-checkbox">

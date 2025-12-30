@@ -14,6 +14,7 @@ export interface User {
   department?: string;
   factory?: string;
   role?: string;
+  password?: string; // Password (lưu trong Firestore)
   createdAt?: Date;
   lastLoginAt?: Date;
 }

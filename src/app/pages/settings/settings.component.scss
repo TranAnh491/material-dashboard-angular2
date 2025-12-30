@@ -416,11 +416,71 @@
     .detail-row {
       margin-bottom: 10px;
       font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
 
       strong {
         display: inline-block;
         min-width: 120px;
         color: #333;
+      }
+      
+      .btn-change-password {
+        padding: 4px 12px;
+        background: #ff9800;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        margin-left: auto;
+        
+        &:hover {
+          background: #f57c00;
+        }
+      }
+    }
+    
+    .change-password-form {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      
+      .form-group {
+        margin-bottom: 10px;
+        
+        label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: 500;
+          font-size: 14px;
+        }
+        
+        .password-input {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
+      }
+      
+      .btn-save-password {
+        padding: 8px 16px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        
+        &:hover {
+          background: #45a049;
+        }
       }
     }
   }
