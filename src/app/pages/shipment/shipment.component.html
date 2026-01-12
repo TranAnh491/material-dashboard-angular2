@@ -170,8 +170,6 @@
             <th>FWD</th>
             <th>PACKING</th>
             <th>QTY PALLET</th>
-            <th>PUSH</th>
-            <th>PUSHNO</th>
             <th>STATUS</th>
             <th>CS DATE</th>
             <th>FULL DATE</th>
@@ -184,7 +182,7 @@
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="22" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -272,15 +270,6 @@
                      [(ngModel)]="shipment.qtyPallet"
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Qty Pallet">
-            </td>
-            <td class="checkbox-cell">
-              <input type="checkbox"
-                     class="push-checkbox"
-                     [(ngModel)]="shipment.push"
-                     (change)="onPushChange(shipment)">
-            </td>
-            <td class="pushno-cell">
-              <span class="pushno-display">{{shipment.pushNo || '000'}}</span>
             </td>
             <td class="status-cell">
               <select class="status-select" [(ngModel)]="shipment.status" (change)="updateShipmentInFirebase(shipment)">
@@ -483,18 +472,6 @@
                    class="form-input" 
                    [(ngModel)]="newShipment.qtyPallet" 
                    placeholder="Nhập số pallet">
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="input-group">
-            <label class="input-label">Push</label>
-            <div class="checkbox-container">
-              <input type="checkbox" 
-                     class="form-checkbox" 
-                     [(ngModel)]="newShipment.push">
-              <span class="checkbox-label">Push to FG Out</span>
-            </div>
           </div>
         </div>
         

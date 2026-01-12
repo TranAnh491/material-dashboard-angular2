@@ -115,7 +115,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // ASM1 FG
     { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM1 FG' },
     { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM1 FG' },
-    { path: '/fg-preparing', title: 'FG Check', icon: 'checklist', category: 'ASM1 FG' },
+    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM1 FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM1 FG' },
     
     // Tools & Operations
@@ -246,6 +246,121 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         }
       }
+    });
+  }
+
+  // Create donut chart for accuracy with percentage in center
+  createAccuracyDonutChart(canvasId: string, label: string, percentage: number, color: string = '#ff9800') {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Format percentage: if it's a whole number, show 0 decimals, otherwise show 2 decimals
+    const percentageText = percentage % 1 === 0 ? percentage.toFixed(0) + '%' : percentage.toFixed(2) + '%';
+
+    const chart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Accuracy'],
+        datasets: [{
+          data: [percentage, 100 - percentage],
+          backgroundColor: [color, '#e0e0e0'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '70%', // Donut hole size
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            enabled: false
+          }
+        }
+      },
+      plugins: [{
+        id: 'centerTextPlugin',
+        afterDraw: (chart) => {
+          const ctx = chart.ctx;
+          const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+          const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+
+          ctx.save();
+          ctx.font = 'bold 32px Arial';
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(percentageText, centerX, centerY);
+          ctx.restore();
+        }
+      }]
+    });
+  }
+
+  // Create donut chart with total in center
+  createDonutChart(canvasId: string, label: string, data: number[]) {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Calculate total
+    const total = data.reduce((sum, val) => sum + val, 0);
+    const totalRounded = total.toFixed(2);
+
+    // All segments use blue color
+    const blueColor = '#2196f3';
+    const colors = Array(12).fill(blueColor);
+
+    const chart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: Array.from({ length: 12 }, (_, i) => `Month ${i + 1}`),
+        datasets: [{
+          data: data,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '70%', // Donut hole size
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const value = context.parsed || 0;
+                return `Month ${context.dataIndex + 1}: ${value.toFixed(2)}`;
+              }
+            }
+          }
+        }
+      },
+      plugins: [{
+        id: 'centerTextPlugin',
+        afterDraw: (chart) => {
+          const ctx = chart.ctx;
+          const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+          const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+
+          ctx.save();
+          ctx.font = 'bold 32px Arial';
+          ctx.fillStyle = '#000000'; // Black text
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(totalRounded, centerX, centerY);
+          ctx.restore();
+        }
+      }]
     });
   }
 
@@ -491,11 +606,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
     const matAccuracy = [99.9, 99.93, 99.80, 99.91, 99.87, 99.86];
     const fgAccuracy = [100, 100, 100, 100, 100, 100];
-    const fgTurnover = [1.14, 1.48, 1.6, 1.15, 1.36, 1.26];
-
-    this.createChart('dailySalesChart', 'Materials Accuracy (%)', months, matAccuracy, '#4caf50', { min: 99, max: 100 });
-    this.createChart('websiteViewsChart', 'Finished Goods Accuracy (%)', months, fgAccuracy, '#ff9800');
-    this.createChart('completedTasksChart', 'FGs Inventory Turnover', months, fgTurnover, '#2196f3', { min: 0.5, max: 2 });
+    
+    // FGs Inventory Turnover - 12 tháng dữ liệu
+    const fgTurnover12Months = [1.21, 0.98, 1.29, 1.63, 1.70, 1.26, 1.63, 1.95, 1.44, 1.56, 1.35, 1.5];
+    
+    this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', 99.85, '#4caf50');
+    this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', 100, '#2196f3');
+    this.createDonutChart('completedTasksChart', 'FGs Inventory Turnover', fgTurnover12Months);
   }
 
   // Method to handle factory selection changes

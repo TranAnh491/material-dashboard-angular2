@@ -43,7 +43,7 @@ export const ROUTES: RouteInfo[] = [
     children: [
       { path: '/fg-in', title: 'FG In', icon: 'IB', class: '' },
       { path: '/fg-out', title: 'FG Out', icon: 'OB', class: '' },
-      { path: '/fg-preparing', title: 'FG Check', icon: 'PR', class: '' },
+      { path: '/fg-check', title: 'FG Check', icon: 'CHK', class: '' },
       { path: '/fg-inventory', title: 'FG Inventory', icon: 'IV', class: '' }
     ]
   },

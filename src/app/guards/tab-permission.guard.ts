@@ -136,7 +136,7 @@ export class TabPermissionGuard implements CanActivate {
       // ASM1 FG routes
       '/fg-in': 'fg-in',
       '/fg-out': 'fg-out',
-      '/fg-preparing': 'fg-preparing',
+      '/fg-check': 'fg-check',
       '/fg-inventory': 'fg-inventory',
       
       // Other routes

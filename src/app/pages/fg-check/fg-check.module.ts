@@ -6,15 +6,15 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { FGPreparingComponent } from './fg-preparing.component';
+import { FGCheckComponent } from './fg-check.component';
 
 const routes: Routes = [
-  { path: '', component: FGPreparingComponent }
+  { path: '', component: FGCheckComponent }
 ];
 
 @NgModule({
   declarations: [
-    FGPreparingComponent
+    FGCheckComponent
   ],
   imports: [
     CommonModule,
@@ -26,7 +26,8 @@ const routes: Routes = [
     MatTooltipModule
   ],
   exports: [
-    FGPreparingComponent
+    FGCheckComponent
   ]
 })
-export class FGPreparingModule { }
+export class FGCheckModule { }
+

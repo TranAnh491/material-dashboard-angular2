@@ -60,7 +60,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // ASM1 FG tabs
     { key: 'fg-in', name: 'FG In' },
     { key: 'fg-out', name: 'FG Out' },
-    { key: 'fg-preparing', name: 'FG Check' },
+    { key: 'fg-check', name: 'FG Check' },
     { key: 'fg-inventory', name: 'FG Inventory' },
     
     // Other tabs

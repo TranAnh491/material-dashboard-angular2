@@ -20,7 +20,7 @@ export class MenuComponent implements OnInit {
     '/inventory-overview-asm2',
     '/fg-in',
     '/fg-out',
-    '/fg-preparing',
+    '/fg-check',
     '/fg-inventory',
     '/index',
     '/utilization',
@@ -58,7 +58,7 @@ export class MenuComponent implements OnInit {
     // ASM1 FG
     { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM1 FG' },
     { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM1 FG' },
-    { path: '/fg-preparing', title: 'FG Check', icon: 'fact_check', category: 'ASM1 FG' },
+    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM1 FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM1 FG' },
     
     // Tools & Operations
