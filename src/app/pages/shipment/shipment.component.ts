@@ -1106,30 +1106,63 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   private parseExcelData(data: any[]): ShipmentItem[] {
-    return data.map((row: any, index: number) => ({
-      shipmentCode: row['Shipment'] || '',
-      materialCode: row['Mã TP'] || '',
-      customerCode: row['Mã Khách'] || '',
-      quantity: parseFloat(row['Lượng Xuất']) || 0,
-      poShip: row['PO Ship'] || '',
-      carton: parseFloat(row['Carton']) || 0,
-      qtyBox: parseFloat(row['QTYBOX']) || 0, // Thêm QTYBOX từ Excel
-      odd: parseFloat(row['Odd']) || 0,
-      shipMethod: row['FWD'] || '',
-      packing: row['Packing'] || 'Pallet', // Thêm Packing từ Excel
-      qtyPallet: parseFloat(row['Qty Pallet']) || 0, // Thêm Qty Pallet từ Excel
-      push: row['Push'] === 'true' || row['Push'] === true || row['Push'] === 1,
-      pushNo: '000', // Default PushNo for imported data
-      inventory: parseFloat(row['Tồn kho']) || 0, // Default inventory for imported data
-      status: row['Status'] || 'Chờ soạn',
-      requestDate: this.parseDate(row['CS Date'] || row['Ngày CS Y/c']) || new Date(),
-      fullDate: this.parseDate(row['Full Date'] || row['Ngày full hàng']) || new Date(),
-      actualShipDate: this.parseDate(row['Dispatch Date'] || row['Thực ship']) || new Date(),
-      dayPre: parseFloat(row['Ngày chuẩn bị'] || row['Day Pre']) || 0,
-      notes: row['Ghi chú'] || '',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }));
+    return data.map((row: any, index: number) => {
+      // Helper function to safely get value - return null/empty if cell is empty
+      const getValue = (key: string, altKey?: string): string => {
+        const value = row[key] || (altKey ? row[altKey] : null);
+        if (value === null || value === undefined || value === '') return '';
+        return String(value).trim();
+      };
+
+      // Helper function to safely parse number - return 0 only if truly empty
+      const getNumber = (key: string, altKey?: string): number => {
+        const value = row[key] || (altKey ? row[altKey] : null);
+        if (value === null || value === undefined || value === '') return 0;
+        const num = parseFloat(String(value));
+        return isNaN(num) ? 0 : num;
+      };
+
+      // Helper function to safely parse date - return null if empty
+      const getDate = (key: string, altKey?: string): Date | null => {
+        const dateStr = row[key] || (altKey ? row[altKey] : null);
+        if (!dateStr || dateStr === '' || dateStr === null || dateStr === undefined) {
+          return null;
+        }
+        return this.parseDate(String(dateStr));
+      };
+
+      // Helper function to safely get boolean
+      const getBoolean = (key: string): boolean => {
+        const value = row[key];
+        if (value === null || value === undefined || value === '') return false;
+        return value === 'true' || value === true || value === 1;
+      };
+
+      return {
+        shipmentCode: getValue('Shipment'),
+        materialCode: getValue('Mã TP'),
+        customerCode: getValue('Mã Khách'),
+        quantity: getNumber('Lượng Xuất'),
+        poShip: getValue('PO Ship'),
+        carton: getNumber('Carton'),
+        qtyBox: getNumber('QTYBOX'),
+        odd: getNumber('Odd'),
+        shipMethod: getValue('FWD'),
+        packing: getValue('Packing'), // No default - keep empty if not provided
+        qtyPallet: getNumber('Qty Pallet'),
+        push: getBoolean('Push'),
+        pushNo: getValue('PushNo'), // No default - keep empty if not provided
+        inventory: getNumber('Tồn kho'),
+        status: getValue('Status'), // No default - keep empty if not provided
+        requestDate: getDate('CS Date', 'Ngày CS Y/c'),
+        fullDate: getDate('Full Date', 'Ngày full hàng'),
+        actualShipDate: getDate('Dispatch Date', 'Thực ship'),
+        dayPre: getNumber('Ngày chuẩn bị', 'Day Pre'),
+        notes: getValue('Ghi chú'),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    });
   }
 
   private parseDate(dateStr: string): Date | null {

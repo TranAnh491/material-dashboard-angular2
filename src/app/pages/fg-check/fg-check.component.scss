@@ -92,6 +92,36 @@
   align-items: center;
   gap: 15px;
   
+  .scan-input-group {
+    input {
+      width: 300px;
+      padding: 8px 12px;
+      border: 2px solid #007bff;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #ffffff;
+      color: #000000;
+      font-family: 'Courier New', monospace;
+      
+      &:focus {
+        outline: none;
+        border-color: #0056b3;
+        box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+      }
+      
+      &::placeholder {
+        color: #666666;
+      }
+    }
+  }
+}
+
+// Scanning Info Group (Shipment, Status, Done button)
+.scanning-info-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  
   .shipment-info {
     display: flex;
     align-items: center;
@@ -114,26 +144,25 @@
     }
   }
   
-  .scan-input-group {
-    input {
-      width: 300px;
-      padding: 8px 12px;
-      border: 2px solid #007bff;
-      border-radius: 4px;
+  .scanning-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 15px;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 4px;
+    
+    .status-label {
+      font-weight: bold;
+      color: #856404;
+    }
+    
+    .status-value {
+      font-weight: bold;
+      color: #856404;
       font-size: 14px;
-      background: #ffffff;
-      color: #000000;
-      font-family: 'Courier New', monospace;
-      
-      &:focus {
-        outline: none;
-        border-color: #0056b3;
-        box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
-      }
-      
-      &::placeholder {
-        color: #666666;
-      }
+      text-transform: uppercase;
     }
   }
 }
@@ -305,6 +334,17 @@
     
     &.status-cell {
       text-align: center;
+      font-weight: 600;
+      
+      &.check-correct {
+        color: #28a745;
+        background-color: #d4edda;
+      }
+      
+      &.check-incorrect {
+        color: #dc3545;
+        background-color: #f8d7da;
+      }
       
       .check-checkbox {
         width: 18px;
@@ -337,6 +377,9 @@
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
+  position: relative;
+  z-index: 10001;
+  pointer-events: auto;
 }
 
 .scanner-dialog {
@@ -462,6 +505,9 @@
         cursor: pointer;
         transition: all 0.3s ease;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        pointer-events: auto !important;
+        position: relative;
+        z-index: 10001;
         
         i {
           font-size: 48px;

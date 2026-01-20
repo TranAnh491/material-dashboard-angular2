@@ -18,13 +18,8 @@
           Check
         </button>
         
-        <!-- Scanning Mode: Show Shipment and Scan Input -->
+        <!-- Scanning Mode: Show Scan Input -->
         <div class="scanning-mode" *ngIf="isScanning">
-          <div class="shipment-info">
-            <span class="shipment-label">Shipment:</span>
-            <span class="shipment-value">{{scannedShipment}}</span>
-          </div>
-          
           <!-- Check P/N Mode -->
           <div class="scan-input-group" *ngIf="checkMode === 'pn'">
             <input type="text" 
@@ -42,15 +37,28 @@
                    class="custom-input scan-customer-input" 
                    [(ngModel)]="currentScanInput"
                    (keyup.enter)="onCustomerCodeScanned()"
-                   placeholder="Quét mã khách hàng"
+                   placeholder="Quét mã hàng hoặc 300+PCS (Số lượng+Mã)"
                    autofocus>
-            <input type="number" 
+            <input type="text" 
                    *ngIf="waitingForQty"
                    class="custom-input scan-qty-input" 
                    [(ngModel)]="currentQtyInput"
                    (keyup.enter)="onQuantityScanned()"
                    placeholder="Quét số lượng (QTY)"
                    autofocus>
+          </div>
+        </div>
+        
+        <!-- Shipment, Status and Done button (shown when scanning) -->
+        <div class="scanning-info-group" *ngIf="isScanning">
+          <div class="shipment-info">
+            <span class="shipment-label">Shipment:</span>
+            <span class="shipment-value">{{scannedShipment}}</span>
+          </div>
+          
+          <div class="scanning-status">
+            <span class="status-label">Status:</span>
+            <span class="status-value">Scanning</span>
           </div>
           
           <button class="custom-btn btn-success" (click)="completeScanning()">
@@ -99,6 +107,7 @@
             <th>Mã Hàng</th>
             <th>Số Thùng</th>
             <th>Số Lượng</th>
+            <th>Lượng Shipment</th>
             <th>Check</th>
             <th>ID Check</th>
           </tr>
@@ -106,7 +115,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="8" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="9" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -120,11 +129,10 @@
             <td class="code-cell">{{item.customerCode}}</td>
             <td class="number-cell">{{formatNumber(item.carton)}}</td>
             <td class="number-cell">{{formatNumber(item.quantity)}}</td>
-            <td class="status-cell">
-              <input type="checkbox" 
-                     [(ngModel)]="item.isChecked"
-                     (change)="toggleCheck(item)"
-                     class="check-checkbox">
+            <td class="number-cell">{{formatNumber(item.shipmentQuantity || 0)}}</td>
+            <td class="status-cell" [class.check-correct]="item.checkResult === 'Đúng'" [class.check-incorrect]="item.checkResult === 'Sai'">
+              <span *ngIf="item.checkResult">{{item.checkResult}}</span>
+              <span *ngIf="!item.checkResult">-</span>
             </td>
             <td class="code-cell">{{item.checkId}}</td>
           </tr>
@@ -173,21 +181,19 @@
         <div class="scanner-content">
           <div class="mode-selection-new">
             <button class="mode-btn-large mode-btn-green" 
-                    (click)="selectModeAndContinue('pn')"
-                    type="button">
+                    type="button"
+                    (click)="selectModeAndContinue('pn'); $event.stopPropagation(); $event.preventDefault();">
               <i class="material-icons">inventory_2</i>
               <div class="btn-content">
                 <span class="btn-title">Check P/N</span>
-                <small class="btn-desc">Mỗi lần scan = 1</small>
               </div>
             </button>
             <button class="mode-btn-large mode-btn-orange" 
-                    (click)="selectModeAndContinue('pn-qty')"
-                    type="button">
+                    type="button"
+                    (click)="selectModeAndContinue('pn-qty'); $event.stopPropagation(); $event.preventDefault();">
               <i class="material-icons">plus_one</i>
               <div class="btn-content">
                 <span class="btn-title">Check P/N + QTY</span>
-                <small class="btn-desc">Scan mã → Scan số lượng</small>
               </div>
             </button>
           </div>

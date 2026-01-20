@@ -383,9 +383,10 @@
   border-collapse: collapse;
   background: #ffffff;
   font-size: 13px;
-  min-width: 1900px; /* Ensure table has enough width for all columns */
+  min-width: 2500px; /* Tăng độ rộng tối thiểu để hiển thị đủ dữ liệu */
   table-layout: fixed;
   border: 1px solid #dee2e6; /* Modern border */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 /* Viền cho toàn bộ bảng - chỉ giữ viền cho header */
@@ -512,44 +513,48 @@
   background: #f0f0f0 !important;
   font-weight: bold;
   text-align: center;
-  width: 50px;
-  min-width: 50px;
+  width: 60px;
+  min-width: 60px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .code-cell {
-  font-family: 'Courier New', monospace;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
   font-weight: bold;
   color: #000000;
-  min-width: 120px;
-  width: 120px;
+  min-width: 150px;
+  width: 150px;
 }
 
 .number-cell {
   text-align: right;
-  font-family: 'Courier New', monospace;
-  min-width: 80px;
-  width: 80px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
+  min-width: 100px;
+  width: 100px;
 }
 
 .date-cell {
   text-align: center;
-  min-width: 100px;
-  width: 100px;
+  min-width: 130px;
+  width: 130px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .status-cell {
   text-align: center;
-  min-width: 100px;
-  width: 100px;
+  min-width: 120px;
+  width: 120px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .action-cell {
   text-align: center;
   min-width: 80px;
   width: 80px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
-/* Specific column widths for better layout */
+/* Specific column widths for better layout - Data table */
 .data-table th:nth-child(1), .data-table td:nth-child(1) { width: 50px; } /* No */
 .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 120px; } /* Shipment */
 .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 120px; } /* Mã TP */
@@ -569,6 +574,29 @@
 .data-table th:nth-child(17), .data-table td:nth-child(17) { width: 120px; } /* Ngày chuẩn bị */
 .data-table th:nth-child(18), .data-table td:nth-child(18) { width: 150px; } /* Ghi chú */
 .data-table th:nth-child(19), .data-table td:nth-child(19) { width: 80px; } /* Xóa */
+
+/* Specific column widths for .table class - Shipment table */
+.table th:nth-child(1), .table td:nth-child(1) { width: 60px; min-width: 60px; } /* NO */
+.table th:nth-child(2), .table td:nth-child(2) { width: 150px; min-width: 150px; } /* SHIPMENT */
+.table th:nth-child(3), .table td:nth-child(3) { width: 150px; min-width: 150px; } /* MÃ TP */
+.table th:nth-child(4), .table td:nth-child(4) { width: 150px; min-width: 150px; } /* MÃ KHÁCH */
+.table th:nth-child(5), .table td:nth-child(5) { width: 120px; min-width: 120px; } /* LƯỢNG XUẤT */
+.table th:nth-child(6), .table td:nth-child(6) { width: 150px; min-width: 150px; } /* PO SHIP */
+.table th:nth-child(7), .table td:nth-child(7) { width: 100px; min-width: 100px; } /* CARTON */
+.table th:nth-child(8), .table td:nth-child(8) { width: 100px; min-width: 100px; } /* QTYBOX */
+.table th:nth-child(9), .table td:nth-child(9) { width: 100px; min-width: 100px; } /* ODD */
+.table th:nth-child(10), .table td:nth-child(10) { width: 120px; min-width: 120px; } /* TỒN KHO */
+.table th:nth-child(11), .table td:nth-child(11) { width: 100px; min-width: 100px; } /* FWD */
+.table th:nth-child(12), .table td:nth-child(12) { width: 100px; min-width: 100px; } /* PACKING */
+.table th:nth-child(13), .table td:nth-child(13) { width: 120px; min-width: 120px; } /* QTY PALLET */
+.table th:nth-child(14), .table td:nth-child(14) { width: 120px; min-width: 120px; } /* STATUS */
+.table th:nth-child(15), .table td:nth-child(15) { width: 130px; min-width: 130px; } /* CS DATE */
+.table th:nth-child(16), .table td:nth-child(16) { width: 130px; min-width: 130px; } /* FULL DATE */
+.table th:nth-child(17), .table td:nth-child(17) { width: 150px; min-width: 150px; } /* DISPATCH DATE */
+.table th:nth-child(18), .table td:nth-child(18) { width: 120px; min-width: 120px; } /* NGÀY CHUẨN BỊ */
+.table th:nth-child(19), .table td:nth-child(19) { width: 200px; min-width: 200px; } /* GHI CHÚ */
+.table th:nth-child(20), .table td:nth-child(20) { width: 80px; min-width: 80px; } /* PRINT */
+.table th:nth-child(21), .table td:nth-child(21) { width: 80px; min-width: 80px; } /* XÓA */
 
 /* Status Styles */
 .status-completed {
@@ -606,6 +634,7 @@
   padding: 4px;
   box-shadow: none;
   outline: none;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .editable-input:focus {
@@ -625,6 +654,7 @@
   border-radius: 2px;
   outline: none;
   box-shadow: none;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .status-select:focus {
@@ -644,6 +674,7 @@
   border-radius: 2px;
   outline: none;
   box-shadow: none;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .editable-select:focus {
@@ -687,7 +718,7 @@
   border: 1px solid #ddd;
   background: #f0f8ff;
   font-weight: bold;
-  font-family: 'Courier New', monospace;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
   font-size: 14px;
   color: #0066cc;
   min-width: 80px;
@@ -701,6 +732,7 @@
   border-radius: 4px;
   min-width: 40px;
   text-align: center;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 /* Inventory Display Styles */
@@ -713,7 +745,7 @@
   min-width: 60px;
   text-align: center;
   font-weight: bold;
-  font-family: 'Courier New', monospace;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
   font-size: 14px;
   color: #28a745;
 }
