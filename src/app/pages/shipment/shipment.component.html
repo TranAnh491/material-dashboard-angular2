@@ -197,15 +197,6 @@
                   <i class="material-icons">calendar_month</i>
                   Schedules
                 </button>
-                
-                <!-- Check Biển Số Button -->
-                <button class="btn btn-warning" 
-                        type="button" 
-                        (click)="openVehiclePlateScannerDialog()"
-                        title="Check biển số xe bằng camera">
-                  <i class="material-icons">camera_alt</i>
-                  Check Biển Số
-                </button>
               </div>
             </div>
           </div>
@@ -247,7 +238,7 @@
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="12" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="25" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -816,88 +807,6 @@
       <button type="button" class="btn btn-cancel" (click)="closeScheduleDialog()">
         <i class="material-icons">close</i>
         Đóng
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Vehicle Plate Scanner Dialog -->
-<div class="custom-modal" [class.show]="showVehiclePlateScanner" [style.display]="showVehiclePlateScanner ? 'flex' : 'none'">
-  <div class="modal-overlay" (click)="closeVehiclePlateScanner()"></div>
-  <div class="modal-container vehicle-plate-scanner-modal">
-    <div class="modal-header">
-      <h5 class="modal-title">
-        <i class="material-icons">camera_alt</i>
-        Check Biển Số Xe
-        <span *ngIf="selectedShipmentForPlateCheck" style="font-size: 14px; font-weight: normal; margin-left: 10px;">
-          - Shipment: {{ selectedShipmentForPlateCheck.shipmentCode }}
-        </span>
-      </h5>
-      <button type="button" class="close-btn" (click)="closeVehiclePlateScanner()">
-        <i class="material-icons">close</i>
-      </button>
-    </div>
-    
-    <div class="modal-body">
-      <div class="plate-scanner-info" *ngIf="selectedShipmentForPlateCheck">
-        <div class="info-row">
-          <label>Biển số trong hệ thống:</label>
-          <span class="info-value" [class.no-plate]="!selectedShipmentForPlateCheck.vehicleNumber">
-            {{ selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)' }}
-          </span>
-        </div>
-      </div>
-      
-      <!-- Camera Video Preview -->
-      <div class="camera-preview-container">
-        <video id="plate-scanner-video" 
-               autoplay 
-               playsinline
-               style="width: 100%; max-width: 640px; height: auto; border-radius: 8px; background: #000;">
-        </video>
-        
-        <!-- Scanning overlay -->
-        <div class="scanning-overlay" *ngIf="plateScanStatus === 'scanning'">
-          <div class="scanning-frame"></div>
-          <p class="scanning-text">Đang quét biển số...</p>
-        </div>
-        
-        <!-- Processing overlay -->
-        <div class="processing-overlay" *ngIf="plateScanStatus === 'processing'">
-          <div class="spinner"></div>
-          <p class="processing-text">Đang xử lý hình ảnh...</p>
-        </div>
-      </div>
-      
-      <!-- Scan Result -->
-      <div class="scan-result" *ngIf="plateScanResult">
-        <div class="result-label">Biển số đọc được:</div>
-        <div class="result-value">{{ plateScanResult }}</div>
-      </div>
-      
-      <!-- Instructions -->
-      <div class="instructions">
-        <p><strong>Hướng dẫn:</strong></p>
-        <ul>
-          <li>Đưa camera vào biển số xe</li>
-          <li>Đảm bảo biển số rõ ràng và đủ ánh sáng</li>
-          <li>Nhấn nút "Chụp và Kiểm tra" để đọc biển số</li>
-          <li>Hệ thống sẽ tự động so sánh với biển số trong hệ thống</li>
-        </ul>
-      </div>
-    </div>
-    
-    <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="closeVehiclePlateScanner()">
-        <i class="material-icons">close</i>
-        Đóng
-      </button>
-      <button type="button" 
-              class="btn btn-primary" 
-              (click)="captureAndProcessPlate()"
-              [disabled]="plateScanStatus === 'processing' || plateScanStatus === 'scanning'">
-        <i class="material-icons">camera</i>
-        {{ plateScanStatus === 'processing' ? 'Đang xử lý...' : 'Chụp và Kiểm tra' }}
       </button>
     </div>
   </div>

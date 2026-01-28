@@ -12,10 +12,8 @@
     "target": "es2020",
     "lib": [
       "es2020",
-      "dom",
-      "webworker"
+      "dom"
     ],
-    "skipLibCheck": true,
     "typeRoots": [
       "node_modules/@types"
     ],

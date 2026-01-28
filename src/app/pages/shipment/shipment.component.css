@@ -411,7 +411,6 @@
   border: 1px solid #e9ecef;
   max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
   padding: 2px; /* Giảm padding để tận dụng không gian tối đa */
-  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .table {
@@ -1122,358 +1121,33 @@ input[type="date"]::-webkit-clear-button {
   text-align: center;
 }
 
-/* Responsive - Mobile Optimization */
+/* Responsive */
 @media (max-width: 768px) {
-  /* Main content */
-  .main-content {
-    padding: 0px 4px;
-  }
-  
-  .card-header {
-    padding: 10px 15px;
-    margin-bottom: 10px;
-  }
-  
-  .card-title {
-    font-size: 1.2em;
-  }
-  
-  .card-body {
-    padding: 8px 4px;
-  }
-  
-  /* Info Boxes */
   .info-boxes {
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
+    gap: 10px;
   }
   
   .info-boxes .info-box {
-    min-width: calc(50% - 4px);
-    padding: 10px;
+    min-width: calc(50% - 5px);
   }
   
-  .info-boxes .info-box h3 {
-    font-size: 16px;
-  }
-  
-  .info-boxes .info-box p {
-    font-size: 13px;
-  }
-  
-  /* Action Controls - Stack vertically on mobile */
   .action-controls {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    width: 100%;
-  }
-  
-  .action-controls > * {
-    width: 100%;
-  }
-  
-  /* More button container */
-  .more-button-container {
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-  
-  /* Buttons - Full width on mobile, compact */
-  .action-controls .btn {
-    width: 100%;
-    padding: 10px 12px;
-    font-size: 13px;
-    justify-content: center;
-    white-space: nowrap;
-    min-height: 44px; /* Touch target */
-  }
-  
-  .action-controls .btn i {
-    font-size: 18px;
-    margin-right: 6px;
-  }
-  
-  /* Hide button text on very small screens, keep icons */
-  @media (max-width: 480px) {
-    .action-controls .btn span:not(.material-icons) {
-      display: none;
-    }
-    
-    .action-controls .btn {
-      min-width: 44px;
-      padding: 10px;
-    }
-  }
-  
-  /* Date Range - Compact vertical layout */
-  .date-range-container {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-    padding: 8px;
     flex-wrap: wrap;
-    width: 100%;
+    gap: 10px;
   }
   
-  .date-range-label {
-    font-size: 11px;
-    white-space: nowrap;
-    min-width: 35px;
-  }
-  
-  .date-range-input {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 6px;
-    font-size: 12px;
-    min-height: 36px;
-  }
-  
-  /* Search - Full width */
-  .search-container {
-    width: 100%;
-  }
-  
-  .search-input {
-    width: 100%;
-    padding: 10px 35px 10px 12px;
-    font-size: 14px;
-    min-height: 44px;
-  }
-  
-  /* Table - Optimized for mobile with reduced columns */
-  .table-responsive {
-    overflow-x: auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    width: 100%;
-    max-height: calc(100vh - 250px);
-    padding: 0;
-    position: relative;
-  }
-  
-  /* Better scrollbar for mobile */
-  .table-responsive::-webkit-scrollbar {
-    height: 6px;
-    width: 6px;
-  }
-  
-  .table-responsive::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-  }
-  
-  .table-responsive::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 3px;
-  }
-  
-  .table-responsive::-webkit-scrollbar-thumb:hover {
-    background: #555;
-  }
-  
-  /* Reduce table min-width on mobile - show essential columns only */
-  .table {
-    min-width: 900px; /* Reduced from 2416px - only essential columns */
-    font-size: 11px;
-  }
-  
-  /* Hide less important columns on mobile - keep only essential ones */
-  /* Show: NO(1), NGÀY IMPORT(2), BIỂN SỐ XE(3), FACTORY(4), SHIPMENT(5), MÃ TP(6), MÃ KHÁCH(7), LƯỢNG XUẤT(8), STATUS(17), PRINT(24), XÓA(25), ẨN(26) */
-  /* Hide: PO SHIP(9), CARTON(10), QTYBOX(11), ODD(12), TỒN KHO(13), FWD(14), PACKING(15), QTY PALLET(16), CHỨNG TỪ(18), CS DATE(19), FULL DATE(20), DISPATCH DATE(21), NGÀY CHUẨN BỊ(22), GHI CHÚ(23) */
-  
-  /* Hide columns 9-16 (PO SHIP to QTY PALLET) */
-  .table th:nth-child(9),
-  .table td:nth-child(9),
-  .table th:nth-child(10),
-  .table td:nth-child(10),
-  .table th:nth-child(11),
-  .table td:nth-child(11),
-  .table th:nth-child(12),
-  .table td:nth-child(12),
-  .table th:nth-child(13),
-  .table td:nth-child(13),
-  .table th:nth-child(14),
-  .table td:nth-child(14),
-  .table th:nth-child(15),
-  .table td:nth-child(15),
-  .table th:nth-child(16),
-  .table td:nth-child(16) {
-    display: none;
-  }
-  
-  /* Hide columns 18-23 (CHỨNG TỪ to GHI CHÚ) */
-  .table th:nth-child(18),
-  .table td:nth-child(18),
-  .table th:nth-child(19),
-  .table td:nth-child(19),
-  .table th:nth-child(20),
-  .table td:nth-child(20),
-  .table th:nth-child(21),
-  .table td:nth-child(21),
-  .table th:nth-child(22),
-  .table td:nth-child(22),
-  .table th:nth-child(23),
-  .table td:nth-child(23) {
-    display: none;
-  }
-  
-  .table th, .table td {
-    padding: 8px 4px;
-    font-size: 11px;
-    vertical-align: middle;
-  }
-  
-  .table th {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 10px 4px;
-    position: sticky;
-    top: 0;
-    background: #f8f9fa;
-    z-index: 5;
-  }
-  
-  /* Editable inputs in table - Larger touch targets */
-  .editable-input, .editable-select, .status-select {
-    font-size: 12px;
-    padding: 8px 6px;
-    min-height: 36px; /* Larger for mobile touch */
-    width: 100%;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-  }
-  
-  .editable-input:focus, .editable-select:focus, .status-select:focus {
-    border-color: #2196f3;
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-  }
-  
-  /* Date inputs in table */
-  .date-input {
-    font-size: 12px;
-    padding: 8px 6px;
-    min-height: 36px;
-    width: 100%;
-  }
-  
-  /* Number inputs */
-  .number-input {
-    font-size: 12px;
-    padding: 8px 6px;
-    min-height: 36px;
-  }
-  
-  /* Code cells */
-  .code-cell {
-    min-width: 100px;
-  }
-  
-  /* Row header */
-  .row-header {
-    font-size: 11px;
-    padding: 8px 4px;
-    font-weight: 600;
-    background: #f8f9fa;
-    position: sticky;
-    left: 0;
-    z-index: 3;
-  }
-  
-  /* Action cells - Larger buttons for mobile */
-  .action-cell {
-    min-width: 50px;
-    width: 50px;
-    padding: 4px;
-  }
-  
-  .action-cell button {
-    min-width: 40px !important;
-    min-height: 40px !important;
-    width: 40px !important;
-    height: 40px !important;
-    padding: 0 !important;
-  }
-  
-  .action-cell button mat-icon {
-    font-size: 20px !important;
-    width: 20px !important;
-    height: 20px !important;
-  }
-  
-  /* Checkbox in action cell */
-  .action-cell input[type="checkbox"] {
-    width: 24px !important;
-    height: 24px !important;
-    cursor: pointer;
-    accent-color: #2196f3;
-  }
-  
-  /* Check status icon */
-  .check-status-icon {
-    font-size: 20px !important;
-  }
-  
-  /* Empty state */
-  .table tbody tr td.text-center {
-    padding: 30px 20px !important;
-  }
-  
-  .table tbody tr td.text-center i.material-icons {
-    font-size: 36px !important;
-  }
-  
-  /* Better spacing for table rows */
-  .table tbody tr {
-    border-bottom: 1px solid #e9ecef;
-  }
-  
-  .table tbody tr:hover {
-    background-color: #f8f9fa;
-  }
-  
-  /* Inventory display */
-  .inventory-display {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px;
-  }
-  
-  /* Data table */
   .data-table {
-    font-size: 10px;
+    font-size: 11px;
   }
   
   .data-table th, .data-table td {
     padding: 4px 2px;
-    font-size: 10px;
   }
   
-  /* Modal optimizations */
   .modal-container {
     width: 95%;
-    max-width: 95%;
-    margin: 10px auto;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-  
-  .modal-header {
-    padding: 15px;
-  }
-  
-  .modal-title {
-    font-size: 16px;
-  }
-  
-  .modal-body {
-    padding: 15px;
-    max-height: calc(90vh - 150px);
-    overflow-y: auto;
+    margin: 10px;
   }
   
   .date-inputs {
@@ -1483,158 +1157,11 @@ input[type="date"]::-webkit-clear-button {
   
   .modal-footer {
     flex-direction: column;
-    gap: 10px;
-    padding: 15px;
   }
   
   .modal-footer .btn {
     width: 100%;
     justify-content: center;
-    padding: 12px;
-    font-size: 14px;
-  }
-  
-  /* Dropdown menu */
-  .dropdown-menu {
-    max-width: 100%;
-    font-size: 14px;
-  }
-  
-  /* Print label modal */
-  .print-label-modal {
-    max-width: 95%;
-  }
-  
-  /* Schedule modal */
-  .schedule-modal {
-    width: 95%;
-    max-width: 95%;
-  }
-  
-  /* Vehicle plate scanner modal */
-  .vehicle-plate-scanner-modal {
-    width: 95%;
-    max-width: 95%;
-  }
-  
-  .camera-preview-container {
-    min-height: 250px;
-  }
-  
-  /* Card body padding */
-  .card-body {
-    padding: 10px 5px;
-    overflow: hidden;
-  }
-  
-  /* Better table container */
-  .table-responsive {
-    border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
-  
-  /* Sticky header for better UX */
-  .table thead th {
-    position: sticky;
-    top: 0;
-    background: #f8f9fa;
-    z-index: 10;
-    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
-  }
-  
-  /* Better visual separation */
-  .table tbody tr:nth-child(even) {
-    background-color: #f9f9f9;
-  }
-  
-  .table tbody tr:nth-child(odd) {
-    background-color: #ffffff;
-  }
-  
-  /* Hide some less important text on very small screens */
-  @media (max-width: 480px) {
-    .action-controls .btn span:not(.material-icons) {
-      display: none;
-    }
-    
-    .action-controls .btn {
-      min-width: 44px; /* Touch target size */
-      min-height: 44px; /* Touch target size */
-      padding: 10px;
-    }
-    
-    .info-boxes .info-box {
-      min-width: 100%;
-    }
-    
-    .table {
-      font-size: 10px;
-    }
-    
-    .table th, .table td {
-      padding: 6px 3px;
-      font-size: 10px;
-    }
-    
-    .table th {
-      padding: 8px 3px;
-      font-size: 9px;
-    }
-    
-    .editable-input, .editable-select, .status-select {
-      font-size: 11px;
-      padding: 6px 4px;
-      min-height: 36px; /* Larger touch target */
-    }
-    
-    .date-input {
-      font-size: 11px;
-      padding: 6px 4px;
-      min-height: 36px;
-    }
-    
-    .action-cell {
-      min-width: 45px;
-      width: 45px;
-    }
-    
-    .action-cell button {
-      min-width: 36px !important;
-      min-height: 36px !important;
-      width: 36px !important;
-      height: 36px !important;
-    }
-    
-    .action-cell input[type="checkbox"] {
-      width: 22px !important;
-      height: 22px !important;
-    }
-    
-    .row-header {
-      font-size: 10px;
-      padding: 6px 3px;
-    }
-    
-    .modal-container {
-      width: 98%;
-      max-width: 98%;
-      margin: 5px auto;
-    }
-  }
-  
-  /* Landscape mobile optimization */
-  @media (max-width: 768px) and (orientation: landscape) {
-    .table-responsive {
-      max-height: calc(100vh - 150px);
-    }
-    
-    .modal-container {
-      max-height: 85vh;
-    }
-    
-    .modal-body {
-      max-height: calc(85vh - 120px);
-    }
   }
 }
 
@@ -1961,232 +1488,29 @@ tr.checked-row:hover {
   .schedule-modal {
     width: 95%;
     max-width: 95%;
-    max-height: 90vh;
-  }
-  
-  .calendar-nav {
-    padding: 10px 15px;
   }
   
   .calendar-title {
-    font-size: 1.1em;
-  }
-  
-  .nav-btn {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .nav-btn i {
-    font-size: 24px;
-  }
-  
-  .calendar-grid {
-    gap: 4px;
-  }
-  
-  .calendar-header {
-    padding: 8px 4px;
-    font-size: 11px;
+    font-size: 1.2em;
   }
   
   .calendar-day {
-    min-height: 70px;
-    padding: 4px;
+    min-height: 80px;
+    padding: 5px;
   }
   
   .day-number {
-    font-size: 12px;
+    font-size: 14px;
   }
   
   .shipment-badge {
-    font-size: 8px;
-    padding: 2px 4px;
+    font-size: 9px;
+    padding: 3px 5px;
   }
   
   .calendar-legend {
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     align-items: flex-start;
-    padding: 10px;
-  }
-}
-
-
-/* Vehicle Plate Scanner Dialog Styles */
-.vehicle-plate-scanner-modal {
-  max-width: 700px;
-  width: 90%;
-}
-
-.plate-scanner-info {
-  background: #f5f5f5;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.plate-scanner-info .info-value.no-plate {
-  color: #999;
-  font-style: italic;
-}
-
-.camera-preview-container {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 20px 0;
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  min-height: 300px;
-}
-
-.scanning-overlay,
-.processing-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-}
-
-.scanning-frame {
-  width: 80%;
-  max-width: 400px;
-  height: 120px;
-  border: 3px solid #4caf50;
-  border-radius: 8px;
-  box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
-  animation: scanningPulse 2s ease-in-out infinite;
-}
-
-@keyframes scanningPulse {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(76, 175, 80, 0.8);
-  }
-}
-
-.scanning-text,
-.processing-text {
-  color: white;
-  font-size: 18px;
-  font-weight: 600;
-  margin-top: 20px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #4caf50;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.scan-result {
-  background: #e8f5e9;
-  padding: 15px;
-  border-radius: 8px;
-  margin: 20px 0;
-  text-align: center;
-}
-
-.result-label {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.result-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #2e7d32;
-  letter-spacing: 2px;
-}
-
-.instructions {
-  background: #fff3cd;
-  padding: 15px;
-  border-radius: 8px;
-  margin-top: 20px;
-  border-left: 4px solid #ffc107;
-}
-
-.instructions p {
-  margin: 0 0 10px 0;
-  font-weight: 600;
-  color: #856404;
-}
-
-.instructions ul {
-  margin: 0;
-  padding-left: 20px;
-  color: #856404;
-}
-
-.instructions li {
-  margin-bottom: 5px;
-}
-
-/* Responsive Vehicle Plate Scanner */
-@media (max-width: 768px) {
-  .vehicle-plate-scanner-modal {
-    width: 95%;
-    max-width: 95%;
-    max-height: 90vh;
-  }
-  
-  .plate-scanner-info {
-    padding: 10px;
-  }
-  
-  .camera-preview-container {
-    min-height: 200px;
-    margin: 15px 0;
-  }
-  
-  .scanning-frame {
-    width: 90%;
-    height: 80px;
-  }
-  
-  .scanning-text,
-  .processing-text {
-    font-size: 14px;
-  }
-  
-  .scan-result {
-    padding: 10px;
-  }
-  
-  .result-value {
-    font-size: 18px;
-  }
-  
-  .instructions {
-    padding: 10px;
-    font-size: 12px;
-  }
-  
-  .instructions ul {
-    padding-left: 18px;
   }
 } 

@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
-import { createWorker } from 'tesseract.js';
 
 export interface ShipmentItem {
   id?: string;
@@ -83,16 +82,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
   
-  // Vehicle Plate Scanner
-  showVehiclePlateScanner: boolean = false;
-  selectedShipmentForPlateCheck: ShipmentItem | null = null;
-  isScanningPlate: boolean = false;
-  plateScanResult: string = '';
-  plateScanStatus: 'idle' | 'scanning' | 'processing' | 'success' | 'error' = 'idle';
-  videoStream: MediaStream | null = null;
-  videoElement: HTMLVideoElement | null = null;
-  canvasElement: HTMLCanvasElement | null = null;
-  
   newShipment: ShipmentItem = {
     shipmentCode: '',
     importDate: new Date(),
@@ -142,7 +131,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
     this.isPushing.clear();
-    this.stopCamera();
   }
 
   // Load shipments from Firebase
@@ -2014,188 +2002,5 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('❌ Error:', error);
       alert('❌ Lỗi: ' + (error?.message || String(error)));
     }
-  }
-
-  // ========== Vehicle Plate Scanner Methods ==========
-  
-  // Open vehicle plate scanner dialog - choose shipment first
-  openVehiclePlateScannerDialog(): void {
-    // Show dialog to select shipment
-    const shipmentCode = prompt('Nhập mã Shipment cần check biển số xe:');
-    
-    if (!shipmentCode || !shipmentCode.trim()) {
-      return; // User cancelled
-    }
-    
-    // Find shipment by code
-    const shipment = this.filteredShipments.find(s => 
-      s.shipmentCode.trim().toUpperCase() === shipmentCode.trim().toUpperCase()
-    );
-    
-    if (!shipment) {
-      alert(`❌ Không tìm thấy shipment: ${shipmentCode}`);
-      return;
-    }
-    
-    // Open scanner for this shipment
-    this.openVehiclePlateScanner(shipment);
-  }
-  
-  // Open vehicle plate scanner modal
-  openVehiclePlateScanner(shipment: ShipmentItem): void {
-    this.selectedShipmentForPlateCheck = shipment;
-    this.showVehiclePlateScanner = true;
-    this.plateScanStatus = 'idle';
-    this.plateScanResult = '';
-    setTimeout(() => {
-      this.startCamera();
-    }, 100);
-  }
-
-  // Close vehicle plate scanner modal
-  closeVehiclePlateScanner(): void {
-    this.stopCamera();
-    this.showVehiclePlateScanner = false;
-    this.selectedShipmentForPlateCheck = null;
-    this.plateScanResult = '';
-    this.plateScanStatus = 'idle';
-  }
-
-  // Start camera
-  async startCamera(): Promise<void> {
-    try {
-      this.plateScanStatus = 'scanning';
-      
-      // Get video element
-      this.videoElement = document.getElementById('plate-scanner-video') as HTMLVideoElement;
-      if (!this.videoElement) {
-        throw new Error('Video element not found');
-      }
-
-      // Request camera access
-      this.videoStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Use back camera on mobile
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-
-      this.videoElement.srcObject = this.videoStream;
-      await this.videoElement.play();
-      
-      console.log('✅ Camera started successfully');
-    } catch (error) {
-      console.error('❌ Error starting camera:', error);
-      this.plateScanStatus = 'error';
-      alert('❌ Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập camera.');
-    }
-  }
-
-  // Stop camera
-  stopCamera(): void {
-    if (this.videoStream) {
-      this.videoStream.getTracks().forEach(track => track.stop());
-      this.videoStream = null;
-    }
-    if (this.videoElement) {
-      this.videoElement.srcObject = null;
-    }
-    this.plateScanStatus = 'idle';
-  }
-
-  // Capture image and process with OCR
-  async captureAndProcessPlate(): Promise<void> {
-    if (!this.videoElement || !this.selectedShipmentForPlateCheck) {
-      return;
-    }
-
-    try {
-      this.plateScanStatus = 'processing';
-      
-      // Create canvas to capture frame
-      if (!this.canvasElement) {
-        this.canvasElement = document.createElement('canvas');
-      }
-      
-      const canvas = this.canvasElement;
-      canvas.width = this.videoElement.videoWidth;
-      canvas.height = this.videoElement.videoHeight;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Cannot get canvas context');
-      }
-      
-      // Draw video frame to canvas
-      ctx.drawImage(this.videoElement, 0, 0, canvas.width, canvas.height);
-      
-      // Convert canvas to image data
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
-      
-      // Process with Tesseract OCR
-      console.log('🔍 Processing image with OCR...');
-      const worker = await createWorker({
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
-          }
-        }
-      });
-
-      // Load language and initialize
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
-
-      // Configure OCR for license plates (numbers and letters)
-      // Vietnamese license plates: A-Z, 0-9, spaces, dots, dashes
-      // PSM 6 = SINGLE_BLOCK (Assume a single uniform block of text)
-      // OEM 1 = LSTM_ONLY (Neural nets LSTM engine only)
-      await worker.setParameters({
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- .',
-        tessedit_pageseg_mode: 6 as any, // PSM.SINGLE_BLOCK
-        tessedit_ocr_engine_mode: 1 as any // OEM.LSTM_ONLY
-      });
-
-      const { data: { text } } = await worker.recognize(imageData);
-      await worker.terminate();
-
-      // Clean and normalize the recognized text
-      const recognizedPlate = this.normalizePlateNumber(text);
-      this.plateScanResult = recognizedPlate;
-      
-      // Compare with existing plate number
-      const existingPlate = this.normalizePlateNumber(
-        this.selectedShipmentForPlateCheck.vehicleNumber || ''
-      );
-      
-      const isMatch = recognizedPlate === existingPlate && recognizedPlate.length > 0;
-      
-      if (isMatch) {
-        this.plateScanStatus = 'success';
-        alert(`✅ ĐÚNG XE!\n\nBiển số đọc được: ${recognizedPlate}\nBiển số trong hệ thống: ${this.selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)'}`);
-      } else {
-        this.plateScanStatus = 'error';
-        alert(`❌ SAI XE!\n\nBiển số đọc được: ${recognizedPlate || '(không đọc được)'}\nBiển số trong hệ thống: ${this.selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)'}\n\nVui lòng kiểm tra lại!`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error processing plate:', error);
-      this.plateScanStatus = 'error';
-      alert('❌ Lỗi khi đọc biển số: ' + (error?.message || String(error)));
-    }
-  }
-
-  // Normalize plate number (remove spaces, dots, dashes for comparison)
-  normalizePlateNumber(plate: string): string {
-    if (!plate) return '';
-    
-    // Remove all spaces, dots, dashes, and convert to uppercase
-    // Also remove common OCR errors like extra characters
-    return plate
-      .replace(/[\s\.\-\_]/g, '') // Remove spaces, dots, dashes, underscores
-      .replace(/[^A-Z0-9]/g, '') // Remove any non-alphanumeric characters
-      .toUpperCase()
-      .trim();
   }
 } 

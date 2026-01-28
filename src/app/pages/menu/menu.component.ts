@@ -12,9 +12,10 @@ export class MenuComponent implements OnInit {
   isMobile: boolean = false;
   
   // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
-  // QC, Label và Shipment đã được cho phép hiển thị trên mobile/tablet
+  // QC và Label đã được cho phép hiển thị trên mobile/tablet
   desktopOnlyTabs: string[] = [
     '/work-order-status',
+    '/shipment',
     '/inventory-overview-asm1',
     '/inventory-overview-asm2',
     '/fg-in',

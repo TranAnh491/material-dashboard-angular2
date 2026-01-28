@@ -103,8 +103,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       '/warehouse-loading',  // Tab Loading
       '/trace-back',         // Tab Trace Back
       '/stock-check',        // Tab 18
-      '/safety',             // Tab 20
-      '/shipment'            // Tab Shipment - Cho phép trên mobile
+      '/safety'              // Tab 20
     ];
 
     return menuItems.map(menuItem => {
