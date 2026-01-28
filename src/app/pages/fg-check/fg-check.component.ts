@@ -15,6 +15,7 @@ export interface FGCheckItem {
   checkMode?: 'pn' | 'pn-qty'; // Lưu mode check của item
   shipmentCarton?: number; // Số thùng Shipment từ tab shipment
   shipmentQuantity?: number; // Lượng Shipment từ tab shipment
+  poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
   checkResult?: 'Đúng' | 'Sai'; // Kết quả check
   scannedCustomerCode?: boolean; // Đã scan mã hàng (highlight xanh)
   scannedQuantity?: boolean; // Đã scan số lượng (highlight xanh)
@@ -27,6 +28,7 @@ export interface ShipmentData {
   materialCode: string;
   quantity: number; // Lượng Xuất
   carton: number;
+  poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
 }
 
 export interface ShipmentDisplayItem {
@@ -72,6 +74,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   // Shipment display items - hiển thị danh sách mã TP của shipment hiện tại
   currentShipmentItems: ShipmentDisplayItem[] = [];
   
+  // Đổi số shipment
+  showChangeShipmentDialog: boolean = false;
+  oldShipmentCode: string = '';
+  newShipmentCode: string = '';
+  
   private destroy$ = new Subject<void>();
   isLoading: boolean = false;
   checkIdCounter: number = 1;
@@ -91,6 +98,102 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  // Mở dialog đổi số shipment
+  openChangeShipmentDialog(): void {
+    this.oldShipmentCode = '';
+    this.newShipmentCode = '';
+    this.showChangeShipmentDialog = true;
+  }
+
+  // Đóng dialog đổi số shipment
+  closeChangeShipmentDialog(): void {
+    this.showChangeShipmentDialog = false;
+    this.oldShipmentCode = '';
+    this.newShipmentCode = '';
+  }
+
+  // Đổi số shipment cho tất cả items
+  changeShipmentCode(): void {
+    const oldShipment = String(this.oldShipmentCode || '').trim().toUpperCase();
+    const newShipment = String(this.newShipmentCode || '').trim().toUpperCase();
+
+    if (!oldShipment || !newShipment) {
+      alert('❌ Vui lòng nhập đầy đủ số shipment cũ và mới!');
+      return;
+    }
+
+    if (oldShipment === newShipment) {
+      alert('❌ Số shipment mới phải khác số shipment cũ!');
+      return;
+    }
+
+    // Tìm tất cả items có shipment = oldShipment
+    const itemsToUpdate = this.items.filter(item => {
+      const itemShipment = String(item.shipment || '').trim().toUpperCase();
+      return itemShipment === oldShipment;
+    });
+
+    if (itemsToUpdate.length === 0) {
+      alert(`⚠️ Không tìm thấy items nào có shipment "${oldShipment}"!`);
+      return;
+    }
+
+    // Xác nhận trước khi đổi
+    const confirmMessage = `Bạn có chắc chắn muốn đổi shipment "${oldShipment}" thành "${newShipment}"?\n\n` +
+                          `Số lượng items sẽ được đổi: ${itemsToUpdate.length}`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Đổi shipment cho tất cả items
+    let successCount = 0;
+    let errorCount = 0;
+    const updatePromises: Promise<void>[] = [];
+
+    itemsToUpdate.forEach(item => {
+      if (item.id) {
+        const updatePromise = this.firestore.collection('fg-check').doc(item.id).update({
+          shipment: newShipment,
+          updatedAt: new Date()
+        })
+        .then(() => {
+          // Cập nhật local item
+          item.shipment = newShipment;
+          successCount++;
+          console.log(`✅ Updated item ${item.checkId}: ${oldShipment} -> ${newShipment}`);
+        })
+        .catch(error => {
+          errorCount++;
+          console.error(`❌ Error updating item ${item.checkId}:`, error);
+        });
+        
+        updatePromises.push(updatePromise);
+      }
+    });
+
+    // Chờ tất cả updates hoàn thành
+    Promise.all(updatePromises).then(() => {
+      // Cập nhật filter nếu đang filter theo shipment cũ
+      if (this.filterByShipment && this.filterByShipment.toUpperCase() === oldShipment) {
+        this.filterByShipment = newShipment;
+      }
+
+      // Recalculate check results và apply filters
+      this.calculateCheckResults();
+      this.applyFilters();
+
+      // Đóng dialog
+      this.closeChangeShipmentDialog();
+
+      // Hiển thị kết quả
+      alert(`✅ Đổi shipment hoàn tất!\n\n` +
+            `- Đã đổi: ${successCount} items\n` +
+            `- Lỗi: ${errorCount} items\n\n` +
+            `Shipment "${oldShipment}" -> "${newShipment}"`);
+    });
   }
 
   // Load items from Firebase
@@ -184,11 +287,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         actions.forEach(action => {
           const data = action.payload.doc.data() as any;
           // Normalize shipmentCode và materialCode: trim và uppercase cho shipmentCode
-          // CHỈ DÙNG 2 TRƯỜNG NÀY ĐỂ LƯU VÀ SO SÁNH
+          // LƯU CẢ PO SHIP ĐỂ PHÂN BIỆT CÁC DÒNG CÙNG MATERIALCODE
           const shipmentCode = String(data.shipmentCode || '').trim().toUpperCase();
           const materialCode = String(data.materialCode || '').trim(); // Mã TP - không uppercase để giữ nguyên format
           const quantity = parseFloat(data.quantity) || 0; // Lượng Xuất
           const carton = parseFloat(data.carton) || 0;
+          const poShip = String(data.poShip || '').trim(); // PO Ship để phân biệt
           
           // CHỈ LƯU KHI CÓ ĐỦ shipmentCode VÀ materialCode
           if (shipmentCode && materialCode) {
@@ -197,11 +301,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             }
             
             // Lưu theo shipmentCode, mỗi shipmentCode có thể có nhiều materialCode
+            // VÀ mỗi materialCode có thể có nhiều PO Ship (nhiều dòng)
             this.shipmentDataMap.get(shipmentCode)!.push({
               shipmentCode: shipmentCode,
               materialCode: materialCode, // Mã TP
               quantity: quantity,
-              carton: carton
+              carton: carton,
+              poShip: poShip // PO Ship để phân biệt
             });
           }
         });
@@ -408,6 +514,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return checkId;
   }
 
+  // Kiểm tra xem item đã đủ số lượng/carton chưa
+  isItemEnough(item: FGCheckItem): boolean {
+    if (!item.shipmentCarton && !item.shipmentQuantity) {
+      return false; // Chưa có dữ liệu shipment
+    }
+    
+    const checkMode = item.checkMode || this.checkMode;
+    
+    if (checkMode === 'pn-qty') {
+      // Check số lượng: so sánh quantity với shipmentQuantity
+      return (item.quantity || 0) >= (item.shipmentQuantity || 0);
+    } else {
+      // Check số thùng: so sánh carton với shipmentCarton
+      return (item.carton || 0) >= (item.shipmentCarton || 0);
+    }
+  }
+
   // Get material code from customer code
   getMaterialCodeFromCustomerCode(customerCode: string): string {
     // Normalize customerCode: uppercase and trim for lookup
@@ -517,6 +640,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       
       return searchableText.includes(this.searchTerm.toUpperCase());
     });
+    
+    // Sắp xếp: 1) Shipment (theo ABC), 2) Mã TP (theo ABC)
+    this.filteredItems.sort((a, b) => {
+      // Bước 1: So sánh Shipment (theo ABC)
+      const shipmentA = String(a.shipment || '').trim().toUpperCase();
+      const shipmentB = String(b.shipment || '').trim().toUpperCase();
+      const shipmentCompare = shipmentA.localeCompare(shipmentB);
+      
+      if (shipmentCompare !== 0) {
+        return shipmentCompare;
+      }
+      
+      // Bước 2: Nếu Shipment giống nhau, so sánh Mã TP (theo ABC)
+      const materialA = String(a.materialCode || '').trim().toUpperCase();
+      const materialB = String(b.materialCode || '').trim().toUpperCase();
+      return materialA.localeCompare(materialB);
+    });
   }
 
   onSearchChange(event: any): void {
@@ -537,6 +677,26 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return '0';
     }
     return value.toLocaleString('vi-VN');
+  }
+
+  // Kiểm tra xem mã TP có trùng trong cùng shipment không
+  isDuplicateMaterialCode(item: FGCheckItem): boolean {
+    const itemShipment = String(item.shipment || '').trim().toUpperCase();
+    const itemMaterialCode = String(item.materialCode || '').trim();
+    
+    if (!itemShipment || !itemMaterialCode) {
+      return false;
+    }
+    
+    // Đếm số lượng items có cùng shipment và materialCode (kiểm tra trong toàn bộ items, không chỉ filteredItems)
+    const duplicateCount = this.items.filter(i => {
+      const iShipment = String(i.shipment || '').trim().toUpperCase();
+      const iMaterialCode = String(i.materialCode || '').trim();
+      return iShipment === itemShipment && iMaterialCode === itemMaterialCode;
+    }).length;
+    
+    // Trả về true nếu có nhiều hơn 1 item (tức là có trùng)
+    return duplicateCount > 1;
   }
 
   // Check Methods
@@ -632,14 +792,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     console.log('🔵 onShipmentEntered called, shipmentCode:', shipmentCode);
     
-    // Load danh sách materialCode của shipment này
-    this.loadShipmentItems(shipmentCode);
-    
-    // Set filter để chỉ hiển thị items của shipment này
+    // Set filter để chỉ hiển thị items của shipment này TRƯỚC KHI load
+    // QUAN TRỌNG: Đảm bảo filter được set ngay từ đầu để khi check chỉ hiển thị đúng shipment
     this.filterByShipment = shipmentCode;
     console.log('✅ Set filterByShipment:', this.filterByShipment);
     
-    // Apply filters để cập nhật bảng
+    // Load danh sách materialCode của shipment này (sẽ tự động sắp xếp theo A, B, C)
+    this.loadShipmentItems(shipmentCode);
+    
+    // Apply filters để cập nhật bảng - chỉ hiển thị items của shipment này
     this.applyFilters();
     
     // Close popup first
@@ -651,6 +812,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     console.log('✅ After - isScanning:', this.isScanning);
     console.log('✅ After - scannedShipment:', this.scannedShipment);
+    console.log('✅ After - filterByShipment:', this.filterByShipment);
     
     this.cdr.detectChanges();
     
@@ -671,8 +833,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     // Lấy từ shipmentDataMap đã load
     const shipmentDataList = this.shipmentDataMap.get(normalizedShipmentCode) || [];
     
-    // Tạo danh sách hiển thị với customerCode (nếu có mapping)
-    this.currentShipmentItems = shipmentDataList.map(shipmentData => {
+    if (shipmentDataList.length === 0) {
+      alert(`⚠️ Không tìm thấy dữ liệu cho shipment "${normalizedShipmentCode}". Vui lòng kiểm tra lại!`);
+      return;
+    }
+    
+    // Tạo danh sách mới từ shipment data với customerCode (nếu có mapping)
+    const newShipmentItems: ShipmentDisplayItem[] = shipmentDataList.map(shipmentData => {
       // Tìm customerCode từ mapping (reverse lookup)
       let customerCode = '';
       this.customerMappings.forEach((materialCode, custCode) => {
@@ -689,15 +856,39 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       };
     });
     
-    console.log(`✅ Loaded ${this.currentShipmentItems.length} items for shipment ${normalizedShipmentCode}:`, 
+    // QUAN TRỌNG: Merge với danh sách cũ - chỉ thêm các mã TP mới (chưa có)
+    // Tạo Set để track các materialCode đã có
+    const existingMaterialCodes = new Set(
+      this.currentShipmentItems.map(item => String(item.materialCode || '').trim())
+    );
+    
+    // Chỉ thêm các mã TP mới vào danh sách
+    const newItemsToAdd = newShipmentItems.filter(item => {
+      const materialCode = String(item.materialCode || '').trim();
+      const isNew = !existingMaterialCodes.has(materialCode);
+      if (isNew) {
+        console.log(`➕ Adding new materialCode: ${materialCode}`);
+      } else {
+        console.log(`⏭️ Skipping existing materialCode: ${materialCode}`);
+      }
+      return isNew;
+    });
+    
+    // Merge: thêm các mã mới vào danh sách cũ
+    this.currentShipmentItems = [...this.currentShipmentItems, ...newItemsToAdd];
+    
+    // Sắp xếp lại theo materialCode A, B, C
+    this.currentShipmentItems.sort((a, b) => {
+      const materialA = String(a.materialCode || '').toUpperCase();
+      const materialB = String(b.materialCode || '').toUpperCase();
+      return materialA.localeCompare(materialB);
+    });
+    
+    console.log(`✅ Updated shipment items list: ${this.currentShipmentItems.length} total items (${newItemsToAdd.length} new items added)`);
+    console.log(`📋 Current items:`, 
       this.currentShipmentItems.map(item => `materialCode=${item.materialCode}, quantity=${item.quantity}`));
     
-    if (this.currentShipmentItems.length === 0) {
-      alert(`⚠️ Không tìm thấy dữ liệu cho shipment "${normalizedShipmentCode}". Vui lòng kiểm tra lại!`);
-      return;
-    }
-    
-    // Tự động tạo items trong bảng FG Check từ shipment data
+    // Tự động tạo items trong bảng FG Check từ shipment data (chỉ tạo items mới)
     this.createItemsFromShipment(normalizedShipmentCode, shipmentDataList);
   }
 
@@ -706,24 +897,31 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     console.log('📝 Creating FG Check items from shipment data...');
     
     shipmentDataList.forEach((shipmentData, index) => {
-      // Kiểm tra xem item đã tồn tại chưa (dựa vào shipment + materialCode) - QUAN TRỌNG: chỉ 1 dòng cho mỗi materialCode
+      // QUAN TRỌNG: Kiểm tra xem item đã tồn tại chưa (dựa vào shipment + materialCode + poShip)
+      // Nếu cùng materialCode nhưng khác PO Ship, tạo item mới
       const existingItem = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const itemMaterialCode = String(item.materialCode || '').trim();
-        return itemShipment === shipmentCode && itemMaterialCode === shipmentData.materialCode;
+        const itemPoShip = String(item.poShip || '').trim();
+        const dataPoShip = String(shipmentData.poShip || '').trim();
+        return itemShipment === shipmentCode && 
+               itemMaterialCode === shipmentData.materialCode &&
+               itemPoShip === dataPoShip; // Phải khớp cả PO Ship
       });
       
       if (existingItem) {
-        console.log(`⏭️ Item already exists for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode} - SKIP creating duplicate`);
+        console.log(`⏭️ Item already exists for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, poShip ${shipmentData.poShip} - SKIP creating duplicate`);
         // Cập nhật shipmentCarton và shipmentQuantity nếu chưa có
         if (!existingItem.shipmentCarton || !existingItem.shipmentQuantity) {
           existingItem.shipmentCarton = shipmentData.carton;
           existingItem.shipmentQuantity = shipmentData.quantity;
+          existingItem.poShip = shipmentData.poShip;
           // Cập nhật vào Firebase
           if (existingItem.id) {
             this.firestore.collection('fg-check').doc(existingItem.id).update({
               shipmentCarton: shipmentData.carton,
-              shipmentQuantity: shipmentData.quantity
+              shipmentQuantity: shipmentData.quantity,
+              poShip: shipmentData.poShip
             }).catch(error => {
               console.error('❌ Error updating shipment data:', error);
             });
@@ -740,7 +938,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         }
       });
       
-      // Tạo item mới
+      // Tạo item mới (mỗi PO Ship = 1 item riêng)
       const checkId = this.getNextCheckId();
       const newItem: FGCheckItem = {
         shipment: shipmentCode,
@@ -753,6 +951,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         checkMode: this.checkMode,
         shipmentCarton: shipmentData.carton, // Lưu số thùng từ shipment
         shipmentQuantity: shipmentData.quantity, // Lưu số lượng từ shipment
+        poShip: shipmentData.poShip, // Lưu PO Ship để phân biệt
         scannedCustomerCode: false,
         scannedQuantity: false,
         createdAt: new Date(),
@@ -762,7 +961,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Lưu vào Firebase
       this.firestore.collection('fg-check').add(newItem)
         .then((docRef) => {
-          console.log(`✅ Created item for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}`);
+          console.log(`✅ Created item for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, poShip ${shipmentData.poShip}`);
           newItem.id = docRef.id;
           this.items.push(newItem);
           this.calculateCheckResults();
@@ -1044,36 +1243,49 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       }
     }
     
-    // Tìm item dựa vào shipment + materialCode (QUAN TRỌNG: chỉ 1 item cho mỗi materialCode)
-    // Không cần customerCode vì có thể chưa scan hoặc đang cập nhật
+    // QUAN TRỌNG: Tìm item chưa đủ (chưa checked và chưa đủ số lượng/carton)
+    // Nếu có nhiều dòng cùng materialCode (khác PO Ship), tìm dòng đầu tiên chưa đủ
     // Normalize materialCode để so sánh chính xác
     const normalizedMaterialCode = String(materialCode || '').trim();
     
-    let existingItem = this.items.find(item => {
+    // Tìm tất cả items cùng shipment + materialCode, sắp xếp theo PO Ship
+    const matchingItems = this.items.filter(item => {
       const itemShipment = String(item.shipment || '').trim().toUpperCase();
       const itemMaterialCode = String(item.materialCode || '').trim();
       return itemShipment === normalizedShipmentCode &&
-             itemMaterialCode === normalizedMaterialCode &&
-             !item.isChecked;
+             itemMaterialCode === normalizedMaterialCode;
     });
     
-    // Nếu không tìm thấy, kiểm tra lại với tất cả items (kể cả đã checked) để đảm bảo không trùng
-    if (!existingItem) {
-      const duplicateItem = this.items.find(item => {
-        const itemShipment = String(item.shipment || '').trim().toUpperCase();
-        const itemMaterialCode = String(item.materialCode || '').trim();
-        return itemShipment === normalizedShipmentCode &&
-               itemMaterialCode === normalizedMaterialCode;
-      });
+    // Sắp xếp theo PO Ship để đảm bảo thứ tự
+    matchingItems.sort((a, b) => {
+      const poShipA = String(a.poShip || '').trim();
+      const poShipB = String(b.poShip || '').trim();
+      return poShipA.localeCompare(poShipB);
+    });
+    
+    // Tìm item đầu tiên chưa đủ (chưa checked và chưa đủ số lượng/carton)
+    let existingItem = matchingItems.find(item => {
+      if (item.isChecked) return false; // Đã checked thì bỏ qua
       
-      if (duplicateItem) {
-        console.warn(`⚠️ Found duplicate item for shipment ${normalizedShipmentCode}, materialCode ${normalizedMaterialCode} - will update instead of creating new`);
-        // Nếu item đã checked, không cập nhật, chỉ cảnh báo
-        if (duplicateItem.isChecked) {
-          alert(`⚠️ Item với mã TP "${normalizedMaterialCode}" đã được checked. Không thể cập nhật!`);
+      // Kiểm tra xem đã đủ chưa
+      const isEnough = this.isItemEnough(item);
+      return !isEnough; // Chỉ lấy item chưa đủ
+    });
+    
+    // Nếu không tìm thấy item chưa đủ, kiểm tra xem có item nào chưa checked không (để cảnh báo)
+    if (!existingItem) {
+      const uncheckedItem = matchingItems.find(item => !item.isChecked);
+      if (uncheckedItem) {
+        // Tất cả items đã đủ nhưng chưa checked - có thể do logic check chưa chạy
+        console.log(`ℹ️ All items for materialCode ${normalizedMaterialCode} are already enough, but not checked yet`);
+        existingItem = uncheckedItem; // Vẫn cập nhật item này
+      } else {
+        // Tất cả items đã checked
+        const checkedItems = matchingItems.filter(item => item.isChecked);
+        if (checkedItems.length > 0) {
+          alert(`⚠️ Tất cả các dòng của mã TP "${normalizedMaterialCode}" đã được checked. Không thể cập nhật!`);
           return;
         }
-        existingItem = duplicateItem;
       }
     }
     
@@ -1132,10 +1344,72 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           alert('❌ Lỗi khi cập nhật: ' + error.message);
         });
     } else {
-      // Create new record - KIỂM TRA LẠI LẦN CUỐI để chắc chắn không trùng
-      console.log('🔵 Creating new record - checking for duplicates one more time...');
+      // Create new record - Tìm item chưa đủ từ danh sách matchingItems
+      console.log('🔵 Creating new record - checking for available item from matching items...');
       
-      // KIỂM TRA LẠI LẦN CUỐI - normalize materialCode để so sánh chính xác
+      // Tìm item chưa đủ từ danh sách đã tìm ở trên
+      const availableItem = matchingItems.find(item => {
+        if (item.isChecked) return false;
+        return !this.isItemEnough(item);
+      });
+      
+      if (availableItem) {
+        // Tìm thấy item chưa đủ - cập nhật item này
+        console.log('✅ Found available item to update:', availableItem.checkId);
+        existingItem = availableItem;
+        
+        // Cập nhật item này (giống logic update ở trên)
+        let updatedQuantity: number;
+        let updatedCarton: number;
+        
+        if (this.checkMode === 'pn-qty') {
+          updatedQuantity = (availableItem.quantity || 0) + quantity;
+          updatedCarton = availableItem.carton || 0;
+        } else {
+          updatedQuantity = 0;
+          updatedCarton = (availableItem.carton || 0) + 1;
+        }
+        
+        const isScanningCustomerCode = !availableItem.customerCode || availableItem.customerCode !== normalizedCustomerCode;
+        const isScanningQuantity = availableItem.quantity !== updatedQuantity;
+        
+        const updateData = {
+          quantity: updatedQuantity,
+          carton: updatedCarton,
+          shipment: normalizedShipmentCode,
+          materialCode: materialCode,
+          customerCode: normalizedCustomerCode,
+          checkMode: this.checkMode,
+          scannedCustomerCode: isScanningCustomerCode ? true : (availableItem.scannedCustomerCode || false),
+          scannedQuantity: isScanningQuantity ? true : (availableItem.scannedQuantity || false),
+          updatedAt: new Date()
+        };
+        
+        if (availableItem.id) {
+          this.firestore.collection('fg-check').doc(availableItem.id).update(updateData)
+            .then(() => {
+              console.log('✅ Updated available item:', normalizedCustomerCode, 'materialCode:', materialCode);
+              availableItem.quantity = updatedQuantity;
+              availableItem.carton = updatedCarton;
+              availableItem.shipment = normalizedShipmentCode;
+              availableItem.materialCode = materialCode;
+              availableItem.customerCode = normalizedCustomerCode;
+              availableItem.checkMode = this.checkMode;
+              availableItem.scannedCustomerCode = updateData.scannedCustomerCode;
+              availableItem.scannedQuantity = updateData.scannedQuantity;
+              availableItem.updatedAt = new Date();
+              this.calculateCheckResults();
+              this.applyFilters();
+            })
+            .catch(error => {
+              console.error('❌ Error updating:', error);
+              alert('❌ Lỗi khi cập nhật: ' + error.message);
+            });
+        }
+        return; // Đã xử lý xong
+      }
+      
+      // Nếu không tìm thấy item chưa đủ, kiểm tra lại lần cuối
       const normalizedMaterialCode = String(materialCode || '').trim();
       const finalCheck = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();

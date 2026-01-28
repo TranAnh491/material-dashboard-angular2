@@ -518,6 +518,14 @@
       border: 2px solid #28a745 !important;
       animation: scanHighlight 0.5s ease;
     }
+    
+    // Highlight duplicate material code (màu cam)
+    &.duplicate-material {
+      background-color: #fff3cd !important;
+      color: #856404 !important;
+      font-weight: 700;
+      border: 2px solid #ff9800 !important;
+    }
   }
 }
 

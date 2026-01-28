@@ -697,6 +697,12 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
+/* Vehicle number filled: show red text (override existing !important rules) */
+.table td input.editable-input.vehicle-number-filled {
+  color: #d32f2f !important;
+  font-weight: 700 !important;
+}
+
 .editable-input:focus {
   outline: 2px solid #000000;
   background: #ffffff;

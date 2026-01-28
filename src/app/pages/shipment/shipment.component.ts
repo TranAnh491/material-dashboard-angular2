@@ -152,7 +152,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             qtyPallet: data.qtyPallet || 0, // Default qtyPallet if not exists
             hidden: data.hidden === true, // Load hidden status
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : null,
-            vehicleNumber: data.vehicleNumber || '',
+            vehicleNumber: data.vehicleNumber ? String(data.vehicleNumber).toUpperCase().trim() : '',
             factory: data.factory || 'ASM1',
             document: data.document || 'Đã có PX',
             requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
@@ -270,6 +270,40 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const materialB = String(b.materialCode || '').toUpperCase();
       return materialA.localeCompare(materialB);
     });
+  }
+
+  private normalizeShipmentCode(code: string | undefined | null): string {
+    return (code ?? '').toString().trim().toUpperCase();
+  }
+
+  // Handle Vehicle Number change - sync to all rows with same shipmentCode and convert to uppercase
+  onVehicleNumberChange(shipment: ShipmentItem): void {
+    // Convert to uppercase
+    if (shipment.vehicleNumber) {
+      shipment.vehicleNumber = shipment.vehicleNumber.toUpperCase().trim();
+    }
+    
+    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
+    const newVehicleNumber = shipment.vehicleNumber || '';
+    
+    if (!shipmentCode) {
+      // If no shipment code, just update this one
+      this.updateShipmentInFirebase(shipment);
+      return;
+    }
+    
+    // Find all shipments with the same shipmentCode
+    const sameShipmentRows = this.shipments.filter(s => 
+      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
+    );
+    
+    // Update Vehicle Number for all rows with same shipmentCode
+    sameShipmentRows.forEach(s => {
+      s.vehicleNumber = newVehicleNumber;
+      this.updateShipmentInFirebase(s);
+    });
+    
+    console.log(`✅ Đã đồng bộ "Biển số xe" = "${newVehicleNumber}" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
   }
 
   // Format number with commas for thousands
@@ -1163,6 +1197,116 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Update shipment in Firebase
+  // Handle document change - sync to all rows with same shipmentCode
+  onDocumentChange(shipment: ShipmentItem): void {
+    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
+    const newDocumentValue = shipment.document || 'Đã có PX';
+    
+    if (!shipmentCode) {
+      // If no shipment code, just update this one
+      this.updateShipmentInFirebase(shipment);
+      return;
+    }
+    
+    // Find all shipments with the same shipmentCode
+    const sameShipmentRows = this.shipments.filter(s => 
+      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
+    );
+    
+    // Update document for all rows with same shipmentCode
+    sameShipmentRows.forEach(s => {
+      s.document = newDocumentValue;
+      this.updateShipmentInFirebase(s);
+    });
+    
+    console.log(`✅ Đã đồng bộ "Chứng từ" = "${newDocumentValue}" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
+  }
+
+  // Handle CS Date change - sync to all rows with same shipmentCode
+  onCSDateChange(shipment: ShipmentItem, dateString: string): void {
+    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
+    const newDate = dateString ? new Date(dateString) : null;
+    
+    // Update current shipment first
+    shipment.requestDate = newDate;
+    shipment.updatedAt = new Date();
+    
+    if (!shipmentCode) {
+      // If no shipment code, just update this one
+      this.updateShipmentInFirebase(shipment);
+      return;
+    }
+    
+    // Find all shipments with the same shipmentCode
+    const sameShipmentRows = this.shipments.filter(s => 
+      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
+    );
+    
+    // Update CS Date for all rows with same shipmentCode
+    sameShipmentRows.forEach(s => {
+      s.requestDate = newDate;
+      s.updatedAt = new Date();
+      this.updateShipmentInFirebase(s);
+    });
+    
+    console.log(`✅ Đã đồng bộ "CS Date" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
+  }
+
+  // Handle Dispatch Date change - sync to all rows with same shipmentCode
+  onDispatchDateChange(shipment: ShipmentItem, dateString: string): void {
+    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
+    const newDate = dateString ? new Date(dateString) : null;
+    
+    // Update current shipment first
+    shipment.actualShipDate = newDate;
+    shipment.updatedAt = new Date();
+    
+    if (!shipmentCode) {
+      // If no shipment code, just update this one
+      this.updateShipmentInFirebase(shipment);
+      return;
+    }
+    
+    // Find all shipments with the same shipmentCode
+    const sameShipmentRows = this.shipments.filter(s => 
+      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
+    );
+    
+    // Update Dispatch Date for all rows with same shipmentCode
+    sameShipmentRows.forEach(s => {
+      s.actualShipDate = newDate;
+      s.updatedAt = new Date();
+      this.updateShipmentInFirebase(s);
+    });
+    
+    console.log(`✅ Đã đồng bộ "Dispatch Date" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
+  }
+
+  // Handle FWD change - sync to all rows with same shipmentCode
+  onFWDChange(shipment: ShipmentItem): void {
+    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
+    const newFWDValue = shipment.shipMethod || '';
+    
+    if (!shipmentCode) {
+      // If no shipment code, just update this one
+      this.updateShipmentInFirebase(shipment);
+      return;
+    }
+    
+    // Find all shipments with the same shipmentCode
+    const sameShipmentRows = this.shipments.filter(s => 
+      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
+    );
+    
+    // Update FWD for all rows with same shipmentCode
+    sameShipmentRows.forEach(s => {
+      s.shipMethod = newFWDValue;
+      this.updateShipmentInFirebase(s);
+    });
+    
+    console.log(`✅ Đã đồng bộ "FWD" = "${newFWDValue}" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
+  }
+
   updateShipmentInFirebase(shipment: ShipmentItem): void {
     if (shipment.id) {
       // Tự động điền Dispatch Date khi Status = "Đã Ship"
