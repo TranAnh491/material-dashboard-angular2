@@ -115,10 +115,6 @@
                       <i class="material-icons">add</i>
                       Add Shipment
                     </a>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); closeDropdown()">
-                      <i class="material-icons">file_upload</i>
-                      Import file
-                    </a>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="refreshFGInventoryCache(); closeDropdown()">
                       <i class="material-icons">refresh</i>
                       Refresh Tồn Kho
@@ -127,17 +123,51 @@
                       <i class="material-icons">bug_report</i>
                       Debug Tồn Kho
                     </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="debugCheckStatus(); closeDropdown()">
+                      <i class="material-icons">verified</i>
+                      Debug Check Status
+                    </a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
                       <i class="material-icons">file_download</i>
                       Export to Excel
                     </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcelByMonth(); closeDropdown()">
+                      <i class="material-icons">calendar_today</i>
+                      Tải về theo tháng
+                    </a>
+                    <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllShipments(); closeDropdown()" *ngIf="filteredShipments.length > 0">
                       <i class="material-icons">delete_forever</i>
                       Xóa Tất Cả
                     </a>
                   </div>
                 </div>
+                
+                <!-- Import File Button -->
+                <button class="btn btn-outline-secondary" type="button" (click)="importFile()">
+                  <i class="material-icons">file_upload</i>
+                  Import File
+                </button>
+                
+                <!-- Date Range Filter -->
+                <div class="date-range-container">
+                  <label class="date-range-label">Từ:</label>
+                  <input type="date" 
+                         class="date-range-input" 
+                         [value]="formatDateForInput(startDate)"
+                         (change)="startDate = parseDateForRange($event.target.value); applyFilters()"
+                         (click)="$event.target.showPicker()"
+                         title="Ngày bắt đầu">
+                  <label class="date-range-label">Đến:</label>
+                  <input type="date" 
+                         class="date-range-input" 
+                         [value]="formatDateForInput(endDate)"
+                         (change)="endDate = parseDateForRange($event.target.value); applyFilters()"
+                         (click)="$event.target.showPicker()"
+                         title="Ngày kết thúc">
+                </div>
+                
                 <div class="search-container">
                   <input type="text" 
                          class="search-input" 
@@ -146,6 +176,36 @@
                          (input)="applyFilters()">
                   <i class="material-icons search-icon">search</i>
                 </div>
+                
+                <!-- Show Hidden Button -->
+                <button class="btn" 
+                        [class.btn-primary]="showHidden"
+                        [class.btn-outline-secondary]="!showHidden"
+                        type="button" 
+                        (click)="toggleShowHidden()"
+                        [title]="showHidden ? 'Đang hiện tất cả (' + getHiddenShipmentsCount() + ' đã ẩn)' : 'Hiện các shipment đã ẩn (' + getHiddenShipmentsCount() + ')'">
+                  <i class="material-icons">{{showHidden ? 'visibility' : 'visibility_off'}}</i>
+                  {{showHidden ? 'Đang hiện tất cả' : 'Hiện tất cả'}} 
+                  <span *ngIf="getHiddenShipmentsCount() > 0">({{getHiddenShipmentsCount()}})</span>
+                </button>
+                
+                <!-- Schedules Button -->
+                <button class="btn btn-info" 
+                        type="button" 
+                        (click)="openScheduleDialog()"
+                        title="Xem lịch xuất hàng theo tháng">
+                  <i class="material-icons">calendar_month</i>
+                  Schedules
+                </button>
+                
+                <!-- Check Biển Số Button -->
+                <button class="btn btn-warning" 
+                        type="button" 
+                        (click)="openVehiclePlateScannerDialog()"
+                        title="Check biển số xe bằng camera">
+                  <i class="material-icons">camera_alt</i>
+                  Check Biển Số
+                </button>
               </div>
             </div>
           </div>
@@ -158,6 +218,9 @@
                 <thead>
           <tr>
             <th class="row-header">NO</th>
+            <th>NGÀY IMPORT</th>
+            <th>BIỂN SỐ XE</th>
+            <th>FACTORY</th>
             <th>SHIPMENT</th>
             <th>MÃ TP</th>
             <th>MÃ KHÁCH</th>
@@ -171,6 +234,7 @@
             <th>PACKING</th>
             <th>QTY PALLET</th>
             <th>STATUS</th>
+            <th>CHỨNG TỪ</th>
             <th>CS DATE</th>
             <th>FULL DATE</th>
             <th>DISPATCH DATE</th>
@@ -178,25 +242,67 @@
             <th>GHI CHÚ</th>
             <th>PRINT</th>
             <th>XÓA</th>
+            <th>ẨN</th>
           </tr>
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="25" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
                   </td>
                 </tr>
           
-                    <tr *ngFor="let shipment of filteredShipments; let i = index">
+                    <tr *ngFor="let shipment of filteredShipments; let i = index" 
+                        [class.checked-row]="isShipmentChecked(shipment)">
             <td class="row-header">{{i + 1}}</td>
-            <td class="code-cell">
+            
+            <!-- Ngày Import -->
+            <td>
+              <input type="date"
+                     class="editable-input date-input"
+                     [value]="formatDateForInput(shipment.importDate)"
+                     (change)="shipment.importDate = parseDate($event.target.value); updateShipmentInFirebase(shipment)"
+                     (click)="$event.target.showPicker()"
+                     title="Ngày import">
+            </td>
+            
+            <!-- Biển số xe -->
+            <td>
               <input type="text"
                      class="editable-input"
-                     [(ngModel)]="shipment.shipmentCode"
+                     [(ngModel)]="shipment.vehicleNumber"
                      (change)="updateShipmentInFirebase(shipment)"
-                     placeholder="Shipment code">
+                     placeholder="Biển số xe">
+            </td>
+            
+            <!-- Nhà máy -->
+            <td>
+              <select class="editable-select" 
+                      [(ngModel)]="shipment.factory" 
+                      (change)="updateShipmentInFirebase(shipment)">
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+                <option value="ASM3">ASM3</option>
+              </select>
+            </td>
+            
+            <td class="code-cell">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="shipment.shipmentCode"
+                       (change)="updateShipmentInFirebase(shipment)"
+                       placeholder="Shipment code"
+                       style="flex: 1;">
+                <i class="material-icons check-status-icon" 
+                   *ngIf="isShipmentChecked(shipment)"
+                   title="✅ Đã kiểm tra và đúng - FG Check OK!"
+                   style="color: #28a745; font-size: 24px; font-weight: bold;">
+                  verified
+                </i>
+              </div>
             </td>
             <td class="code-cell">
               <input type="text"
@@ -272,7 +378,7 @@
                      placeholder="Qty Pallet">
             </td>
             <td class="status-cell">
-              <select class="status-select" [(ngModel)]="shipment.status" (change)="updateShipmentInFirebase(shipment)">
+              <select class="status-select" [(ngModel)]="shipment.status" (change)="onStatusChange(shipment)">
                 <option value="Chờ soạn">Chờ soạn</option>
                 <option value="Đang soạn">Đang soạn</option>
                 <option value="Đã xong">Đã xong</option>
@@ -280,26 +386,42 @@
                 <option value="Delay">Delay</option>
               </select>
             </td>
+            
+            <!-- Chứng từ -->
+            <td>
+              <select class="editable-select" 
+                      [(ngModel)]="shipment.document" 
+                      (change)="updateShipmentInFirebase(shipment)">
+                <option value="Đã có PX">Đã có PX</option>
+                <option value="Full">Full</option>
+                <option value="Thiếu">Thiếu</option>
+                <option value="PKL">PKL</option>
+              </select>
+            </td>
+            
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.requestDate)"
                      (ngModelChange)="updateDateField(shipment, 'requestDate', $event)"
-                     placeholder="Chọn CS Date">
+                     (click)="$event.target.showPicker()"
+                     title="Click để chọn ngày CS Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.fullDate)"
                      (ngModelChange)="updateDateField(shipment, 'fullDate', $event)"
-                     placeholder="Chọn Full Date">
+                     (click)="$event.target.showPicker()"
+                     title="Click để chọn ngày Full Date">
             </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input date-input"
                      [ngModel]="formatDateForInput(shipment.actualShipDate)"
                      (ngModelChange)="updateDateField(shipment, 'actualShipDate', $event)"
-                     placeholder="Chọn Dispatch Date">
+                     (click)="$event.target.showPicker()"
+                     title="Click để chọn ngày Dispatch Date">
             </td>
             <td class="number-cell">
               <input type="number"
@@ -327,6 +449,13 @@
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
+            <td class="action-cell">
+              <input type="checkbox" 
+                     [checked]="shipment.hidden === true"
+                     (change)="toggleHidden(shipment)"
+                     title="Ẩn shipment này"
+                     style="cursor: pointer; width: 18px; height: 18px;">
+            </td>
           </tr>
         </tbody>
       </table>
@@ -351,11 +480,19 @@
       <div class="date-inputs">
         <div class="input-group">
           <label class="input-label">Từ ngày</label>
-          <input type="date" class="date-input" [(ngModel)]="startDate">
+          <input type="date" 
+                 class="date-input" 
+                 [(ngModel)]="startDate"
+                 (click)="$event.target.showPicker()"
+                 title="Click để chọn ngày bắt đầu">
         </div>
         <div class="input-group">
           <label class="input-label">Đến ngày</label>
-          <input type="date" class="date-input" [(ngModel)]="endDate">
+          <input type="date" 
+                 class="date-input" 
+                 [(ngModel)]="endDate"
+                 (click)="$event.target.showPicker()"
+                 title="Click để chọn ngày kết thúc">
         </div>
       </div>
     </div>
@@ -493,13 +630,17 @@
             <label class="input-label">CS Date</label>
             <input type="date" 
                    class="form-input" 
-                   [(ngModel)]="newShipment.requestDate">
+                   [(ngModel)]="newShipment.requestDate"
+                   (click)="$event.target.showPicker()"
+                   title="Click để chọn ngày CS Date">
           </div>
           <div class="input-group">
             <label class="input-label">Full Date</label>
             <input type="date" 
                    class="form-input" 
-                   [(ngModel)]="newShipment.fullDate">
+                   [(ngModel)]="newShipment.fullDate"
+                   (click)="$event.target.showPicker()"
+                   title="Click để chọn ngày Full Date">
           </div>
         </div>
         
@@ -508,7 +649,9 @@
             <label class="input-label">Dispatch Date</label>
             <input type="date" 
                    class="form-input" 
-                   [(ngModel)]="newShipment.actualShipDate">
+                   [(ngModel)]="newShipment.actualShipDate"
+                   (click)="$event.target.showPicker()"
+                   title="Click để chọn ngày Dispatch Date">
           </div>
           <div class="input-group">
             <label class="input-label">Ngày chuẩn bị</label>
@@ -595,6 +738,166 @@
       <button type="button" class="btn btn-cancel" (click)="closePrintLabelDialog()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Calendar Dialog -->
+<div class="custom-modal" [class.show]="showScheduleDialog" [style.display]="showScheduleDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeScheduleDialog()"></div>
+  <div class="modal-container schedule-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">calendar_month</i>
+        Lịch Xuất Hàng - {{ getMonthName() }} {{ scheduleYear }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closeScheduleDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Month Navigation -->
+      <div class="calendar-nav">
+        <button class="nav-btn" (click)="previousMonth()">
+          <i class="material-icons">chevron_left</i>
+        </button>
+        <h3 class="calendar-title">{{ getMonthName() }} {{ scheduleYear }}</h3>
+        <button class="nav-btn" (click)="nextMonth()">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
+      
+      <!-- Calendar Grid -->
+      <div class="calendar-grid">
+        <!-- Day Headers -->
+        <div class="calendar-header">CN</div>
+        <div class="calendar-header">T2</div>
+        <div class="calendar-header">T3</div>
+        <div class="calendar-header">T4</div>
+        <div class="calendar-header">T5</div>
+        <div class="calendar-header">T6</div>
+        <div class="calendar-header">T7</div>
+        
+        <!-- Calendar Days -->
+        <div *ngFor="let dayData of calendarDays" 
+             class="calendar-day"
+             [class.today]="isToday(dayData.date)"
+             [class.has-shipments]="dayData.shipments?.length > 0"
+             [class.empty]="!dayData.date">
+          
+          <div class="day-number" *ngIf="dayData.date">{{ dayData.day }}</div>
+          
+          <div class="shipments-list" *ngIf="dayData.shipments?.length > 0">
+            <div class="shipment-badge" 
+                 *ngFor="let shipment of dayData.shipments"
+                 [title]="shipment.shipmentCode + ' - ' + shipment.materialCode">
+              {{ shipment.shipmentCode }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Legend -->
+      <div class="calendar-legend">
+        <div class="legend-item">
+          <span class="legend-color today-color"></span>
+          <span>Hôm nay</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color has-shipment-color"></span>
+          <span>Có lịch xuất hàng</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeScheduleDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Vehicle Plate Scanner Dialog -->
+<div class="custom-modal" [class.show]="showVehiclePlateScanner" [style.display]="showVehiclePlateScanner ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeVehiclePlateScanner()"></div>
+  <div class="modal-container vehicle-plate-scanner-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">camera_alt</i>
+        Check Biển Số Xe
+        <span *ngIf="selectedShipmentForPlateCheck" style="font-size: 14px; font-weight: normal; margin-left: 10px;">
+          - Shipment: {{ selectedShipmentForPlateCheck.shipmentCode }}
+        </span>
+      </h5>
+      <button type="button" class="close-btn" (click)="closeVehiclePlateScanner()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="plate-scanner-info" *ngIf="selectedShipmentForPlateCheck">
+        <div class="info-row">
+          <label>Biển số trong hệ thống:</label>
+          <span class="info-value" [class.no-plate]="!selectedShipmentForPlateCheck.vehicleNumber">
+            {{ selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)' }}
+          </span>
+        </div>
+      </div>
+      
+      <!-- Camera Video Preview -->
+      <div class="camera-preview-container">
+        <video id="plate-scanner-video" 
+               autoplay 
+               playsinline
+               style="width: 100%; max-width: 640px; height: auto; border-radius: 8px; background: #000;">
+        </video>
+        
+        <!-- Scanning overlay -->
+        <div class="scanning-overlay" *ngIf="plateScanStatus === 'scanning'">
+          <div class="scanning-frame"></div>
+          <p class="scanning-text">Đang quét biển số...</p>
+        </div>
+        
+        <!-- Processing overlay -->
+        <div class="processing-overlay" *ngIf="plateScanStatus === 'processing'">
+          <div class="spinner"></div>
+          <p class="processing-text">Đang xử lý hình ảnh...</p>
+        </div>
+      </div>
+      
+      <!-- Scan Result -->
+      <div class="scan-result" *ngIf="plateScanResult">
+        <div class="result-label">Biển số đọc được:</div>
+        <div class="result-value">{{ plateScanResult }}</div>
+      </div>
+      
+      <!-- Instructions -->
+      <div class="instructions">
+        <p><strong>Hướng dẫn:</strong></p>
+        <ul>
+          <li>Đưa camera vào biển số xe</li>
+          <li>Đảm bảo biển số rõ ràng và đủ ánh sáng</li>
+          <li>Nhấn nút "Chụp và Kiểm tra" để đọc biển số</li>
+          <li>Hệ thống sẽ tự động so sánh với biển số trong hệ thống</li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeVehiclePlateScanner()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" 
+              class="btn btn-primary" 
+              (click)="captureAndProcessPlate()"
+              [disabled]="plateScanStatus === 'processing' || plateScanStatus === 'scanning'">
+        <i class="material-icons">camera</i>
+        {{ plateScanStatus === 'processing' ? 'Đang xử lý...' : 'Chụp và Kiểm tra' }}
       </button>
     </div>
   </div>

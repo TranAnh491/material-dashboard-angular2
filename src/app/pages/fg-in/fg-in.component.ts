@@ -31,6 +31,7 @@ export interface ProductCatalogItem {
   materialCode: string; // Mã TP
   standard: string; // Standard
   customer: string; // Khách
+  customerCode: string; // Mã khách hàng
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -82,7 +83,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   newCatalogItem: ProductCatalogItem = {
     materialCode: '',
     standard: '',
-    customer: ''
+    customer: '',
+    customerCode: ''
   };
   
   // Customer Code Mapping
@@ -722,7 +724,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.newCatalogItem = {
       materialCode: '',
       standard: '',
-      customer: ''
+      customer: '',
+      customerCode: ''
     };
   }
 
@@ -733,7 +736,8 @@ export class FgInComponent implements OnInit, OnDestroy {
         const searchableText = [
           item.materialCode,
           item.standard,
-          item.customer
+          item.customer,
+          item.customerCode
         ].filter(Boolean).join(' ').toUpperCase();
         
         if (!searchableText.includes(this.catalogSearchTerm.toUpperCase())) {
@@ -806,6 +810,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       materialCode: row['Mã TP'] || '',
       standard: row['Standard'] || '',
       customer: row['Khách'] || '',
+      customerCode: row['Mã khách hàng'] || row['Mã Khách Hàng'] || row['Customer Code'] || '',
       createdAt: new Date(),
       updatedAt: new Date()
     })).filter(item => item.materialCode.trim() !== ''); // Filter out empty rows
@@ -867,7 +872,8 @@ export class FgInComponent implements OnInit, OnDestroy {
         this.newCatalogItem = {
           materialCode: '',
           standard: '',
-          customer: ''
+          customer: '',
+          customerCode: ''
         };
       })
       .catch(error => {
@@ -907,12 +913,14 @@ export class FgInComponent implements OnInit, OnDestroy {
       {
         'Mã TP': 'FG001',
         'Standard': 'STD001',
-        'Khách': 'Customer A'
+        'Khách': 'Customer A',
+        'Mã khách hàng': 'CUST001'
       },
       {
         'Mã TP': 'FG002',
         'Standard': 'STD002',
-        'Khách': 'Customer B'
+        'Khách': 'Customer B',
+        'Mã khách hàng': 'CUST002'
       }
     ];
 
@@ -920,6 +928,96 @@ export class FgInComponent implements OnInit, OnDestroy {
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
     XLSX.writeFile(wb, 'FG_Catalog_Template.xlsx');
+  }
+
+  // Sync customer code from mapping to catalog
+  syncCustomerCodeFromMapping(): void {
+    console.log('🔄 Starting sync customer code from mapping to catalog...');
+    
+    // Ensure mapping is loaded
+    if (this.mappingItems.length === 0) {
+      this.loadMappingFromFirebase();
+      // Wait a bit for mapping to load
+      setTimeout(() => {
+        this.performSync();
+      }, 500);
+    } else {
+      this.performSync();
+    }
+  }
+
+  private performSync(): void {
+    if (this.mappingItems.length === 0) {
+      alert('❌ Không có dữ liệu mapping để đồng bộ!');
+      return;
+    }
+
+    if (this.catalogItems.length === 0) {
+      alert('❌ Không có dữ liệu catalog để đồng bộ!');
+      return;
+    }
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    const updatePromises: Promise<void>[] = [];
+
+    // Create a map: materialCode -> customerCode from mapping
+    const mappingMap = new Map<string, string>();
+    this.mappingItems.forEach(mapping => {
+      if (mapping.materialCode && mapping.customerCode) {
+        // If multiple mappings for same materialCode, keep the first one
+        if (!mappingMap.has(mapping.materialCode)) {
+          mappingMap.set(mapping.materialCode, mapping.customerCode);
+        }
+      }
+    });
+
+    console.log(`📊 Found ${mappingMap.size} unique material codes in mapping`);
+
+    // Update existing catalog items
+    this.catalogItems.forEach(catalogItem => {
+      if (catalogItem.materialCode && catalogItem.id) {
+        const customerCodeFromMapping = mappingMap.get(catalogItem.materialCode);
+        
+        if (customerCodeFromMapping) {
+          // Only update if customerCode is different or empty
+          if (catalogItem.customerCode !== customerCodeFromMapping) {
+            console.log(`🔄 Updating catalog item ${catalogItem.materialCode}: ${catalogItem.customerCode || '(empty)'} -> ${customerCodeFromMapping}`);
+            updatedCount++;
+            
+            const updatePromise = this.firestore.collection('fg-catalog').doc(catalogItem.id).update({
+              customerCode: customerCodeFromMapping,
+              updatedAt: new Date()
+            })
+            .then(() => {
+              // Update local item
+              catalogItem.customerCode = customerCodeFromMapping;
+              console.log(`✅ Updated catalog item ${catalogItem.materialCode}`);
+            })
+            .catch(error => {
+              console.error(`❌ Error updating catalog item ${catalogItem.materialCode}:`, error);
+            });
+            
+            updatePromises.push(updatePromise);
+          }
+        }
+      }
+    });
+
+    // Wait for all updates to complete
+    Promise.all(updatePromises).then(() => {
+      // Refresh catalog data
+      this.loadCatalogFromFirebase();
+      
+      if (updatedCount > 0) {
+        alert(`✅ Đã đồng bộ ${updatedCount} items trong catalog với Mã khách hàng từ mapping!`);
+      } else {
+        alert('ℹ️ Tất cả items đã có Mã khách hàng đúng hoặc không có mapping tương ứng.');
+      }
+    }).catch(error => {
+      console.error('❌ Error during sync:', error);
+      alert(`❌ Lỗi khi đồng bộ: ${error.message || error}`);
+    });
   }
 
   // ===== CUSTOMER CODE MAPPING METHODS =====

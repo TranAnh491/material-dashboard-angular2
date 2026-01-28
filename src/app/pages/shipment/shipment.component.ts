@@ -5,10 +5,14 @@ import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
+import { createWorker } from 'tesseract.js';
 
 export interface ShipmentItem {
   id?: string;
   shipmentCode: string;
+  importDate?: Date | null; // Ngày tháng import
+  vehicleNumber?: string; // Biển số xe
+  factory?: string; // Nhà máy: ASM1, ASM2, ASM3
   materialCode: string;
   customerCode: string;
   quantity: number;
@@ -23,11 +27,13 @@ export interface ShipmentItem {
   push: boolean;
   pushNo: string; // Thêm PushNo - format: 001, 002, 003...
   status: string;
+  document?: string; // Chứng từ: Đã có PX, Full, Thiếu, PKL
   requestDate: Date | null; // Cho phép null
   fullDate: Date | null; // Cho phép null
   actualShipDate: Date | null; // Cho phép null
   dayPre: number;
   notes: string;
+  hidden?: boolean; // Ẩn shipment khỏi danh sách
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -44,6 +50,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
   
+  // FG Check status cache - track which shipments have been checked
+  fgCheckStatusCache: Map<string, boolean> = new Map(); // key: shipmentCode+materialCode, value: isCheckedCorrectly
+  
   // Push tracking to prevent duplicate
   private isPushing: Set<string> = new Set();
   
@@ -51,6 +60,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   endDate: Date = new Date();
+  
+  // Show/hide hidden shipments
+  showHidden: boolean = false;
+  
+  // Schedule dialog
+  showScheduleDialog: boolean = false;
+  scheduleMonth: number = new Date().getMonth();
+  scheduleYear: number = new Date().getFullYear();
+  calendarDays: any[] = [];
   
   // Add shipment dialog
   showAddShipmentDialog: boolean = false;
@@ -65,8 +83,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
   
+  // Vehicle Plate Scanner
+  showVehiclePlateScanner: boolean = false;
+  selectedShipmentForPlateCheck: ShipmentItem | null = null;
+  isScanningPlate: boolean = false;
+  plateScanResult: string = '';
+  plateScanStatus: 'idle' | 'scanning' | 'processing' | 'success' | 'error' = 'idle';
+  videoStream: MediaStream | null = null;
+  videoElement: HTMLVideoElement | null = null;
+  canvasElement: HTMLCanvasElement | null = null;
+  
   newShipment: ShipmentItem = {
     shipmentCode: '',
+    importDate: new Date(),
+    vehicleNumber: '',
+    factory: 'ASM1',
     materialCode: '',
     customerCode: '',
     quantity: 0,
@@ -81,11 +112,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     push: false,
     pushNo: '000', // Khởi tạo PushNo = 000
     status: 'Chờ soạn',
+    document: 'Đã có PX',
     requestDate: new Date(),
     fullDate: new Date(),
     actualShipDate: new Date(),
     dayPre: 0,
-    notes: ''
+    notes: '',
+    hidden: false
   };
   
   private destroy$ = new Subject<void>();
@@ -98,6 +131,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadShipmentsFromFirebase();
     this.loadFGInventoryCache();
+    this.loadFGCheckStatus(); // Load FG Check status
     // Fix date format issues - use proper date initialization
     this.startDate = new Date('2020-01-01');
     this.endDate = new Date('2030-12-31');
@@ -108,6 +142,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
     this.isPushing.clear();
+    this.stopCamera();
   }
 
   // Load shipments from Firebase
@@ -127,6 +162,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             inventory: data.inventory || 0, // Default inventory if not exists
             packing: data.packing || 'Pallet', // Default packing if not exists
             qtyPallet: data.qtyPallet || 0, // Default qtyPallet if not exists
+            hidden: data.hidden === true, // Load hidden status
+            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : null,
+            vehicleNumber: data.vehicleNumber || '',
+            factory: data.factory || 'ASM1',
+            document: data.document || 'Đã có PX',
             requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
             fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
             actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : null
@@ -186,9 +226,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Apply filters
   applyFilters(): void {
     this.filteredShipments = this.shipments.filter(shipment => {
-      // Filter by date range
-      const requestDate = new Date(shipment.requestDate);
-      const isInDateRange = requestDate >= this.startDate && requestDate <= this.endDate;
+      // Filter ra các shipment đã ẩn (trừ khi showHidden = true)
+      if (shipment.hidden === true && !this.showHidden) {
+        return false;
+      }
+      
+      // Filter by date range - QUAN TRỌNG: Nếu không có requestDate thì vẫn hiển thị
+      let isInDateRange = true;
+      if (shipment.requestDate) {
+        const requestDate = new Date(shipment.requestDate);
+        isInDateRange = requestDate >= this.startDate && requestDate <= this.endDate;
+      }
+      // Nếu requestDate = null/undefined, tự động pass filter (hiển thị luôn)
       
       // Filter by search term
       const matchesSearch = !this.searchTerm || 
@@ -198,6 +247,23 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         shipment.poShip.toLowerCase().includes(this.searchTerm.toLowerCase());
       
       return isInDateRange && matchesSearch;
+    });
+    
+    // Sắp xếp: 1) Dispatch Date (ngày gần nhất lên trên), 2) Shipment Code
+    this.filteredShipments.sort((a, b) => {
+      // Bước 1: So sánh Dispatch Date (actualShipDate)
+      const dateA = a.actualShipDate ? new Date(a.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dateB = b.actualShipDate ? new Date(b.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      
+      // Null dates xuống cuối, ngày sớm nhất lên đầu
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+      
+      // Bước 2: Nếu Dispatch Date giống nhau, so sánh Shipment Code
+      const shipmentA = String(a.shipmentCode || '').toLowerCase();
+      const shipmentB = String(b.shipmentCode || '').toLowerCase();
+      return shipmentA.localeCompare(shipmentB);
     });
   }
 
@@ -247,6 +313,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Tự động điền Dispatch Date khi Status = "Đã Ship"
+    if (this.newShipment.status === 'Đã Ship' && !this.newShipment.actualShipDate) {
+      this.newShipment.actualShipDate = new Date();
+      console.log('✅ Auto-filled Dispatch Date for new shipment with status "Đã Ship"');
+    }
+
     const shipmentData = {
       ...this.newShipment,
       requestDate: this.newShipment.requestDate,
@@ -271,6 +343,77 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         console.error('Error adding shipment:', error);
         alert('❌ Lỗi khi thêm shipment: ' + error.message);
       });
+  }
+
+  // Load FG Check status - realtime
+  loadFGCheckStatus(): void {
+    this.firestore.collection('fg-check')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((actions) => {
+        this.fgCheckStatusCache.clear();
+        
+        actions.forEach(action => {
+          const data = action.payload.doc.data() as any;
+          const shipmentCode = String(data.shipment || '').trim().toUpperCase();
+          const materialCode = String(data.materialCode || '').trim();
+          const checkResult = data.checkResult || '';
+          
+          if (shipmentCode && materialCode) {
+            const key = `${shipmentCode}|${materialCode}`;
+            // Chỉ đánh dấu là checked nếu kết quả check là "Đúng"
+            if (checkResult === 'Đúng') {
+              this.fgCheckStatusCache.set(key, true);
+              console.log(`✅ Cached check status: ${key} = Đúng`);
+            }
+          }
+        });
+        
+        console.log('✅ Loaded FG Check status cache:', this.fgCheckStatusCache.size, 'checked items');
+        console.log('📋 Cache entries:', Array.from(this.fgCheckStatusCache.keys()));
+      });
+  }
+
+  // Check if shipment has been checked correctly
+  isShipmentChecked(shipment: ShipmentItem): boolean {
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim();
+    const key = `${shipmentCode}|${materialCode}`;
+    const isChecked = this.fgCheckStatusCache.get(key) === true;
+    
+    // Chỉ log khi checked (để không spam console)
+    // Nếu cần debug hết, dùng nút "Debug Check Status"
+    
+    return isChecked;
+  }
+
+  // Debug method to show all cached check statuses
+  debugCheckStatus(): void {
+    console.log('🐛 === DEBUG CHECK STATUS ===');
+    console.log('📊 Cache size:', this.fgCheckStatusCache.size);
+    console.log('📋 All cached items:');
+    Array.from(this.fgCheckStatusCache.entries()).forEach(([key, value]) => {
+      console.log(`  ${key} = ${value ? 'Đúng' : 'Sai'}`);
+    });
+    
+    let debugMessage = '🐛 DEBUG CHECK STATUS\n\n';
+    debugMessage += `📊 Tổng số items đã check đúng: ${this.fgCheckStatusCache.size}\n\n`;
+    
+    if (this.fgCheckStatusCache.size === 0) {
+      debugMessage += '❌ KHÔNG CÓ DỮ LIỆU CHECK!\n\n';
+      debugMessage += 'Vui lòng kiểm tra:\n';
+      debugMessage += '1. Tab FG Check có dữ liệu không?\n';
+      debugMessage += '2. Đã check xong chưa?\n';
+      debugMessage += '3. Thử nhấn "Force Save Check Results" trong FG Check';
+    } else {
+      debugMessage += '📋 Danh sách shipments đã check đúng:\n\n';
+      Array.from(this.fgCheckStatusCache.entries()).forEach(([key, value]) => {
+        const [shipCode, matCode] = key.split('|');
+        debugMessage += `✅ ${shipCode} - ${matCode}\n`;
+      });
+    }
+    
+    alert(debugMessage);
   }
 
   // Load FG Inventory cache for better performance
@@ -436,6 +579,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   resetNewShipment(): void {
     this.newShipment = {
       shipmentCode: '',
+      importDate: new Date(),
+      vehicleNumber: '',
+      factory: 'ASM1',
       materialCode: '',
       customerCode: '',
       quantity: 0,
@@ -450,17 +596,28 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       push: false,
       pushNo: '000',
       status: 'Chờ soạn',
-      requestDate: null, // Khởi tạo null thay vì new Date()
-      fullDate: null, // Khởi tạo null thay vì new Date()
-      actualShipDate: null, // Khởi tạo null thay vì new Date()
+      document: 'Đã có PX',
+      requestDate: new Date(), // CS Date = ngày tạo shipment
+      fullDate: null,
+      actualShipDate: null,
       dayPre: 0,
-      notes: ''
+      notes: '',
+      hidden: false
     };
   }
 
   // Update notes
   updateNotes(shipment: ShipmentItem): void {
     shipment.updatedAt = new Date();
+    this.updateShipmentInFirebase(shipment);
+  }
+
+  // Handle status change - tự động điền Dispatch Date khi Status = "Đã Ship"
+  onStatusChange(shipment: ShipmentItem): void {
+    if (shipment.status === 'Đã Ship' && !shipment.actualShipDate) {
+      shipment.actualShipDate = new Date();
+      console.log('✅ Auto-filled Dispatch Date when status changed to "Đã Ship"');
+    }
     this.updateShipmentInFirebase(shipment);
   }
 
@@ -1003,6 +1160,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Update shipment in Firebase
   updateShipmentInFirebase(shipment: ShipmentItem): void {
     if (shipment.id) {
+      // Tự động điền Dispatch Date khi Status = "Đã Ship"
+      if (shipment.status === 'Đã Ship' && !shipment.actualShipDate) {
+        shipment.actualShipDate = new Date();
+        console.log('✅ Auto-filled Dispatch Date:', shipment.actualShipDate);
+      }
+      
       const updateData = {
         ...shipment,
         requestDate: shipment.requestDate,
@@ -1044,6 +1207,202 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (index > -1) {
       this.shipments.splice(index, 1);
       this.applyFilters();
+    }
+  }
+
+  // Toggle hidden status
+  toggleHidden(shipment: ShipmentItem): void {
+    shipment.hidden = !shipment.hidden;
+    shipment.updatedAt = new Date();
+    
+    if (shipment.id) {
+      this.firestore.collection('shipments').doc(shipment.id).update({
+        hidden: shipment.hidden,
+        updatedAt: new Date()
+      })
+      .then(() => {
+        console.log(`Shipment ${shipment.shipmentCode} hidden status: ${shipment.hidden}`);
+        this.applyFilters(); // Cập nhật danh sách
+      })
+      .catch(error => {
+        console.error('Error updating hidden status:', error);
+      });
+    }
+  }
+
+  // Toggle show/hide hidden shipments
+  toggleShowHidden(): void {
+    this.showHidden = !this.showHidden;
+    console.log(`Show hidden shipments: ${this.showHidden}`);
+    this.applyFilters();
+  }
+
+  // Get count of hidden shipments
+  getHiddenShipmentsCount(): number {
+    return this.shipments.filter(s => s.hidden === true).length;
+  }
+
+  // Open schedule dialog
+  openScheduleDialog(): void {
+    this.scheduleMonth = new Date().getMonth();
+    this.scheduleYear = new Date().getFullYear();
+    this.generateCalendar();
+    this.showScheduleDialog = true;
+  }
+
+  // Close schedule dialog
+  closeScheduleDialog(): void {
+    this.showScheduleDialog = false;
+  }
+
+  // Generate calendar for current month
+  generateCalendar(): void {
+    const firstDay = new Date(this.scheduleYear, this.scheduleMonth, 1);
+    const lastDay = new Date(this.scheduleYear, this.scheduleMonth + 1, 0);
+    const startingDayOfWeek = firstDay.getDay(); // 0 = Sunday
+    const daysInMonth = lastDay.getDate();
+
+    this.calendarDays = [];
+
+    // Add empty cells for days before the first day of month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      this.calendarDays.push({ date: null, shipments: [] });
+    }
+
+    // Add all days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(this.scheduleYear, this.scheduleMonth, day);
+      const shipments = this.getShipmentsByDate(date);
+      this.calendarDays.push({ 
+        date: date, 
+        day: day,
+        shipments: shipments 
+      });
+    }
+  }
+
+  // Get shipments for a specific date
+  getShipmentsByDate(date: Date): ShipmentItem[] {
+    return this.shipments.filter(shipment => {
+      if (!shipment.actualShipDate) return false;
+      const shipDate = new Date(shipment.actualShipDate);
+      return shipDate.getDate() === date.getDate() &&
+             shipDate.getMonth() === date.getMonth() &&
+             shipDate.getFullYear() === date.getFullYear();
+    });
+  }
+
+  // Navigate to previous month
+  previousMonth(): void {
+    if (this.scheduleMonth === 0) {
+      this.scheduleMonth = 11;
+      this.scheduleYear--;
+    } else {
+      this.scheduleMonth--;
+    }
+    this.generateCalendar();
+  }
+
+  // Navigate to next month
+  nextMonth(): void {
+    if (this.scheduleMonth === 11) {
+      this.scheduleMonth = 0;
+      this.scheduleYear++;
+    } else {
+      this.scheduleMonth++;
+    }
+    this.generateCalendar();
+  }
+
+  // Get month name in Vietnamese
+  getMonthName(): string {
+    const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+                    'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+    return months[this.scheduleMonth];
+  }
+
+  // Check if date is today
+  isToday(date: Date | null): boolean {
+    if (!date) return false;
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+           date.getMonth() === today.getMonth() &&
+           date.getFullYear() === today.getFullYear();
+  }
+
+  // Export to Excel by month
+  exportToExcelByMonth(): void {
+    // Hiển thị dialog để chọn tháng
+    const monthInput = prompt('Nhập tháng cần tải (format: MM/YYYY hoặc MM-YYYY):', 
+      `${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`);
+    
+    if (!monthInput) return;
+    
+    // Parse tháng
+    const parts = monthInput.split(/[\/\-]/);
+    if (parts.length !== 2) {
+      alert('❌ Format tháng không đúng! Vui lòng nhập MM/YYYY hoặc MM-YYYY');
+      return;
+    }
+    
+    const month = parseInt(parts[0]);
+    const year = parseInt(parts[1]);
+    
+    if (month < 1 || month > 12 || year < 2020 || year > 2100) {
+      alert('❌ Tháng hoặc năm không hợp lệ!');
+      return;
+    }
+    
+    // Filter shipments theo tháng (dựa vào CS Date - requestDate)
+    const shipmentsInMonth = this.shipments.filter(shipment => {
+      if (!shipment.requestDate) return false;
+      const date = new Date(shipment.requestDate);
+      return date.getMonth() + 1 === month && date.getFullYear() === year;
+    });
+    
+    if (shipmentsInMonth.length === 0) {
+      alert(`ℹ️ Không có shipment nào trong tháng ${month}/${year}`);
+      return;
+    }
+    
+    try {
+      const exportData = shipmentsInMonth.map((shipment, index) => ({
+        'No': index + 1,
+        'Ngày Import': this.formatDateForExport(shipment.importDate),
+        'Biển số xe': shipment.vehicleNumber || '',
+        'Nhà máy': shipment.factory || 'ASM1',
+        'Shipment': shipment.shipmentCode,
+        'Mã TP': shipment.materialCode,
+        'Mã Khách': shipment.customerCode,
+        'Lượng Xuất': shipment.quantity,
+        'PO Ship': shipment.poShip,
+        'Carton': shipment.carton,
+        'QTYBOX': shipment.qtyBox,
+        'Odd': shipment.odd,
+        'Tồn kho': shipment.inventory || 0,
+        'FWD': shipment.shipMethod,
+        'Packing': shipment.packing || 'Pallet',
+        'Qty Pallet': shipment.qtyPallet || 0,
+        'Push': shipment.push ? 'Yes' : 'No',
+        'PushNo': shipment.pushNo,
+        'Status': shipment.status,
+        'Chứng từ': shipment.document || 'Đã có PX',
+        'CS Date': this.formatDateForExport(shipment.requestDate),
+        'Full Date': this.formatDateForExport(shipment.fullDate),
+        'Dispatch Date': this.formatDateForExport(shipment.actualShipDate),
+        'Ngày chuẩn bị': shipment.dayPre,
+        'Ghi chú': shipment.notes
+      }));
+
+      const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `Tháng ${month}-${year}`);
+      
+      XLSX.writeFile(wb, `Shipment_Thang${String(month).padStart(2, '0')}_${year}.xlsx`);
+      alert(`✅ Đã tải xuống ${shipmentsInMonth.length} shipments của tháng ${month}/${year}!`);
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('❌ Lỗi khi export dữ liệu. Vui lòng thử lại.');
     }
   }
 
@@ -1122,11 +1481,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return isNaN(num) ? 0 : num;
       };
 
-      // Helper function to safely parse date - return null if empty
+      // Helper function to safely parse date - return null if empty (GIỮ NGUYÊN TRỐNG)
       const getDate = (key: string, altKey?: string): Date | null => {
         const dateStr = row[key] || (altKey ? row[altKey] : null);
         if (!dateStr || dateStr === '' || dateStr === null || dateStr === undefined) {
-          return null;
+          return null; // Giữ nguyên null nếu trống
         }
         return this.parseDate(String(dateStr));
       };
@@ -1138,8 +1497,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return value === 'true' || value === true || value === 1;
       };
 
+      // CS Date logic: Nếu file có CS Date thì dùng, nếu không thì set = ngày import (ngày hiện tại)
+      const csDate = getDate('CS Date', 'Ngày CS Y/c');
+      
       return {
         shipmentCode: getValue('Shipment'),
+        importDate: getDate('Ngày Import') || new Date(), // Ngày import, default = ngày hiện tại
+        vehicleNumber: getValue('Biển số xe'),
+        factory: getValue('Nhà máy') || 'ASM1', // Default ASM1
         materialCode: getValue('Mã TP'),
         customerCode: getValue('Mã Khách'),
         quantity: getNumber('Lượng Xuất'),
@@ -1148,13 +1513,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         qtyBox: getNumber('QTYBOX'),
         odd: getNumber('Odd'),
         shipMethod: getValue('FWD'),
-        packing: getValue('Packing'), // No default - keep empty if not provided
+        packing: getValue('Packing'), // Giữ nguyên trống nếu không có
         qtyPallet: getNumber('Qty Pallet'),
         push: getBoolean('Push'),
-        pushNo: getValue('PushNo'), // No default - keep empty if not provided
+        pushNo: getValue('PushNo'), // Giữ nguyên trống nếu không có
         inventory: getNumber('Tồn kho'),
-        status: getValue('Status'), // No default - keep empty if not provided
-        requestDate: getDate('CS Date', 'Ngày CS Y/c'),
+        status: getValue('Status'), // Giữ nguyên trống nếu không có
+        document: getValue('Chứng từ') || 'Đã có PX', // Default Đã có PX
+        requestDate: csDate || new Date(), // CS Date = ngày import nếu file không có
         fullDate: getDate('Full Date', 'Ngày full hàng'),
         actualShipDate: getDate('Dispatch Date', 'Thực ship'),
         dayPre: getNumber('Ngày chuẩn bị', 'Day Pre'),
@@ -1176,6 +1542,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
     
     return new Date(dateStr);
+  }
+
+  // Parse date for date range inputs (always return Date, not null)
+  parseDateForRange(dateStr: string): Date {
+    const parsed = this.parseDate(dateStr);
+    return parsed || new Date();
   }
 
   // Save shipments to Firebase
@@ -1642,5 +2014,188 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('❌ Error:', error);
       alert('❌ Lỗi: ' + (error?.message || String(error)));
     }
+  }
+
+  // ========== Vehicle Plate Scanner Methods ==========
+  
+  // Open vehicle plate scanner dialog - choose shipment first
+  openVehiclePlateScannerDialog(): void {
+    // Show dialog to select shipment
+    const shipmentCode = prompt('Nhập mã Shipment cần check biển số xe:');
+    
+    if (!shipmentCode || !shipmentCode.trim()) {
+      return; // User cancelled
+    }
+    
+    // Find shipment by code
+    const shipment = this.filteredShipments.find(s => 
+      s.shipmentCode.trim().toUpperCase() === shipmentCode.trim().toUpperCase()
+    );
+    
+    if (!shipment) {
+      alert(`❌ Không tìm thấy shipment: ${shipmentCode}`);
+      return;
+    }
+    
+    // Open scanner for this shipment
+    this.openVehiclePlateScanner(shipment);
+  }
+  
+  // Open vehicle plate scanner modal
+  openVehiclePlateScanner(shipment: ShipmentItem): void {
+    this.selectedShipmentForPlateCheck = shipment;
+    this.showVehiclePlateScanner = true;
+    this.plateScanStatus = 'idle';
+    this.plateScanResult = '';
+    setTimeout(() => {
+      this.startCamera();
+    }, 100);
+  }
+
+  // Close vehicle plate scanner modal
+  closeVehiclePlateScanner(): void {
+    this.stopCamera();
+    this.showVehiclePlateScanner = false;
+    this.selectedShipmentForPlateCheck = null;
+    this.plateScanResult = '';
+    this.plateScanStatus = 'idle';
+  }
+
+  // Start camera
+  async startCamera(): Promise<void> {
+    try {
+      this.plateScanStatus = 'scanning';
+      
+      // Get video element
+      this.videoElement = document.getElementById('plate-scanner-video') as HTMLVideoElement;
+      if (!this.videoElement) {
+        throw new Error('Video element not found');
+      }
+
+      // Request camera access
+      this.videoStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment', // Use back camera on mobile
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      this.videoElement.srcObject = this.videoStream;
+      await this.videoElement.play();
+      
+      console.log('✅ Camera started successfully');
+    } catch (error) {
+      console.error('❌ Error starting camera:', error);
+      this.plateScanStatus = 'error';
+      alert('❌ Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập camera.');
+    }
+  }
+
+  // Stop camera
+  stopCamera(): void {
+    if (this.videoStream) {
+      this.videoStream.getTracks().forEach(track => track.stop());
+      this.videoStream = null;
+    }
+    if (this.videoElement) {
+      this.videoElement.srcObject = null;
+    }
+    this.plateScanStatus = 'idle';
+  }
+
+  // Capture image and process with OCR
+  async captureAndProcessPlate(): Promise<void> {
+    if (!this.videoElement || !this.selectedShipmentForPlateCheck) {
+      return;
+    }
+
+    try {
+      this.plateScanStatus = 'processing';
+      
+      // Create canvas to capture frame
+      if (!this.canvasElement) {
+        this.canvasElement = document.createElement('canvas');
+      }
+      
+      const canvas = this.canvasElement;
+      canvas.width = this.videoElement.videoWidth;
+      canvas.height = this.videoElement.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Cannot get canvas context');
+      }
+      
+      // Draw video frame to canvas
+      ctx.drawImage(this.videoElement, 0, 0, canvas.width, canvas.height);
+      
+      // Convert canvas to image data
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      
+      // Process with Tesseract OCR
+      console.log('🔍 Processing image with OCR...');
+      const worker = await createWorker({
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      });
+
+      // Load language and initialize
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+
+      // Configure OCR for license plates (numbers and letters)
+      // Vietnamese license plates: A-Z, 0-9, spaces, dots, dashes
+      // PSM 6 = SINGLE_BLOCK (Assume a single uniform block of text)
+      // OEM 1 = LSTM_ONLY (Neural nets LSTM engine only)
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- .',
+        tessedit_pageseg_mode: 6 as any, // PSM.SINGLE_BLOCK
+        tessedit_ocr_engine_mode: 1 as any // OEM.LSTM_ONLY
+      });
+
+      const { data: { text } } = await worker.recognize(imageData);
+      await worker.terminate();
+
+      // Clean and normalize the recognized text
+      const recognizedPlate = this.normalizePlateNumber(text);
+      this.plateScanResult = recognizedPlate;
+      
+      // Compare with existing plate number
+      const existingPlate = this.normalizePlateNumber(
+        this.selectedShipmentForPlateCheck.vehicleNumber || ''
+      );
+      
+      const isMatch = recognizedPlate === existingPlate && recognizedPlate.length > 0;
+      
+      if (isMatch) {
+        this.plateScanStatus = 'success';
+        alert(`✅ ĐÚNG XE!\n\nBiển số đọc được: ${recognizedPlate}\nBiển số trong hệ thống: ${this.selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)'}`);
+      } else {
+        this.plateScanStatus = 'error';
+        alert(`❌ SAI XE!\n\nBiển số đọc được: ${recognizedPlate || '(không đọc được)'}\nBiển số trong hệ thống: ${this.selectedShipmentForPlateCheck.vehicleNumber || '(chưa có)'}\n\nVui lòng kiểm tra lại!`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing plate:', error);
+      this.plateScanStatus = 'error';
+      alert('❌ Lỗi khi đọc biển số: ' + (error?.message || String(error)));
+    }
+  }
+
+  // Normalize plate number (remove spaces, dots, dashes for comparison)
+  normalizePlateNumber(plate: string): string {
+    if (!plate) return '';
+    
+    // Remove all spaces, dots, dashes, and convert to uppercase
+    // Also remove common OCR errors like extra characters
+    return plate
+      .replace(/[\s\.\-\_]/g, '') // Remove spaces, dots, dashes, underscores
+      .replace(/[^A-Z0-9]/g, '') // Remove any non-alphanumeric characters
+      .toUpperCase()
+      .trim();
   }
 } 

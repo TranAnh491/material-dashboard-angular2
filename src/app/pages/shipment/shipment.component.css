@@ -243,6 +243,41 @@
   gap: 15px; /* Khoảng cách giữa More button và Search */
 }
 
+/* Date Range Filter */
+.date-range-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.date-range-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.date-range-input {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 600;
+  color: #000;
+}
+
+.date-range-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
 .search-container {
   position: relative;
   display: flex;
@@ -376,6 +411,7 @@
   border: 1px solid #e9ecef;
   max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
   padding: 2px; /* Giảm padding để tận dụng không gian tối đa */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .table {
@@ -383,7 +419,7 @@
   border-collapse: collapse;
   background: #ffffff;
   font-size: 13px;
-  min-width: 2500px; /* Tăng độ rộng tối thiểu để hiển thị đủ dữ liệu */
+  min-width: 2416px; /* Cập nhật: thêm NGÀY IMPORT(110) + BIỂN SỐ XE(100) + NHÀ MÁY(80) + CHỨNG TỪ(90) = +380px */
   table-layout: fixed;
   border: 1px solid #dee2e6; /* Modern border */
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
@@ -421,14 +457,15 @@
   text-align: center; /* Căn giữa tất cả */
   vertical-align: middle;
   background: #ffffff;
-  color: #333333;
+  color: #000000; /* Màu chữ đen đậm */
+  font-weight: 600; /* Chữ đậm */
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Cùng font chữ */
 }
 
 /* Cố định size dòng tiêu đề */
 .table th {
-  font-size: 10.4px !important; /* Giảm từ 13px xuống 80% (10.4px) */
-  font-weight: 600 !important;
+  font-size: 12px !important; /* Tăng 15%: 10.4px * 1.15 ≈ 12px */
+  font-weight: 700 !important; /* Tăng độ đậm từ 600 lên 700 (bold) */
   text-transform: uppercase; /* Chữ in hoa */
   color: #000000 !important;
   background: #f8f9fa !important;
@@ -446,12 +483,22 @@
 /* Cố định size nội dung */
 .table td {
   font-size: 12px !important; /* Size cố định cho nội dung */
-  font-weight: normal !important;
-  color: #333333 !important;
+  font-weight: 600 !important; /* Chữ đậm */
+  color: #000000 !important; /* Màu chữ đen đậm */
   border: 1px solid #dee2e6 !important; /* Giữ viền bảng */
   background: #ffffff !important; /* Nền trắng cho tất cả các cột */
   text-align: center !important; /* Căn giữa tất cả nội dung */
   text-transform: uppercase !important; /* Viết hoa 100% */
+}
+
+/* Giảm font-size cho cột PO SHIP (cột 9) */
+.table td:nth-child(9) {
+  font-size: 10.8px !important; /* Giảm 10% từ 12px (12 * 0.9 = 10.8) */
+}
+
+.table td:nth-child(9) input,
+.table td:nth-child(9) .editable-input {
+  font-size: 10.8px !important; /* Áp dụng cho input trong cột PO SHIP */
 }
 
 /* Loại bỏ màu nền đặc biệt cho các ô nội dung */
@@ -463,7 +510,8 @@
 .table td .editable-select,
 .table td .status-select {
   background: #ffffff !important; /* Nền trắng cho tất cả nội dung */
-  color: #333333 !important; /* Màu chữ đen */
+  color: #000000 !important; /* Màu chữ đen đậm */
+  font-weight: 600 !important; /* Chữ đậm */
   border: none !important; /* Loại bỏ viền nội dung */
 }
 
@@ -471,7 +519,8 @@
 .table td input,
 .table td select {
   background: #ffffff !important;
-  color: #333333 !important;
+  color: #000000 !important; /* Màu chữ đen đậm */
+  font-weight: 600 !important; /* Chữ đậm */
   border: 1px solid #ddd !important;
 }
 
@@ -522,35 +571,41 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
   font-weight: bold;
   color: #000000;
-  min-width: 150px;
-  width: 150px;
+  min-width: 120px;
+  width: 120px;
 }
 
 .number-cell {
   text-align: right;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
-  min-width: 100px;
-  width: 100px;
+  min-width: 80px;
+  width: 80px;
 }
 
 .date-cell {
   text-align: center;
-  min-width: 130px;
-  width: 130px;
+  min-width: 104px;
+  width: 104px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
+  padding: 0 !important; /* Loại bỏ padding để input chiếm hết ô */
+}
+
+.date-cell input {
+  padding: 8px 4px; /* Tăng padding cho input để dễ click */
+  height: 100%; /* Input chiếm hết chiều cao ô */
 }
 
 .status-cell {
   text-align: center;
-  min-width: 120px;
-  width: 120px;
+  min-width: 96px;
+  width: 96px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
 .action-cell {
   text-align: center;
-  min-width: 80px;
-  width: 80px;
+  min-width: 64px;
+  width: 64px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
@@ -577,26 +632,31 @@
 
 /* Specific column widths for .table class - Shipment table */
 .table th:nth-child(1), .table td:nth-child(1) { width: 60px; min-width: 60px; } /* NO */
-.table th:nth-child(2), .table td:nth-child(2) { width: 150px; min-width: 150px; } /* SHIPMENT */
-.table th:nth-child(3), .table td:nth-child(3) { width: 150px; min-width: 150px; } /* MÃ TP */
-.table th:nth-child(4), .table td:nth-child(4) { width: 150px; min-width: 150px; } /* MÃ KHÁCH */
-.table th:nth-child(5), .table td:nth-child(5) { width: 120px; min-width: 120px; } /* LƯỢNG XUẤT */
-.table th:nth-child(6), .table td:nth-child(6) { width: 150px; min-width: 150px; } /* PO SHIP */
-.table th:nth-child(7), .table td:nth-child(7) { width: 100px; min-width: 100px; } /* CARTON */
-.table th:nth-child(8), .table td:nth-child(8) { width: 100px; min-width: 100px; } /* QTYBOX */
-.table th:nth-child(9), .table td:nth-child(9) { width: 100px; min-width: 100px; } /* ODD */
-.table th:nth-child(10), .table td:nth-child(10) { width: 120px; min-width: 120px; } /* TỒN KHO */
-.table th:nth-child(11), .table td:nth-child(11) { width: 100px; min-width: 100px; } /* FWD */
-.table th:nth-child(12), .table td:nth-child(12) { width: 100px; min-width: 100px; } /* PACKING */
-.table th:nth-child(13), .table td:nth-child(13) { width: 120px; min-width: 120px; } /* QTY PALLET */
-.table th:nth-child(14), .table td:nth-child(14) { width: 120px; min-width: 120px; } /* STATUS */
-.table th:nth-child(15), .table td:nth-child(15) { width: 130px; min-width: 130px; } /* CS DATE */
-.table th:nth-child(16), .table td:nth-child(16) { width: 130px; min-width: 130px; } /* FULL DATE */
-.table th:nth-child(17), .table td:nth-child(17) { width: 150px; min-width: 150px; } /* DISPATCH DATE */
-.table th:nth-child(18), .table td:nth-child(18) { width: 120px; min-width: 120px; } /* NGÀY CHUẨN BỊ */
-.table th:nth-child(19), .table td:nth-child(19) { width: 200px; min-width: 200px; } /* GHI CHÚ */
-.table th:nth-child(20), .table td:nth-child(20) { width: 80px; min-width: 80px; } /* PRINT */
-.table th:nth-child(21), .table td:nth-child(21) { width: 80px; min-width: 80px; } /* XÓA */
+.table th:nth-child(2), .table td:nth-child(2) { width: 110px; min-width: 110px; } /* NGÀY IMPORT */
+.table th:nth-child(3), .table td:nth-child(3) { width: 100px; min-width: 100px; } /* BIỂN SỐ XE */
+.table th:nth-child(4), .table td:nth-child(4) { width: 80px; min-width: 80px; } /* NHÀ MÁY */
+.table th:nth-child(5), .table td:nth-child(5) { width: 120px; min-width: 120px; } /* SHIPMENT - giảm 20% từ 150px */
+.table th:nth-child(6), .table td:nth-child(6) { width: 120px; min-width: 120px; } /* MÃ TP - giảm 20% từ 150px */
+.table th:nth-child(7), .table td:nth-child(7) { width: 120px; min-width: 120px; } /* MÃ KHÁCH - giảm 20% từ 150px */
+.table th:nth-child(8), .table td:nth-child(8) { width: 115px; min-width: 115px; } /* LƯỢNG XUẤT - tăng 20% từ 96px */
+.table th:nth-child(9), .table td:nth-child(9) { width: 173px; min-width: 173px; } /* PO SHIP - tăng thêm 20% từ 144px (144 * 1.2 = 173) */
+.table th:nth-child(10), .table td:nth-child(10) { width: 80px; min-width: 80px; } /* CARTON - giảm 20% từ 100px */
+.table th:nth-child(11), .table td:nth-child(11) { width: 80px; min-width: 80px; } /* QTYBOX - giảm 20% từ 100px */
+.table th:nth-child(12), .table td:nth-child(12) { width: 80px; min-width: 80px; } /* ODD - giảm 20% từ 100px */
+.table th:nth-child(13), .table td:nth-child(13) { width: 96px; min-width: 96px; } /* TỒN KHO - giảm 20% từ 120px */
+.table th:nth-child(14), .table td:nth-child(14) { width: 80px; min-width: 80px; } /* FWD - giảm 20% từ 100px */
+.table th:nth-child(15), .table td:nth-child(15) { width: 80px; min-width: 80px; } /* PACKING - giảm 20% từ 100px */
+.table th:nth-child(16), .table td:nth-child(16) { width: 96px; min-width: 96px; } /* QTY PALLET - giảm 20% từ 120px */
+.table th:nth-child(17), .table td:nth-child(17) { width: 96px; min-width: 96px; } /* STATUS - giảm 20% từ 120px */
+.table th:nth-child(18), .table td:nth-child(18) { width: 90px; min-width: 90px; } /* CHỨNG TỪ */
+.table th:nth-child(19), .table td:nth-child(19) { width: 104px; min-width: 104px; } /* CS DATE - giảm 20% từ 130px */
+.table th:nth-child(20), .table td:nth-child(20) { width: 104px; min-width: 104px; } /* FULL DATE - giảm 20% từ 130px */
+.table th:nth-child(21), .table td:nth-child(21) { width: 120px; min-width: 120px; } /* DISPATCH DATE - giảm 20% từ 150px */
+.table th:nth-child(22), .table td:nth-child(22) { width: 96px; min-width: 96px; } /* NGÀY CHUẨN BỊ - giảm 20% từ 120px */
+.table th:nth-child(23), .table td:nth-child(23) { width: 160px; min-width: 160px; } /* GHI CHÚ - giảm 20% từ 200px */
+.table th:nth-child(24), .table td:nth-child(24) { width: 64px; min-width: 64px; } /* PRINT - giảm 20% từ 80px */
+.table th:nth-child(25), .table td:nth-child(25) { width: 64px; min-width: 64px; } /* XÓA - giảm 20% từ 80px */
+.table th:nth-child(26), .table td:nth-child(26) { width: 64px; min-width: 64px; } /* ẨN */
 
 /* Status Styles */
 .status-completed {
@@ -629,8 +689,9 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: #000000;
+  color: #000000; /* Màu chữ đen đậm */
   font-size: 13px;
+  font-weight: 600; /* Chữ đậm */
   padding: 4px;
   box-shadow: none;
   outline: none;
@@ -641,6 +702,7 @@
   outline: 2px solid #000000;
   background: #ffffff;
   border: 1px solid #000000;
+  font-weight: 600; /* Giữ chữ đậm khi focus */
 }
 
 /* Status Select */
@@ -648,8 +710,9 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: #000000;
+  color: #000000; /* Màu chữ đen đậm */
   font-size: 13px;
+  font-weight: 600; /* Chữ đậm */
   padding: 4px;
   border-radius: 2px;
   outline: none;
@@ -692,17 +755,35 @@
 /* Date Input */
 .date-input {
   font-size: 12px;
-  padding: 2px 4px;
+  padding: 4px 6px;
   border: none;
   background: transparent;
   outline: none;
   box-shadow: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Ẩn icon calendar trong input date */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+
+input[type="date"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-clear-button {
+  display: none;
+  -webkit-appearance: none;
 }
 
 .date-input:focus {
   outline: 2px solid #000000;
   border: 1px solid #000000;
   background: #ffffff;
+}
+
+.date-input:hover {
+  background: #f5f5f5;
 }
 
 /* Checkbox Styles */
@@ -780,12 +861,18 @@
   cursor: pointer;
   border-radius: 2px;
   margin-right: 2px;
-  opacity: 0.6;
-  filter: invert(1);
+  opacity: 1;
+  filter: invert(0);
+  width: 16px;
+  height: 16px;
+  padding: 2px;
+  background-color: transparent;
 }
 
 .date-input::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+  background-color: #e0e0e0;
+  border-radius: 3px;
 }
 
 /* Modal Styles */
@@ -930,10 +1017,66 @@
   color: #666666;
 }
 
+/* Date input trong form */
+.shipment-form .input-group .form-input[type="date"] {
+  cursor: pointer;
+}
+
+.shipment-form .input-group .form-input[type="date"]:hover {
+  background: #f5f5f5;
+}
+
+.shipment-form .input-group .form-input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+}
+
+.shipment-form .input-group .form-input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  background-color: #e0e0e0;
+  border-radius: 3px;
+}
+
 .date-inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+}
+
+/* Date input trong Time Range dialog */
+.date-inputs .input-group .date-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #000000;
+  border-radius: 4px;
+  font-size: 14px;
+  background: #ffffff;
+  color: #000000;
+  cursor: pointer;
+}
+
+.date-inputs .input-group .date-input:hover {
+  background: #f5f5f5;
+}
+
+.date-inputs .input-group .date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+}
+
+.date-inputs .input-group .date-input::-webkit-calendar-picker-indicator:hover {
+  background-color: #e0e0e0;
+  border-radius: 3px;
+}
+
+.date-inputs .input-group .input-label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #000000;
 }
 
 /* Buttons */
@@ -979,33 +1122,183 @@
   text-align: center;
 }
 
-/* Responsive */
+/* Responsive - Mobile Optimization */
 @media (max-width: 768px) {
+  /* Main content */
+  .main-content {
+    padding: 0px 4px;
+  }
+  
+  .card-header {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+  }
+  
+  .card-title {
+    font-size: 1.2em;
+  }
+  
+  .card-body {
+    padding: 8px 4px;
+  }
+  
+  /* Info Boxes */
   .info-boxes {
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
+    margin-bottom: 10px;
   }
   
   .info-boxes .info-box {
-    min-width: calc(50% - 5px);
+    min-width: calc(50% - 4px);
+    padding: 10px;
   }
   
+  .info-boxes .info-box h3 {
+    font-size: 16px;
+  }
+  
+  .info-boxes .info-box p {
+    font-size: 13px;
+  }
+  
+  /* Action Controls - Stack vertically on mobile */
   .action-controls {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px;
   }
   
-  .data-table {
+  .action-controls > * {
+    width: 100%;
+  }
+  
+  /* Buttons - Full width on mobile */
+  .action-controls .btn {
+    width: 100%;
+    padding: 10px 15px;
+    font-size: 14px;
+    justify-content: center;
+  }
+  
+  .action-controls .btn i {
+    font-size: 20px;
+  }
+  
+  /* Date Range - Stack vertically */
+  .date-range-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+  }
+  
+  .date-range-label {
+    font-size: 12px;
+  }
+  
+  .date-range-input {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+  }
+  
+  /* Search - Full width */
+  .search-container {
+    width: 100%;
+  }
+  
+  .search-input {
+    width: 100%;
+    padding: 10px 35px 10px 12px;
+    font-size: 14px;
+  }
+  
+  /* Table - Horizontal scroll on mobile */
+  .table-responsive {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-height: calc(100vh - 200px);
+    padding: 0;
+  }
+  
+  .table {
+    min-width: 2416px; /* Keep original min-width for horizontal scroll */
     font-size: 11px;
+  }
+  
+  .table th, .table td {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  
+  .table th {
+    font-size: 10px;
+    font-weight: 700;
+  }
+  
+  /* Editable inputs in table */
+  .editable-input, .editable-select, .status-select {
+    font-size: 11px;
+    padding: 4px 6px;
+    min-height: 28px;
+  }
+  
+  /* Date inputs in table */
+  .date-input {
+    font-size: 11px;
+    padding: 4px 6px;
+  }
+  
+  /* Number inputs */
+  .number-input {
+    font-size: 11px;
+  }
+  
+  /* Code cells */
+  .code-cell {
+    min-width: 100px;
+  }
+  
+  /* Row header */
+  .row-header {
+    font-size: 11px;
+    padding: 6px 4px;
+  }
+  
+  /* Data table */
+  .data-table {
+    font-size: 10px;
   }
   
   .data-table th, .data-table td {
     padding: 4px 2px;
+    font-size: 10px;
   }
   
+  /* Modal optimizations */
   .modal-container {
     width: 95%;
-    margin: 10px;
+    max-width: 95%;
+    margin: 10px auto;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    padding: 15px;
+  }
+  
+  .modal-title {
+    font-size: 16px;
+  }
+  
+  .modal-body {
+    padding: 15px;
+    max-height: calc(90vh - 150px);
+    overflow-y: auto;
   }
   
   .date-inputs {
@@ -1015,11 +1308,100 @@
   
   .modal-footer {
     flex-direction: column;
+    gap: 10px;
+    padding: 15px;
   }
   
   .modal-footer .btn {
     width: 100%;
     justify-content: center;
+    padding: 12px;
+    font-size: 14px;
+  }
+  
+  /* Dropdown menu */
+  .dropdown-menu {
+    max-width: 100%;
+    font-size: 14px;
+  }
+  
+  /* Print label modal */
+  .print-label-modal {
+    max-width: 95%;
+  }
+  
+  /* Schedule modal */
+  .schedule-modal {
+    width: 95%;
+    max-width: 95%;
+  }
+  
+  /* Vehicle plate scanner modal */
+  .vehicle-plate-scanner-modal {
+    width: 95%;
+    max-width: 95%;
+  }
+  
+  .camera-preview-container {
+    min-height: 250px;
+  }
+  
+  /* Card body padding */
+  .card-body {
+    padding: 15px;
+  }
+  
+  /* Hide some less important text on very small screens */
+  @media (max-width: 480px) {
+    .action-controls .btn span:not(.material-icons) {
+      display: none;
+    }
+    
+    .action-controls .btn {
+      min-width: 44px; /* Touch target size */
+      min-height: 44px; /* Touch target size */
+      padding: 10px;
+    }
+    
+    .info-boxes .info-box {
+      min-width: 100%;
+    }
+    
+    .table {
+      font-size: 10px;
+    }
+    
+    .table th, .table td {
+      padding: 4px 2px;
+      font-size: 10px;
+    }
+    
+    .editable-input, .editable-select, .status-select {
+      font-size: 10px;
+      padding: 3px 4px;
+      min-height: 32px; /* Larger touch target */
+    }
+    
+    .modal-container {
+      width: 98%;
+      max-width: 98%;
+      margin: 5px auto;
+    }
+  }
+  
+  /* Landscape mobile optimization */
+  @media (max-width: 768px) and (orientation: landscape) {
+    .table-responsive {
+      max-height: calc(100vh - 150px);
+    }
+    
+    .modal-container {
+      max-height: 85vh;
+    }
+    
+    .modal-body {
+      max-height: calc(85vh - 120px);
+    }
   }
 }
 
@@ -1123,4 +1505,455 @@
 .print-option-btn.pallet-btn:hover {
   background: #e8f5e9;
   border-color: #1e7e34;
+}
+
+/* Check Status Icon - Nổi bật cho shipment đã check */
+.check-status-icon {
+  margin-left: 8px;
+  animation: checkPulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px rgba(40, 167, 69, 0.6));
+  cursor: help;
+}
+
+@keyframes checkPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+.check-status-icon:hover {
+  transform: scale(1.3) !important;
+  filter: drop-shadow(0 0 8px rgba(40, 167, 69, 0.9));
+}
+
+/* Highlight row đã check */
+tr.checked-row {
+  background-color: rgba(40, 167, 69, 0.08) !important;
+}
+
+tr.checked-row:hover {
+  background-color: rgba(40, 167, 69, 0.12) !important;
+}
+
+/* Schedule Calendar Dialog Styles */
+.schedule-modal {
+  max-width: 900px;
+  width: 90%;
+}
+
+.calendar-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.calendar-title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 700;
+}
+
+.nav-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.nav-btn i {
+  font-size: 28px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.calendar-header {
+  text-align: center;
+  font-weight: 700;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #333;
+}
+
+.calendar-day {
+  min-height: 100px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.calendar-day:hover:not(.empty) {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  transform: translateY(-2px);
+}
+
+.calendar-day.empty {
+  background: #fafafa;
+  border-color: #f0f0f0;
+}
+
+.calendar-day.today {
+  border-color: #2196f3;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  box-shadow: 0 0 15px rgba(33, 150, 243, 0.3);
+}
+
+.calendar-day.has-shipments {
+  border-color: #4caf50;
+  background: linear-gradient(135deg, #ffffff 0%, #e8f5e9 100%);
+}
+
+.day-number {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.calendar-day.today .day-number {
+  color: #2196f3;
+  font-size: 18px;
+}
+
+.shipments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 70px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.shipments-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.shipments-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.shipment-badge {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.shipment-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(76, 175, 80, 0.4);
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  padding: 15px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+}
+
+.legend-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 2px solid #ddd;
+}
+
+.legend-color.today-color {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-color: #2196f3;
+}
+
+.legend-color.has-shipment-color {
+  background: linear-gradient(135deg, #ffffff 0%, #e8f5e9 100%);
+  border-color: #4caf50;
+}
+
+/* Responsive Calendar */
+@media (max-width: 768px) {
+  .schedule-modal {
+    width: 95%;
+    max-width: 95%;
+    max-height: 90vh;
+  }
+  
+  .calendar-nav {
+    padding: 10px 15px;
+  }
+  
+  .calendar-title {
+    font-size: 1.1em;
+  }
+  
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .nav-btn i {
+    font-size: 24px;
+  }
+  
+  .calendar-grid {
+    gap: 4px;
+  }
+  
+  .calendar-header {
+    padding: 8px 4px;
+    font-size: 11px;
+  }
+  
+  .calendar-day {
+    min-height: 70px;
+    padding: 4px;
+  }
+  
+  .day-number {
+    font-size: 12px;
+  }
+  
+  .shipment-badge {
+    font-size: 8px;
+    padding: 2px 4px;
+  }
+  
+  .calendar-legend {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 10px;
+  }
+}
+
+
+/* Vehicle Plate Scanner Dialog Styles */
+.vehicle-plate-scanner-modal {
+  max-width: 700px;
+  width: 90%;
+}
+
+.plate-scanner-info {
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.plate-scanner-info .info-value.no-plate {
+  color: #999;
+  font-style: italic;
+}
+
+.camera-preview-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+}
+
+.scanning-overlay,
+.processing-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.scanning-frame {
+  width: 80%;
+  max-width: 400px;
+  height: 120px;
+  border: 3px solid #4caf50;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+  animation: scanningPulse 2s ease-in-out infinite;
+}
+
+@keyframes scanningPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(76, 175, 80, 0.8);
+  }
+}
+
+.scanning-text,
+.processing-text {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 20px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #4caf50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scan-result {
+  background: #e8f5e9;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.result-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.result-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2e7d32;
+  letter-spacing: 2px;
+}
+
+.instructions {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  border-left: 4px solid #ffc107;
+}
+
+.instructions p {
+  margin: 0 0 10px 0;
+  font-weight: 600;
+  color: #856404;
+}
+
+.instructions ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #856404;
+}
+
+.instructions li {
+  margin-bottom: 5px;
+}
+
+/* Responsive Vehicle Plate Scanner */
+@media (max-width: 768px) {
+  .vehicle-plate-scanner-modal {
+    width: 95%;
+    max-width: 95%;
+    max-height: 90vh;
+  }
+  
+  .plate-scanner-info {
+    padding: 10px;
+  }
+  
+  .camera-preview-container {
+    min-height: 200px;
+    margin: 15px 0;
+  }
+  
+  .scanning-frame {
+    width: 90%;
+    height: 80px;
+  }
+  
+  .scanning-text,
+  .processing-text {
+    font-size: 14px;
+  }
+  
+  .scan-result {
+    padding: 10px;
+  }
+  
+  .result-value {
+    font-size: 18px;
+  }
+  
+  .instructions {
+    padding: 10px;
+    font-size: 12px;
+  }
+  
+  .instructions ul {
+    padding-left: 18px;
+  }
 } 

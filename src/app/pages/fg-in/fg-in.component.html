@@ -205,6 +205,10 @@
           <i class="material-icons">download</i>
           Tải Template
         </button>
+        <button class="custom-btn" (click)="syncCustomerCodeFromMapping()">
+          <i class="material-icons">sync</i>
+          Đồng bộ Mã KH
+        </button>
         <div class="search-box">
           <input type="text" 
                  placeholder="TÌM KIẾM DANH MỤC..." 
@@ -230,6 +234,10 @@
                  [(ngModel)]="newCatalogItem.customer" 
                  placeholder="Khách"
                  class="custom-input">
+          <input type="text" 
+                 [(ngModel)]="newCatalogItem.customerCode" 
+                 placeholder="Mã khách hàng"
+                 class="custom-input">
           <button class="custom-btn" (click)="addCatalogItem()">
             <i class="material-icons">add</i>
             Thêm
@@ -246,6 +254,7 @@
               <th>Mã TP</th>
               <th>Standard</th>
               <th>Khách</th>
+              <th>Mã khách hàng</th>
               <th>Xóa</th>
             </tr>
           </thead>
@@ -255,6 +264,7 @@
               <td class="code-cell">{{item.materialCode}}</td>
               <td>{{item.standard}}</td>
               <td>{{item.customer}}</td>
+              <td class="code-cell">{{item.customerCode}}</td>
               <td class="status-cell">
                 <button mat-icon-button color="warn" (click)="deleteCatalogItem(item)" 
                         matTooltip="Xóa">

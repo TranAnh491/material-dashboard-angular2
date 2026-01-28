@@ -18,34 +18,59 @@
           Check
         </button>
         
+        <!-- Filter indicator - hiển thị khi đang filter theo shipment -->
+        <div class="filter-indicator" *ngIf="filterByShipment && !isScanning">
+          <i class="material-icons">filter_alt</i>
+          <span>Đang lọc: Shipment <strong>{{filterByShipment}}</strong></span>
+          <button class="clear-filter-btn" (click)="clearShipmentFilter()" title="Xóa bộ lọc">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        
         <!-- Scanning Mode: Show Scan Input -->
         <div class="scanning-mode" *ngIf="isScanning">
-          <!-- Check P/N Mode -->
-          <div class="scan-input-group" *ngIf="checkMode === 'pn'">
-            <input type="text" 
-                   class="custom-input scan-customer-input" 
-                   [(ngModel)]="currentScanInput"
-                   (keyup.enter)="onCustomerCodeScanned()"
-                   placeholder="Quét mã khách hàng"
-                   autofocus>
+          <!-- Check P/N Mode - chỉ 1 ô -->
+          <div class="scan-inputs-container" *ngIf="checkMode === 'pn'">
+            <div class="scan-input-box active">
+              <label class="scan-label">Scan mã hàng</label>
+              <input type="text" 
+                     class="custom-input scan-customer-input" 
+                     [(ngModel)]="currentScanInput"
+                     (keyup.enter)="onCustomerCodeScanned()"
+                     placeholder="Quét mã khách hàng..."
+                     autofocus>
+            </div>
           </div>
           
-          <!-- Check P/N + QTY Mode -->
-          <div class="scan-input-group" *ngIf="checkMode === 'pn-qty'">
-            <input type="text" 
-                   *ngIf="!waitingForQty"
-                   class="custom-input scan-customer-input" 
-                   [(ngModel)]="currentScanInput"
-                   (keyup.enter)="onCustomerCodeScanned()"
-                   placeholder="Quét mã hàng hoặc 300+PCS (Số lượng+Mã)"
-                   autofocus>
-            <input type="text" 
-                   *ngIf="waitingForQty"
-                   class="custom-input scan-qty-input" 
-                   [(ngModel)]="currentQtyInput"
-                   (keyup.enter)="onQuantityScanned()"
-                   placeholder="Quét số lượng (QTY)"
-                   autofocus>
+          <!-- Check P/N + QTY Mode - 2 ô cùng lúc -->
+          <div class="scan-inputs-container" *ngIf="checkMode === 'pn-qty'">
+            <div class="scan-input-box" [class.active]="!waitingForQty" [class.completed]="waitingForQty">
+              <label class="scan-label">
+                <i class="material-icons status-icon">{{!waitingForQty ? 'radio_button_checked' : 'check_circle'}}</i>
+                Bước 1: Scan mã hàng
+              </label>
+              <input type="text" 
+                     class="custom-input scan-customer-input" 
+                     [(ngModel)]="currentScanInput"
+                     (keyup.enter)="onCustomerCodeScanned()"
+                     [disabled]="waitingForQty"
+                     placeholder="Quét mã hàng hoặc 300+PCS..."
+                     [autofocus]="!waitingForQty">
+            </div>
+            
+            <div class="scan-input-box" [class.active]="waitingForQty" [class.disabled]="!waitingForQty">
+              <label class="scan-label">
+                <i class="material-icons status-icon">{{waitingForQty ? 'radio_button_checked' : 'radio_button_unchecked'}}</i>
+                Bước 2: Scan số lượng
+              </label>
+              <input type="text" 
+                     class="custom-input scan-qty-input" 
+                     [(ngModel)]="currentQtyInput"
+                     (keyup.enter)="onQuantityScanned()"
+                     [disabled]="!waitingForQty"
+                     placeholder="Quét số lượng (QTY)..."
+                     [autofocus]="waitingForQty">
+            </div>
           </div>
         </div>
         
@@ -57,8 +82,8 @@
           </div>
           
           <div class="scanning-status">
-            <span class="status-label">Status:</span>
-            <span class="status-value">Scanning</span>
+            <span class="status-label">Mode:</span>
+            <span class="status-value">{{checkMode === 'pn' ? 'Check P/N (Thùng)' : 'Check P/N + QTY'}}</span>
           </div>
           
           <button class="custom-btn btn-success" (click)="completeScanning()">
@@ -76,6 +101,22 @@
             <a class="dropdown-item" href="javascript:void(0)" (click)="loadItemsFromFirebase(); $event.preventDefault()">
               <i class="material-icons">refresh</i>
               Refresh
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="reloadMappingAndUpdate(); $event.preventDefault()">
+              <i class="material-icons">sync</i>
+              Reload Mapping & Cập nhật Mã TP
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="forceReloadShipmentData(); $event.preventDefault()">
+              <i class="material-icons">refresh</i>
+              Reload Shipment Data & Tính lại
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="forceSaveCheckResults(); $event.preventDefault()">
+              <i class="material-icons">save</i>
+              Force Save Check Results
+            </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="debugShipmentData(); $event.preventDefault()">
+              <i class="material-icons">bug_report</i>
+              Debug Shipment Data
             </a>
           </div>
         </div>
@@ -107,15 +148,17 @@
             <th>Mã Hàng</th>
             <th>Số Thùng</th>
             <th>Số Lượng</th>
+            <th>Thùng Shipment</th>
             <th>Lượng Shipment</th>
-            <th>Check</th>
+            <th>So sánh</th>
             <th>ID Check</th>
+            <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="9" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="11" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -126,15 +169,20 @@
             <td>{{item.shipment || ''}}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell">{{item.materialCode}}</td>
-            <td class="code-cell">{{item.customerCode}}</td>
+            <td class="code-cell" [class.scanned-cell]="item.scannedCustomerCode">{{item.customerCode}}</td>
             <td class="number-cell">{{formatNumber(item.carton)}}</td>
-            <td class="number-cell">{{formatNumber(item.quantity)}}</td>
+            <td class="number-cell" [class.scanned-cell]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
+            <td class="number-cell">{{formatNumber(item.shipmentCarton || 0)}}</td>
             <td class="number-cell">{{formatNumber(item.shipmentQuantity || 0)}}</td>
             <td class="status-cell" [class.check-correct]="item.checkResult === 'Đúng'" [class.check-incorrect]="item.checkResult === 'Sai'">
-              <span *ngIf="item.checkResult">{{item.checkResult}}</span>
-              <span *ngIf="!item.checkResult">-</span>
+              {{item.checkResult || '-'}}
             </td>
             <td class="code-cell">{{item.checkId}}</td>
+            <td class="action-cell">
+              <button class="btn-delete" (click)="deleteItem(item)" title="Xóa">
+                <i class="material-icons">delete</i>
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
