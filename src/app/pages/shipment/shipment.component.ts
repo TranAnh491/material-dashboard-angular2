@@ -1568,6 +1568,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       {
+        'Ngày Import': '26/01/2026',
+        'Biển số xe': '51K-75600',
+        'Nhà máy': 'ASM1',
         'Shipment': 'SHIP001',
         'Mã TP': 'P001234',
         'Mã Khách': 'CUST001',
@@ -1583,6 +1586,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Push': true,
         'PushNo': '001',
         'Status': 'Chờ soạn',
+        'Chứng từ': 'Đã có PX',
         'CS Date': '15/01/2024',
         'Full Date': '20/01/2024',
         'Dispatch Date': '25/01/2024',
@@ -1590,6 +1594,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Ghi chú': 'Standard shipment'
       },
       {
+        'Ngày Import': '26/01/2026',
+        'Biển số xe': '29A-12345',
+        'Nhà máy': 'ASM2',
         'Shipment': 'SHIP002',
         'Mã TP': 'P002345',
         'Mã Khách': 'CUST002',
@@ -1605,6 +1612,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Push': false,
         'PushNo': '000',
         'Status': 'Đang soạn',
+        'Chứng từ': 'Full',
         'CS Date': '16/01/2024',
         'Full Date': '21/01/2024',
         'Dispatch Date': '26/01/2024',
@@ -1616,13 +1624,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
     
-    // Set column widths
+    // Set column widths - updated with new columns
     const colWidths = [
+      { wch: 12 }, // Ngày Import
+      { wch: 12 }, // Biển số xe
+      { wch: 10 }, // Nhà máy
       { wch: 12 }, // Shipment
       { wch: 12 }, // Mã TP
       { wch: 12 }, // Mã Khách
       { wch: 12 }, // Lượng Xuất
-      { wch: 12 }, // PO Ship
+      { wch: 15 }, // PO Ship
       { wch: 10 }, // Carton
       { wch: 10 }, // QTYBOX
       { wch: 8 },  // Odd
@@ -1633,6 +1644,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 8 },  // Push
       { wch: 8 },  // PushNo
       { wch: 12 }, // Status
+      { wch: 12 }, // Chứng từ
       { wch: 12 }, // CS Date
       { wch: 12 }, // Full Date
       { wch: 15 }, // Dispatch Date
