@@ -237,21 +237,38 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return isInDateRange && matchesSearch;
     });
     
-    // Sắp xếp: 1) Dispatch Date (ngày gần nhất lên trên), 2) Shipment Code
+    // Sắp xếp: 1) CS Date (requestDate), 2) Ngày Import (importDate), 3) Số lô (shipmentCode), 4) Mã TP (materialCode)
     this.filteredShipments.sort((a, b) => {
-      // Bước 1: So sánh Dispatch Date (actualShipDate)
-      const dateA = a.actualShipDate ? new Date(a.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const dateB = b.actualShipDate ? new Date(b.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      // Bước 1: So sánh CS Date (requestDate) - ngày sớm nhất lên đầu
+      const csDateA = a.requestDate ? new Date(a.requestDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const csDateB = b.requestDate ? new Date(b.requestDate).getTime() : Number.MAX_SAFE_INTEGER;
       
       // Null dates xuống cuối, ngày sớm nhất lên đầu
-      if (dateA !== dateB) {
-        return dateA - dateB;
+      if (csDateA !== csDateB) {
+        return csDateA - csDateB;
       }
       
-      // Bước 2: Nếu Dispatch Date giống nhau, so sánh Shipment Code
-      const shipmentA = String(a.shipmentCode || '').toLowerCase();
-      const shipmentB = String(b.shipmentCode || '').toLowerCase();
-      return shipmentA.localeCompare(shipmentB);
+      // Bước 2: Nếu CS Date giống nhau, so sánh Ngày Import (importDate)
+      const importDateA = a.importDate ? new Date(a.importDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const importDateB = b.importDate ? new Date(b.importDate).getTime() : Number.MAX_SAFE_INTEGER;
+      
+      if (importDateA !== importDateB) {
+        return importDateA - importDateB;
+      }
+      
+      // Bước 3: Nếu Ngày Import giống nhau, so sánh Số lô (shipmentCode) - sắp theo A, B, C
+      const shipmentA = String(a.shipmentCode || '').toUpperCase();
+      const shipmentB = String(b.shipmentCode || '').toUpperCase();
+      const shipmentCompare = shipmentA.localeCompare(shipmentB);
+      
+      if (shipmentCompare !== 0) {
+        return shipmentCompare;
+      }
+      
+      // Bước 4: Nếu Số lô giống nhau, so sánh Mã TP (materialCode) - sắp theo A, B, C
+      const materialA = String(a.materialCode || '').toUpperCase();
+      const materialB = String(b.materialCode || '').toUpperCase();
+      return materialA.localeCompare(materialB);
     });
   }
 
