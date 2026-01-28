@@ -1471,11 +1471,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
       // Helper function to safely parse date - return null if empty (GIỮ NGUYÊN TRỐNG)
       const getDate = (key: string, altKey?: string): Date | null => {
-        const dateStr = row[key] || (altKey ? row[altKey] : null);
-        if (!dateStr || dateStr === '' || dateStr === null || dateStr === undefined) {
+        const dateValue = row[key] || (altKey ? row[altKey] : null);
+        if (!dateValue || dateValue === '' || dateValue === null || dateValue === undefined) {
           return null; // Giữ nguyên null nếu trống
         }
-        return this.parseDate(String(dateStr));
+        // Handle Excel date serial numbers and various formats
+        return this.parseDate(dateValue);
       };
 
       // Helper function to safely get boolean
@@ -1519,17 +1520,75 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
-  private parseDate(dateStr: string): Date | null {
-    if (!dateStr || dateStr.trim() === '') return null;
+  private parseDate(dateStr: any): Date | null {
+    if (!dateStr || dateStr === '' || dateStr === null || dateStr === undefined) {
+      return null;
+    }
     
-    if (typeof dateStr === 'string' && dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+    // If it's already a Date object
+    if (dateStr instanceof Date) {
+      return this.isValidDate(dateStr) ? dateStr : null;
+    }
+    
+    // If it's a number (Excel serial number or timestamp)
+    if (typeof dateStr === 'number') {
+      // Excel serial number (days since 1899-12-30)
+      // Excel serial numbers are typically between 1 and ~50000 (for dates 1900-2137)
+      // Also handle decimal numbers (Excel date with time)
+      if (dateStr >= 1 && dateStr < 100000) {
+        // Excel serial number - convert to Date
+        // Excel epoch is 1899-12-30 (not 1900-01-01 due to bug)
+        const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
+        const days = Math.floor(dateStr);
+        const milliseconds = (dateStr - days) * 24 * 60 * 60 * 1000; // Handle time portion
+        const date = new Date(excelEpoch.getTime() + days * 24 * 60 * 60 * 1000 + milliseconds);
+        return this.isValidDate(date) ? date : null;
+      }
+      // Timestamp in milliseconds (Unix timestamp)
+      else if (dateStr > 946684800000 && dateStr < 4102444800000) {
+        // Valid timestamp range (2000-01-01 to 2100-01-01)
+        const date = new Date(dateStr);
+        return this.isValidDate(date) ? date : null;
+      }
+      // Invalid timestamp - log warning and return null
+      else {
+        console.warn('⚠️ Invalid date value (out of range):', dateStr);
+        return null;
       }
     }
     
-    return new Date(dateStr);
+    // If it's a string
+    const str = String(dateStr).trim();
+    if (str === '') return null;
+    
+    // Try parsing as DD/MM/YYYY or MM/DD/YYYY
+    if (str.includes('/')) {
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const year = parseInt(parts[2]);
+        
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year) && year >= 1900 && year <= 2100) {
+          const date = new Date(year, month, day);
+          return this.isValidDate(date) ? date : null;
+        }
+      }
+    }
+    
+    // Try parsing as ISO date string or other formats
+    const date = new Date(str);
+    return this.isValidDate(date) ? date : null;
+  }
+
+  // Validate if date is valid
+  private isValidDate(date: Date): boolean {
+    if (!(date instanceof Date)) return false;
+    if (isNaN(date.getTime())) return false;
+    
+    // Check if date is in reasonable range (1900-2100)
+    const year = date.getFullYear();
+    return year >= 1900 && year <= 2100;
   }
 
   // Parse date for date range inputs (always return Date, not null)
@@ -1541,15 +1600,48 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Save shipments to Firebase
   saveShipmentsToFirebase(shipments: ShipmentItem[]): void {
     shipments.forEach(shipment => {
-      const shipmentData = {
-        ...shipment,
-        requestDate: shipment.requestDate,
-        fullDate: shipment.fullDate,
-        actualShipDate: shipment.actualShipDate,
-        pushNo: shipment.pushNo || '000', // Ensure PushNo is included
-        inventory: shipment.inventory || 0, // Ensure inventory is included
-        packing: shipment.packing || 'Pallet', // Ensure packing is included
-        qtyPallet: shipment.qtyPallet || 0, // Ensure qtyPallet is included
+      // Validate and sanitize dates before saving
+      const validateDate = (date: Date | null): Date | null => {
+        if (!date) return null;
+        if (!(date instanceof Date)) return null;
+        if (isNaN(date.getTime())) return null;
+        
+        // Check if date is in reasonable range (1900-2100)
+        const year = date.getFullYear();
+        if (year < 1900 || year > 2100) {
+          console.warn('⚠️ Date out of range:', date, 'for shipment:', shipment.shipmentCode);
+          return null;
+        }
+        
+        return date;
+      };
+      
+      const shipmentData: any = {
+        shipmentCode: shipment.shipmentCode,
+        importDate: validateDate(shipment.importDate) || new Date(), // Default to today if invalid
+        vehicleNumber: shipment.vehicleNumber || '',
+        factory: shipment.factory || 'ASM1',
+        materialCode: shipment.materialCode,
+        customerCode: shipment.customerCode,
+        quantity: shipment.quantity,
+        poShip: shipment.poShip,
+        carton: shipment.carton,
+        qtyBox: shipment.qtyBox,
+        odd: shipment.odd,
+        shipMethod: shipment.shipMethod,
+        packing: shipment.packing || 'Pallet',
+        qtyPallet: shipment.qtyPallet || 0,
+        push: shipment.push,
+        pushNo: shipment.pushNo || '000',
+        inventory: shipment.inventory || 0,
+        status: shipment.status || 'Chờ soạn',
+        document: shipment.document || 'Đã có PX',
+        requestDate: validateDate(shipment.requestDate) || new Date(),
+        fullDate: validateDate(shipment.fullDate),
+        actualShipDate: validateDate(shipment.actualShipDate),
+        dayPre: shipment.dayPre || 0,
+        notes: shipment.notes || '',
+        hidden: shipment.hidden || false,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1560,6 +1652,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error saving shipment to Firebase:', error);
+          console.error('Shipment data:', shipmentData);
+          alert(`❌ Lỗi khi lưu shipment ${shipment.shipmentCode}: ${error.message || error}`);
         });
     });
   }
