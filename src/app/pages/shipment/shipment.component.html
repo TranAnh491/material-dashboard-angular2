@@ -222,7 +222,7 @@
             <th>GHI CHÚ</th>
             <th>PRINT</th>
             <th>XÓA</th>
-            <th>ẨN</th>
+            <th class="col-hidden-header">ẨN</th>
           </tr>
         </thead>
         <tbody>
@@ -437,7 +437,7 @@
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
-            <td class="action-cell">
+            <td class="action-cell col-hidden-cell">
               <input type="checkbox" 
                      [checked]="shipment.hidden === true"
                      (change)="toggleHidden(shipment)"

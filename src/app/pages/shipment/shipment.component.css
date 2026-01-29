@@ -679,7 +679,40 @@
 .table th:nth-child(23), .table td:nth-child(23) { width: 160px; min-width: 160px; } /* GHI CHÚ - giảm 20% từ 200px */
 .table th:nth-child(24), .table td:nth-child(24) { width: 64px; min-width: 64px; } /* PRINT - giảm 20% từ 80px */
 .table th:nth-child(25), .table td:nth-child(25) { width: 64px; min-width: 64px; } /* XÓA - giảm 20% từ 80px */
-.table th:nth-child(26), .table td:nth-child(26) { width: 64px; min-width: 64px; } /* ẨN */
+.table th:nth-child(26), .table td:nth-child(26) { width: 64px; min-width: 64px; } /* ẨN - cột cuối */
+
+/* Cột Ẩn (cột cuối cùng): có tiêu đề "ẨN" và viền ngang dọc đầy đủ */
+.table th.col-hidden-header,
+.table th:last-child {
+  border-top: 1px solid #dee2e6 !important;
+  border-right: 1px solid #dee2e6 !important;
+  border-bottom: 2px solid #dee2e6 !important;
+  border-left: 1px solid #dee2e6 !important;
+  background: #f8f9fa !important;
+  padding: 8px 12px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #000000 !important;
+  min-width: 64px !important;
+  width: 64px !important;
+  box-sizing: border-box !important;
+}
+.table td.col-hidden-cell,
+.table td:last-child {
+  border-top: 1px solid #dee2e6 !important;
+  border-right: 1px solid #dee2e6 !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  border-left: 1px solid #dee2e6 !important;
+  padding: 8px 12px !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  background: #ffffff !important;
+  min-width: 64px !important;
+  width: 64px !important;
+  box-sizing: border-box !important;
+}
 
 /* Status Styles */
 .status-completed {

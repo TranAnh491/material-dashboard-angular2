@@ -219,9 +219,10 @@
       <div class="form-group" style="margin-bottom: 20px;">
         <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Shipment:</label>
         <input type="text" 
-               class="form-input" 
+               #shipmentInput
+               class="form-input check-shipment-input"
                [(ngModel)]="scannedShipment"
-               (keyup.enter)="currentPalletNo && confirmCheckInfo()"
+               (keyup.enter)="onShipmentEnterMoveToPallet()"
                placeholder="Nhập hoặc quét mã Shipment"
                style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
                autofocus>
@@ -230,9 +231,10 @@
       <div class="form-group" style="margin-bottom: 20px;">
         <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Pallet:</label>
         <input type="text" 
-               class="form-input" 
+               #palletInput
+               class="form-input check-pallet-input"
                [(ngModel)]="currentPalletNo"
-               (keyup.enter)="scannedShipment && confirmCheckInfo()"
+               (keyup.enter)="onPalletEnterConfirm()"
                placeholder="Nhập hoặc quét số Pallet"
                style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
       </div>

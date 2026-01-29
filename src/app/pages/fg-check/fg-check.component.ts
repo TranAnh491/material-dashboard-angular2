@@ -766,9 +766,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.showCheckDialog = true;
     this.cdr.detectChanges();
     
-    // Focus vào input Shipment sau khi popup mở
+    // Focus vào ô Số Shipment sau khi popup mở
     setTimeout(() => {
-      const input = document.querySelector('.form-input') as HTMLInputElement;
+      const input = document.querySelector('.check-shipment-input') as HTMLInputElement;
       if (input) {
         input.focus();
         input.select();
@@ -779,6 +779,28 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   closeCheckDialog(): void {
     this.showCheckDialog = false;
     this.cdr.detectChanges();
+  }
+
+  /** Sau khi nhập/quét xong Số Shipment và nhấn Enter → tự nhảy focus sang ô Số Pallet */
+  onShipmentEnterMoveToPallet(): void {
+    this.scannedShipment = String(this.scannedShipment || '').trim().toUpperCase();
+    if (!this.scannedShipment) return;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const palletInput = document.querySelector('.check-pallet-input') as HTMLInputElement;
+      if (palletInput) {
+        palletInput.focus();
+        palletInput.select();
+      }
+    }, 50);
+  }
+
+  /** Nhấn Enter ở ô Số Pallet → xác nhận (confirm) nếu đã có đủ Shipment + Pallet */
+  onPalletEnterConfirm(): void {
+    this.currentPalletNo = String(this.currentPalletNo || '').trim().toUpperCase();
+    if (this.scannedShipment && this.currentPalletNo) {
+      this.confirmCheckInfo();
+    }
   }
 
   confirmCheckInfo(): void {
