@@ -146,13 +146,11 @@
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
             <td class="code-cell" [class.scanned-customer-code]="item.scannedCustomerCode">{{item.customerCode}}</td>
-            <td class="number-cell">{{formatNumber(item.carton)}}</td>
+            <td class="number-cell">{{formatNumber(getDisplayCarton(item))}}</td>
             <td class="number-cell" [class.scanned-quantity]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
             <td class="number-cell">{{formatNumber(item.shipmentCarton || 0)}}</td>
             <td class="number-cell">{{formatNumber(item.shipmentQuantity || 0)}}</td>
-            <td class="status-cell" [class.check-correct]="item.checkResult === 'Đúng'" [class.check-incorrect]="item.checkResult === 'Sai'">
-              {{item.checkResult || '-'}}
-            </td>
+            <td class="status-cell">-</td>
             <td class="code-cell">{{item.checkId}}</td>
             <td class="action-cell">
               <button class="btn-reset" 

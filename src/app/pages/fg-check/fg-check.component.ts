@@ -21,6 +21,7 @@ export interface FGCheckItem {
   scannedQuantity?: boolean; // Đã scan số lượng (highlight xanh)
   isLocked?: boolean; // Lock dữ liệu
   palletNo?: string; // Số Pallet
+  docIds?: string[]; // Nhiều doc Firebase gộp lại (cùng shipment + materialCode + palletNo)
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -30,6 +31,7 @@ export interface ShipmentData {
   materialCode: string;
   quantity: number; // Lượng Xuất
   carton: number;
+  qtyBox?: number; // Số lượng trong 1 thùng - dùng để tính số thùng = quantity / qtyBox
   poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
 }
 
@@ -254,7 +256,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           return item;
         });
         
-        this.items = firebaseItems;
+        // Gộp dòng: cùng shipment + materialCode + palletNo thì cộng dồn quantity và carton thành một dòng
+        this.items = this.mergeItemsByShipmentMaterialPallet(firebaseItems);
         this.itemsLoaded = true;
         this.isLoading = false;
         
@@ -264,6 +267,37 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         }
         this.applyFilters();
       });
+  }
+
+  /** Gộp các dòng cùng shipment + materialCode + palletNo: cộng dồn quantity và carton thành một dòng. */
+  private mergeItemsByShipmentMaterialPallet(rawItems: FGCheckItem[]): FGCheckItem[] {
+    const key = (item: FGCheckItem) => {
+      const s = String(item.shipment || '').trim().toUpperCase();
+      const m = String(item.materialCode || '').trim().toUpperCase();
+      const p = String(item.palletNo || '').trim().toUpperCase();
+      return `${s}|${m}|${p}`;
+    };
+    const map = new Map<string, FGCheckItem[]>();
+    rawItems.forEach(item => {
+      const k = key(item);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(item);
+    });
+    const merged: FGCheckItem[] = [];
+    map.forEach((group) => {
+      const first = group[0];
+      const quantity = group.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+      const carton = group.reduce((sum, i) => sum + (Number(i.carton) || 0), 0);
+      const docIds = group.map(i => i.id).filter((id): id is string => !!id);
+      merged.push({
+        ...first,
+        id: first.id,
+        quantity,
+        carton,
+        docIds: docIds.length > 1 ? docIds : undefined
+      });
+    });
+    return merged;
   }
 
   // Load customer code mappings
@@ -304,6 +338,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           const materialCode = String(data.materialCode || '').trim(); // Mã TP - không uppercase để giữ nguyên format
           const quantity = parseFloat(data.quantity) || 0; // Lượng Xuất
           const carton = parseFloat(data.carton) || 0;
+          const qtyBox = parseFloat(data.qtyBox) || 0; // Số lượng trong 1 thùng (tab Shipment)
           const poShip = String(data.poShip || '').trim(); // PO Ship để phân biệt
           
           // CHỈ LƯU KHI CÓ ĐỦ shipmentCode VÀ materialCode
@@ -319,6 +354,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
               materialCode: materialCode, // Mã TP
               quantity: quantity,
               carton: carton,
+              qtyBox: qtyBox, // Để tính số thùng = quantity / qtyBox
               poShip: poShip // PO Ship để phân biệt
             });
           }
@@ -349,22 +385,21 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.loadShipmentData();
   }
 
-  // Force save check results to Firebase for all items
+  // Force save shipmentQuantity/shipmentCarton to Firebase for all items (không so sánh đúng/sai)
   forceSaveCheckResults(): void {
-    console.log('💾 Force saving check results for all items...');
+    console.log('💾 Force saving shipmentQuantity/shipmentCarton for all items...');
     let savedCount = 0;
     let errorCount = 0;
     
     const savePromises = this.items.map(item => {
-      if (item.id && item.checkResult) {
+      if (item.id) {
         return this.firestore.collection('fg-check').doc(item.id).update({
-          checkResult: item.checkResult,
           shipmentQuantity: item.shipmentQuantity || 0,
           shipmentCarton: item.shipmentCarton || 0,
           updatedAt: new Date()
         }).then(() => {
           savedCount++;
-          console.log(`✅ Saved checkResult for ${item.checkId}: ${item.checkResult}`);
+          console.log(`✅ Saved for ${item.checkId}`);
         }).catch(error => {
           errorCount++;
           console.error(`❌ Error saving ${item.checkId}:`, error);
@@ -431,7 +466,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       if (!shipmentCode || !materialCode) {
         console.warn(`⚠️ Item ${item.checkId} missing shipmentCode or materialCode - shipmentCode="${shipmentCode}", materialCode="${materialCode}"`);
         item.shipmentQuantity = 0;
-        item.checkResult = 'Sai';
         return;
       }
       
@@ -461,7 +495,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         console.warn(`  - Looking for: shipmentCode="${shipmentCode}", materialCode="${materialCode}"`);
         console.warn(`  - Available in shipment ${shipmentCode}:`, shipmentDataList.map(s => s.materialCode));
         item.shipmentQuantity = 0;
-        item.checkResult = 'Sai';
         return;
       }
       
@@ -524,6 +557,20 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const checkId = `CHK${String(this.checkIdCounter).padStart(3, '0')}`;
     this.checkIdCounter++;
     return checkId;
+  }
+
+  /** Số thùng = số lượng (quantity) / qtyBox từ tab Shipment (cùng shipment + materialCode). Nếu không có qtyBox thì trả về item.carton. */
+  getDisplayCarton(item: FGCheckItem): number {
+    const shipmentCode = String(item.shipment || '').trim().toUpperCase();
+    const materialCode = String(item.materialCode || '').trim();
+    const list = this.shipmentDataMap.get(shipmentCode) || [];
+    const match = list.find(s => String(s.materialCode || '').trim() === materialCode);
+    const qtyBox = match?.qtyBox ? Number(match.qtyBox) : 0;
+    const quantity = Number(item.quantity) || 0;
+    if (qtyBox > 0) {
+      return Math.floor(quantity / qtyBox);
+    }
+    return Number(item.carton) || 0;
   }
 
   // Kiểm tra xem item đã đủ số lượng/carton chưa
@@ -1000,17 +1047,24 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     });
     
     if (existingItem && existingItem.id) {
-      // Luôn thay thế số lượng khi cập nhật item đã có (cùng shipment, materialCode, palletNo)
-      // Tránh cộng dồn sau khi reset hoặc khi scan lại cùng mã hàng
-      const newQuantity = quantity;
-      console.log(`✅ Cập nhật: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} -> ${newQuantity}`);
-      
-      this.firestore.collection('fg-check').doc(existingItem.id).update({
+      // Cộng dồn: cùng shipment + materialCode + palletNo thì cộng thêm quantity vào dòng đã có
+      const newQuantity = (existingItem.quantity || 0) + quantity;
+      console.log(`✅ Cộng dồn: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} + ${quantity} = ${newQuantity}`);
+      const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id!];
+      const mainId = idsToUpdate[0];
+      const restIds = idsToUpdate.slice(1);
+      const updatePayload = {
         quantity: newQuantity,
-        customerCode: customerCodeUpper, // Lưu mã hàng
+        customerCode: customerCodeUpper,
         scannedCustomerCode: true,
         scannedQuantity: true,
         updatedAt: new Date()
+      };
+      this.firestore.collection('fg-check').doc(mainId).update(updatePayload)
+      .then(() => {
+        if (restIds.length) {
+          return Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete()));
+        }
       })
       .then(() => {
         existingItem.quantity = newQuantity;
@@ -1018,8 +1072,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         existingItem.scannedCustomerCode = true;
         existingItem.scannedQuantity = true;
         existingItem.updatedAt = new Date();
-        
-        // Recalculate và cập nhật bảng
+        existingItem.id = mainId;
+        (existingItem as any).docIds = undefined;
         this.calculateCheckResults();
         this.applyFilters();
         this.cdr.detectChanges();
@@ -1111,17 +1165,22 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
       
       if (existingItem && existingItem.id) {
-        // Thay thế số lượng bằng tổng từ danh sách scan (không cộng dồn với số cũ)
-        const newQuantity = totalQuantity;
-        const updatePromise = this.firestore.collection('fg-check').doc(existingItem.id).update({
+        const newQuantity = (existingItem.quantity || 0) + totalQuantity;
+        const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id];
+        const mainId = idsToUpdate[0];
+        const restIds = idsToUpdate.slice(1);
+        const updatePromise = this.firestore.collection('fg-check').doc(mainId).update({
           quantity: newQuantity,
           scannedQuantity: true,
           updatedAt: new Date()
         })
+        .then(() => Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete())))
         .then(() => {
           existingItem.quantity = newQuantity;
           existingItem.scannedQuantity = true;
           existingItem.updatedAt = new Date();
+          existingItem.id = mainId;
+          (existingItem as any).docIds = undefined;
           savedCount++;
           console.log(`✅ Cập nhật: ${materialCode} -> ${newQuantity}`);
         })
@@ -1129,7 +1188,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           errorCount++;
           console.error(`❌ Error updating ${materialCode}:`, error);
         });
-        
         savePromises.push(updatePromise);
       } else {
         // Tạo item mới
@@ -1622,12 +1680,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     // Normalize materialCode để so sánh chính xác
     const normalizedMaterialCode = String(materialCode || '').trim();
     
-    // Tìm tất cả items cùng shipment + materialCode, sắp xếp theo PO Ship
+    // Tìm tất cả items cùng shipment + materialCode + palletNo, sắp xếp theo PO Ship
+    const normalizedPalletNo = String(this.currentPalletNo || '').trim().toUpperCase();
     const matchingItems = this.items.filter(item => {
       const itemShipment = String(item.shipment || '').trim().toUpperCase();
       const itemMaterialCode = String(item.materialCode || '').trim();
+      const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
       return itemShipment === normalizedShipmentCode &&
-             itemMaterialCode === normalizedMaterialCode;
+             itemMaterialCode === normalizedMaterialCode &&
+             itemPalletNo === normalizedPalletNo;
     });
     
     // Sắp xếp theo PO Ship để đảm bảo thứ tự
@@ -1705,18 +1766,25 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       };
       
       console.log('🔵 Updating with data:', updateData);
-      this.firestore.collection('fg-check').doc(existingItem.id).update(updateData)
+      const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id!];
+      const mainId = idsToUpdate[0];
+      const restIds = idsToUpdate.slice(1);
+      const deleteRest = (): Promise<void> => (restIds.length ? Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete())).then(() => undefined) : Promise.resolve()) as Promise<void>;
+      this.firestore.collection('fg-check').doc(mainId).update(updateData)
+        .then(deleteRest)
         .then(() => {
           console.log('✅ Updated existing record:', normalizedCustomerCode, 'materialCode:', materialCode, 'quantity:', updatedQuantity);
           existingItem.quantity = updatedQuantity;
           existingItem.carton = updatedCarton;
-          existingItem.shipment = normalizedShipmentCode; // Ensure shipmentCode is normalized
-          existingItem.materialCode = materialCode; // Ensure materialCode is updated
-          existingItem.customerCode = normalizedCustomerCode; // Ensure customerCode is normalized
-          existingItem.checkMode = this.checkMode; // Ensure checkMode is updated
+          existingItem.shipment = normalizedShipmentCode;
+          existingItem.materialCode = materialCode;
+          existingItem.customerCode = normalizedCustomerCode;
+          existingItem.checkMode = this.checkMode;
           existingItem.scannedCustomerCode = updateData.scannedCustomerCode;
           existingItem.scannedQuantity = updateData.scannedQuantity;
           existingItem.updatedAt = new Date();
+          existingItem.id = mainId;
+          (existingItem as any).docIds = undefined;
           this.calculateCheckResults();
           this.applyFilters();
         })
@@ -1790,24 +1858,25 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         return; // Đã xử lý xong
       }
       
-      // Nếu không tìm thấy item chưa đủ, kiểm tra lại lần cuối
-      const normalizedMaterialCode = String(materialCode || '').trim();
+      // Nếu không tìm thấy item chưa đủ, kiểm tra lại lần cuối (cùng shipment + materialCode + palletNo)
       const finalCheck = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const itemMaterialCode = String(item.materialCode || '').trim();
+        const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
         return itemShipment === normalizedShipmentCode &&
                itemMaterialCode === normalizedMaterialCode &&
+               itemPalletNo === normalizedPalletNo &&
                !item.isChecked;
       });
       
       if (finalCheck && finalCheck.id) {
-        console.log('⚠️ Found existing item in final check - updating instead of creating duplicate');
-          // Cập nhật item đã có thay vì tạo mới
+        console.log('⚠️ Found existing item in final check - cộng dồn thay vì tạo mới');
         const isScanningCustomerCode = !finalCheck.customerCode || finalCheck.customerCode !== normalizedCustomerCode;
-        
+        const newQty = this.checkMode === 'pn-qty' ? ((finalCheck.quantity || 0) + quantity) : (finalCheck.quantity || 0);
+        const newCarton = this.checkMode === 'pn-qty' ? (finalCheck.carton || 0) : ((finalCheck.carton || 0) + 1);
         const updateData = {
-          quantity: this.checkMode === 'pn-qty' ? quantity : 0, // PN: để 0, PN+QTY: ghi số lượng
-          carton: this.checkMode === 'pn-qty' ? (finalCheck.carton || 0) : ((finalCheck.carton || 0) + 1), // PN: tăng thùng, PN+QTY: giữ nguyên
+          quantity: newQty,
+          carton: newCarton,
           shipment: normalizedShipmentCode,
           materialCode: materialCode,
           customerCode: normalizedCustomerCode,
@@ -1817,14 +1886,21 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           updatedAt: new Date()
         };
         
-        this.firestore.collection('fg-check').doc(finalCheck.id).update(updateData)
-          .then(() => {
+        const idsToUpdate = (finalCheck.docIds && finalCheck.docIds.length) ? finalCheck.docIds : [finalCheck.id!];
+        const mainId = idsToUpdate[0];
+        const restIds = idsToUpdate.slice(1);
+      const deleteRest = (): Promise<void> => (restIds.length ? Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete())).then(() => undefined) : Promise.resolve()) as Promise<void>;
+      this.firestore.collection('fg-check').doc(mainId).update(updateData)
+        .then(deleteRest)
+        .then(() => {
             console.log('✅ Updated existing item instead of creating duplicate');
             finalCheck.quantity = updateData.quantity;
             finalCheck.carton = updateData.carton;
             finalCheck.customerCode = normalizedCustomerCode;
             finalCheck.scannedCustomerCode = updateData.scannedCustomerCode;
             finalCheck.scannedQuantity = updateData.scannedQuantity;
+            finalCheck.id = mainId;
+            (finalCheck as any).docIds = undefined;
             this.calculateCheckResults();
             this.applyFilters();
           })
@@ -1849,7 +1925,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         scannedCustomerCode: true, // Đã scan mã hàng
         scannedQuantity: this.checkMode === 'pn-qty' && quantity > 0, // Chỉ highlight khi mode PN+QTY
         isLocked: false, // Mặc định không lock
-        palletNo: '', // Mặc định không có pallet number
+        palletNo: normalizedPalletNo || '', // Cùng shipment + materialCode + palletNo thì cộng dồn
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1900,12 +1976,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!item.id) {
+    const ids = (item.docIds && item.docIds.length) ? item.docIds : (item.id ? [item.id] : []);
+    if (ids.length === 0) {
       alert('❌ Không thể reset: Không tìm thấy ID');
       return;
     }
 
-    // Reset tất cả dữ liệu đã scan về 0
+    // Reset tất cả dữ liệu đã scan về 0 (nếu dòng gộp nhiều doc thì reset tất cả)
     const updateData = {
       carton: 0,
       quantity: 0,
@@ -1917,14 +1994,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     };
 
     console.log('🔄 Resetting item:', {
-      id: item.id,
+      ids,
       shipment: item.shipment,
       materialCode: item.materialCode,
       currentQuantity: item.quantity,
       currentCustomerCode: item.customerCode
     });
 
-    this.firestore.collection('fg-check').doc(item.id).update(updateData)
+    Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).update(updateData)))
       .then(() => {
         // Cập nhật local item
         item.carton = 0;
@@ -1952,9 +2029,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Toggle lock/unlock item
+  // Toggle lock/unlock item (nếu dòng gộp nhiều doc thì cập nhật tất cả)
   toggleLockItem(item: FGCheckItem): void {
-    if (!item.id) {
+    const ids = (item.docIds && item.docIds.length) ? item.docIds : (item.id ? [item.id] : []);
+    if (ids.length === 0) {
       alert('❌ Không thể lock: Không tìm thấy ID');
       return;
     }
@@ -1965,7 +2043,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       updatedAt: new Date()
     };
 
-    this.firestore.collection('fg-check').doc(item.id).update(updateData)
+    Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).update(updateData)))
       .then(() => {
         item.isLocked = newLockStatus;
         item.updatedAt = new Date();
@@ -1974,7 +2052,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       .catch(error => {
         console.error('❌ Error toggling lock:', error);
         alert('❌ Lỗi khi lock/unlock: ' + error.message);
-        // Revert checkbox state
         item.isLocked = !newLockStatus;
       });
   }
@@ -2007,32 +2084,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   deleteItem(item: FGCheckItem): void {
-    if (!item.id) {
+    const ids = (item.docIds && item.docIds.length) ? item.docIds : (item.id ? [item.id] : []);
+    if (ids.length === 0) {
       alert('❌ Không thể xóa: Không tìm thấy ID');
       return;
     }
 
     if (confirm(`Xác nhận xóa item?\n\nShipment: ${item.shipment}\nMã TP: ${item.materialCode}\nMã Hàng: ${item.customerCode}\nID Check: ${item.checkId}`)) {
-      // Delete from Firebase
-      this.firestore.collection('fg-check').doc(item.id).delete()
+      Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).delete()))
         .then(() => {
-          console.log('✅ Item deleted successfully from Firebase:', item.id);
-          
-          // Remove from local array
-          const index = this.items.findIndex(i => i.id === item.id);
+          console.log('✅ Item(s) deleted from Firebase:', ids.length);
+          const index = this.items.findIndex(i => i.id === item.id || (i.docIds && i.docIds[0] === item.id));
           if (index > -1) {
             this.items.splice(index, 1);
-            console.log('✅ Item removed from local array');
           }
-          
-          // Recalculate check results và apply filters để cập nhật bảng
           this.calculateCheckResults();
           this.applyFilters();
-          
-          // Force change detection để cập nhật UI
           this.cdr.detectChanges();
-          
-          console.log('✅ Item deleted and table updated');
         })
         .catch(error => {
           console.error('❌ Error deleting item:', error);
