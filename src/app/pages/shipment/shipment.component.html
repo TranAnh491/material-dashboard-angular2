@@ -201,6 +201,7 @@
             <th>BIỂN SỐ XE</th>
             <th>FACTORY</th>
             <th>SHIPMENT</th>
+            <th>CHECK</th>
             <th>MÃ TP</th>
             <th>MÃ KHÁCH</th>
             <th>LƯỢNG XUẤT</th>
@@ -226,7 +227,7 @@
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="25" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="26" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -270,19 +271,19 @@
             </td>
             
             <td class="code-cell">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="text"
-                       class="editable-input"
-                       [(ngModel)]="shipment.shipmentCode"
-                       (change)="updateShipmentInFirebase(shipment)"
-                       placeholder="Shipment code"
-                       style="flex: 1;">
-                <i class="material-icons check-status-icon" 
-                   *ngIf="isShipmentChecked(shipment)"
-                   title="✅ Đã kiểm tra và đúng - FG Check OK!"
-                   style="color: #28a745; font-size: 24px; font-weight: bold;">
-                  verified
-                </i>
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="shipment.shipmentCode"
+                     (change)="updateShipmentInFirebase(shipment)"
+                     placeholder="Shipment code">
+            </td>
+            <td class="check-cell">
+              <div class="shipment-check-result" *ngIf="getShipmentCheckDisplay(shipment) as check">
+                <span class="check-ok" *ngIf="check.status === 'ok'" title="Đã check đủ số lượng">
+                  <i class="material-icons" style="color: #28a745; font-size: 20px; vertical-align: middle;">check_circle</i> OK
+                </span>
+                <span class="check-excess" *ngIf="check.status === 'excess'" title="Số lượng scan vượt số lượng shipment">Dư</span>
+                <span class="check-pct" *ngIf="check.status === 'percentage'">{{ check.value }}%</span>
               </div>
             </td>
             <td class="code-cell">
@@ -683,7 +684,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">print</i>
-        In Tem QR Code
+        In Tem Barcode 1D
       </h5>
       <button type="button" class="close-btn" (click)="closePrintLabelDialog()">
         <i class="material-icons">close</i>
@@ -704,18 +705,18 @@
       
       <div class="print-label-options">
         <button class="print-option-btn shipment-btn" (click)="printShipmentLabel()">
-          <i class="material-icons">qr_code</i>
+          <i class="material-icons">straighten</i>
           <div class="btn-content">
             <span class="btn-title">Shipment Label</span>
-            <small class="btn-desc">In 1 tem QR với mã shipment</small>
+            <small class="btn-desc">In 1 tem barcode 1D với mã shipment</small>
           </div>
         </button>
         
         <button class="print-option-btn pallet-btn" (click)="printPalletLabels()">
-          <i class="material-icons">qr_code_2</i>
+          <i class="material-icons">straighten</i>
           <div class="btn-content">
             <span class="btn-title">Pallet Labels</span>
-            <small class="btn-desc">In nhiều tem theo Qty Pallet</small>
+            <small class="btn-desc">In nhiều tem barcode 1D theo Qty Pallet</small>
           </div>
         </button>
       </div>

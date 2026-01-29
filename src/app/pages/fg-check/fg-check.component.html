@@ -13,7 +13,40 @@
     <!-- Action Buttons and Search -->
     <div class="action-section">
       <div class="action-buttons">
-        <button class="custom-btn btn-primary" (click)="openCheck()" *ngIf="!isScanning">
+        <!-- Step 3: Scan Mã TP + Số lượng (hiển thị sau khi nhập shipment và pallet) -->
+        <div class="scan-step-3" *ngIf="checkStep === 3">
+          <div class="scan-info-row">
+            <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
+            <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
+            <span class="scan-info-item">Đã scan: <strong>{{scannedItems.length}} items</strong></span>
+          </div>
+          <div class="scan-inputs-row">
+            <input type="text" 
+                   class="custom-input scan-material-input" 
+                   [(ngModel)]="currentScanInput"
+                   (keyup.enter)="onMaterialCodeEntered()"
+                   placeholder="Mã hàng..."
+                   style="text-transform: uppercase;">
+            <input type="text" 
+                   class="custom-input scan-qty-input" 
+                   [(ngModel)]="currentQtyInput"
+                   (keyup.enter)="onMaterialAndQtyScanned()"
+                   placeholder="Số lượng">
+            <button class="custom-btn" (click)="onMaterialAndQtyScanned()" [disabled]="!currentScanInput || !currentQtyInput">
+              <i class="material-icons">add</i>
+            </button>
+            <button class="custom-btn btn-success" (click)="saveScannedData()" [disabled]="scannedItems.length === 0">
+              <i class="material-icons">check_circle</i>
+              Done
+            </button>
+            <button class="custom-btn" (click)="resetCheck()">
+              <i class="material-icons">close</i>
+              Hủy
+            </button>
+          </div>
+        </div>
+        
+        <button class="custom-btn btn-primary" (click)="openCheck()" *ngIf="checkStep === 0">
           <i class="material-icons">qr_code_scanner</i>
           Check
         </button>
@@ -27,77 +60,12 @@
           </button>
         </div>
         
-        <!-- Scanning Mode: Show Scan Input -->
-        <div class="scanning-mode" *ngIf="isScanning">
-          <!-- Check P/N Mode - chỉ 1 ô -->
-          <div class="scan-inputs-container" *ngIf="checkMode === 'pn'">
-            <div class="scan-input-box active">
-              <label class="scan-label">Scan mã hàng</label>
-              <input type="text" 
-                     class="custom-input scan-customer-input" 
-                     [(ngModel)]="currentScanInput"
-                     (keyup.enter)="onCustomerCodeScanned()"
-                     placeholder="Quét mã khách hàng..."
-                     autofocus>
-            </div>
-          </div>
-          
-          <!-- Check P/N + QTY Mode - 2 ô cùng lúc -->
-          <div class="scan-inputs-container" *ngIf="checkMode === 'pn-qty'">
-            <div class="scan-input-box" [class.active]="!waitingForQty" [class.completed]="waitingForQty">
-              <label class="scan-label">
-                <i class="material-icons status-icon">{{!waitingForQty ? 'radio_button_checked' : 'check_circle'}}</i>
-                Bước 1: Scan mã hàng
-              </label>
-              <input type="text" 
-                     class="custom-input scan-customer-input" 
-                     [(ngModel)]="currentScanInput"
-                     (keyup.enter)="onCustomerCodeScanned()"
-                     [disabled]="waitingForQty"
-                     placeholder="Quét mã hàng hoặc 300+PCS..."
-                     [autofocus]="!waitingForQty">
-            </div>
-            
-            <div class="scan-input-box" [class.active]="waitingForQty" [class.disabled]="!waitingForQty">
-              <label class="scan-label">
-                <i class="material-icons status-icon">{{waitingForQty ? 'radio_button_checked' : 'radio_button_unchecked'}}</i>
-                Bước 2: Scan số lượng
-              </label>
-              <input type="text" 
-                     class="custom-input scan-qty-input" 
-                     [(ngModel)]="currentQtyInput"
-                     (keyup.enter)="onQuantityScanned()"
-                     [disabled]="!waitingForQty"
-                     placeholder="Quét số lượng (QTY)..."
-                     [autofocus]="waitingForQty">
-            </div>
-          </div>
-        </div>
-        
-        <!-- Shipment, Status and Done button (shown when scanning) -->
-        <div class="scanning-info-group" *ngIf="isScanning">
-          <div class="shipment-info">
-            <span class="shipment-label">Shipment:</span>
-            <span class="shipment-value">{{scannedShipment}}</span>
-          </div>
-          
-          <div class="scanning-status">
-            <span class="status-label">Mode:</span>
-            <span class="status-value">{{checkMode === 'pn' ? 'Check P/N (Thùng)' : 'Check P/N + QTY'}}</span>
-          </div>
-          
-          <button class="custom-btn btn-success" (click)="completeScanning()">
-            <i class="material-icons">check_circle</i>
-            Done
-          </button>
-        </div>
-        
-        <button class="custom-btn" (click)="openChangeShipmentDialog()" *ngIf="!isScanning">
+        <button class="custom-btn" (click)="openChangeShipmentDialog()" *ngIf="checkStep === 0">
           <i class="material-icons">swap_horiz</i>
           Đổi số shipment
         </button>
         
-        <div class="dropdown">
+        <div class="dropdown" *ngIf="checkStep === 0">
           <button class="custom-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
             <i class="material-icons">more_vert</i>
             More
@@ -157,13 +125,16 @@
             <th>Lượng Shipment</th>
             <th>So sánh</th>
             <th>ID Check</th>
+            <th>Reset</th>
+            <th>Lock</th>
+            <th>Pallet No</th>
             <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="11" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="14" class="text-center" style="padding: 20px; color: #000000;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -174,15 +145,39 @@
             <td>{{item.shipment || ''}}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
-            <td class="code-cell" [class.scanned-cell]="item.scannedCustomerCode">{{item.customerCode}}</td>
+            <td class="code-cell" [class.scanned-customer-code]="item.scannedCustomerCode">{{item.customerCode}}</td>
             <td class="number-cell">{{formatNumber(item.carton)}}</td>
-            <td class="number-cell" [class.scanned-cell]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
+            <td class="number-cell" [class.scanned-quantity]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
             <td class="number-cell">{{formatNumber(item.shipmentCarton || 0)}}</td>
             <td class="number-cell">{{formatNumber(item.shipmentQuantity || 0)}}</td>
             <td class="status-cell" [class.check-correct]="item.checkResult === 'Đúng'" [class.check-incorrect]="item.checkResult === 'Sai'">
               {{item.checkResult || '-'}}
             </td>
             <td class="code-cell">{{item.checkId}}</td>
+            <td class="action-cell">
+              <button class="btn-reset" 
+                      (click)="resetItem(item)" 
+                      [disabled]="item.isLocked"
+                      title="Reset dữ liệu đã scan">
+                <i class="material-icons">refresh</i>
+              </button>
+            </td>
+            <td class="action-cell">
+              <input type="checkbox" 
+                     class="lock-checkbox"
+                     [checked]="item.isLocked"
+                     (change)="toggleLockItem(item)"
+                     title="Lock/Unlock dữ liệu">
+            </td>
+            <td class="code-cell">
+              <input type="text"
+                     class="pallet-input"
+                     [(ngModel)]="item.palletNo"
+                     [disabled]="item.isLocked"
+                     (change)="updateItemInFirebase(item)"
+                     placeholder="Pallet No"
+                     style="text-transform: uppercase;">
+            </td>
             <td class="action-cell">
               <button class="btn-delete" (click)="deleteItem(item)" title="Xóa">
                 <i class="material-icons">delete</i>
@@ -195,10 +190,11 @@
   </div>
 </div>
 
-<!-- Check Dialog -->
+
+<!-- Popup nhập Shipment và Pallet -->
 <div class="modal-overlay" 
      *ngIf="showCheckDialog" 
-     (click)="closeCheck()"
+     (click)="closeCheckDialog()"
      [style.position]="'fixed'"
      [style.top.px]="0"
      [style.left.px]="0"
@@ -209,79 +205,54 @@
      [style.align-items]="'center'"
      [style.justify-content]="'center'"
      [style.z-index]="10000">
-  <div class="modal-dialog scanner-dialog" 
-       (click)="$event.stopPropagation()"
-       [style.background]="'white'"
-       [style.border-radius.px]="8"
-       [style.max-width.px]="800"
-       [style.width.%]="90"
-       [style.max-height.vh]="80"
-       [style.overflow-y]="'auto'">
-    <div class="modal-header">
-      <h3>Check - FG Check</h3>
-      <button class="close-btn" (click)="closeCheck()">
+  <div class="modal-container" 
+       (click)="$event.stopPropagation()">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 class="modal-title" style="margin: 0;">
+        <i class="material-icons">qr_code_scanner</i>
+        Nhập thông tin Check
+      </h3>
+      <button class="close-btn" (click)="closeCheckDialog()">
         <i class="material-icons">close</i>
       </button>
     </div>
+    
     <div class="modal-body">
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Shipment:</label>
+        <input type="text" 
+               class="form-input" 
+               [(ngModel)]="scannedShipment"
+               (keyup.enter)="currentPalletNo && confirmCheckInfo()"
+               placeholder="Nhập hoặc quét mã Shipment"
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
+               autofocus>
+      </div>
       
-      <!-- Step 0: Select Mode -->
-      <div class="scanner-step" [class.active]="checkStep === 0" *ngIf="checkStep === 0">
-        <div class="step-header">
-          <div class="step-number">⚙️</div>
-          <h4>Chọn chế độ Check</h4>
-        </div>
-        <div class="scanner-content">
-          <div class="mode-selection-new">
-            <button class="mode-btn-large mode-btn-green" 
-                    type="button"
-                    (click)="selectModeAndContinue('pn'); $event.stopPropagation(); $event.preventDefault();">
-              <i class="material-icons">inventory_2</i>
-              <div class="btn-content">
-                <span class="btn-title">Check P/N</span>
-              </div>
-            </button>
-            <button class="mode-btn-large mode-btn-orange" 
-                    type="button"
-                    (click)="selectModeAndContinue('pn-qty'); $event.stopPropagation(); $event.preventDefault();">
-              <i class="material-icons">plus_one</i>
-              <div class="btn-content">
-                <span class="btn-title">Check P/N + QTY</span>
-              </div>
-            </button>
-          </div>
-        </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Pallet:</label>
+        <input type="text" 
+               class="form-input" 
+               [(ngModel)]="currentPalletNo"
+               (keyup.enter)="scannedShipment && confirmCheckInfo()"
+               placeholder="Nhập hoặc quét số Pallet"
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
       </div>
-
-      <!-- Step 1: Enter Shipment -->
-      <div class="scanner-step" [class.active]="checkStep === 1" *ngIf="checkStep === 1">
-        <div class="step-header">
-          <div class="step-number">1</div>
-          <h4>Nhập Số Shipment</h4>
-        </div>
-        <div class="scanner-content">
-          <div class="scanner-input-group">
-            <input type="text" 
-                   class="scanner-input check-shipment-input" 
-                   [(ngModel)]="scannedShipment"
-                   (keyup.enter)="onShipmentEntered()"
-                   placeholder="Nhập hoặc quét mã Shipment"
-                   autofocus>
-            <button class="scanner-btn" (click)="onShipmentEntered()">
-              <i class="material-icons">check</i>
-            </button>
-          </div>
-          <div class="scan-info">
-            <span>Mode: <strong>{{checkMode === 'pn' ? 'Check P/N' : 'Check P/N + QTY'}}</strong></span>
-          </div>
-        </div>
-      </div>
-
     </div>
+    
     <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="closeCheck()">
+      <button type="button" class="btn btn-cancel" (click)="closeCheckDialog()">
         <i class="material-icons">close</i>
-        Đóng
+        Hủy
+      </button>
+      <button type="button" 
+              class="btn btn-success" 
+              (click)="confirmCheckInfo()" 
+              [disabled]="!scannedShipment || !currentPalletNo"
+              [style.opacity]="(!scannedShipment || !currentPalletNo) ? '0.5' : '1'"
+              [style.cursor]="(!scannedShipment || !currentPalletNo) ? 'not-allowed' : 'pointer'">
+        <i class="material-icons">check</i>
+        Xác nhận
       </button>
     </div>
   </div>

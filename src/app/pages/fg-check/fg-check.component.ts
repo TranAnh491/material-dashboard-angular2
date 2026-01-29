@@ -19,6 +19,8 @@ export interface FGCheckItem {
   checkResult?: 'Đúng' | 'Sai'; // Kết quả check
   scannedCustomerCode?: boolean; // Đã scan mã hàng (highlight xanh)
   scannedQuantity?: boolean; // Đã scan số lượng (highlight xanh)
+  isLocked?: boolean; // Lock dữ liệu
+  palletNo?: string; // Số Pallet
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -52,13 +54,17 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   
   // Scanner properties
   showCheckDialog: boolean = false;
-  checkStep: number = 0; // 0 = select mode, 1 = shipment input, 2 = scanning
+  checkStep: number = 0; // 0 = select mode, 1 = shipment input, 2 = scan pallet, 3 = scan material+qty
   checkMode: 'pn' | 'pn-qty' = 'pn';
   scannedShipment: string = '';
-  currentScanInput: string = '';
-  currentQtyInput: string = '';
+  currentPalletNo: string = ''; // Pallet đang scan
+  currentScanInput: string = ''; // Mã hàng đang scan
+  currentQtyInput: string = ''; // Số lượng đang scan
   waitingForQty: boolean = false;
   isScanning: boolean = false;
+  
+  // Danh sách các mã hàng đã scan (tạm thời, để hiển thị)
+  scannedItems: Array<{materialCode: string, quantity: number, customerCode?: string}> = [];
   
   // Filter by shipment - để lọc theo shipment đang check
   filterByShipment: string = ''; // Shipment đang được filter
@@ -220,6 +226,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             checkMode: data.checkMode || 'pn', // Load checkMode từ Firebase
             scannedCustomerCode: data.scannedCustomerCode || false,
             scannedQuantity: data.scannedQuantity || false,
+            isLocked: data.isLocked || false, // Load lock status
+            palletNo: data.palletNo || '', // Load pallet number
+            shipmentCarton: data.shipmentCarton || 0,
+            shipmentQuantity: data.shipmentQuantity || 0,
+            poShip: data.poShip || '',
+            checkResult: data.checkResult || undefined,
             createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
             updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
           };
@@ -703,41 +715,69 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   openCheck(): void {
     console.log('🔵 openCheck called');
     this.resetCheck();
+    // Mở popup nhập Shipment và Pallet
     this.showCheckDialog = true;
-    console.log('✅ showCheckDialog set to:', this.showCheckDialog);
-    console.log('✅ checkStep:', this.checkStep);
-    console.log('✅ checkMode:', this.checkMode);
     this.cdr.detectChanges();
     
-    // Verify modal is in DOM
+    // Focus vào input Shipment sau khi popup mở
     setTimeout(() => {
-      const modal = document.querySelector('.modal-overlay');
-      const step0 = document.querySelector('.scanner-step');
-      console.log('🔍 Modal in DOM:', modal !== null);
-      console.log('🔍 Step 0 in DOM:', step0 !== null);
-      console.log('🔍 All buttons:', document.querySelectorAll('.mode-btn-large').length);
+      const input = document.querySelector('.form-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
     }, 100);
   }
 
-  closeCheck(): void {
+  closeCheckDialog(): void {
     this.showCheckDialog = false;
-    // Don't reset if we're starting scanning mode
-    if (!this.isScanning) {
-      this.resetCheck();
-    } else {
-      // Only reset dialog-related properties
-      this.checkStep = 0;
+    this.cdr.detectChanges();
+  }
+
+  confirmCheckInfo(): void {
+    // Kiểm tra đã nhập đủ thông tin
+    if (!this.scannedShipment || !this.currentPalletNo) {
+      alert('Vui lòng nhập đầy đủ Shipment và Pallet!');
+      return;
     }
+    
+    // Chuẩn hóa dữ liệu
+    this.scannedShipment = String(this.scannedShipment).trim().toUpperCase();
+    this.currentPalletNo = String(this.currentPalletNo).trim().toUpperCase();
+    
+    console.log('✅ Confirm check info:', {
+      shipment: this.scannedShipment,
+      pallet: this.currentPalletNo
+    });
+    
+    // Đóng popup
+    this.showCheckDialog = false;
+    
+    // Chuyển sang step 3 (scan mã TP + số lượng)
+    this.checkStep = 3;
+    this.checkMode = 'pn-qty';
+    
+    this.cdr.detectChanges();
+    
+    // Focus vào input scan mã TP sau khi popup đóng
+    setTimeout(() => {
+      const input = document.querySelector('.scan-material-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 200);
   }
 
   resetCheck(): void {
     this.checkStep = 0;
-    this.checkMode = 'pn';
+    this.checkMode = 'pn-qty'; // Mặc định là PN+QTY
     this.scannedShipment = '';
+    this.currentPalletNo = '';
     this.currentScanInput = '';
     this.currentQtyInput = '';
     this.waitingForQty = false;
     this.isScanning = false;
+    this.scannedItems = []; // Reset danh sách scan tạm thời
     this.currentShipmentItems = []; // Reset danh sách shipment items
     
     // Clear filter khi reset
@@ -792,28 +832,48 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     console.log('🔵 onShipmentEntered called, shipmentCode:', shipmentCode);
     
-    // Set filter để chỉ hiển thị items của shipment này TRƯỚC KHI load
-    // QUAN TRỌNG: Đảm bảo filter được set ngay từ đầu để khi check chỉ hiển thị đúng shipment
-    this.filterByShipment = shipmentCode;
-    console.log('✅ Set filterByShipment:', this.filterByShipment);
+    // KHÔNG load dữ liệu gì ra nữa - chỉ chuyển sang step scan Pallet
+    this.checkStep = 2; // Chuyển sang step scan Pallet
+    this.cdr.detectChanges();
     
-    // Load danh sách materialCode của shipment này (sẽ tự động sắp xếp theo A, B, C)
-    this.loadShipmentItems(shipmentCode);
+    // Auto focus on pallet input
+    setTimeout(() => {
+      const palletInput = document.querySelector('.scan-pallet-input') as HTMLInputElement;
+      if (palletInput) {
+        palletInput.focus();
+      }
+    }, 200);
+  }
+
+  // Chỉ cho phép chọn Check P/N + QTY (không cho chọn Check P/N)
+  selectModeAndContinueNew(mode: 'pn-qty'): void {
+    console.log('🔵 selectModeAndContinueNew called with mode:', mode);
+    this.checkMode = mode;
+    this.checkStep = 1; // Chuyển sang step nhập shipment
+    this.cdr.detectChanges();
     
-    // Apply filters để cập nhật bảng - chỉ hiển thị items của shipment này
-    this.applyFilters();
+    // Focus vào input shipment
+    setTimeout(() => {
+      const input = document.querySelector('.custom-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 100);
+  }
+
+  // Scan Pallet No
+  onPalletScanned(): void {
+    const palletNo = String(this.currentPalletNo || '').trim().toUpperCase();
+    if (!palletNo) {
+      alert('⚠️ Vui lòng nhập số Pallet!');
+      return;
+    }
     
-    // Close popup first
-    this.showCheckDialog = false;
-    this.checkStep = 0;
+    console.log('🔵 Pallet scanned:', palletNo);
     
-    // Then start scanning mode (keep scannedShipment value)
-    this.isScanning = true;
-    
-    console.log('✅ After - isScanning:', this.isScanning);
-    console.log('✅ After - scannedShipment:', this.scannedShipment);
-    console.log('✅ After - filterByShipment:', this.filterByShipment);
-    
+    // Chuyển sang step scan mã hàng + số lượng
+    this.checkStep = 3;
     this.cdr.detectChanges();
     
     // Auto focus on customer code input
@@ -823,6 +883,318 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         scanInput.focus();
       }
     }, 200);
+  }
+
+  // Khi nhập mã TP và nhấn Enter → tự động focus vào ô số lượng
+  onMaterialCodeEntered(): void {
+    const materialCode = String(this.currentScanInput.trim()).toUpperCase();
+    if (!materialCode) {
+      return;
+    }
+    
+    // Tự động focus vào ô số lượng
+    setTimeout(() => {
+      const qtyInput = document.querySelector('.scan-qty-input') as HTMLInputElement;
+      if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+      }
+    }, 100);
+  }
+
+  // Scan mã hàng + số lượng (có thể scan nhiều lần) - Tự động lưu ngay vào Firebase
+  // Từ mã hàng sẽ tự động tìm ra mã TP
+  onMaterialAndQtyScanned(): void {
+    if (!this.currentScanInput.trim()) {
+      alert('⚠️ Vui lòng nhập mã hàng!');
+      return;
+    }
+    
+    const customerCode = String(this.currentScanInput.trim()).toUpperCase();
+    const qtyValue = this.currentQtyInput.trim();
+    
+    // Parse số lượng
+    const cleanQtyValue = qtyValue.replace(/[^\d]/g, '');
+    const quantity = cleanQtyValue ? parseInt(cleanQtyValue, 10) : 0;
+    
+    if (!customerCode) {
+      alert('⚠️ Vui lòng nhập mã hàng!');
+      return;
+    }
+    
+    if (quantity <= 0) {
+      alert('⚠️ Số lượng phải lớn hơn 0!');
+      return;
+    }
+    
+    // Tìm mã TP từ mã hàng
+    const materialCode = this.getMaterialCodeFromCustomerCode(customerCode);
+    
+    if (!materialCode) {
+      alert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}".\n\nVui lòng kiểm tra lại mapping trong danh mục!`);
+      // Reset input để scan lại
+      this.currentScanInput = '';
+      this.currentQtyInput = '';
+      setTimeout(() => {
+        const scanInput = document.querySelector('.scan-material-input') as HTMLInputElement;
+        if (scanInput) {
+          scanInput.focus();
+          scanInput.select();
+        }
+      }, 100);
+      return;
+    }
+    
+    // Thêm vào danh sách scan tạm thời để hiển thị (hiển thị cả mã hàng và mã TP)
+    this.scannedItems.push({
+      materialCode: materialCode,
+      quantity: quantity,
+      customerCode: customerCode // Thêm customerCode để hiển thị
+    } as any);
+    
+    console.log(`✅ Đã scan: Mã hàng=${customerCode} -> Mã TP=${materialCode}, Số lượng=${quantity}`);
+    console.log(`📋 Tổng số items đã scan: ${this.scannedItems.length}`);
+    
+    // Tự động lưu ngay vào Firebase và cập nhật bảng
+    this.saveSingleScannedItem(customerCode, materialCode, quantity);
+    
+    // Reset input để scan tiếp
+    this.currentScanInput = '';
+    this.currentQtyInput = '';
+    
+    // Auto focus lại vào input mã hàng để tiếp tục scan
+    setTimeout(() => {
+      const scanInput = document.querySelector('.scan-material-input') as HTMLInputElement;
+      if (scanInput) {
+        scanInput.focus();
+        scanInput.select();
+      }
+    }, 100);
+    
+    this.cdr.detectChanges();
+  }
+
+  // Lưu một item đơn lẻ vào Firebase ngay lập tức
+  // Nhận customerCode (mã hàng), tự động tìm materialCode (mã TP) từ mapping
+  saveSingleScannedItem(customerCode: string, materialCode: string, quantity: number): void {
+    if (!this.scannedShipment || !this.currentPalletNo) {
+      console.warn('⚠️ Chưa có Shipment hoặc Pallet No!');
+      return;
+    }
+    
+    const shipmentCode = String(this.scannedShipment).trim().toUpperCase();
+    const palletNo = String(this.currentPalletNo).trim().toUpperCase();
+    const materialCodeUpper = materialCode.toUpperCase();
+    const customerCodeUpper = String(customerCode).trim().toUpperCase();
+    
+    // Tìm item đã có trong Firebase (cùng shipment, materialCode, palletNo, chưa lock)
+    const existingItem = this.items.find(item => {
+      const itemShipment = String(item.shipment || '').trim().toUpperCase();
+      const itemMaterialCode = String(item.materialCode || '').trim().toUpperCase();
+      const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
+      const itemCustomerCode = String(item.customerCode || '').trim().toUpperCase();
+      return itemShipment === shipmentCode && 
+             itemMaterialCode === materialCodeUpper &&
+             itemPalletNo === palletNo &&
+             !item.isLocked; // Chỉ cập nhật item chưa lock
+    });
+    
+    if (existingItem && existingItem.id) {
+      // Luôn thay thế số lượng khi cập nhật item đã có (cùng shipment, materialCode, palletNo)
+      // Tránh cộng dồn sau khi reset hoặc khi scan lại cùng mã hàng
+      const newQuantity = quantity;
+      console.log(`✅ Cập nhật: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} -> ${newQuantity}`);
+      
+      this.firestore.collection('fg-check').doc(existingItem.id).update({
+        quantity: newQuantity,
+        customerCode: customerCodeUpper, // Lưu mã hàng
+        scannedCustomerCode: true,
+        scannedQuantity: true,
+        updatedAt: new Date()
+      })
+      .then(() => {
+        existingItem.quantity = newQuantity;
+        existingItem.customerCode = customerCodeUpper;
+        existingItem.scannedCustomerCode = true;
+        existingItem.scannedQuantity = true;
+        existingItem.updatedAt = new Date();
+        
+        // Recalculate và cập nhật bảng
+        this.calculateCheckResults();
+        this.applyFilters();
+        this.cdr.detectChanges();
+      })
+      .catch(error => {
+        console.error(`❌ Error updating ${materialCodeUpper}:`, error);
+        alert(`❌ Lỗi khi cập nhật ${materialCodeUpper}: ${error.message}`);
+      });
+    } else {
+      // Tạo item mới
+      const checkId = this.getNextCheckId();
+      const newItem: FGCheckItem = {
+        shipment: shipmentCode,
+        materialCode: materialCodeUpper,
+        customerCode: customerCodeUpper, // Lưu mã hàng đã scan
+        carton: 0,
+        quantity: quantity,
+        isChecked: false,
+        checkId: checkId,
+        checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
+        palletNo: palletNo,
+        isLocked: false,
+        scannedCustomerCode: true, // Đã scan mã hàng
+        scannedQuantity: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      this.firestore.collection('fg-check').add(newItem)
+        .then((docRef) => {
+          newItem.id = docRef.id;
+          this.items.push(newItem);
+          console.log(`✅ Tạo mới: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper} = ${quantity}`);
+          
+          // Recalculate và cập nhật bảng
+          this.calculateCheckResults();
+          this.applyFilters();
+          this.cdr.detectChanges();
+        })
+        .catch(error => {
+          console.error(`❌ Error creating ${materialCodeUpper}:`, error);
+          alert(`❌ Lỗi khi tạo mới ${materialCodeUpper}: ${error.message}`);
+        });
+    }
+  }
+
+  // Lưu dữ liệu đã scan vào Firebase (cộng dồn theo mã TP)
+  saveScannedData(): void {
+    if (!this.scannedShipment || !this.currentPalletNo) {
+      alert('⚠️ Vui lòng nhập đầy đủ Shipment và Pallet No!');
+      return;
+    }
+    
+    if (this.scannedItems.length === 0) {
+      alert('⚠️ Chưa có dữ liệu nào được scan!');
+      return;
+    }
+    
+    const shipmentCode = String(this.scannedShipment).trim().toUpperCase();
+    const palletNo = String(this.currentPalletNo).trim().toUpperCase();
+    
+    // Nhóm theo materialCode và cộng dồn số lượng
+    const groupedByMaterial: Map<string, number> = new Map();
+    
+    this.scannedItems.forEach(item => {
+      const materialCode = item.materialCode;
+      const currentQty = groupedByMaterial.get(materialCode) || 0;
+      groupedByMaterial.set(materialCode, currentQty + item.quantity);
+    });
+    
+    console.log('📊 Dữ liệu đã nhóm theo mã TP:', Array.from(groupedByMaterial.entries()));
+    
+    // Lưu từng materialCode vào Firebase (cộng dồn nếu đã có)
+    let savedCount = 0;
+    let errorCount = 0;
+    const savePromises: Promise<void>[] = [];
+    
+    groupedByMaterial.forEach((totalQuantity, materialCode) => {
+      // Tìm item đã có trong Firebase (cùng shipment, materialCode, palletNo)
+      // QUAN TRỌNG: Chỉ cộng dồn vào item chưa lock
+      const existingItem = this.items.find(item => {
+        const itemShipment = String(item.shipment || '').trim().toUpperCase();
+        const itemMaterialCode = String(item.materialCode || '').trim().toUpperCase();
+        const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
+        return itemShipment === shipmentCode && 
+               itemMaterialCode === materialCode.toUpperCase() &&
+               itemPalletNo === palletNo &&
+               !item.isLocked; // Chỉ cộng dồn vào item chưa lock
+      });
+      
+      if (existingItem && existingItem.id) {
+        // Thay thế số lượng bằng tổng từ danh sách scan (không cộng dồn với số cũ)
+        const newQuantity = totalQuantity;
+        const updatePromise = this.firestore.collection('fg-check').doc(existingItem.id).update({
+          quantity: newQuantity,
+          scannedQuantity: true,
+          updatedAt: new Date()
+        })
+        .then(() => {
+          existingItem.quantity = newQuantity;
+          existingItem.scannedQuantity = true;
+          existingItem.updatedAt = new Date();
+          savedCount++;
+          console.log(`✅ Cập nhật: ${materialCode} -> ${newQuantity}`);
+        })
+        .catch(error => {
+          errorCount++;
+          console.error(`❌ Error updating ${materialCode}:`, error);
+        });
+        
+        savePromises.push(updatePromise);
+      } else {
+        // Tạo item mới
+        const checkId = this.getNextCheckId();
+        const newItem: FGCheckItem = {
+          shipment: shipmentCode,
+          materialCode: materialCode.toUpperCase(),
+          customerCode: '', // Không lưu customerCode vì scan trực tiếp mã TP
+          carton: 0,
+          quantity: totalQuantity,
+          isChecked: false,
+          checkId: checkId,
+          checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
+          palletNo: palletNo,
+          isLocked: false,
+          scannedCustomerCode: false,
+          scannedQuantity: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        const createPromise = this.firestore.collection('fg-check').add(newItem)
+          .then((docRef) => {
+            newItem.id = docRef.id;
+            this.items.push(newItem);
+            savedCount++;
+            console.log(`✅ Tạo mới: ${materialCode} = ${totalQuantity}`);
+          })
+          .catch(error => {
+            errorCount++;
+            console.error(`❌ Error creating ${materialCode}:`, error);
+          });
+        
+        savePromises.push(createPromise);
+      }
+    });
+    
+    // Chờ tất cả saves hoàn thành
+    Promise.all(savePromises).then(() => {
+      // Recalculate check results và apply filters
+      this.calculateCheckResults();
+      this.applyFilters();
+      
+      // Reset scanning state
+      this.scannedItems = [];
+      this.currentPalletNo = '';
+      this.currentScanInput = '';
+      this.currentQtyInput = '';
+      this.isScanning = false;
+      this.checkStep = 0;
+      this.showCheckDialog = false;
+      
+      // Clear filter
+      this.filterByShipment = '';
+      this.applyFilters();
+      
+      alert(`✅ Đã lưu thành công!\n\n` +
+            `- Shipment: ${shipmentCode}\n` +
+            `- Pallet No: ${palletNo}\n` +
+            `- Số mã TP: ${groupedByMaterial.size}\n` +
+            `- Đã lưu: ${savedCount} items\n` +
+            `- Lỗi: ${errorCount} items`);
+      
+      this.cdr.detectChanges();
+    });
   }
 
   // Load danh sách materialCode của shipment để hiển thị và tự động tạo items trong bảng
@@ -954,6 +1326,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         poShip: shipmentData.poShip, // Lưu PO Ship để phân biệt
         scannedCustomerCode: false,
         scannedQuantity: false,
+        isLocked: false, // Mặc định không lock
+        palletNo: '', // Mặc định không có pallet number
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1272,14 +1646,21 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return !isEnough; // Chỉ lấy item chưa đủ
     });
     
-    // Nếu không tìm thấy item chưa đủ, kiểm tra xem có item nào chưa checked không (để cảnh báo)
+    // Nếu không tìm thấy item chưa đủ, kiểm tra xem có item nào chưa checked và chưa lock không (để cảnh báo)
     if (!existingItem) {
-      const uncheckedItem = matchingItems.find(item => !item.isChecked);
-      if (uncheckedItem) {
+      const uncheckedUnlockedItem = matchingItems.find(item => !item.isChecked && !item.isLocked);
+      if (uncheckedUnlockedItem) {
         // Tất cả items đã đủ nhưng chưa checked - có thể do logic check chưa chạy
         console.log(`ℹ️ All items for materialCode ${normalizedMaterialCode} are already enough, but not checked yet`);
-        existingItem = uncheckedItem; // Vẫn cập nhật item này
+        existingItem = uncheckedUnlockedItem; // Vẫn cập nhật item này
       } else {
+        // Kiểm tra xem có item nào bị lock không
+        const lockedItems = matchingItems.filter(item => item.isLocked);
+        if (lockedItems.length > 0) {
+          alert(`⚠️ Các dòng của mã TP "${normalizedMaterialCode}" đã bị lock. Không thể cập nhật!`);
+          return;
+        }
+        
         // Tất cả items đã checked
         const checkedItems = matchingItems.filter(item => item.isChecked);
         if (checkedItems.length > 0) {
@@ -1467,6 +1848,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         checkMode: this.checkMode, // Lưu checkMode của item
         scannedCustomerCode: true, // Đã scan mã hàng
         scannedQuantity: this.checkMode === 'pn-qty' && quantity > 0, // Chỉ highlight khi mode PN+QTY
+        isLocked: false, // Mặc định không lock
+        palletNo: '', // Mặc định không có pallet number
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1506,7 +1889,123 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Delete item
+  // Reset dữ liệu đã scan của item về 0 để scan lại
+  resetItem(item: FGCheckItem): void {
+    if (item.isLocked) {
+      alert('⚠️ Không thể reset: Item đã bị lock!');
+      return;
+    }
+
+    if (!confirm(`Xác nhận reset dữ liệu đã scan?\n\nShipment: ${item.shipment}\nMã TP: ${item.materialCode}\nMã Hàng: ${item.customerCode || '(chưa có)'}\nSố lượng hiện tại: ${item.quantity}\nID Check: ${item.checkId}\n\nDữ liệu sẽ được reset về 0 để scan lại.`)) {
+      return;
+    }
+
+    if (!item.id) {
+      alert('❌ Không thể reset: Không tìm thấy ID');
+      return;
+    }
+
+    // Reset tất cả dữ liệu đã scan về 0
+    const updateData = {
+      carton: 0,
+      quantity: 0,
+      customerCode: '', // Xóa mã hàng đã scan
+      scannedCustomerCode: false, // Reset flag đã scan mã hàng
+      scannedQuantity: false, // Reset flag đã scan số lượng
+      checkResult: null, // Xóa kết quả check
+      updatedAt: new Date()
+    };
+
+    console.log('🔄 Resetting item:', {
+      id: item.id,
+      shipment: item.shipment,
+      materialCode: item.materialCode,
+      currentQuantity: item.quantity,
+      currentCustomerCode: item.customerCode
+    });
+
+    this.firestore.collection('fg-check').doc(item.id).update(updateData)
+      .then(() => {
+        // Cập nhật local item
+        item.carton = 0;
+        item.quantity = 0;
+        item.customerCode = '';
+        item.scannedCustomerCode = false;
+        item.scannedQuantity = false;
+        item.checkResult = undefined;
+        item.updatedAt = new Date();
+        
+        console.log('✅ Item reset successfully - all scanned data cleared to 0');
+        
+        // Recalculate check results và cập nhật bảng
+        this.calculateCheckResults();
+        this.applyFilters();
+        
+        // Force change detection để cập nhật UI
+        this.cdr.detectChanges();
+        
+        console.log('✅ Item reset complete - ready to rescan');
+      })
+      .catch(error => {
+        console.error('❌ Error resetting item:', error);
+        alert('❌ Lỗi khi reset: ' + error.message);
+      });
+  }
+
+  // Toggle lock/unlock item
+  toggleLockItem(item: FGCheckItem): void {
+    if (!item.id) {
+      alert('❌ Không thể lock: Không tìm thấy ID');
+      return;
+    }
+
+    const newLockStatus = !item.isLocked;
+    const updateData = {
+      isLocked: newLockStatus,
+      updatedAt: new Date()
+    };
+
+    this.firestore.collection('fg-check').doc(item.id).update(updateData)
+      .then(() => {
+        item.isLocked = newLockStatus;
+        item.updatedAt = new Date();
+        console.log(`✅ Item ${newLockStatus ? 'locked' : 'unlocked'} successfully`);
+      })
+      .catch(error => {
+        console.error('❌ Error toggling lock:', error);
+        alert('❌ Lỗi khi lock/unlock: ' + error.message);
+        // Revert checkbox state
+        item.isLocked = !newLockStatus;
+      });
+  }
+
+  // Update item in Firebase (for Pallet No and other fields)
+  updateItemInFirebase(item: FGCheckItem): void {
+    if (!item.id) {
+      return;
+    }
+
+    if (item.isLocked) {
+      alert('⚠️ Không thể cập nhật: Item đã bị lock!');
+      return;
+    }
+
+    const updateData = {
+      palletNo: item.palletNo || '',
+      updatedAt: new Date()
+    };
+
+    this.firestore.collection('fg-check').doc(item.id).update(updateData)
+      .then(() => {
+        item.updatedAt = new Date();
+        console.log('✅ Item updated successfully');
+      })
+      .catch(error => {
+        console.error('❌ Error updating item:', error);
+        alert('❌ Lỗi khi cập nhật: ' + error.message);
+      });
+  }
+
   deleteItem(item: FGCheckItem): void {
     if (!item.id) {
       alert('❌ Không thể xóa: Không tìm thấy ID');
@@ -1517,14 +2016,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Delete from Firebase
       this.firestore.collection('fg-check').doc(item.id).delete()
         .then(() => {
-          console.log('✅ Item deleted successfully');
+          console.log('✅ Item deleted successfully from Firebase:', item.id);
+          
           // Remove from local array
-          const index = this.items.indexOf(item);
+          const index = this.items.findIndex(i => i.id === item.id);
           if (index > -1) {
             this.items.splice(index, 1);
-            this.applyFilters();
-            alert('✅ Đã xóa thành công!');
+            console.log('✅ Item removed from local array');
           }
+          
+          // Recalculate check results và apply filters để cập nhật bảng
+          this.calculateCheckResults();
+          this.applyFilters();
+          
+          // Force change detection để cập nhật UI
+          this.cdr.detectChanges();
+          
+          console.log('✅ Item deleted and table updated');
         })
         .catch(error => {
           console.error('❌ Error deleting item:', error);

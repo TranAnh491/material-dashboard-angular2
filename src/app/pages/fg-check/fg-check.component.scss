@@ -70,8 +70,8 @@
 }
 
 .action-section {
-  background: #ffffff;
-  border-bottom: 1px solid #ddd;
+  background: #ffffff; // Nền trắng
+  border-bottom: 1px solid #000000; // Viền đen dưới
   padding: 15px 20px;
   display: flex;
   justify-content: space-between;
@@ -84,6 +84,73 @@
   display: flex;
   align-items: center;
   gap: 15px;
+}
+
+// Step 3 scan section - layout
+.scan-step-3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.scan-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scan-info-item {
+  font-weight: 600;
+}
+
+.scan-inputs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  .scan-material-input {
+    width: 200px;
+    min-width: 120px;
+  }
+
+  .scan-qty-input {
+    width: 120px;
+    min-width: 80px;
+  }
+}
+
+.scanned-list-wrap {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.scanned-list-box {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #000;
+  border-radius: 0;
+  padding: 10px;
+  background: #f9f9f9;
+}
+
+.scanned-list-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #000;
+}
+
+.scanned-list-item {
+  padding: 5px 0;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 // Filter indicator
@@ -337,30 +404,30 @@
   input {
     width: 100%;
     padding: 8px 12px;
-    border: 2px solid #000000;
-    border-radius: 4px;
+    border: 1px solid #000000; // Viền đen
+    border-radius: 0; // Không bo góc
     font-size: 14px;
-    background: #ffffff;
-    color: #000000;
+    background: #ffffff; // Nền trắng
+    color: #000000; // Chữ đen
     
     &:focus {
       outline: none;
-      border-color: #333333;
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+      border: 1px solid #000000; // Giữ viền đen khi focus
+      background: #ffffff;
     }
     
     &::placeholder {
-      color: #666666;
+      color: #999999;
     }
   }
 }
 
 .custom-btn {
-  background: #ffffff;
-  border: 2px solid #000000;
-  color: #000000;
+  background: #ffffff; // Nền trắng
+  border: 1px solid #000000; // Viền đen
+  color: #000000; // Chữ đen
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 0; // Không bo góc
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -370,22 +437,23 @@
   transition: all 0.2s ease;
   
   &:hover {
-    background: #f0f0f0;
+    background: #f5f5f5; // Hover nhẹ
   }
   
   &.btn-primary {
-    background: #007bff;
-    border-color: #007bff;
-    color: #ffffff;
+    background: #ffffff; // Nền trắng
+    border: 1px solid #000000; // Viền đen
+    color: #000000; // Chữ đen
     
     &:hover {
-      background: #0056b3;
-      border-color: #0056b3;
+      background: #f5f5f5; // Hover nhẹ
     }
   }
   
   i {
     font-size: 18px;
+    color: #000000; // Icon đen
+    filter: grayscale(100%); // Không màu
   }
 }
 
@@ -414,87 +482,86 @@
 }
 
 .excel-table {
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
   width: 100%;
   font-family: Arial, sans-serif;
   font-size: 11px;
-  min-width: 1200px;
+  table-layout: fixed; // Chia đều chiều rộng các cột
+  border: 1px solid #000000; // Viền đen cho bảng
   
   thead {
     position: sticky;
     top: 0;
     z-index: 1000;
-    background: #000000;
+    background: #ffffff;
   }
   
   th, td {
-    border: 1px solid #000000;
+    border: 1px solid #000000; // Viền đen cho các ô
     padding: 6px 4px;
     text-align: left;
     vertical-align: middle;
     white-space: nowrap;
+    width: calc(100% / 14); // Chia đều cho 14 cột
   }
   
   th {
-    background: #000000;
-    color: #ffffff;
+    background: #ffffff; // Nền trắng
+    color: #000000; // Chữ đen
     font-weight: 600;
     font-size: 11px;
     text-transform: uppercase;
     text-align: center;
-    
-    &.row-header {
-      width: 40px;
-      min-width: 40px;
-    }
+    border: 1px solid #000000; // Viền đen
   }
   
   tbody tr {
-    background-color: #ffffff;
-    
-    &:nth-child(even) {
-      background-color: #f8f8f8;
-    }
+    background-color: #ffffff; // Nền trắng
     
     &:hover {
-      background: #e8e8e8;
+      background: #f5f5f5; // Hover nhẹ
     }
   }
   
   td {
     font-size: 11px;
-    color: #000000;
+    color: #000000; // Chữ đen
     text-align: center;
+    background: #ffffff; // Nền trắng
+    border: 1px solid #000000; // Viền đen
     
     &.row-header {
       text-align: center;
-      width: 40px;
-      min-width: 40px;
     }
     
     &.code-cell {
       font-weight: 600;
       text-align: left;
+      color: #000000; // Chữ đen
     }
     
     &.number-cell {
       text-align: center;
       font-family: Arial, sans-serif;
+      color: #000000; // Chữ đen
     }
     
     &.status-cell {
       text-align: center;
       font-weight: 600;
+      color: #000000; // Chữ đen mặc định
       
       &.check-correct {
-        color: #28a745;
-        background-color: #d4edda;
+        color: #ffffff; // Chữ trắng
+        background-color: #28a745; // Nền xanh lá
+        border: 1px solid #28a745; // Viền xanh lá
       }
       
       &.check-incorrect {
-        color: #dc3545;
-        background-color: #f8d7da;
+        color: #ffffff; // Chữ trắng
+        background-color: #dc3545; // Nền đỏ
+        border: 1px solid #dc3545; // Viền đỏ
       }
       
       .check-checkbox {
@@ -506,25 +573,30 @@
     
     &.action-cell {
       text-align: center;
-      width: 80px;
-      min-width: 80px;
     }
     
-    // Highlight scanned cells (màu xanh)
-    &.scanned-cell {
-      background-color: #d4edda !important;
-      color: #155724 !important;
+    // Ô mã hàng: màu xanh khi đã scan mã hàng
+    &.scanned-customer-code {
+      background-color: #d4edda !important; // Nền xanh lá
+      color: #155724 !important; // Chữ xanh đậm
       font-weight: 600;
-      border: 2px solid #28a745 !important;
-      animation: scanHighlight 0.5s ease;
+      border: 1px solid #28a745 !important; // Viền xanh
     }
     
-    // Highlight duplicate material code (màu cam)
+    // Ô số lượng: màu xanh khi đã scan số lượng
+    &.scanned-quantity {
+      background-color: #d4edda !important; // Nền xanh lá
+      color: #155724 !important; // Chữ xanh đậm
+      font-weight: 600;
+      border: 1px solid #28a745 !important; // Viền xanh
+    }
+    
+    // Highlight duplicate material code - không màu, chỉ chữ đen
     &.duplicate-material {
-      background-color: #fff3cd !important;
-      color: #856404 !important;
+      background-color: #ffffff !important; // Nền trắng
+      color: #000000 !important; // Chữ đen
       font-weight: 700;
-      border: 2px solid #ff9800 !important;
+      border: 1px solid #000000 !important; // Viền đen
     }
   }
 }
@@ -543,7 +615,35 @@
 
 // Delete Button Styles
 .btn-delete {
-  background: #dc3545;
+  background: #ffffff; // Nền trắng
+  border: 1px solid #000000; // Viền đen
+  color: #000000; // Chữ đen
+  padding: 6px 12px;
+  border-radius: 0; // Không bo góc
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f5f5f5; // Hover nhẹ
+  }
+  
+  &:active {
+    background: #e0e0e0;
+  }
+  
+  i {
+    font-size: 18px;
+    color: #000000; // Icon đen
+  }
+}
+
+// Reset Button Styles
+.btn-reset {
+  background: #ff9800;
   border: none;
   color: #ffffff;
   padding: 6px 12px;
@@ -555,17 +655,56 @@
   justify-content: center;
   transition: all 0.2s ease;
   
-  &:hover {
-    background: #c82333;
+  &:hover:not(:disabled) {
+    background: #f57c00;
     transform: scale(1.05);
   }
   
-  &:active {
+  &:active:not(:disabled) {
     transform: scale(0.95);
+  }
+  
+  &:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.6;
   }
   
   i {
     font-size: 18px;
+  }
+}
+
+// Lock Checkbox Styles
+.lock-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #000000; // Màu đen
+  filter: grayscale(100%); // Không màu
+}
+
+// Pallet Input Styles
+.pallet-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #ffffff;
+  color: #000000;
+  text-align: center;
+  
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+  }
+  
+  &:disabled {
+    background: #f5f5f5;
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 
@@ -581,6 +720,48 @@
   align-items: center !important;
   justify-content: center !important;
   z-index: 10000 !important;
+}
+
+.modal-container {
+  background: #ffffff; // Nền trắng
+  border: 1px solid #000000; // Viền đen
+  border-radius: 0; // Không bo góc
+  padding: 20px;
+  min-width: 400px;
+  max-width: 500px;
+}
+
+// Form input styles
+.form-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #000000; // Viền đen
+  border-radius: 0; // Không bo góc
+  font-size: 14px;
+  background: #ffffff; // Nền trắng
+  color: #000000; // Chữ đen
+  text-transform: uppercase;
+  
+  &:focus {
+    outline: none;
+    border: 1px solid #000000; // Giữ viền đen khi focus
+    background: #ffffff;
+  }
+  
+  &::placeholder {
+    color: #999999;
+  }
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #000000; // Chữ đen
+}
+
+.form-group {
+  margin-bottom: 20px;
 }
 
 .modal-dialog {
@@ -605,23 +786,23 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #000000; // Viền đen
   
   h3 {
     margin: 0;
-    color: #333;
+    color: #000000; // Chữ đen
     font-size: 20px;
   }
   
   .close-btn {
     background: none;
-    border: none;
+    border: 1px solid #000000; // Viền đen
     font-size: 24px;
     cursor: pointer;
-    color: #666;
+    color: #000000; // Chữ đen
     
     &:hover {
-      color: #000;
+      background: #f5f5f5;
     }
   }
 }
@@ -773,27 +954,29 @@
       .scanner-input {
         flex: 1;
         padding: 10px 15px;
-        border: 2px solid #007bff;
-        border-radius: 4px;
+        border: 1px solid #000000; // Viền đen
+        border-radius: 0; // Không bo góc
         font-size: 16px;
+        background: #ffffff; // Nền trắng
+        color: #000000; // Chữ đen
         
         &:focus {
           outline: none;
-          border-color: #0056b3;
+          border: 1px solid #000000; // Giữ viền đen khi focus
         }
       }
       
       .scanner-btn {
         padding: 10px 20px;
-        background: #007bff;
-        color: #ffffff;
-        border: none;
-        border-radius: 4px;
+        background: #ffffff; // Nền trắng
+        color: #000000; // Chữ đen
+        border: 1px solid #000000; // Viền đen
+        border-radius: 0; // Không bo góc
         cursor: pointer;
         font-size: 16px;
         
         &:hover {
-          background: #0056b3;
+          background: #f5f5f5;
         }
       }
     }
@@ -806,6 +989,226 @@
       font-size: 14px;
       color: #333;
     }
+  }
+}
+
+// ========== Responsive: Tablet & Mobile ==========
+
+// Tablet (max 1024px)
+@media (max-width: 1024px) {
+  .content-container {
+    overflow-x: auto;
+  }
+  
+  .header-section {
+    padding: 12px 16px;
+  }
+  
+  .page-title {
+    font-size: 20px;
+    
+    i {
+      font-size: 24px;
+    }
+  }
+  
+  .action-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  
+  .action-buttons {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .search-box {
+    max-width: 100%;
+  }
+  
+  .excel-table {
+    font-size: 10px;
+    min-width: 900px;
+    
+    th, td {
+      padding: 5px 3px;
+      width: auto;
+      min-width: 60px;
+    }
+  }
+  
+  .custom-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  
+  .custom-input,
+  .scan-material-input,
+  .scan-qty-input {
+    min-width: 0;
+  }
+}
+
+// Mobile (max 768px)
+@media (max-width: 768px) {
+  .main-content {
+    height: auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  
+  .header-section {
+    padding: 10px 12px;
+  }
+  
+  .page-title {
+    font-size: 18px;
+    
+    i {
+      font-size: 22px;
+    }
+  }
+  
+  .action-section {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .scan-step-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .scan-info-row {
+    justify-content: flex-start;
+  }
+  
+  .scan-inputs-row {
+    flex-wrap: wrap;
+    
+    .scan-material-input,
+    .scan-qty-input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+    }
+    
+    .custom-btn {
+      flex: 1;
+      min-width: 60px;
+    }
+  }
+  
+  .scanned-list-box {
+    max-height: 120px;
+  }
+  
+  .scanned-list-item {
+    font-size: 11px;
+  }
+  
+  .filter-indicator {
+    flex-wrap: wrap;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  .excel-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .excel-table {
+    font-size: 10px;
+    min-width: 800px;
+    
+    th, td {
+      padding: 6px 4px;
+      min-width: 55px;
+      font-size: 10px;
+    }
+  }
+  
+  .btn-reset,
+  .btn-delete {
+    padding: 6px 10px;
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
+  .pallet-input {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+  
+  .lock-checkbox {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .dropdown .dropdown-menu {
+    position: absolute;
+    z-index: 1050;
+  }
+  
+  // Modal popup - full width on mobile
+  .modal-overlay .modal-container {
+    min-width: 90%;
+    max-width: 95%;
+    margin: 10px;
+  }
+  
+  .modal-body .form-group {
+    margin-bottom: 16px;
+  }
+}
+
+// Small mobile (max 480px)
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 16px;
+    
+    i {
+      font-size: 20px;
+    }
+  }
+  
+  .action-section {
+    padding: 8px 10px;
+  }
+  
+  .excel-table {
+    min-width: 700px;
+    font-size: 9px;
+    
+    th, td {
+      padding: 4px 2px;
+      min-width: 48px;
+      font-size: 9px;
+    }
+  }
+  
+  .custom-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    
+    i {
+      font-size: 16px;
+    }
+  }
+  
+  .scanned-customer-code,
+  .scanned-quantity {
+    font-size: 9px !important;
   }
 }
 

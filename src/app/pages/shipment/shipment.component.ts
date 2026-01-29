@@ -4,7 +4,7 @@ import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import * as QRCode from 'qrcode';
+// Label in barcode 1D (Code128), không dùng QR code
 
 export interface ShipmentItem {
   id?: string;
@@ -51,6 +51,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   
   // FG Check status cache - track which shipments have been checked
   fgCheckStatusCache: Map<string, boolean> = new Map(); // key: shipmentCode+materialCode, value: isCheckedCorrectly
+  // FG Check scanned quantity - tổng số lượng đã scan theo shipmentCode + materialCode
+  fgCheckScannedQty: Map<string, number> = new Map(); // key: shipmentCode|materialCode, value: total scanned qty
   
   // Push tracking to prevent duplicate
   private isPushing: Set<string> = new Set();
@@ -384,32 +386,34 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Load FG Check status - realtime
+  // Load FG Check status - realtime + tổng hợp số lượng scan theo shipmentCode + materialCode
   loadFGCheckStatus(): void {
     this.firestore.collection('fg-check')
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
         this.fgCheckStatusCache.clear();
+        this.fgCheckScannedQty.clear();
         
         actions.forEach(action => {
           const data = action.payload.doc.data() as any;
           const shipmentCode = String(data.shipment || '').trim().toUpperCase();
           const materialCode = String(data.materialCode || '').trim();
           const checkResult = data.checkResult || '';
+          const quantity = Number(data.quantity) || 0;
           
           if (shipmentCode && materialCode) {
             const key = `${shipmentCode}|${materialCode}`;
-            // Chỉ đánh dấu là checked nếu kết quả check là "Đúng"
             if (checkResult === 'Đúng') {
               this.fgCheckStatusCache.set(key, true);
-              console.log(`✅ Cached check status: ${key} = Đúng`);
             }
+            // Cộng dồn số lượng scan theo shipmentCode + materialCode
+            const current = this.fgCheckScannedQty.get(key) || 0;
+            this.fgCheckScannedQty.set(key, current + quantity);
           }
         });
         
-        console.log('✅ Loaded FG Check status cache:', this.fgCheckStatusCache.size, 'checked items');
-        console.log('📋 Cache entries:', Array.from(this.fgCheckStatusCache.keys()));
+        console.log('✅ Loaded FG Check: status cache', this.fgCheckStatusCache.size, ', scanned qty keys', this.fgCheckScannedQty.size);
       });
   }
 
@@ -419,11 +423,23 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const materialCode = String(shipment.materialCode || '').trim();
     const key = `${shipmentCode}|${materialCode}`;
     const isChecked = this.fgCheckStatusCache.get(key) === true;
-    
-    // Chỉ log khi checked (để không spam console)
-    // Nếu cần debug hết, dùng nút "Debug Check Status"
-    
     return isChecked;
+  }
+
+  /** So sánh số lượng scan (FG Check) với số lượng shipment theo mã TP + số lượng. Trả về trạng thái hiển thị: ok / excess (Dư) / percentage (% đã check). */
+  getShipmentCheckDisplay(shipment: ShipmentItem): { status: 'ok' | 'excess' | 'percentage'; value: number | null } {
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim();
+    const key = `${shipmentCode}|${materialCode}`;
+    const expected = Number(shipment.quantity) || 0;
+    const scanned = this.fgCheckScannedQty.get(key) || 0;
+    if (expected <= 0) {
+      return scanned > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+    }
+    if (scanned > expected) return { status: 'excess', value: null };
+    if (scanned === expected) return { status: 'ok', value: null };
+    const pct = Math.round((scanned / expected) * 100);
+    return { status: 'percentage', value: pct };
   }
 
   // Debug method to show all cached check statuses
@@ -1827,6 +1843,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Biển số xe': '51K-75600',
         'Nhà máy': 'ASM1',
         'Shipment': 'SHIP001',
+        'Check': 'OK',
         'Mã TP': 'P001234',
         'Mã Khách': 'CUST001',
         'Lượng Xuất': 100,
@@ -1885,6 +1902,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 12 }, // Biển số xe
       { wch: 10 }, // Nhà máy
       { wch: 12 }, // Shipment
+      { wch: 8 },  // Check
       { wch: 12 }, // Mã TP
       { wch: 12 }, // Mã Khách
       { wch: 12 }, // Lượng Xuất
@@ -2008,7 +2026,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     console.log('🏷️ Printing Shipment Label:', shipmentCode);
     
     try {
-      await this.generateAndPrintQRCode(shipmentCode, 'Shipment Label');
+      await this.generateAndPrintBarcode1D(shipmentCode, 'Shipment Label');
       this.closePrintLabelDialog();
     } catch (error) {
       console.error('❌ Error printing shipment label:', error);
@@ -2052,7 +2070,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       console.log('📋 Pallet codes:', palletCodes);
       
-      await this.generateAndPrintMultipleQRCodes(palletCodes, 'Pallet Labels');
+      await this.generateAndPrintMultipleBarcodes1D(palletCodes, 'Pallet Labels');
       this.closePrintLabelDialog();
     } catch (error) {
       console.error('❌ Error printing pallet labels:', error);
@@ -2060,22 +2078,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Generate and print single QR code
-  private async generateAndPrintQRCode(code: string, title: string): Promise<void> {
+  // Generate and print single 1D barcode label (Code128)
+  private async generateAndPrintBarcode1D(code: string, title: string): Promise<void> {
     try {
-      console.log('🔧 Generating QR code for:', code);
-      
-      // Generate QR code using qrcode library (same as materials)
-      const qrCodeDataURL = await QRCode.toDataURL(code, {
-        width: 240,
-        margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      });
-      
-      console.log('✅ QR code generated, length:', qrCodeDataURL.length);
+      console.log('🔧 Generating 1D barcode for:', code);
       
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
@@ -2083,77 +2089,62 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return;
       }
       
-      console.log('✅ Print window opened');
-      
       const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <title>${title}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
   <style>
     @page { size: 57mm 32mm; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { 
-      margin: 0; 
-      padding: 0; 
-      font-family: Arial, sans-serif;
-      background: white;
-      width: 57mm;
-      height: 32mm;
-    }
+    body { margin: 0; padding: 4mm; font-family: Arial, sans-serif; background: white; }
     .label-container {
-      width: 57mm;
-      height: 32mm;
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid #000;
-      gap: 3mm;
-      background: white;
+      width: 57mm; min-height: 32mm;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border: 1px solid #000; background: white;
     }
-    .qr-code {
-      width: 28mm;
-      height: 28mm;
-    }
-    .code-text {
-      font-size: 14px;
-      font-weight: bold;
-      color: #000;
-    }
+    .barcode-wrap { margin: 2mm 0; }
+    svg { max-width: 100%; height: auto; }
+    .code-text { font-size: 10px; font-weight: bold; color: #000; margin-top: 2mm; }
   </style>
 </head>
 <body>
   <div class="label-container">
-    <img class="qr-code" src="${qrCodeDataURL}">
-    <div class="code-text">${code}</div>
+    <div class="barcode-wrap"><svg id="barcode"><\/svg></div>
+    <div class="code-text">${this.escapeHtml(code)}</div>
   </div>
+  <script>
+    (function() {
+      var code = ${JSON.stringify(code)};
+      try {
+        JsBarcode("#barcode", code, {
+          format: "CODE128",
+          width: 2,
+          height: 50,
+          displayValue: false,
+          margin: 2
+        });
+      } catch (e) { console.error(e); }
+    })();
+  <\/script>
 </body>
 </html>`;
 
-      console.log('📝 Writing HTML to print window...');
       printWindow.document.write(htmlContent);
-      
       printWindow.document.close();
-      console.log('✅ Document closed');
       
-      // Wait for content to load, then print
       printWindow.onload = () => {
-        console.log('📄 Content loaded');
         setTimeout(() => {
-          console.log('🖨️ Starting print...');
           printWindow.focus();
           printWindow.print();
-        }, 300);
+        }, 400);
       };
-      
-      // Fallback if onload doesn't fire
       setTimeout(() => {
         if (printWindow && !printWindow.closed) {
-          console.log('🖨️ Fallback print...');
           printWindow.focus();
           printWindow.print();
         }
-      }, 1000);
+      }, 1200);
       
     } catch (error) {
       console.error('❌ Error:', error);
@@ -2161,26 +2152,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Generate and print multiple QR codes
-  private async generateAndPrintMultipleQRCodes(codes: string[], title: string): Promise<void> {
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Generate and print multiple 1D barcode labels (Code128)
+  private async generateAndPrintMultipleBarcodes1D(codes: string[], title: string): Promise<void> {
     try {
-      console.log('🔧 Generating multiple QR codes for:', codes.length, 'labels');
-      
-      // Generate all QR codes first
-      const qrCodeDataURLs = await Promise.all(
-        codes.map(code => 
-          QRCode.toDataURL(code, {
-            width: 240, // 30mm = 240px (8px/mm) - same as materials inbound
-            margin: 1,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          })
-        )
-      );
-      
-      console.log('✅ All QR codes generated successfully:', qrCodeDataURLs.length);
+      console.log('🔧 Generating multiple 1D barcodes for:', codes.length, 'labels');
       
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
@@ -2188,82 +2169,72 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return;
       }
       
-      console.log('✅ Print window opened for multiple labels');
-      
       let labelsHtml = '';
       codes.forEach((code, index) => {
-        const qrCodeDataURL = qrCodeDataURLs[index];
         const pageBreak = index < codes.length - 1 ? 'page-break-after: always;' : '';
+        const safeCode = code.replace(/\\/g, '\\\\').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         labelsHtml += `
   <div class="label-container" style="${pageBreak}">
-    <img class="qr-code" src="${qrCodeDataURL}">
-    <div class="code-text">${code}</div>
+    <div class="barcode-wrap"><svg id="barcode-${index}"></svg></div>
+    <div class="code-text">${safeCode}</div>
   </div>`;
       });
       
+      const codesJson = JSON.stringify(codes);
       const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <title>${title}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   <style>
     @page { size: 57mm 32mm; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { 
-      margin: 0; 
-      padding: 0; 
-      font-family: Arial, sans-serif;
-      background: white;
-    }
+    body { margin: 0; padding: 4mm; font-family: Arial, sans-serif; background: white; }
     .label-container {
-      width: 57mm;
-      height: 32mm;
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid #000;
-      gap: 3mm;
-      background: white;
+      width: 57mm; min-height: 32mm;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border: 1px solid #000; background: white;
     }
-    .qr-code {
-      width: 28mm;
-      height: 28mm;
-    }
-    .code-text {
-      font-size: 14px;
-      font-weight: bold;
-      color: #000;
-    }
+    .barcode-wrap { margin: 2mm 0; }
+    svg { max-width: 100%; height: auto; }
+    .code-text { font-size: 10px; font-weight: bold; color: #000; margin-top: 2mm; }
   </style>
 </head>
 <body>${labelsHtml}
+  <script>
+    (function() {
+      var codes = ${codesJson};
+      codes.forEach(function(code, i) {
+        try {
+          JsBarcode("#barcode-" + i, code, {
+            format: "CODE128",
+            width: 2,
+            height: 50,
+            displayValue: false,
+            margin: 2
+          });
+        } catch (e) { console.error(e); }
+      });
+    })();
+  <\/script>
 </body>
 </html>`;
 
-      console.log('📝 Writing HTML for multiple labels...');
       printWindow.document.write(htmlContent);
-      
       printWindow.document.close();
-      console.log('✅ Document closed for multiple labels');
       
-      // Wait for content to load, then print
       printWindow.onload = () => {
-        console.log('📄 Multiple labels content loaded');
         setTimeout(() => {
-          console.log('🖨️ Starting print for multiple labels...');
           printWindow.focus();
           printWindow.print();
-        }, 300);
+        }, 500);
       };
-      
-      // Fallback if onload doesn't fire
       setTimeout(() => {
         if (printWindow && !printWindow.closed) {
-          console.log('🖨️ Fallback print for multiple labels...');
           printWindow.focus();
           printWindow.print();
         }
-      }, 1000);
+      }, 1500);
       
     } catch (error) {
       console.error('❌ Error:', error);

@@ -574,6 +574,30 @@
   width: 120px;
 }
 
+.check-cell {
+  min-width: 72px;
+  width: 72px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.shipment-check-result {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shipment-check-result .check-ok {
+  color: #28a745;
+}
+
+.shipment-check-result .check-excess {
+  color: #dc3545;
+}
+
+.shipment-check-result .check-pct {
+  color: #fd7e14;
+}
+
 .number-cell {
   text-align: right;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
