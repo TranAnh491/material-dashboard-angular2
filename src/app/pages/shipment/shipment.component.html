@@ -201,7 +201,7 @@
             <th>BIỂN SỐ XE</th>
             <th>FACTORY</th>
             <th>SHIPMENT</th>
-            <th>CHECK</th>
+            <th>LƯỢNG KTRA</th>
             <th>MÃ TP</th>
             <th>MÃ KHÁCH</th>
             <th>LƯỢNG XUẤT</th>
@@ -278,13 +278,7 @@
                      placeholder="Shipment code">
             </td>
             <td class="check-cell">
-              <div class="shipment-check-result" *ngIf="getShipmentCheckDisplay(shipment) as check">
-                <span class="check-ok" *ngIf="check.status === 'ok'" title="Đã check đủ số lượng">
-                  <i class="material-icons" style="color: #28a745; font-size: 20px; vertical-align: middle;">check_circle</i> OK
-                </span>
-                <span class="check-excess" *ngIf="check.status === 'excess'" title="Số lượng scan vượt số lượng shipment">Dư</span>
-                <span class="check-pct" *ngIf="check.status === 'percentage'">{{ check.value }}%</span>
-              </div>
+              {{getScannedQuantity(shipment) | number}}
             </td>
             <td class="code-cell">
               <input type="text"

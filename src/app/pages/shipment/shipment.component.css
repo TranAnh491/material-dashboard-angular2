@@ -658,9 +658,9 @@
 .table th:nth-child(3), .table td:nth-child(3) { min-width: 88px; } /* BIỂN SỐ XE */
 .table th:nth-child(4), .table td:nth-child(4) { min-width: 72px; } /* NHÀ MÁY */
 .table th:nth-child(5), .table td:nth-child(5) { min-width: 90px; } /* SHIPMENT */
-.table th:nth-child(6), .table td:nth-child(6) { min-width: 72px; } /* CHECK */
+.table th:nth-child(6), .table td:nth-child(6) { min-width: 72px; } /* LƯỢNG KTRA */
 .table th:nth-child(7), .table td:nth-child(7) { min-width: 90px; } /* MÃ TP */
-.table th:nth-child(8), .table td:nth-child(8) { min-width: 108px; } /* MÃ KHÁCH +20% */
+.table th:nth-child(8), .table td:nth-child(8) { min-width: 130px; } /* MÃ KHÁCH (rộng thêm 20%) */
 .table th:nth-child(9), .table td:nth-child(9) { min-width: 90px; } /* LƯỢNG XUẤT */
 .table th:nth-child(10), .table td:nth-child(10) { min-width: 120px; } /* PO SHIP +20% */
 .table th:nth-child(11), .table td:nth-child(11) { min-width: 77px; } /* CARTON +20% */

@@ -414,6 +414,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return this.getShipmentCheckDisplay(shipment).status === 'ok';
   }
 
+  /** Tổng số lượng đã scan ở tab FG Check theo Shipment + Mã TP (hiển thị cột LƯỢNG KTRA). */
+  getScannedQuantity(shipment: ShipmentItem): number {
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
+    const key = `${shipmentCode}|${materialCode}`;
+    return this.fgCheckScannedQty.get(key) || 0;
+  }
+
   /** So sánh tổng lượng đã check (FG Check cộng dồn) với số lượng shipment theo mã TP. Trả về: ok / excess (Dư) / percentage (% đã check). */
   getShipmentCheckDisplay(shipment: ShipmentItem): { status: 'ok' | 'excess' | 'percentage'; value: number | null } {
     const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
@@ -1824,7 +1832,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Biển số xe': '51K-75600',
         'Nhà máy': 'ASM1',
         'Shipment': 'SHIP001',
-        'Check': 'OK',
+        'Lượng KTRA': 0,
         'Mã TP': 'P001234',
         'Mã Khách': 'CUST001',
         'Lượng Xuất': 100,
@@ -1851,6 +1859,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'Biển số xe': '29A-12345',
         'Nhà máy': 'ASM2',
         'Shipment': 'SHIP002',
+        'Lượng KTRA': 0,
         'Mã TP': 'P002345',
         'Mã Khách': 'CUST002',
         'Lượng Xuất': 200,
@@ -1883,9 +1892,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 12 }, // Biển số xe
       { wch: 10 }, // Nhà máy
       { wch: 12 }, // Shipment
-      { wch: 8 },  // Check
+      { wch: 12 }, // Lượng KTRA
       { wch: 12 }, // Mã TP
-      { wch: 12 }, // Mã Khách
+      { wch: 14 }, // Mã Khách (rộng hơn)
       { wch: 12 }, // Lượng Xuất
       { wch: 15 }, // PO Ship
       { wch: 10 }, // Carton

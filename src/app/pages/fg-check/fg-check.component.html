@@ -18,7 +18,7 @@
           <div class="scan-info-row">
             <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
             <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
-            <span class="scan-info-item">Đã scan: <strong>{{scannedItems.length}} items</strong></span>
+            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedQuantity()}}</strong></span>
           </div>
           <div class="scan-inputs-row">
             <input type="text" 
@@ -121,11 +121,8 @@
             <th>Mã Hàng</th>
             <th>Số Thùng</th>
             <th>Số Lượng</th>
-            <th>Thùng Shipment</th>
-            <th>Lượng Shipment</th>
-            <th>So sánh</th>
             <th>ID Check</th>
-            <th>Reset</th>
+            <th>Time</th>
             <th>Lock</th>
             <th>Pallet No</th>
             <th>Xóa</th>
@@ -134,7 +131,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="14" class="text-center" style="padding: 20px; color: #000000;">
+            <td colspan="11" class="text-center" style="padding: 20px; color: #000000;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -148,17 +145,13 @@
             <td class="code-cell" [class.scanned-customer-code]="item.scannedCustomerCode">{{item.customerCode}}</td>
             <td class="number-cell">{{formatNumber(getDisplayCarton(item))}}</td>
             <td class="number-cell" [class.scanned-quantity]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
-            <td class="number-cell">{{formatNumber(item.shipmentCarton || 0)}}</td>
-            <td class="number-cell">{{formatNumber(item.shipmentQuantity || 0)}}</td>
-            <td class="status-cell">-</td>
-            <td class="code-cell">{{item.checkId}}</td>
-            <td class="action-cell">
-              <button class="btn-reset" 
-                      (click)="resetItem(item)" 
-                      [disabled]="item.isLocked"
-                      title="Reset dữ liệu đã scan">
-                <i class="material-icons">refresh</i>
-              </button>
+            <td class="code-cell code-cell-check-id" 
+                (click)="showCheckTime(item)" 
+                [title]="'Thời gian check: ' + formatCheckTime(item.createdAt)">
+              {{item.scanId || item.checkId}}
+            </td>
+            <td class="code-cell code-cell-time" [title]="formatCheckTime(item.createdAt)">
+              {{formatCheckTime(item.createdAt)}}
             </td>
             <td class="action-cell">
               <input type="checkbox" 
@@ -177,7 +170,7 @@
                      style="text-transform: uppercase;">
             </td>
             <td class="action-cell">
-              <button class="btn-delete" (click)="deleteItem(item)" title="Xóa">
+              <button class="btn-delete" (click)="openDeleteConfirm(item)" title="Xóa">
                 <i class="material-icons">delete</i>
               </button>
             </td>
@@ -217,19 +210,31 @@
     
     <div class="modal-body">
       <div class="form-group" style="margin-bottom: 20px;">
-        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Shipment:</label>
+        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">ID <span style="color: #c00;">*</span> (ASP + 4 số, VD: ASP1234):</label>
+        <input type="text" 
+               #idInput
+               class="form-input check-id-input"
+               [(ngModel)]="scannedCheckId"
+               (keyup.enter)="onIdEnterMoveToShipment()"
+               (input)="scannedCheckId = scannedCheckId.toUpperCase(); scannedCheckId = scannedCheckId.substring(0, 7)"
+               maxlength="7"
+               placeholder="Quét hoặc nhập ID (7 ký tự)"
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
+               autofocus>
+      </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Shipment <span style="color: #c00;">*</span>:</label>
         <input type="text" 
                #shipmentInput
                class="form-input check-shipment-input"
                [(ngModel)]="scannedShipment"
                (keyup.enter)="onShipmentEnterMoveToPallet()"
                placeholder="Nhập hoặc quét mã Shipment"
-               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
-               autofocus>
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
       </div>
       
       <div class="form-group" style="margin-bottom: 20px;">
-        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Pallet:</label>
+        <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Pallet <span style="color: #c00;">*</span>:</label>
         <input type="text" 
                #palletInput
                class="form-input check-pallet-input"
@@ -248,9 +253,9 @@
       <button type="button" 
               class="btn btn-success" 
               (click)="confirmCheckInfo()" 
-              [disabled]="!scannedShipment || !currentPalletNo"
-              [style.opacity]="(!scannedShipment || !currentPalletNo) ? '0.5' : '1'"
-              [style.cursor]="(!scannedShipment || !currentPalletNo) ? 'not-allowed' : 'pointer'">
+              [disabled]="!isCheckIdValid() || !scannedShipment || !currentPalletNo"
+              [style.opacity]="(!isCheckIdValid() || !scannedShipment || !currentPalletNo) ? '0.5' : '1'"
+              [style.cursor]="(!isCheckIdValid() || !scannedShipment || !currentPalletNo) ? 'not-allowed' : 'pointer'">
         <i class="material-icons">check</i>
         Xác nhận
       </button>
@@ -303,6 +308,34 @@
       <button class="btn btn-apply" (click)="changeShipmentCode()" [disabled]="!oldShipmentCode || !newShipmentCode">
         <i class="material-icons">check</i>
         Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup xóa: quét mã quản lý (chỉ scan, không nhập tay) -->
+<div class="modal-overlay" 
+     *ngIf="showDeleteConfirmPopup" 
+     (click)="closeDeleteConfirm()">
+  <div class="modal-container delete-confirm-modal" (click)="$event.stopPropagation()">
+    <h3>Xóa item</h3>
+    <p class="delete-confirm-info" *ngIf="deleteConfirmItem">
+      Shipment: {{deleteConfirmItem.shipment}} | Mã TP: {{deleteConfirmItem.materialCode}}
+    </p>
+    <p class="delete-confirm-hint">Quét mã quản lý (chỉ quét, không nhập tay):</p>
+    <input type="text"
+           #deleteManagerInput
+           class="form-input delete-manager-scan-input"
+           [(ngModel)]="deleteManagerScanInput"
+           (input)="onDeleteManagerScanInput($event)"
+           placeholder="Quét mã..."
+           maxlength="7"
+           autocomplete="off"
+           style="text-transform: uppercase; font-size: 18px;">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-cancel" (click)="closeDeleteConfirm()">
+        <i class="material-icons">close</i>
+        Hủy
       </button>
     </div>
   </div>

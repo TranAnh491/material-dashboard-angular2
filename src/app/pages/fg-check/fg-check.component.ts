@@ -12,6 +12,7 @@ export interface FGCheckItem {
   quantity: number;
   isChecked: boolean;
   checkId: string;
+  scanId?: string; // ID scan khi bắt đầu check (ASP+4 số), dùng hiển thị trong cột ID Check
   checkMode?: 'pn' | 'pn-qty'; // Lưu mode check của item
   shipmentCarton?: number; // Số thùng Shipment từ tab shipment
   shipmentQuantity?: number; // Lượng Shipment từ tab shipment
@@ -58,6 +59,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   showCheckDialog: boolean = false;
   checkStep: number = 0; // 0 = select mode, 1 = shipment input, 2 = scan pallet, 3 = scan material+qty
   checkMode: 'pn' | 'pn-qty' = 'pn';
+  /** ID khi quét: lấy 7 ký tự đầu, định dạng ASP + 4 số (VD: ASP1234) */
+  scannedCheckId: string = '';
   scannedShipment: string = '';
   currentPalletNo: string = ''; // Pallet đang scan
   currentScanInput: string = ''; // Mã hàng đang scan
@@ -86,6 +89,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   showChangeShipmentDialog: boolean = false;
   oldShipmentCode: string = '';
   newShipmentCode: string = '';
+
+  // Popup xóa: quét mã quản lý (chỉ scan)
+  private readonly MANAGER_CODES = ['ASP0106', 'ASP0538', 'ASP0119', 'ASP1761'];
+  showDeleteConfirmPopup: boolean = false;
+  deleteConfirmItem: FGCheckItem | null = null;
+  deleteManagerScanInput: string = '';
+  private deleteScanFirstCharTime: number = 0;
   
   private destroy$ = new Subject<void>();
   isLoading: boolean = false;
@@ -225,6 +235,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             quantity: data.quantity || 0,
             isChecked: data.isChecked || false,
             checkId: data.checkId || '',
+            scanId: data.scanId || undefined,
             checkMode: data.checkMode || 'pn', // Load checkMode từ Firebase
             scannedCustomerCode: data.scannedCustomerCode || false,
             scannedQuantity: data.scannedQuantity || false,
@@ -444,93 +455,29 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     console.log('🐛 Debug complete');
   }
 
-  // Calculate check results for all items
+  // Tính shipmentQuantity/shipmentCarton trong bộ nhớ (không ghi Firebase để tránh chậm)
   calculateCheckResults(): void {
-    console.log('🔍 calculateCheckResults - Total items:', this.items.length);
-    console.log('🔍 calculateCheckResults - Shipment data map size:', this.shipmentDataMap.size);
-    
-    if (!this.itemsLoaded || !this.shipmentDataLoaded) {
-      console.warn('⚠️ Cannot calculate check results: itemsLoaded=', this.itemsLoaded, 'shipmentDataLoaded=', this.shipmentDataLoaded);
-      return;
-    }
-    
+    if (!this.itemsLoaded || !this.shipmentDataLoaded) return;
+
     this.items.forEach(item => {
-      // QUAN TRỌNG: CHỈ DÙNG shipmentCode VÀ materialCode ĐỂ SO SÁNH
-      // Normalize shipmentCode và materialCode để so sánh chính xác
       const shipmentCode = String(item.shipment || '').trim().toUpperCase();
-      const materialCode = String(item.materialCode || '').trim(); // Mã TP - không uppercase
-      
-      console.log(`🔍 Processing item ${item.checkId}: shipmentCode="${shipmentCode}", materialCode="${materialCode}"`);
-      
-      // Kiểm tra có đủ 2 thông tin bắt buộc: shipmentCode và materialCode
+      const materialCode = String(item.materialCode || '').trim();
       if (!shipmentCode || !materialCode) {
-        console.warn(`⚠️ Item ${item.checkId} missing shipmentCode or materialCode - shipmentCode="${shipmentCode}", materialCode="${materialCode}"`);
         item.shipmentQuantity = 0;
         return;
       }
-      
-      // Bước 1: Tìm danh sách shipment records theo shipmentCode
+
       const shipmentDataList = this.shipmentDataMap.get(shipmentCode) || [];
-      console.log(`🔍 Found ${shipmentDataList.length} shipment records for shipmentCode="${shipmentCode}"`);
-      
-      if (shipmentDataList.length > 0) {
-        console.log(`🔍 Shipment records for ${shipmentCode}:`, shipmentDataList.map(s => `materialCode=${s.materialCode}, quantity=${s.quantity}`));
-      } else {
-        console.warn(`⚠️ No shipment records found for shipmentCode="${shipmentCode}"`);
-      }
-      
-      // Bước 2: Tìm matching shipment bằng materialCode (so sánh chính xác)
-      // CHỈ SO SÁNH DỰA VÀO materialCode, KHÔNG DÙNG BẤT KỲ TRƯỜNG NÀO KHÁC
-      const matchingShipment = shipmentDataList.find(s => {
-        const sMaterialCode = String(s.materialCode || '').trim();
-        const match = sMaterialCode === materialCode;
-        if (!match) {
-          console.log(`  ⚠️ MaterialCode mismatch: "${sMaterialCode}" !== "${materialCode}"`);
-        }
-        return match;
-      });
-      
+      const matchingShipment = shipmentDataList.find(s => String(s.materialCode || '').trim() === materialCode);
       if (!matchingShipment) {
-        console.warn(`⚠️ No matching shipment found for item ${item.checkId}`);
-        console.warn(`  - Looking for: shipmentCode="${shipmentCode}", materialCode="${materialCode}"`);
-        console.warn(`  - Available in shipment ${shipmentCode}:`, shipmentDataList.map(s => s.materialCode));
         item.shipmentQuantity = 0;
         return;
       }
-      
-      // Tìm thấy matching shipment dựa vào shipmentCode và materialCode
-      console.log(`✅ Found matching shipment for item ${item.checkId}: shipmentCode="${shipmentCode}", materialCode="${materialCode}", carton=${matchingShipment.carton}, quantity=${matchingShipment.quantity}`);
-      item.shipmentCarton = matchingShipment.carton; // Lưu số thùng từ shipment
-      item.shipmentQuantity = matchingShipment.quantity; // Lưu số lượng từ shipment
-      
-      // Check based on item's checkMode (or current checkMode as fallback)
-      const itemCheckMode = item.checkMode || this.checkMode;
-      
-      if (itemCheckMode === 'pn-qty') {
-        // Check số lượng: so sánh Lượng Xuất (shipment) với Số Lượng quét (FG check)
-        item.checkResult = (item.quantity === matchingShipment.quantity) ? 'Đúng' : 'Sai';
-        console.log(`🔍 Check PN+QTY - Item ${item.checkId}: Quét=${item.quantity}, Shipment=${matchingShipment.quantity}, Result=${item.checkResult}`);
-      } else {
-        // Check số thùng: so sánh Số Thùng quét (FG check) với Số Thùng Shipment
-        item.checkResult = (item.carton === matchingShipment.carton) ? 'Đúng' : 'Sai';
-        console.log(`🔍 Check PN - Item ${item.checkId}: Thùng quét=${item.carton}, Thùng Shipment=${matchingShipment.carton}, Result=${item.checkResult}`);
-      }
-      
-      // LƯU checkResult vào Firebase ngay lập tức
-      if (item.id) {
-        this.firestore.collection('fg-check').doc(item.id).update({
-          checkResult: item.checkResult,
-          shipmentQuantity: item.shipmentQuantity,
-          shipmentCarton: item.shipmentCarton,
-          updatedAt: new Date()
-        }).then(() => {
-          console.log(`💾 Saved checkResult to Firebase: ${item.checkId} = ${item.checkResult}`);
-        }).catch(error => {
-          console.error(`❌ Error saving checkResult for ${item.checkId}:`, error);
-        });
-      }
+
+      item.shipmentCarton = matchingShipment.carton;
+      item.shipmentQuantity = matchingShipment.quantity;
     });
-    
+
     this.applyFilters();
   }
 
@@ -571,6 +518,26 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return Math.floor(quantity / qtyBox);
     }
     return Number(item.carton) || 0;
+  }
+
+  /** Định dạng thời gian check để hiển thị (dd/MM/yyyy HH:mm:ss). */
+  formatCheckTime(date: Date | undefined): string {
+    if (!date) return '—';
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${day}/${month}/${year} ${h}:${m}:${s}`;
+  }
+
+  /** Click vào ID Check: hiển thị thời gian check. */
+  showCheckTime(item: FGCheckItem): void {
+    const timeStr = this.formatCheckTime(item.createdAt);
+    alert(`Thời gian check: ${timeStr}`);
   }
 
   // Kiểm tra xem item đã đủ số lượng/carton chưa
@@ -718,6 +685,32 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Số dòng đã scan của pallet hiện tại (shipment + pallet đang check). Chưa scan gì = 0. */
+  getCurrentPalletScannedCount(): number {
+    const shipment = String(this.scannedShipment || '').trim().toUpperCase();
+    const pallet = String(this.currentPalletNo || '').trim().toUpperCase();
+    if (!shipment || !pallet) return 0;
+    return this.items.filter(item => {
+      const itemShipment = String(item.shipment || '').trim().toUpperCase();
+      const itemPallet = String(item.palletNo || '').trim().toUpperCase();
+      return itemShipment === shipment && itemPallet === pallet;
+    }).length;
+  }
+
+  /** Tổng số lượng (quantity) đã scan của pallet hiện tại – dùng để hiển thị "Đã scan: 160". */
+  getCurrentPalletScannedQuantity(): number {
+    const shipment = String(this.scannedShipment || '').trim().toUpperCase();
+    const pallet = String(this.currentPalletNo || '').trim().toUpperCase();
+    if (!shipment || !pallet) return 0;
+    return this.items
+      .filter(item => {
+        const itemShipment = String(item.shipment || '').trim().toUpperCase();
+        const itemPallet = String(item.palletNo || '').trim().toUpperCase();
+        return itemShipment === shipment && itemPallet === pallet;
+      })
+      .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  }
+
   onSearchChange(event: any): void {
     let searchTerm = event.target.value;
     
@@ -766,9 +759,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.showCheckDialog = true;
     this.cdr.detectChanges();
     
-    // Focus vào ô Số Shipment sau khi popup mở
+    // Focus vào ô ID sau khi popup mở (bắt buộc quét ID trước)
     setTimeout(() => {
-      const input = document.querySelector('.check-shipment-input') as HTMLInputElement;
+      const input = document.querySelector('.check-id-input') as HTMLInputElement;
       if (input) {
         input.focus();
         input.select();
@@ -779,6 +772,44 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   closeCheckDialog(): void {
     this.showCheckDialog = false;
     this.cdr.detectChanges();
+  }
+
+  /** Lấy 7 ký tự đầu từ chuỗi quét ID; định dạng ASP + 4 số. Trả về chuỗi đã chuẩn hóa hoặc rỗng nếu không hợp lệ. */
+  normalizeCheckId(raw: string): string {
+    const s = String(raw || '').trim().toUpperCase();
+    const id7 = s.substring(0, 7);
+    if (id7.length < 7) return id7; // Chưa đủ 7 ký tự thì trả về như cũ để user nhập tiếp
+    const match = /^ASP\d{4}$/.test(id7);
+    return match ? id7 : '';
+  }
+
+  /** Kiểm tra ID đã đúng định dạng ASP + 4 số chưa */
+  isCheckIdValid(): boolean {
+    const id = this.normalizeCheckId(this.scannedCheckId);
+    return id.length === 7 && /^ASP\d{4}$/.test(id);
+  }
+
+  /** Sau khi nhập/quét ID và nhấn Enter → validate, lấy 7 ký tự đầu, nhảy focus sang ô Shipment */
+  onIdEnterMoveToShipment(): void {
+    const raw = String(this.scannedCheckId || '').trim().toUpperCase();
+    const id7 = raw.substring(0, 7);
+    this.scannedCheckId = id7;
+    if (id7.length < 7) {
+      alert('ID phải đủ 7 ký tự, định dạng ASP + 4 số (VD: ASP1234)');
+      return;
+    }
+    if (!/^ASP\d{4}$/.test(id7)) {
+      alert('ID không đúng định dạng. Yêu cầu: ASP + 4 số (VD: ASP1234)');
+      return;
+    }
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const shipmentInput = document.querySelector('.check-shipment-input') as HTMLInputElement;
+      if (shipmentInput) {
+        shipmentInput.focus();
+        shipmentInput.select();
+      }
+    }, 50);
   }
 
   /** Sau khi nhập/quét xong Số Shipment và nhấn Enter → tự nhảy focus sang ô Số Pallet */
@@ -795,26 +826,33 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 50);
   }
 
-  /** Nhấn Enter ở ô Số Pallet → xác nhận (confirm) nếu đã có đủ Shipment + Pallet */
+  /** Nhấn Enter ở ô Số Pallet → xác nhận (confirm) nếu đã có đủ ID + Shipment + Pallet */
   onPalletEnterConfirm(): void {
     this.currentPalletNo = String(this.currentPalletNo || '').trim().toUpperCase();
-    if (this.scannedShipment && this.currentPalletNo) {
+    if (this.isCheckIdValid() && this.scannedShipment && this.currentPalletNo) {
       this.confirmCheckInfo();
     }
   }
 
   confirmCheckInfo(): void {
-    // Kiểm tra đã nhập đủ thông tin
-    if (!this.scannedShipment || !this.currentPalletNo) {
-      alert('Vui lòng nhập đầy đủ Shipment và Pallet!');
+    // Bắt buộc: ID (7 ký tự ASP+4 số), Shipment, Pallet
+    if (!this.scannedCheckId || !this.scannedShipment || !this.currentPalletNo) {
+      alert('Vui lòng nhập đầy đủ ID, Số Shipment và Số Pallet!');
+      return;
+    }
+    const id7 = this.normalizeCheckId(this.scannedCheckId);
+    if (id7.length !== 7 || !/^ASP\d{4}$/.test(id7)) {
+      alert('ID không đúng định dạng. Yêu cầu: 7 ký tự, ASP + 4 số (VD: ASP1234)');
       return;
     }
     
     // Chuẩn hóa dữ liệu
+    this.scannedCheckId = id7;
     this.scannedShipment = String(this.scannedShipment).trim().toUpperCase();
     this.currentPalletNo = String(this.currentPalletNo).trim().toUpperCase();
     
     console.log('✅ Confirm check info:', {
+      id: this.scannedCheckId,
       shipment: this.scannedShipment,
       pallet: this.currentPalletNo
     });
@@ -840,6 +878,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   resetCheck(): void {
     this.checkStep = 0;
     this.checkMode = 'pn-qty'; // Mặc định là PN+QTY
+    this.scannedCheckId = '';
     this.scannedShipment = '';
     this.currentPalletNo = '';
     this.currentScanInput = '';
@@ -1080,6 +1119,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         customerCode: customerCodeUpper,
         scannedCustomerCode: true,
         scannedQuantity: true,
+        ...(this.scannedCheckId ? { scanId: this.scannedCheckId } : {}),
         updatedAt: new Date()
       };
       this.firestore.collection('fg-check').doc(mainId).update(updatePayload)
@@ -1093,6 +1133,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         existingItem.customerCode = customerCodeUpper;
         existingItem.scannedCustomerCode = true;
         existingItem.scannedQuantity = true;
+        if (this.scannedCheckId) existingItem.scanId = this.scannedCheckId;
         existingItem.updatedAt = new Date();
         existingItem.id = mainId;
         (existingItem as any).docIds = undefined;
@@ -1115,6 +1156,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         quantity: quantity,
         isChecked: false,
         checkId: checkId,
+        scanId: this.scannedCheckId || undefined,
         checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
         palletNo: palletNo,
         isLocked: false,
@@ -1191,15 +1233,18 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id];
         const mainId = idsToUpdate[0];
         const restIds = idsToUpdate.slice(1);
-        const updatePromise = this.firestore.collection('fg-check').doc(mainId).update({
+        const updatePayload: any = {
           quantity: newQuantity,
           scannedQuantity: true,
           updatedAt: new Date()
-        })
+        };
+        if (this.scannedCheckId) updatePayload.scanId = this.scannedCheckId;
+        const updatePromise = this.firestore.collection('fg-check').doc(mainId).update(updatePayload)
         .then(() => Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete())))
         .then(() => {
           existingItem.quantity = newQuantity;
           existingItem.scannedQuantity = true;
+          if (this.scannedCheckId) existingItem.scanId = this.scannedCheckId;
           existingItem.updatedAt = new Date();
           existingItem.id = mainId;
           (existingItem as any).docIds = undefined;
@@ -1222,6 +1267,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           quantity: totalQuantity,
           isChecked: false,
           checkId: checkId,
+          scanId: this.scannedCheckId || undefined,
           checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
           palletNo: palletNo,
           isLocked: false,
@@ -1400,6 +1446,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         quantity: 0,
         isChecked: false,
         checkId: checkId,
+        scanId: this.scannedCheckId || undefined,
         checkMode: this.checkMode,
         shipmentCarton: shipmentData.carton, // Lưu số thùng từ shipment
         shipmentQuantity: shipmentData.quantity, // Lưu số lượng từ shipment
@@ -1943,6 +1990,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         quantity: this.checkMode === 'pn-qty' ? quantity : 0, // PN: để 0, PN+QTY: ghi số lượng
         isChecked: false,
         checkId: checkId,
+        scanId: this.scannedCheckId || undefined,
         checkMode: this.checkMode, // Lưu checkMode của item
         scannedCustomerCode: true, // Đã scan mã hàng
         scannedQuantity: this.checkMode === 'pn-qty' && quantity > 0, // Chỉ highlight khi mode PN+QTY
@@ -2105,30 +2153,95 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
   }
 
-  deleteItem(item: FGCheckItem): void {
+  /** Mở popup xóa: bắt buộc quét mã quản lý (chỉ scan). */
+  openDeleteConfirm(item: FGCheckItem): void {
+    this.deleteConfirmItem = item;
+    this.deleteManagerScanInput = '';
+    this.deleteScanFirstCharTime = 0;
+    this.showDeleteConfirmPopup = true;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.querySelector('.delete-manager-scan-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  }
+
+  closeDeleteConfirm(): void {
+    this.showDeleteConfirmPopup = false;
+    this.deleteConfirmItem = null;
+    this.deleteManagerScanInput = '';
+    this.deleteScanFirstCharTime = 0;
+    this.cdr.detectChanges();
+  }
+
+  /** Xử lý input quét mã quản lý: chỉ chấp nhận khi quét nhanh (7 ký tự trong < 200ms), không nhập tay. */
+  onDeleteManagerScanInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    let raw = (input.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const id7 = raw.substring(0, 7);
+    this.deleteManagerScanInput = id7;
+    input.value = id7;
+
+    if (id7.length === 1 && this.deleteScanFirstCharTime === 0) {
+      this.deleteScanFirstCharTime = Date.now();
+    }
+    if (id7.length < 7) {
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const elapsed = Date.now() - this.deleteScanFirstCharTime;
+    if (elapsed > 200) {
+      alert('Chỉ được quét mã, không nhập tay. Vui lòng quét lại.');
+      this.deleteManagerScanInput = '';
+      this.deleteScanFirstCharTime = 0;
+      input.value = '';
+      input.focus();
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const valid = this.MANAGER_CODES.includes(id7);
+    if (valid && this.deleteConfirmItem) {
+      this.doDeleteItem(this.deleteConfirmItem);
+      this.closeDeleteConfirm();
+    } else {
+      alert('Mã quản lý không hợp lệ. Chỉ chấp nhận: ASP0106, ASP0538, ASP0119, ASP1761');
+      this.deleteManagerScanInput = '';
+      this.deleteScanFirstCharTime = 0;
+      input.value = '';
+      input.focus();
+    }
+    this.cdr.detectChanges();
+  }
+
+  /** Thực hiện xóa item sau khi đã xác thực mã quản lý. */
+  doDeleteItem(item: FGCheckItem): void {
     const ids = (item.docIds && item.docIds.length) ? item.docIds : (item.id ? [item.id] : []);
     if (ids.length === 0) {
       alert('❌ Không thể xóa: Không tìm thấy ID');
       return;
     }
+    Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).delete()))
+      .then(() => {
+        const index = this.items.findIndex(i => i.id === item.id || (i.docIds && i.docIds[0] === item.id));
+        if (index > -1) {
+          this.items.splice(index, 1);
+        }
+        this.calculateCheckResults();
+        this.applyFilters();
+        this.cdr.detectChanges();
+      })
+      .catch(error => {
+        console.error('❌ Error deleting item:', error);
+        alert('❌ Lỗi khi xóa: ' + error.message);
+      });
+  }
 
-    if (confirm(`Xác nhận xóa item?\n\nShipment: ${item.shipment}\nMã TP: ${item.materialCode}\nMã Hàng: ${item.customerCode}\nID Check: ${item.checkId}`)) {
-      Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).delete()))
-        .then(() => {
-          console.log('✅ Item(s) deleted from Firebase:', ids.length);
-          const index = this.items.findIndex(i => i.id === item.id || (i.docIds && i.docIds[0] === item.id));
-          if (index > -1) {
-            this.items.splice(index, 1);
-          }
-          this.calculateCheckResults();
-          this.applyFilters();
-          this.cdr.detectChanges();
-        })
-        .catch(error => {
-          console.error('❌ Error deleting item:', error);
-          alert('❌ Lỗi khi xóa: ' + error.message);
-        });
-    }
+  deleteItem(item: FGCheckItem): void {
+    this.openDeleteConfirm(item);
   }
 
   // Complete scanning
