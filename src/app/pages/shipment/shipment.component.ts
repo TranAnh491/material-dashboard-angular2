@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -112,9 +112,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
 
+  // Scroll position tracking
+  private scrollPosition: number = 0;
+  private shouldRestoreScroll: boolean = false;
+  
   constructor(
     private firestore: AngularFirestore,
-    private afAuth: AngularFireAuth
+    private afAuth: AngularFireAuth,
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit(): void {
@@ -165,6 +171,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         
         this.shipments = firebaseShipments;
         this.applyFilters();
+        
+        // Restore scroll position if needed
+        if (this.shouldRestoreScroll) {
+          this.ngZone.runOutsideAngular(() => {
+            setTimeout(() => {
+              this.restoreScrollPosition();
+              this.shouldRestoreScroll = false;
+            }, 0);
+          });
+        }
+        
         console.log('Loaded shipments from Firebase:', this.shipments.length);
       });
   }
@@ -1421,8 +1438,28 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     console.log(`✅ Đã đồng bộ "FWD" = "${newFWDValue}" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
   }
 
+  // Save scroll position before update
+  private saveScrollPosition(): void {
+    const tableContainer = document.querySelector('.table-responsive');
+    if (tableContainer) {
+      this.scrollPosition = tableContainer.scrollTop;
+    }
+  }
+  
+  // Restore scroll position after update
+  private restoreScrollPosition(): void {
+    const tableContainer = document.querySelector('.table-responsive');
+    if (tableContainer && this.scrollPosition > 0) {
+      tableContainer.scrollTop = this.scrollPosition;
+    }
+  }
+  
   updateShipmentInFirebase(shipment: ShipmentItem): void {
     if (shipment.id) {
+      // Save scroll position before update
+      this.saveScrollPosition();
+      this.shouldRestoreScroll = true;
+      
       // Tự động điền Dispatch Date khi Status = "Đã Ship"
       if (shipment.status === 'Đã Ship' && !shipment.actualShipDate) {
         shipment.actualShipDate = new Date();

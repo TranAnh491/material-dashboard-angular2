@@ -342,9 +342,13 @@
                       [(ngModel)]="shipment.shipMethod"
                       (change)="onFWDChange(shipment)">
                 <option value="">Chọn FWD</option>
-                <option value="Sea">Sea</option>
-                <option value="Air">Air</option>
-                <option value="Road">Road</option>
+                <option value="AIR">AIR</option>
+                <option value="SEA">SEA</option>
+                <option value="DHL">DHL</option>
+                <option value="FEDEX">FEDEX</option>
+                <option value="UPS">UPS</option>
+                <option value="EMS">EMS</option>
+                <option value="AIRSPEED">AIRSPEED</option>
               </select>
             </td>
             <td>
@@ -368,6 +372,7 @@
                       (change)="onStatusChange(shipment)">
                 <option value="Chờ soạn">Chờ soạn</option>
                 <option value="Đang soạn">Đang soạn</option>
+                <option value="Chưa Đủ">Chưa Đủ</option>
                 <option value="Đã xong">Đã xong</option>
                 <option value="Đã Ship">Đã Ship</option>
                 <option value="Delay">Delay</option>
@@ -578,9 +583,13 @@
             <label class="input-label">FWD</label>
             <select class="form-input" [(ngModel)]="newShipment.shipMethod">
               <option value="">Chọn phương thức</option>
-              <option value="Sea">Sea</option>
-              <option value="Air">Air</option>
-              <option value="Road">Road</option>
+              <option value="AIR">AIR</option>
+              <option value="SEA">SEA</option>
+              <option value="DHL">DHL</option>
+              <option value="FEDEX">FEDEX</option>
+              <option value="UPS">UPS</option>
+              <option value="EMS">EMS</option>
+              <option value="AIRSPEED">AIRSPEED</option>
             </select>
           </div>
           <div class="input-group">
@@ -605,6 +614,7 @@
             <select class="form-input" [(ngModel)]="newShipment.status">
               <option value="Chờ soạn">Chờ soạn</option>
               <option value="Đang soạn">Đang soạn</option>
+              <option value="Chưa Đủ">Chưa Đủ</option>
               <option value="Đã xong">Đã xong</option>
               <option value="Đã Ship">Đã Ship</option>
               <option value="Delay">Delay</option>
