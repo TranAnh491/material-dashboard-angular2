@@ -385,46 +385,60 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
       const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
       
-      // Get current month and year for filtering
+      // Get current month and year for filtering by deliveryDate
       const currentDate = new Date();
       const currentMonth = currentDate.getMonth() + 1; // 1-12
       const currentYear = currentDate.getFullYear();
       
-      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} for month ${currentMonth}/${currentYear}`);
+      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} in month ${currentMonth}/${currentYear} (by deliveryDate)`);
       
-      // Load work orders from database with monthly filter
+      // Load work orders from database
       this.firestore.collection('work-orders').snapshotChanges().subscribe((actions) => {
         const workOrders = actions.map(a => {
           const data = a.payload.doc.data() as any;
           const id = a.payload.doc.id;
-          return { id, ...data };
+          
+          // Process deliveryDate to ensure proper Date object
+          let deliveryDate: Date | null = null;
+          if (data.deliveryDate) {
+            if (typeof data.deliveryDate === 'object' && data.deliveryDate !== null && 'toDate' in data.deliveryDate) {
+              deliveryDate = data.deliveryDate.toDate();
+            } else if (data.deliveryDate instanceof Date) {
+              deliveryDate = data.deliveryDate;
+            } else {
+              deliveryDate = new Date(data.deliveryDate);
+            }
+          }
+          
+          return { id, ...data, deliveryDate };
         });
         
-        // Filter by factory AND current month/year
+        // Filter by factory AND deliveryDate month/year
         this.workOrders = workOrders.filter(wo => {
           const woFactory = wo.factory || 'ASM1';
-          const woMonth = wo.month || 1;
-          const woYear = wo.year || currentYear;
           
           // Check factory match
           const factoryMatch = factoryFilter.includes(woFactory);
           
-          // Check month/year match
-          const monthYearMatch = woMonth === currentMonth && woYear === currentYear;
+          // Check deliveryDate month/year match
+          let monthYearMatch = false;
+          if (wo.deliveryDate) {
+            const deliveryMonth = wo.deliveryDate.getMonth() + 1;
+            const deliveryYear = wo.deliveryDate.getFullYear();
+            monthYearMatch = deliveryMonth === currentMonth && deliveryYear === currentYear;
+          }
           
           return factoryMatch && monthYearMatch;
         });
         
         this.filteredWorkOrders = [...this.workOrders];
         
-        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (${factoryFilter.join(', ')}) in ${currentMonth}/${currentYear}`);
-        console.log('Work orders:', this.workOrders.map(wo => ({
+        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} with deliveryDate in ${currentMonth}/${currentYear}`);
+        console.log('Sample work orders:', this.workOrders.slice(0, 5).map(wo => ({
           id: wo.id,
           productCode: wo.productCode,
           factory: wo.factory,
           status: wo.status,
-          month: wo.month,
-          year: wo.year,
           deliveryDate: wo.deliveryDate
         })));
         

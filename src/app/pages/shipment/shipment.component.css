@@ -1,15 +1,17 @@
 /* Shipment - Modern Interface */
 :host {
   display: block;
-  height: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-content {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 0px 6px; /* Loại bỏ padding trên để xóa khoảng trống */
+  padding: 0px 6px;
   margin-top: 0px;
+  overflow: hidden;
 }
 
 .container-fluid {
@@ -17,7 +19,8 @@
   display: flex;
   flex-direction: column;
   margin-top: 0px;
-  padding-top: 0px; /* Loại bỏ padding trên */
+  padding-top: 0px;
+  overflow: hidden;
 }
 
 .card-body {
@@ -25,7 +28,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 4px 6px; /* Giảm padding để tận dụng không gian tối đa */
+  padding: 4px 6px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Header Section */
@@ -479,8 +489,8 @@
   font-size: 12px !important; /* Tăng 15%: 10.4px * 1.15 ≈ 12px */
   font-weight: 700 !important; /* Tăng độ đậm từ 600 lên 700 (bold) */
   text-transform: uppercase; /* Chữ in hoa */
-  color: #000000 !important;
-  background: #f8f9fa !important;
+  color: #ffffff !important; /* Màu chữ trắng */
+  background: #2196F3 !important; /* Nền xanh */
   border: 1px solid #dee2e6 !important; /* Viền cho tiêu đề */
   border-bottom: 2px solid #dee2e6 !important;
   position: sticky;
@@ -594,6 +604,26 @@
   vertical-align: middle;
 }
 
+.check-cell.quantity-matched {
+  background-color: #4CAF50 !important;
+  color: white !important;
+  font-weight: 700;
+}
+
+.check-status-cell {
+  min-width: 48px;
+  width: 48px;
+  text-align: center;
+  vertical-align: middle;
+  padding: 6px 2px;
+}
+
+.check-ok-icon {
+  color: #4CAF50;
+  font-size: 24px;
+  vertical-align: middle;
+}
+
 .shipment-check-result {
   font-size: 12px;
   font-weight: 600;
@@ -614,8 +644,23 @@
 .number-cell {
   text-align: right;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
-  min-width: 80px;
-  width: 80px;
+  min-width: 104px;
+  width: 104px;
+}
+
+.customer-cell {
+  min-width: 130px;
+  width: 130px;
+}
+
+.poship-cell {
+  min-width: 130px;
+  width: 130px;
+}
+
+.notes-cell {
+  min-width: 156px;
+  width: 156px;
 }
 
 .date-cell {
@@ -702,7 +747,8 @@
   border-right: 1px solid #dee2e6 !important;
   border-bottom: 2px solid #dee2e6 !important;
   border-left: 1px solid #dee2e6 !important;
-  background: #f8f9fa !important;
+  background: #2196F3 !important; /* Nền xanh */
+  color: #ffffff !important; /* Màu chữ trắng */
   padding: 8px 12px !important;
   text-align: center !important;
   white-space: nowrap !important;

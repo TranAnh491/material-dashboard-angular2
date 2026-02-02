@@ -206,6 +206,7 @@
             <th>FACTORY</th>
             <th>SHIPMENT</th>
             <th>LƯỢNG KTRA</th>
+            <th>CHECK</th>
             <th>MÃ TP</th>
             <th>MÃ KHÁCH</th>
             <th>LƯỢNG XUẤT</th>
@@ -231,7 +232,7 @@
         </thead>
         <tbody>
                           <tr *ngIf="shipments.length === 0">
-                  <td colspan="27" class="text-center" style="padding: 20px; color: #666;">
+                  <td colspan="28" class="text-center" style="padding: 20px; color: #666;">
                     <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
                     <br>
                     Không có dữ liệu
@@ -282,8 +283,11 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Shipment code">
             </td>
-            <td class="check-cell">
+            <td class="check-cell" [class.quantity-matched]="isQuantityMatched(shipment)">
               {{getScannedQuantity(shipment) | number}}
+            </td>
+            <td class="check-status-cell">
+              <i class="material-icons check-ok-icon" *ngIf="isCheckOK(shipment)">check_circle</i>
             </td>
             <td class="code-cell">
               <input type="text"
@@ -292,7 +296,7 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Mã TP">
             </td>
-            <td>
+            <td class="customer-cell">
               <input type="text"
                      class="editable-input"
                      [(ngModel)]="shipment.customerCode"
@@ -306,7 +310,7 @@
                      (input)="onQuantityChange($event, shipment)"
                      placeholder="Lượng">
             </td>
-            <td>
+            <td class="poship-cell">
               <input type="text"
                      class="editable-input"
                      [(ngModel)]="shipment.poShip"
@@ -422,7 +426,7 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Ngày chuẩn bị">
             </td>
-            <td>
+            <td class="notes-cell">
               <input type="text"
                      class="editable-input"
                      [(ngModel)]="shipment.notes"
