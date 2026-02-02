@@ -1824,13 +1824,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Download template
+  // Download template - cột trùng thứ tự với bảng Shipment (NO, Ngày Import ... Ghi chú)
   downloadTemplate(): void {
     const templateData = [
       {
-        'Ngày Import': '26/01/2026',
+        'NO': 1,
+        'Ngày Import': '2026-01-26',
         'Biển số xe': '51K-75600',
-        'Nhà máy': 'ASM1',
+        'Factory': 'ASM1',
         'Shipment': 'SHIP001',
         'Lượng KTRA': 0,
         'Mã TP': 'P001234',
@@ -1844,20 +1845,19 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'FWD': 'Sea',
         'Packing': 'Pallet',
         'Qty Pallet': 5,
-        'Push': true,
-        'PushNo': '001',
         'Status': 'Chờ soạn',
         'Chứng từ': 'Đã có PX',
-        'CS Date': '15/01/2024',
-        'Full Date': '20/01/2024',
-        'Dispatch Date': '25/01/2024',
+        'CS Date': '2024-01-15',
+        'Full Date': '2024-01-20',
+        'Dispatch Date': '2024-01-25',
         'Ngày chuẩn bị': 5,
         'Ghi chú': 'Standard shipment'
       },
       {
-        'Ngày Import': '26/01/2026',
+        'NO': 2,
+        'Ngày Import': '2026-01-26',
         'Biển số xe': '29A-12345',
-        'Nhà máy': 'ASM2',
+        'Factory': 'ASM2',
         'Shipment': 'SHIP002',
         'Lượng KTRA': 0,
         'Mã TP': 'P002345',
@@ -1871,13 +1871,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'FWD': 'Air',
         'Packing': 'Box',
         'Qty Pallet': 3,
-        'Push': false,
-        'PushNo': '000',
         'Status': 'Đang soạn',
         'Chứng từ': 'Full',
-        'CS Date': '16/01/2024',
-        'Full Date': '21/01/2024',
-        'Dispatch Date': '26/01/2024',
+        'CS Date': '2024-01-16',
+        'Full Date': '2024-01-21',
+        'Dispatch Date': '2024-01-26',
         'Ngày chuẩn bị': 3,
         'Ghi chú': 'Urgent shipment'
       }
@@ -1886,32 +1884,31 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
     
-    // Set column widths - updated with new columns
+    // Độ rộng cột theo thứ tự bảng: NO → Ghi chú (không có Print, Xóa, Ẩn)
     const colWidths = [
+      { wch: 5 },  // NO
       { wch: 12 }, // Ngày Import
       { wch: 12 }, // Biển số xe
-      { wch: 10 }, // Nhà máy
+      { wch: 8 },  // Factory
       { wch: 12 }, // Shipment
       { wch: 12 }, // Lượng KTRA
       { wch: 12 }, // Mã TP
-      { wch: 14 }, // Mã Khách (rộng hơn)
+      { wch: 14 }, // Mã Khách
       { wch: 12 }, // Lượng Xuất
       { wch: 15 }, // PO Ship
-      { wch: 10 }, // Carton
-      { wch: 10 }, // QTYBOX
-      { wch: 8 },  // Odd
+      { wch: 8 },  // Carton
+      { wch: 8 },  // QTYBOX
+      { wch: 6 },  // Odd
       { wch: 10 }, // Tồn kho
       { wch: 8 },  // FWD
       { wch: 10 }, // Packing
       { wch: 10 }, // Qty Pallet
-      { wch: 8 },  // Push
-      { wch: 8 },  // PushNo
       { wch: 12 }, // Status
       { wch: 12 }, // Chứng từ
       { wch: 12 }, // CS Date
       { wch: 12 }, // Full Date
       { wch: 15 }, // Dispatch Date
-      { wch: 15 }, // Ngày chuẩn bị
+      { wch: 12 }, // Ngày chuẩn bị
       { wch: 20 }  // Ghi chú
     ];
     ws['!cols'] = colWidths;
