@@ -543,62 +543,106 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private loadShipmentDataFromGoogleSheets() {
-    // Get current month and year for filtering
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1; // 1-12
-    const currentYear = currentDate.getFullYear();
+    // Load shipment data from Firebase collection 'shipments'
+    console.log(`Loading all shipment data from Firebase`);
     
-    console.log(`Loading shipment data for ${currentMonth}/${currentYear}`);
-    
-    // Keep existing shipment loading logic from Google Sheets
-    fetch('https://docs.google.com/spreadsheets/d/1dGfJhDx-JNsFJ0l3kcz8uAHvMtm7GhPeAcUj8pBqx_Q/pub?gid=1580861382&single=true&output=csv')
-      .then(res => res.text())
-      .then(csv => {
-        const rows = csv.split('\n').map(row => row.split(','));
-
-        // Parse shipment data from CSV
-        let totalShipments = 0;
-        let completedShipments = 0;
-        
-        for (let cells of rows) {
-          if (cells[0]?.trim().toLowerCase() === "shipment") {
-            // Try to parse the shipment value as "completed/total" format
-            const shipmentValue = cells[1]?.trim();
-            if (shipmentValue && shipmentValue.includes('/')) {
-              const parts = shipmentValue.split('/');
-              completedShipments = parseInt(parts[0]) || 0;
-              totalShipments = parseInt(parts[1]) || 0;
-            } else {
-              // Fallback to single value
-              this.shipment = shipmentValue || "0/0";
-            }
-          }
-        }
-        
-        // Set shipment display with monthly context
-        this.shipment = `${completedShipments}/${totalShipments}`;
-        console.log(`Shipment data for ${currentMonth}/${currentYear}: ${this.shipment} (completed/total)`);
-
-        // Shipment Status (keep existing logic for next 7 days)
-        this.shipmentStatus = [];
-        for (let i = 31; i < rows.length; i++) {
-          if (!rows[i] || !rows[i][0] || rows[i][0].trim() === '') break;
-          if (rows[i][0].trim().toLowerCase() === 'ship date') continue;
-
-          this.shipmentStatus.push({
-            shipDate: rows[i][0]?.trim(),
-            shipment: rows[i][1]?.trim(),
-            customer: rows[i][2]?.trim(),
-            carton: rows[i][3]?.trim(),
-            statusDetail: rows[i][4]?.trim()
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error loading shipment data:', error);
-        // Fallback values
-        this.shipment = "0/0";
+    this.firestore.collection('shipments').get().subscribe(snapshot => {
+      const allShipments = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          id: doc.id,
+          ...data,
+          requestDate: data.requestDate ? (data.requestDate.toDate ? data.requestDate.toDate() : new Date(data.requestDate)) : null,
+          actualShipDate: data.actualShipDate ? (data.actualShipDate.toDate ? data.actualShipDate.toDate() : new Date(data.actualShipDate)) : null,
+          status: data.status || 'Chờ soạn'
+        };
       });
+      
+      // Group by shipmentCode (đếm tất cả shipments, không filter theo tháng)
+      const shipmentGroups = new Map<string, any[]>();
+      allShipments.forEach(s => {
+        const code = String(s.shipmentCode || '').trim().toUpperCase();
+        if (!code) return; // Skip empty shipment codes
+        if (!shipmentGroups.has(code)) {
+          shipmentGroups.set(code, []);
+        }
+        shipmentGroups.get(code)!.push(s);
+      });
+      
+      // Count total unique shipments
+      const totalShipments = shipmentGroups.size;
+      
+      // Count completed shipments (all items in shipment have status "Đã Ship")
+      let completedShipments = 0;
+      shipmentGroups.forEach((items, shipmentCode) => {
+        const allShipped = items.every(item => item.status === 'Đã Ship');
+        if (allShipped) {
+          completedShipments++;
+        }
+      });
+      
+      this.shipment = `${completedShipments}/${totalShipments}`;
+      console.log(`Total Shipments: ${this.shipment} (completed/total shipments)`);
+      console.log(`Breakdown: ${completedShipments} shipments fully shipped out of ${totalShipments} total shipments`);
+      
+      // Shipment Status for next 7 days
+      this.updateShipmentStatus(allShipments);
+    }, error => {
+      console.error('Error loading shipment data from Firebase:', error);
+      this.shipment = "0/0";
+      this.shipmentStatus = [];
+    });
+  }
+  
+  private updateShipmentStatus(allShipments: any[]) {
+    this.shipmentStatus = [];
+    const today = new Date();
+    
+    console.log('Updating shipment status for next 7 days starting from:', today.toDateString());
+    
+    // Generate next 7 days
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + i);
+      
+      const dateStr = targetDate.toLocaleDateString('vi-VN', { 
+        day: '2-digit', 
+        month: '2-digit' 
+      });
+      
+      // Find shipments for this date (based on actualShipDate)
+      const shipmentsForDate = allShipments.filter(s => {
+        if (!s.actualShipDate) return false;
+        const shipDate = s.actualShipDate;
+        return shipDate.toDateString() === targetDate.toDateString();
+      });
+      
+      // Group by shipment code
+      const shipmentGroups = new Map<string, any[]>();
+      shipmentsForDate.forEach(s => {
+        const code = String(s.shipmentCode || '').trim().toUpperCase();
+        if (!shipmentGroups.has(code)) {
+          shipmentGroups.set(code, []);
+        }
+        shipmentGroups.get(code)!.push(s);
+      });
+      
+      // Create rows for each shipment code on this date
+      shipmentGroups.forEach((items, shipmentCode) => {
+        const totalCartons = items.reduce((sum, item) => sum + (item.carton || 0), 0);
+        const statuses = [...new Set(items.map(item => item.status || ''))].join(', ');
+        
+        this.shipmentStatus.push({
+          shipDate: dateStr,
+          shipment: shipmentCode,
+          customer: '', // Để trống cột Customer
+          carton: totalCartons > 0 ? totalCartons.toString() : '—',
+          statusDetail: statuses || '—'
+        });
+      });
+    }
+    
+    console.log(`Updated Shipment Status for next 7 days:`, this.shipmentStatus);
   }
 
   private createCharts() {
