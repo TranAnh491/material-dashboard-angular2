@@ -2,9 +2,9 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-// Label in barcode 1D (Code128), không dùng QR code
 
 export interface ShipmentItem {
   id?: string;
@@ -118,13 +118,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.loadShipmentsFromFirebase();
-    this.loadFGInventoryCache();
-    this.loadFGCheckStatus(); // Load FG Check status
     // Fix date format issues - use proper date initialization
     this.startDate = new Date('2020-01-01');
     this.endDate = new Date('2030-12-31');
-    this.applyFilters();
+    
+    // Load dữ liệu - chỉ shipments dùng realtime, các collection khác load 1 lần
+    this.loadShipmentsFromFirebase();
+    this.loadFGInventoryCacheOnce();
+    this.loadFGCheckStatusOnce();
+    // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
   }
 
   ngOnDestroy(): void {
@@ -177,9 +179,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.isDropdownOpen = false;
   }
 
-  // Get total shipments count
+  // Get total shipments count (đếm số shipment duy nhất, bỏ dòng trùng)
   getTotalShipments(): number {
-    return this.filteredShipments.length;
+    const uniqueShipments = new Set(this.filteredShipments.map(s => String(s.shipmentCode || '').trim().toUpperCase()));
+    return uniqueShipments.size;
   }
 
   // Get completed shipments count
@@ -237,35 +240,24 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return isInDateRange && matchesSearch;
     });
     
-    // Sắp xếp: 1) CS Date (requestDate), 2) Ngày Import (importDate), 3) Số lô (shipmentCode), 4) Mã TP (materialCode)
+    // Sắp xếp: 1) Dispatch Date, 2) Shipment Code, 3) Mã TP (A,B,C)
     this.filteredShipments.sort((a, b) => {
-      // Bước 1: So sánh CS Date (requestDate) - ngày sớm nhất lên đầu
-      const csDateA = a.requestDate ? new Date(a.requestDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const csDateB = b.requestDate ? new Date(b.requestDate).getTime() : Number.MAX_SAFE_INTEGER;
-      
-      // Null dates xuống cuối, ngày sớm nhất lên đầu
-      if (csDateA !== csDateB) {
-        return csDateA - csDateB;
+      // Bước 1: So sánh Dispatch Date (actualShipDate) - ngày sớm nhất lên đầu
+      const dispatchA = a.actualShipDate ? new Date(a.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dispatchB = b.actualShipDate ? new Date(b.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      if (dispatchA !== dispatchB) {
+        return dispatchA - dispatchB;
       }
       
-      // Bước 2: Nếu CS Date giống nhau, so sánh Ngày Import (importDate)
-      const importDateA = a.importDate ? new Date(a.importDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const importDateB = b.importDate ? new Date(b.importDate).getTime() : Number.MAX_SAFE_INTEGER;
-      
-      if (importDateA !== importDateB) {
-        return importDateA - importDateB;
-      }
-      
-      // Bước 3: Nếu Ngày Import giống nhau, so sánh Số lô (shipmentCode) - sắp theo A, B, C
+      // Bước 2: Nếu Dispatch Date giống nhau, so sánh Shipment Code - sắp theo A, B, C
       const shipmentA = String(a.shipmentCode || '').toUpperCase();
       const shipmentB = String(b.shipmentCode || '').toUpperCase();
       const shipmentCompare = shipmentA.localeCompare(shipmentB);
-      
       if (shipmentCompare !== 0) {
         return shipmentCompare;
       }
       
-      // Bước 4: Nếu Số lô giống nhau, so sánh Mã TP (materialCode) - sắp theo A, B, C
+      // Bước 3: Nếu Shipment giống nhau, so sánh Mã TP (materialCode) - sắp theo A, B, C
       const materialA = String(a.materialCode || '').toUpperCase();
       const materialB = String(b.materialCode || '').toUpperCase();
       return materialA.localeCompare(materialB);
@@ -385,6 +377,37 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Load FG Check: realtime + cộng dồn toàn bộ số lượng đã check (tab FG check) theo shipmentCode + materialCode (không so sánh đúng/sai)
+  // Load FG Check status - one-time load (tối ưu performance)
+  loadFGCheckStatusOnce(): void {
+    this.firestore.collection('fg-check')
+      .get()
+      .toPromise()
+      .then((snapshot) => {
+        this.fgCheckScannedQty.clear();
+        
+        if (snapshot) {
+          snapshot.forEach(doc => {
+            const data = doc.data() as any;
+            const shipmentCode = String(data.shipment || '').trim().toUpperCase();
+            const materialCode = String(data.materialCode || '').trim().toUpperCase();
+            const quantity = Number(data.quantity) || 0;
+            
+            if (shipmentCode && materialCode) {
+              const key = `${shipmentCode}|${materialCode}`;
+              const current = this.fgCheckScannedQty.get(key) || 0;
+              this.fgCheckScannedQty.set(key, current + quantity);
+            }
+          });
+        }
+        
+        console.log('✅ FG Check loaded (one-time):', this.fgCheckScannedQty.size, 'keys');
+      })
+      .catch(error => {
+        console.error('Error loading FG Check status:', error);
+      });
+  }
+  
+  // Load FG Check status - realtime (deprecated, giữ lại để tương thích)
   loadFGCheckStatus(): void {
     this.firestore.collection('fg-check')
       .snapshotChanges()
@@ -420,6 +443,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
     const key = `${shipmentCode}|${materialCode}`;
     return this.fgCheckScannedQty.get(key) || 0;
+  }
+
+  /** Kiểm tra xem dòng hiện tại có phải là dòng đầu tiên của shipment mới không (để vẽ đường kẻ phân biệt). */
+  isFirstOfShipment(index: number): boolean {
+    if (index === 0) return false; // Dòng đầu tiên không cần border
+    const current = this.filteredShipments[index];
+    const previous = this.filteredShipments[index - 1];
+    return current.shipmentCode !== previous.shipmentCode;
   }
 
   /** So sánh tổng lượng đã check (FG Check cộng dồn) với số lượng shipment theo mã TP. Trả về: ok / excess (Dư) / percentage (% đã check). */
@@ -460,7 +491,84 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     alert(debugMessage);
   }
 
-  // Load FG Inventory cache for better performance
+  // Load FG Inventory cache - one-time load (tối ưu performance)
+  async loadFGInventoryCacheOnce(): Promise<void> {
+    try {
+      // Load all three collections at once
+      const [fgInventorySnapshot, fgInSnapshot, fgExportSnapshot] = await Promise.all([
+        this.firestore.collection('fg-inventory').get().toPromise(),
+        this.firestore.collection('fg-in').get().toPromise(),
+        this.firestore.collection('fg-export').get().toPromise()
+      ]);
+      
+      // Clear cache
+      this.fgInventoryCache.clear();
+      
+      // Group by materialCode and get tonDau from fg-inventory
+      const materialData: {[key: string]: {tonDau: number, nhap: number, xuat: number}} = {};
+      
+      // Process fg-inventory data
+      if (fgInventorySnapshot) {
+        fgInventorySnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const materialCode = data.materialCode || '';
+          const tonDau = data.tonDau || 0;
+          
+          if (materialCode) {
+            if (!materialData[materialCode]) {
+              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
+            }
+            materialData[materialCode].tonDau += tonDau;
+          }
+        });
+      }
+      
+      // Process fg-in data
+      if (fgInSnapshot) {
+        fgInSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const materialCode = data.materialCode || '';
+          const quantity = data.quantity || 0;
+          
+          if (materialCode) {
+            if (!materialData[materialCode]) {
+              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
+            }
+            materialData[materialCode].nhap += quantity;
+          }
+        });
+      }
+      
+      // Process fg-export data
+      if (fgExportSnapshot) {
+        fgExportSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          const materialCode = data.materialCode || '';
+          const quantity = data.quantity || 0;
+          
+          if (materialCode) {
+            if (!materialData[materialCode]) {
+              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
+            }
+            materialData[materialCode].xuat += quantity;
+          }
+        });
+      }
+      
+      // Calculate final ton for each material
+      Object.keys(materialData).forEach(materialCode => {
+        const data = materialData[materialCode];
+        const calculatedTon = data.tonDau + data.nhap - data.xuat;
+        this.fgInventoryCache.set(materialCode, calculatedTon);
+      });
+      
+      console.log('✅ FG Inventory cache loaded (one-time):', this.fgInventoryCache.size, 'materials');
+    } catch (error) {
+      console.error('Error loading FG Inventory cache:', error);
+    }
+  }
+  
+  // Load FG Inventory cache - realtime (deprecated, giữ lại để tương thích)
   loadFGInventoryCache(): void {
     // Use combineLatest to load data from all three collections
     const fgInventory$ = this.firestore.collection('fg-inventory').snapshotChanges();
@@ -557,11 +665,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return inventory;
   }
 
-  // Force refresh FG Inventory cache
+  // Force refresh FG Inventory cache và FG Check status
   refreshFGInventoryCache(): void {
-    console.log('🔄 Refreshing FG Inventory cache...');
-    this.loadFGInventoryCache();
-    alert('✅ Đã refresh tồn kho từ FG Inventory!\n\nDữ liệu sẽ được cập nhật trong vài giây.');
+    console.log('🔄 Refreshing FG Inventory cache and FG Check status...');
+    this.loadFGInventoryCacheOnce();
+    this.loadFGCheckStatusOnce();
+    alert('✅ Đã refresh tồn kho và trạng thái Check!\n\nDữ liệu đã được cập nhật.');
   }
 
   // Debug method to compare inventory data
@@ -1582,15 +1691,39 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   private async processExcelFile(file: File): Promise<void> {
     try {
       const data = await this.readExcelFile(file);
-      const shipments = this.parseExcelData(data);
+      const parsedShipments = this.parseExcelData(data);
       
-      this.shipments = [...this.shipments, ...shipments];
+      // Kiểm tra trùng lặp: bỏ qua shipment có cùng shipmentCode + materialCode
+      const toImport: ShipmentItem[] = [];
+      const skipped: string[] = [];
+      parsedShipments.forEach(imported => {
+        const shipCode = String(imported.shipmentCode || '').trim().toUpperCase();
+        const matCode = String(imported.materialCode || '').trim().toUpperCase();
+        const isDuplicate = this.shipments.some(existing => {
+          const exShip = String(existing.shipmentCode || '').trim().toUpperCase();
+          const exMat = String(existing.materialCode || '').trim().toUpperCase();
+          return exShip === shipCode && exMat === matCode;
+        });
+        if (isDuplicate) {
+          skipped.push(`${shipCode} - ${matCode}`);
+        } else {
+          toImport.push(imported);
+        }
+      });
+      
+      this.shipments = [...this.shipments, ...toImport];
       this.applyFilters();
       
-      // Save to Firebase
-      this.saveShipmentsToFirebase(shipments);
+      // Save to Firebase (chỉ shipment không trùng)
+      if (toImport.length > 0) {
+        this.saveShipmentsToFirebase(toImport);
+      }
       
-      alert(`✅ Đã import thành công ${shipments.length} shipments từ file Excel!`);
+      let message = `✅ Đã import thành công ${toImport.length} shipments từ file Excel!`;
+      if (skipped.length > 0) {
+        message += `\n\n⚠️ Bỏ qua ${skipped.length} shipment do trùng lặp:\n${skipped.join('\n')}`;
+      }
+      alert(message);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
@@ -2065,6 +2198,100 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('❌ Error printing pallet labels:', error);
       alert('❌ Lỗi khi in tem pallet: ' + error.message);
     }
+  }
+
+  /** In SHIPMENT ORDER: giấy A4, toàn bộ thông tin shipment + mã QR + ký tên soạn */
+  async printShipmentOrder(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const s = this.selectedShipmentForPrint;
+    const fmtDate = (d: Date | null | undefined): string => {
+      if (!d) return '—';
+      const x = new Date(d);
+      return isNaN(x.getTime()) ? '—' : `${String(x.getDate()).padStart(2, '0')}/${String(x.getMonth() + 1).padStart(2, '0')}/${x.getFullYear()}`;
+    };
+    const qrData = `${s.shipmentCode || ''}|${s.materialCode || ''}|${s.poShip || ''}`;
+    let qrDataUrl = '';
+    try {
+      qrDataUrl = await QRCode.toDataURL(qrData, { width: 160, margin: 1 });
+    } catch (e) {
+      console.error('QR generate error:', e);
+    }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
+      return;
+    }
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SHIPMENT ORDER - ${this.escapeHtml(String(s.shipmentCode || ''))}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; padding: 15mm; color: #000; }
+    h1 { font-size: 18px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 6px; }
+    table.info { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    table.info th, table.info td { border: 1px solid #000; padding: 6px 8px; text-align: left; }
+    table.info th { width: 28%; background: #f0f0f0; font-weight: 600; }
+    .qr-block { margin: 16px 0; text-align: center; }
+    .qr-block img { max-width: 160px; height: auto; }
+    .sign-line { margin-top: 24px; padding-top: 8px; border-top: 1px solid #000; }
+    .sign-label { font-size: 11px; font-style: italic; margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+  <h1>SHIPMENT ORDER</h1>
+  <table class="info">
+    <tr><th>Shipment</th><td>${this.escapeHtml(String(s.shipmentCode || ''))}</td></tr>
+    <tr><th>Mã TP</th><td>${this.escapeHtml(String(s.materialCode || ''))}</td></tr>
+    <tr><th>Mã Khách</th><td>${this.escapeHtml(String(s.customerCode || ''))}</td></tr>
+    <tr><th>Số lượng</th><td>${this.escapeHtml(String(s.quantity ?? ''))}</td></tr>
+    <tr><th>Số PO</th><td>${this.escapeHtml(String(s.poShip || ''))}</td></tr>
+    <tr><th>Carton</th><td>${this.escapeHtml(String(s.carton ?? ''))}</td></tr>
+    <tr><th>QtyBox</th><td>${this.escapeHtml(String(s.qtyBox ?? ''))}</td></tr>
+    <tr><th>Odd</th><td>${this.escapeHtml(String(s.odd ?? ''))}</td></tr>
+    <tr><th>Factory</th><td>${this.escapeHtml(String(s.factory || ''))}</td></tr>
+    <tr><th>Biển số xe</th><td>${this.escapeHtml(String(s.vehicleNumber || ''))}</td></tr>
+    <tr><th>Ngày Import</th><td>${fmtDate(s.importDate)}</td></tr>
+    <tr><th>Packing</th><td>${this.escapeHtml(String(s.packing || ''))}</td></tr>
+    <tr><th>Qty Pallet</th><td>${this.escapeHtml(String(s.qtyPallet ?? ''))}</td></tr>
+    <tr><th>Status</th><td>${this.escapeHtml(String(s.status || ''))}</td></tr>
+    <tr><th>Chứng từ</th><td>${this.escapeHtml(String(s.document || ''))}</td></tr>
+    <tr><th>CS Date</th><td>${fmtDate(s.requestDate)}</td></tr>
+    <tr><th>Full Date</th><td>${fmtDate(s.fullDate)}</td></tr>
+    <tr><th>Dispatch Date</th><td>${fmtDate(s.actualShipDate)}</td></tr>
+    <tr><th>Ngày chuẩn bị</th><td>${this.escapeHtml(String(s.dayPre ?? ''))}</td></tr>
+    <tr><th>Ghi chú</th><td>${this.escapeHtml(String(s.notes || ''))}</td></tr>
+  </table>
+  <div class="qr-block">
+    <p style="margin-bottom: 8px;"><strong>Mã QR Shipment</strong></p>
+    ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
+  </div>
+  <div class="sign-line">
+    <div class="sign-label">Ký tên soạn</div>
+    <div style="height: 36px; border-bottom: 1px solid #000;"></div>
+  </div>
+</body>
+</html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 300);
+    };
+    setTimeout(() => {
+      if (printWindow && !printWindow.closed) {
+        printWindow.focus();
+        printWindow.print();
+      }
+    }, 800);
+    this.closePrintLabelDialog();
   }
 
   // Generate and print single 1D barcode label (Code128)

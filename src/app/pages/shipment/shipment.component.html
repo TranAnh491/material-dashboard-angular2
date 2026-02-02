@@ -4,8 +4,10 @@
     <div class="row">
       <div class="col-md-12">
         <div class="card">
-          <!-- Summary Cards -->
-          <div class="row summary-row">
+          <!-- Sticky Header Wrapper -->
+          <div class="sticky-header-wrapper">
+            <!-- Summary Cards -->
+            <div class="row summary-row">
             <div class="col-lg-2 col-md-4 col-sm-6">
               <div class="card card-stats compact-stats summary-card">
                 <div class="card-header">
@@ -188,6 +190,8 @@
               </div>
             </div>
           </div>
+          </div>
+          <!-- End Sticky Header Wrapper -->
           
           <div class="card-body">
     
@@ -235,7 +239,8 @@
                 </tr>
           
                     <tr *ngFor="let shipment of filteredShipments; let i = index" 
-                        [class.checked-row]="isShipmentChecked(shipment)">
+                        [class.checked-row]="isShipmentChecked(shipment)"
+                        [class.shipment-separator]="isFirstOfShipment(i)">
             <td class="row-header">{{i + 1}}</td>
             
             <!-- Ngày Import -->
@@ -711,6 +716,14 @@
           <div class="btn-content">
             <span class="btn-title">Pallet Labels</span>
             <small class="btn-desc">In nhiều tem barcode 1D theo Qty Pallet</small>
+          </div>
+        </button>
+        
+        <button class="print-option-btn shipment-order-btn" (click)="printShipmentOrder()">
+          <i class="material-icons">description</i>
+          <div class="btn-content">
+            <span class="btn-title">SHIPMENT ORDER</span>
+            <small class="btn-desc">In A4: toàn bộ thông tin shipment, mã QR, ký tên soạn</small>
           </div>
         </button>
       </div>

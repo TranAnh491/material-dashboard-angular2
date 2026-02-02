@@ -57,6 +57,17 @@
   color: #000000;
 }
 
+/* Sticky Header Wrapper - cố định header khi scroll */
+.sticky-header-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  background: #ffffff;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 /* Summary Cards */
 .summary-row {
   margin-bottom: 8px;
@@ -402,11 +413,14 @@
   text-align: center;
 }
 
-/* Table Section */
+/* Table Section - container scroll riêng cho tbody */
 .table-responsive {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto; /* Chỉ scroll vertical */
+  overflow-x: auto; /* Scroll horizontal nếu cần */
   background: #ffffff;
+  position: relative;
+  max-height: calc(100vh - 250px); /* Giới hạn chiều cao để có scroll riêng */
   border-radius: 6px;
   border: 1px solid #e9ecef;
   max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
@@ -460,7 +474,7 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Cùng font chữ */
 }
 
-/* Cố định size dòng tiêu đề */
+/* Cố định size dòng tiêu đề - sticky ngay dưới header wrapper */
 .table th {
   font-size: 12px !important; /* Tăng 15%: 10.4px * 1.15 ≈ 12px */
   font-weight: 700 !important; /* Tăng độ đậm từ 600 lên 700 (bold) */
@@ -470,8 +484,8 @@
   border: 1px solid #dee2e6 !important; /* Viền cho tiêu đề */
   border-bottom: 2px solid #dee2e6 !important;
   position: sticky;
-  top: 0;
-  z-index: 10;
+  top: 0; /* Sẽ được tính relative so với table-responsive container */
+  z-index: 100; /* Cao hơn tbody nhưng trong container */
   white-space: nowrap !important; /* Không xuống dòng */
   overflow: hidden;
   text-overflow: ellipsis;
@@ -652,34 +666,34 @@
 .data-table th:nth-child(18), .data-table td:nth-child(18) { width: 150px; } /* Ghi chú */
 .data-table th:nth-child(19), .data-table td:nth-child(19) { width: 80px; } /* Xóa */
 
-/* Cột tự mở rộng/thu nhỏ theo nội dung - chỉ set min-width, không fix width */
-.table th:nth-child(1), .table td:nth-child(1) { min-width: 48px; } /* NO */
-.table th:nth-child(2), .table td:nth-child(2) { min-width: 100px; } /* NGÀY IMPORT */
-.table th:nth-child(3), .table td:nth-child(3) { min-width: 88px; } /* BIỂN SỐ XE */
-.table th:nth-child(4), .table td:nth-child(4) { min-width: 72px; } /* NHÀ MÁY */
-.table th:nth-child(5), .table td:nth-child(5) { min-width: 90px; } /* SHIPMENT */
-.table th:nth-child(6), .table td:nth-child(6) { min-width: 72px; } /* LƯỢNG KTRA */
-.table th:nth-child(7), .table td:nth-child(7) { min-width: 90px; } /* MÃ TP */
-.table th:nth-child(8), .table td:nth-child(8) { min-width: 130px; } /* MÃ KHÁCH (rộng thêm 20%) */
-.table th:nth-child(9), .table td:nth-child(9) { min-width: 90px; } /* LƯỢNG XUẤT */
-.table th:nth-child(10), .table td:nth-child(10) { min-width: 120px; } /* PO SHIP +20% */
-.table th:nth-child(11), .table td:nth-child(11) { min-width: 77px; } /* CARTON +20% */
-.table th:nth-child(12), .table td:nth-child(12) { min-width: 64px; } /* QTYBOX */
-.table th:nth-child(13), .table td:nth-child(13) { min-width: 56px; } /* ODD */
-.table th:nth-child(14), .table td:nth-child(14) { min-width: 80px; } /* TỒN KHO */
-.table th:nth-child(15), .table td:nth-child(15) { min-width: 72px; } /* FWD */
-.table th:nth-child(16), .table td:nth-child(16) { min-width: 72px; } /* PACKING */
-.table th:nth-child(17), .table td:nth-child(17) { min-width: 80px; } /* QTY PALLET */
-.table th:nth-child(18), .table td:nth-child(18) { min-width: 106px; } /* STATUS +20% */
-.table th:nth-child(19), .table td:nth-child(19) { min-width: 82px; } /* CHỨNG TỪ */
-.table th:nth-child(20), .table td:nth-child(20) { min-width: 96px; } /* CS DATE */
-.table th:nth-child(21), .table td:nth-child(21) { min-width: 96px; } /* FULL DATE */
-.table th:nth-child(22), .table td:nth-child(22) { min-width: 110px; } /* DISPATCH DATE */
-.table th:nth-child(23), .table td:nth-child(23) { min-width: 80px; } /* NGÀY CHUẨN BỊ */
-.table th:nth-child(24), .table td:nth-child(24) { min-width: 120px; } /* GHI CHÚ */
-.table th:nth-child(25), .table td:nth-child(25) { min-width: 56px; } /* PRINT */
-.table th:nth-child(26), .table td:nth-child(26) { min-width: 56px; } /* XÓA */
-.table th:nth-child(27), .table td:nth-child(27) { min-width: 56px; } /* ẨN */
+/* Cột tự mở rộng/thu nhỏ theo nội dung - tăng min-width ~20-30% */
+.table th:nth-child(1), .table td:nth-child(1) { min-width: 56px; } /* NO +15% */
+.table th:nth-child(2), .table td:nth-child(2) { min-width: 120px; } /* NGÀY IMPORT +20% */
+.table th:nth-child(3), .table td:nth-child(3) { min-width: 105px; } /* BIỂN SỐ XE +20% */
+.table th:nth-child(4), .table td:nth-child(4) { min-width: 86px; } /* NHÀ MÁY +20% */
+.table th:nth-child(5), .table td:nth-child(5) { min-width: 110px; } /* SHIPMENT +22% */
+.table th:nth-child(6), .table td:nth-child(6) { min-width: 90px; } /* LƯỢNG KTRA +25% */
+.table th:nth-child(7), .table td:nth-child(7) { min-width: 110px; } /* MÃ TP +22% */
+.table th:nth-child(8), .table td:nth-child(8) { min-width: 155px; } /* MÃ KHÁCH +20% từ 130 */
+.table th:nth-child(9), .table td:nth-child(9) { min-width: 110px; } /* LƯỢNG XUẤT +22% */
+.table th:nth-child(10), .table td:nth-child(10) { min-width: 145px; } /* PO SHIP +20% */
+.table th:nth-child(11), .table td:nth-child(11) { min-width: 92px; } /* CARTON +20% */
+.table th:nth-child(12), .table td:nth-child(12) { min-width: 77px; } /* QTYBOX +20% */
+.table th:nth-child(13), .table td:nth-child(13) { min-width: 67px; } /* ODD +20% */
+.table th:nth-child(14), .table td:nth-child(14) { min-width: 96px; } /* TỒN KHO +20% */
+.table th:nth-child(15), .table td:nth-child(15) { min-width: 86px; } /* FWD +20% */
+.table th:nth-child(16), .table td:nth-child(16) { min-width: 86px; } /* PACKING +20% */
+.table th:nth-child(17), .table td:nth-child(17) { min-width: 96px; } /* QTY PALLET +20% */
+.table th:nth-child(18), .table td:nth-child(18) { min-width: 127px; } /* STATUS +20% */
+.table th:nth-child(19), .table td:nth-child(19) { min-width: 98px; } /* CHỨNG TỪ +20% */
+.table th:nth-child(20), .table td:nth-child(20) { min-width: 115px; } /* CS DATE +20% */
+.table th:nth-child(21), .table td:nth-child(21) { min-width: 115px; } /* FULL DATE +20% */
+.table th:nth-child(22), .table td:nth-child(22) { min-width: 132px; } /* DISPATCH DATE +20% */
+.table th:nth-child(23), .table td:nth-child(23) { min-width: 96px; } /* NGÀY CHUẨN BỊ +20% */
+.table th:nth-child(24), .table td:nth-child(24) { min-width: 145px; } /* GHI CHÚ +20% */
+.table th:nth-child(25), .table td:nth-child(25) { min-width: 67px; } /* PRINT +20% */
+.table th:nth-child(26), .table td:nth-child(26) { min-width: 67px; } /* XÓA +20% */
+.table th:nth-child(27), .table td:nth-child(27) { min-width: 67px; } /* ẨN +20% */
 
 /* Cột Ẩn (cột cuối cùng): có tiêu đề "ẨN" và viền ngang dọc đầy đủ */
 .table th.col-hidden-header,
@@ -758,6 +772,11 @@
 .table td input.editable-input.vehicle-number-filled {
   color: #d32f2f !important;
   font-weight: 700 !important;
+}
+
+/* Shipment separator - đường kẻ xám phân biệt giữa các shipment */
+.shipment-separator td {
+  border-top: 4px solid #999 !important;
 }
 
 .editable-input:focus {
@@ -1328,6 +1347,16 @@ input[type="date"]::-webkit-clear-button {
 .print-option-btn.pallet-btn:hover {
   background: #e8f5e9;
   border-color: #1e7e34;
+}
+
+.print-option-btn.shipment-order-btn {
+  border-color: #6f42c1;
+  color: #6f42c1;
+}
+
+.print-option-btn.shipment-order-btn:hover {
+  background: #f3eef9;
+  border-color: #5a32a3;
 }
 
 /* Check Status Icon - Nổi bật cho shipment đã check */
