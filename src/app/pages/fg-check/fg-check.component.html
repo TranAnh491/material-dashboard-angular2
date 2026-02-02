@@ -18,21 +18,25 @@
           <div class="scan-info-row">
             <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
             <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
-            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedQuantity()}}</strong></span>
+            <span class="scan-info-item">Đã scan: <strong>{{checkMode === 'pn' ? getCurrentPalletScannedCarton() : getCurrentPalletScannedQuantity()}}</strong>{{checkMode === 'pn' ? ' thùng' : ''}}</span>
           </div>
           <div class="scan-inputs-row">
             <input type="text" 
                    class="custom-input scan-material-input" 
                    [(ngModel)]="currentScanInput"
-                   (keyup.enter)="onMaterialCodeEntered()"
+                   (keyup.enter)="checkMode === 'pn' ? onMaterialScannedForCarton() : onMaterialCodeEntered()"
                    placeholder="Mã hàng..."
                    style="text-transform: uppercase;">
             <input type="text" 
+                   *ngIf="checkMode === 'pn-qty'"
                    class="custom-input scan-qty-input" 
                    [(ngModel)]="currentQtyInput"
                    (keyup.enter)="onMaterialAndQtyScanned()"
                    placeholder="Số lượng">
-            <button class="custom-btn" (click)="onMaterialAndQtyScanned()" [disabled]="!currentScanInput || !currentQtyInput">
+            <button *ngIf="checkMode === 'pn-qty'" class="custom-btn" (click)="onMaterialAndQtyScanned()" [disabled]="!currentScanInput || !currentQtyInput">
+              <i class="material-icons">add</i>
+            </button>
+            <button *ngIf="checkMode === 'pn'" class="custom-btn" (click)="onMaterialScannedForCarton()" [disabled]="!currentScanInput">
               <i class="material-icons">add</i>
             </button>
             <button class="custom-btn btn-success" (click)="saveScannedData()" [disabled]="scannedItems.length === 0">
@@ -65,34 +69,14 @@
           Đổi số shipment
         </button>
         
-        <div class="dropdown" *ngIf="checkStep === 0">
-          <button class="custom-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="loadItemsFromFirebase(); $event.preventDefault()">
-              <i class="material-icons">refresh</i>
-              Refresh
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="reloadMappingAndUpdate(); $event.preventDefault()">
-              <i class="material-icons">sync</i>
-              Reload Mapping & Cập nhật Mã TP
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="forceReloadShipmentData(); $event.preventDefault()">
-              <i class="material-icons">refresh</i>
-              Reload Shipment Data & Tính lại
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="forceSaveCheckResults(); $event.preventDefault()">
-              <i class="material-icons">save</i>
-              Force Save Check Results
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugShipmentData(); $event.preventDefault()">
-              <i class="material-icons">bug_report</i>
-              Debug Shipment Data
-            </a>
-          </div>
-        </div>
+        <button class="custom-btn" type="button" (click)="openUnhideDialog()" *ngIf="checkStep === 0">
+          <i class="material-icons">visibility</i>
+          UNHIDE
+        </button>
+        <button class="custom-btn" type="button" (click)="openMorePopup()" *ngIf="checkStep === 0">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
       </div>
       
       <div class="search-box">
@@ -201,14 +185,30 @@
     <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
       <h3 class="modal-title" style="margin: 0;">
         <i class="material-icons">qr_code_scanner</i>
-        Nhập thông tin Check
+        {{ checkDialogStep === 'mode' ? 'Chọn loại Check' : 'Nhập thông tin Check' }}
       </h3>
       <button class="close-btn" (click)="closeCheckDialog()">
         <i class="material-icons">close</i>
       </button>
     </div>
     
-    <div class="modal-body">
+    <!-- Bước 1: Chọn Check Thùng hoặc Check Số Lượng -->
+    <div class="modal-body" *ngIf="checkDialogStep === 'mode'">
+      <p class="check-mode-hint" style="margin-bottom: 16px; color: #333;">Chọn loại kiểm tra:</p>
+      <div class="check-mode-options">
+        <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn')">
+          <i class="material-icons">inventory_2</i>
+          Check Thùng
+        </button>
+        <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn-qty')">
+          <i class="material-icons">numbers</i>
+          Check Số Lượng
+        </button>
+      </div>
+    </div>
+    
+    <!-- Bước 2: Nhập ID, Shipment, Pallet -->
+    <div class="modal-body" *ngIf="checkDialogStep === 'form'">
       <div class="form-group" style="margin-bottom: 20px;">
         <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">ID <span style="color: #c00;">*</span> (ASP + 4 số, VD: ASP1234):</label>
         <input type="text" 
@@ -233,7 +233,7 @@
                style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
       </div>
       
-      <div class="form-group" style="margin-bottom: 20px;">
+      <div class="form-group" style="margin-bottom: 12px;">
         <label class="form-label" style="display: block; margin-bottom: 8px; font-weight: 600;">Số Pallet <span style="color: #c00;">*</span>:</label>
         <input type="text" 
                #palletInput
@@ -243,9 +243,15 @@
                placeholder="Nhập hoặc quét số Pallet"
                style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
       </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <button type="button" class="btn btn-ship-le" (click)="setPalletToShipLe()">
+          <i class="material-icons">local_shipping</i>
+          Ship Lẻ
+        </button>
+      </div>
     </div>
     
-    <div class="modal-footer">
+    <div class="modal-footer" *ngIf="checkDialogStep === 'form'">
       <button type="button" class="btn btn-cancel" (click)="closeCheckDialog()">
         <i class="material-icons">close</i>
         Hủy
@@ -336,6 +342,127 @@
       <button type="button" class="btn btn-cancel" (click)="closeDeleteConfirm()">
         <i class="material-icons">close</i>
         Hủy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup More -->
+<div class="modal-overlay" 
+     *ngIf="showMorePopup" 
+     (click)="closeMorePopup()">
+  <div class="modal-container more-popup-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 class="modal-title" style="margin: 0;">
+        <i class="material-icons">more_vert</i>
+        More
+      </h3>
+      <button class="close-btn" (click)="closeMorePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="more-popup-options">
+      <button type="button" class="more-popup-item" (click)="openReportMonthDialog()">
+        <i class="material-icons">description</i>
+        <span>1. Tải báo cáo Check theo tháng</span>
+      </button>
+      <button type="button" class="more-popup-item" (click)="loadItemsFromFirebase(); closeMorePopup()">
+        <i class="material-icons">refresh</i>
+        <span>Refresh</span>
+      </button>
+      <button type="button" class="more-popup-item" (click)="reloadMappingAndUpdate(); closeMorePopup()">
+        <i class="material-icons">sync</i>
+        <span>Reload Mapping & Cập nhật Mã TP</span>
+      </button>
+      <button type="button" class="more-popup-item" (click)="forceReloadShipmentData(); closeMorePopup()">
+        <i class="material-icons">refresh</i>
+        <span>Reload Shipment Data & Tính lại</span>
+      </button>
+      <button type="button" class="more-popup-item" (click)="forceSaveCheckResults(); closeMorePopup()">
+        <i class="material-icons">save</i>
+        <span>Force Save Check Results</span>
+      </button>
+      <button type="button" class="more-popup-item" (click)="debugShipmentData(); closeMorePopup()">
+        <i class="material-icons">bug_report</i>
+        <span>Debug Shipment Data</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog chọn tháng/năm để tải báo cáo Check -->
+<div class="modal-overlay" 
+     *ngIf="showReportMonthDialog" 
+     (click)="closeReportMonthDialog()">
+  <div class="modal-container report-month-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 class="modal-title" style="margin: 0;">Tải báo cáo Check theo tháng</h3>
+      <button class="close-btn" (click)="closeReportMonthDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label class="form-label">Tháng</label>
+        <select class="form-input" [(ngModel)]="reportMonth" style="width: 100%; padding: 10px;">
+          <option *ngFor="let m of [1,2,3,4,5,6,7,8,9,10,11,12]" [value]="m">Tháng {{m}}</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label class="form-label">Năm</label>
+        <input type="number" class="form-input" [(ngModel)]="reportYear" min="2020" max="2030" style="width: 100%; padding: 10px;">
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+      <button type="button" class="btn btn-cancel" (click)="closeReportMonthDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-success" (click)="downloadCheckReportByMonth()">
+        <i class="material-icons">file_download</i>
+        Tải báo cáo
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog UNHIDE: nhập Shipment để hiển thị dữ liệu đã ẩn (Lock), có thể Bỏ Lock -->
+<div class="modal-overlay" 
+     *ngIf="showUnhideDialog" 
+     (click)="closeUnhideDialog()">
+  <div class="modal-container unhide-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 class="modal-title" style="margin: 0;">
+        <i class="material-icons">visibility</i>
+        UNHIDE – Hiển thị Shipment đã ẩn
+      </h3>
+      <button class="close-btn" (click)="closeUnhideDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="unhide-hint" style="margin-bottom: 12px; color: #333;">Nhập số Shipment để hiển thị lại dữ liệu đã bị ẩn (Lock).</p>
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label class="form-label">Số Shipment</label>
+        <input type="text"
+               class="form-input unhide-shipment-input"
+               [(ngModel)]="unhideShipmentInput"
+               placeholder="Nhập hoặc quét Shipment"
+               style="text-transform: uppercase; width: 100%; padding: 10px;">
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;">
+      <button type="button" class="btn btn-cancel" (click)="closeUnhideDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-primary" (click)="confirmUnhideShipment()" [disabled]="!unhideShipmentInput?.trim()">
+        <i class="material-icons">visibility</i>
+        Hiển thị
+      </button>
+      <button type="button" class="btn btn-success" (click)="unlockShipmentAndClose()" [disabled]="!unhideShipmentInput?.trim()">
+        <i class="material-icons">lock_open</i>
+        Bỏ Lock
       </button>
     </div>
   </div>

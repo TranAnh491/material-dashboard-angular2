@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import * as XLSX from 'xlsx';
 
 export interface FGCheckItem {
   id?: string;
@@ -57,6 +58,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   
   // Scanner properties
   showCheckDialog: boolean = false;
+  checkDialogStep: 'mode' | 'form' = 'mode'; // Trong dialog: chọn mode trước, sau đó nhập ID/Shipment/Pallet
   checkStep: number = 0; // 0 = select mode, 1 = shipment input, 2 = scan pallet, 3 = scan material+qty
   checkMode: 'pn' | 'pn-qty' = 'pn';
   /** ID khi quét: lấy 7 ký tự đầu, định dạng ASP + 4 số (VD: ASP1234) */
@@ -89,6 +91,18 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   showChangeShipmentDialog: boolean = false;
   oldShipmentCode: string = '';
   newShipmentCode: string = '';
+
+  // Lock = ẩn dữ liệu; UNHIDE = nhập Shipment để hiển thị lại
+  unhiddenShipments: Set<string> = new Set();
+  showUnhideDialog: boolean = false;
+  unhideShipmentInput: string = '';
+
+  // Popup More
+  showMorePopup: boolean = false;
+  // Tải báo cáo Check theo tháng
+  showReportMonthDialog: boolean = false;
+  reportMonth: number = new Date().getMonth() + 1;
+  reportYear: number = new Date().getFullYear();
 
   // Popup xóa: quét mã quản lý (chỉ scan)
   private readonly MANAGER_CODES = ['ASP0106', 'ASP0538', 'ASP0119', 'ASP1761'];
@@ -640,30 +654,31 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 1000); // Wait 1000ms for mapping to load
   }
 
-  // Apply search filters
+  // Apply search filters (Lock = ẩn; chỉ hiện nếu không lock hoặc shipment trong unhiddenShipments)
   applyFilters(): void {
     this.filteredItems = this.items.filter(item => {
+      const itemShipment = String(item.shipment || '').trim().toUpperCase();
+      // Ẩn dòng đã Lock, trừ khi Shipment đã được UNHIDE
+      if (item.isLocked && !this.unhiddenShipments.has(itemShipment)) {
+        return false;
+      }
       // Filter by shipment nếu đang check một shipment cụ thể
       if (this.filterByShipment && this.filterByShipment.trim() !== '') {
-        const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const filterShipment = this.filterByShipment.trim().toUpperCase();
         if (itemShipment !== filterShipment) {
-          return false; // Loại bỏ items không thuộc shipment đang check
+          return false;
         }
       }
-      
       // Filter by search term
       if (!this.searchTerm || this.searchTerm.trim() === '') {
         return true;
       }
-      
       const searchableText = [
         item.shipment,
         item.materialCode,
         item.customerCode,
         item.checkId
       ].filter(Boolean).join(' ').toUpperCase();
-      
       return searchableText.includes(this.searchTerm.toUpperCase());
     });
     
@@ -711,6 +726,20 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }
 
+  /** Tổng số thùng (carton) đã scan của pallet hiện tại – dùng khi Check Thùng. */
+  getCurrentPalletScannedCarton(): number {
+    const shipment = String(this.scannedShipment || '').trim().toUpperCase();
+    const pallet = String(this.currentPalletNo || '').trim().toUpperCase();
+    if (!shipment || !pallet) return 0;
+    return this.items
+      .filter(item => {
+        const itemShipment = String(item.shipment || '').trim().toUpperCase();
+        const itemPallet = String(item.palletNo || '').trim().toUpperCase();
+        return itemShipment === shipment && itemPallet === pallet;
+      })
+      .reduce((sum, item) => sum + (Number(item.carton) || 0), 0);
+  }
+
   onSearchChange(event: any): void {
     let searchTerm = event.target.value;
     
@@ -753,13 +782,17 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Check Methods
   openCheck(): void {
-    console.log('🔵 openCheck called');
     this.resetCheck();
-    // Mở popup nhập Shipment và Pallet
+    this.checkDialogStep = 'mode';
     this.showCheckDialog = true;
     this.cdr.detectChanges();
-    
-    // Focus vào ô ID sau khi popup mở (bắt buộc quét ID trước)
+  }
+
+  /** Chọn mode Check Thùng hoặc Check Số Lượng, chuyển sang form nhập ID/Shipment/Pallet */
+  selectCheckMode(mode: 'pn' | 'pn-qty'): void {
+    this.checkMode = mode;
+    this.checkDialogStep = 'form';
+    this.cdr.detectChanges();
     setTimeout(() => {
       const input = document.querySelector('.check-id-input') as HTMLInputElement;
       if (input) {
@@ -769,8 +802,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 100);
   }
 
+  /** Nút Ship Lẻ: đặt Pallet = "Ship lẻ" thay vì nhập số */
+  setPalletToShipLe(): void {
+    this.currentPalletNo = 'Ship lẻ';
+    this.cdr.detectChanges();
+  }
+
   closeCheckDialog(): void {
     this.showCheckDialog = false;
+    this.checkDialogStep = 'mode';
     this.cdr.detectChanges();
   }
 
@@ -860,9 +900,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     // Đóng popup
     this.showCheckDialog = false;
     
-    // Chuyển sang step 3 (scan mã TP + số lượng)
+    // Chuyển sang step 3 (scan mã TP; nếu Check Số Lượng thì thêm scan số lượng)
     this.checkStep = 3;
-    this.checkMode = 'pn-qty';
+    // Giữ checkMode đã chọn (pn = Check Thùng, pn-qty = Check Số Lượng)
     
     this.cdr.detectChanges();
     
@@ -1000,12 +1040,38 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return;
     }
     
-    // Tự động focus vào ô số lượng
+    // Check Số Lượng: tự động focus vào ô số lượng
     setTimeout(() => {
       const qtyInput = document.querySelector('.scan-qty-input') as HTMLInputElement;
       if (qtyInput) {
         qtyInput.focus();
         qtyInput.select();
+      }
+    }, 100);
+  }
+
+  /** Check Thùng: scan xong mã hàng (1 thùng) → lưu ngay, không cần nhập số lượng */
+  onMaterialScannedForCarton(): void {
+    const customerCode = String(this.currentScanInput.trim()).toUpperCase();
+    if (!customerCode) {
+      alert('⚠️ Vui lòng nhập mã hàng!');
+      return;
+    }
+    const materialCode = this.getMaterialCodeFromCustomerCode(customerCode);
+    if (!materialCode) {
+      alert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}". Vui lòng kiểm tra mapping!`);
+      this.currentScanInput = '';
+      return;
+    }
+    this.scannedItems.push({ materialCode, quantity: 1, customerCode } as any);
+    this.saveSingleScannedItem(customerCode, materialCode, 0); // quantity 0, mode pn = cộng 1 thùng
+    this.currentScanInput = '';
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.querySelector('.scan-material-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
       }
     }, 100);
   }
@@ -1108,17 +1174,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     });
     
     if (existingItem && existingItem.id) {
-      // Cộng dồn: cùng shipment + materialCode + palletNo thì cộng thêm quantity vào dòng đã có
-      const newQuantity = (existingItem.quantity || 0) + quantity;
-      console.log(`✅ Cộng dồn: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} + ${quantity} = ${newQuantity}`);
+      const isCartonMode = this.checkMode === 'pn';
+      const newQuantity = isCartonMode ? (existingItem.quantity || 0) : (existingItem.quantity || 0) + quantity;
+      const newCarton = isCartonMode ? (existingItem.carton || 0) + 1 : (existingItem.carton || 0);
+      if (isCartonMode) {
+        console.log(`✅ Cộng dồn thùng: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Thùng: ${existingItem.carton || 0} + 1 = ${newCarton}`);
+      } else {
+        console.log(`✅ Cộng dồn: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} + ${quantity} = ${newQuantity}`);
+      }
       const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id!];
       const mainId = idsToUpdate[0];
       const restIds = idsToUpdate.slice(1);
       const updatePayload = {
         quantity: newQuantity,
+        carton: newCarton,
         customerCode: customerCodeUpper,
         scannedCustomerCode: true,
-        scannedQuantity: true,
+        scannedQuantity: !isCartonMode,
         ...(this.scannedCheckId ? { scanId: this.scannedCheckId } : {}),
         updatedAt: new Date()
       };
@@ -1130,9 +1202,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       })
       .then(() => {
         existingItem.quantity = newQuantity;
+        existingItem.carton = newCarton;
         existingItem.customerCode = customerCodeUpper;
         existingItem.scannedCustomerCode = true;
-        existingItem.scannedQuantity = true;
+        existingItem.scannedQuantity = !isCartonMode;
         if (this.scannedCheckId) existingItem.scanId = this.scannedCheckId;
         existingItem.updatedAt = new Date();
         existingItem.id = mainId;
@@ -1147,21 +1220,22 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
     } else {
       // Tạo item mới
+      const isCartonMode = this.checkMode === 'pn';
       const checkId = this.getNextCheckId();
       const newItem: FGCheckItem = {
         shipment: shipmentCode,
         materialCode: materialCodeUpper,
-        customerCode: customerCodeUpper, // Lưu mã hàng đã scan
-        carton: 0,
-        quantity: quantity,
+        customerCode: customerCodeUpper,
+        carton: isCartonMode ? 1 : 0,
+        quantity: isCartonMode ? 0 : quantity,
         isChecked: false,
         checkId: checkId,
         scanId: this.scannedCheckId || undefined,
-        checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
+        checkMode: this.checkMode,
         palletNo: palletNo,
         isLocked: false,
-        scannedCustomerCode: true, // Đã scan mã hàng
-        scannedQuantity: true,
+        scannedCustomerCode: true,
+        scannedQuantity: !isCartonMode,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1217,7 +1291,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     groupedByMaterial.forEach((totalQuantity, materialCode) => {
       // Tìm item đã có trong Firebase (cùng shipment, materialCode, palletNo)
-      // QUAN TRỌNG: Chỉ cộng dồn vào item chưa lock
       const existingItem = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const itemMaterialCode = String(item.materialCode || '').trim().toUpperCase();
@@ -1225,54 +1298,34 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         return itemShipment === shipmentCode && 
                itemMaterialCode === materialCode.toUpperCase() &&
                itemPalletNo === palletNo &&
-               !item.isLocked; // Chỉ cộng dồn vào item chưa lock
+               !item.isLocked;
       });
       
+      // Đã có dòng: mỗi lần scan Enter đã gọi saveSingleScannedItem và cập nhật Firebase rồi → KHÔNG cộng thêm (tránh double)
       if (existingItem && existingItem.id) {
-        const newQuantity = (existingItem.quantity || 0) + totalQuantity;
-        const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id];
-        const mainId = idsToUpdate[0];
-        const restIds = idsToUpdate.slice(1);
-        const updatePayload: any = {
-          quantity: newQuantity,
-          scannedQuantity: true,
-          updatedAt: new Date()
-        };
-        if (this.scannedCheckId) updatePayload.scanId = this.scannedCheckId;
-        const updatePromise = this.firestore.collection('fg-check').doc(mainId).update(updatePayload)
-        .then(() => Promise.all(restIds.map(id => this.firestore.collection('fg-check').doc(id).delete())))
-        .then(() => {
-          existingItem.quantity = newQuantity;
-          existingItem.scannedQuantity = true;
-          if (this.scannedCheckId) existingItem.scanId = this.scannedCheckId;
-          existingItem.updatedAt = new Date();
-          existingItem.id = mainId;
-          (existingItem as any).docIds = undefined;
-          savedCount++;
-          console.log(`✅ Cập nhật: ${materialCode} -> ${newQuantity}`);
-        })
-        .catch(error => {
-          errorCount++;
-          console.error(`❌ Error updating ${materialCode}:`, error);
-        });
-        savePromises.push(updatePromise);
-      } else {
-        // Tạo item mới
+        savedCount++;
+        // Không gọi Firebase update ở đây - số lượng đã được lưu từng lần khi user nhấn Enter
+        this.cdr.detectChanges();
+        return;
+      }
+      // Chưa có dòng: tạo mới
+      {
+        const isCartonMode = this.checkMode === 'pn';
         const checkId = this.getNextCheckId();
         const newItem: FGCheckItem = {
           shipment: shipmentCode,
           materialCode: materialCode.toUpperCase(),
-          customerCode: '', // Không lưu customerCode vì scan trực tiếp mã TP
-          carton: 0,
-          quantity: totalQuantity,
+          customerCode: '',
+          carton: isCartonMode ? totalQuantity : 0,
+          quantity: isCartonMode ? 0 : totalQuantity,
           isChecked: false,
           checkId: checkId,
           scanId: this.scannedCheckId || undefined,
-          checkMode: 'pn-qty', // Luôn dùng mode PN+QTY
+          checkMode: this.checkMode,
           palletNo: palletNo,
           isLocked: false,
           scannedCustomerCode: false,
-          scannedQuantity: true,
+          scannedQuantity: !isCartonMode,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -2117,12 +2170,80 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       .then(() => {
         item.isLocked = newLockStatus;
         item.updatedAt = new Date();
-        console.log(`✅ Item ${newLockStatus ? 'locked' : 'unlocked'} successfully`);
+        this.applyFilters();
+        this.cdr.detectChanges();
       })
       .catch(error => {
         console.error('❌ Error toggling lock:', error);
         alert('❌ Lỗi khi lock/unlock: ' + error.message);
         item.isLocked = !newLockStatus;
+      });
+  }
+
+  openUnhideDialog(): void {
+    this.unhideShipmentInput = '';
+    this.showUnhideDialog = true;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.querySelector('.unhide-shipment-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 100);
+  }
+
+  closeUnhideDialog(): void {
+    this.showUnhideDialog = false;
+    this.unhideShipmentInput = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmUnhideShipment(): void {
+    const shipment = String(this.unhideShipmentInput || '').trim().toUpperCase();
+    if (!shipment) {
+      alert('Vui lòng nhập số Shipment!');
+      return;
+    }
+    this.unhiddenShipments.add(shipment);
+    this.applyFilters();
+    this.closeUnhideDialog();
+    this.cdr.detectChanges();
+    alert(`Đã hiển thị Shipment: ${shipment}`);
+  }
+
+  unlockShipmentAndClose(): void {
+    const shipment = String(this.unhideShipmentInput || '').trim().toUpperCase();
+    if (!shipment) {
+      alert('Vui lòng nhập số Shipment!');
+      return;
+    }
+    const itemsOfShipment = this.items.filter(item => {
+      const s = String(item.shipment || '').trim().toUpperCase();
+      return s === shipment && item.isLocked;
+    });
+    if (itemsOfShipment.length === 0) {
+      alert(`Shipment ${shipment} không có dòng nào đang Lock.`);
+      return;
+    }
+    const idsToUpdate: string[] = [];
+    itemsOfShipment.forEach(item => {
+      const ids = (item.docIds && item.docIds.length) ? item.docIds : (item.id ? [item.id] : []);
+      idsToUpdate.push(...ids);
+    });
+    const uniqueIds = [...new Set(idsToUpdate)];
+    Promise.all(uniqueIds.map(id => this.firestore.collection('fg-check').doc(id).update({ isLocked: false, updatedAt: new Date() })))
+      .then(() => {
+        itemsOfShipment.forEach(item => {
+          item.isLocked = false;
+          item.updatedAt = new Date();
+        });
+        this.unhiddenShipments.delete(shipment);
+        this.applyFilters();
+        this.closeUnhideDialog();
+        this.cdr.detectChanges();
+        alert(`Đã bỏ Lock cho Shipment ${shipment} (${itemsOfShipment.length} dòng). Shipment sẽ luôn hiển thị.`);
+      })
+      .catch(error => {
+        console.error('❌ Error unlocking shipment:', error);
+        alert('❌ Lỗi khi bỏ Lock: ' + (error?.message || error));
       });
   }
 
@@ -2264,6 +2385,60 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.filterByShipment = '';
     this.applyFilters();
     console.log('✅ Cleared shipment filter - showing all items');
+  }
+
+  // Popup More
+  openMorePopup(): void {
+    this.showMorePopup = true;
+    this.cdr.detectChanges();
+  }
+
+  closeMorePopup(): void {
+    this.showMorePopup = false;
+    this.cdr.detectChanges();
+  }
+
+  /** Mở dialog chọn tháng/năm để tải báo cáo Check */
+  openReportMonthDialog(): void {
+    this.closeMorePopup();
+    this.reportMonth = new Date().getMonth() + 1;
+    this.reportYear = new Date().getFullYear();
+    this.showReportMonthDialog = true;
+    this.cdr.detectChanges();
+  }
+
+  closeReportMonthDialog(): void {
+    this.showReportMonthDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  /** Tải báo cáo Check theo tháng đã chọn (Excel) */
+  downloadCheckReportByMonth(): void {
+    const itemsInMonth = this.items.filter(item => {
+      const d = item.createdAt ? (item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt)) : null;
+      if (!d || isNaN(d.getTime())) return false;
+      return d.getMonth() + 1 === this.reportMonth && d.getFullYear() === this.reportYear;
+    });
+    const rows = itemsInMonth.map((item, i) => ({
+      'STT': i + 1,
+      'Shipment': item.shipment || '',
+      'Mã TP': item.materialCode || '',
+      'Mã Hàng': item.customerCode || '',
+      'Số Thùng': item.carton ?? 0,
+      'Số Lượng': item.quantity ?? 0,
+      'ID Check': item.scanId || item.checkId || '',
+      'Pallet No': item.palletNo || '',
+      'Thời gian': item.createdAt ? this.formatCheckTime(item.createdAt) : '',
+      'Lock': item.isLocked ? 'Có' : 'Không'
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'FG Check');
+    const fileName = `Bao_cao_Check_${this.reportYear}_${String(this.reportMonth).padStart(2, '0')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    this.closeReportMonthDialog();
+    alert(`✅ Đã tải báo cáo: ${itemsInMonth.length} dòng (Tháng ${this.reportMonth}/${this.reportYear})`);
+    this.cdr.detectChanges();
   }
 }
 
