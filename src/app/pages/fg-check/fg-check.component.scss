@@ -598,6 +598,18 @@
       border: 1px solid #28a745 !important; // Viền xanh
     }
     
+    // Check Thùng: tổng số thùng đủ → hiển thị OK
+    &.carton-ok {
+      background-color: #d4edda !important;
+      color: #155724 !important;
+      font-weight: 600;
+      border: 1px solid #28a745 !important;
+      .carton-ok-label {
+        font-weight: 700;
+        color: #155724;
+      }
+    }
+    
     // Highlight duplicate material code - không màu, chỉ chữ đen
     &.duplicate-material {
       background-color: #ffffff !important; // Nền trắng
@@ -1133,6 +1145,7 @@
 @media (max-width: 1024px) {
   .content-container {
     overflow-x: auto;
+    min-height: 0;
   }
   
   .header-section {
@@ -1163,6 +1176,11 @@
     max-width: 100%;
   }
   
+  .excel-body {
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  
   .excel-table {
     font-size: 10px;
     min-width: 900px;
@@ -1186,16 +1204,42 @@
   }
 }
 
-// Mobile (max 768px)
+// Mobile (max 768px) - Giao diện Mobile
 @media (max-width: 768px) {
+  :host {
+    display: block;
+    width: 100%;
+    min-height: 100vh;
+    -webkit-overflow-scrolling: touch;
+  }
+  
   .main-content {
     height: auto;
     min-height: 100vh;
     overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  .content-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: calc(100vh - env(safe-area-inset-bottom, 0));
+    overflow: hidden;
   }
   
   .header-section {
     padding: 10px 12px;
+    padding-left: max(12px, env(safe-area-inset-left, 0));
+    padding-right: max(12px, env(safe-area-inset-right, 0));
+    flex-shrink: 0;
   }
   
   .page-title {
@@ -1208,12 +1252,22 @@
   
   .action-section {
     padding: 10px 12px;
+    padding-left: max(12px, env(safe-area-inset-left, 0));
+    padding-right: max(12px, env(safe-area-inset-right, 0));
     gap: 10px;
+    flex-shrink: 0;
   }
   
   .action-buttons {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  .custom-btn {
+    min-height: 44px;
+    padding: 12px 16px;
+    font-size: 14px;
+    touch-action: manipulation;
   }
   
   .scan-step-3 {
@@ -1233,11 +1287,14 @@
       flex: 1;
       min-width: 0;
       width: 100%;
+      min-height: 44px;
+      font-size: 16px; // Tránh zoom khi focus trên iOS
     }
     
     .custom-btn {
       flex: 1;
-      min-width: 60px;
+      min-width: 0;
+      min-height: 44px;
     }
   }
   
@@ -1255,9 +1312,22 @@
     padding: 6px 12px;
   }
   
+  .search-box {
+    width: 100%;
+    
+    input {
+      min-height: 44px;
+      font-size: 16px; // Tránh zoom khi focus trên iOS
+    }
+  }
+  
   .excel-body {
+    flex: 1 1 0;
+    min-height: 0;
     overflow-x: auto;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   
   .excel-table {
@@ -1273,37 +1343,65 @@
   
   .btn-reset,
   .btn-delete {
-    padding: 6px 10px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px;
     
     i {
-      font-size: 16px;
+      font-size: 18px;
     }
   }
   
   .pallet-input {
     font-size: 10px;
-    padding: 4px 6px;
+    padding: 6px 8px;
+    min-height: 36px;
   }
   
   .lock-checkbox {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
   }
   
   .dropdown .dropdown-menu {
     position: absolute;
     z-index: 1050;
+    max-height: 70vh;
+    overflow-y: auto;
   }
   
-  // Modal popup - full width on mobile
+  // Modal - full width, scroll được, safe area
+  .modal-overlay {
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+    align-items: flex-start;
+    padding-top: max(10px, env(safe-area-inset-top, 0));
+    overflow-y: auto;
+  }
+  
   .modal-overlay .modal-container {
     min-width: 90%;
     max-width: 95%;
+    max-height: 90vh;
+    max-height: calc(100vh - 20px - env(safe-area-inset-top, 0) - env(safe-area-inset-bottom, 0));
     margin: 10px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   .modal-body .form-group {
     margin-bottom: 16px;
+  }
+  
+  .modal-body .form-input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  
+  .btn-check-mode {
+    min-height: 48px;
+    padding: 14px 20px;
   }
 }
 
@@ -1317,8 +1415,11 @@
     }
   }
   
+  .header-section,
   .action-section {
     padding: 8px 10px;
+    padding-left: max(10px, env(safe-area-inset-left, 0));
+    padding-right: max(10px, env(safe-area-inset-right, 0));
   }
   
   .excel-table {
@@ -1333,17 +1434,24 @@
   }
   
   .custom-btn {
-    padding: 8px 10px;
-    font-size: 12px;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 13px;
     
     i {
-      font-size: 16px;
+      font-size: 18px;
     }
   }
   
   .scanned-customer-code,
   .scanned-quantity {
     font-size: 9px !important;
+  }
+  
+  .modal-overlay .modal-container {
+    min-width: 95%;
+    max-width: 100%;
+    margin: 5px;
   }
 }
 

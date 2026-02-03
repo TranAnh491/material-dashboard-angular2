@@ -637,6 +637,11 @@
   vertical-align: middle;
 }
 
+/* Tick cột CHECK khi kiểm tra bằng thùng và khớp carton: màu xanh da trời */
+.check-ok-icon.check-ok-icon-carton {
+  color: #2196F3;
+}
+
 .shipment-check-result {
   font-size: 12px;
   font-weight: 600;

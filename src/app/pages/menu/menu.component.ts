@@ -12,7 +12,7 @@ export class MenuComponent implements OnInit {
   isMobile: boolean = false;
   
   // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
-  // QC và Label đã được cho phép hiển thị trên mobile/tablet
+  // FG Check đã được cho phép hiển thị trên mobile
   desktopOnlyTabs: string[] = [
     '/work-order-status',
     '/shipment',
@@ -20,7 +20,6 @@ export class MenuComponent implements OnInit {
     '/inventory-overview-asm2',
     '/fg-in',
     '/fg-out',
-    '/fg-check',
     '/fg-inventory',
     '/index',
     '/utilization',

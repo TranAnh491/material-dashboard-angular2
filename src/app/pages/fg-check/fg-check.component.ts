@@ -520,8 +520,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return checkId;
   }
 
-  /** Số thùng = số lượng (quantity) / qtyBox từ tab Shipment (cùng shipment + materialCode). Nếu không có qtyBox thì trả về item.carton. */
+  /** Số thùng hiển thị: Check Thùng (pn) = số thùng đã scan (item.carton); Check Số Lượng (pn-qty) = quantity/qtyBox hoặc item.carton. */
   getDisplayCarton(item: FGCheckItem): number {
+    const checkMode = item.checkMode || this.checkMode;
+    // Check Thùng: mỗi lần scan = 1 thùng → ghi nhận trực tiếp vào cột Số Thùng
+    if (checkMode === 'pn') {
+      return Number(item.carton) || 0;
+    }
+    // Check Số Lượng: có thể tính từ quantity/qtyBox
     const shipmentCode = String(item.shipment || '').trim().toUpperCase();
     const materialCode = String(item.materialCode || '').trim();
     const list = this.shipmentDataMap.get(shipmentCode) || [];
@@ -569,6 +575,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Check số thùng: so sánh carton với shipmentCarton
       return (item.carton || 0) >= (item.shipmentCarton || 0);
     }
+  }
+
+  /** Check Thùng: tổng số thùng đã scan >= số thùng shipment → hiển thị OK */
+  isCartonOk(item: FGCheckItem): boolean {
+    const checkMode = item.checkMode || this.checkMode;
+    if (checkMode !== 'pn') return false;
+    const expected = Number(item.shipmentCarton) || 0;
+    if (expected <= 0) return false;
+    return (Number(item.carton) || 0) >= expected;
   }
 
   // Get material code from customer code
@@ -1050,7 +1065,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 100);
   }
 
-  /** Check Thùng: scan xong mã hàng (1 thùng) → lưu ngay, không cần nhập số lượng */
+  /** Check Thùng: mỗi lần scan mã hàng = 1 thùng. Lưu ngay, không cần nhập số lượng. */
   onMaterialScannedForCarton(): void {
     const customerCode = String(this.currentScanInput.trim()).toUpperCase();
     if (!customerCode) {
@@ -1063,8 +1078,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.currentScanInput = '';
       return;
     }
-    this.scannedItems.push({ materialCode, quantity: 1, customerCode } as any);
-    this.saveSingleScannedItem(customerCode, materialCode, 0); // quantity 0, mode pn = cộng 1 thùng
+    this.scannedItems.push({ materialCode, quantity: 1, customerCode } as any); // quantity 1 = 1 lần scan = 1 thùng
+    this.saveSingleScannedItem(customerCode, materialCode, 0); // Check Thùng: mỗi lần scan = 1 thùng (quantity không dùng)
     this.currentScanInput = '';
     this.cdr.detectChanges();
     setTimeout(() => {
@@ -1148,8 +1163,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // Lưu một item đơn lẻ vào Firebase ngay lập tức
-  // Nhận customerCode (mã hàng), tự động tìm materialCode (mã TP) từ mapping
+  /** Lưu một item đơn lẻ vào Firebase. Check Thùng (pn): mỗi lần scan = cộng đúng 1 thùng (carton+1), không cộng quantity. */
   saveSingleScannedItem(customerCode: string, materialCode: string, quantity: number): void {
     if (!this.scannedShipment || !this.currentPalletNo) {
       console.warn('⚠️ Chưa có Shipment hoặc Pallet No!');
@@ -1174,11 +1188,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     });
     
     if (existingItem && existingItem.id) {
-      const isCartonMode = this.checkMode === 'pn';
+      const isCartonMode = this.checkMode === 'pn'; // Check Thùng: mỗi lần scan = 1 thùng
       const newQuantity = isCartonMode ? (existingItem.quantity || 0) : (existingItem.quantity || 0) + quantity;
-      const newCarton = isCartonMode ? (existingItem.carton || 0) + 1 : (existingItem.carton || 0);
+      const newCarton = isCartonMode ? (existingItem.carton || 0) + 1 : (existingItem.carton || 0); // pn: mỗi scan +1 thùng
       if (isCartonMode) {
-        console.log(`✅ Cộng dồn thùng: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Thùng: ${existingItem.carton || 0} + 1 = ${newCarton}`);
+        console.log(`✅ Check Thùng - Mỗi scan = 1 thùng: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Thùng: ${existingItem.carton || 0} + 1 = ${newCarton}`);
       } else {
         console.log(`✅ Cộng dồn: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} + ${quantity} = ${newQuantity}`);
       }
@@ -2441,4 +2455,3 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 }
-

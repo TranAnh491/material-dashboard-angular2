@@ -127,7 +127,10 @@
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
             <td class="code-cell" [class.scanned-customer-code]="item.scannedCustomerCode">{{item.customerCode}}</td>
-            <td class="number-cell">{{formatNumber(getDisplayCarton(item))}}</td>
+            <td class="number-cell" [class.carton-ok]="isCartonOk(item)">
+              {{formatNumber(getDisplayCarton(item))}}
+              <span class="carton-ok-label" *ngIf="isCartonOk(item)"> OK</span>
+            </td>
             <td class="number-cell" [class.scanned-quantity]="item.scannedQuantity">{{formatNumber(item.quantity)}}</td>
             <td class="code-cell code-cell-check-id" 
                 (click)="showCheckTime(item)" 

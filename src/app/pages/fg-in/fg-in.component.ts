@@ -99,6 +99,19 @@ export class FgInComponent implements OnInit, OnDestroy {
     materialCode: '',
     description: ''
   };
+
+  // Nhập Kho dialog
+  showNhapKhoDialog: boolean = false;
+  newNhapKhoItem: { materialCode: string; quantity: number | null; lot: string; lsx: string } = {
+    materialCode: '',
+    quantity: null,
+    lot: '',
+    lsx: ''
+  };
+  nhapKhoMaterialSuggestions: CustomerCodeMappingItem[] = [];
+  showNhapKhoSuggestions: boolean = false;
+  private nhapKhoSuggestionsBlurTimer: any;
+  private readonly NHAP_KHO_MIN_CHARS = 4; // Chỉ lọc khi nhập đủ 4 ký tự để hạn chế lag
   
   private destroy$ = new Subject<void>();
 
@@ -168,23 +181,14 @@ export class FgInComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Update received status (Đã nhận) - Only allow ticking, not unticking
-  updateReceivedStatus(material: FgInItem, checked: boolean): void {
-    // Only allow ticking (true), not unticking (false)
-    if (!checked) {
-      console.log(`Cannot untick received status for ${material.materialCode}`);
-      return;
-    }
-    
+  // Lock / Unlock (cột Lock): Tick = khóa (chuyển Inventory), Bỏ tick = mở khóa để sửa
+  updateLockStatus(material: FgInItem, checked: boolean): void {
     material.isReceived = checked;
     material.updatedAt = new Date();
-    console.log(`Updated received status for ${material.materialCode}: ${checked}`);
-    
-    // Save to Firebase
     this.updateMaterialInFirebase(material);
-    
-    // Auto-add to Inventory when marked as received
-    this.addToInventory(material);
+    if (checked) {
+      this.addToInventory(material);
+    }
   }
 
   // Add material to Inventory when received
@@ -356,6 +360,96 @@ export class FgInComponent implements OnInit, OnDestroy {
     }, 0);
   }
 
+  // Nhập Kho - open/close dialog
+  openNhapKho(): void {
+    this.newNhapKhoItem = { materialCode: '', quantity: null, lot: '', lsx: '' };
+    this.showNhapKhoSuggestions = false;
+    this.nhapKhoMaterialSuggestions = [];
+    this.showNhapKhoDialog = true;
+  }
+
+  closeNhapKho(): void {
+    this.showNhapKhoDialog = false;
+    this.showNhapKhoSuggestions = false;
+    this.newNhapKhoItem = { materialCode: '', quantity: null, lot: '', lsx: '' };
+    this.nhapKhoMaterialSuggestions = [];
+    if (this.nhapKhoSuggestionsBlurTimer) clearTimeout(this.nhapKhoSuggestionsBlurTimer);
+  }
+
+  filterNhapKhoMaterialSuggestions(): void {
+    const term = (this.newNhapKhoItem.materialCode || '').trim().toUpperCase();
+    if (term.length < this.NHAP_KHO_MIN_CHARS) {
+      this.nhapKhoMaterialSuggestions = [];
+      this.showNhapKhoSuggestions = false;
+      return;
+    }
+    this.nhapKhoMaterialSuggestions = this.mappingItems
+      .filter(item => (item.materialCode || '').toUpperCase().includes(term))
+      .slice(0, 20);
+    this.showNhapKhoSuggestions = this.nhapKhoMaterialSuggestions.length > 0;
+  }
+
+  onNhapKhoMaterialCodeFocus(): void {
+    this.filterNhapKhoMaterialSuggestions();
+  }
+
+  onNhapKhoMaterialCodeInput(): void {
+    this.filterNhapKhoMaterialSuggestions();
+  }
+
+  onNhapKhoMaterialCodeBlur(): void {
+    this.nhapKhoSuggestionsBlurTimer = setTimeout(() => {
+      this.showNhapKhoSuggestions = false;
+    }, 200);
+  }
+
+  selectNhapKhoMaterialCode(item: CustomerCodeMappingItem): void {
+    this.newNhapKhoItem.materialCode = item.materialCode || '';
+    this.showNhapKhoSuggestions = false;
+  }
+
+  submitNhapKho(): void {
+    const code = (this.newNhapKhoItem.materialCode || '').trim();
+    const qty = this.newNhapKhoItem.quantity != null ? Number(this.newNhapKhoItem.quantity) : 0;
+    if (!code) {
+      alert('Vui lòng nhập Mã TP.');
+      return;
+    }
+    if (!qty || qty <= 0) {
+      alert('Vui lòng nhập Số lượng hợp lệ.');
+      return;
+    }
+    const materialData = {
+      factory: 'ASM1',
+      importDate: new Date(),
+      batchNumber: this.generateBatchNumber(0),
+      materialCode: code,
+      rev: '',
+      lot: (this.newNhapKhoItem.lot || '').trim(),
+      lsx: (this.newNhapKhoItem.lsx || '').trim(),
+      quantity: qty,
+      carton: 0,
+      odd: 0,
+      location: 'Temporary',
+      notes: '',
+      customer: '',
+      isReceived: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.firestore.collection('fg-in').add(materialData)
+      .then((docRef) => {
+        const newMaterial = { ...materialData, id: docRef.id } as FgInItem;
+        this.addToInventory(newMaterial);
+        this.refreshData();
+        this.closeNhapKho();
+      })
+      .catch(err => {
+        console.error('Error adding FG In material:', err);
+        alert('Lỗi khi lưu: ' + (err?.message || err));
+      });
+  }
+
   // Refresh data after operations (import, update, delete)
   refreshData(): void {
     console.log('Refreshing data...');
@@ -413,6 +507,12 @@ export class FgInComponent implements OnInit, OnDestroy {
     return catalogItem ? catalogItem.customer : '';
   }
 
+  // Lấy Tên khách hàng từ danh mục Mapping (cột Tên Khách Hàng = description)
+  getCustomerNameFromMapping(materialCode: string): string {
+    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
+    return mapping ? (mapping.description || '') : '';
+  }
+
   // Clear all data from Firebase (for testing)
   clearAllData(): void {
     if (confirm('⚠️ XÁC NHẬN XÓA TẤT CẢ DỮ LIỆU FG IN? Hành động này không thể hoàn tác!')) {
@@ -464,7 +564,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Check if user can edit material
   canEditMaterial(material: FgInItem): boolean {
     const materialFactory = material.factory || 'ASM1';
-    return this.availableFactories.includes(materialFactory);
+    return this.availableFactories.includes(materialFactory) && !material.isReceived;
   }
 
   // Check if user can view material
@@ -543,20 +643,20 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   private parseExcelData(data: any[]): FgInItem[] {
     return data.map((row: any, index: number) => ({
-      factory: 'ASM1', // FG In chỉ dành cho ASM1
-      importDate: new Date(), // Ngày hiện tại
-      batchNumber: this.generateBatchNumber(), // Tự động tạo batch number
+      factory: 'ASM1',
+      importDate: new Date(),
+      batchNumber: this.generateBatchNumber(index),
       materialCode: row['Mã TP'] || '',
       rev: row['REV'] || '',
       lot: row['LOT'] || '',
       lsx: row['LSX'] || '',
       quantity: parseInt(row['Lượng Nhập']) || 0,
-      carton: 0, // Sẽ được tính toán khi tick "Đã nhận"
-      odd: 0, // Sẽ được tính toán khi tick "Đã nhận"
-      location: 'Temporary', // Mặc định là Temporary
+      carton: 0,
+      odd: 0,
+      location: 'Temporary',
       notes: row['Ghi chú'] || '',
-      customer: '', // Sẽ lấy từ catalog khi tick "Đã nhận"
-      isReceived: false, // Mặc định chưa nhận
+      customer: '',
+      isReceived: false,
       createdAt: new Date(),
       updatedAt: new Date()
     }));
@@ -603,19 +703,25 @@ export class FgInComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Generate batch number based on week and sequence
-  private generateBatchNumber(): string {
+  // Batch 8 số: DDMM + 4 số thứ tự (0001, 0002, ...). offset dùng khi import nhiều dòng cùng lúc.
+  private generateBatchNumber(offset: number = 0): string {
     const now = new Date();
-    const weekNumber = this.getWeekNumber(now);
-    const sequence = Math.floor(Math.random() * 9999) + 1; // Random 4-digit sequence for demo
-    return `${weekNumber}${sequence.toString().padStart(4, '0')}`;
-  }
-
-  // Get week number of the year
-  private getWeekNumber(date: Date): number {
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+    const dd = ('0' + now.getDate()).slice(-2);
+    const mm = ('0' + (now.getMonth() + 1)).slice(-2);
+    const prefix = dd + mm;
+    const todayBatchNumbers = this.materials.filter(m => {
+      const d = m.importDate instanceof Date ? m.importDate : new Date(m.importDate);
+      const md = ('0' + d.getDate()).slice(-2);
+      const mMonth = ('0' + (d.getMonth() + 1)).slice(-2);
+      return (md + mMonth) === prefix && (m.batchNumber || '').length >= 8;
+    });
+    let maxSeq = 0;
+    todayBatchNumbers.forEach(m => {
+      const seq = parseInt((m.batchNumber || '').slice(-4), 10);
+      if (!isNaN(seq)) maxSeq = Math.max(maxSeq, seq);
+    });
+    const nextSeq = maxSeq + 1 + offset;
+    return prefix + nextSeq.toString().padStart(4, '0');
   }
 
     // Download template

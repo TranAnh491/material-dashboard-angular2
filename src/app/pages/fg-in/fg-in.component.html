@@ -62,6 +62,11 @@
           Debug
         </button>
 
+        <button class="custom-btn nhap-kho-btn" (click)="openNhapKho()">
+          <i class="material-icons">add_box</i>
+          Nhập Kho
+        </button>
+
         <button class="custom-btn" (click)="clearAllData()" style="background: #f44336 !important; color: white !important;">
           <i class="material-icons">delete_forever</i>
           Clear All
@@ -79,7 +84,6 @@
             <th>Ngày</th>
             <th>Batch</th>
             <th>Mã TP</th>
-            <th>REV</th>
             <th>LOT</th>
             <th>LSX</th>
             <th>QTY</th>
@@ -88,7 +92,7 @@
             <th>Vị Trí</th>
             <th>Ghi chú</th>
             <th>Khách</th>
-            <th>Đã nhận</th>
+            <th>Lock</th>
             <th>Xóa</th>
           </tr>
         </thead>
@@ -100,7 +104,6 @@
             <td>{{material.batchNumber}}</td>
             <td class="code-cell" 
                 [class.material-received]="material.isReceived">{{material.materialCode}}</td>
-            <td>{{material.rev}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
             <td class="number-cell">{{material.quantity}}</td>
@@ -119,12 +122,11 @@
                      placeholder="Nhập ghi chú..."
                      [disabled]="!canEditMaterial(material)">
             </td>
-            <td>{{getCustomerFromCatalog(material.materialCode)}}</td>
+            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
             <td class="status-cell">
               <mat-checkbox [checked]="material.isReceived" 
-                           (change)="updateReceivedStatus(material, $event.checked)" 
-                           [disabled]="material.isReceived"
-                           [matTooltip]="material.isReceived ? 'Không thể bỏ tick - Đã chuyển vào Inventory' : 'Tick để chuyển vào Inventory'"
+                           (change)="updateLockStatus(material, $event.checked)" 
+                           [matTooltip]="material.isReceived ? 'Đang khóa – Bỏ tick để mở khóa và chỉnh sửa' : 'Chưa khóa – Tick để khóa (chuyển vào Inventory)'"
                            [class.received-checked]="material.isReceived">
               </mat-checkbox>
             </td>
@@ -138,6 +140,65 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Nhập Kho Dialog -->
+<div class="custom-modal" [class.show]="showNhapKhoDialog" [style.display]="showNhapKhoDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeNhapKho()"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">add_box</i>
+        Nhập Kho
+      </h5>
+      <button type="button" class="close-btn" (click)="closeNhapKho()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body nhap-kho-form-body">
+      <div class="input-group nhap-kho-material-wrap">
+        <label class="input-label">Mã TP</label>
+        <input type="text"
+               class="custom-input full-width"
+               [(ngModel)]="newNhapKhoItem.materialCode"
+               (input)="onNhapKhoMaterialCodeInput()"
+               (focus)="onNhapKhoMaterialCodeFocus()"
+               (blur)="onNhapKhoMaterialCodeBlur()"
+               placeholder="Nhập Mã TP (từ 4 ký tự, gợi ý từ Mapping KH → TP)">
+        <ul class="nhap-kho-suggestions" *ngIf="showNhapKhoSuggestions && nhapKhoMaterialSuggestions.length">
+          <li *ngFor="let item of nhapKhoMaterialSuggestions"
+              (mousedown)="selectNhapKhoMaterialCode(item); $event.preventDefault()">
+            <span class="suggestion-code">{{ item.materialCode }}</span>
+            <span class="suggestion-meta" *ngIf="item.customerCode || item.description">
+              {{ item.customerCode ? 'Mã KH: ' + item.customerCode : '' }}{{ item.customerCode && item.description ? ' · ' : '' }}{{ item.description || '' }}
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div class="input-group">
+        <label class="input-label">Số lượng</label>
+        <input type="number" class="custom-input full-width" [(ngModel)]="newNhapKhoItem.quantity" placeholder="Số lượng" min="1">
+      </div>
+      <div class="input-group">
+        <label class="input-label">LOT</label>
+        <input type="text" class="custom-input full-width" [(ngModel)]="newNhapKhoItem.lot" placeholder="LOT">
+      </div>
+      <div class="input-group">
+        <label class="input-label">LSX</label>
+        <input type="text" class="custom-input full-width" [(ngModel)]="newNhapKhoItem.lsx" placeholder="LSX">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeNhapKho()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="submitNhapKho()">
+        <i class="material-icons">check</i>
+        Xác nhận
+      </button>
     </div>
   </div>
 </div>
@@ -334,7 +395,7 @@
                  class="custom-input">
           <input type="text" 
                  [(ngModel)]="newMappingItem.description" 
-                 placeholder="Mô Tả (optional)"
+                 placeholder="Tên Khách Hàng"
                  class="custom-input">
           <button class="custom-btn" (click)="addMappingItem()">
             <i class="material-icons">add</i>
@@ -351,7 +412,7 @@
               <th class="row-header">No</th>
               <th>Mã Khách Hàng</th>
               <th>Mã Thành Phẩm</th>
-              <th>Mô Tả</th>
+              <th>Tên Khách Hàng</th>
               <th>Xóa</th>
             </tr>
           </thead>
