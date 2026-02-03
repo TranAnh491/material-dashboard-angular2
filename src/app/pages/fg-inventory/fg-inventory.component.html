@@ -83,7 +83,7 @@
             <th>Tồn đầu</th>
             <th>Nhập</th>
             <th>Xuất</th>
-            <th>Tồn</th>
+            <th>Tồn kho</th>
             <th>Carton</th>
             <th>ODD</th>
             <th>Vị trí</th>
@@ -97,7 +97,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="15" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="17" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -154,7 +154,7 @@
                      placeholder="Nhập ghi chú..."
                      [disabled]="!canEditMaterial(material)">
             </td>
-            <td>{{material.customer}}</td>
+            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
             <td class="status-cell">
               <button mat-icon-button color="primary" (click)="openCreatePXDialog(material)" 
                       matTooltip="Tạo phiếu xuất">

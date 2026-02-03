@@ -46,6 +46,15 @@ export interface ProductCatalogItem {
   updatedAt?: Date;
 }
 
+export interface CustomerCodeMappingItem {
+  id?: string;
+  customerCode: string;
+  materialCode: string;
+  description?: string; // Tên Khách Hàng
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 @Component({
   selector: 'app-fg-inventory',
   templateUrl: './fg-inventory.component.html',
@@ -66,7 +75,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   catalogItems: ProductCatalogItem[] = [];
   catalogLoaded: boolean = false;
 
-
+  // Customer Code Mapping (Tên Khách Hàng = description)
+  mappingItems: CustomerCodeMappingItem[] = [];
 
   // Search optimization
   private searchSubject = new Subject<string>();
@@ -109,6 +119,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.setupDebouncedSearch();
     this.loadCatalogFromFirebase(); // Load catalog first
+    this.loadMappingFromFirebase(); // Load mapping for customer names
     this.loadMaterialsFromFirebase();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
@@ -225,7 +236,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Recalculate ton using formula: Tồn đầu + Nhập - Xuất = Tồn
+  // Recalculate Tồn kho: Tồn đầu + Nhập - Xuất
   private recalculateTon(material: FGInventoryItem): void {
     const tonDau = material.tonDau || 0;
     const nhap = material.nhap || 0;
@@ -805,6 +816,32 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         
         // Only calculate Tồn - other data comes from FG In
       });
+  }
+
+  // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
+  loadMappingFromFirebase(): void {
+    this.firestore.collection('fg-customer-mapping')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        const firebaseMapping = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          return {
+            id: action.payload.doc.id,
+            customerCode: data.customerCode || '',
+            materialCode: data.materialCode || '',
+            description: data.description || ''
+          };
+        });
+        this.mappingItems = firebaseMapping;
+        console.log('Loaded Customer Code Mapping from Firebase:', this.mappingItems.length);
+      });
+  }
+
+  // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
+  getCustomerNameFromMapping(materialCode: string): string {
+    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
+    return mapping ? (mapping.description || '') : '';
   }
 
   // Get customer from material data (no catalog lookup needed)

@@ -33,6 +33,27 @@ export interface FgOutItem {
   updatedAt?: Date;
 }
 
+export interface CustomerCodeMappingItem {
+  id?: string;
+  customerCode: string;
+  materialCode: string;
+  description?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface XuatKhoPreviewItem {
+  materialCode: string;
+  batchNumber: string;
+  lot: string;
+  lsx: string;
+  quantity: number;
+  availableStock: number;
+  location: string;
+  notes: string;
+  inventoryId?: string; // ID của record trong FG Inventory
+}
+
 @Component({
   selector: 'app-fg-out',
   templateUrl: './fg-out.component.html',
@@ -81,6 +102,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private locationCache = new Map<string, string>(); // Cache for locations
   private loadLocationsSubject = new Subject<void>(); // Subject for debouncing location loading
   
+  // Customer Code Mapping (Tên Khách Hàng = description)
+  mappingItems: CustomerCodeMappingItem[] = [];
+  
+  // Xuất Kho Dialog
+  showXuatKhoDialog: boolean = false;
+  xuatKhoInputText: string = '';
+  xuatKhoChecked: boolean = false;
+  xuatKhoPreviewItems: XuatKhoPreviewItem[] = [];
+  
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
 
   constructor(
@@ -92,6 +122,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadMaterialsFromFirebase();
+    this.loadMappingFromFirebase();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
     this.applyFilters();
@@ -152,6 +183,31 @@ export class FgOutComponent implements OnInit, OnDestroy {
         this.loadLocationsSubject.next(); // Trigger debounced location loading
         console.log('Loaded FG Out materials from Firebase:', this.materials.length);
       });
+  }
+
+  // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
+  loadMappingFromFirebase(): void {
+    this.firestore.collection('fg-customer-mapping')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        const firebaseMapping = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          return {
+            id: action.payload.doc.id,
+            customerCode: data.customerCode || '',
+            materialCode: data.materialCode || '',
+            description: data.description || ''
+          };
+        });
+        this.mappingItems = firebaseMapping;
+      });
+  }
+
+  // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
+  getCustomerNameFromMapping(materialCode: string): string {
+    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
+    return mapping ? (mapping.description || '') : '';
   }
 
   // Sort materials by date, shipment, materialCode, LSX, Batch
@@ -1157,5 +1213,208 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ==================== XUẤT KHO FUNCTIONS ====================
+  
+  // Open Xuất Kho Dialog
+  openXuatKhoDialog(): void {
+    this.showXuatKhoDialog = true;
+    this.xuatKhoInputText = '';
+    this.xuatKhoChecked = false;
+    this.xuatKhoPreviewItems = [];
+  }
+
+  // Close Xuất Kho Dialog
+  closeXuatKhoDialog(): void {
+    this.showXuatKhoDialog = false;
+    this.xuatKhoInputText = '';
+    this.xuatKhoChecked = false;
+    this.xuatKhoPreviewItems = [];
+  }
+
+  // Back to input step
+  backToInput(): void {
+    this.xuatKhoChecked = false;
+    this.xuatKhoPreviewItems = [];
+  }
+
+  // Remove item from preview list
+  removeXuatKhoItem(index: number): void {
+    this.xuatKhoPreviewItems.splice(index, 1);
+  }
+
+  // Check tồn kho từ FG Inventory
+  checkXuatKho(): void {
+    if (!this.xuatKhoInputText.trim()) {
+      alert('⚠️ Vui lòng nhập danh sách mã TP và số lượng');
+      return;
+    }
+
+    console.log('🔍 Checking inventory for export...');
+    
+    // Parse input text (Mã TP, Số lượng)
+    const lines = this.xuatKhoInputText.split('\n').filter(line => line.trim());
+    const requests: {materialCode: string, quantity: number}[] = [];
+    
+    lines.forEach(line => {
+      const parts = line.split(/[,\t]/).map(p => p.trim());
+      if (parts.length >= 2) {
+        const materialCode = parts[0].toUpperCase();
+        const quantity = parseInt(parts[1]);
+        if (materialCode && !isNaN(quantity) && quantity > 0) {
+          requests.push({ materialCode, quantity });
+        }
+      }
+    });
+
+    if (requests.length === 0) {
+      alert('⚠️ Không có dữ liệu hợp lệ. Vui lòng nhập theo định dạng: Mã TP, Số lượng');
+      return;
+    }
+
+    console.log('📋 Parsed requests:', requests);
+
+    // Query FG Inventory để tìm tồn kho
+    this.xuatKhoPreviewItems = [];
+    let processedCount = 0;
+
+    requests.forEach(request => {
+      this.firestore.collection('fg-inventory', ref => 
+        ref.where('materialCode', '==', request.materialCode)
+           .where('ton', '>', 0)
+      ).get().subscribe(snapshot => {
+        processedCount++;
+
+        if (!snapshot.empty) {
+          // Tìm thấy tồn kho, lấy item đầu tiên (hoặc có thể lấy nhiều items)
+          let remainingQuantity = request.quantity;
+
+          snapshot.docs.forEach(doc => {
+            if (remainingQuantity <= 0) return;
+
+            const data = doc.data() as any;
+            const availableStock = data.ton || 0;
+            const exportQuantity = Math.min(remainingQuantity, availableStock);
+
+            if (exportQuantity > 0) {
+              this.xuatKhoPreviewItems.push({
+                materialCode: data.materialCode || '',
+                batchNumber: data.batchNumber || '',
+                lot: data.lot || '',
+                lsx: data.lsx || '',
+                quantity: exportQuantity,
+                availableStock: availableStock,
+                location: data.location || '',
+                notes: '',
+                inventoryId: doc.id
+              });
+
+              remainingQuantity -= exportQuantity;
+            }
+          });
+
+          if (remainingQuantity > 0) {
+            console.warn(`⚠️ Không đủ tồn kho cho ${request.materialCode}: Còn thiếu ${remainingQuantity}`);
+          }
+        } else {
+          console.warn(`⚠️ Không tìm thấy tồn kho cho ${request.materialCode}`);
+        }
+
+        // Khi đã process hết tất cả requests
+        if (processedCount === requests.length) {
+          if (this.xuatKhoPreviewItems.length > 0) {
+            this.xuatKhoChecked = true;
+            console.log('✅ Found', this.xuatKhoPreviewItems.length, 'items to export');
+          } else {
+            alert('❌ Không tìm thấy hàng tồn kho phù hợp');
+          }
+        }
+      });
+    });
+  }
+
+  // Approve và lưu vào FG Out + cập nhật FG Inventory
+  approveXuatKho(): void {
+    if (this.xuatKhoPreviewItems.length === 0) {
+      alert('⚠️ Không có dữ liệu để duyệt');
+      return;
+    }
+
+    // Kiểm tra số lượng xuất không vượt quá tồn
+    const hasError = this.xuatKhoPreviewItems.some(item => item.quantity > item.availableStock);
+    if (hasError) {
+      alert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
+      return;
+    }
+
+    const confirmed = confirm(`✅ Xác nhận xuất kho ${this.xuatKhoPreviewItems.length} items?`);
+    if (!confirmed) return;
+
+    console.log('🚀 Approving export...');
+    let savedCount = 0;
+
+    this.xuatKhoPreviewItems.forEach(item => {
+      // 1. Tạo record trong FG Out
+      const fgOutRecord: any = {
+        factory: 'ASM1',
+        exportDate: new Date(),
+        shipment: this.selectedShipment || '',
+        materialCode: item.materialCode,
+        batchNumber: item.batchNumber,
+        lsx: item.lsx,
+        lot: item.lot,
+        quantity: item.quantity,
+        carton: 0,
+        qtyBox: 0,
+        odd: 0,
+        location: item.location,
+        notes: item.notes,
+        approved: false,
+        updateCount: 0,
+        pushNo: '000',
+        customerCode: '',
+        poShip: '',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      this.firestore.collection('fg-out').add(fgOutRecord).then(() => {
+        console.log(`✅ Created FG Out record for ${item.materialCode}`);
+        savedCount++;
+
+        // 2. Cập nhật cột Xuất trong FG Inventory
+        if (item.inventoryId) {
+          this.firestore.collection('fg-inventory').doc(item.inventoryId).get().subscribe(doc => {
+            if (doc.exists) {
+              const currentData = doc.data() as any;
+              const currentXuat = currentData.xuat || 0;
+              const newXuat = currentXuat + item.quantity;
+              const currentTon = currentData.ton || 0;
+              const newTon = currentTon - item.quantity;
+
+              doc.ref.update({
+                xuat: newXuat,
+                ton: newTon,
+                updatedAt: new Date()
+              }).then(() => {
+                console.log(`✅ Updated FG Inventory xuat: ${currentXuat} → ${newXuat}, ton: ${currentTon} → ${newTon}`);
+              }).catch(error => {
+                console.error('❌ Error updating FG Inventory:', error);
+              });
+            }
+          });
+        }
+
+        // Khi đã lưu hết
+        if (savedCount === this.xuatKhoPreviewItems.length) {
+          alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items!`);
+          this.closeXuatKhoDialog();
+          this.loadMaterialsFromFirebase(); // Refresh data
+        }
+      }).catch(error => {
+        console.error('❌ Error creating FG Out record:', error);
+        alert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
+      });
+    });
+  }
 
 }

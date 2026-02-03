@@ -2051,6 +2051,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   letter-spacing: 0 !important;
                 }
                 
+                .info-row.material-code {
+                  font-size: 23.04px !important; /* Gấp đôi từ 9.6px + tăng 20% */
+                  font-weight: bold !important;
+                }
+                
                 .info-row.small {
                   font-size: 8.4px !important; /* Tăng 20% từ 7px */
                   color: #000000 !important; /* Đổi từ #666 thành đen */
@@ -2146,6 +2151,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     white-space: nowrap !important;
                   }
                   
+                  .info-row.material-code {
+                    font-size: 23.04px !important; /* Gấp đôi từ 9.6px + tăng 20% */
+                    font-weight: bold !important;
+                  }
+                  
                   .info-row.small {
                     font-size: 8.4px !important; /* Tăng 20% từ 7px */
                     color: #000000 !important; /* Đổi từ #666 thành đen */
@@ -2208,7 +2218,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                       </div>
                       <div class="info-section">
                         <div>
-                          <div class="info-row">Mã: ${qr.materialCode}</div>
+                          <div class="info-row material-code">${qr.materialCode}</div>
                           <div class="info-row">PO: ${qr.poNumber}</div>
                           <div class="info-row">Ngày: ${qr.qrData.split('|')[3]}</div>
                           <div class="info-row">Số ĐV: ${qr.unitNumber}</div>

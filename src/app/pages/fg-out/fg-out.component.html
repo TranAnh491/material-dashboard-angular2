@@ -66,6 +66,11 @@
           <i class="material-icons">add_box</i>
           Thêm dòng
         </button>
+        
+        <button class="custom-btn btn-warning" (click)="openXuatKhoDialog()">
+          <i class="material-icons">exit_to_app</i>
+          Xuất Kho
+        </button>
 
       </div>
     </div>
@@ -76,22 +81,17 @@
         <thead>
           <tr>
             <th class="row-header">No</th>
-            <th class="date-header">NGÀY</th>
-            <th class="update-header">PushNo</th>
-            <th>Factory</th>
-            <th>Shipment</th>
-            <th>Mã TP</th>
-            <th>Mã Khách</th>
+            <th class="date-header">Ngày</th>
             <th>Batch</th>
-            <th>LSX</th>
+            <th>Mã TP</th>
             <th>LOT</th>
-            <th>Lượng Xuất</th>
-            <th>PO Ship</th>
+            <th>LSX</th>
+            <th>QTY Xuất</th>
             <th>Carton</th>
-            <th>QTYBOX</th>
-            <th>Odd</th>
-            <th>Vị trí</th>
+            <th>ODD</th>
+            <th>Vị Trí</th>
             <th>Ghi chú</th>
+            <th>Khách</th>
             <th>Duyệt Xuất</th>
             <th>Xóa</th>
           </tr>
@@ -105,41 +105,6 @@
                      [value]="formatDateForInput(material.exportDate)"
                      (change)="onDateChange($event, material)">
             </td>
-            <td class="update-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.pushNo"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="PushNo">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.factory"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Factory">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.shipment"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Shipment code">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.materialCode"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Mã TP">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.customerCode"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Mã Khách">
-            </td>
             <td class="code-cell">
               <input type="text"
                      class="editable-input"
@@ -150,9 +115,9 @@
             <td class="code-cell">
               <input type="text"
                      class="editable-input"
-                     [(ngModel)]="material.lsx"
+                     [(ngModel)]="material.materialCode"
                      (change)="updateMaterialInFirebase(material)"
-                     placeholder="LSX">
+                     placeholder="Mã TP">
             </td>
             <td class="code-cell">
               <input type="text"
@@ -161,19 +126,19 @@
                      (change)="updateMaterialInFirebase(material)"
                      placeholder="LOT">
             </td>
+            <td class="code-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.lsx"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="LSX">
+            </td>
             <td class="number-cell">
               <input type="number"
                      class="editable-input number-input"
                      [(ngModel)]="material.quantity"
                      (change)="updateMaterialInFirebase(material)"
-                     placeholder="Lượng">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.poShip"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="PO Ship">
+                     placeholder="QTY Xuất">
             </td>
             <td class="number-cell">
               <input type="number"
@@ -181,13 +146,6 @@
                      [(ngModel)]="material.carton"
                      (change)="updateMaterialInFirebase(material)"
                      placeholder="Carton">
-            </td>
-            <td class="number-cell">
-              <input type="number"
-                     class="editable-input number-input"
-                     [(ngModel)]="material.qtyBox"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="QtyBox">
             </td>
             <td class="checkbox-cell">
               <input type="checkbox"
@@ -210,6 +168,7 @@
                      (change)="updateMaterialInFirebase(material)"
                      placeholder="">
             </td>
+            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
             <td class="checkbox-cell">
               <input type="checkbox"
                      class="approval-checkbox"
@@ -394,13 +353,11 @@
               <tr>
                 <th>STT</th>
                 <th>Mã TP</th>
-                <th>Mã Khách</th>
                 <th>Batch</th>
-                <th>LSX</th>
                 <th>LOT</th>
-                <th>Lượng Xuất</th>
+                <th>LSX</th>
+                <th>QTY Xuất</th>
                 <th>Carton</th>
-                <th>QTYBOX</th>
                 <th>Vị trí</th>
                 <th>Ghi chú</th>
               </tr>
@@ -409,13 +366,11 @@
               <tr *ngFor="let material of printMaterials; let i = index">
                 <td>{{i + 1}}</td>
                 <td>{{material.materialCode}}</td>
-                <td>{{material.customerCode}}</td>
                 <td>{{material.batchNumber}}</td>
-                <td>{{material.lsx}}</td>
                 <td>{{material.lot}}</td>
+                <td>{{material.lsx}}</td>
                 <td>{{material.quantity}}</td>
                 <td>{{material.carton}}</td>
-                <td>{{material.qtyBox}}</td>
                 <td>{{material.location}}</td>
                 <td>{{material.notes}}</td>
               </tr>
@@ -487,6 +442,148 @@
       <button type="button" class="btn btn-apply" (click)="applyTimeRangeFilter()">
         <i class="material-icons">search</i>
         Lọc
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Xuất Kho Dialog -->
+<div class="custom-modal" [class.show]="showXuatKhoDialog" [style.display]="showXuatKhoDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showXuatKhoDialog = false"></div>
+  <div class="modal-container modal-large">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">exit_to_app</i>
+        Xuất Kho
+      </h5>
+      <button type="button" class="close-btn" (click)="closeXuatKhoDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      
+      <!-- Step 1: Nhập Mã TP + Số lượng -->
+      <div class="xuat-kho-section" *ngIf="!xuatKhoChecked">
+        <h6>Nhập danh sách xuất kho (Mã TP + Số lượng)</h6>
+        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+          Mỗi dòng: Mã TP, Số lượng (phân cách bằng dấu phẩy hoặc tab)
+        </p>
+        <textarea class="xuat-kho-textarea" 
+                  [(ngModel)]="xuatKhoInputText"
+                  placeholder="Ví dụ:&#10;ABC123, 100&#10;DEF456, 200&#10;GHI789, 150"
+                  rows="10"></textarea>
+        
+        <div style="margin-top: 15px;">
+          <button type="button" class="btn btn-apply" (click)="checkXuatKho()">
+            <i class="material-icons">search</i>
+            Check Tồn Kho
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Preview và chỉnh sửa -->
+      <div class="xuat-kho-section" *ngIf="xuatKhoChecked">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h6>Danh sách xuất kho (có thể chỉnh sửa)</h6>
+          <button type="button" class="btn btn-cancel" (click)="backToInput()">
+            <i class="material-icons">arrow_back</i>
+            Quay lại
+          </button>
+        </div>
+        
+        <div class="preview-table" style="max-height: 400px; overflow-y: auto;">
+          <table class="excel-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã TP</th>
+                <th>Batch</th>
+                <th>LOT</th>
+                <th>LSX</th>
+                <th>Tồn</th>
+                <th>Số lượng xuất</th>
+                <th>Vị trí</th>
+                <th>Ghi chú</th>
+                <th>Xóa</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of xuatKhoPreviewItems; let i = index" 
+                  [class.error-row]="item.quantity > item.availableStock">
+                <td>{{i + 1}}</td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.materialCode"
+                         style="min-width: 100px;">
+                </td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.batchNumber"
+                         style="min-width: 80px;">
+                </td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.lot"
+                         style="min-width: 80px;">
+                </td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.lsx"
+                         style="min-width: 100px;">
+                </td>
+                <td class="number-cell">{{item.availableStock}}</td>
+                <td>
+                  <input type="number" 
+                         class="editable-input number-input" 
+                         [(ngModel)]="item.quantity"
+                         style="min-width: 80px;"
+                         [class.error-input]="item.quantity > item.availableStock">
+                </td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.location"
+                         style="min-width: 80px;">
+                </td>
+                <td>
+                  <input type="text" 
+                         class="editable-input" 
+                         [(ngModel)]="item.notes"
+                         style="min-width: 120px;">
+                </td>
+                <td>
+                  <button mat-icon-button color="warn" (click)="removeXuatKhoItem(i)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div *ngIf="xuatKhoPreviewItems.length === 0" style="text-align: center; padding: 30px; color: #999;">
+          <i class="material-icons" style="font-size: 48px;">inventory_2</i>
+          <p>Không tìm thấy hàng tồn kho phù hợp</p>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeXuatKhoDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" 
+              class="btn btn-apply" 
+              (click)="approveXuatKho()"
+              [disabled]="!xuatKhoChecked || xuatKhoPreviewItems.length === 0"
+              *ngIf="xuatKhoChecked">
+        <i class="material-icons">check</i>
+        Duyệt Xuất Kho
       </button>
     </div>
   </div>

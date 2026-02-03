@@ -7,6 +7,41 @@
   padding: 0;
 }
 
+// Xuất Kho Dialog Styles
+.xuat-kho-section {
+  padding: 15px;
+  
+  h6 {
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+}
+
+.xuat-kho-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+  
+  &:focus {
+    outline: none;
+    border-color: #2196F3;
+  }
+}
+
+.error-row {
+  background-color: #ffebee !important;
+}
+
+.error-input {
+  border-color: #f44336 !important;
+  background-color: #ffebee !important;
+}
+
 .main-content {
   padding: 0;
   margin: 0;
