@@ -18,7 +18,7 @@
           <div class="scan-info-row">
             <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
             <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
-            <span class="scan-info-item">Đã scan: <strong>{{checkMode === 'pn' ? getCurrentPalletScannedCarton() : getCurrentPalletScannedQuantity()}}</strong>{{checkMode === 'pn' ? ' thùng' : ''}}</span>
+            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedCarton()}}</strong> thùng</span>
           </div>
           <div class="scan-inputs-row">
             <input type="text" 

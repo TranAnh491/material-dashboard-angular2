@@ -1303,70 +1303,43 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
     console.log('🔍 Loading inventory for shipment:', this.xuatKhoSelectedShipment);
     
-    // Bước 1: Query FG In để lấy danh sách items của shipment này
-    this.firestore.collection('fg-in', ref => 
-      ref.where('shipmentCode', '==', this.xuatKhoSelectedShipment)
-    ).get().subscribe(fgInSnapshot => {
-      
-      if (fgInSnapshot.empty) {
-        alert('⚠️ Không tìm thấy dữ liệu nhập kho cho shipment này');
-        return;
-      }
+    // Load trực tiếp từ FG Inventory
+    this.firestore.collection('fg-inventory', ref => 
+      ref.where('ton', '>', 0)
+    ).get().subscribe(snapshot => {
+      this.xuatKhoPreviewItems = [];
 
-      // Thu thập các unique keys (materialCode + lot + lsx + batch)
-      const fgInItems = new Map<string, any>();
-      fgInSnapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-        const key = `${data.materialCode}_${data.lot}_${data.lsx}_${data.batchNumber}`;
-        fgInItems.set(key, {
-          materialCode: data.materialCode,
-          lot: data.lot,
-          lsx: data.lsx,
-          batchNumber: data.batchNumber
-        });
-      });
-
-      console.log('📋 Found', fgInItems.size, 'unique items from FG In');
-
-      // Bước 2: Query FG Inventory để lấy tồn kho
-      this.firestore.collection('fg-inventory', ref => 
-        ref.where('ton', '>', 0)
-      ).get().subscribe(inventorySnapshot => {
-        this.xuatKhoPreviewItems = [];
-
-        inventorySnapshot.docs.forEach(doc => {
+      if (!snapshot.empty) {
+        snapshot.docs.forEach(doc => {
           const data = doc.data() as any;
-          const key = `${data.materialCode}_${data.lot}_${data.lsx}_${data.batchNumber}`;
-          
-          // Chỉ lấy những items có trong FG In của shipment này
-          if (fgInItems.has(key)) {
-            const availableStock = data.ton || 0;
-            if (availableStock > 0) {
-              this.xuatKhoPreviewItems.push({
-                materialCode: data.materialCode || '',
-                batchNumber: data.batchNumber || '',
-                lot: data.lot || '',
-                lsx: data.lsx || '',
-                quantity: availableStock, // Mặc định xuất hết tồn
-                availableStock: availableStock,
-                location: data.location || '',
-                notes: '',
-                inventoryId: doc.id,
-                selected: false // Mặc định không chọn, để user tự chọn
-              });
-            }
+          const availableStock = data.ton || 0;
+
+          if (availableStock > 0) {
+            this.xuatKhoPreviewItems.push({
+              materialCode: data.materialCode || '',
+              batchNumber: data.batchNumber || '',
+              lot: data.lot || '',
+              lsx: data.lsx || '',
+              quantity: availableStock, // Mặc định xuất hết tồn
+              availableStock: availableStock,
+              location: data.location || '',
+              notes: '',
+              inventoryId: doc.id,
+              selected: false // Mặc định không chọn, để user tự chọn
+            });
           }
         });
 
-        console.log('📦 Loaded', this.xuatKhoPreviewItems.length, 'items matching shipment');
-
-        if (this.xuatKhoPreviewItems.length === 0) {
-          alert('⚠️ Không tìm thấy hàng tồn kho cho shipment này');
-        } else {
+        if (this.xuatKhoPreviewItems.length > 0) {
+          this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
-          this.xuatKhoStep = 2; // Chuyển sang bước preview
+          console.log('✅ Loaded', this.xuatKhoPreviewItems.length, 'items from FG Inventory');
+        } else {
+          alert('❌ Không có hàng tồn kho');
         }
-      });
+      } else {
+        alert('❌ Không tìm thấy hàng tồn kho');
+      }
     });
   }
 
