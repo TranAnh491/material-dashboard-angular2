@@ -2,7 +2,7 @@
 :host {
   display: block;
   height: 100vh;
-  overflow: hidden;
+  overflow: hidden; /* Ẩn scroll bên ngoài */
 }
 
 .main-content {
@@ -11,7 +11,7 @@
   flex-direction: column;
   padding: 0px 6px;
   margin-top: 0px;
-  overflow: hidden;
+  overflow: hidden; /* Ẩn scroll bên ngoài */
 }
 
 .container-fluid {
@@ -20,7 +20,7 @@
   flex-direction: column;
   margin-top: 0px;
   padding-top: 0px;
-  overflow: hidden;
+  overflow: hidden; /* Ẩn scroll bên ngoài */
 }
 
 .card-body {
@@ -28,14 +28,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 4px 6px;
+  padding: 4px 6px 12px 6px; /* padding-bottom để không che thanh scroll ngang */
 }
 
 .card {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow: hidden; /* Ẩn scroll bên ngoài */
 }
 
 /* Header Section */
@@ -423,26 +423,39 @@
   text-align: center;
 }
 
-/* Table Section - container scroll riêng cho tbody */
+/* Table Section - thanh kéo ngang + dọc, scrollbar luôn nằm trong màn hình */
 .table-responsive {
   flex: 1;
-  overflow-y: auto; /* Chỉ scroll vertical */
-  overflow-x: auto; /* Scroll horizontal nếu cần */
+  min-height: 0;
+  min-width: 0;
+  /* Giảm max-height để thanh scroll ngang không bị che bởi viền/cửa sổ */
+  max-height: calc(100vh - 280px);
+  overflow-x: scroll !important;
+  overflow-y: auto !important;
   background: #ffffff;
   position: relative;
-  max-height: calc(100vh - 250px); /* Giới hạn chiều cao để có scroll riêng */
   border-radius: 6px;
   border: 1px solid #e9ecef;
-  max-height: calc(100vh - 120px); /* Tăng chiều cao bảng để tận dụng màn hình tối đa */
-  padding: 2px; /* Giảm padding để tận dụng không gian tối đa */
+  padding: 2px 2px 8px 2px; /* padding-bottom để thanh scroll ngang không sát viền */
+  margin-bottom: 4px; /* Khoảng cách dưới, thanh scroll luôn thấy */
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
-.table {
-  width: 100%;
+.table-scroll-wrapper {
+  display: block;
+  width: 2800px;
+  min-width: 2800px;
+  box-sizing: border-box;
+}
+
+.table-responsive .table {
+  width: 2800px;
+  min-width: 2800px;
   border-collapse: collapse;
   background: #ffffff;
   font-size: 12px;
-  table-layout: auto; /* Cột tự mở rộng/thu nhỏ theo nội dung */
+  table-layout: auto;
   border: 1px solid #dee2e6;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -649,13 +662,13 @@
 }
 
 .customer-cell {
-  min-width: 130px;
-  width: 130px;
+  min-width: 169px;
+  width: 169px;
 }
 
 .poship-cell {
-  min-width: 130px;
-  width: 130px;
+  min-width: 169px;
+  width: 169px;
 }
 
 .notes-cell {
