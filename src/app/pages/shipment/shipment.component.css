@@ -764,6 +764,30 @@
 .table th:nth-child(27), .table td:nth-child(27) { min-width: 67px; }  /* 27 XÓA */
 .table th:nth-child(28), .table td:nth-child(28) { min-width: 67px; }  /* 28 ẨN */
 
+/* Cố định cột từ NO đến Mã TP (cột 1–8) khi kéo ngang – vẫn thấy Mã TP */
+.table th:nth-child(1), .table th:nth-child(2), .table th:nth-child(3), .table th:nth-child(4),
+.table th:nth-child(5), .table th:nth-child(6), .table th:nth-child(7), .table th:nth-child(8) {
+  top: 0;
+}
+.table th:nth-child(1), .table td:nth-child(1) { position: sticky; left: 0; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(1) { z-index: 10; background: #f0f0f0 !important; }
+.table th:nth-child(2), .table td:nth-child(2) { position: sticky; left: 56px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(2) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(3), .table td:nth-child(3) { position: sticky; left: 176px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(3) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(4), .table td:nth-child(4) { position: sticky; left: 281px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(4) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(5), .table td:nth-child(5) { position: sticky; left: 367px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(5) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(6), .table td:nth-child(6) { position: sticky; left: 477px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(6) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(7), .table td:nth-child(7) { position: sticky; left: 567px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(7) { z-index: 10; background: #ffffff !important; }
+.table th:nth-child(8), .table td:nth-child(8) { position: sticky; left: 615px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table td:nth-child(8) { z-index: 10; background: #ffffff !important; }
+.table td:nth-child(6).quantity-matched { background: #4CAF50 !important; }
+.table td:nth-child(6).carton-matched { background: #4CAF50 !important; }
+
 /* Cột Ẩn (cột cuối cùng): có tiêu đề "ẨN" và viền ngang dọc đầy đủ */
 .table th.col-hidden-header,
 .table th:last-child {

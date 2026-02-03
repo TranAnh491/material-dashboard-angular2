@@ -421,12 +421,8 @@
                      (click)="$event.target.showPicker()"
                      title="Click để chọn ngày Dispatch Date">
             </td>
-            <td class="number-cell">
-              <input type="number"
-                     class="editable-input number-input"
-                     [(ngModel)]="shipment.dayPre"
-                     (change)="updateShipmentInFirebase(shipment)"
-                     placeholder="Ngày chuẩn bị">
+            <td class="number-cell daypre-cell">
+              {{ getDayPreDisplay(shipment) }}
             </td>
             <td class="notes-cell">
               <input type="text"
@@ -663,10 +659,7 @@
           </div>
           <div class="input-group">
             <label class="input-label">Ngày chuẩn bị</label>
-            <input type="number" 
-                   class="form-input" 
-                   [(ngModel)]="newShipment.dayPre" 
-                   placeholder="Nhập số ngày">
+            <span class="form-input daypre-readonly">{{ getDayPreDisplay(newShipment) }}</span>
           </div>
         </div>
         

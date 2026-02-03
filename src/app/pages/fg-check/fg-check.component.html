@@ -327,11 +327,11 @@
      *ngIf="showDeleteConfirmPopup" 
      (click)="closeDeleteConfirm()">
   <div class="modal-container delete-confirm-modal" (click)="$event.stopPropagation()">
-    <h3>Xóa item</h3>
+    <h3>Xóa item đã lock</h3>
     <p class="delete-confirm-info" *ngIf="deleteConfirmItem">
       Shipment: {{deleteConfirmItem.shipment}} | Mã TP: {{deleteConfirmItem.materialCode}}
     </p>
-    <p class="delete-confirm-hint">Quét mã quản lý (chỉ quét, không nhập tay):</p>
+    <p class="delete-confirm-hint">Item đã lock – cần quét mã quản lý (chỉ quét, không nhập tay):</p>
     <input type="text"
            #deleteManagerInput
            class="form-input delete-manager-scan-input"

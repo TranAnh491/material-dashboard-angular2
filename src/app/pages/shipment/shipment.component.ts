@@ -363,11 +363,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.newShipment.actualShipDate = new Date();
     }
 
+    this.newShipment.dayPre = this.calcDayPre(this.newShipment) ?? 0;
+
     const shipmentData = {
       ...this.newShipment,
       requestDate: this.newShipment.requestDate,
       fullDate: this.newShipment.fullDate,
       actualShipDate: this.newShipment.actualShipDate,
+      dayPre: this.newShipment.dayPre,
       pushNo: this.newShipment.pushNo || '000', // Ensure PushNo is included
       inventory: this.newShipment.inventory || 0, // Ensure inventory is included
       packing: this.newShipment.packing || 'Pallet', // Ensure packing is included
@@ -1283,13 +1286,30 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return `${year}-${month}-${day}`;
   }
 
+  /** Tính Ngày chuẩn bị = Dispatch date - Full date (số ngày). Trả về null nếu thiếu một trong hai ngày. */
+  calcDayPre(shipment: ShipmentItem): number | null {
+    const full = shipment.fullDate ? new Date(shipment.fullDate).getTime() : null;
+    const dispatch = shipment.actualShipDate ? new Date(shipment.actualShipDate).getTime() : null;
+    if (full == null || dispatch == null) return null;
+    const days = Math.round((dispatch - full) / (24 * 60 * 60 * 1000));
+    return days;
+  }
+
+  /** Giá trị hiển thị cột Ngày chuẩn bị (tính từ Full date - Dispatch date). */
+  getDayPreDisplay(shipment: ShipmentItem): string | number {
+    const val = this.calcDayPre(shipment);
+    return val !== null ? val : '';
+  }
+
   // Update date field
   updateDateField(shipment: ShipmentItem, field: string, dateString: string): void {
     if (dateString) {
       (shipment as any)[field] = new Date(dateString);
     } else {
-      // Set to null instead of current date when empty
       (shipment as any)[field] = null;
+    }
+    if (field === 'fullDate') {
+      shipment.dayPre = this.calcDayPre(shipment) ?? 0;
     }
     shipment.updatedAt = new Date();
     this.updateShipmentInFirebase(shipment);
@@ -1356,29 +1376,27 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
     const newDate = dateString ? new Date(dateString) : null;
     
-    // Update current shipment first
     shipment.actualShipDate = newDate;
+    shipment.dayPre = this.calcDayPre(shipment) ?? 0;
     shipment.updatedAt = new Date();
     
     if (!shipmentCode) {
-      // If no shipment code, just update this one
       this.updateShipmentInFirebase(shipment);
       return;
     }
     
-    // Find all shipments with the same shipmentCode
     const sameShipmentRows = this.shipments.filter(s => 
       this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
     );
     
-    // Update Dispatch Date for all rows with same shipmentCode
     sameShipmentRows.forEach(s => {
       s.actualShipDate = newDate;
+      s.dayPre = this.calcDayPre(s) ?? 0;
       s.updatedAt = new Date();
       this.updateShipmentInFirebase(s);
     });
     
-    console.log(`✅ Đã đồng bộ "Dispatch Date" cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
+    console.log(`✅ Đã đồng bộ "Dispatch Date" và Ngày chuẩn bị cho ${sameShipmentRows.length} dòng của shipment ${shipmentCode}`);
   }
 
   // Handle FWD change - sync to all rows with same shipmentCode

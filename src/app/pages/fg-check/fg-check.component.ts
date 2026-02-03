@@ -669,13 +669,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 1000); // Wait 1000ms for mapping to load
   }
 
-  // Apply search filters (Lock = ẩn; chỉ hiện nếu không lock hoặc shipment trong unhiddenShipments)
+  // Apply search filters: dòng đã lock luôn ẩn (muốn thấy thì dùng UNHIDE shipment)
   applyFilters(): void {
     this.filteredItems = this.items.filter(item => {
       const itemShipment = String(item.shipment || '').trim().toUpperCase();
-      // Ẩn dòng đã Lock, trừ khi Shipment đã được UNHIDE
-      if (item.isLocked && !this.unhiddenShipments.has(itemShipment)) {
-        return false;
+      // Ẩn dòng đã Lock; chỉ hiện nếu Shipment đã được UNHIDE
+      if (item.isLocked) {
+        if (!this.unhiddenShipments.has(itemShipment)) return false;
       }
       // Filter by shipment nếu đang check một shipment cụ thể
       if (this.filterByShipment && this.filterByShipment.trim() !== '') {
@@ -2288,8 +2288,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
   }
 
-  /** Mở popup xóa: bắt buộc quét mã quản lý (chỉ scan). */
+  /** Mở xóa: chưa lock → confirm rồi xóa; đã lock → mở popup quét mã quản lý. */
   openDeleteConfirm(item: FGCheckItem): void {
+    if (!item.isLocked) {
+      if (confirm(`Xóa item?\n\nShipment: ${item.shipment} | Mã TP: ${item.materialCode}`)) {
+        this.doDeleteItem(item);
+      }
+      return;
+    }
     this.deleteConfirmItem = item;
     this.deleteManagerScanInput = '';
     this.deleteScanFirstCharTime = 0;
