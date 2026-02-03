@@ -311,13 +311,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Format number with commas for thousands
+  /** Định dạng số: hàng nghìn bằng dấu phẩy (ví dụ 1,000), không có số lẻ thập phân */
   formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined) {
       return '0';
     }
-    
-    return value.toLocaleString('vi-VN');
+    return value.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
   }
 
   // Get status class for styling
@@ -662,11 +661,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
 
   // Handle quantity input change with formatting
-  onQuantityChange(event: any, shipment: ShipmentItem): void {
+  /** Cập nhật quantity khi gõ (chỉ đổi giá trị hiển thị, chưa lưu Firebase). */
+  onQuantityInput(event: any, shipment: ShipmentItem): void {
     const inputValue = event.target.value;
-    // Remove commas and parse as number
-    const numericValue = parseFloat(inputValue.replace(/,/g, '')) || 0;
+    const numericValue = parseFloat(String(inputValue).replace(/,/g, '')) || 0;
     shipment.quantity = numericValue;
+  }
+
+  /** Lưu Lượng xuất vào Firebase khi click ra ngoài ô (blur). */
+  onQuantityBlur(shipment: ShipmentItem): void {
     this.updateShipmentInFirebase(shipment);
   }
 
@@ -2194,12 +2197,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const importDate = fmtDate(s.importDate);
     const dispatchDate = fmtDate(s.actualShipDate);
     
-    // Tạo HTML cho từng mã TP
+    // Tạo HTML cho từng mã TP (có ô tick Mã hàng, Số lượng khi đã soạn xong)
     const itemBoxes = allItemsInShipment.map(item => `
       <div class="item-box">
         <div class="item-row">
-          <div class="item-cell"><strong>Mã TP:</strong> ${this.escapeHtml(String(item.materialCode || ''))}</div>
-          <div class="item-cell"><strong>Số lượng:</strong> ${this.escapeHtml(String(item.quantity ?? ''))}</div>
+          <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Mã TP:</strong> ${this.escapeHtml(String(item.materialCode || ''))}</div>
+          <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Số lượng:</strong> ${this.escapeHtml(String(item.quantity ?? ''))}</div>
         </div>
         <div class="item-row">
           <div class="item-cell"><strong>Carton:</strong> ${this.escapeHtml(String(item.carton ?? ''))}</div>
@@ -2230,12 +2233,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 13px; padding: 15mm; color: #000; }
     
-    /* Header */
     .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #000; padding-bottom: 10px; }
     .header h1 { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
     .header .shipment-code { font-size: 18px; color: #2196F3; font-weight: bold; }
     
-    /* Top section: QR + Dates */
     .top-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .qr-section { flex: 0 0 220px; text-align: center; border: 2px solid #000; padding: 10px; }
     .qr-section img { width: 200px; height: 200px; }
@@ -2245,21 +2246,59 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .date-box { border: 2px solid #000; padding: 15px; background: #f9f9f9; }
     .date-box strong { display: block; font-size: 14px; margin-bottom: 5px; color: #2196F3; }
     .date-box .date-value { font-size: 16px; font-weight: bold; }
+    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
+    .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; }
     
-    /* Items section */
-    .items-section { margin-bottom: 20px; }
+    .items-section { margin-bottom: 16px; }
     .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #2196F3; color: white; }
     .item-box { border: 2px solid #000; padding: 10px; margin-bottom: 10px; background: #fff; }
     .item-row { display: flex; gap: 10px; margin-bottom: 5px; }
     .item-row:last-child { margin-bottom: 0; }
     .item-cell { flex: 1; padding: 8px; border: 1px solid #ddd; background: #f9f9f9; }
+    .item-cell-tick .tick-box { font-size: 16px; margin-right: 6px; }
     
-    /* Notes section */
+    .ship-by-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; background: #f5f5f5; }
+    .ship-by-section h4 { font-size: 14px; margin-bottom: 10px; }
+    .ship-by-options { display: flex; gap: 20px; margin-bottom: 8px; }
+    .ship-by-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .ship-by-options input { width: 18px; height: 18px; }
+    
+    .part-divider { margin: 24px 0 16px 0; border-top: 3px solid #000; padding-top: 16px; }
+    .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; }
+    
+    .inspection-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; }
+    .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #333; color: #fff; padding: 6px; }
+    .inspection-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
+    .inspection-table th, .inspection-table td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+    .inspection-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+    .inspection-table .col-no { width: 36px; text-align: center; }
+    .inspection-table .col-content { min-width: 280px; }
+    .inspection-table .col-pass { width: 70px; text-align: center; }
+    .inspection-table .col-fail { width: 80px; text-align: center; }
+    .inspection-table .cat-header { background: #e8e8e8; font-weight: bold; }
+    .inspection-table .tick-cell { text-align: center; }
+    .inspection-7 { margin-bottom: 12px; }
+    .inspection-7-title { font-weight: bold; margin-bottom: 6px; font-size: 12px; }
+    .inspection-truck { margin-bottom: 8px; }
+    .inspection-truck-title { font-weight: bold; margin-bottom: 4px; font-size: 12px; }
+    .inspection-truck-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+    .inspection-truck-table th, .inspection-truck-table td { border: 1px solid #000; padding: 6px 8px; }
+    .inspection-truck-table th { background: #f0f0f0; }
+    .inspection-moto { font-size: 12px; color: #666; font-style: italic; margin-top: 8px; }
+    
     .notes-section { margin-bottom: 20px; }
     .notes-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; padding: 5px; background: #666; color: white; }
     .notes-box { border: 2px solid #666; padding: 10px; min-height: 60px; background: #fff; white-space: pre-wrap; }
     
-    /* Signature section */
+    .goods-confirm-section { margin-top: 20px; margin-bottom: 20px; border: 2px solid #000; padding: 15px; background: #fafafa; }
+    .goods-confirm-section h4 { font-size: 13px; margin-bottom: 10px; font-weight: bold; }
+    .goods-confirm-statement { margin: 12px 0; padding: 10px; border: 1px solid #ccc; background: #fff; font-weight: bold; }
+    .goods-confirm-signatures { display: flex; justify-content: space-between; gap: 20px; margin-top: 30px; }
+    .goods-confirm-sig-block { flex: 1; text-align: center; }
+    .goods-confirm-sig-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
+    .goods-confirm-sig-line { height: 50px; border-bottom: 2px solid #000; margin-bottom: 4px; }
+    .goods-confirm-sig-hint { font-size: 11px; font-style: italic; color: #555; }
+    
     .signature-section { margin-top: 30px; border: 2px solid #000; padding: 15px; }
     .signature-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; text-align: center; }
     .signature-box { height: 80px; border-bottom: 2px solid #000; margin-top: 50px; }
@@ -2267,13 +2306,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   </style>
 </head>
 <body>
-  <!-- Header -->
   <div class="header">
     <h1>SHIPMENT ORDER</h1>
     <div class="shipment-code">${this.escapeHtml(shipmentCode)}</div>
   </div>
   
-  <!-- Top Section: QR + Dates -->
+  <!-- PHẦN 1: THÔNG TIN SOẠN HÀNG -->
+  <div class="part-title">PHẦN 1: THÔNG TIN SOẠN HÀNG / PART 1: PICKING INFORMATION</div>
+  
   <div class="top-section">
     <div class="qr-section">
       ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
@@ -2288,28 +2328,171 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         <strong>NGÀY SHIP:</strong>
         <div class="date-value">${dispatchDate}</div>
       </div>
+      <div class="notes-box-top-label">GHI CHÚ (dưới box Ngày Ship):</div>
+      <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
     </div>
   </div>
   
-  <!-- Items Section -->
   <div class="items-section">
-    <div class="items-title">CHI TIẾT SẢN PHẨM (${allItemsInShipment.length} mã TP)</div>
+    <div class="items-title">CHI TIẾT SẢN PHẨM (${allItemsInShipment.length} mã TP) – Tick ☐ khi đã soạn xong</div>
     ${itemBoxes}
   </div>
   
-  <!-- Notes Section -->
   ${allNotes ? `
   <div class="notes-section">
-    <div class="notes-title">GHI CHÚ</div>
+    <div class="notes-title">GHI CHÚ (toàn bộ)</div>
     <div class="notes-box">${this.escapeHtml(allNotes)}</div>
   </div>
   ` : ''}
   
-  <!-- Signature Section -->
   <div class="signature-section">
-    <div class="signature-title">KÝ TÊN NGƯỜI SOẠN</div>
+    <div class="signature-title">KÝ TÊN NGƯỜI SOẠN / PREPARER SIGNATURE</div>
     <div class="signature-box"></div>
-    <div class="signature-label">(Ký và ghi rõ họ tên)</div>
+    <div class="signature-label">(Ký và ghi rõ họ tên) / (Sign and write full name)</div>
+  </div>
+  
+  <!-- PHẦN 2: CÁC MỤC KIỂM TRA -->
+  <div class="part-divider"></div>
+  <div class="part-title">PHẦN 2: CÁC MỤC KIỂM TRA / PART 2: INSPECTION ITEMS</div>
+  
+  <div class="ship-by-section">
+    <h4>Ship bằng (chọn một) / Ship by (choose one):</h4>
+    <div class="ship-by-options">
+      <label><input type="radio" name="shipBy" value="cont"> Cont (Container)</label>
+      <label><input type="radio" name="shipBy" value="truck"> Xe tải / Truck</label>
+      <label><input type="radio" name="shipBy" value="moto"> Xe máy / Motorbike</label>
+    </div>
+  </div>
+  
+  <div class="inspection-section">
+    <h4>NỘI DUNG KIỂM TRA 7 ĐIỂM (Nếu Cont) / 7-POINT INSPECTION (If Container)</h4>
+    <table class="inspection-table">
+      <thead>
+        <tr>
+          <th class="col-no">STT</th>
+          <th class="col-content">NỘI DUNG KIỂM TRA / Inspection Item</th>
+          <th class="col-pass">ĐẠT / Passed</th>
+          <th class="col-fail">KHÔNG ĐẠT / Failed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="4" class="cat-header">1. Kiểm tra bên ngoài/ gầm/ khung dầm xe / Exterior/Undercarriage Inspection</td></tr>
+        <tr>
+          <td class="col-no">1</td>
+          <td class="col-content">Kiểm tra xem xe có các vết rách, lỗ thủng, biến dạng hay không? / Check for tears, punctures, or deformations?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">2. Kiểm tra bên trong/ ngoài cửa xe / Interior/Exterior Door Inspection</td></tr>
+        <tr>
+          <td class="col-no">2.1</td>
+          <td class="col-content">Kiểm tra bên trong/ ngoài xe có các lỗ thủng/ vết nứt hay không? / Check for holes or cracks?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">2.2</td>
+          <td class="col-content">Kiểm tra các đinh tán, ri-vê tại các vị trí có gắn lỗ khóa niêm phong xem có bị hư hỏng, mức độ chắc chắn hay nhô lên không? / Check the rivets and screws at the sealing keyhole locations for damage, firmness or protruding.</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">2.3</td>
+          <td class="col-content">Kiểm tra hoạt động khi đóng mở cánh cửa và then cài có an toàn và kín không? / Check the operation when opening and closing the door—is it safe and tight?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">3. Kiểm tra mép hông, vách phải xe / The right side edge and wall Inspection</td></tr>
+        <tr>
+          <td class="col-no">3</td>
+          <td class="col-content">Kiểm tra phần mép hông và phần vách bên phải, phần tiếp xúc với nền xem có bị gỉ sét, lâu ngày có thể hình thành lỗ hổng không? / Check the right side edge and wall, areas in contact with the floor for signs of rust. Can it cause holes to form over time?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">4. Kiểm tra mép hông, vách trái xe / The left side edge and wall Inspection</td></tr>
+        <tr>
+          <td class="col-no">4</td>
+          <td class="col-content">Kiểm tra phần mép hông và phần vách bên trái, phần tiếp xúc với nền xem có bị gỉ sét, lâu ngày có thể hình thành lỗ hổng không? / Check the left side edge and wall, areas in contact with the floor for signs of rust. Can it cause holes to form over time?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">5. Kiểm tra vách trước / Front Wall Inspection</td></tr>
+        <tr>
+          <td class="col-no">5</td>
+          <td class="col-content">Kiểm tra phần vách trước, phần tiếp xúc với nền xem có bị gỉ sét, lâu ngày có thể hình thành lỗ hổng không? / Check front wall, areas in contact with the floor for signs of rust. Can it cause holes to form over time?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">6. Kiểm tra trần/ nóc/ sàn ngoài / Roof/top/outer floor Inspection</td></tr>
+        <tr>
+          <td class="col-no">6.1</td>
+          <td class="col-content">Kiểm tra trần, nóc, sàn có bị thủng hoặc vết nứt không? / Check roof/top/outer floor for holes or cracks.</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">6.2</td>
+          <td class="col-content">Kiểm tra các nhãn, mác hàng hóa của lần vận chuyển trước đó còn hay không? / Check for previous shipping labels.</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">6.3</td>
+          <td class="col-content">Các vách ngang cần được dựng lên và khóa cứng không? (check nếu xe có) / Are the crossbars erected and securely locked? (if applicable)</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">6.4</td>
+          <td class="col-content">Các thanh giằng cho mái cần phải được lắp vào đúng vị trí quy định. Các tấm bạt che không bị hư hại và có kích cỡ đúng để che phủ toàn bộ diện tích trần xe không? (check nếu xe có) / Are the roof braces installed correctly? Are the tarpaulins undamaged and of the correct size to cover the entire roof? (if applicable)</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">6.5</td>
+          <td class="col-content">Các dây thừng ở trong trạng thái tốt không? (check nếu xe có) / Are the ropes in good condition? (if applicable)</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr><td colspan="4" class="cat-header">7. Kiểm tra sàn trong / Interior Floor Inspection</td></tr>
+        <tr>
+          <td class="col-no">7.1</td>
+          <td class="col-content">Sàn trong có được vệ sinh sạch sẽ, khô ráo, không bị mùi hôi, dơ bẩn, han, gỉ do ẩm ướt, bụi bẩn không? / Is the interior floor clean, dry, odorless, free from moisture-related rust, dirt, stains, or corrosion?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">7.2</td>
+          <td class="col-content">Sàn xe có gập gềnh không bằng phẳng không? / Is the floor level, not uneven?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+        <tr>
+          <td class="col-no">7.3</td>
+          <td class="col-content">Trong xe có vật sắc nhọn có thể làm hỏng hàng hóa trong quá trình vận chuyển không? / Are there sharp objects inside that could damage cargo during transport?</td>
+          <td class="tick-cell">☐</td><td class="tick-cell">☐</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <div class="inspection-truck">
+      <div class="inspection-truck-title">Nếu Xe tải → Kiểm tra / If Truck → Inspect:</div>
+      <table class="inspection-truck-table">
+        <thead><tr><th>STT</th><th>NỘI DUNG KIỂM TRA / Inspection Item</th><th>ĐẠT / Passed</th><th>KHÔNG ĐẠT / Failed</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Thùng xe / Cargo body</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
+          <tr><td>2</td><td>Sàn xe / Floor</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
+          <tr><td>3</td><td>Nước / Water (rò rỉ, ẩm) / (leaks, moisture)</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="inspection-moto">Nếu Xe máy → Không kiểm tra về xe. / If Motorbike → No vehicle inspection required.</div>
+  </div>
+  
+  <div class="goods-confirm-section">
+    <h4>II. XÁC NHẬN TÌNH TRẠNG HÀNG HÓA (ĐƯỢC XÁC NHẬN SAU KHI ĐÃ HOÀN TẤT VIỆC NÂNG PALET LÊN XE) / GOODS CONDITION CONFIRMATION (TO BE CONFIRMED AFTER PALLET LIFTING IS COMPLETE)</h4>
+    <div class="goods-confirm-statement">
+      XÁC NHẬN: Hàng và pallet được nhận trong tình trạng không bị móp, rách, gãy, bể.<br>
+      CONFIRMATION: Goods and pallets are received in a condition that is not dented, torn, broken.
+    </div>
+    <div class="goods-confirm-signatures">
+      <div class="goods-confirm-sig-block">
+        <div class="goods-confirm-sig-label">Người giao hàng / Deliverer</div>
+        <div class="goods-confirm-sig-line"></div>
+        <div class="goods-confirm-sig-hint">(Ký và ghi rõ họ tên) / (Sign and write full name)</div>
+      </div>
+      <div class="goods-confirm-sig-block">
+        <div class="goods-confirm-sig-label">Tài xế vận chuyển / Transport driver</div>
+        <div class="goods-confirm-sig-line"></div>
+        <div class="goods-confirm-sig-hint">(Ký và ghi rõ họ tên) / (Sign and write full name)</div>
+      </div>
+    </div>
   </div>
 </body>
 </html>`;

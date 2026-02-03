@@ -285,7 +285,7 @@
                      placeholder="Shipment code">
             </td>
             <td class="check-cell" [class.quantity-matched]="isQuantityMatched(shipment)">
-              {{getScannedQuantity(shipment) | number}}
+              {{getScannedQuantity(shipment) | number:'1.0-0':'en-US'}}
             </td>
             <td class="check-status-cell">
               <i class="material-icons check-ok-icon" *ngIf="isCheckOK(shipment)">check_circle</i>
@@ -308,7 +308,8 @@
               <input type="text"
                      class="editable-input number-input"
                      [value]="formatNumber(shipment.quantity)"
-                     (input)="onQuantityChange($event, shipment)"
+                     (input)="onQuantityInput($event, shipment)"
+                     (blur)="onQuantityBlur(shipment)"
                      placeholder="Lượng">
             </td>
             <td class="poship-cell">
@@ -325,7 +326,7 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Carton">
             </td>
-            <td class="number-cell">
+            <td class="number-cell qtybox-cell">
               <input type="number"
                      class="editable-input number-input"
                      [(ngModel)]="shipment.qtyBox"
