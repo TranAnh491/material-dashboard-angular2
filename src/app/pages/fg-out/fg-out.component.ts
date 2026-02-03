@@ -52,6 +52,7 @@ export interface XuatKhoPreviewItem {
   location: string;
   notes: string;
   inventoryId?: string; // ID của record trong FG Inventory
+  selected: boolean; // Checkbox để chọn item
 }
 
 @Component({
@@ -110,6 +111,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   xuatKhoInputText: string = '';
   xuatKhoChecked: boolean = false;
   xuatKhoPreviewItems: XuatKhoPreviewItem[] = [];
+  xuatKhoSelectedShipment: string = '';
+  xuatKhoAvailableShipments: string[] = [];
+  xuatKhoStep: number = 1; // 1: Chọn shipment, 2: Preview items
   
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
 
@@ -1221,6 +1225,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoInputText = '';
     this.xuatKhoChecked = false;
     this.xuatKhoPreviewItems = [];
+    this.xuatKhoStep = 1;
+    this.xuatKhoSelectedShipment = '';
+    this.loadAvailableShipmentsForXuatKho();
   }
 
   // Close Xuất Kho Dialog
@@ -1229,12 +1236,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoInputText = '';
     this.xuatKhoChecked = false;
     this.xuatKhoPreviewItems = [];
+    this.xuatKhoStep = 1;
+    this.xuatKhoSelectedShipment = '';
   }
 
-  // Back to input step
+  // Back to shipment selection
   backToInput(): void {
+    this.xuatKhoStep = 1;
     this.xuatKhoChecked = false;
     this.xuatKhoPreviewItems = [];
+    this.xuatKhoSelectedShipment = '';
   }
 
   // Remove item from preview list
@@ -1242,117 +1253,152 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoPreviewItems.splice(index, 1);
   }
 
-  // Check tồn kho từ FG Inventory
-  checkXuatKho(): void {
-    if (!this.xuatKhoInputText.trim()) {
-      alert('⚠️ Vui lòng nhập danh sách mã TP và số lượng');
-      return;
-    }
+  // Check if all items are selected
+  isAllSelected(): boolean {
+    return this.xuatKhoPreviewItems.length > 0 && 
+           this.xuatKhoPreviewItems.every(item => item.selected);
+  }
 
-    console.log('🔍 Checking inventory for export...');
-    
-    // Parse input text (Mã TP, Số lượng)
-    const lines = this.xuatKhoInputText.split('\n').filter(line => line.trim());
-    const requests: {materialCode: string, quantity: number}[] = [];
-    
-    lines.forEach(line => {
-      const parts = line.split(/[,\t]/).map(p => p.trim());
-      if (parts.length >= 2) {
-        const materialCode = parts[0].toUpperCase();
-        const quantity = parseInt(parts[1]);
-        if (materialCode && !isNaN(quantity) && quantity > 0) {
-          requests.push({ materialCode, quantity });
-        }
-      }
+  // Toggle select all items
+  toggleSelectAll(checked: boolean): void {
+    this.xuatKhoPreviewItems.forEach(item => {
+      item.selected = checked;
     });
+  }
 
-    if (requests.length === 0) {
-      alert('⚠️ Không có dữ liệu hợp lệ. Vui lòng nhập theo định dạng: Mã TP, Số lượng');
+  // Get count of selected items
+  getSelectedItemsCount(): number {
+    return this.xuatKhoPreviewItems.filter(item => item.selected).length;
+  }
+
+  // Load available shipments cho Xuất Kho
+  loadAvailableShipmentsForXuatKho(): void {
+    console.log('🔍 Loading available shipments...');
+    
+    // Load từ collection shipments
+    this.firestore.collection('shipments', ref => 
+      ref.orderBy('createdAt', 'desc')
+         .limit(50)
+    ).get().subscribe(snapshot => {
+      const shipments = new Set<string>();
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        if (data.shipmentCode) {
+          shipments.add(data.shipmentCode);
+        }
+      });
+      
+      this.xuatKhoAvailableShipments = Array.from(shipments).sort();
+      console.log('✅ Loaded', this.xuatKhoAvailableShipments.length, 'shipments');
+    });
+  }
+
+  // Load inventory items theo shipment đã chọn
+  loadInventoryForShipment(): void {
+    if (!this.xuatKhoSelectedShipment) {
+      alert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
-    console.log('📋 Parsed requests:', requests);
+    console.log('🔍 Loading inventory for shipment:', this.xuatKhoSelectedShipment);
+    
+    // Bước 1: Query FG In để lấy danh sách items của shipment này
+    this.firestore.collection('fg-in', ref => 
+      ref.where('shipmentCode', '==', this.xuatKhoSelectedShipment)
+    ).get().subscribe(fgInSnapshot => {
+      
+      if (fgInSnapshot.empty) {
+        alert('⚠️ Không tìm thấy dữ liệu nhập kho cho shipment này');
+        return;
+      }
 
-    // Query FG Inventory để tìm tồn kho
-    this.xuatKhoPreviewItems = [];
-    let processedCount = 0;
+      // Thu thập các unique keys (materialCode + lot + lsx + batch)
+      const fgInItems = new Map<string, any>();
+      fgInSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const key = `${data.materialCode}_${data.lot}_${data.lsx}_${data.batchNumber}`;
+        fgInItems.set(key, {
+          materialCode: data.materialCode,
+          lot: data.lot,
+          lsx: data.lsx,
+          batchNumber: data.batchNumber
+        });
+      });
 
-    requests.forEach(request => {
+      console.log('📋 Found', fgInItems.size, 'unique items from FG In');
+
+      // Bước 2: Query FG Inventory để lấy tồn kho
       this.firestore.collection('fg-inventory', ref => 
-        ref.where('materialCode', '==', request.materialCode)
-           .where('ton', '>', 0)
-      ).get().subscribe(snapshot => {
-        processedCount++;
+        ref.where('ton', '>', 0)
+      ).get().subscribe(inventorySnapshot => {
+        this.xuatKhoPreviewItems = [];
 
-        if (!snapshot.empty) {
-          // Tìm thấy tồn kho, lấy item đầu tiên (hoặc có thể lấy nhiều items)
-          let remainingQuantity = request.quantity;
-
-          snapshot.docs.forEach(doc => {
-            if (remainingQuantity <= 0) return;
-
-            const data = doc.data() as any;
+        inventorySnapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          const key = `${data.materialCode}_${data.lot}_${data.lsx}_${data.batchNumber}`;
+          
+          // Chỉ lấy những items có trong FG In của shipment này
+          if (fgInItems.has(key)) {
             const availableStock = data.ton || 0;
-            const exportQuantity = Math.min(remainingQuantity, availableStock);
-
-            if (exportQuantity > 0) {
+            if (availableStock > 0) {
               this.xuatKhoPreviewItems.push({
                 materialCode: data.materialCode || '',
                 batchNumber: data.batchNumber || '',
                 lot: data.lot || '',
                 lsx: data.lsx || '',
-                quantity: exportQuantity,
+                quantity: availableStock, // Mặc định xuất hết tồn
                 availableStock: availableStock,
                 location: data.location || '',
                 notes: '',
-                inventoryId: doc.id
+                inventoryId: doc.id,
+                selected: false // Mặc định không chọn, để user tự chọn
               });
-
-              remainingQuantity -= exportQuantity;
             }
-          });
-
-          if (remainingQuantity > 0) {
-            console.warn(`⚠️ Không đủ tồn kho cho ${request.materialCode}: Còn thiếu ${remainingQuantity}`);
           }
+        });
+
+        console.log('📦 Loaded', this.xuatKhoPreviewItems.length, 'items matching shipment');
+
+        if (this.xuatKhoPreviewItems.length === 0) {
+          alert('⚠️ Không tìm thấy hàng tồn kho cho shipment này');
         } else {
-          console.warn(`⚠️ Không tìm thấy tồn kho cho ${request.materialCode}`);
-        }
-
-        // Khi đã process hết tất cả requests
-        if (processedCount === requests.length) {
-          if (this.xuatKhoPreviewItems.length > 0) {
-            this.xuatKhoChecked = true;
-            console.log('✅ Found', this.xuatKhoPreviewItems.length, 'items to export');
-          } else {
-            alert('❌ Không tìm thấy hàng tồn kho phù hợp');
-          }
+          this.xuatKhoChecked = true;
+          this.xuatKhoStep = 2; // Chuyển sang bước preview
         }
       });
     });
   }
 
+  // Check tồn kho từ FG Inventory (giữ lại để backward compatible)
+  checkXuatKho(): void {
+    this.loadInventoryForShipment();
+  }
+
   // Approve và lưu vào FG Out + cập nhật FG Inventory
   approveXuatKho(): void {
-    if (this.xuatKhoPreviewItems.length === 0) {
-      alert('⚠️ Không có dữ liệu để duyệt');
+    // Lọc chỉ những items được chọn
+    const selectedItems = this.xuatKhoPreviewItems.filter(item => item.selected);
+    
+    if (selectedItems.length === 0) {
+      alert('⚠️ Vui lòng chọn ít nhất một item để xuất kho');
       return;
     }
 
     // Kiểm tra số lượng xuất không vượt quá tồn
-    const hasError = this.xuatKhoPreviewItems.some(item => item.quantity > item.availableStock);
+    const hasError = selectedItems.some(item => item.quantity > item.availableStock);
     if (hasError) {
       alert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
       return;
     }
 
-    const confirmed = confirm(`✅ Xác nhận xuất kho ${this.xuatKhoPreviewItems.length} items?`);
+    const confirmed = confirm(`✅ Xác nhận xuất kho ${selectedItems.length} items đã chọn?`);
     if (!confirmed) return;
 
-    console.log('🚀 Approving export...');
+    console.log('🚀 Approving export for', selectedItems.length, 'selected items...');
     let savedCount = 0;
 
-    this.xuatKhoPreviewItems.forEach(item => {
+    selectedItems.forEach(item => {
       // 1. Tạo record trong FG Out
       const fgOutRecord: any = {
         factory: 'ASM1',
@@ -1377,6 +1423,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       };
 
+      fgOutRecord.shipment = this.xuatKhoSelectedShipment; // Gán shipment đã chọn
+      
       this.firestore.collection('fg-out').add(fgOutRecord).then(() => {
         console.log(`✅ Created FG Out record for ${item.materialCode}`);
         savedCount++;
@@ -1405,8 +1453,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }
 
         // Khi đã lưu hết
-        if (savedCount === this.xuatKhoPreviewItems.length) {
-          alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items!`);
+        if (savedCount === selectedItems.length) {
+          alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
           this.closeXuatKhoDialog();
           this.loadMaterialsFromFirebase(); // Refresh data
         }

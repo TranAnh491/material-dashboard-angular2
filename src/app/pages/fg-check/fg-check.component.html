@@ -103,7 +103,7 @@
             <th class="row-header">No</th>
             <th>Mã TP</th>
             <th>Mã Hàng</th>
-            <th>Số Thùng</th>
+            <th *ngIf="checkMode !== 'pn-qty'">Số Thùng</th>
             <th>Số Lượng</th>
             <th>ID Check</th>
             <th>Time</th>
@@ -115,7 +115,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="11" class="text-center" style="padding: 20px; color: #000000;">
+            <td [attr.colspan]="checkMode === 'pn-qty' ? 10 : 11" class="text-center" style="padding: 20px; color: #000000;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -127,7 +127,7 @@
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
             <td class="code-cell" [class.scanned-customer-code]="item.scannedCustomerCode">{{item.customerCode}}</td>
-            <td class="number-cell" [class.carton-ok]="isCartonOk(item)">
+            <td *ngIf="checkMode !== 'pn-qty'" class="number-cell" [class.carton-ok]="isCartonOk(item)">
               {{formatNumber(getDisplayCarton(item))}}
               <span class="carton-ok-label" *ngIf="isCartonOk(item)"> OK</span>
             </td>

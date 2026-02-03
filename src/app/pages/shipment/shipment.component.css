@@ -848,6 +848,11 @@
   font-weight: bold;
 }
 
+.status-checked {
+  color: #9c27b0;
+  font-weight: bold;
+}
+
 /* Editable Inputs */
 .editable-input {
   width: 100%;

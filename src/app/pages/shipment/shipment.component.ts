@@ -330,6 +330,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return 'status-progress';
       case 'Chờ soạn':
         return 'status-pending';
+      case 'Đã Check':
+        return 'status-checked';
       case 'Đã Ship':
         return 'status-shipped';
       case 'Delay':

@@ -63,8 +63,16 @@ export class FgInComponent implements OnInit, OnDestroy {
   
   // Time range filter
   showTimeRangeDialog: boolean = false;
-  startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  endDate: Date = new Date();
+  startDate: Date = new Date(); // Mặc định là hôm nay
+  endDate: Date = new Date();   // Mặc định là hôm nay
+  
+  // Unhide Dialog
+  showUnhideDialog: boolean = false;
+  unhideMaterialCode: string = '';
+  
+  // Report Dialog
+  showReportDialog: boolean = false;
+  reportMonth: string = '';
   
   // Display options
   showCompleted: boolean = true;
@@ -122,6 +130,10 @@ export class FgInComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // Mặc định chỉ hiển thị hôm nay
+    this.startDate = new Date();
+    this.endDate = new Date();
+    
     this.loadMaterialsFromFirebase();
     // Load catalog immediately so calculations work
     this.loadCatalogFromFirebase();
@@ -765,6 +777,112 @@ export class FgInComponent implements OnInit, OnDestroy {
   updateNotes(material: FgInItem): void {
     console.log('Updating notes for material:', material.materialCode, 'to:', material.notes);
     this.updateMaterialInFirebase(material);
+  }
+
+  // UNHIDE Dialog Functions
+  openUnhideDialog(): void {
+    this.showUnhideDialog = true;
+    this.unhideMaterialCode = '';
+  }
+
+  closeUnhideDialog(): void {
+    this.showUnhideDialog = false;
+    this.unhideMaterialCode = '';
+  }
+
+  onUnhideInput(): void {
+    // Convert to uppercase
+    this.unhideMaterialCode = this.unhideMaterialCode.toUpperCase();
+  }
+
+  applyUnhideFilter(): void {
+    if (this.unhideMaterialCode.length < 7) {
+      alert('⚠️ Vui lòng nhập ít nhất 7 ký tự');
+      return;
+    }
+
+    const prefix = this.unhideMaterialCode.substring(0, 7);
+    console.log('🔍 Unhiding materials with prefix:', prefix);
+
+    // Mở rộng khoảng thời gian để tìm tất cả
+    this.startDate = new Date(2020, 0, 1);
+    this.endDate = new Date(2030, 11, 31);
+    
+    // Apply filters sẽ tự filter theo searchTerm
+    this.searchTerm = prefix;
+    this.applyFilters();
+    
+    this.closeUnhideDialog();
+    console.log(`✅ Showing materials starting with ${prefix}:`, this.filteredMaterials.length);
+  }
+
+  // REPORT Dialog Functions
+  openReportDialog(): void {
+    this.showReportDialog = true;
+    // Set default to current month
+    const now = new Date();
+    this.reportMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  closeReportDialog(): void {
+    this.showReportDialog = false;
+    this.reportMonth = '';
+  }
+
+  downloadReport(): void {
+    if (!this.reportMonth) {
+      alert('⚠️ Vui lòng chọn tháng');
+      return;
+    }
+
+    const [year, month] = this.reportMonth.split('-');
+    const startOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const endOfMonth = new Date(parseInt(year), parseInt(month), 0);
+
+    console.log('📊 Downloading report for:', this.reportMonth);
+    console.log('Date range:', startOfMonth, 'to', endOfMonth);
+
+    // Query materials within the month
+    this.firestore.collection('fg-in', ref =>
+      ref.where('importDate', '>=', startOfMonth)
+         .where('importDate', '<=', endOfMonth)
+         .orderBy('importDate', 'desc')
+    ).get().subscribe(snapshot => {
+      const reportData: any[] = [];
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        reportData.push({
+          'Ngày': this.formatDate(data.importDate),
+          'Batch': data.batchNumber || '',
+          'Mã TP': data.materialCode || '',
+          'LOT': data.lot || '',
+          'LSX': data.lsx || '',
+          'Số lượng': data.quantity || 0,
+          'Vị trí': data.location || '',
+          'Ghi chú': data.notes || '',
+          'Khách': this.getCustomerNameFromMapping(data.materialCode),
+          'Lock': data.isReceived ? 'Đã Lock' : 'Chưa Lock'
+        });
+      });
+
+      if (reportData.length === 0) {
+        alert('❌ Không có dữ liệu trong tháng này');
+        return;
+      }
+
+      // Export to Excel
+      const ws = XLSX.utils.json_to_sheet(reportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `FG In ${this.reportMonth}`);
+      
+      const fileName = `FG_In_Report_${this.reportMonth}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      console.log(`✅ Downloaded report: ${fileName}`);
+      alert(`✅ Đã tải báo cáo: ${fileName} (${reportData.length} dòng)`);
+      this.closeReportDialog();
+    });
   }
 
   viewAllMaterials(): void {

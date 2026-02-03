@@ -462,27 +462,37 @@
     </div>
     <div class="modal-body">
       
-      <!-- Step 1: Nhập Mã TP + Số lượng -->
-      <div class="xuat-kho-section" *ngIf="!xuatKhoChecked">
-        <h6>Nhập danh sách xuất kho (Mã TP + Số lượng)</h6>
+      <!-- Step 1: Chọn Shipment -->
+      <div class="xuat-kho-section" *ngIf="xuatKhoStep === 1">
+        <h6>Bước 1: Chọn Shipment</h6>
         <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-          Mỗi dòng: Mã TP, Số lượng (phân cách bằng dấu phẩy hoặc tab)
+          Chọn shipment để tự động load danh sách hàng từ kho
         </p>
-        <textarea class="xuat-kho-textarea" 
-                  [(ngModel)]="xuatKhoInputText"
-                  placeholder="Ví dụ:&#10;ABC123, 100&#10;DEF456, 200&#10;GHI789, 150"
-                  rows="10"></textarea>
+        
+        <div class="shipment-selection">
+          <select class="form-input" 
+                  [(ngModel)]="xuatKhoSelectedShipment"
+                  style="width: 100%; padding: 10px; font-size: 14px;">
+            <option value="">-- Chọn Shipment --</option>
+            <option *ngFor="let shipment of xuatKhoAvailableShipments" [value]="shipment">
+              {{shipment}}
+            </option>
+          </select>
+        </div>
         
         <div style="margin-top: 15px;">
-          <button type="button" class="btn btn-apply" (click)="checkXuatKho()">
-            <i class="material-icons">search</i>
-            Check Tồn Kho
+          <button type="button" 
+                  class="btn btn-apply" 
+                  (click)="loadInventoryForShipment()"
+                  [disabled]="!xuatKhoSelectedShipment">
+            <i class="material-icons">inventory_2</i>
+            Load Danh Sách Hàng
           </button>
         </div>
       </div>
 
       <!-- Step 2: Preview và chỉnh sửa -->
-      <div class="xuat-kho-section" *ngIf="xuatKhoChecked">
+      <div class="xuat-kho-section" *ngIf="xuatKhoStep === 2">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h6>Danh sách xuất kho (có thể chỉnh sửa)</h6>
           <button type="button" class="btn btn-cancel" (click)="backToInput()">
@@ -495,6 +505,11 @@
           <table class="excel-table">
             <thead>
               <tr>
+                <th>
+                  <input type="checkbox" 
+                         [checked]="isAllSelected()"
+                         (change)="toggleSelectAll($event.target.checked)">
+                </th>
                 <th>STT</th>
                 <th>Mã TP</th>
                 <th>Batch</th>
@@ -504,12 +519,16 @@
                 <th>Số lượng xuất</th>
                 <th>Vị trí</th>
                 <th>Ghi chú</th>
-                <th>Xóa</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let item of xuatKhoPreviewItems; let i = index" 
-                  [class.error-row]="item.quantity > item.availableStock">
+                  [class.error-row]="item.quantity > item.availableStock"
+                  [class.selected-row]="item.selected">
+                <td>
+                  <input type="checkbox" 
+                         [(ngModel)]="item.selected">
+                </td>
                 <td>{{i + 1}}</td>
                 <td>
                   <input type="text" 
@@ -555,11 +574,6 @@
                          [(ngModel)]="item.notes"
                          style="min-width: 120px;">
                 </td>
-                <td>
-                  <button mat-icon-button color="warn" (click)="removeXuatKhoItem(i)">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </td>
               </tr>
             </tbody>
           </table>
@@ -580,10 +594,10 @@
       <button type="button" 
               class="btn btn-apply" 
               (click)="approveXuatKho()"
-              [disabled]="!xuatKhoChecked || xuatKhoPreviewItems.length === 0"
-              *ngIf="xuatKhoChecked">
+              [disabled]="!xuatKhoChecked || getSelectedItemsCount() === 0"
+              *ngIf="xuatKhoStep === 2">
         <i class="material-icons">check</i>
-        Duyệt Xuất Kho
+        Duyệt Xuất Kho ({{getSelectedItemsCount()}} items)
       </button>
     </div>
   </div>

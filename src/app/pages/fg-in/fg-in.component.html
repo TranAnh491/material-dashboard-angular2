@@ -23,6 +23,10 @@
               <i class="material-icons">download</i>
               Tải Template
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="openReportDialog(); $event.preventDefault()">
+              <i class="material-icons">assessment</i>
+              Tải báo cáo
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="showCatalog(); $event.preventDefault()">
               <i class="material-icons">list</i>
               Danh mục TP
@@ -47,29 +51,14 @@
           Chọn thời gian
         </button>
         
-        <button class="custom-btn" (click)="viewAllMaterials()">
+        <button class="custom-btn" (click)="openUnhideDialog()">
           <i class="material-icons">visibility</i>
-          Xem tất cả
-          </button>
-
-        <button class="custom-btn" (click)="manualRefresh()">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
-
-        <button class="custom-btn" (click)="debugMaterials()">
-          <i class="material-icons">bug_report</i>
-          Debug
+          Unhide
         </button>
 
         <button class="custom-btn nhap-kho-btn" (click)="openNhapKho()">
           <i class="material-icons">add_box</i>
           Nhập Kho
-        </button>
-
-        <button class="custom-btn" (click)="clearAllData()" style="background: #f44336 !important; color: white !important;">
-          <i class="material-icons">delete_forever</i>
-          Clear All
         </button>
 
       </div>
@@ -438,6 +427,88 @@
       <button type="button" class="btn btn-cancel" (click)="closeMapping()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Unhide Dialog -->
+<div class="custom-modal" [class.show]="showUnhideDialog" [style.display]="showUnhideDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showUnhideDialog = false"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">visibility</i>
+        Unhide - Hiển thị mã TP
+      </h5>
+      <button type="button" class="close-btn" (click)="closeUnhideDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="input-group">
+        <label class="input-label">Nhập 7 ký tự đầu của Mã TP</label>
+        <input type="text" 
+               class="custom-input full-width" 
+               [(ngModel)]="unhideMaterialCode"
+               (input)="onUnhideInput()"
+               placeholder="Ví dụ: P011356"
+               maxlength="20"
+               style="text-transform: uppercase;">
+      </div>
+      <div *ngIf="unhideMaterialCode.length >= 7" style="margin-top: 10px; color: #666; font-size: 12px;">
+        Sẽ hiển thị tất cả mã TP bắt đầu bằng: <strong>{{unhideMaterialCode.substring(0, 7)}}</strong>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeUnhideDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" 
+              class="btn btn-apply" 
+              (click)="applyUnhideFilter()"
+              [disabled]="unhideMaterialCode.length < 7">
+        <i class="material-icons">visibility</i>
+        Hiển thị
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Report Dialog -->
+<div class="custom-modal" [class.show]="showReportDialog" [style.display]="showReportDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showReportDialog = false"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">assessment</i>
+        Tải báo cáo
+      </h5>
+      <button type="button" class="close-btn" (click)="closeReportDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="input-group">
+        <label class="input-label">Chọn tháng</label>
+        <input type="month" 
+               class="custom-input full-width" 
+               [(ngModel)]="reportMonth"
+               style="padding: 10px;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeReportDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" 
+              class="btn btn-apply" 
+              (click)="downloadReport()"
+              [disabled]="!reportMonth">
+        <i class="material-icons">download</i>
+        Tải báo cáo
       </button>
     </div>
   </div>
