@@ -115,11 +115,25 @@
   .scan-material-input {
     width: 200px;
     min-width: 120px;
+    
+    &:focus {
+      background-color: #e3f2fd !important;
+      border-color: #2196F3 !important;
+      box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2) !important;
+      outline: none;
+    }
   }
 
   .scan-qty-input {
     width: 120px;
     min-width: 80px;
+    
+    &:focus {
+      background-color: #e3f2fd !important;
+      border-color: #2196F3 !important;
+      box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2) !important;
+      outline: none;
+    }
   }
 }
 
@@ -464,10 +478,13 @@
   font-size: 14px;
   background: #ffffff;
   color: #000000;
+  transition: all 0.2s ease;
   
   &:focus {
     outline: none;
-    border-color: #333333;
+    background-color: #e3f2fd !important;
+    border-color: #2196F3 !important;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
   }
   
   &.search-input-uppercase {
@@ -1241,6 +1258,21 @@
     padding-right: max(12px, env(safe-area-inset-right, 0));
     flex-shrink: 0;
   }
+
+  // Ẩn bảng dữ liệu trên mobile
+  .excel-body {
+    display: none !important;
+  }
+
+  // Ẩn loading indicator trên mobile
+  .loading-indicator {
+    display: none !important;
+  }
+
+  // Ẩn search box trên mobile
+  .search-box {
+    display: none !important;
+  }
   
   .page-title {
     font-size: 18px;
@@ -1261,40 +1293,79 @@
   .action-buttons {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+    
+    // Chỉ hiển thị nút Check trên mobile
+    .custom-btn {
+      display: none;
+      
+      &.btn-primary {
+        display: flex !important;
+      }
+    }
   }
   
   .custom-btn {
-    min-height: 44px;
+    width: 100%;
+    min-height: 48px;
     padding: 12px 16px;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 600;
     touch-action: manipulation;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  // Ẩn filter indicator trên mobile
+  .filter-indicator {
+    display: none !important;
   }
   
   .scan-step-3 {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
   
   .scan-info-row {
     justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    
+    .scan-info-item {
+      font-size: 14px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 0;
+    }
   }
   
   .scan-inputs-row {
-    flex-wrap: wrap;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     
     .scan-material-input,
     .scan-qty-input {
-      flex: 1;
-      min-width: 0;
       width: 100%;
-      min-height: 44px;
+      min-height: 48px;
       font-size: 16px; // Tránh zoom khi focus trên iOS
+      padding: 12px;
+      box-sizing: border-box;
     }
     
     .custom-btn {
-      flex: 1;
-      min-width: 0;
-      min-height: 44px;
+      width: 100%;
+      min-height: 48px;
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
   }
   

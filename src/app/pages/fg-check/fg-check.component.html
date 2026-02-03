@@ -25,14 +25,20 @@
                    class="custom-input scan-material-input" 
                    [(ngModel)]="currentScanInput"
                    (keyup.enter)="checkMode === 'pn' ? onMaterialScannedForCarton() : onMaterialCodeEntered()"
-                   placeholder="Mã hàng..."
-                   style="text-transform: uppercase;">
+                   placeholder="Scan mã hàng..."
+                   style="text-transform: uppercase;"
+                   readonly
+                   (focus)="$event.target.removeAttribute('readonly')"
+                   (blur)="$event.target.setAttribute('readonly', 'readonly')">
             <input type="text" 
                    *ngIf="checkMode === 'pn-qty'"
                    class="custom-input scan-qty-input" 
                    [(ngModel)]="currentQtyInput"
                    (keyup.enter)="onMaterialAndQtyScanned()"
-                   placeholder="Số lượng">
+                   placeholder="Scan số lượng"
+                   readonly
+                   (focus)="$event.target.removeAttribute('readonly')"
+                   (blur)="$event.target.setAttribute('readonly', 'readonly')">
             <button *ngIf="checkMode === 'pn-qty'" class="custom-btn" (click)="onMaterialAndQtyScanned()" [disabled]="!currentScanInput || !currentQtyInput">
               <i class="material-icons">add</i>
             </button>
@@ -232,8 +238,11 @@
                class="form-input check-shipment-input"
                [(ngModel)]="scannedShipment"
                (keyup.enter)="onShipmentEnterMoveToPallet()"
-               placeholder="Nhập hoặc quét mã Shipment"
-               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
+               placeholder="Scan mã Shipment"
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
+               readonly
+               (focus)="$event.target.removeAttribute('readonly')"
+               (blur)="$event.target.setAttribute('readonly', 'readonly')">
       </div>
       
       <div class="form-group" style="margin-bottom: 12px;">
@@ -243,8 +252,11 @@
                class="form-input check-pallet-input"
                [(ngModel)]="currentPalletNo"
                (keyup.enter)="onPalletEnterConfirm()"
-               placeholder="Nhập hoặc quét số Pallet"
-               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;">
+               placeholder="Scan số Pallet"
+               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-transform: uppercase;"
+               readonly
+               (focus)="$event.target.removeAttribute('readonly')"
+               (blur)="$event.target.setAttribute('readonly', 'readonly')">
       </div>
       <div class="form-group" style="margin-bottom: 20px;">
         <button type="button" class="btn btn-ship-le" (click)="setPalletToShipLe()">
