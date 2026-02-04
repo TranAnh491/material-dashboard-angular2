@@ -2308,8 +2308,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .date-box { border: 2px solid #000; padding: 15px; background: #f9f9f9; }
     .date-box strong { display: block; font-size: 14px; margin-bottom: 5px; color: #2196F3; }
     .date-box .date-value { font-size: 16px; font-weight: bold; }
-    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
+    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 4px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
     .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; }
+    .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
+    .humidity-box-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+    .humidity-box-input { width: 120px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
     
     .items-section { margin-bottom: 16px; }
     .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #2196F3; color: white; }
@@ -2360,11 +2363,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .goods-confirm-sig-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
     .goods-confirm-sig-line { height: 50px; border-bottom: 2px solid #000; margin-bottom: 4px; }
     .goods-confirm-sig-hint { font-size: 11px; font-style: italic; color: #555; }
-    
-    .signature-section { margin-top: 30px; border: 2px solid #000; padding: 15px; }
-    .signature-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; text-align: center; }
-    .signature-box { height: 80px; border-bottom: 2px solid #000; margin-top: 50px; }
-    .signature-label { text-align: center; margin-top: 5px; font-size: 12px; font-style: italic; }
   </style>
 </head>
 <body>
@@ -2390,8 +2388,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         <strong>NGÀY SHIP:</strong>
         <div class="date-value">${dispatchDate}</div>
       </div>
-      <div class="notes-box-top-label">GHI CHÚ (dưới box Ngày Ship):</div>
+      <div class="notes-box-top-label">Ghi Chú</div>
       <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
+      <div class="humidity-box">
+        <div class="humidity-box-label">Độ ẩm pallet (nếu có)</div>
+        <input type="text" class="humidity-box-input" placeholder="Điền độ ẩm..." />
+      </div>
     </div>
   </div>
   
@@ -2400,34 +2402,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     ${itemBoxes}
   </div>
   
-  ${allNotes ? `
-  <div class="notes-section">
-    <div class="notes-title">GHI CHÚ (toàn bộ)</div>
-    <div class="notes-box">${this.escapeHtml(allNotes)}</div>
-  </div>
-  ` : ''}
-  
-  <div class="signature-section">
-    <div class="signature-title">KÝ TÊN NGƯỜI SOẠN / PREPARER SIGNATURE</div>
-    <div class="signature-box"></div>
-    <div class="signature-label">(Ký và ghi rõ họ tên) / (Sign and write full name)</div>
-  </div>
-  
   <!-- PHẦN 2: CÁC MỤC KIỂM TRA -->
   <div class="part-divider"></div>
   <div class="part-title">PHẦN 2: CÁC MỤC KIỂM TRA / PART 2: INSPECTION ITEMS</div>
   
   <div class="ship-by-section">
-    <h4>Ship bằng (chọn một) / Ship by (choose one):</h4>
+    <h4>Loại xe / Ship by:</h4>
     <div class="ship-by-options">
-      <label><input type="radio" name="shipBy" value="cont"> Cont (Container)</label>
-      <label><input type="radio" name="shipBy" value="truck"> Xe tải / Truck</label>
-      <label><input type="radio" name="shipBy" value="moto"> Xe máy / Motorbike</label>
+      <label><input type="radio" name="shipBy" value="cont"> Xe container</label>
+      <label><input type="radio" name="shipBy" value="truck"> Xe tải</label>
+      <label><input type="radio" name="shipBy" value="moto"> Xe máy</label>
     </div>
   </div>
   
   <div class="inspection-section">
-    <h4>NỘI DUNG KIỂM TRA 7 ĐIỂM (Nếu Cont) / 7-POINT INSPECTION (If Container)</h4>
+    <h4>NỘI DUNG KIỂM TRA 7 ĐIỂM (Nếu Cont) / 7-POINT INSPECTION (If Container) (không áp dụng cho xe máy)</h4>
     <table class="inspection-table">
       <thead>
         <tr>
@@ -2522,19 +2511,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         </tr>
       </tbody>
     </table>
-    
-    <div class="inspection-truck">
-      <div class="inspection-truck-title">Nếu Xe tải → Kiểm tra / If Truck → Inspect:</div>
-      <table class="inspection-truck-table">
-        <thead><tr><th>STT</th><th>NỘI DUNG KIỂM TRA / Inspection Item</th><th>ĐẠT / Passed</th><th>KHÔNG ĐẠT / Failed</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>Thùng xe / Cargo body</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
-          <tr><td>2</td><td>Sàn xe / Floor</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
-          <tr><td>3</td><td>Nước / Water (rò rỉ, ẩm) / (leaks, moisture)</td><td class="tick-cell">☐</td><td class="tick-cell">☐</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="inspection-moto">Nếu Xe máy → Không kiểm tra về xe. / If Motorbike → No vehicle inspection required.</div>
   </div>
   
   <div class="goods-confirm-section">

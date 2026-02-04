@@ -2471,6 +2471,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   letter-spacing: 0 !important;
                 }
                 
+                .info-row.material-code {
+                  font-size: 23.04px !important;
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
                 .info-row.small {
                   font-size: 8.4px !important;
                   color: #000000 !important;
@@ -2571,6 +2577,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     margin: 0.2mm 0 !important;
                   }
                   
+                  .info-row.material-code {
+                    font-size: 23.04px !important;
+                    font-weight: bold !important;
+                    color: #000000 !important;
+                  }
+                  
                   .info-row.small {
                     font-size: 8.4px !important;
                     color: #000000 !important;
@@ -2637,7 +2649,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     </div>
                     <div class="info-section">
                       <div>
-                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row material-code">${qr.materialCode}</div>
                         <div class="info-row">PO: ${qr.poNumber}</div>
                         <div class="info-row">Ngày: ${qr.batchNumber}</div>
                         <div class="info-row">Số ĐV: ${qr.unitNumber}</div>

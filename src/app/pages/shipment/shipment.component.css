@@ -618,8 +618,6 @@
 }
 
 .check-cell.quantity-matched {
-  background-color: #4CAF50 !important;
-  color: white !important;
   font-weight: 700;
 }
 
@@ -779,14 +777,13 @@
 .table td:nth-child(4) { z-index: 10; background: #ffffff !important; }
 .table th:nth-child(5), .table td:nth-child(5) { position: sticky; left: 367px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .table td:nth-child(5) { z-index: 10; background: #ffffff !important; }
-.table th:nth-child(6), .table td:nth-child(6) { position: sticky; left: 477px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table th:nth-child(6), .table td:nth-child(6) { position: sticky; left: 477px; z-index: 110; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.table th:nth-child(6) { background: #2196F3 !important; color: #ffffff !important; }
 .table td:nth-child(6) { z-index: 10; background: #ffffff !important; }
 .table th:nth-child(7), .table td:nth-child(7) { position: sticky; left: 567px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .table td:nth-child(7) { z-index: 10; background: #ffffff !important; }
 .table th:nth-child(8), .table td:nth-child(8) { position: sticky; left: 615px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .table td:nth-child(8) { z-index: 10; background: #ffffff !important; }
-.table td:nth-child(6).quantity-matched { background: #4CAF50 !important; }
-.table td:nth-child(6).carton-matched { background: #4CAF50 !important; }
 
 /* Cột Ẩn (cột cuối cùng): có tiêu đề "ẨN" và viền ngang dọc đầy đủ */
 .table th.col-hidden-header,
