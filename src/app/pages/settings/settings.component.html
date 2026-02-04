@@ -22,7 +22,6 @@
   <div *ngIf="isAdminLoggedIn" class="dashboard">
     <div class="header">
       <h1>Quản lý người dùng</h1>
-      <button (click)="logout()">Đăng xuất</button>
           </div>
           
     <!-- Stats -->
@@ -61,6 +60,11 @@
         <h3>Danh sách người dùng</h3>
         <div class="actions">
           <button (click)="refreshFirebaseUsers()">Làm mới</button>
+          <a routerLink="/menu" class="btn-menu" title="Về Menu">
+            <i class="material-icons">home</i>
+            Về menu
+          </a>
+          <button type="button" (click)="logout()" class="btn-logout">Đăng xuất</button>
         </div>
       </div>
 

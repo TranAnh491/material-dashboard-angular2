@@ -117,7 +117,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Scroll position tracking
   private scrollPosition: number = 0;
   private shouldRestoreScroll: boolean = false;
-  
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -242,7 +242,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       // Filter by date range - QUAN TRỌNG: Nếu không có requestDate thì vẫn hiển thị
       let isInDateRange = true;
       if (shipment.requestDate) {
-        const requestDate = new Date(shipment.requestDate);
+      const requestDate = new Date(shipment.requestDate);
         isInDateRange = requestDate >= this.startDate && requestDate <= this.endDate;
       }
       // Nếu requestDate = null/undefined, tự động pass filter (hiển thị luôn)
@@ -1812,7 +1812,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
       // CS Date logic: Nếu file có CS Date thì dùng, nếu không thì set = ngày import (ngày hiện tại)
       const csDate = getDate('CS Date', 'Ngày CS Y/c');
-      
+
       return {
         shipmentCode: getValue('Shipment'),
         importDate: getDate('Ngày Import') || new Date(), // Ngày import, default = ngày hiện tại

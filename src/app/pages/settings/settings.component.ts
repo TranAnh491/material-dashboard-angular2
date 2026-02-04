@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
 import { PermissionService, UserPermission } from '../../services/permission.service';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -117,8 +118,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private userPermissionService: UserPermissionService,
     private notificationService: NotificationService,
-    private employeeCleanupService: EmployeeCleanupService
+    private employeeCleanupService: EmployeeCleanupService,
+    private router: Router
   ) { }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   ngOnInit(): void {
     console.log('🚀 Settings Component Initializing...');
