@@ -1967,6 +1967,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                   color: #000000 !important; /* Tất cả text màu đen */
                 }
                 
+                .info-row.material-code {
+                  font-size: 19.2px !important; /* Gấp đôi từ 9.6px */
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
                 .info-row.small {
                   font-size: 8.4px !important; /* Tăng 20% từ 7px */
                   color: #000000 !important; /* Đổi từ #666 thành đen */
@@ -2071,7 +2077,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                       </div>
                       <div class="info-section">
                         <div>
-                          <div class="info-row">Mã: ${qr.materialCode}</div>
+                          <div class="info-row material-code">${qr.materialCode}</div>
                           <div class="info-row">PO: ${qr.poNumber}</div>
                           <div class="info-row">Ngày: ${qr.qrData.split('|')[3]}</div>
                           <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
@@ -2299,6 +2305,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                   color: #000000 !important;
                 }
                 
+                .info-row.material-code {
+                  font-size: 19.2px !important; /* Gấp đôi từ 9.6px */
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
                 .info-row.small {
                   font-size: 8.4px !important;
                   color: #000000 !important;
@@ -2403,7 +2415,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                     </div>
                     <div class="info-section">
                       <div>
-                        <div class="info-row">Mã: ${qr.materialCode}</div>
+                        <div class="info-row material-code">${qr.materialCode}</div>
                         <div class="info-row">PO: ${qr.poNumber}</div>
                         <div class="info-row">Ngày: ${qr.batchNumber}</div>
                         <div class="info-row">Số ĐV: ${qr.unitNumber}</div>
@@ -2519,7 +2531,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'PO': material.poNumber || '',
-        'Qty': Number(material.quantity || 0).toFixed(2),
+        'Qty': Number(material.quantity || 0).toFixed(4),
         'Unit': material.unit || '',
         'Location': material.location || '',
         'Type': material.type || '',
@@ -2760,7 +2772,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60)) + ' phút' : 'N/A',
           this.getStatusText(material),
           material.supplier || 'N/A',
-          Number(material.quantity || 0).toFixed(2),
+          Number(material.quantity || 0).toFixed(4),
           material.remarks || 'N/A'
         ];
         
@@ -2796,7 +2808,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             duration > 0 ? duration : 'N/A',
             this.getStatusText(material),
             material.supplier || 'N/A',
-            Number(material.quantity || 0).toFixed(2),
+            Number(material.quantity || 0).toFixed(4),
             material.remarks || 'N/A'
           ];
           
@@ -2866,13 +2878,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     return date.toLocaleString('vi-VN');
   }
   
-  // Format number with commas for thousands
+  // Format number with commas for thousands, cho phép lẻ 4 số thập phân
   formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined) {
       return '0';
     }
-    
-    return value.toLocaleString('vi-VN');
+    return value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
   }
   
   getStatusBadgeClass(material: InboundMaterial): string {
@@ -4025,7 +4036,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             // Chưa đủ - chỉ cập nhật số lượng đã scan
             this.inspectionScanResult = {
               success: true,
-              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}`,
+              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(4)}`,
               material: foundMaterial
             };
             

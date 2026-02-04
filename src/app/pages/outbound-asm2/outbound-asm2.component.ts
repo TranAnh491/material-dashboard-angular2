@@ -1407,7 +1407,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
-          quantity: parseInt(parts[2]) || 0,
+          quantity: parseFloat(parts[2]) || 0,
           importDate: parts.length >= 4 ? parts[3].trim() : null // Bây giờ là batch number: 26082025
         };
         
@@ -1441,7 +1441,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             this.lastScannedData = {
               materialCode: jsonData.materialCode.toString().trim(),
               poNumber: jsonData.poNumber.toString().trim(),
-              quantity: parseInt(jsonData.quantity) || parseInt(jsonData.unitNumber) || 0
+              quantity: parseFloat(jsonData.quantity) || parseFloat(jsonData.unitNumber) || 0
             };
             
             console.log('✅ Parsed QR data (JSON format):', this.lastScannedData);
@@ -1462,7 +1462,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             this.lastScannedData = {
               materialCode: materialCodeMatch[0],
               poNumber: poMatch[0],
-              quantity: parseInt(numberMatch[0]) || 0
+              quantity: parseFloat(numberMatch[0]) || 0
             };
             
             console.log('✅ Parsed QR data (pattern extraction):', this.lastScannedData);
@@ -2311,7 +2311,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       if (parts.length >= 3) {
         materialCode = parts[0].trim();
         poNumber = parts[1].trim();
-        quantity = parseInt(parts[2]) || 1;
+        quantity = parseFloat(parts[2]) || 1;
         if (parts.length >= 4) importDate = parts[3].trim();
       }
     } else {

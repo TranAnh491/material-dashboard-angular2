@@ -2082,7 +2082,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   color: #FFFFFF !important;
                   border-radius: 2mm !important;
                   font-size: 10px !important;
-                  font-weight: bold !important;
+                  font-weight: 700 !important;
+                  font-family: Arial, sans-serif !important;
                   z-index: 10 !important;
                 }
                 
@@ -2180,7 +2181,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     color: #FFFFFF !important;
                     border-radius: 2mm !important;
                     font-size: 10px !important;
-                    font-weight: bold !important;
+                    font-weight: 700 !important;
+                    font-family: Arial, sans-serif !important;
                     z-index: 10 !important;
                   }
                   
@@ -2495,7 +2497,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   color: #FFFFFF !important;
                   border-radius: 2mm !important;
                   font-size: 10px !important;
-                  font-weight: bold !important;
+                  font-weight: 700 !important;
+                  font-family: Arial, sans-serif !important;
                   z-index: 10 !important;
                 }
                 
@@ -2595,7 +2598,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     color: #FFFFFF !important;
                     border-radius: 2mm !important;
                     font-size: 10px !important;
-                    font-weight: bold !important;
+                    font-weight: 700 !important;
+                    font-family: Arial, sans-serif !important;
                     z-index: 10 !important;
                   }
                   

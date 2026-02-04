@@ -4533,6 +4533,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               color: #000000 !important; /* Tất cả text màu đen */
             }
             
+            .info-row.material-code {
+              font-size: 19.2px !important; /* Gấp đôi từ 9.6px */
+              font-weight: bold !important;
+              color: #000000 !important;
+            }
+            
             .info-row.small {
               font-size: 8.4px !important; /* Tăng 20% từ 7px */
               color: #000000 !important; /* Đổi từ #666 thành đen */
@@ -4615,7 +4621,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
                   <img src="${qr.image}" alt="QR Code" class="qr-image">
                 </div>
                 <div class="info-section">
-                  <div class="info-row">${qr.materialCode}</div>
+                  <div class="info-row material-code">${qr.materialCode}</div>
                   <div class="info-row">${qr.poNumber}</div>
                   <div class="info-row">${qr.unitNumber}</div>
                   <div class="info-row small">ASM1</div>

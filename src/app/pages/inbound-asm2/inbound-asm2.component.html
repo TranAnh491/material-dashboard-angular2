@@ -249,7 +249,7 @@
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
                      (change)="updateMaterial(material)"
-                     step="0.01"
+                     step="0.0001"
                      min="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị'">
@@ -272,9 +272,9 @@
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa trọng lượng đơn vị (gram)'"
                      placeholder="gram"
-                     step="0.01"
+                     step="0.0001"
                      min="0"
-                     max="99999.99">
+                     max="99999.9999">
             </td>
             <td class="remarks-cell">
               <input type="text" 
@@ -761,8 +761,8 @@
             <span class="value">{{ returnGoodsScanResult.material.poNumber }}</span>
           </div>
           <div class="detail-row">
-            <span class="label">Lượng nhập:</span>
-            <span class="value">{{ returnGoodsScanResult.material.quantity }}</span>
+<span class="label">Lượng nhập:</span>
+              <span class="value">{{ returnGoodsScanResult.material.quantity | number:'1.0-4' }}</span>
           </div>
           <div class="detail-row">
             <span class="label">Lô hàng:</span>
@@ -857,16 +857,16 @@
             <div class="material-quantity-info">
               <div class="quantity-row">
                 <span class="label">Số lượng nhập:</span>
-                <span class="value">{{ item.totalQuantity | number:'1.2-2' }}</span>
+                <span class="value">{{ item.totalQuantity | number:'1.0-4' }}</span>
               </div>
               <div class="quantity-row">
                 <span class="label">Đã scan:</span>
-                <span class="value scanned">{{ item.scannedQuantity | number:'1.2-2' }}</span>
+                <span class="value scanned">{{ item.scannedQuantity | number:'1.0-4' }}</span>
               </div>
               <div class="quantity-row">
                 <span class="label">Còn lại:</span>
                 <span class="value remaining" [ngClass]="{ 'zero': item.remainingQuantity === 0 }">
-                  {{ item.remainingQuantity | number:'1.2-2' }}
+                  {{ item.remainingQuantity | number:'1.0-4' }}
                 </span>
               </div>
             </div>

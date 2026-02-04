@@ -321,7 +321,7 @@
               {{material.importDate || 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
-              {{material.exportQuantity}}
+              {{ material.exportQuantity != null ? (material.exportQuantity | number:'1.0-4') : '' }}
             </td>
             <td class="employee-cell readonly-cell">
               {{getDisplayEmployeeId(material.employeeId)}}
@@ -362,7 +362,7 @@
               {{material.importDate || 'N/A'}}
             </td>
             <td class="number-cell readonly-cell">
-              {{material.exportQuantity}}
+              {{ material.exportQuantity != null ? (material.exportQuantity | number:'1.0-4') : '' }}
             </td>
             <td class="employee-cell readonly-cell">
               {{getDisplayEmployeeId(material.employeeId)}}
@@ -463,7 +463,7 @@
                   <strong>PO:</strong> {{ item.poNumber }}
                 </div>
                 <div class="scan-detail">
-                  <strong>Số lượng:</strong> {{ item.quantity }} KG
+                  <strong>Số lượng:</strong> {{ item.quantity != null ? (item.quantity | number:'1.0-4') : '0' }} KG
                 </div>
                 <div class="scan-detail" *ngIf="item.importDate">
                   <strong>IMD:</strong> {{ item.importDate }}
@@ -515,7 +515,7 @@
               <strong>PO:</strong> {{ item.poNumber }}
             </div>
             <div class="scan-detail">
-              <strong>Số lượng:</strong> {{ item.quantity }} KG
+              <strong>Số lượng:</strong> {{ item.quantity != null ? (item.quantity | number:'1.0-4') : '0' }} KG
             </div>
             <div class="scan-detail" *ngIf="item.importDate">
               <strong>IMD:</strong> {{ item.importDate }}

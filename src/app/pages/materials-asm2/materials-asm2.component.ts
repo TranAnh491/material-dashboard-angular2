@@ -4174,7 +4174,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     } else {
       return num.toLocaleString('vi-VN', { 
         minimumFractionDigits: 0, 
-        maximumFractionDigits: 2 
+        maximumFractionDigits: 4 
       });
     }
   }

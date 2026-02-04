@@ -141,7 +141,7 @@
                    (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
                    (change)="updateOpeningStock(material)" 
                    min="0" 
-                   step="0.1" 
+                   step="0.0001" 
                    placeholder="Nhập tồn đầu">
           </div>
           
@@ -162,7 +162,7 @@
                    [(ngModel)]="material.xt" 
                    (change)="updateXT(material)" 
                    min="0" 
-                   step="0.1" 
+                   step="0.0001" 
                    placeholder="Nhập XT">
           </div>
           
@@ -324,7 +324,7 @@
                      (keyup.enter)="finishEditingOpeningStock(material)"
                      (keyup.escape)="cancelEditingOpeningStock(material)"
                      min="0" 
-                     step="0.1" 
+                     step="0.0001" 
                      placeholder="Nhập tồn đầu">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
@@ -344,7 +344,7 @@
                        (blur)="updateExportedAmount(material)"
                        (keyup.enter)="updateExportedAmount(material)"
                        min="0" 
-                       step="0.1"
+                       step="0.0001"
                        placeholder="0">
               </ng-container>
             </td>
@@ -365,7 +365,7 @@
                      (keyup.enter)="finishEditingXT(material)"
                      (keyup.escape)="cancelEditingXT(material)"
                      min="0" 
-                     step="0.1" 
+                     step="0.0001" 
                      placeholder="Nhập số lượng XT">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
