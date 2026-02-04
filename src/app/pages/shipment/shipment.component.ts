@@ -49,10 +49,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
   
-  // FG Check scanned quantity - tổng số lượng đã scan theo shipmentCode + materialCode (không so sánh đúng/sai)
-  fgCheckScannedQty: Map<string, number> = new Map(); // key: shipmentCode|materialCode, value: total scanned qty
-  // FG Check scanned carton - tổng số thùng đã scan (Check Thùng) theo shipmentCode + materialCode
-  fgCheckScannedCarton: Map<string, number> = new Map(); // key: shipmentCode|materialCode, value: total scanned carton
+  // FG Check scanned quantity - tổng số lượng đã scan theo shipmentCode + materialCode
+  fgCheckScannedQty: Map<string, number> = new Map();
+  // FG Check scanned carton - tổng số thùng đã scan theo shipmentCode + materialCode
+  fgCheckScannedCarton: Map<string, number> = new Map();
+  // Loại check theo (shipment|materialCode): 'pn' = Thùng, 'pn-qty' = Lượng (từ cột Loại check FG Check)
+  fgCheckModeByKey: Map<string, 'pn' | 'pn-qty'> = new Map();
   
   // Push tracking to prevent duplicate
   private isPushing: Set<string> = new Set();
@@ -130,10 +132,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.startDate = new Date('2020-01-01');
     this.endDate = new Date('2030-12-31');
     
-    // Load dữ liệu - chỉ shipments dùng realtime, các collection khác load 1 lần
+    // Load dữ liệu - shipments + FG Check dùng realtime để luôn khớp (vd: shipment 5176)
     this.loadShipmentsFromFirebase();
     this.loadFGInventoryCacheOnce();
-    this.loadFGCheckStatusOnce();
+    this.loadFGCheckStatus(); // Realtime: load và lắng nghe thay đổi từ fg-check
     // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
   }
 
@@ -394,6 +396,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Load FG Check: cộng dồn số lượng + số thùng đã check theo shipmentCode + materialCode
+  /** Load một lần (dùng khi refresh). */
   loadFGCheckStatusOnce(): void {
     this.firestore.collection('fg-check')
       .get()
@@ -401,54 +404,61 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       .then((snapshot) => {
         this.fgCheckScannedQty.clear();
         this.fgCheckScannedCarton.clear();
-        
         if (snapshot) {
           snapshot.forEach(doc => {
             const data = doc.data() as any;
-            const shipmentCode = String(data.shipment || '').trim().toUpperCase();
-            const materialCode = String(data.materialCode || '').trim().toUpperCase();
-            const quantity = Number(data.quantity) || 0;
-            const carton = Number(data.carton) || 0;
-            
-            if (shipmentCode && materialCode) {
-              const key = `${shipmentCode}|${materialCode}`;
-              const currentQty = this.fgCheckScannedQty.get(key) || 0;
-              this.fgCheckScannedQty.set(key, currentQty + quantity);
-              const currentCarton = this.fgCheckScannedCarton.get(key) || 0;
-              this.fgCheckScannedCarton.set(key, currentCarton + carton);
-            }
+            this.accumulateFGCheckDoc(data);
           });
         }
+        this.cdr.markForCheck();
       })
       .catch(error => {
         console.error('Error loading FG Check status:', error);
       });
   }
-  
+
+  /** Cộng dồn 1 doc fg-check vào Map; lưu loại check: nếu có bất kỳ doc nào là 'pn' (Thùng) thì key đó dùng Thùng. */
+  private accumulateFGCheckDoc(data: any): void {
+    const shipmentCode = String(data.shipment ?? '').trim().toUpperCase();
+    const materialCode = String(data.materialCode ?? '').trim().toUpperCase();
+    const quantity = Number(data.quantity) || 0;
+    const carton = Number(data.carton) || 0;
+    const docMode: 'pn' | 'pn-qty' = (data.checkMode === 'pn' || data.checkMode === 'pn-qty') ? data.checkMode : 'pn';
+    if (!shipmentCode || !materialCode) return;
+    const key = `${shipmentCode}|${materialCode}`;
+    this.fgCheckScannedQty.set(key, (this.fgCheckScannedQty.get(key) || 0) + quantity);
+    this.fgCheckScannedCarton.set(key, (this.fgCheckScannedCarton.get(key) || 0) + carton);
+    if (docMode === 'pn' || this.fgCheckModeByKey.get(key) === 'pn') {
+      this.fgCheckModeByKey.set(key, 'pn');
+    } else {
+      this.fgCheckModeByKey.set(key, 'pn-qty');
+    }
+  }
+
+  /** Realtime: mỗi lần fg-check thay đổi thì load lại toàn bộ và build map (đảm bảo đủ dữ liệu cho Lượng Ktra). */
   loadFGCheckStatus(): void {
+    const rebuildMaps = () => {
+      this.firestore.collection('fg-check')
+        .get()
+        .toPromise()
+        .then((snapshot) => {
+          this.fgCheckScannedQty.clear();
+          this.fgCheckScannedCarton.clear();
+          this.fgCheckModeByKey.clear();
+          if (snapshot) {
+            snapshot.forEach(doc => {
+              this.accumulateFGCheckDoc(doc.data() as any);
+            });
+          }
+          this.cdr.detectChanges();
+        })
+        .catch(err => console.error('Error loading FG Check:', err));
+    };
+    rebuildMaps();
     this.firestore.collection('fg-check')
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        this.fgCheckScannedQty.clear();
-        this.fgCheckScannedCarton.clear();
-        
-        actions.forEach(action => {
-          const data = action.payload.doc.data() as any;
-          const shipmentCode = String(data.shipment || '').trim().toUpperCase();
-          const materialCode = String(data.materialCode || '').trim().toUpperCase();
-          const quantity = Number(data.quantity) || 0;
-          const carton = Number(data.carton) || 0;
-          
-          if (shipmentCode && materialCode) {
-            const key = `${shipmentCode}|${materialCode}`;
-            const currentQty = this.fgCheckScannedQty.get(key) || 0;
-            this.fgCheckScannedQty.set(key, currentQty + quantity);
-            const currentCarton = this.fgCheckScannedCarton.get(key) || 0;
-            this.fgCheckScannedCarton.set(key, currentCarton + carton);
-          }
-        });
-      });
+      .subscribe(() => rebuildMaps());
   }
 
   // Coi là đã check khi tổng lượng scan đủ (không so sánh đúng/sai nữa)
@@ -456,7 +466,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return this.getShipmentCheckDisplay(shipment).status === 'ok';
   }
 
-  /** Tổng số lượng đã scan ở tab FG Check theo Shipment + Mã TP (hiển thị cột LƯỢNG KTRA). */
+  /**
+   * Tổng số lượng (pcs) đã check ở FG Check theo (shipment + Mã TP).
+   * Cùng 1 shipment + 1 mã TP có thể nhiều dòng → FG Check cộng tổng theo key shipment|materialCode.
+   */
   getScannedQuantity(shipment: ShipmentItem): number {
     const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
     const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
@@ -472,19 +485,46 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return current.shipmentCode !== previous.shipmentCode;
   }
 
-  /** Kiểm tra xem lượng kiểm tra có bằng với lượng xuất không (để tô nền xanh). */
+  /** Kiểm tra tổng lượng (cùng shipment + mã hàng) có bằng tổng FG Check không (để tô nền xanh). Nhiều dòng cùng shipment + mã hàng thì so tổng. */
   isQuantityMatched(shipment: ShipmentItem): boolean {
-    const scannedQty = this.getScannedQuantity(shipment);
-    const quantity = shipment.quantity || 0;
-    return scannedQty > 0 && scannedQty === quantity;
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
+    const key = `${shipmentCode}|${materialCode}`;
+    const scannedQty = this.fgCheckScannedQty.get(key) || 0;
+    if (scannedQty <= 0) return false;
+    const totalQuantity = this.shipments
+      .filter(s => {
+        const sCode = String(s.shipmentCode || '').trim().toUpperCase();
+        const mCode = String(s.materialCode || '').trim().toUpperCase();
+        return sCode === shipmentCode && mCode === materialCode;
+      })
+      .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    return totalQuantity > 0 && totalQuantity === scannedQty;
   }
 
-  /** Tổng số thùng đã scan ở FG Check (Check Thùng) theo Shipment + Mã TP. */
+  /**
+   * Tổng số thùng đã check ở FG Check theo (shipment + Mã TP).
+   */
   getScannedCarton(shipment: ShipmentItem): number {
     const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
     const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
     const key = `${shipmentCode}|${materialCode}`;
     return this.fgCheckScannedCarton.get(key) || 0;
+  }
+
+  /** Loại check tại FG Check cho (shipment + Mã TP): 'pn' = Thùng, 'pn-qty' = Lượng. Mặc định Lượng. */
+  getCheckModeForKey(shipment: ShipmentItem): 'pn' | 'pn-qty' {
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
+    const key = `${shipmentCode}|${materialCode}`;
+    return this.fgCheckModeByKey.get(key) || 'pn-qty';
+  }
+
+  /** Số hiển thị cột Lượng Ktra: theo Loại check ở FG Check – Thùng thì cộng thùng, Lượng thì cộng số lượng. */
+  getDisplayScannedValue(shipment: ShipmentItem): number {
+    return this.getCheckModeForKey(shipment) === 'pn'
+      ? this.getScannedCarton(shipment)
+      : this.getScannedQuantity(shipment);
   }
 
   /** Kiểm tra tổng carton shipment = tổng số thùng KTRA (cho cột CHECK khi kiểm tra bằng thùng). */
@@ -504,16 +544,19 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return totalCarton > 0 && totalCarton === scannedCarton;
   }
 
-  /** Kiểm tra tổng lượng xuất = tổng lượng KTRA theo shipment + mã TP (cho cột CHECK). Nếu có số thùng KTRA thì so sánh carton, không thì so sánh quantity. */
+  /**
+   * So sánh: cùng 1 shipment + 1 mã TP → tổng (Shipment) với tổng đã check (FG Check).
+   * Theo cột Loại check ở FG Check: Thùng (pn) thì so tổng thùng, Lượng (pn-qty) thì so tổng số lượng.
+   */
   isCheckOK(shipment: ShipmentItem): boolean {
     const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
     const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
     const key = `${shipmentCode}|${materialCode}`;
     const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
     const scannedQty = this.fgCheckScannedQty.get(key) || 0;
+    const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
 
-    // Nếu shipment kiểm tra bằng thùng (có dữ liệu số thùng từ FG Check): so sánh tổng carton
-    if (scannedCarton > 0) {
+    if (mode === 'pn') {
       const totalCarton = this.shipments
         .filter(s => {
           const sCode = String(s.shipmentCode || '').trim().toUpperCase();
@@ -535,19 +578,37 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return totalQuantity > 0 && scannedQty > 0 && totalQuantity === scannedQty;
   }
 
-  /** So sánh tổng lượng đã check (FG Check cộng dồn) với số lượng shipment theo mã TP. Trả về: ok / excess (Dư) / percentage (% đã check). */
+  /** So sánh tổng đã check (FG Check) với tổng shipment theo (shipment + mã TP). Theo Loại check: Thùng so thùng, Lượng so số lượng. */
   getShipmentCheckDisplay(shipment: ShipmentItem): { status: 'ok' | 'excess' | 'percentage'; value: number | null } {
     const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
     const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
     const key = `${shipmentCode}|${materialCode}`;
-    const expected = Number(shipment.quantity) || 0;
-    const scanned = this.fgCheckScannedQty.get(key) || 0;
-    if (expected <= 0) {
-      return scanned > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+    const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
+    const scannedQty = this.fgCheckScannedQty.get(key) || 0;
+    const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
+
+    const sameGroup = (s: ShipmentItem) => {
+      const sCode = String(s.shipmentCode || '').trim().toUpperCase();
+      const mCode = String(s.materialCode || '').trim().toUpperCase();
+      return sCode === shipmentCode && mCode === materialCode;
+    };
+
+    if (mode === 'pn') {
+      const totalCarton = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+      if (totalCarton <= 0) return scannedCarton > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+      if (scannedCarton > totalCarton) return { status: 'excess', value: null };
+      if (scannedCarton === totalCarton) return { status: 'ok', value: null };
+      const pct = Math.round((scannedCarton / totalCarton) * 100);
+      return { status: 'percentage', value: pct };
     }
-    if (scanned > expected) return { status: 'excess', value: null };
-    if (scanned === expected) return { status: 'ok', value: null };
-    const pct = Math.round((scanned / expected) * 100);
+
+    const totalQuantity = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    if (totalQuantity <= 0) {
+      return scannedQty > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+    }
+    if (scannedQty > totalQuantity) return { status: 'excess', value: null };
+    if (scannedQty === totalQuantity) return { status: 'ok', value: null };
+    const pct = Math.round((scannedQty / totalQuantity) * 100);
     return { status: 'percentage', value: pct };
   }
 

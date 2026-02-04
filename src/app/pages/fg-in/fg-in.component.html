@@ -29,12 +29,20 @@
             </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="showCatalog(); $event.preventDefault()">
               <i class="material-icons">list</i>
-              Danh mục TP
+              Danh mục
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showMapping(); $event.preventDefault()">
-              <i class="material-icons">link</i>
-              Mapping KH-TP
-            </a>
+          </div>
+        </div>
+
+        <div class="dropdown factory-filter-dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            <i class="material-icons">business</i>
+            Factory: {{ selectedFactory }}
+          </button>
+          <div class="dropdown-menu" aria-labelledby="factoryFilterDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM1'); $event.preventDefault()">ASM1</a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM2'); $event.preventDefault()">ASM2</a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('TOTAL'); $event.preventDefault()">TOTAL</a>
           </div>
         </div>
 
@@ -69,6 +77,7 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th>Factory</th>
             <th class="row-header">No</th>
             <th>Ngày</th>
             <th>Batch</th>
@@ -88,6 +97,7 @@
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index" 
               [class.received-row]="material.isReceived">
+            <td>{{ material.factory || 'ASM1' }}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
             <td>{{material.batchNumber}}</td>
@@ -95,7 +105,7 @@
                 [class.material-received]="material.isReceived">{{material.materialCode}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
-            <td class="number-cell">{{material.quantity}}</td>
+            <td class="number-cell">{{ material.quantity | number:'1.0-0' }}</td>
             <td class="number-cell">{{calculateCartonAndOdd(material).carton}}</td>
             <td class="number-cell">{{calculateCartonAndOdd(material).odd}}</td>
             <td>
@@ -147,6 +157,13 @@
       </button>
     </div>
     <div class="modal-body nhap-kho-form-body">
+      <div class="input-group">
+        <label class="input-label">Factory</label>
+        <select class="custom-input full-width" [(ngModel)]="newNhapKhoItem.factory">
+          <option value="ASM1">ASM1</option>
+          <option value="ASM2">ASM2</option>
+        </select>
+      </div>
       <div class="input-group nhap-kho-material-wrap">
         <label class="input-label">Mã TP</label>
         <input type="text"
@@ -230,14 +247,14 @@
   </div>
 </div>
 
-<!-- Product Catalog Dialog -->
+<!-- Danh mục TP & Mapping KH-TP (gộp một dialog) -->
 <div class="custom-modal" [class.show]="showCatalogDialog" [style.display]="showCatalogDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="closeCatalog()"></div>
   <div class="modal-container catalog-modal">
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">list</i>
-        Danh mục thành phẩm
+        Danh mục TP & Mapping KH-TP
       </h5>
       <button type="button" class="close-btn" (click)="closeCatalog()">
         <i class="material-icons">close</i>
@@ -245,57 +262,54 @@
     </div>
     
     <div class="modal-body">
-      <!-- Catalog Actions -->
       <div class="catalog-actions">
-        <button class="custom-btn" (click)="importCatalog()">
+        <button class="custom-btn" (click)="importMergedCatalog()">
           <i class="material-icons">file_upload</i>
           Import
         </button>
-        <button class="custom-btn" (click)="downloadCatalogTemplate()">
+        <button class="custom-btn" (click)="downloadMergedCatalogTemplate()">
           <i class="material-icons">download</i>
           Tải Template
         </button>
-        <button class="custom-btn" (click)="syncCustomerCodeFromMapping()">
-          <i class="material-icons">sync</i>
-          Đồng bộ Mã KH
+        <button class="custom-btn" (click)="downloadMergedCatalogCurrent()">
+          <i class="material-icons">download</i>
+          Tải Danh Mục
         </button>
         <div class="search-box">
           <input type="text" 
-                 placeholder="TÌM KIẾM DANH MỤC..." 
-                 [(ngModel)]="catalogSearchTerm"
-                 (input)="onCatalogSearchChange($event)"
+                 placeholder="TÌM KIẾM..." 
+                 [(ngModel)]="mergedSearchTerm"
+                 (input)="onMergedSearchChange($event)"
                  class="custom-input search-input-uppercase">
         </div>
       </div>
 
-      <!-- Add New Item Form -->
       <div class="add-item-form">
         <h6>Thêm mới:</h6>
         <div class="form-row">
           <input type="text" 
-                 [(ngModel)]="newCatalogItem.materialCode" 
+                 [(ngModel)]="newMergedItem.materialCode" 
                  placeholder="Mã TP"
                  class="custom-input">
           <input type="text" 
-                 [(ngModel)]="newCatalogItem.standard" 
+                 [(ngModel)]="newMergedItem.standard" 
                  placeholder="Standard"
                  class="custom-input">
           <input type="text" 
-                 [(ngModel)]="newCatalogItem.customer" 
-                 placeholder="Khách"
+                 [(ngModel)]="newMergedItem.customerCode" 
+                 placeholder="Mã KH"
                  class="custom-input">
           <input type="text" 
-                 [(ngModel)]="newCatalogItem.customerCode" 
-                 placeholder="Mã khách hàng"
+                 [(ngModel)]="newMergedItem.description" 
+                 placeholder="Tên KH"
                  class="custom-input">
-          <button class="custom-btn" (click)="addCatalogItem()">
+          <button class="custom-btn" (click)="addMergedCatalogItem()">
             <i class="material-icons">add</i>
             Thêm
           </button>
         </div>
       </div>
 
-      <!-- Catalog Table -->
       <div class="catalog-table-container">
         <table class="excel-table catalog-table">
           <thead>
@@ -303,116 +317,20 @@
               <th class="row-header">No</th>
               <th>Mã TP</th>
               <th>Standard</th>
-              <th>Khách</th>
-              <th>Mã khách hàng</th>
+              <th>Mã KH</th>
+              <th>Tên KH</th>
               <th>Xóa</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of filteredCatalogItems; let i = index">
+            <tr *ngFor="let item of filteredMergedCatalogItems; let i = index">
               <td class="row-header">{{i + 1}}</td>
               <td class="code-cell">{{item.materialCode}}</td>
               <td>{{item.standard}}</td>
-              <td>{{item.customer}}</td>
               <td class="code-cell">{{item.customerCode}}</td>
-              <td class="status-cell">
-                <button mat-icon-button color="warn" (click)="deleteCatalogItem(item)" 
-                        matTooltip="Xóa">
-                  <mat-icon>delete</mat-icon>
-                </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      </div>
-    </div>
-    
-    <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="closeCatalog()">
-        <i class="material-icons">close</i>
-        Đóng
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Customer Code Mapping Dialog -->
-<div class="custom-modal" [class.show]="showMappingDialog" [style.display]="showMappingDialog ? 'flex' : 'none'">
-  <div class="modal-overlay" (click)="closeMapping()"></div>
-  <div class="modal-container catalog-modal">
-    <div class="modal-header">
-      <h5 class="modal-title">
-        <i class="material-icons">link</i>
-        Mapping Mã Khách Hàng → Mã Thành Phẩm
-      </h5>
-      <button type="button" class="close-btn" (click)="closeMapping()">
-        <i class="material-icons">close</i>
-      </button>
-    </div>
-    
-    <div class="modal-body">
-      <!-- Mapping Actions -->
-      <div class="catalog-actions">
-        <button class="custom-btn" (click)="importMapping()">
-          <i class="material-icons">file_upload</i>
-          Import
-        </button>
-        <button class="custom-btn" (click)="downloadMappingTemplate()">
-          <i class="material-icons">download</i>
-          Tải Template
-        </button>
-        <div class="search-box">
-          <input type="text" 
-                 placeholder="TÌM KIẾM MAPPING..." 
-                 [(ngModel)]="mappingSearchTerm"
-                 (input)="onMappingSearchChange($event)"
-                 class="custom-input search-input-uppercase">
-        </div>
-      </div>
-
-      <!-- Add New Mapping Form -->
-      <div class="add-item-form">
-        <h6>Thêm mới mapping:</h6>
-        <div class="form-row">
-          <input type="text" 
-                 [(ngModel)]="newMappingItem.customerCode" 
-                 placeholder="Mã Khách Hàng"
-                 class="custom-input">
-          <input type="text" 
-                 [(ngModel)]="newMappingItem.materialCode" 
-                 placeholder="Mã Thành Phẩm"
-                 class="custom-input">
-          <input type="text" 
-                 [(ngModel)]="newMappingItem.description" 
-                 placeholder="Tên Khách Hàng"
-                 class="custom-input">
-          <button class="custom-btn" (click)="addMappingItem()">
-            <i class="material-icons">add</i>
-            Thêm
-          </button>
-        </div>
-      </div>
-
-      <!-- Mapping Table -->
-      <div class="catalog-table-container">
-        <table class="excel-table catalog-table">
-          <thead>
-            <tr>
-              <th class="row-header">No</th>
-              <th>Mã Khách Hàng</th>
-              <th>Mã Thành Phẩm</th>
-              <th>Tên Khách Hàng</th>
-              <th>Xóa</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let item of filteredMappingItems; let i = index">
-              <td class="row-header">{{i + 1}}</td>
-              <td class="code-cell">{{item.customerCode}}</td>
-              <td class="code-cell">{{item.materialCode}}</td>
               <td>{{item.description}}</td>
               <td class="status-cell">
-                <button mat-icon-button color="warn" (click)="deleteMappingItem(item)" 
+                <button mat-icon-button color="warn" (click)="deleteMergedCatalogItem(item)" 
                         matTooltip="Xóa">
                   <mat-icon>delete</mat-icon>
                 </button>
@@ -424,7 +342,7 @@
     </div>
     
     <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="closeMapping()">
+      <button type="button" class="btn btn-cancel" (click)="closeCatalog()">
         <i class="material-icons">close</i>
         Đóng
       </button>

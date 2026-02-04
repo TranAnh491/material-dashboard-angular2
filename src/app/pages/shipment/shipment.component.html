@@ -285,7 +285,7 @@
                      placeholder="Shipment code">
             </td>
             <td class="check-cell" [class.quantity-matched]="isQuantityMatched(shipment)" [class.carton-matched]="isCheckOKByCarton(shipment)">
-              {{getScannedCarton(shipment) > 0 ? (getScannedCarton(shipment) | number:'1.0-0':'en-US') : (getScannedQuantity(shipment) | number:'1.0-0':'en-US')}}
+              {{ getDisplayScannedValue(shipment) | number:'1.0-0':'en-US' }}
             </td>
             <td class="check-status-cell">
               <i class="material-icons check-ok-icon" [class.check-ok-icon-carton]="isCheckOKByCarton(shipment)" *ngIf="isCheckOK(shipment)">check_circle</i>

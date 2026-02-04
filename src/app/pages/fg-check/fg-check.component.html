@@ -18,7 +18,7 @@
           <div class="scan-info-row">
             <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
             <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
-            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedCarton()}}</strong> thùng</span>
+            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedCarton()}}</strong> thùng, <strong>{{getCurrentPalletScannedQuantity()}}</strong> pcs</span>
           </div>
           <div class="scan-inputs-row">
             <input type="text" 
@@ -115,13 +115,15 @@
             <th>Time</th>
             <th>Lock</th>
             <th>Pallet No</th>
+            <th>Loại check</th>
+            <th>Ghi chú</th>
             <th>Xóa</th>
           </tr>
         </thead>
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td [attr.colspan]="checkMode === 'pn-qty' ? 10 : 11" class="text-center" style="padding: 20px; color: #000000;">
+            <td [attr.colspan]="checkMode === 'pn-qty' ? 12 : 13" class="text-center" style="padding: 20px; color: #000000;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -161,6 +163,19 @@
                      (change)="updateItemInFirebase(item)"
                      placeholder="Pallet No"
                      style="text-transform: uppercase;">
+            </td>
+            <td class="check-type-cell">
+              <select class="check-type-select"
+                      [ngModel]="getCheckTypeLabel(item)"
+                      (ngModelChange)="onCheckTypeChange(item, $event)"
+                      [disabled]="item.isLocked"
+                      title="Thùng = Check Thùng, Lượng = Check Số lượng">
+                <option value="Thùng">Thùng</option>
+                <option value="Lượng">Lượng</option>
+              </select>
+            </td>
+            <td class="notes-cell" [class.notes-warning]="getCheckNote(item)">
+              <span *ngIf="getCheckNote(item)" class="note-warning-text">{{ getCheckNote(item) }}</span>
             </td>
             <td class="action-cell">
               <button class="btn-delete" (click)="openDeleteConfirm(item)" title="Xóa">
