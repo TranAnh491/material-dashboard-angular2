@@ -260,7 +260,7 @@
               <input type="text"
                      class="editable-input"
                      [(ngModel)]="shipment.vehicleNumber"
-                     (change)="onVehicleNumberChange(shipment)"
+                     (change)="updateShipmentInFirebase(shipment)"
                      (input)="shipment.vehicleNumber = $event.target.value.toUpperCase()"
                      placeholder="Biển số xe"
                      style="text-transform: uppercase;">

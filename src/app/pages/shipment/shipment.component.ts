@@ -287,34 +287,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return (code ?? '').toString().trim().toUpperCase();
   }
 
-  // Handle Vehicle Number change - sync to all rows with same shipmentCode and convert to uppercase
-  onVehicleNumberChange(shipment: ShipmentItem): void {
-    // Convert to uppercase
-    if (shipment.vehicleNumber) {
-      shipment.vehicleNumber = shipment.vehicleNumber.toUpperCase().trim();
-    }
-    
-    const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
-    const newVehicleNumber = shipment.vehicleNumber || '';
-    
-    if (!shipmentCode) {
-      // If no shipment code, just update this one
-      this.updateShipmentInFirebase(shipment);
-      return;
-    }
-    
-    // Find all shipments with the same shipmentCode
-    const sameShipmentRows = this.shipments.filter(s => 
-      this.normalizeShipmentCode(s.shipmentCode) === shipmentCode
-    );
-    
-    // Update Vehicle Number for all rows with same shipmentCode
-    sameShipmentRows.forEach(s => {
-      s.vehicleNumber = newVehicleNumber;
-      this.updateShipmentInFirebase(s);
-    });
-  }
-
   /** Định dạng số: hàng nghìn bằng dấu phẩy (ví dụ 1,000), không có số lẻ thập phân */
   formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined) {
