@@ -80,7 +80,10 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th>Factory</th>
             <th class="row-header">No</th>
+            <th>Shipment</th>
+            <th>XP</th>
             <th class="date-header">Ngày</th>
             <th>Batch</th>
             <th>Mã TP</th>
@@ -98,7 +101,22 @@
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index">
+            <td>{{material.factory || 'ASM1'}}</td>
             <td class="row-header">{{i + 1}}</td>
+            <td>
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.shipment"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="Shipment">
+            </td>
+            <td>
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.xp"
+                     (change)="updateMaterialInFirebase(material)"
+                     placeholder="XP">
+            </td>
             <td class="date-cell">
               <input type="date"
                      class="editable-input"
@@ -137,22 +155,19 @@
               <input type="number"
                      class="editable-input number-input"
                      [(ngModel)]="material.quantity"
-                     (change)="updateMaterialInFirebase(material)"
+                     (change)="onQuantityChange(material)"
                      placeholder="QTY Xuất">
             </td>
-            <td class="number-cell">
-              <input type="number"
-                     class="editable-input number-input"
-                     [(ngModel)]="material.carton"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Carton">
+            <td class="number-cell carton-cell">
+              <ng-container *ngIf="getCartonOdd(material).hasStandard; else noStandard">
+                {{ getCartonOdd(material).carton }}
+              </ng-container>
+              <ng-template #noStandard>
+                <span class="carton-warning" title="Vào danh mục FG IN nhập Standard cho Mã TP này">Nhập standard</span>
+              </ng-template>
             </td>
-            <td class="checkbox-cell">
-              <input type="checkbox"
-                     class="odd-checkbox"
-                     [(ngModel)]="material.odd"
-                     (change)="updateMaterialInFirebase(material)"
-                     [title]="material.odd ? 'Gộp Thùng' : 'Thùng Chẵn'">
+            <td class="number-cell">
+              {{ getCartonOdd(material).odd }}
             </td>
             <td class="location-cell">
               <input type="text"
@@ -450,7 +465,7 @@
 <!-- Xuất Kho Dialog -->
 <div class="custom-modal" [class.show]="showXuatKhoDialog" [style.display]="showXuatKhoDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showXuatKhoDialog = false"></div>
-  <div class="modal-container modal-large">
+  <div class="modal-container modal-large modal-xuat-kho">
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">exit_to_app</i>
@@ -472,6 +487,7 @@
         <div class="shipment-selection">
           <select class="form-input" 
                   [(ngModel)]="xuatKhoSelectedShipment"
+                  (ngModelChange)="onXuatKhoShipmentChange($event)"
                   style="width: 100%; padding: 10px; font-size: 14px;">
             <option value="">-- Chọn Shipment --</option>
             <option *ngFor="let shipment of xuatKhoAvailableShipments" [value]="shipment">
@@ -482,7 +498,10 @@
         
         <div style="margin-top: 15px;">
           <button type="button" 
-                  class="btn btn-apply" 
+                  class="btn btn-load-danh-sach"
+                  [class.btn-load-enough]="shipmentStockStatus === 'enough'"
+                  [class.btn-load-insufficient]="shipmentStockStatus === 'insufficient'"
+                  [class.btn-load-loading]="shipmentStockStatus === 'loading'"
                   (click)="loadInventoryForShipment()"
                   [disabled]="!xuatKhoSelectedShipment">
             <i class="material-icons">inventory_2</i>
@@ -495,13 +514,19 @@
       <div class="xuat-kho-section" *ngIf="xuatKhoStep === 2">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h6>Danh sách xuất kho (có thể chỉnh sửa)</h6>
-          <button type="button" class="btn btn-cancel" (click)="backToInput()">
-            <i class="material-icons">arrow_back</i>
-            Quay lại
-          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-apply" (click)="addXuatKhoRow()">
+              <i class="material-icons">add</i>
+              Thêm dòng
+            </button>
+            <button type="button" class="btn btn-cancel" (click)="backToInput()">
+              <i class="material-icons">arrow_back</i>
+              Quay lại
+            </button>
+          </div>
         </div>
         
-        <div class="preview-table" style="max-height: 400px; overflow-y: auto;">
+        <div class="preview-table preview-table-xuat-kho">
           <table class="excel-table">
             <thead>
               <tr>
@@ -519,60 +544,35 @@
                 <th>Số lượng xuất</th>
                 <th>Vị trí</th>
                 <th>Ghi chú</th>
+                <th class="th-xoa">Xóa</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let item of xuatKhoPreviewItems; let i = index" 
-                  [class.error-row]="item.quantity > item.availableStock"
+                  [class.error-row]="item.inventoryId && item.quantity > item.availableStock"
                   [class.selected-row]="item.selected">
                 <td>
                   <input type="checkbox" 
                          [(ngModel)]="item.selected">
                 </td>
                 <td>{{i + 1}}</td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.materialCode"
-                         style="min-width: 100px;">
-                </td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.batchNumber"
-                         style="min-width: 80px;">
-                </td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.lot"
-                         style="min-width: 80px;">
-                </td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.lsx"
-                         style="min-width: 100px;">
-                </td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.materialCode"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.batchNumber"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.lot"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.lsx"></td>
                 <td class="number-cell">{{item.availableStock}}</td>
                 <td>
                   <input type="number" 
                          class="editable-input number-input" 
                          [(ngModel)]="item.quantity"
-                         style="min-width: 80px;"
-                         [class.error-input]="item.quantity > item.availableStock">
+                         [class.error-input]="item.inventoryId && item.quantity > item.availableStock">
                 </td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.location"
-                         style="min-width: 80px;">
-                </td>
-                <td>
-                  <input type="text" 
-                         class="editable-input" 
-                         [(ngModel)]="item.notes"
-                         style="min-width: 120px;">
+                <td><input type="text" class="editable-input" [(ngModel)]="item.location"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.notes"></td>
+                <td class="td-xoa">
+                  <button type="button" class="btn-icon-delete" (click)="removeXuatKhoItem(i)" title="Xóa dòng">
+                    <i class="material-icons">delete</i>
+                  </button>
                 </td>
               </tr>
             </tbody>

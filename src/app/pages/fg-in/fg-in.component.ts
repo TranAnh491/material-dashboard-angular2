@@ -474,14 +474,13 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: 'Temporary',
       notes: '',
       customer: '',
-      isReceived: true,
+      isReceived: false,
       createdAt: new Date(),
       updatedAt: new Date()
     };
     this.firestore.collection('fg-in').add(materialData)
       .then((docRef) => {
         const newMaterial = { ...materialData, id: docRef.id } as FgInItem;
-        this.addToInventory(newMaterial);
         this.refreshData();
         this.closeNhapKho();
       })

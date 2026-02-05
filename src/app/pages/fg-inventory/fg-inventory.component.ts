@@ -324,95 +324,62 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   }
 
   // Helper method to parse Batch for sorting
-  private parseBatchForSorting(batch: string): { week: number, sequence: number } {
-    if (!batch || batch.length < 6) {
-      return { week: 9999, sequence: 9999 }; // Put invalid batch at the end
+  // Format 8 ký tự: WWMMSSSS (ví dụ 05020003 = tuần 05, 02, thứ tự 0003)
+  private parseBatchForSorting(batch: string): { week: number, middle: number, sequence: number } {
+    const def = { week: 9999, middle: 99, sequence: 9999 };
+    if (!batch || batch.length < 6) return def;
+    const week = parseInt(batch.substring(0, 2), 10) || 0;
+    // 8 ký tự: WWMMSSSS → middle 2 số, sequence 4 số cuối
+    if (batch.length >= 8) {
+      const middle = parseInt(batch.substring(2, 4), 10) || 0;
+      const sequence = parseInt(batch.substring(4, 8), 10) ?? 9999;
+      return { week, middle, sequence };
     }
-    
-    // Format: WWXXXX
-    const week = parseInt(batch.substring(0, 2));
-    const sequence = parseInt(batch.substring(2, 6));
-    
-    return { week, sequence };
+    // 6 ký tự: WWXXXX (cũ)
+    const sequence = parseInt(batch.substring(2, 6), 10) ?? 9999;
+    return { week, middle: 0, sequence };
   }
 
-  // Sort materials by material code (A-Z), then LSX, then Batch
+  // Sort materials FIFO: Mã TP (A,B,C) rồi BATCH (số thứ tự trước sau)
   sortMaterials(): void {
-    console.log('🔄 Sorting FG Inventory materials by: Mã hàng (A-Z) → LSX (year, month, sequence) → Batch (week, sequence)');
-    
     this.materials.sort((a, b) => {
-      // First sort by material code (A-Z)
-      const materialCodeA = a.materialCode.toUpperCase();
-      const materialCodeB = b.materialCode.toUpperCase();
+      // 1. Mã TP theo A, B, C
+      const materialCodeA = (a.materialCode || '').toString().toUpperCase();
+      const materialCodeB = (b.materialCode || '').toString().toUpperCase();
+      const codeCompare = materialCodeA.localeCompare(materialCodeB);
+      if (codeCompare !== 0) return codeCompare;
       
-      if (materialCodeA < materialCodeB) {
-        return -1;
-      }
-      if (materialCodeA > materialCodeB) {
-        return 1;
-      }
-      
-      // If material codes are the same, sort by LSX
-      const lsxA = this.parseLSXForSorting(a.lsx);
-      const lsxB = this.parseLSXForSorting(b.lsx);
-      
-      // Sort by year (oldest first)
-      if (lsxA.year !== lsxB.year) {
-        return lsxA.year - lsxB.year;
-      }
-      
-      // Then by month
-      if (lsxA.month !== lsxB.month) {
-        return lsxA.month - lsxB.month;
-      }
-      
-      // Finally by sequence number
-      if (lsxA.sequence !== lsxB.sequence) {
-        return lsxA.sequence - lsxB.sequence;
-      }
-      
-      // If LSX are the same, sort by Batch
+      // 2. Cùng Mã TP → sắp theo BATCH (số thứ tự trước sau: week → middle → sequence)
       const batchA = this.parseBatchForSorting(a.batchNumber);
       const batchB = this.parseBatchForSorting(b.batchNumber);
-      
-      // Sort by week (oldest first)
-      if (batchA.week !== batchB.week) {
-        return batchA.week - batchB.week;
-      }
-      
-      // Then by sequence number (smallest first)
+      if (batchA.week !== batchB.week) return batchA.week - batchB.week;
+      if (batchA.middle !== batchB.middle) return batchA.middle - batchB.middle;
       return batchA.sequence - batchB.sequence;
     });
-    
-    console.log(`✅ Sorted ${this.materials.length} FG Inventory materials`);
   }
 
   // Apply search filters
   applyFilters(): void {
     this.filteredMaterials = this.materials.filter(material => {
-      // Show all materials if no search term
-      if (!this.searchTerm || this.searchTerm.trim() === '') {
-        return true; // Show all materials when no search term
-      }
-      
-      // Filter by search term - SIMPLIFIED (data comes from FG In)
-      const searchableText = [
-        material.materialCode,
-        material.batchNumber,
-        material.location,
-        material.lsx,
-        material.lot,
-        material.ton?.toString(),
-        material.notes,
-        material.customer // Customer data comes from FG In
-      ].filter(Boolean).join(' ').toUpperCase();
-      
-      if (!searchableText.includes(this.searchTerm)) {
-        return false;
+      // Filter by search term (nếu có)
+      if (this.searchTerm && this.searchTerm.trim() !== '') {
+        const searchableText = [
+          material.materialCode,
+          material.batchNumber,
+          material.location,
+          material.lsx,
+          material.lot,
+          material.ton?.toString(),
+          material.notes,
+          material.customer
+        ].filter(Boolean).join(' ').toUpperCase();
+        if (!searchableText.includes(this.searchTerm)) {
+          return false;
+        }
       }
 
-      // Filter by factory
-      if (this.selectedFactory) {
+      // Filter by factory (TOTAL = xem tất cả)
+      if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
         const materialFactory = material.factory || 'ASM1';
         if (materialFactory !== this.selectedFactory) {
           return false;
@@ -429,48 +396,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       return isInDateRange && isCompletedVisible;
     });
     
-    // Sort filtered materials using the same logic as sortMaterials()
+    // Sort FIFO: Mã TP (A,B,C) rồi BATCH (số thứ tự trước sau)
     this.filteredMaterials.sort((a, b) => {
-      // First sort by material code (A-Z)
-      const materialCodeA = a.materialCode.toUpperCase();
-      const materialCodeB = b.materialCode.toUpperCase();
+      const materialCodeA = (a.materialCode || '').toString().toUpperCase();
+      const materialCodeB = (b.materialCode || '').toString().toUpperCase();
+      const codeCompare = materialCodeA.localeCompare(materialCodeB);
+      if (codeCompare !== 0) return codeCompare;
       
-      if (materialCodeA < materialCodeB) {
-        return -1;
-      }
-      if (materialCodeA > materialCodeB) {
-        return 1;
-      }
-      
-      // If material codes are the same, sort by LSX
-      const lsxA = this.parseLSXForSorting(a.lsx);
-      const lsxB = this.parseLSXForSorting(b.lsx);
-      
-      // Sort by year (oldest first)
-      if (lsxA.year !== lsxB.year) {
-        return lsxA.year - lsxB.year;
-      }
-      
-      // Then by month
-      if (lsxA.month !== lsxB.month) {
-        return lsxA.month - lsxB.month;
-      }
-      
-      // Finally by sequence number
-      if (lsxA.sequence !== lsxB.sequence) {
-        return lsxA.sequence - lsxB.sequence;
-      }
-      
-      // If LSX are the same, sort by Batch
       const batchA = this.parseBatchForSorting(a.batchNumber);
       const batchB = this.parseBatchForSorting(b.batchNumber);
-      
-      // Sort by week (oldest first)
-      if (batchA.week !== batchB.week) {
-        return batchA.week - batchB.week;
-      }
-      
-      // Then by sequence number (smallest first)
+      if (batchA.week !== batchB.week) return batchA.week - batchB.week;
+      if (batchA.middle !== batchB.middle) return batchA.middle - batchB.middle;
       return batchA.sequence - batchB.sequence;
     });
     
@@ -520,14 +456,53 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.applyFilters();
   }
 
-  // Format number with commas for thousands
+  // Format number: dấu phẩy hàng nghìn, không có số thập phân
   formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined) {
       return '0';
     }
-    
-    // Format with commas for thousands
-    return value.toLocaleString('vi-VN');
+    return value.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  }
+
+  setFactoryFilter(factory: string): void {
+    this.selectedFactory = factory;
+    this.applyFilters();
+  }
+
+  /** Số Batch đã chuẩn hóa (trim, uppercase) - mỗi số batch phải riêng biệt trong kho */
+  private getBatchNormalized(material: FGInventoryItem): string {
+    return String(material.batchNumber || '').trim().toUpperCase();
+  }
+
+  /** Danh sách số Batch đang trùng (cùng số batch xuất hiện > 1 lần trong filteredMaterials) */
+  getDuplicateBatchKeys(): string[] {
+    const countByBatch = new Map<string, number>();
+    this.filteredMaterials.forEach(m => {
+      const batch = this.getBatchNormalized(m);
+      if (batch) countByBatch.set(batch, (countByBatch.get(batch) || 0) + 1);
+    });
+    return Array.from(countByBatch.entries())
+      .filter(([, count]) => count > 1)
+      .map(([batch]) => batch);
+  }
+
+  /** Có đang tồn tại trùng Batch không */
+  hasDuplicateBatches(): boolean {
+    return this.getDuplicateBatchKeys().length > 0;
+  }
+
+  /** Dòng này có số Batch trùng không (số batch này xuất hiện ở nhiều dòng) */
+  isBatchDuplicate(material: FGInventoryItem): boolean {
+    const batch = this.getBatchNormalized(material);
+    if (!batch) return false;
+    const count = this.filteredMaterials.filter(m => this.getBatchNormalized(m) === batch).length;
+    return count > 1;
+  }
+
+  /** Chuỗi mô tả các số Batch trùng (để hiển thị trong box) */
+  getDuplicateBatchMessage(): string {
+    const batches = this.getDuplicateBatchKeys();
+    return batches.length === 0 ? '' : batches.join('; ');
   }
 
   // Load user permissions

@@ -27,6 +27,32 @@
   100% { transform: rotate(360deg); }
 }
 
+// Box báo trùng Batch
+.duplicate-batch-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 8px 12px;
+  background: #ffebee;
+  border: 1px solid #f44336;
+  color: #c62828;
+  font-size: 13px;
+  border-radius: 4px;
+
+  .material-icons {
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+}
+
+// Ô Batch trùng: chữ đỏ, nền đỏ nhạt
+.batch-cell-duplicate {
+  color: #c62828 !important;
+  font-weight: 600;
+  background-color: #ffebee !important;
+}
+
 .main-content {
   padding: 0;
   margin: 0;

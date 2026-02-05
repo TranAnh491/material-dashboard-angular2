@@ -41,6 +41,18 @@
             </a>
           </div>
         </div>
+
+        <div class="dropdown factory-filter-dropdown">
+          <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            <i class="material-icons">business</i>
+            Factory: {{ selectedFactory }}
+          </button>
+          <div class="dropdown-menu" aria-labelledby="factoryFilterDropdown">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM1'); $event.preventDefault()">ASM1</a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM2'); $event.preventDefault()">ASM2</a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('TOTAL'); $event.preventDefault()">TOTAL</a>
+          </div>
+        </div>
         
         <div class="search-box">
           <input type="text" 
@@ -72,10 +84,16 @@
 
     <!-- Excel-like Body -->
     <div class="excel-body" [style.display]="isLoading ? 'none' : 'block'">
+      <!-- Box báo trùng Batch -->
+      <div *ngIf="hasDuplicateBatches()" class="duplicate-batch-alert">
+        <i class="material-icons">warning</i>
+        <span><strong>Trùng Batch:</strong> {{ getDuplicateBatchMessage() }}</span>
+      </div>
       <table class="excel-table">
         <thead>
           <tr>
             <th class="row-header">No</th>
+            <th>Factory</th>
             <th>Batch</th>
             <th>Mã TP</th>
             <th>LOT</th>
@@ -97,7 +115,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="17" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="18" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -107,7 +125,8 @@
           <tr *ngFor="let material of filteredMaterials; let i = index">
 
             <td class="row-header">{{i + 1}}</td>
-            <td>{{material.batchNumber}}</td>
+            <td>{{material.factory || 'ASM1'}}</td>
+            <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{material.batchNumber}}</td>
             <td class="code-cell">{{material.materialCode}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>

@@ -34,7 +34,7 @@
     position: sticky !important;
     top: 0 !important;
     z-index: 1000 !important;
-    background: #000000 !important;
+    background: #ffffff !important;
   }
   
   th, td {
@@ -51,8 +51,8 @@
   }
   
   th {
-    background: #000000 !important;
-    color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
     font-weight: 600;
     font-size: 11px;
     text-transform: uppercase;
@@ -68,12 +68,33 @@
     text-align: center;
     
     &.row-header {
-      background: #000000;
-      color: #ffffff;
+      background: #ffffff !important;
+      color: #000000 !important;
       font-size: 11px;
       text-align: center;
       width: 40px;
       min-width: 40px;
+    }
+    
+    &.th-two-line {
+      white-space: normal;
+      line-height: 1.25;
+      vertical-align: middle;
+      .th-vi, .th-en {
+        text-transform: uppercase;
+        display: block;
+      }
+      .th-vi {
+        font-size: 10px;
+        font-weight: 600;
+        color: #000000;
+      }
+      .th-en {
+        font-size: 9px;
+        font-weight: 500;
+        color: #000000;
+        opacity: 0.85;
+      }
     }
   }
   
@@ -82,7 +103,7 @@
     background-color: #ffffff;
     
     &:nth-child(even) {
-      background-color: #f8f8f8;
+      background-color: #ffffff;
     }
     
     &:nth-child(odd) {
@@ -90,7 +111,7 @@
     }
     
     &:hover {
-      background: #e8e8e8;
+      background: #f0f0f0;
     }
   }
   
@@ -654,8 +675,9 @@ mat-checkbox {
     }
     
     .modal-header {
-      background: #000000;
-      color: #ffffff;
+      background: #ffffff;
+      color: #000000;
+      border-bottom: 1px solid #000000;
       padding: 16px 20px;
       display: flex;
       align-items: center;
@@ -665,26 +687,28 @@ mat-checkbox {
         margin: 0;
         font-size: 16px;
         font-weight: 600;
+        color: #000000;
         display: flex;
         align-items: center;
         gap: 8px;
         
         .material-icons {
           font-size: 20px;
+          color: #000000;
         }
       }
       
       .close-btn {
         background: none;
         border: none;
-        color: #ffffff;
+        color: #000000;
         cursor: pointer;
         padding: 4px;
         border-radius: 0;
         transition: none;
         
         &:hover {
-          background: #333333;
+          background: #f0f0f0;
         }
         
         .material-icons {
@@ -695,6 +719,8 @@ mat-checkbox {
     
     .modal-body {
       padding: 20px;
+      background: #ffffff;
+      color: #000000;
       
       .date-inputs {
         display: grid;
@@ -736,7 +762,8 @@ mat-checkbox {
     
     .modal-footer {
       padding: 16px 20px;
-      background: #f8f8f8;
+      background: #ffffff;
+      border-top: 1px solid #000000;
       display: flex;
       justify-content: flex-end;
       gap: 8px;

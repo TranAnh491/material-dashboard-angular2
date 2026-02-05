@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { Subject } from 'rxjs';
-import { takeUntil, debounceTime } from 'rxjs/operators';
+import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
@@ -12,6 +12,7 @@ export interface FgOutItem {
   factory?: string;
   exportDate: Date;
   shipment: string;
+  xp?: string; // Cột XP (phiếu xuất / mã XP)
   materialCode: string;
   customerCode: string;
   batchNumber: string;
@@ -40,6 +41,15 @@ export interface CustomerCodeMappingItem {
   description?: string;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+/** Danh mục (fg-catalog): Mã TP + Standard để tính Carton/ODD */
+export interface FgCatalogItem {
+  id?: string;
+  materialCode: string;
+  standard: string;
+  customer?: string;
+  customerCode?: string;
 }
 
 export interface XuatKhoPreviewItem {
@@ -105,6 +115,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Customer Code Mapping (Tên Khách Hàng = description)
   mappingItems: CustomerCodeMappingItem[] = [];
+  // Danh mục (fg-catalog) – Standard theo Mã TP để tính Carton/ODD
+  catalogItems: FgCatalogItem[] = [];
   
   // Xuất Kho Dialog
   showXuatKhoDialog: boolean = false;
@@ -114,6 +126,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   xuatKhoSelectedShipment: string = '';
   xuatKhoAvailableShipments: string[] = [];
   xuatKhoStep: number = 1; // 1: Chọn shipment, 2: Preview items
+  /** Trạng thái tồn cho shipment đã chọn: đủ stock (xanh), thiếu stock (cam) */
+  shipmentStockStatus: 'unknown' | 'loading' | 'enough' | 'insufficient' = 'unknown';
   
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
 
@@ -127,6 +141,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
+    this.loadCatalogFromFirebase();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
     this.applyFilters();
@@ -168,14 +183,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
           return {
             id: id,
             ...data,
-            shipment: data.shipment || '', // Đảm bảo shipment có giá trị
+            factory: data.factory || 'ASM1',
+            shipment: data.shipment || '',
+            xp: data.xp || '',
             batchNumber: data.batchNumber || '',
             lsx: data.lsx || '',
             lot: data.lot || '',
-            location: data.location || '', // Thêm trường location
+            location: data.location || '',
             updateCount: data.updateCount || 1,
-            pushNo: data.pushNo || '000', // Thêm pushNo với default value
-            approved: data.approved || false, // Thêm trường approved với default = false
+            pushNo: data.pushNo || '000',
+            approved: data.approved || false,
             exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
           };
         });
@@ -206,6 +223,57 @@ export class FgOutComponent implements OnInit, OnDestroy {
         });
         this.mappingItems = firebaseMapping;
       });
+  }
+
+  // Load danh mục (fg-catalog) – có cột Standard để tính Carton/ODD
+  loadCatalogFromFirebase(): void {
+    this.firestore.collection('fg-catalog')
+      .snapshotChanges()
+      .pipe(take(1), takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.catalogItems = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          return {
+            id: action.payload.doc.id,
+            materialCode: (data.materialCode || '').toString().trim(),
+            standard: (data.standard != null && data.standard !== '') ? String(data.standard).trim() : '',
+            customer: data.customer || '',
+            customerCode: data.customerCode || ''
+          };
+        });
+      });
+  }
+
+  /** Lấy Standard (số) theo Mã TP từ danh mục. Trả về null nếu không có hoặc không hợp lệ. */
+  getStandardForMaterial(materialCode: string): number | null {
+    if (!materialCode || !this.catalogItems.length) return null;
+    const code = (materialCode || '').toString().trim().toUpperCase();
+    const item = this.catalogItems.find(c => (c.materialCode || '').trim().toUpperCase() === code);
+    if (!item || !item.standard) return null;
+    const num = parseFloat(item.standard);
+    return !isNaN(num) && num > 0 ? num : null;
+  }
+
+  /** Tính Carton (số thùng chẵn) và ODD (số lẻ) từ QTY xuất / Standard. */
+  getCartonOdd(material: FgOutItem): { carton: number; odd: number; hasStandard: boolean } {
+    const qty = Number(material.quantity) || 0;
+    const standard = this.getStandardForMaterial(material.materialCode || '');
+    if (standard == null || standard <= 0) {
+      return { carton: 0, odd: 0, hasStandard: false };
+    }
+    const carton = Math.floor(qty / standard);
+    const odd = qty % standard;
+    return { carton, odd, hasStandard: true };
+  }
+
+  /** Khi đổi QTY xuất: cập nhật Carton và ODD từ Standard rồi lưu. */
+  onQuantityChange(material: FgOutItem): void {
+    const { carton, odd, hasStandard } = this.getCartonOdd(material);
+    if (hasStandard) {
+      material.carton = carton;
+      material.odd = odd;
+    }
+    this.updateMaterialInFirebase(material);
   }
 
   // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
@@ -764,6 +832,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       factory: 'ASM1',
       exportDate: new Date(),
       shipment: this.xtpShipment.trim(),
+      xp: '',
       materialCode: item.materialCode,
       customerCode: '',
       batchNumber: '',
@@ -782,6 +851,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
       createdAt: new Date(),
       updatedAt: new Date()
     }));
+
+    // Tính Carton/ODD từ Standard (danh mục) cho từng dòng
+    newMaterials.forEach(m => {
+      const { carton, odd, hasStandard } = this.getCartonOdd(m);
+      if (hasStandard) {
+        m.carton = carton;
+        m.odd = odd;
+      }
+    });
 
     // Add to local array
     this.materials = [...this.materials, ...newMaterials];
@@ -1102,7 +1180,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
           return {
             id: id,
             ...data,
+            factory: data.factory || 'ASM1',
             shipment: data.shipment || '',
+            xp: data.xp || '',
             batchNumber: data.batchNumber || '',
             lsx: data.lsx || '',
             lot: data.lot || '',
@@ -1136,6 +1216,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       factory: 'ASM1',
       exportDate: new Date(),
       shipment: this.selectedShipment || '',
+      xp: '',
       materialCode: '',
       customerCode: '',
       batchNumber: '',
@@ -1227,6 +1308,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoPreviewItems = [];
     this.xuatKhoStep = 1;
     this.xuatKhoSelectedShipment = '';
+    this.shipmentStockStatus = 'unknown';
     this.loadAvailableShipmentsForXuatKho();
   }
 
@@ -1238,6 +1320,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoPreviewItems = [];
     this.xuatKhoStep = 1;
     this.xuatKhoSelectedShipment = '';
+    this.shipmentStockStatus = 'unknown';
   }
 
   // Back to shipment selection
@@ -1248,7 +1331,22 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoSelectedShipment = '';
   }
 
-  // Remove item from preview list
+  // Thêm dòng mới vào danh sách xuất kho (dòng trống để nhập tay)
+  addXuatKhoRow(): void {
+    this.xuatKhoPreviewItems.push({
+      materialCode: '',
+      batchNumber: '',
+      lot: '',
+      lsx: '',
+      quantity: 0,
+      availableStock: 0,
+      location: 'Temporary',
+      notes: '',
+      selected: true
+    });
+  }
+
+  // Xóa dòng khỏi danh sách xuất kho
   removeXuatKhoItem(index: number): void {
     this.xuatKhoPreviewItems.splice(index, 1);
   }
@@ -1271,75 +1369,229 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return this.xuatKhoPreviewItems.filter(item => item.selected).length;
   }
 
-  // Load available shipments cho Xuất Kho
+  // Load available shipments cho Xuất Kho – chỉ lấy shipment có status "Chờ soạn"
   loadAvailableShipmentsForXuatKho(): void {
-    console.log('🔍 Loading available shipments...');
+    console.log('🔍 Loading available shipments (status Chờ soạn)...');
     
-    // Load từ collection shipments
-    this.firestore.collection('shipments', ref => 
-      ref.orderBy('createdAt', 'desc')
-         .limit(50)
+    this.firestore.collection('shipments', ref =>
+      ref.where('status', '==', 'Chờ soạn').limit(500)
     ).get().subscribe(snapshot => {
       const shipments = new Set<string>();
-      
       snapshot.docs.forEach(doc => {
         const data = doc.data() as any;
         if (data.shipmentCode) {
           shipments.add(data.shipmentCode);
         }
       });
-      
       this.xuatKhoAvailableShipments = Array.from(shipments).sort();
-      console.log('✅ Loaded', this.xuatKhoAvailableShipments.length, 'shipments');
+      console.log('✅ Loaded', this.xuatKhoAvailableShipments.length, 'shipments (Chờ soạn)');
     });
   }
 
-  // Load inventory items theo shipment đã chọn
+  /** Parse Batch để sắp FIFO (giống FG Inventory): WWMMSSSS */
+  private parseBatchForSorting(batch: string): { week: number; middle: number; sequence: number } {
+    const def = { week: 9999, middle: 99, sequence: 9999 };
+    if (!batch || batch.length < 6) return def;
+    const week = parseInt(batch.substring(0, 2), 10) || 0;
+    if (batch.length >= 8) {
+      const middle = parseInt(batch.substring(2, 4), 10) || 0;
+      const sequence = parseInt(batch.substring(4, 8), 10) ?? 9999;
+      return { week, middle, sequence };
+    }
+    const sequence = parseInt(batch.substring(2, 6), 10) ?? 9999;
+    return { week, middle: 0, sequence };
+  }
+
+  /** So sánh FIFO: Mã TP rồi Batch (batch cũ trước) */
+  private compareFIFO(a: { materialCode: string; batchNumber: string }, b: { materialCode: string; batchNumber: string }): number {
+    const codeA = (a.materialCode || '').toString().toUpperCase();
+    const codeB = (b.materialCode || '').toString().toUpperCase();
+    const c = codeA.localeCompare(codeB);
+    if (c !== 0) return c;
+    const ba = this.parseBatchForSorting(a.batchNumber);
+    const bb = this.parseBatchForSorting(b.batchNumber);
+    if (ba.week !== bb.week) return ba.week - bb.week;
+    if (ba.middle !== bb.middle) return ba.middle - bb.middle;
+    return ba.sequence - bb.sequence;
+  }
+
+  // Khi đổi shipment ở dropdown → kiểm tra tồn để đổi màu nút Load
+  onXuatKhoShipmentChange(shipmentCode: string): void {
+    this.xuatKhoSelectedShipment = shipmentCode || '';
+    if (!this.xuatKhoSelectedShipment.trim()) {
+      this.shipmentStockStatus = 'unknown';
+      return;
+    }
+    this.shipmentStockStatus = 'loading';
+    this.checkStockForSelectedShipment(this.xuatKhoSelectedShipment.trim());
+  }
+
+  // Kiểm tra đủ/thiếu tồn cho shipment (chỉ set shipmentStockStatus, không load danh sách)
+  private checkStockForSelectedShipment(shipmentCode: string): void {
+    this.firestore.collection('shipments', ref =>
+      ref.where('shipmentCode', '==', shipmentCode)
+    ).get().subscribe(shipmentSnapshot => {
+      const demandByMaterial = new Map<string, number>();
+      shipmentSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const code = String(data.materialCode || '').trim().toUpperCase();
+        const qty = Number(data.quantity) || 0;
+        if (code && qty > 0) {
+          demandByMaterial.set(code, (demandByMaterial.get(code) || 0) + qty);
+        }
+      });
+      if (demandByMaterial.size === 0) {
+        this.shipmentStockStatus = 'unknown';
+        return;
+      }
+      this.firestore.collection('fg-inventory').get().subscribe(invSnapshot => {
+        const inventoryRows: Array<{ materialCode: string; batchNumber: string; ton: number }> = [];
+        invSnapshot.docs.forEach(doc => {
+          const d = doc.data() as any;
+          const ton = Number(d.ton ?? d.stock ?? 0) || 0;
+          if (ton > 0) {
+            inventoryRows.push({
+              materialCode: String(d.materialCode || d.maTP || '').trim(),
+              batchNumber: String(d.batchNumber || ''),
+              ton
+            });
+          }
+        });
+        inventoryRows.sort((a, b) => this.compareFIFO(a, b));
+        let hasShortage = false;
+        demandByMaterial.forEach((qtyNeeded, materialCodeNorm) => {
+          const rows = inventoryRows.filter(r => {
+            const invCode = (r.materialCode || '').trim().toUpperCase();
+            if (invCode === materialCodeNorm) return true;
+            if (materialCodeNorm.startsWith(invCode) && invCode.length >= 6) return true;
+            if (invCode.startsWith(materialCodeNorm) && materialCodeNorm.length >= 6) return true;
+            return false;
+          });
+          let remaining = qtyNeeded;
+          for (const row of rows) {
+            if (remaining <= 0) break;
+            const take = Math.min(row.ton, remaining);
+            if (take > 0) remaining -= take;
+          }
+          if (remaining > 0) hasShortage = true;
+        });
+        this.shipmentStockStatus = hasShortage ? 'insufficient' : 'enough';
+      });
+    });
+  }
+
+  // Load danh sách hàng: lọc shipment từ tab Shipment + phân bổ FIFO từ FG Inventory
   loadInventoryForShipment(): void {
     if (!this.xuatKhoSelectedShipment) {
       alert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
-    console.log('🔍 Loading inventory for shipment:', this.xuatKhoSelectedShipment);
-    
-    // Load trực tiếp từ FG Inventory
-    this.firestore.collection('fg-inventory', ref => 
-      ref.where('ton', '>', 0)
-    ).get().subscribe(snapshot => {
-      this.xuatKhoPreviewItems = [];
+    const shipmentCode = this.xuatKhoSelectedShipment.trim();
+    if (!shipmentCode) {
+      alert('⚠️ Vui lòng chọn shipment');
+      return;
+    }
 
-      if (!snapshot.empty) {
-        snapshot.docs.forEach(doc => {
-          const data = doc.data() as any;
-          const availableStock = data.ton || 0;
+    console.log('🔍 Loading inventory for shipment:', shipmentCode);
 
-          if (availableStock > 0) {
-            this.xuatKhoPreviewItems.push({
-              materialCode: data.materialCode || '',
-              batchNumber: data.batchNumber || '',
-              lot: data.lot || '',
-              lsx: data.lsx || '',
-              quantity: availableStock, // Mặc định xuất hết tồn
-              availableStock: availableStock,
-              location: data.location || '',
-              notes: '',
-              inventoryId: doc.id,
-              selected: false // Mặc định không chọn, để user tự chọn
+    // Bước 1: Lọc shipment đó từ tab Shipment (collection shipments)
+    this.firestore.collection('shipments', ref =>
+      ref.where('shipmentCode', '==', shipmentCode)
+    ).get().subscribe(shipmentSnapshot => {
+      const demandByMaterial = new Map<string, number>();
+      shipmentSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const code = String(data.materialCode || '').trim().toUpperCase();
+        const qty = Number(data.quantity) || 0;
+        if (code && qty > 0) {
+          demandByMaterial.set(code, (demandByMaterial.get(code) || 0) + qty);
+        }
+      });
+
+      const materialCodesNeeded = Array.from(demandByMaterial.keys());
+      if (materialCodesNeeded.length === 0) {
+        alert('❌ Không tìm thấy dòng nào của shipment "' + shipmentCode + '" trong tab Shipment. Kiểm tra lại mã shipment.');
+        return;
+      }
+
+      console.log('📦 Shipment cần xuất (từ tab Shipment):', Object.fromEntries(demandByMaterial));
+
+      // Bước 2: Load toàn bộ FG Inventory, lọc tồn > 0 trong memory (tránh lỡ field ton vs stock)
+      this.firestore.collection('fg-inventory').get().subscribe(invSnapshot => {
+        const inventoryRows: Array<{
+          id: string;
+          materialCode: string;
+          batchNumber: string;
+          lot: string;
+          lsx: string;
+          ton: number;
+          location: string;
+        }> = [];
+        invSnapshot.docs.forEach(doc => {
+          const d = doc.data() as any;
+          // Cột tồn kho: FG Inventory lưu ton hoặc stock
+          const ton = Number(d.ton ?? d.stock ?? 0) || 0;
+          if (ton > 0) {
+            inventoryRows.push({
+              id: doc.id,
+              materialCode: String(d.materialCode || d.maTP || '').trim(),
+              batchNumber: String(d.batchNumber || ''),
+              lot: String(d.lot || ''),
+              lsx: String(d.lsx || ''),
+              ton,
+              location: String(d.location || '') || 'Temporary'
             });
+          }
+        });
+
+        // Sắp FIFO: Mã TP (A,B,C) rồi Batch (cũ trước)
+        inventoryRows.sort((a, b) => this.compareFIFO(a, b));
+
+        // Bước 3: Phân bổ FIFO – ví dụ cần 2000, tồn 2 batch 1500 mỗi batch → lấy 1500 + 500
+        // Khớp mã TP: exact hoặc base code (P030105_B khớp P030105 và ngược lại)
+        this.xuatKhoPreviewItems = [];
+        demandByMaterial.forEach((qtyNeeded, materialCodeNorm) => {
+          const rows = inventoryRows.filter(r => {
+            const invCode = (r.materialCode || '').trim().toUpperCase();
+            if (invCode === materialCodeNorm) return true;
+            // Mã có thể lưu không hậu tố _B ở kho: P030105 khớp P030105_B
+            if (materialCodeNorm.startsWith(invCode) && invCode.length >= 6) return true;
+            if (invCode.startsWith(materialCodeNorm) && materialCodeNorm.length >= 6) return true;
+            return false;
+          });
+          let remaining = qtyNeeded;
+          for (const row of rows) {
+            if (remaining <= 0) break;
+            const take = Math.min(row.ton, remaining);
+            if (take <= 0) continue;
+            this.xuatKhoPreviewItems.push({
+              materialCode: row.materialCode,
+              batchNumber: row.batchNumber,
+              lot: row.lot,
+              lsx: row.lsx,
+              quantity: take,
+              availableStock: row.ton,
+              location: row.location,
+              notes: '',
+              inventoryId: row.id,
+              selected: true
+            });
+            remaining -= take;
+          }
+          if (remaining > 0) {
+            console.warn(`⚠️ Thiếu tồn cho mã TP ${materialCodeNorm}: cần ${qtyNeeded}, đã phân bổ ${qtyNeeded - remaining}`);
           }
         });
 
         if (this.xuatKhoPreviewItems.length > 0) {
           this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
-          console.log('✅ Loaded', this.xuatKhoPreviewItems.length, 'items from FG Inventory');
+          console.log('✅ Loaded', this.xuatKhoPreviewItems.length, 'dòng xuất (FIFO) cho shipment', shipmentCode);
         } else {
-          alert('❌ Không có hàng tồn kho');
+          alert('❌ Không có tồn kho phù hợp với danh sách hàng của shipment này (hoặc tồn = 0).');
         }
-      } else {
-        alert('❌ Không tìm thấy hàng tồn kho');
-      }
+      });
     });
   }
 
@@ -1358,8 +1610,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Kiểm tra số lượng xuất không vượt quá tồn
-    const hasError = selectedItems.some(item => item.quantity > item.availableStock);
+    // Kiểm tra số lượng xuất không vượt quá tồn (chỉ với dòng có inventoryId từ kho)
+    const hasError = selectedItems.some(item => item.inventoryId && item.quantity > item.availableStock);
     if (hasError) {
       alert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
       return;
@@ -1372,19 +1624,25 @@ export class FgOutComponent implements OnInit, OnDestroy {
     let savedCount = 0;
 
     selectedItems.forEach(item => {
+      // Tính Carton/ODD từ Standard (danh mục)
+      const standard = this.getStandardForMaterial(item.materialCode);
+      const carton = (standard != null && standard > 0) ? Math.floor(item.quantity / standard) : 0;
+      const odd = (standard != null && standard > 0) ? item.quantity % standard : 0;
+
       // 1. Tạo record trong FG Out
       const fgOutRecord: any = {
         factory: 'ASM1',
         exportDate: new Date(),
-        shipment: this.selectedShipment || '',
+        shipment: this.xuatKhoSelectedShipment || '',
+        xp: '',
         materialCode: item.materialCode,
         batchNumber: item.batchNumber,
         lsx: item.lsx,
         lot: item.lot,
         quantity: item.quantity,
-        carton: 0,
+        carton,
         qtyBox: 0,
-        odd: 0,
+        odd,
         location: item.location,
         notes: item.notes,
         approved: false,
