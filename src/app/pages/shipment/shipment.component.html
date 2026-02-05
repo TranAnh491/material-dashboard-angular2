@@ -9,7 +9,10 @@
             <!-- Summary Cards -->
             <div class="row summary-row">
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive(null)"
+                   (click)="setStatusFilter(null)"
+                   role="button" tabindex="0" title="Xem tất cả">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">local_shipping</i>
@@ -23,7 +26,10 @@
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive('Đã Check')"
+                   (click)="setStatusFilter('Đã Check')"
+                   role="button" tabindex="0" title="Lọc: Đã Check">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">check_circle</i>
@@ -37,21 +43,27 @@
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive('Chưa Đủ')"
+                   (click)="setStatusFilter('Chưa Đủ')"
+                   role="button" tabindex="0" title="Lọc: Chưa đủ hàng">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">warning</i>
                   </div>
                   <div class="card-content">
-                    <p class="card-category">THIẾU HÀNG</p>
-                    <p class="card-category-en">MISSING ITEMS</p>
+                    <p class="card-category">CHƯA ĐỦ HÀNG</p>
+                    <p class="card-category-en">INSUFFICIENT</p>
                   </div>
                   <h3 class="card-title">{{getMissingItemsShipments()}}</h3>
                 </div>
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive('Đang soạn')"
+                   (click)="setStatusFilter('Đang soạn')"
+                   role="button" tabindex="0" title="Lọc: Đang soạn">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">work</i>
@@ -65,7 +77,10 @@
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive('Chờ soạn')"
+                   (click)="setStatusFilter('Chờ soạn')"
+                   role="button" tabindex="0" title="Lọc: Chờ soạn">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">schedule</i>
@@ -79,7 +94,10 @@
               </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card">
+              <div class="card card-stats compact-stats summary-card summary-card-clickable"
+                   [class.summary-card-active]="isStatusFilterActive('Delay')"
+                   (click)="setStatusFilter('Delay')"
+                   role="button" tabindex="0" title="Lọc: Delay">
                 <div class="card-header">
                   <div class="card-header-icon">
                     <i class="material-icons">error</i>

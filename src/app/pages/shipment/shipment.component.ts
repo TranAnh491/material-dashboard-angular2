@@ -82,6 +82,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Search term
   searchTerm: string = '';
   
+  // Filter by status when clicking summary cards (null = show all)
+  filterByStatus: string | null = null;
+  
   // Print Label dialog
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
@@ -204,18 +207,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return uniqueShipments.size;
   }
 
-  // Get completed shipments count
+  // Get completed shipments count (status Đã Check)
   getCompletedShipments(): number {
-    return this.filteredShipments.filter(s => s.status === 'Đã xong').length;
+    return this.filteredShipments.filter(s => s.status === 'Đã Check').length;
   }
 
-  // Get missing items shipments count
+  // Get count of unique material codes (mã TP) that have status "Chưa Đủ"
   getMissingItemsShipments(): number {
-    return this.filteredShipments.filter(s => {
-      // Check if inventory is less than quantity needed
-      const inventory = this.getInventory(s.materialCode);
-      return inventory < s.quantity;
-    }).length;
+    const materialCodesWithChuaDu = new Set<string>();
+    this.filteredShipments
+      .filter(s => s.status === 'Chưa Đủ')
+      .forEach(s => {
+        const code = String(s.materialCode || '').trim().toUpperCase();
+        if (code) materialCodesWithChuaDu.add(code);
+      });
+    return materialCodesWithChuaDu.size;
   }
 
   // Get in progress shipments count
@@ -233,11 +239,26 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return this.filteredShipments.filter(s => s.status === 'Delay').length;
   }
 
+  // Set status filter from summary card click (null = clear filter)
+  setStatusFilter(status: string | null): void {
+    this.filterByStatus = this.filterByStatus === status ? null : status;
+    this.applyFilters();
+  }
+
+  isStatusFilterActive(status: string | null): boolean {
+    return this.filterByStatus === status;
+  }
+
   // Apply filters
   applyFilters(): void {
     this.filteredShipments = this.shipments.filter(shipment => {
       // Filter ra các shipment đã ẩn (trừ khi showHidden = true)
       if (shipment.hidden === true && !this.showHidden) {
+        return false;
+      }
+      
+      // Filter by status (when user clicked a summary card)
+      if (this.filterByStatus != null && shipment.status !== this.filterByStatus) {
         return false;
       }
       
