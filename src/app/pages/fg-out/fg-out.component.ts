@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Subject, forkJoin } from 'rxjs';
 import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -65,6 +65,11 @@ export interface XuatKhoPreviewItem {
   selected: boolean; // Checkbox để chọn item
 }
 
+/** Dòng hiển thị: chi tiết hoặc dòng cộng tổng theo Mã TP trong mỗi shipment */
+export type FgOutDisplayRow =
+  | { type: 'detail'; material: FgOutItem }
+  | { type: 'subtotal'; shipment: string; materialCode: string; totalQty: number };
+
 @Component({
   selector: 'app-fg-out',
   templateUrl: './fg-out.component.html',
@@ -73,11 +78,12 @@ export interface XuatKhoPreviewItem {
 export class FgOutComponent implements OnInit, OnDestroy {
   materials: FgOutItem[] = [];
   filteredMaterials: FgOutItem[] = [];
+  displayRows: FgOutDisplayRow[] = [];
   
   // Search and filter
   searchTerm: string = '';
   
-  // Factory filter - FG Out is only for ASM1
+  // Factory filter
   selectedFactory: string = 'ASM1';
   availableFactories: string[] = ['ASM1'];
   
@@ -92,7 +98,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Display options
   showCompleted: boolean = true;
   
-  // Shipment filter
   selectedShipment: string = '';
   availableShipments: string[] = [];
   
@@ -124,6 +129,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   xuatKhoChecked: boolean = false;
   xuatKhoPreviewItems: XuatKhoPreviewItem[] = [];
   xuatKhoSelectedShipment: string = '';
+  /** Factory của shipment đang xuất (từ tab Shipment: ASM1/ASM2) – dùng lọc tồn và ghi FG Out */
+  xuatKhoShipmentFactory: string = 'ASM1';
   xuatKhoAvailableShipments: string[] = [];
   xuatKhoStep: number = 1; // 1: Chọn shipment, 2: Preview items
   /** Trạng thái tồn cho shipment đã chọn: đủ stock (xanh), thiếu stock (cam) */
@@ -276,6 +283,27 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.updateMaterialInFirebase(material);
   }
 
+  /** Định dạng số có dấu phẩy (ví dụ 1,000). */
+  formatNumber(value: number | undefined | null): string {
+    if (value == null || isNaN(value)) return '';
+    return value.toLocaleString('en-US');
+  }
+
+  /** Xử lý nhập QTY (parse số, cập nhật model). */
+  onQtyInput(event: Event, material: FgOutItem): void {
+    const input = event.target as HTMLInputElement;
+    const raw = (input.value || '').replace(/,/g, '').trim();
+    const num = parseInt(raw, 10);
+    material.quantity = isNaN(num) ? 0 : num;
+    this.onQuantityChange(material);
+  }
+
+  /** Sau khi blur ô QTY: hiển thị lại có dấu phẩy. */
+  onQtyBlur(event: Event, material: FgOutItem): void {
+    const input = event.target as HTMLInputElement;
+    input.value = this.formatNumber(material.quantity);
+  }
+
   // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
   getCustomerNameFromMapping(materialCode: string): string {
     const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
@@ -391,21 +419,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Apply search filters
   applyFilters(): void {
     this.filteredMaterials = this.materials.filter(material => {
-      // Filter by search term
-      if (this.searchTerm) {
-        const searchableText = [
-          material.materialCode,
-          material.shipment,
-          material.customerCode,
-          material.batchNumber,
-          material.lsx,
-          material.lot,
-          material.poShip,
-          material.quantity?.toString(),
-          material.notes
-        ].filter(Boolean).join(' ').toUpperCase();
-        
-        if (!searchableText.includes(this.searchTerm)) {
+      // Search theo Shipment hoặc Mã TP (contains, không phân biệt hoa thường)
+      if (this.searchTerm && this.searchTerm.trim()) {
+        const term = this.searchTerm.trim().toUpperCase();
+        const ship = (material.shipment || '').toUpperCase();
+        const code = (material.materialCode || '').toUpperCase();
+        if (!ship.includes(term) && !code.includes(term)) {
           return false;
         }
       }
@@ -418,13 +437,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }
       }
       
-      // Filter by shipment
-      if (this.selectedShipment) {
-        if (material.shipment !== this.selectedShipment) {
-          return false;
-        }
-      }
-      
       // Filter by date range
       const exportDate = new Date(material.exportDate);
       const isInDateRange = exportDate >= this.startDate && exportDate <= this.endDate;
@@ -432,41 +444,38 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return isInDateRange;
     });
     
-    // Sort filtered materials using the same logic
+    // Sắp xếp: Ngày, Shipment, Mã TP, Batch
     this.filteredMaterials.sort((a, b) => {
-      // 1. Sort by date (newest first)
       const dateA = new Date(a.exportDate).getTime();
       const dateB = new Date(b.exportDate).getTime();
-      if (dateA !== dateB) {
-        return dateB - dateA; // Newest first
-      }
-      
-      // 2. Sort by shipment (A-Z)
-      const shipmentA = a.shipment.toUpperCase();
-      const shipmentB = b.shipment.toUpperCase();
-      if (shipmentA !== shipmentB) {
-        return shipmentA.localeCompare(shipmentB);
-      }
-      
-      // 3. Sort by materialCode (A-Z)
-      const materialA = a.materialCode.toUpperCase();
-      const materialB = b.materialCode.toUpperCase();
-      if (materialA !== materialB) {
-        return materialA.localeCompare(materialB);
-      }
-      
-      // 4. Sort by LSX (A-Z)
-      const lsxA = a.lsx.toUpperCase();
-      const lsxB = b.lsx.toUpperCase();
-      if (lsxA !== lsxB) {
-        return lsxA.localeCompare(lsxB);
-      }
-      
-      // 5. Sort by Batch (A-Z)
-      const batchA = a.batchNumber.toUpperCase();
-      const batchB = b.batchNumber.toUpperCase();
+      if (dateA !== dateB) return dateB - dateA; // Mới nhất trước
+      const shipA = (a.shipment || '').toUpperCase();
+      const shipB = (b.shipment || '').toUpperCase();
+      if (shipA !== shipB) return shipA.localeCompare(shipB);
+      const codeA = (a.materialCode || '').toUpperCase();
+      const codeB = (b.materialCode || '').toUpperCase();
+      if (codeA !== codeB) return codeA.localeCompare(codeB);
+      const batchA = (a.batchNumber || '').toUpperCase();
+      const batchB = (b.batchNumber || '').toUpperCase();
       return batchA.localeCompare(batchB);
     });
+
+    // Build display rows: chi tiết + dòng cộng tổng theo (shipment, Mã TP)
+    this.displayRows = [];
+    let i = 0;
+    while (i < this.filteredMaterials.length) {
+      const m = this.filteredMaterials[i];
+      const groupKey = (m.shipment || '') + '|' + (m.materialCode || '');
+      let totalQty = 0;
+      while (i < this.filteredMaterials.length &&
+        ((this.filteredMaterials[i].shipment || '') + '|' + (this.filteredMaterials[i].materialCode || '')) === groupKey) {
+        const row = this.filteredMaterials[i];
+        this.displayRows.push({ type: 'detail', material: row });
+        totalQty += Number(row.quantity) || 0;
+        i++;
+      }
+      this.displayRows.push({ type: 'subtotal', shipment: m.shipment || '', materialCode: m.materialCode || '', totalQty });
+    }
     
     console.log('FG Out search results:', {
       searchTerm: this.searchTerm,
@@ -899,6 +908,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Handle shipment input change
   onShipmentInputChange(): void {
     console.log('Shipment input changed to:', this.selectedShipment);
+    this.applyFilters();
+  }
+
+  // Lọc theo nhà máy: ASM1, ASM2, TOTAL ('' = tất cả)
+  setFactoryFilter(factory: string): void {
+    this.selectedFactory = factory;
     this.applyFilters();
   }
 
@@ -1495,19 +1510,23 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
     console.log('🔍 Loading inventory for shipment:', shipmentCode);
 
-    // Bước 1: Lọc shipment đó từ tab Shipment (collection shipments)
+    // Bước 1: Lọc shipment đó từ tab Shipment (collection shipments), lấy factory
     this.firestore.collection('shipments', ref =>
       ref.where('shipmentCode', '==', shipmentCode)
     ).get().subscribe(shipmentSnapshot => {
       const demandByMaterial = new Map<string, number>();
-      shipmentSnapshot.docs.forEach(doc => {
+      let shipmentFactory = 'ASM1';
+      shipmentSnapshot.docs.forEach((doc, idx) => {
         const data = doc.data() as any;
+        if (idx === 0) shipmentFactory = (data.factory || 'ASM1').toString().trim().toUpperCase();
+        if (shipmentFactory !== 'ASM1' && shipmentFactory !== 'ASM2') shipmentFactory = 'ASM1';
         const code = String(data.materialCode || '').trim().toUpperCase();
         const qty = Number(data.quantity) || 0;
         if (code && qty > 0) {
           demandByMaterial.set(code, (demandByMaterial.get(code) || 0) + qty);
         }
       });
+      this.xuatKhoShipmentFactory = shipmentFactory;
 
       const materialCodesNeeded = Array.from(demandByMaterial.keys());
       if (materialCodesNeeded.length === 0) {
@@ -1515,10 +1534,32 @@ export class FgOutComponent implements OnInit, OnDestroy {
         return;
       }
 
-      console.log('📦 Shipment cần xuất (từ tab Shipment):', Object.fromEntries(demandByMaterial));
+      console.log('📦 Shipment cần xuất (từ tab Shipment):', Object.fromEntries(demandByMaterial), ', factory:', this.xuatKhoShipmentFactory);
 
-      // Bước 2: Load toàn bộ FG Inventory, lọc tồn > 0 trong memory (tránh lỡ field ton vs stock)
-      this.firestore.collection('fg-inventory').get().subscribe(invSnapshot => {
+      // Bước 2: Load FG Inventory (chỉ nhà máy của shipment) + fg-in + fg-export, tính tồn
+      const invGet = this.firestore.collection('fg-inventory').get();
+      const fgInGet = this.firestore.collection('fg-in').get();
+      const fgExportGet = this.firestore.collection('fg-export').get();
+
+      forkJoin([invGet, fgInGet, fgExportGet]).pipe(take(1)).subscribe(([invSnapshot, fgInSnapshot, fgExportSnapshot]) => {
+        const key = (mc: string, batch: string, lsx: string, lot: string) =>
+          [String(mc || '').trim(), String(batch || '').trim(), String(lsx || '').trim(), String(lot || '').trim()].join('|');
+
+        const nhapByKey = new Map<string, number>();
+        fgInSnapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          const k = key(data.materialCode, data.batchNumber, data.lsx, data.lot);
+          const q = Number(data.quantity) || 0;
+          nhapByKey.set(k, (nhapByKey.get(k) || 0) + q);
+        });
+        const xuatByKey = new Map<string, number>();
+        fgExportSnapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          const k = key(data.materialCode, data.batchNumber, data.lsx, data.lot);
+          const q = Number(data.quantity) || 0;
+          xuatByKey.set(k, (xuatByKey.get(k) || 0) + q);
+        });
+
         const inventoryRows: Array<{
           id: string;
           materialCode: string;
@@ -1530,8 +1571,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }> = [];
         invSnapshot.docs.forEach(doc => {
           const d = doc.data() as any;
-          // Cột tồn kho: FG Inventory lưu ton hoặc stock
-          const ton = Number(d.ton ?? d.stock ?? 0) || 0;
+          const docFactory = (d.factory || 'ASM1').toString().trim().toUpperCase();
+          if (docFactory !== this.xuatKhoShipmentFactory) return; // Chỉ lấy tồn kho đúng nhà máy
+          const tonDau = Number(d.tonDau ?? 0) || 0;
+          const k = key(d.materialCode || d.maTP, d.batchNumber, d.lsx, d.lot);
+          const nhap = nhapByKey.get(k) ?? 0;
+          const xuat = xuatByKey.get(k) ?? 0;
+          const ton = tonDau + nhap - xuat;
           if (ton > 0) {
             inventoryRows.push({
               id: doc.id,
@@ -1629,9 +1675,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const carton = (standard != null && standard > 0) ? Math.floor(item.quantity / standard) : 0;
       const odd = (standard != null && standard > 0) ? item.quantity % standard : 0;
 
-      // 1. Tạo record trong FG Out
+      // 1. Tạo record trong FG Out – factory theo shipment (ASM1/ASM2)
       const fgOutRecord: any = {
-        factory: 'ASM1',
+        factory: this.xuatKhoShipmentFactory,
         exportDate: new Date(),
         shipment: this.xuatKhoSelectedShipment || '',
         xp: '',

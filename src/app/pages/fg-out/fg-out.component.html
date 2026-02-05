@@ -28,18 +28,26 @@
         
         <div class="search-box">
           <input type="text" 
-                 placeholder="TÌM KIẾM..." 
+                 class="custom-input search-input-uppercase" 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 class="custom-input search-input-uppercase">
+                 placeholder="Shipment hoặc Mã TP">
         </div>
         
-        <div class="shipment-input">
-          <input type="text" 
-                 class="custom-input" 
-                 [(ngModel)]="selectedShipment" 
-                 (input)="onShipmentInputChange()"
-                 placeholder="Nhập mã Shipment để lọc">
+        <div class="factory-filter">
+          <span class="filter-label">Nhà máy:</span>
+          <button type="button" 
+                  class="custom-btn factory-btn"
+                  [class.active]="selectedFactory === 'ASM1'"
+                  (click)="setFactoryFilter('ASM1')">ASM1</button>
+          <button type="button" 
+                  class="custom-btn factory-btn"
+                  [class.active]="selectedFactory === 'ASM2'"
+                  (click)="setFactoryFilter('ASM2')">ASM2</button>
+          <button type="button" 
+                  class="custom-btn factory-btn"
+                  [class.active]="selectedFactory === ''"
+                  (click)="setFactoryFilter('')">TOTAL</button>
         </div>
         
         <button class="custom-btn" (click)="showTimeRangeDialog = true">
@@ -50,21 +58,6 @@
         <button class="custom-btn" (click)="viewAllMaterials()">
           <i class="material-icons">visibility</i>
           Xem tất cả
-        </button>
-        
-        <button class="custom-btn btn-primary" (click)="showXTPDialog = true">
-          <i class="material-icons">add</i>
-          + XTP
-        </button>
-        
-        <button class="custom-btn btn-success" (click)="printSelectedShipment()" [disabled]="!selectedShipment">
-          <i class="material-icons">print</i>
-          In
-        </button>
-        
-        <button class="custom-btn btn-info" (click)="addNewRow()">
-          <i class="material-icons">add_box</i>
-          Thêm dòng
         </button>
         
         <button class="custom-btn btn-warning" (click)="openXuatKhoDialog()">
@@ -100,104 +93,116 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; let i = index">
-            <td>{{material.factory || 'ASM1'}}</td>
-            <td class="row-header">{{i + 1}}</td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.shipment"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Shipment">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.xp"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="XP">
-            </td>
-            <td class="date-cell">
-              <input type="date"
-                     class="editable-input"
-                     [value]="formatDateForInput(material.exportDate)"
-                     (change)="onDateChange($event, material)">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.batchNumber"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Batch">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.materialCode"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Mã TP">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.lot"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="LOT">
-            </td>
-            <td class="code-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.lsx"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="LSX">
-            </td>
-            <td class="number-cell">
-              <input type="number"
-                     class="editable-input number-input"
-                     [(ngModel)]="material.quantity"
-                     (change)="onQuantityChange(material)"
-                     placeholder="QTY Xuất">
-            </td>
-            <td class="number-cell carton-cell">
-              <ng-container *ngIf="getCartonOdd(material).hasStandard; else noStandard">
-                {{ getCartonOdd(material).carton }}
-              </ng-container>
-              <ng-template #noStandard>
-                <span class="carton-warning" title="Vào danh mục FG IN nhập Standard cho Mã TP này">Nhập standard</span>
-              </ng-template>
-            </td>
-            <td class="number-cell">
-              {{ getCartonOdd(material).odd }}
-            </td>
-            <td class="location-cell">
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.location"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="Vị trí">
-            </td>
-            <td>
-              <input type="text"
-                     class="editable-input"
-                     [(ngModel)]="material.notes"
-                     (change)="updateMaterialInFirebase(material)"
-                     placeholder="">
-            </td>
-            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
-            <td class="checkbox-cell">
-              <input type="checkbox"
-                     class="approval-checkbox"
-                     [(ngModel)]="material.approved"
-                     (change)="onApprovalChange(material)"
-                     [title]="material.approved ? 'Đã duyệt' : 'Chưa duyệt'">
-            </td>
-            <td class="action-cell">
-              <button mat-icon-button color="warn" (click)="deleteMaterial(material)"
-                      matTooltip="Xóa">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
-          </tr>
+          <ng-container *ngFor="let row of displayRows; let i = index">
+            <!-- Dòng chi tiết -->
+            <tr *ngIf="row.type === 'detail'" class="detail-row">
+              <td>{{row.material.factory || 'ASM1'}}</td>
+              <td class="row-header">{{i + 1}}</td>
+              <td>
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.shipment"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="Shipment">
+              </td>
+              <td>
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.xp"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="XP">
+              </td>
+              <td class="date-cell">
+                <input type="date"
+                       class="editable-input"
+                       [value]="formatDateForInput(row.material.exportDate)"
+                       (change)="onDateChange($event, row.material)">
+              </td>
+              <td class="code-cell">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.batchNumber"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="Batch">
+              </td>
+              <td class="code-cell">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.materialCode"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="Mã TP">
+              </td>
+              <td class="code-cell">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.lot"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="LOT">
+              </td>
+              <td class="code-cell">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.lsx"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="LSX">
+              </td>
+              <td class="number-cell qty-cell">
+                <input type="text"
+                       class="editable-input number-input"
+                       [value]="formatNumber(row.material.quantity)"
+                       (input)="onQtyInput($event, row.material)"
+                       (blur)="onQtyBlur($event, row.material)"
+                       placeholder="QTY Xuất">
+              </td>
+              <td class="number-cell carton-cell">
+                <ng-container *ngIf="getCartonOdd(row.material).hasStandard; else noStandard">
+                  {{ getCartonOdd(row.material).carton }}
+                </ng-container>
+                <ng-template #noStandard>
+                  <span class="carton-warning" title="Vào danh mục FG IN nhập Standard cho Mã TP này">Nhập standard</span>
+                </ng-template>
+              </td>
+              <td class="number-cell">
+                {{ getCartonOdd(row.material).odd }}
+              </td>
+              <td class="location-cell">
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.location"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="Vị trí">
+              </td>
+              <td>
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.notes"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="">
+              </td>
+              <td>{{getCustomerNameFromMapping(row.material.materialCode)}}</td>
+              <td class="checkbox-cell">
+                <input type="checkbox"
+                       class="approval-checkbox"
+                       [(ngModel)]="row.material.approved"
+                       (change)="onApprovalChange(row.material)"
+                       [title]="row.material.approved ? 'Đã duyệt' : 'Chưa duyệt'">
+              </td>
+              <td class="action-cell">
+                <button mat-icon-button color="warn" (click)="deleteMaterial(row.material)"
+                        matTooltip="Xóa">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </td>
+            </tr>
+            <!-- Dòng cộng tổng theo Mã TP trong mỗi shipment – tổng QTY thẳng cột QTY Xuất -->
+            <tr *ngIf="row.type === 'subtotal'" class="subtotal-row">
+              <td colspan="6"></td>
+              <td class="subtotal-label">Tổng {{row.materialCode}}</td>
+              <td colspan="2"></td>
+              <td class="number-cell subtotal-qty"><strong>{{row.totalQty | number}}</strong></td>
+              <td colspan="7"></td>
+            </tr>
+          </ng-container>
         </tbody>
       </table>
     </div>

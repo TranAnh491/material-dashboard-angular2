@@ -52,6 +52,43 @@
   white-space: nowrap;
 }
 
+.factory-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  .filter-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    margin-right: 4px;
+  }
+  .factory-btn {
+    min-width: 56px;
+    &.active {
+      background: #000 !important;
+      color: #fff !important;
+      border-color: #000 !important;
+    }
+  }
+}
+
+.subtotal-row {
+  background-color: #e0e0e0 !important;
+  td {
+    border-top: 1px solid #999;
+    font-size: 11px;
+    color: #000;
+  }
+}
+.subtotal-label {
+  font-weight: 600;
+  color: #000;
+}
+.subtotal-qty {
+  font-weight: 600;
+  color: #000;
+}
+
 .selected-row {
   background-color: #e3f2fd !important;
 }
