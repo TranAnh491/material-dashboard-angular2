@@ -76,6 +76,7 @@
             <th>Factory</th>
             <th class="row-header">No</th>
             <th>Shipment</th>
+            <th>Pallet</th>
             <th>XP</th>
             <th class="date-header">Ngày</th>
             <th>Batch</th>
@@ -104,6 +105,13 @@
                        [(ngModel)]="row.material.shipment"
                        (change)="updateMaterialInFirebase(row.material)"
                        placeholder="Shipment">
+              </td>
+              <td>
+                <input type="text"
+                       class="editable-input"
+                       [(ngModel)]="row.material.pallet"
+                       (change)="updateMaterialInFirebase(row.material)"
+                       placeholder="Pallet">
               </td>
               <td>
                 <input type="text"
@@ -196,7 +204,7 @@
             </tr>
             <!-- Dòng cộng tổng theo Mã TP trong mỗi shipment – tổng QTY thẳng cột QTY Xuất -->
             <tr *ngIf="row.type === 'subtotal'" class="subtotal-row">
-              <td colspan="6"></td>
+              <td colspan="7"></td>
               <td class="subtotal-label">Tổng {{row.materialCode}}</td>
               <td colspan="2"></td>
               <td class="number-cell subtotal-qty"><strong>{{row.totalQty | number}}</strong></td>

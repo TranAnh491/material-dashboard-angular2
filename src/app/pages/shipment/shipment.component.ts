@@ -1615,10 +1615,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(this.scheduleYear, this.scheduleMonth, day);
       const shipments = this.getShipmentsByDate(date);
+      const totalCarton = shipments.reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
       this.calendarDays.push({ 
         date: date, 
         day: day,
-        shipments: shipments 
+        shipments: shipments,
+        totalCarton,
+        shipmentCount: shipments.length
       });
     }
   }
@@ -2279,41 +2282,33 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** In SHIPMENT ORDER: giấy A4, toàn bộ thông tin shipment + mã QR + ký tên soạn */
-  async printShipmentOrder(): Promise<void> {
-    if (!this.selectedShipmentForPrint) {
-      alert('❌ Không có shipment được chọn!');
-      return;
-    }
+  /** Tạo HTML template Shipment Order (dùng cho in và xem mẫu). */
+  async buildShipmentOrderHtml(): Promise<string> {
+    if (!this.selectedShipmentForPrint) return '';
     const s = this.selectedShipmentForPrint;
     const shipmentCode = String(s.shipmentCode || '').trim().toUpperCase();
-    
-    // Lấy tất cả các dòng có cùng shipmentCode
+
     const allItemsInShipment = this.shipments.filter(item => {
       const itemCode = String(item.shipmentCode || '').trim().toUpperCase();
       return itemCode === shipmentCode;
     });
-    
+
     const fmtDate = (d: Date | null | undefined): string => {
       if (!d) return '—';
       const x = new Date(d);
       return isNaN(x.getTime()) ? '—' : `${String(x.getDate()).padStart(2, '0')}/${String(x.getMonth() + 1).padStart(2, '0')}/${x.getFullYear()}`;
     };
-    
-    // QR code cho shipment
-    const qrData = shipmentCode;
+
     let qrDataUrl = '';
     try {
-      qrDataUrl = await QRCode.toDataURL(qrData, { width: 200, margin: 1 });
+      qrDataUrl = await QRCode.toDataURL(shipmentCode, { width: 200, margin: 1 });
     } catch (e) {
       console.error('QR generate error:', e);
     }
-    
-    // Lấy ngày import và dispatch date (lấy từ item đầu tiên)
+
     const importDate = fmtDate(s.importDate);
     const dispatchDate = fmtDate(s.actualShipDate);
-    
-    // Tạo HTML cho từng mã TP (có ô tick Mã hàng, Số lượng khi đã soạn xong)
+
     const itemBoxes = allItemsInShipment.map(item => `
       <div class="item-box">
         <div class="item-row">
@@ -2326,20 +2321,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         </div>
       </div>
     `).join('');
-    
-    // Tạo box ghi chú (tổng hợp tất cả ghi chú)
+
     const allNotes = allItemsInShipment
       .map(item => item.notes)
       .filter(note => note && note.trim())
       .join('\n');
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
-      return;
-    }
-    
-    const html = `<!DOCTYPE html>
+
+    const totalPallets = allItemsInShipment.reduce((sum, it) => sum + (Number(it.qtyPallet) || 0), 0);
+    const packingLower = (s.packing || '').toLowerCase();
+    const isPallet = packingLower.includes('pallet');
+    const isCarton = packingLower.includes('carton') || packingLower.includes('box') || !isPallet;
+
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -2349,20 +2342,34 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 13px; padding: 15mm; color: #000; }
     
-    .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #000; padding-bottom: 10px; }
-    .header h1 { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-    .header .shipment-code { font-size: 18px; color: #2196F3; font-weight: bold; }
+    .header-box { border: 2px solid #000; padding: 14px; margin-bottom: 16px; }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; }
+    .header-left { text-align: left; }
+    .header-left .title { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+    .header-left .shipment-no { font-size: 14px; }
+    .header-left .shipment-no strong { margin-right: 6px; }
+    .header-right { text-align: right; }
+    .header-right .company { font-size: 15px; font-weight: bold; margin-bottom: 8px; white-space: nowrap; }
+    .header-right .date-label { font-size: 14px; }
+    .header-right .date-label strong { margin-right: 6px; }
     
-    .top-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-    .qr-section { flex: 0 0 220px; text-align: center; border: 2px solid #000; padding: 10px; }
-    .qr-section img { width: 200px; height: 200px; }
-    .qr-label { font-size: 12px; margin-top: 5px; font-weight: bold; }
+    .p1-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; }
     
-    .dates-section { flex: 1; margin-left: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .date-box { border: 2px solid #000; padding: 15px; background: #f9f9f9; }
-    .date-box strong { display: block; font-size: 14px; margin-bottom: 5px; color: #2196F3; }
-    .date-box .date-value { font-size: 16px; font-weight: bold; }
-    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 4px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
+    .qr-box { display: inline-block; border: 2px solid #000; padding: 12px; margin-bottom: 16px; text-align: center; }
+    .qr-box img { width: 200px; height: 200px; display: block; }
+    .qr-box .qr-label { font-size: 12px; margin-top: 6px; font-weight: bold; }
+    
+    .packing-section { border: 2px solid #000; padding: 12px; margin-bottom: 16px; background: #f9f9f9; }
+    .packing-section h4 { font-size: 14px; margin-bottom: 10px; }
+    .packing-options { display: flex; gap: 24px; margin-bottom: 10px; align-items: center; }
+    .packing-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .packing-options input { width: 18px; height: 18px; }
+    .packing-total { margin-bottom: 10px; font-size: 14px; }
+    .pallet-type { display: flex; gap: 20px; align-items: center; margin-top: 8px; }
+    .pallet-type label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .pallet-type input { width: 18px; height: 18px; }
+    
+    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 8px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
     .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; }
     .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
     .humidity-box-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
@@ -2420,39 +2427,50 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>SHIPMENT ORDER</h1>
-    <div class="shipment-code">${this.escapeHtml(shipmentCode)}</div>
+  <!-- Phần đầu trong box có viền -->
+  <div class="header-box">
+    <div class="header-row">
+      <div class="header-left">
+        <div class="title">SHIPMENT ORDER</div>
+        <div class="shipment-no"><strong>Shipment No :</strong> ${this.escapeHtml(shipmentCode)}</div>
+      </div>
+      <div class="header-right">
+        <div class="company">AIRSPEED MANUFACTURING VIỆT NAM</div>
+        <div class="date-label"><strong>Ngày nhận thông tin</strong> ${importDate}</div>
+      </div>
+    </div>
   </div>
   
-  <!-- PHẦN 1: THÔNG TIN SOẠN HÀNG -->
-  <div class="part-title">PHẦN 1: THÔNG TIN SOẠN HÀNG / PART 1: PICKING INFORMATION</div>
+  <div class="p1-title">P1: THÔNG TIN SOẠN HÀNG</div>
   
-  <div class="top-section">
-    <div class="qr-section">
-      ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
-      <div class="qr-label">QR: ${this.escapeHtml(shipmentCode)}</div>
+  <div class="qr-box">
+    ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
+    <div class="qr-label">QR: ${this.escapeHtml(shipmentCode)}</div>
+  </div>
+  
+  <div class="packing-section">
+    <h4>Packing method</h4>
+    <div class="packing-options">
+      <label><input type="checkbox" ${isCarton ? 'checked' : ''} disabled> Carton</label>
+      <label><input type="checkbox" ${isPallet ? 'checked' : ''} disabled> Pallet</label>
     </div>
-    <div class="dates-section">
-      <div class="date-box">
-        <strong>NGÀY IMPORT:</strong>
-        <div class="date-value">${importDate}</div>
-      </div>
-      <div class="date-box">
-        <strong>NGÀY SHIP:</strong>
-        <div class="date-value">${dispatchDate}</div>
-      </div>
-      <div class="notes-box-top-label">Ghi Chú</div>
-      <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
-      <div class="humidity-box">
-        <div class="humidity-box-label">Độ ẩm pallet (nếu có)</div>
-        <input type="text" class="humidity-box-input" placeholder="Điền độ ẩm..." />
-      </div>
+    <div class="packing-total"><strong>Tổng số pallet:</strong> ${totalPallets}</div>
+    <div class="pallet-type">
+      <span style="font-weight: bold;">Loại pallet:</span>
+      <label><input type="checkbox" name="palletType"> Plywood</label>
+      <label><input type="checkbox" name="palletType"> Plastic</label>
     </div>
+  </div>
+  
+  <div class="notes-box-top-label">Ghi Chú</div>
+  <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
+  <div class="humidity-box">
+    <div class="humidity-box-label">Độ ẩm pallet (nếu có)</div>
+    <input type="text" class="humidity-box-input" placeholder="Điền độ ẩm..." />
   </div>
   
   <div class="items-section">
-    <div class="items-title">CHI TIẾT SẢN PHẨM (${allItemsInShipment.length} mã TP) – Tick ☐ khi đã soạn xong</div>
+    <div class="items-title">Chi Tiết Hàng Soạn</div>
     ${itemBoxes}
   </div>
   
@@ -2588,7 +2606,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   </div>
 </body>
 </html>`;
-    
+  }
+
+  /** In SHIPMENT ORDER: giấy A4, toàn bộ thông tin shipment + mã QR + ký tên soạn */
+  async printShipmentOrder(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const html = await this.buildShipmentOrderHtml();
+    if (!html) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
+      return;
+    }
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.onload = () => {
@@ -2604,6 +2636,24 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       }
     }, 800);
     this.closePrintLabelDialog();
+  }
+
+  /** Xem mẫu format Shipment Order (mở tab mới, không in). */
+  async previewShipmentOrder(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const html = await this.buildShipmentOrderHtml();
+    if (!html) return;
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      alert('❌ Không thể mở cửa sổ. Vui lòng bật popup!');
+      return;
+    }
+    previewWindow.document.write(html);
+    previewWindow.document.close();
+    previewWindow.document.title = 'Xem mẫu SHIPMENT ORDER - ' + (this.selectedShipmentForPrint?.shipmentCode || '');
   }
 
   // Generate and print single 1D barcode label (Code128)

@@ -1471,6 +1471,15 @@ input[type="date"]::-webkit-clear-button {
   border-color: #5a32a3;
 }
 
+.print-option-btn.preview-order-btn {
+  border-color: #6c757d;
+  color: #495057;
+}
+.print-option-btn.preview-order-btn:hover {
+  background: #e9ecef;
+  border-color: #495057;
+}
+
 /* Check Status Icon - Nổi bật cho shipment đã check */
 .check-status-icon {
   margin-left: 8px;
@@ -1611,6 +1620,17 @@ tr.checked-row:hover {
 .calendar-day.today .day-number {
   color: #2196f3;
   font-size: 18px;
+}
+
+.day-stats {
+  font-size: 12px;
+  text-align: center;
+  margin-top: 4px;
+}
+.day-stats .stat-line {
+  margin-bottom: 2px;
+  font-weight: 600;
+  color: #333;
 }
 
 .shipments-list {

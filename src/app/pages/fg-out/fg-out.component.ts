@@ -12,6 +12,7 @@ export interface FgOutItem {
   factory?: string;
   exportDate: Date;
   shipment: string;
+  pallet?: string; // Cột Pallet (sau Shipment)
   xp?: string; // Cột XP (phiếu xuất / mã XP)
   materialCode: string;
   customerCode: string;
@@ -192,6 +193,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             ...data,
             factory: data.factory || 'ASM1',
             shipment: data.shipment || '',
+            pallet: data.pallet || '',
             xp: data.xp || '',
             batchNumber: data.batchNumber || '',
             lsx: data.lsx || '',
@@ -605,6 +607,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       factory: row['Factory'] || 'ASM1',
       exportDate: this.parseDate(row['Ngày xuất']) || new Date(),
       shipment: row['Shipment'] || '',
+      pallet: row['Pallet'] || '',
       materialCode: row['Mã TP'] || '',
       customerCode: row['Mã Khách'] || '',
       batchNumber: row['Batch'] || '',
@@ -841,6 +844,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       factory: 'ASM1',
       exportDate: new Date(),
       shipment: this.xtpShipment.trim(),
+      pallet: '',
       xp: '',
       materialCode: item.materialCode,
       customerCode: '',
@@ -922,38 +926,42 @@ export class FgOutComponent implements OnInit, OnDestroy {
     console.log('Approval changed for material:', material.id, 'approved:', material.approved);
     
     if (material.approved) {
-      // Subtract from FG Inventory when approved
+      // Tick duyệt xuất: ghi nhận xuất kho ở FG Inventory (theo Mã TP, batch)
       this.subtractFromFGInventory(material);
-    } else {
-      // Add back to FG Inventory when unapproved (hoàn tác)
-      this.addBackToFGInventory(material);
     }
-    
+    // Bỏ tick duyệt xuất: không thay đổi FG Inventory, chỉ lưu trạng thái FG Out
     this.updateMaterialInFirebase(material);
   }
 
-  // Subtract quantity from FG Inventory and update export collection
+  // Subtract quantity from FG Inventory (theo Mã TP, nhà máy, batch) và cập nhật fg-export
   private subtractFromFGInventory(material: FgOutItem): void {
     console.log(`📉 Processing export for ${material.quantity} units of ${material.materialCode}`);
-    
-    // First, check if there's enough inventory
-    this.firestore.collection('fg-inventory', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('batchNumber', '==', material.batchNumber)
-         .where('lsx', '==', material.lsx)
-         .where('lot', '==', material.lot)
+    const factory = (material.factory || 'ASM1').toString().trim();
+    const materialCodeNorm = (material.materialCode || '').toString().trim().toUpperCase();
+    const batchNorm = (material.batchNumber || '').toString().trim();
+
+    // Tìm tồn theo nhà máy + batch, rồi lọc theo mã TP (FG Inventory có thể lưu materialCode hoặc maTP)
+    this.firestore.collection('fg-inventory', ref =>
+      ref.where('factory', '==', factory)
+         .where('batchNumber', '==', batchNorm)
     ).get().subscribe(snapshot => {
-      if (snapshot.empty) {
-        console.log('⚠️ No matching FG Inventory found');
-        alert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}!`);
+      const matchingDocs = snapshot.docs.filter(doc => {
+        const d = doc.data() as any;
+        const invCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
+        return invCode === materialCodeNorm;
+      });
+
+      if (matchingDocs.length === 0) {
+        console.log('⚠️ No matching FG Inventory found (factory, materialCode, batch)');
+        alert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
         return;
       }
 
-      // Calculate total available inventory
+      // Tổng tồn có sẵn (ton hoặc stock)
       let totalAvailable = 0;
-      snapshot.docs.forEach(doc => {
-        const inventoryData = doc.data() as any;
-        totalAvailable += inventoryData.ton || 0;
+      matchingDocs.forEach(doc => {
+        const d = doc.data() as any;
+        totalAvailable += Number(d.ton ?? d.stock ?? 0) || 0;
       });
 
       if (totalAvailable < material.quantity) {
@@ -962,28 +970,22 @@ export class FgOutComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Subtract from inventory
-      this.subtractFromInventory(snapshot, material.quantity);
-      
-      // Add to export collection
+      // Trừ tồn theo thứ tự (FIFO)
+      this.subtractFromInventoryDocs(matchingDocs, material.quantity);
       this.addToExportCollection(material);
     });
   }
 
-  // Subtract quantity from inventory items
-  private subtractFromInventory(snapshot: any, totalQuantity: number): void {
+  // Trừ tồn từ danh sách doc FG Inventory (FIFO)
+  private subtractFromInventoryDocs(docs: any[], totalQuantity: number): void {
     let remainingQuantity = totalQuantity;
-    
-    snapshot.docs.forEach(doc => {
+    docs.forEach(doc => {
       if (remainingQuantity <= 0) return;
-      
-      const inventoryData = doc.data() as any;
-      const availableQuantity = inventoryData.ton || 0;
+      const d = doc.data() as any;
+      const availableQuantity = Number(d.ton ?? d.stock ?? 0) || 0;
       const quantityToSubtract = Math.min(remainingQuantity, availableQuantity);
-      
       if (quantityToSubtract > 0) {
         const newQuantity = availableQuantity - quantityToSubtract;
-        
         doc.ref.update({
           ton: newQuantity,
           updatedAt: new Date()
@@ -992,7 +994,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }).catch(error => {
           console.error('❌ Error updating inventory:', error);
         });
-        
         remainingQuantity -= quantityToSubtract;
       }
     });
@@ -1197,6 +1198,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             ...data,
             factory: data.factory || 'ASM1',
             shipment: data.shipment || '',
+            pallet: data.pallet || '',
             xp: data.xp || '',
             batchNumber: data.batchNumber || '',
             lsx: data.lsx || '',
@@ -1231,6 +1233,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       factory: 'ASM1',
       exportDate: new Date(),
       shipment: this.selectedShipment || '',
+      pallet: '',
       xp: '',
       materialCode: '',
       customerCode: '',
@@ -1680,6 +1683,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         factory: this.xuatKhoShipmentFactory,
         exportDate: new Date(),
         shipment: this.xuatKhoSelectedShipment || '',
+        pallet: '',
         xp: '',
         materialCode: item.materialCode,
         batchNumber: item.batchNumber,

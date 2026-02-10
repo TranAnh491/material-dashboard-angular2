@@ -759,6 +759,13 @@
             <small class="btn-desc">In A4: toàn bộ thông tin shipment, mã QR, ký tên soạn</small>
           </div>
         </button>
+        <button class="print-option-btn preview-order-btn" (click)="previewShipmentOrder()" type="button">
+          <i class="material-icons">visibility</i>
+          <div class="btn-content">
+            <span class="btn-title">Xem mẫu format</span>
+            <small class="btn-desc">Mở template Shipment Order để xem / chỉnh sửa format</small>
+          </div>
+        </button>
       </div>
     </div>
     
@@ -817,12 +824,9 @@
           
           <div class="day-number" *ngIf="dayData.date">{{ dayData.day }}</div>
           
-          <div class="shipments-list" *ngIf="dayData.shipments?.length > 0">
-            <div class="shipment-badge" 
-                 *ngFor="let shipment of dayData.shipments"
-                 [title]="shipment.shipmentCode + ' - ' + shipment.materialCode">
-              {{ shipment.shipmentCode }}
-            </div>
+          <div class="day-stats" *ngIf="dayData.shipments?.length > 0">
+            <div class="stat-line">Carton: {{ dayData.totalCarton }}</div>
+            <div class="stat-line">Shipment: {{ dayData.shipmentCount }}</div>
           </div>
         </div>
       </div>
