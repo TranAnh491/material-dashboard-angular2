@@ -88,6 +88,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Print Label dialog
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
+
+  // Danh mục mã khách (để hiển thị Customer trong Shipment Order)
+  customerMappingItems: { id: string; customerCode: string; materialCode: string; description: string }[] = [];
   
   newShipment: ShipmentItem = {
     shipmentCode: '',
@@ -137,6 +140,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     // Load dữ liệu - shipments + FG Check dùng realtime để luôn khớp (vd: shipment 5176)
     this.loadShipmentsFromFirebase();
+    this.loadCustomerMapping();
     this.loadFGInventoryCacheOnce();
     this.loadFGCheckStatus(); // Realtime: load và lắng nghe thay đổi từ fg-check
     // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
@@ -189,6 +193,34 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           });
         }
       });
+  }
+
+  // Load danh mục mã khách (fg-customer-mapping) cho Shipment Order
+  loadCustomerMapping(): void {
+    this.firestore.collection('fg-customer-mapping')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.customerMappingItems = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          return {
+            id: action.payload.doc.id,
+            customerCode: (data.customerCode || '').toString().trim(),
+            materialCode: (data.materialCode || '').toString().trim(),
+            description: (data.description || '').toString().trim()
+          };
+        });
+      });
+  }
+
+  // Lấy tên khách hàng từ mã khách (danh mục) – dùng cho Shipment Order
+  getCustomerNameFromMapping(customerCode: string): string {
+    if (!customerCode || !this.customerMappingItems.length) return '';
+    const code = (customerCode || '').toString().trim().toUpperCase();
+    const item = this.customerMappingItems.find(m =>
+      (m.customerCode || '').toString().trim().toUpperCase() === code
+    );
+    return item ? (item.description || '').trim() : '';
   }
 
   // Toggle dropdown
@@ -2332,6 +2364,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const isPallet = packingLower.includes('pallet');
     const isCarton = packingLower.includes('carton') || packingLower.includes('box') || !isPallet;
 
+    const customerName = this.getCustomerNameFromMapping(s.customerCode || '') || (s.customerCode || '');
+    const factoryNorm = (s.factory || 'ASM1').toString().trim().toUpperCase();
+    const warehouse = factoryNorm === 'ASM2' ? 'LH' : 'Main';
+
+    const logoUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
+      ? window.location.origin + '/assets/img/logo.png'
+      : '';
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -2344,39 +2384,50 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     .header-box { border: 2px solid #000; padding: 14px; margin-bottom: 16px; }
     .header-row { display: flex; justify-content: space-between; align-items: flex-start; }
-    .header-left { text-align: left; }
-    .header-left .title { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
-    .header-left .shipment-no { font-size: 14px; }
-    .header-left .shipment-no strong { margin-right: 6px; }
+    .header-left { display: flex; align-items: center; gap: 16px; text-align: left; }
+    .header-logo { height: 56px; width: auto; max-width: 180px; object-fit: contain; }
+    .header-left-text .title { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+    .header-left-text .shipment-no { font-size: 14px; }
+    .header-left-text .shipment-no strong { margin-right: 6px; }
     .header-right { text-align: right; }
     .header-right .company { font-size: 15px; font-weight: bold; margin-bottom: 8px; white-space: nowrap; }
     .header-right .date-label { font-size: 14px; }
     .header-right .date-label strong { margin-right: 6px; }
     
-    .p1-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; }
+    .customer-warehouse-row { display: flex; gap: 20px; margin-bottom: 12px; }
+    .customer-warehouse-row .cw-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
+    .customer-warehouse-row .cw-box .cw-title { font-size: 11px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
+    .customer-warehouse-row .cw-box .cw-value { font-size: 14px; }
     
-    .qr-box { display: inline-block; border: 2px solid #000; padding: 12px; margin-bottom: 16px; text-align: center; }
+    .p1-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; text-transform: uppercase; }
+    
+    .qr-packing-row { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; }
+    .qr-box { flex: 0 0 auto; border: 2px solid #000; padding: 12px; text-align: center; }
     .qr-box img { width: 200px; height: 200px; display: block; }
     .qr-box .qr-label { font-size: 12px; margin-top: 6px; font-weight: bold; }
     
-    .packing-section { border: 2px solid #000; padding: 12px; margin-bottom: 16px; background: #f9f9f9; }
-    .packing-section h4 { font-size: 14px; margin-bottom: 10px; }
-    .packing-options { display: flex; gap: 24px; margin-bottom: 10px; align-items: center; }
+    .packing-notes-column { flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 12px; }
+    .packing-two-boxes { display: flex; gap: 16px; }
+    .packing-method-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
+    .packing-method-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; }
+    .packing-options { display: flex; gap: 24px; margin-bottom: 8px; align-items: center; }
     .packing-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
     .packing-options input { width: 18px; height: 18px; }
-    .packing-total { margin-bottom: 10px; font-size: 14px; }
-    .pallet-type { display: flex; gap: 20px; align-items: center; margin-top: 8px; }
-    .pallet-type label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    .pallet-type input { width: 18px; height: 18px; }
+    .packing-total { font-size: 14px; }
+    .pallet-type-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
+    .pallet-type-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; }
+    .pallet-type-options { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    .pallet-type-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .pallet-type-options input { width: 18px; height: 18px; }
     
-    .notes-box-top { border: 2px solid #666; padding: 10px; margin-top: 8px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
-    .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; }
+    .notes-box-top { border: 2px solid #666; padding: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
+    .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; text-transform: uppercase; }
     .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
-    .humidity-box-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
-    .humidity-box-input { width: 120px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
+    .humidity-box-label { font-size: 12px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
+    .humidity-box-input { width: 100%; max-width: 200px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
     
     .items-section { margin-bottom: 16px; }
-    .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #2196F3; color: white; }
+    .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #2196F3; color: white; text-transform: uppercase; }
     .item-box { border: 2px solid #000; padding: 10px; margin-bottom: 10px; background: #fff; }
     .item-row { display: flex; gap: 10px; margin-bottom: 5px; }
     .item-row:last-child { margin-bottom: 0; }
@@ -2384,16 +2435,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .item-cell-tick .tick-box { font-size: 16px; margin-right: 6px; }
     
     .ship-by-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; background: #f5f5f5; }
-    .ship-by-section h4 { font-size: 14px; margin-bottom: 10px; }
+    .ship-by-section h4 { font-size: 14px; margin-bottom: 10px; text-transform: uppercase; }
     .ship-by-options { display: flex; gap: 20px; margin-bottom: 8px; }
     .ship-by-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
     .ship-by-options input { width: 18px; height: 18px; }
     
     .part-divider { margin: 24px 0 16px 0; border-top: 3px solid #000; padding-top: 16px; }
-    .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; }
+    .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; text-transform: uppercase; }
     
     .inspection-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; }
-    .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #333; color: #fff; padding: 6px; }
+    .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #333; color: #fff; padding: 6px; text-transform: uppercase; }
     .inspection-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
     .inspection-table th, .inspection-table td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
     .inspection-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
@@ -2413,11 +2464,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .inspection-moto { font-size: 12px; color: #666; font-style: italic; margin-top: 8px; }
     
     .notes-section { margin-bottom: 20px; }
-    .notes-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; padding: 5px; background: #666; color: white; }
+    .notes-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; padding: 5px; background: #666; color: white; text-transform: uppercase; }
     .notes-box { border: 2px solid #666; padding: 10px; min-height: 60px; background: #fff; white-space: pre-wrap; }
     
     .goods-confirm-section { margin-top: 20px; margin-bottom: 20px; border: 2px solid #000; padding: 15px; background: #fafafa; }
-    .goods-confirm-section h4 { font-size: 13px; margin-bottom: 10px; font-weight: bold; }
+    .goods-confirm-section h4 { font-size: 13px; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; }
     .goods-confirm-statement { margin: 12px 0; padding: 10px; border: 1px solid #ccc; background: #fff; font-weight: bold; }
     .goods-confirm-signatures { display: flex; justify-content: space-between; gap: 20px; margin-top: 30px; }
     .goods-confirm-sig-block { flex: 1; text-align: center; }
@@ -2431,46 +2482,67 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   <div class="header-box">
     <div class="header-row">
       <div class="header-left">
-        <div class="title">SHIPMENT ORDER</div>
-        <div class="shipment-no"><strong>Shipment No :</strong> ${this.escapeHtml(shipmentCode)}</div>
+        ${logoUrl ? `<img src="${logoUrl}" alt="Airspeed" class="header-logo" onerror="this.style.display=\'none\'">` : ''}
+        <div class="header-left-text">
+          <div class="title">SHIPMENT ORDER</div>
+          <div class="shipment-no"><strong>Shipment No :</strong> ${this.escapeHtml(shipmentCode)}</div>
+        </div>
       </div>
       <div class="header-right">
         <div class="company">AIRSPEED MANUFACTURING VIỆT NAM</div>
-        <div class="date-label"><strong>Ngày nhận thông tin</strong> ${importDate}</div>
+        <div class="date-label"><strong>Ngày nhận thông tin / Date of information received</strong> ${importDate}</div>
       </div>
     </div>
   </div>
   
-  <div class="p1-title">P1: THÔNG TIN SOẠN HÀNG</div>
-  
-  <div class="qr-box">
-    ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
-    <div class="qr-label">QR: ${this.escapeHtml(shipmentCode)}</div>
-  </div>
-  
-  <div class="packing-section">
-    <h4>Packing method</h4>
-    <div class="packing-options">
-      <label><input type="checkbox" ${isCarton ? 'checked' : ''} disabled> Carton</label>
-      <label><input type="checkbox" ${isPallet ? 'checked' : ''} disabled> Pallet</label>
+  <div class="customer-warehouse-row">
+    <div class="cw-box">
+      <div class="cw-title">Khách hàng / Customer</div>
+      <div class="cw-value">${this.escapeHtml(customerName)}</div>
     </div>
-    <div class="packing-total"><strong>Tổng số pallet:</strong> ${totalPallets}</div>
-    <div class="pallet-type">
-      <span style="font-weight: bold;">Loại pallet:</span>
-      <label><input type="checkbox" name="palletType"> Plywood</label>
-      <label><input type="checkbox" name="palletType"> Plastic</label>
+    <div class="cw-box">
+      <div class="cw-title">Kho / Warehouse</div>
+      <div class="cw-value">${this.escapeHtml(warehouse)}</div>
     </div>
   </div>
   
-  <div class="notes-box-top-label">Ghi Chú</div>
-  <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
+  <div class="p1-title">P1: Thông tin soạn hàng / Picking information</div>
+  
+  <div class="qr-packing-row">
+    <div class="qr-box">
+      ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR">` : '<p>—</p>'}
+      <div class="qr-label">QR: ${this.escapeHtml(shipmentCode)}</div>
+    </div>
+    <div class="packing-notes-column">
+      <div class="packing-two-boxes">
+        <div class="packing-method-box">
+          <h4>Phương thức đóng gói / Packing method</h4>
+          <div class="packing-options">
+            <label><input type="checkbox" ${isCarton ? 'checked' : ''} disabled> Carton</label>
+            <label><input type="checkbox" ${isPallet ? 'checked' : ''} disabled> Pallet</label>
+          </div>
+          <div class="packing-total"><strong>Tổng số pallet / Total pallets:</strong> ${totalPallets}</div>
+        </div>
+        <div class="pallet-type-box">
+          <h4>Loại pallet / Pallet type</h4>
+          <div class="pallet-type-options">
+            <label><input type="checkbox" name="palletType"> Plywood</label>
+            <label><input type="checkbox" name="palletType"> Plastic</label>
+          </div>
+        </div>
+      </div>
+      <div class="notes-box-top-label">Ghi chú / Notes</div>
+      <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
+    </div>
+  </div>
+  
   <div class="humidity-box">
-    <div class="humidity-box-label">Độ ẩm pallet (nếu có)</div>
-    <input type="text" class="humidity-box-input" placeholder="Điền độ ẩm..." />
+    <div class="humidity-box-label">Độ ẩm pallet (nếu có) / Pallet humidity (if any)</div>
+    <input type="text" class="humidity-box-input" />
   </div>
   
   <div class="items-section">
-    <div class="items-title">Chi Tiết Hàng Soạn</div>
+    <div class="items-title">Chi tiết hàng soạn / Picking details</div>
     ${itemBoxes}
   </div>
   
