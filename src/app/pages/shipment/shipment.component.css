@@ -549,23 +549,28 @@
   font-size: 12px !important;
 }
 
-/* Loại bỏ màu nền đặc biệt cho các ô nội dung */
+/* Loại bỏ màu nền đặc biệt cho các ô nội dung (trừ .status-select – màu theo trạng thái) */
 .table td .inventory-display,
 .table td .pushno-display,
 .table td .badge,
 .table td .status-badge,
 .table td .editable-input,
-.table td .editable-select,
-.table td .status-select {
+.table td .editable-select {
   background: #ffffff !important; /* Nền trắng cho tất cả nội dung */
   color: #000000 !important; /* Màu chữ đen đậm */
   font-weight: 600 !important; /* Chữ đậm */
   border: none !important; /* Loại bỏ viền nội dung */
 }
+.table td .status-select {
+  background: transparent !important;
+  border: none !important;
+  font-weight: 600 !important;
+  /* Màu chữ do .status-cell.status-xxx .status-select quy định */
+}
 
-/* Loại bỏ màu nền cho các input và select */
+/* Loại bỏ màu nền cho các input và select (trừ .status-select – màu theo trạng thái) */
 .table td input,
-.table td select {
+.table td select:not(.status-select) {
   background: #ffffff !important;
   color: #000000 !important; /* Màu chữ đen đậm */
   font-weight: 600 !important; /* Chữ đậm */
@@ -573,10 +578,28 @@
 }
 
 .table td input:focus,
-.table td select:focus {
+.table td select:not(.status-select):focus {
   background: #ffffff !important;
   color: #333333 !important;
   border-color: #2196f3 !important;
+}
+
+/* Cột FACTORY(16), PACKING(17), Chứng từ(20), FWD(23): nội dung ô không viền */
+.table td:nth-child(16) .editable-select,
+.table td:nth-child(17) .editable-select,
+.table td:nth-child(20) .editable-select,
+.table td:nth-child(23) .editable-select {
+  border: none !important;
+  outline: none;
+  box-shadow: none;
+}
+.table td:nth-child(16) .editable-select:focus,
+.table td:nth-child(17) .editable-select:focus,
+.table td:nth-child(20) .editable-select:focus,
+.table td:nth-child(23) .editable-select:focus {
+  border: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .data-table th {
@@ -717,6 +740,16 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
+/* Màu chữ theo từng trạng thái Status – dùng .table td để tăng độ ưu tiên */
+.table td.status-cell.status-cho-soan .status-select { background: transparent !important; color: #e65100 !important; font-weight: 600 !important; } /* Chờ soạn: cam */
+.table td.status-cell.status-dang-soan .status-select { background: transparent !important; color: #f9a825 !important; font-weight: 600 !important; } /* Đang soạn: vàng */
+.table td.status-cell.status-chua-du .status-select { background: transparent !important; color: #c62828 !important; font-weight: 600 !important; } /* Chưa đủ: đỏ */
+.table td.status-cell.status-da-xong .status-select { background: transparent !important; color: #2e7d32 !important; font-weight: 600 !important; } /* Đã xong: xanh lá cây */
+.table td.status-cell.status-da-check .status-select { background: transparent !important; color: #0288d1 !important; font-weight: 600 !important; } /* Đã check: xanh da trời */
+.table td.status-cell.status-da-ship .status-select { background: transparent !important; color: #000000 !important; font-weight: 600 !important; } /* Đã ship: đen */
+.table td.status-cell.status-delay .status-select { background: transparent !important; color: #d32f2f !important; font-weight: 600 !important; } /* Delay: đỏ */
+.table td.status-cell.status-default .status-select { background: transparent !important; color: #616161 !important; font-weight: 600 !important; }
+
 .action-cell {
   text-align: center;
   min-width: 64px;
@@ -749,7 +782,7 @@
 .table th:nth-child(1), .table td:nth-child(1) { min-width: 56px; }   /* 1 NO */
 .table th:nth-child(2), .table td:nth-child(2) { min-width: 120px; } /* 2 NGÀY IMPORT */
 .table th:nth-child(3), .table td:nth-child(3) { min-width: 105px; } /* 3 BIỂN SỐ XE */
-.table th:nth-child(4), .table td:nth-child(4) { min-width: 86px; }  /* 4 FACTORY */
+.table th:nth-child(4), .table td:nth-child(4) { min-width: 115px; } /* 4 DISPATCH DATE */
 .table th:nth-child(5), .table td:nth-child(5) { min-width: 110px; } /* 5 SHIPMENT */
 .table th:nth-child(6), .table td:nth-child(6) { min-width: 90px; }  /* 6 LƯỢNG KTRA */
 .table th:nth-child(6) { color: #000000 !important; } /* Tiêu đề LƯỢNG KTRA chữ đen */
@@ -762,19 +795,19 @@
 .table th:nth-child(13), .table td:nth-child(13) { min-width: 100px; } /* 13 QTYBOX +30% */
 .table th:nth-child(14), .table td:nth-child(14) { min-width: 67px; }  /* 14 ODD */
 .table th:nth-child(15), .table td:nth-child(15) { min-width: 96px; }  /* 15 TỒN KHO */
-.table th:nth-child(16), .table td:nth-child(16) { min-width: 86px; }  /* 16 FWD */
+.table th:nth-child(16), .table td:nth-child(16) { min-width: 86px; }  /* 16 FACTORY */
 .table th:nth-child(17), .table td:nth-child(17) { min-width: 86px; }  /* 17 PACKING */
 .table th:nth-child(18), .table td:nth-child(18) { min-width: 96px; }  /* 18 QTY PALLET */
 .table th:nth-child(19), .table td:nth-child(19) { min-width: 127px; } /* 19 STATUS */
 .table th:nth-child(20), .table td:nth-child(20) { min-width: 98px; }  /* 20 CHỨNG TỪ */
 .table th:nth-child(21), .table td:nth-child(21) { min-width: 115px; } /* 21 CS DATE */
 .table th:nth-child(22), .table td:nth-child(22) { min-width: 115px; } /* 22 FULL DATE */
-.table th:nth-child(23), .table td:nth-child(23) { min-width: 132px; } /* 23 DISPATCH DATE */
+.table th:nth-child(23), .table td:nth-child(23) { min-width: 86px; }  /* 23 FWD */
 .table th:nth-child(24), .table td:nth-child(24) { min-width: 96px; }  /* 24 NGÀY CHUẨN BỊ */
 .table th:nth-child(25), .table td:nth-child(25) { min-width: 156px; } /* 25 GHI CHÚ */
 .table th:nth-child(26), .table td:nth-child(26) { min-width: 67px; }  /* 26 PRINT */
-.table th:nth-child(27), .table td:nth-child(27) { min-width: 67px; }  /* 27 XÓA */
-.table th:nth-child(28), .table td:nth-child(28) { min-width: 67px; }  /* 28 ẨN */
+.table th:nth-child(27), .table td:nth-child(27) { min-width: 67px; }  /* 27 ẨN */
+.table th:nth-child(28), .table td:nth-child(28) { min-width: 67px; }  /* 28 XÓA */
 
 /* Cố định cột từ NO đến Mã TP (cột 1–8) khi kéo ngang – vẫn thấy Mã TP */
 .table th:nth-child(1), .table th:nth-child(2), .table th:nth-child(3), .table th:nth-child(4),
@@ -788,7 +821,7 @@
 .table th:nth-child(3), .table td:nth-child(3) { position: sticky; left: 176px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .table td:nth-child(3) { z-index: 10; background: #ffffff !important; }
 .table th:nth-child(4), .table td:nth-child(4) { position: sticky; left: 281px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
-.table td:nth-child(4) { z-index: 10; background: #ffffff !important; }
+.table td:nth-child(4) { z-index: 10; background: #ffffff !important; } /* DISPATCH DATE */
 .table th:nth-child(5), .table td:nth-child(5) { position: sticky; left: 367px; z-index: 110; background: #2196F3 !important; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .table td:nth-child(5) { z-index: 10; background: #ffffff !important; }
 .table th:nth-child(6), .table td:nth-child(6) { position: sticky; left: 477px; z-index: 110; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }

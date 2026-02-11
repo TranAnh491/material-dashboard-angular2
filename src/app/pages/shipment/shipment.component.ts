@@ -349,23 +349,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Get status class for styling
-  getStatusClass(status: string): string {
-    switch (status) {
-      case 'Đã xong':
-        return 'status-completed';
-      case 'Đang soạn':
-        return 'status-progress';
-      case 'Chờ soạn':
-        return 'status-pending';
-      case 'Đã Check':
-        return 'status-checked';
-      case 'Đã Ship':
-        return 'status-shipped';
-      case 'Delay':
-        return 'status-delay';
-      default:
-        return 'status-pending';
-    }
+  getStatusClass(status: string | undefined): string {
+    if (!status) return 'status-default';
+    const map: Record<string, string> = {
+      'Chờ soạn': 'status-cho-soan',
+      'Đang soạn': 'status-dang-soan',
+      'Chưa Đủ': 'status-chua-du',
+      'Đã xong': 'status-da-xong',
+      'Đã Check': 'status-da-check',
+      'Đã Ship': 'status-da-ship',
+      'Delay': 'status-delay'
+    };
+    return map[status] || 'status-default';
   }
 
   // Time range filter
@@ -1566,6 +1561,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Delete shipment
   deleteShipment(shipment: ShipmentItem): void {
+    if (!confirm('Bạn có chắc muốn xóa shipment này?')) {
+      return;
+    }
     if (shipment.id) {
       this.firestore.collection('shipments').doc(shipment.id).delete()
         .then(() => {
@@ -2071,14 +2069,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Download template - cột trùng thứ tự với bảng Shipment (NO, Ngày Import ... Ghi chú)
+  // Download template - cột trùng thứ tự với bảng Shipment (NO, Ngày Import, Dispatch Date, ... Factory, ... FWD, ... Ghi chú)
   downloadTemplate(): void {
     const templateData = [
       {
         'NO': 1,
         'Ngày Import': '2026-01-26',
         'Biển số xe': '51K-75600',
-        'Factory': 'ASM1',
+        'Dispatch Date': '2024-01-25',
         'Shipment': 'SHIP001',
         'Lượng KTRA': 0,
         'Mã TP': 'P001234',
@@ -2089,14 +2087,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'QTYBOX': 100,
         'Odd': 5,
         'Tồn kho': 500,
-        'FWD': 'Sea',
+        'Factory': 'ASM1',
         'Packing': 'Pallet',
         'Qty Pallet': 5,
         'Status': 'Chờ soạn',
         'Chứng từ': 'Đã có PX',
         'CS Date': '2024-01-15',
         'Full Date': '2024-01-20',
-        'Dispatch Date': '2024-01-25',
+        'FWD': 'SEA',
         'Ngày chuẩn bị': 5,
         'Ghi chú': 'Standard shipment'
       },
@@ -2104,7 +2102,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'NO': 2,
         'Ngày Import': '2026-01-26',
         'Biển số xe': '29A-12345',
-        'Factory': 'ASM2',
+        'Dispatch Date': '2024-01-26',
         'Shipment': 'SHIP002',
         'Lượng KTRA': 0,
         'Mã TP': 'P002345',
@@ -2115,14 +2113,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         'QTYBOX': 100,
         'Odd': 8,
         'Tồn kho': 750,
-        'FWD': 'Air',
+        'Factory': 'ASM2',
         'Packing': 'Box',
         'Qty Pallet': 3,
         'Status': 'Đang soạn',
         'Chứng từ': 'Full',
         'CS Date': '2024-01-16',
         'Full Date': '2024-01-21',
-        'Dispatch Date': '2024-01-26',
+        'FWD': 'AIR',
         'Ngày chuẩn bị': 3,
         'Ghi chú': 'Urgent shipment'
       }
@@ -2131,12 +2129,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
     const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
     
-    // Độ rộng cột theo thứ tự bảng: NO → Ghi chú (không có Print, Xóa, Ẩn)
+    // Độ rộng cột theo thứ tự bảng: NO → Ghi chú (Dispatch Date cột 4, Factory cột 16, FWD cột 23)
     const colWidths = [
       { wch: 5 },  // NO
       { wch: 12 }, // Ngày Import
       { wch: 12 }, // Biển số xe
-      { wch: 8 },  // Factory
+      { wch: 15 }, // Dispatch Date
       { wch: 12 }, // Shipment
       { wch: 12 }, // Lượng KTRA
       { wch: 12 }, // Mã TP
@@ -2147,14 +2145,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       { wch: 8 },  // QTYBOX
       { wch: 6 },  // Odd
       { wch: 10 }, // Tồn kho
-      { wch: 8 },  // FWD
+      { wch: 8 },  // Factory
       { wch: 10 }, // Packing
       { wch: 10 }, // Qty Pallet
       { wch: 12 }, // Status
       { wch: 12 }, // Chứng từ
       { wch: 12 }, // CS Date
       { wch: 12 }, // Full Date
-      { wch: 15 }, // Dispatch Date
+      { wch: 8 },  // FWD
       { wch: 12 }, // Ngày chuẩn bị
       { wch: 20 }  // Ghi chú
     ];

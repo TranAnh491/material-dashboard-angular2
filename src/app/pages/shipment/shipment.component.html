@@ -222,7 +222,7 @@
             <th class="row-header">NO</th>
             <th>NGÀY IMPORT</th>
             <th>BIỂN SỐ XE</th>
-            <th>FACTORY</th>
+            <th>DISPATCH DATE</th>
             <th>SHIPMENT</th>
             <th>LƯỢNG KTRA</th>
             <th>CHECK</th>
@@ -234,19 +234,19 @@
             <th>QTYBOX</th>
             <th>ODD</th>
             <th>TỒN KHO</th>
-            <th>FWD</th>
+            <th>FACTORY</th>
             <th>PACKING</th>
             <th>QTY PALLET</th>
             <th>STATUS</th>
             <th>CHỨNG TỪ</th>
             <th>CS DATE</th>
             <th>FULL DATE</th>
-            <th>DISPATCH DATE</th>
+            <th>FWD</th>
             <th>NGÀY CHUẨN BỊ</th>
             <th>GHI CHÚ</th>
             <th>PRINT</th>
-            <th>XÓA</th>
             <th class="col-hidden-header">ẨN</th>
+            <th>XÓA</th>
           </tr>
         </thead>
         <tbody>
@@ -284,15 +284,14 @@
                      style="text-transform: uppercase;">
             </td>
             
-            <!-- Nhà máy -->
-            <td>
-              <select class="editable-select" 
-                      [(ngModel)]="shipment.factory" 
-                      (change)="updateShipmentInFirebase(shipment)">
-                <option value="ASM1">ASM1</option>
-                <option value="ASM2">ASM2</option>
-                <option value="ASM3">ASM3</option>
-              </select>
+            <!-- Dispatch Date -->
+            <td class="date-cell">
+              <input type="date"
+                     class="editable-input date-input"
+                     [ngModel]="formatDateForInput(shipment.actualShipDate)"
+                     (ngModelChange)="onDispatchDateChange(shipment, $event)"
+                     (click)="$event.target.showPicker()"
+                     title="Click để chọn ngày Dispatch Date">
             </td>
             
             <td class="code-cell">
@@ -361,18 +360,14 @@
             <td class="number-cell">
               <span class="inventory-display">{{formatNumber(getInventory(shipment.materialCode))}}</span>
             </td>
+            <!-- Factory -->
             <td>
-              <select class="editable-select"
-                      [(ngModel)]="shipment.shipMethod"
-                      (change)="onFWDChange(shipment)">
-                <option value="">Chọn FWD</option>
-                <option value="AIR">AIR</option>
-                <option value="SEA">SEA</option>
-                <option value="DHL">DHL</option>
-                <option value="FEDEX">FEDEX</option>
-                <option value="UPS">UPS</option>
-                <option value="EMS">EMS</option>
-                <option value="AIRSPEED">AIRSPEED</option>
+              <select class="editable-select" 
+                      [(ngModel)]="shipment.factory" 
+                      (change)="updateShipmentInFirebase(shipment)">
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+                <option value="ASM3">ASM3</option>
               </select>
             </td>
             <td>
@@ -390,7 +385,7 @@
                      (change)="updateShipmentInFirebase(shipment)"
                      placeholder="Qty Pallet">
             </td>
-            <td class="status-cell">
+            <td class="status-cell" [ngClass]="getStatusClass(shipment.status)">
               <select class="status-select"
                       [(ngModel)]="shipment.status"
                       (change)="onStatusChange(shipment)">
@@ -432,13 +427,20 @@
                      (click)="$event.target.showPicker()"
                      title="Click để chọn ngày Full Date">
             </td>
-            <td class="date-cell">
-              <input type="date"
-                     class="editable-input date-input"
-                     [ngModel]="formatDateForInput(shipment.actualShipDate)"
-                     (ngModelChange)="onDispatchDateChange(shipment, $event)"
-                     (click)="$event.target.showPicker()"
-                     title="Click để chọn ngày Dispatch Date">
+            <!-- FWD -->
+            <td>
+              <select class="editable-select"
+                      [(ngModel)]="shipment.shipMethod"
+                      (change)="onFWDChange(shipment)">
+                <option value="">Chọn FWD</option>
+                <option value="AIR">AIR</option>
+                <option value="SEA">SEA</option>
+                <option value="DHL">DHL</option>
+                <option value="FEDEX">FEDEX</option>
+                <option value="UPS">UPS</option>
+                <option value="EMS">EMS</option>
+                <option value="AIRSPEED">AIRSPEED</option>
+              </select>
             </td>
             <td class="number-cell daypre-cell">
               {{ getDayPreDisplay(shipment) }}
@@ -456,18 +458,18 @@
                 <mat-icon>print</mat-icon>
               </button>
             </td>
-            <td class="action-cell">
-              <button mat-icon-button color="warn" (click)="deleteShipment(shipment)"
-                      matTooltip="Xóa">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
             <td class="action-cell col-hidden-cell">
               <input type="checkbox" 
                      [checked]="shipment.hidden === true"
                      (change)="toggleHidden(shipment)"
                      title="Ẩn shipment này"
                      style="cursor: pointer; width: 18px; height: 18px;">
+            </td>
+            <td class="action-cell">
+              <button mat-icon-button color="warn" (click)="deleteShipment(shipment)"
+                      matTooltip="Xóa">
+                <mat-icon>delete</mat-icon>
+              </button>
             </td>
           </tr>
         </tbody>
