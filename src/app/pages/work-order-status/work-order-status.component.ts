@@ -3478,10 +3478,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const factory = (workOrder.factory || this.selectedFactory || 'ASM1').toUpperCase();
     const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
     let qrImage = '';
+    let qrImageLine = '';
     try {
       qrImage = await QRCode.toDataURL(lsx, { width: 120, margin: 1 });
     } catch (e) {
       console.warn('Không tạo được QR code:', e);
+    }
+    const lineNhan = (workOrder.productionLine || '').trim() || '-';
+    try {
+      if (lineNhan !== '-') qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
+    } catch (e) {
+      console.warn('Không tạo được QR code Line:', e);
     }
     const locationMap = new Map<string, string>();
     try {
@@ -3531,7 +3538,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.warn('Không load được Lượng Scan từ outbound:', e);
     }
     const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
-    let nhanVienGiaoNhanStr = '-';
+    let nhanVienGiaoStr = '-';
+    let nhanVienNhanStr = '-';
     try {
       const normLsxForDelivery = (s: string) => {
         const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
@@ -3546,9 +3554,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const d = doc.data() as any;
         const docLsxNorm = normLsxForDelivery(d.lsx || '');
         if (docLsxNorm && docLsxNorm === woLsxNorm) {
-          const giao = (d.employeeName || d.employeeId || '').trim() || '-';
-          const nhan = (d.receiverEmployeeName || d.receiverEmployeeId || '').trim() || '-';
-          nhanVienGiaoNhanStr = (giao !== '-' || nhan !== '-') ? `${giao} / ${nhan}` : '-';
+          nhanVienGiaoStr = (d.employeeName || d.employeeId || '').trim() || '-';
+          nhanVienNhanStr = (d.receiverEmployeeName || d.receiverEmployeeId || '').trim() || '-';
           break;
         }
       }
@@ -3598,6 +3605,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong>${label}</strong><span style="margin-top:4px;word-break:break-all;line-height:1.2;">${value}</span></div>`;
     const lsxBox = `<div style="${boxStyle}"><strong>LSX</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lsx)}</span>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
+    const lineNhanBox = `<div style="${boxStyle}"><strong>Line Nhận</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lineNhan)}</span>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
     const soChungTuBox = `<div style="${boxStyle}"><strong>Số Chứng Từ</strong><span style="margin-top:4px;word-break:break-all;line-height:1.4;font-size:9px;">${soChungTuDisplay}</span></div>`;
     const emptyBox = `<div style="${boxStyle}"></div>`;
     const rowStyle = 'display:flex;flex-direction:row;gap:8px;justify-content:flex-start;align-items:flex-start;margin-bottom:8px';
@@ -3608,12 +3616,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     ${infoBox('Ngày giao NVL', deliveryDateStr)}
     ${infoBox('Lượng sản phẩm', this.formatQuantityForPxk(workOrder.quantity || 0))}
     ${lsxBox}
+    ${lineNhanBox}
   </div>
   <div style="${rowStyle}">
     ${infoBox('Nhà máy', this.escapeHtmlForPrint(factory))}
     ${soChungTuBox}
     ${infoBox('Nhân Viên Soạn', this.escapeHtmlForPrint(nhanVienSoanStr))}
-    ${infoBox('Nhân viên Giao và Nhận', this.escapeHtmlForPrint(nhanVienGiaoNhanStr))}
+    ${infoBox('Nhân viên Giao', this.escapeHtmlForPrint(nhanVienGiaoStr))}
+    ${infoBox('Nhân viên Nhận', this.escapeHtmlForPrint(nhanVienNhanStr))}
   </div>
 </div>`;
     const html = `
