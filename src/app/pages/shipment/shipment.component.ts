@@ -2376,9 +2376,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   <meta charset="utf-8">
   <title>SHIPMENT ORDER - ${this.escapeHtml(shipmentCode)}</title>
   <style>
-    @page { size: A4; margin: 15mm; }
+    @page { size: A4; margin: 8mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 13px; padding: 15mm; color: #000; }
+    html, body { border: none !important; outline: none !important; font-family: Arial, sans-serif; font-size: 13px; color: #000; }
+    body { padding: 8mm; max-width: 100%; width: 100%; margin: 0; box-sizing: border-box; }
     
     .header-box { border: 2px solid #000; padding: 14px; margin-bottom: 16px; }
     .header-row { display: flex; justify-content: space-between; align-items: flex-start; }
@@ -2397,7 +2398,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .customer-warehouse-row .cw-box .cw-title { font-size: 11px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
     .customer-warehouse-row .cw-box .cw-value { font-size: 14px; }
     
-    .p1-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; text-transform: uppercase; }
+    .p1-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #e8e8e8; color: #000; text-transform: uppercase; }
     
     .qr-packing-row { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; }
     .qr-box { flex: 0 0 auto; border: 2px solid #000; padding: 12px; text-align: center; }
@@ -2407,25 +2408,26 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .packing-notes-column { flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 12px; }
     .packing-two-boxes { display: flex; gap: 16px; }
     .packing-method-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
-    .packing-method-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; }
+    .packing-method-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; color: #000; }
     .packing-options { display: flex; gap: 24px; margin-bottom: 8px; align-items: center; }
-    .packing-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    .packing-options input { width: 18px; height: 18px; }
-    .packing-total { font-size: 14px; }
+    .packing-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #000; }
+    .packing-options input { width: 18px; height: 18px; accent-color: #000; }
+    .packing-options input:checked { accent-color: #000; filter: none; }
+    .packing-total { font-size: 14px; color: #000; }
     .pallet-type-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
-    .pallet-type-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; }
+    .pallet-type-box h4 { font-size: 12px; margin-bottom: 10px; text-transform: uppercase; color: #000; }
     .pallet-type-options { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-    .pallet-type-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    .pallet-type-options input { width: 18px; height: 18px; }
+    .pallet-type-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #000; }
+    .pallet-type-options input { width: 18px; height: 18px; accent-color: #000; }
     
-    .notes-box-top { border: 2px solid #666; padding: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; }
-    .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #333; text-transform: uppercase; }
+    .notes-box-top { border: 2px solid #666; padding: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; color: #000; }
+    .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #000; text-transform: uppercase; }
     .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
     .humidity-box-label { font-size: 12px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
     .humidity-box-input { width: 100%; max-width: 200px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
     
     .items-section { margin-bottom: 16px; }
-    .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #2196F3; color: white; text-transform: uppercase; }
+    .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #e8e8e8; color: #000; text-transform: uppercase; }
     .item-box { border: 2px solid #000; padding: 10px; margin-bottom: 10px; background: #fff; }
     .item-row { display: flex; gap: 10px; margin-bottom: 5px; }
     .item-row:last-child { margin-bottom: 0; }
@@ -2439,10 +2441,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .ship-by-options input { width: 18px; height: 18px; }
     
     .part-divider { margin: 24px 0 16px 0; border-top: 3px solid #000; padding-top: 16px; }
-    .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #333; color: #fff; text-transform: uppercase; }
+    .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #e8e8e8; color: #000; text-transform: uppercase; }
     
     .inspection-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; }
-    .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #333; color: #fff; padding: 6px; text-transform: uppercase; }
+    .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #e8e8e8; color: #000; padding: 6px; text-transform: uppercase; }
     .inspection-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
     .inspection-table th, .inspection-table td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
     .inspection-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
@@ -2459,10 +2461,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .inspection-truck-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
     .inspection-truck-table th, .inspection-truck-table td { border: 1px solid #000; padding: 6px 8px; }
     .inspection-truck-table th { background: #f0f0f0; }
-    .inspection-moto { font-size: 12px; color: #666; font-style: italic; margin-top: 8px; }
+    .inspection-moto { font-size: 12px; color: #000; font-style: italic; margin-top: 8px; }
     
     .notes-section { margin-bottom: 20px; }
-    .notes-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; padding: 5px; background: #666; color: white; text-transform: uppercase; }
+    .notes-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; padding: 5px; background: #e0e0e0; color: #000; text-transform: uppercase; }
     .notes-box { border: 2px solid #666; padding: 10px; min-height: 60px; background: #fff; white-space: pre-wrap; }
     
     .goods-confirm-section { margin-top: 20px; margin-bottom: 20px; border: 2px solid #000; padding: 15px; background: #fafafa; }
@@ -2472,7 +2474,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .goods-confirm-sig-block { flex: 1; text-align: center; }
     .goods-confirm-sig-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
     .goods-confirm-sig-line { height: 50px; border-bottom: 2px solid #000; margin-bottom: 4px; }
-    .goods-confirm-sig-hint { font-size: 11px; font-style: italic; color: #555; }
+    .goods-confirm-sig-hint { font-size: 11px; font-style: italic; color: #000; }
+    .header-left-text .title, .header-right .company, .header-right .date-label { color: #000; }
+    .customer-warehouse-row .cw-box .cw-title, .customer-warehouse-row .cw-box .cw-value { color: #000; }
+    .ship-by-section h4, .ship-by-options label { color: #000; }
   </style>
 </head>
 <body>

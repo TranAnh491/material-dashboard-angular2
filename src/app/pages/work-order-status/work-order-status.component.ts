@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
 import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
@@ -11,6 +11,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
@@ -34,6 +35,21 @@ interface ScanData {
   factory: string;
   workOrderId: string;
 }
+
+/** Dòng PXK đã import (theo LSX) */
+interface PxkLine {
+  materialCode: string;
+  quantity: number;
+  unit: string;
+  po: string;
+  soChungTu?: string; // Số chứng từ từ cột C
+}
+
+/** Dữ liệu PXK nhóm theo LSX */
+type PxkDataByLsx = { [lsx: string]: PxkLine[] };
+
+/** Từ 01/03/2026: LSX có PXK import và So sánh có Thiếu thì không cho bấm Done */
+const RULE_DONE_BLOCK_DATE = new Date(2026, 2, 1); // 1 tháng 3 năm 2026
 
 @Component({
   selector: 'app-work-order-status',
@@ -67,6 +83,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   transferOrders: number = 0;
   doneOrders: number = 0;
   delayOrders: number = 0;
+  checkCount: number = 0; // Số LSX đã import PXK nhưng còn Thiếu (So sánh)
   
   // Form data for new work order
   newWorkOrder: Partial<WorkOrder> = {
@@ -124,6 +141,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   scannerBuffer: string = '';
   scannerTimeoutId: any = null;
   keyboardListener: any = null;
+
+  // PXK Import
+  pxkDataByLsx: PxkDataByLsx = {};
+  isImportingPxk: boolean = false;
   
   
 
@@ -163,7 +184,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -273,10 +295,28 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   async loadWorkOrders(): Promise<void> {
     console.log('🔄 Loading work orders from database...');
-    
-    // Always try fallback first for better reliability in production
+    await this.loadPxkFromFirebase();
     console.log('📄 Using direct Firestore methods for better reliability');
     await this.loadWorkOrdersDirect();
+  }
+
+  /** Load PXK từ Firebase để dùng khi cần (Box Check, Print PXK, chặn Done) */
+  async loadPxkFromFirebase(): Promise<void> {
+    try {
+      const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
+      this.pxkDataByLsx = {};
+      snapshot.docs.forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const lsx = String(d?.lsx || '').trim();
+        const lines = Array.isArray(d?.lines) ? d.lines : [];
+        if (lsx && lines.length > 0) {
+          this.pxkDataByLsx[lsx] = lines;
+        }
+      });
+      console.log('[PXK] Đã load từ Firebase:', Object.keys(this.pxkDataByLsx).length, 'LSX');
+    } catch (e) {
+      console.warn('[PXK] Không load được từ Firebase:', e);
+    }
   }
   
   private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
@@ -633,6 +673,33 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.transferOrders = filtered.filter(wo => wo.status === WorkOrderStatus.TRANSFER).length;
     this.doneOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DONE).length;
     this.delayOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DELAY).length;
+    this.calculateCheckCount(); // Đếm LSX đã import PXK có Thiếu
+  }
+
+  /** Đếm số LSX (đã import PXK) có So sánh Thiếu - hiển thị cảnh báo */
+  async calculateCheckCount(): Promise<void> {
+    if (!this.isRuleEffectiveDate()) {
+      this.checkCount = 0;
+      return;
+    }
+    const filtered = this.filteredWorkOrders;
+    const lsxMap = new Map<string, { lsx: string; factory: string }>(); // norm -> {lsx, factory}
+    for (const wo of filtered) {
+      if (!this.hasPxkForWorkOrder(wo)) continue;
+      const lsx = (wo.productionOrder || '').trim();
+      if (!lsx) continue;
+      const norm = lsx.toUpperCase().replace(/\s/g, '');
+      if (!lsxMap.has(norm)) {
+        lsxMap.set(norm, { lsx, factory: wo.factory || this.selectedFactory || 'ASM1' });
+      }
+    }
+    let count = 0;
+    for (const entry of lsxMap.values()) {
+      const hasThieu = await this.hasPxkThieuForLsx(entry.lsx, entry.factory);
+      if (hasThieu) count++;
+    }
+    this.checkCount = count;
+    this.cdr.detectChanges();
   }
 
   onSearchChange(): void {
@@ -734,6 +801,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       planReceivedDate: new Date(),
       notes: ''
     };
+  }
+
+  async onStatusChange(workOrder: WorkOrder, newStatus: string): Promise<void> {
+    const newStatusEnum = this.convertStringToStatus(newStatus);
+    if (newStatusEnum === WorkOrderStatus.DONE) {
+      const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
+      if (blocked) {
+        alert('Không thể chọn Done: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
+        return;
+      }
+    }
+    await this.updateWorkOrderStatus(workOrder, newStatusEnum);
   }
 
   async updateWorkOrderStatus(workOrder: WorkOrder, newStatus: WorkOrderStatus): Promise<void> {
@@ -2401,6 +2480,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   // New methods for the updated UI
   async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
+    const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
+    if (blocked) {
+      alert('Không thể bấm Done: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
+      return;
+    }
     console.log('🔄 Bắt đầu hoàn thành work order:', workOrder.productCode, 'ID:', workOrder.id);
     
     // Kiểm tra quyền hoàn thành
@@ -2727,6 +2811,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  openPrintOptionDialog(workOrder: WorkOrder): void {
+    const dialogRef = this.dialog.open(PrintOptionDialogComponent, {
+      width: '400px',
+      data: { workOrder }
+    });
+    dialogRef.afterClosed().subscribe((result: 'qr' | 'pxk') => {
+      if (result === 'qr') this.generateQRCode(workOrder);
+      else if (result === 'pxk') this.printPxk(workOrder);
+    });
+  }
+
   // Generate QR Code for Work Order
   generateQRCode(workOrder: WorkOrder): void {
     console.log('Generating QR code for work order:', workOrder.productionOrder);
@@ -2972,7 +3067,472 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  // PXK Import
+  triggerPxkImport(): void {
+    const input = document.getElementById('pxkFileInput') as HTMLInputElement;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  }
 
+  async onPxkFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+    this.isImportingPxk = true;
+    try {
+      const data = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target as FileReader).result as ArrayBuffer);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+      const workbook = XLSX.read(data, { type: 'array' });
+      let sheet = workbook.Sheets['Sheet1'] || workbook.Sheets['sheet1'];
+      if (!sheet) {
+        const sheet1 = workbook.SheetNames.find((n: string) => n.trim().toLowerCase() === 'sheet1');
+        if (sheet1) sheet = workbook.Sheets[sheet1];
+      }
+      if (!sheet) {
+        const found = workbook.SheetNames.find((n: string) => {
+          const lower = n.trim().toLowerCase();
+          return lower.includes('bảng kê') || lower.includes('bang ke') || lower.includes('phiếu xuất') || lower.includes('phieu xuat');
+        });
+        if (found) sheet = workbook.Sheets[found];
+      }
+      if (!sheet) sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as any[][];
+      if (rows.length < 2) {
+        alert('File PXK không có dữ liệu.');
+        return;
+      }
+      const norm = (s: string) => s.toLowerCase().replace(/\s/g, '').replace(/[àáảãạăắằẳẵặâấầẩẫậ]/g, 'a').replace(/[đ]/g, 'd').replace(/[èéẻẽẹêếềểễệ]/g, 'e').replace(/[ìíỉĩị]/g, 'i').replace(/[òóỏõọôốồổỗộơớờởỡợ]/g, 'o').replace(/[ùúủũụưứừửữự]/g, 'u');
+      const colIdx = (headers: string[], ...names: string[]): number => {
+        for (const name of names) {
+          const i = headers.findIndex((h: string) => norm(h).includes(norm(name)) || norm(name).includes(norm(h)));
+          if (i >= 0) return i;
+        }
+        return -1;
+      };
+      const hasRequiredHeaders = (h: string[]): boolean => {
+        const hasMaCtu = colIdx(h, 'Mã Ctừ', 'Ma Ctu', 'MaCtu', 'Mã chứng từ', 'Ma chung tu', 'Chứng từ', 'Loại ctừ') >= 0;
+        const hasLsx = colIdx(h, 'Số lệnh sản xuất', 'So lenh san xuat', 'SoLenhSanXuat', 'Lệnh sản xuất', 'Lenh san xuat', 'LSX', 'Số LSX') >= 0;
+        const hasMaVatTu = colIdx(h, 'Mã vật tư', 'Ma vat tu', 'MaVatTu', 'Mã VT', 'Ma VT', 'Vật tư') >= 0;
+        return hasMaCtu && hasLsx && hasMaVatTu;
+      };
+      let headerRowIndex = -1;
+      for (let r = 0; r < Math.min(20, rows.length); r++) {
+        const rowHeaders = (rows[r] || []).map((h: any) => String(h || '').trim());
+        if (hasRequiredHeaders(rowHeaders)) {
+          headerRowIndex = r;
+          break;
+        }
+      }
+      console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
+      const COL_C = 2, COL_E = 4, COL_I = 8, COL_N = 13, COL_Q = 16, COL_Z = 25;
+      let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
+      let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number;
+      idxSoLenhSX = COL_E;
+      idxMaVatTu = COL_I;
+      idxSoLuongXTT = COL_N;
+      idxDvt = COL_Q;
+      idxSoPO = COL_Z;
+      if (headerRowIndex >= 0) {
+        const headers = (rows[headerRowIndex] || []).map((h: any) => String(h || '').trim());
+        idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu', 'Mã chứng từ', 'Ma chung tu', 'Chứng từ');
+        if (idxMaCtu < 0) idxMaCtu = 0;
+        idxSoChungTu = COL_C; // Luôn lấy số chứng từ ở cột C
+      } else {
+        headerRowIndex = 0;
+        idxMaCtu = 0;
+        idxSoChungTu = COL_C;
+      }
+      const allWo = [...this.workOrders, ...(this.filteredWorkOrders || [])];
+      const woLsxList = [...new Set(allWo.map(wo => String(wo.productionOrder || '').trim()).filter(Boolean))];
+      const normalizeLsx = (s: string): string => {
+        const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+        return m ? m[1].replace(/[-.]/g, '/') : t;
+      };
+      const woNormToOriginal = new Map<string, string>();
+      woLsxList.forEach(lsx => {
+        const n = normalizeLsx(lsx);
+        if (n) woNormToOriginal.set(n, lsx);
+      });
+      const findMatchingWoLsx = (pxkLsx: string): string | null => {
+        const trimmed = String(pxkLsx || '').trim();
+        if (!trimmed) return null;
+        const upper = trimmed.toUpperCase();
+        for (const wo of woLsxList) {
+          const woUpper = wo.toUpperCase();
+          if (woUpper === upper) return wo;
+          if (woUpper.includes(upper) || upper.includes(woUpper)) return wo;
+        }
+        const n = normalizeLsx(trimmed);
+        return woNormToOriginal.get(n) || null;
+      };
+      const getFullLsxFromCell = (val: any): string => {
+        if (val == null || val === '') return '';
+        if (typeof val === 'string') return val.trim();
+        if (typeof val === 'number' && !Number.isInteger(val) && val < 1 && val > 0) return '';
+        return String(val).trim();
+      };
+      const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number) => {
+        const out: PxkDataByLsx = {};
+        let cnt = 0;
+        for (let r = dataStartRow; r < rows.length; r++) {
+          const row = rows[r] || [];
+          const v = String(row[maCtuCol] ?? '').trim().toUpperCase();
+          if (v !== 'PX' && !v.includes('PX') && !v.includes('PHIEU XUAT') && !v.includes('PHIẾU XUẤT')) continue;
+          cnt++;
+          const pxkLsxRaw = getFullLsxFromCell(row[lsxCol]);
+          const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || (pxkLsxRaw || null);
+          if (!matchedLsx) continue;
+          const storeKey = pxkLsxRaw && (pxkLsxRaw.includes('KZLSX') || pxkLsxRaw.includes('/') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+          const soChungTu = String(row[soChungTuCol] ?? '').trim();
+          const materialCode = String(row[vatTuCol] ?? '').trim();
+          const qtyRaw = row[qtyCol];
+          const quantity = typeof qtyRaw === 'number' ? qtyRaw : parseFloat(String(qtyRaw ?? '0').replace(/,/g, '')) || 0;
+          const unit = String(row[dvtCol] ?? '').trim();
+          const po = String(row[poCol] ?? '').trim();
+          if (!out[storeKey]) out[storeKey] = [];
+          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined });
+        }
+        return { byLsx: out, rowsWithPx: cnt };
+      };
+      const dataStartRow = headerRowIndex + 1;
+      let idxMaCtuFinal = idxMaCtu, idxSoLenhSXFinal = idxSoLenhSX, idxMaVatTuFinal = idxMaVatTu;
+      let idxSoLuongXTTFinal = idxSoLuongXTT, idxDvtFinal = idxDvt, idxSoPOFinal = idxSoPO, idxSoChungTuFinal = idxSoChungTu;
+      let byLsx: PxkDataByLsx = {};
+      let rowsWithPx = 0;
+      const pxkLsxSamples: string[] = [];
+      const tryParse = () => {
+        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal);
+        byLsx = res.byLsx;
+        rowsWithPx = res.rowsWithPx;
+      };
+      tryParse();
+      if (rowsWithPx === 0 && rows.length > dataStartRow) {
+        const pxCountByCol: number[] = [];
+        for (let c = 0; c <= 10; c++) pxCountByCol[c] = 0;
+        for (let r = dataStartRow; r < Math.min(dataStartRow + 200, rows.length); r++) {
+          const row = rows[r] || [];
+          for (let c = 0; c <= 10; c++) {
+            const v = String(row[c] ?? '').trim().toUpperCase();
+            if (v === 'PX' || v.includes('PX')) pxCountByCol[c]++;
+          }
+        }
+        const bestMaCtuCol = pxCountByCol.reduce((best, cnt, i) => cnt > (pxCountByCol[best] || 0) ? i : best, 0);
+        if ((pxCountByCol[bestMaCtuCol] || 0) > 0) {
+          console.log('[PXK Import] Fallback: cột có nhiều PX nhất =', bestMaCtuCol + 1, '(', pxCountByCol[bestMaCtuCol], 'dòng)');
+          idxMaCtuFinal = bestMaCtuCol;
+          tryParse();
+        }
+      }
+      for (let r = dataStartRow; r < rows.length && pxkLsxSamples.length < 5; r++) {
+        const row = rows[r] || [];
+        const v = String(row[idxMaCtuFinal] ?? '').trim().toUpperCase();
+        if (v !== 'PX' && !v.includes('PX')) continue;
+        const pxkLsxRaw = getFullLsxFromCell(row[idxSoLenhSXFinal]);
+        if (pxkLsxRaw) pxkLsxSamples.push(pxkLsxRaw);
+      }
+      // Merge: cùng số CT ghi đè, khác số CT thêm mới
+      for (const [lsxKey, newLines] of Object.entries(byLsx)) {
+        const existing = this.pxkDataByLsx[lsxKey] || [];
+        const newSoCtSet = new Set(newLines.map(l => l.soChungTu ?? ''));
+        const kept = existing.filter(l => !newSoCtSet.has(l.soChungTu ?? ''));
+        this.pxkDataByLsx[lsxKey] = [...kept, ...newLines];
+      }
+      const total = Object.values(byLsx).reduce((s, arr) => s + arr.length, 0);
+      const storedKeys = Object.keys(byLsx);
+      console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
+      if (total === 0) {
+        if (rowsWithPx > 0) {
+          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không khớp LSX.\nWork Order LSX mẫu: ${woLsxList.slice(0, 5).join(', ')}\nPXK LSX mẫu: ${pxkLsxSamples.join(', ')}\nMở Console (F12) để xem chi tiết.`);
+        } else if (rows.length > dataStartRow) {
+          alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
+        } else {
+          alert('Import PXK: Không có dữ liệu sau dòng tiêu đề.');
+        }
+      } else {
+        const factorySave = (this.selectedFactory || 'ASM1').toUpperCase().includes('ASM1') ? 'ASM1' : 'ASM2';
+        try {
+          for (const [lsxKey, lines] of Object.entries(this.pxkDataByLsx)) {
+            const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            await this.firestore.collection('pxk-import-data').doc(docId).set({
+              lsx: lsxKey,
+              factory: factorySave,
+              lines: lines,
+              importedAt: new Date()
+            });
+          }
+        } catch (e) {
+          console.warn('Không lưu PXK vào Firebase:', e);
+        }
+        const lsxList = Object.keys(byLsx).sort();
+        const maxShow = 15;
+        const lsxDisplay = lsxList.length <= maxShow
+          ? lsxList.join(', ')
+          : lsxList.slice(0, maxShow).join(', ') + ` và ${lsxList.length - maxShow} LSX khác`;
+        alert(`Đã import PXK: ${total} dòng, ${lsxList.length} LSX.\n\nLSX đã import:\n${lsxDisplay}`);
+        this.calculateSummary();
+      }
+    } catch (err) {
+      console.error('PXK import error:', err);
+      alert('Lỗi khi đọc file PXK: ' + (err as Error).message);
+    } finally {
+      this.isImportingPxk = false;
+      input.value = '';
+    }
+  }
+
+  getPxkLinesForLsx(lsx: string): PxkLine[] {
+    if (!lsx) return [];
+    const woLsx = String(lsx).trim();
+    const woUpper = woLsx.toUpperCase();
+    const normalizeLsx = (s: string): string => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const woNorm = normalizeLsx(woLsx);
+    for (const key of Object.keys(this.pxkDataByLsx)) {
+      if (key.toUpperCase() === woUpper) return this.pxkDataByLsx[key] || [];
+      if (woUpper.includes(key.toUpperCase()) || key.toUpperCase().includes(woUpper)) return this.pxkDataByLsx[key] || [];
+      if (woNorm && normalizeLsx(key) === woNorm) return this.pxkDataByLsx[key] || [];
+    }
+    if (Object.keys(this.pxkDataByLsx).length > 0) {
+      console.log('[PXK Lookup] Không tìm thấy cho LSX:', JSON.stringify(woLsx), '| Các key đang có:', Object.keys(this.pxkDataByLsx).slice(0, 15));
+    }
+    return [];
+  }
+
+  hasPxkForWorkOrder(wo: WorkOrder): boolean {
+    return this.getPxkLinesForLsx(wo.productionOrder || '').length > 0;
+  }
+
+  private isRuleEffectiveDate(): boolean {
+    return new Date() >= RULE_DONE_BLOCK_DATE;
+  }
+
+  /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không (chỉ tính mã B, không tính R) */
+  async hasPxkThieuForLsx(lsx: string, factory: string): Promise<boolean> {
+    const lines = this.getPxkLinesForLsx(lsx);
+    if (lines.length === 0) return false;
+    const isAsm1 = (factory || 'ASM1').toUpperCase().includes('ASM1');
+    const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
+    const normLsx = (s: string) => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const woLsxNorm = normLsx(lsx);
+    const scanMap = new Map<string, number>();
+    try {
+      const outboundSnapshot = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
+        ref.where('factory', '==', factoryFilter)
+      ).get());
+      outboundSnapshot.docs.forEach((doc: any) => {
+        const d = doc.data() as any;
+        const poLsxNorm = normLsx(d.productionOrder || '');
+        if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+        const mat = String(d.materialCode || '').trim();
+        const prefix = mat.toUpperCase().charAt(0);
+        if (prefix !== 'B') return;
+        const po = String(d.poNumber ?? '').trim();
+        const qty = Number(d.exportQuantity || 0) || 0;
+        const key = `${mat}|${po}`;
+        scanMap.set(key, (scanMap.get(key) || 0) + qty);
+      });
+    } catch (e) {
+      return false;
+    }
+    for (const l of lines) {
+      const matCode = String(l.materialCode || '').trim();
+      const prefix = matCode.toUpperCase().charAt(0);
+      if (prefix === 'R') continue;
+      const key = `${matCode}|${(l.po || '').trim()}`;
+      const qtyPxk = Number(l.quantity) || 0;
+      const qtyScan = scanMap.get(key) || 0;
+      if (qtyPxk > qtyScan) return true;
+    }
+    return false;
+  }
+
+  /** Từ 01/03/2026: nếu LSX có PXK và So sánh có Thiếu thì không cho bấm Done */
+  async isDoneBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
+    if (!this.isRuleEffectiveDate()) return false;
+    if (!this.hasPxkForWorkOrder(wo)) return false;
+    const factory = wo.factory || this.selectedFactory || 'ASM1';
+    return this.hasPxkThieuForLsx(wo.productionOrder || '', factory);
+  }
+
+  private formatQuantityForPxk(n: number): string {
+    const num = Number(n);
+    const fixed = num.toFixed(2);
+    const parts = fixed.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+
+  async printPxk(workOrder: WorkOrder): Promise<void> {
+    const lines = this.getPxkLinesForLsx(workOrder.productionOrder || '');
+    if (lines.length === 0) {
+      alert('Chưa có dữ liệu PXK cho LSX ' + workOrder.productionOrder + '. Vui lòng import file PXK trước.');
+      return;
+    }
+    const lsx = workOrder.productionOrder || '';
+    const factory = (workOrder.factory || this.selectedFactory || 'ASM1').toUpperCase();
+    const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
+    let qrImage = '';
+    try {
+      qrImage = await QRCode.toDataURL(lsx, { width: 120, margin: 1 });
+    } catch (e) {
+      console.warn('Không tạo được QR code:', e);
+    }
+    const locationMap = new Map<string, string>();
+    try {
+      const snapshot = await firstValueFrom(this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
+      ).get());
+      snapshot.docs.forEach((doc: any) => {
+        const d = doc.data() as any;
+        const mat = String(d.materialCode || '').trim();
+        const po = String(d.poNumber || d.po || '').trim();
+        const loc = String(d.location || '').trim();
+        if (mat && po) locationMap.set(`${mat}|${po}`, loc);
+      });
+    } catch (e) {
+      console.warn('Không load được vị trí từ inventory:', e);
+    }
+    const getLocation = (materialCode: string, po: string): string =>
+      locationMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || '-';
+    const scanQtyMap = new Map<string, number>();
+    const employeeIds = new Set<string>();
+    const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
+    try {
+      const normLsx = (s: string) => {
+        const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+        return m ? m[1].replace(/[-.]/g, '/') : t;
+      };
+      const woLsxNorm = normLsx(lsx);
+      const outboundSnapshot = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
+        ref.where('factory', '==', factoryFilter)
+      ).get());
+      outboundSnapshot.docs.forEach((doc: any) => {
+        const d = doc.data() as any;
+        const poLsxNorm = normLsx(d.productionOrder || '');
+        if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+        const empId = String(d.employeeId || d.exportedBy || '').trim();
+        if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
+        const mat = String(d.materialCode || '').trim();
+        const po = String(d.poNumber || d.po || '').trim();
+        const exportQty = Number(d.exportQuantity || 0);
+        if (mat && po) {
+          const key = `${mat}|${po}`;
+          scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
+        }
+      });
+    } catch (e) {
+      console.warn('Không load được Lượng Scan từ outbound:', e);
+    }
+    const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
+    const getScanQty = (materialCode: string, po: string): number =>
+      scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
+    const getSoSanh = (xuất: number, scan: number): string => {
+      if (scan >= xuất) return 'Đủ';
+      const diff = xuất - scan;
+      return 'Thiếu ' + this.formatQuantityForPxk(diff);
+    };
+    const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+    const soChungTuList = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
+    const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
+    const rowsHtml = sortedLines.map((l, i) => {
+      const stt = i + 1;
+      const matCode = String(l.materialCode || '').trim();
+      const isR = matCode.toUpperCase().charAt(0) === 'R';
+      const location = getLocation(l.materialCode, l.po);
+      const qtyStr = this.formatQuantityForPxk(l.quantity);
+      const scanQty = isR ? 0 : getScanQty(l.materialCode, l.po);
+      const scanQtyStr = isR ? '' : this.formatQuantityForPxk(scanQty);
+      const soSanh = isR ? '' : getSoSanh(l.quantity, scanQty);
+      const soCt = (l.soChungTu || '').trim() || '-';
+      return `<tr>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soCt)}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.unit)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:right;">${qtyStr}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(location)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soSanh)}</td>
+        <td style="border:1px solid #000;padding:6px;"></td>
+      </tr>`;
+    }).join('');
+    const deliveryDateStr = workOrder.deliveryDate
+      ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
+      : '-';
+    const boxSize = '140px';
+    const boxStyle = `width:${boxSize};height:${boxSize};border:1px solid #000;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:10px;box-sizing:border-box;flex-shrink:0`;
+    const infoBox = (label: string, value: string) =>
+      `<div style="${boxStyle}"><strong>${label}</strong><span style="margin-top:4px;word-break:break-all;line-height:1.2;">${value}</span></div>`;
+    const lsxBox = `<div style="${boxStyle}"><strong>LSX</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lsx)}</span>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
+    const soChungTuBox = `<div style="${boxStyle}"><strong>Số Chứng Từ</strong><span style="margin-top:4px;word-break:break-all;line-height:1.4;font-size:9px;">${soChungTuDisplay}</span></div>`;
+    const emptyBox = `<div style="${boxStyle}"></div>`;
+    const rowStyle = 'display:flex;flex-direction:row;gap:8px;justify-content:flex-start;align-items:flex-start;margin-bottom:8px';
+    const headerSection = `
+<div style="margin-bottom:16px;">
+  <div style="${rowStyle}">
+    ${infoBox('Mã TP VN', this.escapeHtmlForPrint(workOrder.productCode || '-'))}
+    ${infoBox('Ngày giao NVL', deliveryDateStr)}
+    ${infoBox('Lượng sản phẩm', this.formatQuantityForPxk(workOrder.quantity || 0))}
+    ${lsxBox}
+  </div>
+  <div style="${rowStyle}">
+    ${infoBox('Nhân Viên Soạn', this.escapeHtmlForPrint(nhanVienSoanStr))}
+    ${soChungTuBox}
+    ${infoBox('Nhà máy', this.escapeHtmlForPrint(factory))}
+  </div>
+</div>`;
+    const html = `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>PXK - ${this.escapeHtmlForPrint(lsx)}</title>
+<style>
+@page{size:A4;margin:10mm}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;padding:10mm;color:#000;font-size:12px}
+h2{margin-bottom:12px;font-size:16px}
+.pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
+.pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
+.pxk-table th{background:#f0f0f0;font-weight:bold}
+</style></head><body>
+<h2>Production Order Material List</h2>
+${headerSection}
+<table class="pxk-table">
+<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th>Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Delivery</th></tr></thead>
+<tbody>${rowsHtml}</tbody>
+</table>
+<p style="margin-top:16px;font-size:11px;">Ngày in: ${new Date().toLocaleString('vi-VN')}</p>
+<script>window.onload=function(){window.print()}</script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  }
+
+  private escapeHtmlForPrint(s: string): string {
+    if (s == null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
 
 

@@ -82,22 +82,30 @@ html, body {
   min-height: 60px; /* Set minimum height */
   margin-bottom: 5px; /* Reduced spacing */
   
+  &.card-warning .card-header {
+    background: #fff3e0 !important;
+    border-left: 4px solid #ff9800;
+  }
+  
   .card-header {
     padding: 8px 15px !important; /* Reduced padding */
     background: #f8f9fa !important; /* Neutral background color */
     border: none !important;
     
     .card-category {
-      margin: 0 0 3px 0 !important; /* Reduced margin */
-      font-size: 0.75em !important; /* Smaller font */
-      color: #6c757d !important; /* Neutral text color */
+      margin: 0 0 3px 0 !important;
+      font-size: 0.75em !important;
+      text-transform: uppercase !important;
+      font-weight: bold !important;
+      color: #000 !important;
     }
     
     .card-title {
-      font-size: 1.1em !important; /* Smaller title */
+      font-size: 1.1em !important;
       margin: 0 !important;
-      font-weight: 600;
-      color: #495057 !important; /* Neutral text color */
+      font-weight: bold !important;
+      text-transform: uppercase !important;
+      color: #000 !important;
     }
   }
 }

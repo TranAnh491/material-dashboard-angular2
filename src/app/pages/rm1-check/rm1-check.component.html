@@ -1,0 +1,113 @@
+<div class="check-container">
+  <div class="check-header">
+    <h2>
+      <i class="material-icons">fact_check</i>
+      RM1 Check
+    </h2>
+    <button class="menu-btn" (click)="goToMenu()" title="Về Menu">
+      <i class="material-icons">home</i>
+      Về menu
+    </button>
+  </div>
+
+  <div class="check-content">
+    <div class="top-row">
+      <button type="button" class="btn-chon-lsx" (click)="openLsxModal()" title="Chọn LSX">
+        <i class="material-icons">description</i>
+        {{ selectedLsx ? selectedLsx : 'Chọn LSX' }}
+      </button>
+      <div class="box-check">Check: {{ rowsThieu.length }}</div>
+    </div>
+
+    <!-- Popup chọn LSX -->
+    <div class="modal-overlay" *ngIf="showLsxModal" (click)="closeLsxModal()">
+      <div class="modal-content lsx-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Chọn LSX (Lệnh sản xuất)</h3>
+          <button type="button" class="modal-close" (click)="closeLsxModal()" aria-label="Đóng">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-select-row">
+            <select
+              class="lsx-select"
+              [(ngModel)]="selectedLsxInModal"
+              [disabled]="isLoadingLsx">
+              <option value="">-- Chọn LSX --</option>
+              <option *ngFor="let lsx of availableLsxList" [value]="lsx">{{ lsx }}</option>
+            </select>
+            <button type="button" class="refresh-btn" (click)="loadAvailableLsx()" [disabled]="isLoadingLsx" title="Làm mới">
+              <i class="material-icons" [class.rotating]="isLoadingLsx">refresh</i>
+              Làm mới
+            </button>
+          </div>
+          <p class="hint" *ngIf="availableLsxList.length === 0 && !isLoadingLsx">
+            Chưa có LSX nào. Vui lòng import PXK trong Work Order trước.
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn-confirm" (click)="confirmLsxSelection()" [disabled]="!selectedLsxInModal">
+              Xong
+            </button>
+            <button type="button" class="btn-cancel" (click)="closeLsxModal()">Đóng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-section" *ngIf="selectedLsx">
+      <h3>
+        <i class="material-icons">table_chart</i>
+        Kết quả so sánh LSX: {{ selectedLsx }}
+      </h3>
+      <div class="loading-state" *ngIf="isLoadingCheck">
+        <i class="material-icons rotating">sync</i>
+        Đang tải dữ liệu...
+      </div>
+      <div class="table-wrapper" *ngIf="!isLoadingCheck && checkRows.length > 0">
+        <table class="check-table">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã vật tư</th>
+              <th>PO</th>
+              <th>Đvt</th>
+              <th>Lượng Xuất (PXK)</th>
+              <th>Lượng Scan</th>
+              <th>So Sánh</th>
+              <th>Giao hàng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of checkRows" [class.thieu]="row.comparison.startsWith('Thiếu')">
+              <td>{{ row.stt }}</td>
+              <td>{{ row.materialCode }}</td>
+              <td>{{ row.po }}</td>
+              <td>{{ row.unit }}</td>
+              <td>{{ row.quantityPxk | number:'1.0-4' }}</td>
+              <td>{{ row.quantityScan | number:'1.0-4' }}</td>
+              <td [class.du]="row.comparison === 'Đủ'" [class.thieu]="row.comparison.startsWith('Thiếu')">
+                {{ row.comparison }}
+              </td>
+              <td>{{ row.quantityDelivery | number:'1.0-4' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" *ngIf="!isLoadingCheck && selectedLsx && checkRows.length === 0">
+        <i class="material-icons">info</i>
+        Không có dữ liệu PXK cho LSX này.
+      </div>
+
+      <!-- Box các dòng đang thiếu hàng -->
+      <div class="box-thieu" *ngIf="!isLoadingCheck && selectedLsx && rowsThieu.length > 0">
+        <h4><i class="material-icons">warning</i> Các mã đang thiếu hàng (So sánh)</h4>
+        <ul>
+          <li *ngFor="let row of rowsThieu">
+            <strong>{{ row.materialCode }}</strong> – PO {{ row.po }}: {{ row.comparison }}
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

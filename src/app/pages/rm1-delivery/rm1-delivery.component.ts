@@ -6,18 +6,32 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 
 export interface DeliveryRecord {
   id?: string;
-  mode: 'kiem-tra' | 'giao-hang'; // Kiểm tra hoặc Giao hàng
+  mode: 'kiem-tra' | 'giao-hang';
   employeeId: string;
   employeeName?: string;
-  lsx: string; // Lệnh sản xuất
+  lsx: string;
   materials?: Array<{
     materialCode: string;
     poNumber?: string;
     quantity?: number;
+    deliveryQuantity?: number;
+    deliveryScannedAt?: Date;
   }>;
-  receiveLine?: string; // Line nhận (chỉ cho Giao hàng)
+  receiveLine?: string;
+  receiverEmployeeId?: string; // Mã nhân viên nhận (Giao hàng)
+  receiverEmployeeName?: string;
+  outboundLines?: Array<{ materialCode: string; poNumber: string; quantity: number; deliveryQuantity?: number; deliveryScannedAt?: Date }>;
   timestamp: Date;
   createdAt?: Date;
+}
+
+/** Dòng outbound đã lọc theo LSX + thông tin giao hàng */
+export interface OutboundDeliveryRow {
+  materialCode: string;
+  poNumber: string;
+  quantity: number; // Lượng outbound (đã scan ở outbound)
+  deliveryQuantity?: number; // Lượng giao (scan khi giao)
+  deliveryScannedAt?: Date; // Thời gian scan giao
 }
 
 @Component({
@@ -53,8 +67,19 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
   receiveLineScanInput: string = '';
   currentReceiveLine: string = '';
   
-  // Current step
-  currentStep: 'mode' | 'employee' | 'lsx' | 'materials' | 'receiveLine' | 'done' = 'mode';
+  // Current step (Giao hàng: lsx → receiveLine → employeeReceiver → deliveryScan → done)
+  currentStep: 'mode' | 'employee' | 'lsx' | 'materials' | 'receiveLine' | 'employeeReceiver' | 'deliveryScan' | 'done' = 'mode';
+  
+  // Mã nhân viên nhận (chỉ cho Giao hàng)
+  receiverScanInput: string = '';
+  receiverEmployeeId: string = '';
+  receiverEmployeeName: string = '';
+  isReceiverVerified: boolean = false;
+  
+  // Outbound theo LSX (Giao hàng): mã, PO, lượng đã scan outbound + lượng giao + thời gian
+  outboundDeliveryRows: OutboundDeliveryRow[] = [];
+  isLoadingOutbound: boolean = false;
+  deliveryMaterialScanInput: string = ''; // Scan mã|PO|lượng để ghi nhận giao
   
   // History
   deliveryHistory: DeliveryRecord[] = [];
@@ -80,8 +105,14 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
   // Mode selection
   selectMode(mode: 'kiem-tra' | 'giao-hang'): void {
     this.selectedMode = mode;
-    this.currentStep = 'employee';
-    this.showEmployeeModal = true;
+    if (mode === 'giao-hang') {
+      // Giao hàng: đầu tiên scan LSX → Line giao → Mã NV nhận → bảng scan
+      this.currentStep = 'lsx';
+      this.showEmployeeModal = false;
+    } else {
+      this.currentStep = 'employee';
+      this.showEmployeeModal = true;
+    }
     console.log('✅ Mode selected:', mode);
   }
   
@@ -138,7 +169,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
     const lsx = this.lsxScanInput.trim();
     
     if (!lsx) {
-      alert('⚠️ Vui lòng nhập hoặc quét LSX!');
+      alert('⚠️ Vui lòng nhập hoặc quét LSX giao!');
       return;
     }
     
@@ -146,7 +177,6 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
     this.isLsxScanned = true;
     this.lsxScanInput = '';
     
-    // Chuyển sang bước tiếp theo
     if (this.selectedMode === 'kiem-tra') {
       this.currentStep = 'materials';
     } else {
@@ -207,42 +237,170 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
     const receiveLine = this.receiveLineScanInput.trim();
     
     if (!receiveLine) {
-      alert('⚠️ Vui lòng nhập hoặc quét Line nhận!');
+      alert('⚠️ Vui lòng nhập hoặc quét Line giao!');
       return;
     }
     
     this.currentReceiveLine = receiveLine;
     this.receiveLineScanInput = '';
-    this.currentStep = 'done';
+    this.currentStep = 'employeeReceiver';
+    this.showEmployeeModal = true;
     
-    console.log('✅ Receive Line scanned:', this.currentReceiveLine);
+    console.log('✅ Line giao scanned:', this.currentReceiveLine);
+  }
+  
+  // Mã nhân viên nhận (Giao hàng) - dùng chung modal với nhãn khác
+  verifyReceiver(): void {
+    const employeeId = this.receiverScanInput.trim().toUpperCase();
+    
+    if (!employeeId) {
+      alert('⚠️ Vui lòng quét hoặc nhập mã nhân viên nhận!');
+      return;
+    }
+    
+    this.firestore.collection('users', ref =>
+      ref.where('displayName', '==', employeeId).limit(1)
+    ).get().toPromise().then(snapshot => {
+      if (snapshot && !snapshot.empty) {
+        const userData = snapshot.docs[0].data() as any;
+        this.receiverEmployeeId = employeeId;
+        this.receiverEmployeeName = userData.displayName || employeeId;
+      } else {
+        this.receiverEmployeeId = employeeId;
+        this.receiverEmployeeName = employeeId;
+      }
+      this.isReceiverVerified = true;
+      this.showEmployeeModal = false;
+      this.receiverScanInput = '';
+      this.currentStep = 'deliveryScan';
+      this.loadOutboundByLsx();
+      console.log('✅ Mã NV nhận:', this.receiverEmployeeName);
+    }).catch(() => {
+      this.receiverEmployeeId = employeeId;
+      this.receiverEmployeeName = employeeId;
+      this.isReceiverVerified = true;
+      this.showEmployeeModal = false;
+      this.receiverScanInput = '';
+      this.currentStep = 'deliveryScan';
+      this.loadOutboundByLsx();
+    });
+  }
+  
+  // Lọc outbound theo LSX (mã, PO, lượng đã scan ở outbound)
+  loadOutboundByLsx(): void {
+    if (!this.currentLsx || this.currentLsx.trim() === '') return;
+    
+    this.isLoadingOutbound = true;
+    this.outboundDeliveryRows = [];
+    
+    this.firestore.collection('outbound-materials', ref =>
+      ref.where('factory', '==', 'ASM1')
+         .where('productionOrder', '==', this.currentLsx.trim())
+         .limit(200)
+    ).get().toPromise().then(snapshot => {
+      const map = new Map<string, OutboundDeliveryRow>();
+      (snapshot?.docs || []).forEach(doc => {
+        const d = doc.data() as any;
+        const materialCode = (d.materialCode || '').toString().trim();
+        const poNumber = (d.poNumber || '').toString().trim();
+        const qty = Number(d.quantity) || 0;
+        const key = `${materialCode}|${poNumber}`;
+        const existing = map.get(key);
+        if (existing) {
+          existing.quantity += qty;
+        } else {
+          map.set(key, { materialCode, poNumber, quantity: qty });
+        }
+      });
+      this.outboundDeliveryRows = Array.from(map.values()).sort((a, b) =>
+        (a.materialCode + a.poNumber).localeCompare(b.materialCode + b.poNumber)
+      );
+      this.isLoadingOutbound = false;
+      console.log('✅ Outbound theo LSX:', this.outboundDeliveryRows.length, 'dòng');
+    }).catch(err => {
+      console.error('❌ Load outbound error:', err);
+      this.isLoadingOutbound = false;
+    });
+  }
+  
+  // Scan mã|PO|lượng khi giao - check 1 lần, ghi lượng giao + thời gian
+  onDeliveryMaterialScan(): void {
+    const raw = this.deliveryMaterialScanInput.trim();
+    if (!raw) return;
+    
+    const parts = raw.split('|');
+    const materialCode = (parts[0] || '').trim();
+    const poNumber = (parts.length >= 2) ? (parts[1] || '').trim() : '';
+    const scannedQty = (parts.length >= 3) ? (parseFloat(parts[2]) || 0) : 0;
+    
+    if (!materialCode) {
+      this.deliveryMaterialScanInput = '';
+      return;
+    }
+    
+    const row = this.outboundDeliveryRows.find(r =>
+      (r.materialCode || '').toUpperCase() === materialCode.toUpperCase() &&
+      (r.poNumber || '').toUpperCase() === poNumber.toUpperCase()
+    );
+    
+    if (!row) {
+      alert('⚠️ Không tìm thấy mã/PO trong danh sách outbound LSX này. Kiểm tra lại.');
+      this.deliveryMaterialScanInput = '';
+      return;
+    }
+    
+    row.deliveryQuantity = scannedQty > 0 ? scannedQty : row.quantity;
+    row.deliveryScannedAt = new Date();
+    this.deliveryMaterialScanInput = '';
+    console.log('✅ Ghi nhận giao:', row.materialCode, row.poNumber, row.deliveryQuantity, row.deliveryScannedAt);
   }
   
   // Done - Save to Firestore
   async onDone(): Promise<void> {
-    if (!this.currentEmployeeId || !this.currentLsx) {
-      alert('⚠️ Vui lòng scan đầy đủ thông tin!');
+    if (!this.currentLsx) {
+      alert('⚠️ Vui lòng scan LSX!');
       return;
     }
     
-    if (this.selectedMode === 'kiem-tra' && this.scannedMaterials.length === 0) {
-      alert('⚠️ Vui lòng scan ít nhất một mã nguyên liệu!');
-      return;
+    if (this.selectedMode === 'kiem-tra') {
+      if (!this.currentEmployeeId) {
+        alert('⚠️ Vui lòng xác thực nhân viên!');
+        return;
+      }
+      if (this.scannedMaterials.length === 0) {
+        alert('⚠️ Vui lòng scan ít nhất một mã nguyên liệu!');
+        return;
+      }
     }
     
-    if (this.selectedMode === 'giao-hang' && !this.currentReceiveLine) {
-      alert('⚠️ Vui lòng scan Line nhận!');
-      return;
+    if (this.selectedMode === 'giao-hang') {
+      if (!this.currentReceiveLine) {
+        alert('⚠️ Vui lòng scan Line giao!');
+        return;
+      }
+      if (!this.receiverEmployeeId) {
+        alert('⚠️ Vui lòng scan mã nhân viên nhận!');
+        return;
+      }
     }
     
     try {
       const deliveryRecord: DeliveryRecord = {
         mode: this.selectedMode!,
-        employeeId: this.currentEmployeeId,
-        employeeName: this.currentEmployeeName,
+        employeeId: this.selectedMode === 'kiem-tra' ? this.currentEmployeeId : (this.receiverEmployeeId || ''),
+        employeeName: this.selectedMode === 'kiem-tra' ? this.currentEmployeeName : this.receiverEmployeeName,
         lsx: this.currentLsx,
         materials: this.selectedMode === 'kiem-tra' ? this.scannedMaterials : undefined,
         receiveLine: this.selectedMode === 'giao-hang' ? this.currentReceiveLine : undefined,
+        receiverEmployeeId: this.selectedMode === 'giao-hang' ? this.receiverEmployeeId : undefined,
+        receiverEmployeeName: this.selectedMode === 'giao-hang' ? this.receiverEmployeeName : undefined,
+        outboundLines: this.selectedMode === 'giao-hang' ? this.outboundDeliveryRows.map(r => ({
+          materialCode: r.materialCode,
+          poNumber: r.poNumber,
+          quantity: r.quantity,
+          deliveryQuantity: r.deliveryQuantity,
+          deliveryScannedAt: r.deliveryScannedAt
+        })) : undefined,
         timestamp: new Date(),
         createdAt: new Date()
       };
@@ -252,10 +410,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       console.log('✅ Delivery record saved:', deliveryRecord);
       alert('✅ Đã lưu thành công!');
       
-      // Reset form
       this.resetForm();
-      
-      // Reload history
       this.loadDeliveryHistory();
       
     } catch (error) {
@@ -278,6 +433,18 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
     this.scannedMaterials = [];
     this.receiveLineScanInput = '';
     this.currentReceiveLine = '';
+    this.receiverScanInput = '';
+    this.receiverEmployeeId = '';
+    this.receiverEmployeeName = '';
+    this.isReceiverVerified = false;
+    this.outboundDeliveryRows = [];
+    this.deliveryMaterialScanInput = '';
+  }
+  
+  formatDeliveryTime(d: Date | undefined): string {
+    if (!d) return '—';
+    const x = d instanceof Date ? d : new Date(d);
+    return isNaN(x.getTime()) ? '—' : x.toLocaleString('vi-VN');
   }
   
   // Load delivery history
@@ -292,6 +459,10 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       next: (snapshot) => {
         this.deliveryHistory = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
+          const outboundLines = (data.outboundLines || []).map((line: any) => ({
+            ...line,
+            deliveryScannedAt: line.deliveryScannedAt?.toDate?.() || line.deliveryScannedAt
+          }));
           return {
             id: doc.payload.doc.id,
             mode: data.mode,
@@ -300,6 +471,9 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
             lsx: data.lsx,
             materials: data.materials || [],
             receiveLine: data.receiveLine,
+            receiverEmployeeId: data.receiverEmployeeId,
+            receiverEmployeeName: data.receiverEmployeeName,
+            outboundLines,
             timestamp: data.timestamp?.toDate() || new Date(),
             createdAt: data.createdAt?.toDate() || new Date()
           } as DeliveryRecord;

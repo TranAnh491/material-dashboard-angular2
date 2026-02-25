@@ -242,6 +242,54 @@
       }
     }
   }
+  
+  .receiver-info {
+    background: #e3f2fd;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    border-left: 4px solid #2196f3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    
+    .material-icons {
+      color: #2196f3;
+    }
+    
+    strong {
+      font-weight: 600;
+    }
+  }
+  
+  .outbound-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px;
+    color: #666;
+    
+    .material-icons.rotating {
+      animation: spin 1s linear infinite;
+    }
+  }
+  
+  .empty-outbound {
+    text-align: center;
+    padding: 24px;
+    color: #666;
+    
+    .material-icons {
+      font-size: 40px;
+      opacity: 0.5;
+      display: block;
+      margin-bottom: 8px;
+    }
+  }
+}
+
+.materials-table table tbody tr.scanned {
+  background: #e8f5e9 !important;
 }
 
 // Materials List

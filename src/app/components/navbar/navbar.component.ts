@@ -228,6 +228,14 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return currentPath === '/settings';
     }
 
+    isRm1CheckPage(): boolean {
+      var currentPath = this.location.prepareExternalUrl(this.location.path());
+      if(currentPath.charAt(0) === '#'){
+          currentPath = currentPath.slice( 1 );
+      }
+      return currentPath === '/rm1-check';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

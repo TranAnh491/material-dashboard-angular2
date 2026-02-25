@@ -13,7 +13,7 @@
     </div>
   </div>
 
-  <!-- Employee Verification Modal -->
+  <!-- Employee Verification Modal (Kiểm tra) -->
   <div class="modal-overlay" *ngIf="showEmployeeModal && currentStep === 'employee'">
     <div class="modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
@@ -46,8 +46,41 @@
     </div>
   </div>
 
+  <!-- Mã nhân viên nhận (Giao hàng) -->
+  <div class="modal-overlay" *ngIf="showEmployeeModal && currentStep === 'employeeReceiver'">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">person_pin</i>
+          Scan mã nhân viên nhận
+        </h3>
+      </div>
+      <div class="modal-body">
+        <div class="scan-section">
+          <label>
+            <i class="material-icons">qr_code_scanner</i>
+            Quét hoặc nhập mã nhân viên nhận hàng
+          </label>
+          <div class="scan-input-container">
+            <input 
+              type="text" 
+              class="scan-input"
+              [(ngModel)]="receiverScanInput"
+              (keyup.enter)="verifyReceiver()"
+              placeholder="ASP0106"
+              autofocus>
+            <button class="scan-btn" (click)="verifyReceiver()">
+              <i class="material-icons">check</i>
+              Xác nhận
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Content -->
-  <div class="delivery-content" *ngIf="currentStep !== 'employee'">
+  <div class="delivery-content" *ngIf="currentStep !== 'employee' && currentStep !== 'employeeReceiver'">
     
     <!-- Mode Selection -->
     <div class="mode-selection" *ngIf="currentStep === 'mode'">
@@ -76,7 +109,7 @@
     <div class="scan-section" *ngIf="currentStep === 'lsx'">
       <h3>
         <i class="material-icons">description</i>
-        Quét LSX
+        {{ selectedMode === 'giao-hang' ? 'Quét LSX giao' : 'Quét LSX' }}
       </h3>
       <div class="scan-input-container">
         <input 
@@ -160,7 +193,7 @@
     <div class="scan-section" *ngIf="currentStep === 'receiveLine' && selectedMode === 'giao-hang'">
       <h3>
         <i class="material-icons">vertical_align_center</i>
-        Quét Line nhận
+        Scan hoặc nhập tên Line giao
       </h3>
       <div class="scan-input-container">
         <input 
@@ -168,7 +201,7 @@
           class="scan-input"
           [(ngModel)]="receiveLineScanInput"
           (keyup.enter)="onReceiveLineScan()"
-          placeholder="Quét hoặc nhập Line nhận"
+          placeholder="Quét hoặc nhập Line giao"
           autofocus>
         <button class="scan-btn" (click)="onReceiveLineScan()">
           <i class="material-icons">check</i>
@@ -177,11 +210,70 @@
       </div>
       <div class="scan-status" *ngIf="currentReceiveLine">
         <i class="material-icons">check_circle</i>
-        <span>Line nhận: <strong>{{ currentReceiveLine }}</strong></span>
+        <span>Line giao: <strong>{{ currentReceiveLine }}</strong></span>
       </div>
-      
+    </div>
+
+    <!-- Bảng outbound theo LSX + Scan mã/PO/lượng giao (Giao hàng) -->
+    <div class="scan-section" *ngIf="currentStep === 'deliveryScan' && selectedMode === 'giao-hang'">
+      <h3>
+        <i class="material-icons">inventory_2</i>
+        Scan mã, PO, lượng để ghi nhận giao (check 1 lần)
+      </h3>
+      <div class="scan-input-container">
+        <input 
+          type="text" 
+          class="scan-input"
+          [(ngModel)]="deliveryMaterialScanInput"
+          (keyup.enter)="onDeliveryMaterialScan()"
+          placeholder="Mã|PO|Lượng (hoặc quét tem)"
+          autofocus>
+        <button class="scan-btn" (click)="onDeliveryMaterialScan()">
+          <i class="material-icons">add</i>
+          Ghi nhận
+        </button>
+      </div>
+      <div class="receiver-info" *ngIf="receiverEmployeeName">
+        <i class="material-icons">person</i>
+        <span>NV nhận: <strong>{{ receiverEmployeeName }}</strong></span>
+      </div>
+      <div class="outbound-loading" *ngIf="isLoadingOutbound">
+        <i class="material-icons rotating">refresh</i>
+        <span>Đang tải dữ liệu outbound theo LSX...</span>
+      </div>
+      <div class="materials-list" *ngIf="!isLoadingOutbound && outboundDeliveryRows.length > 0">
+        <h4>Danh sách outbound LSX ({{ outboundDeliveryRows.length }}) – Lượng giao / Thời gian</h4>
+        <div class="materials-table">
+          <table>
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã</th>
+                <th>PO</th>
+                <th>Lượng (outbound)</th>
+                <th>Lượng giao</th>
+                <th>Thời gian</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of outboundDeliveryRows; let i = index" [class.scanned]="row.deliveryScannedAt">
+                <td>{{ i + 1 }}</td>
+                <td>{{ row.materialCode }}</td>
+                <td>{{ row.poNumber }}</td>
+                <td>{{ row.quantity }}</td>
+                <td>{{ row.deliveryQuantity ?? '—' }}</td>
+                <td>{{ formatDeliveryTime(row.deliveryScannedAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="empty-outbound" *ngIf="!isLoadingOutbound && outboundDeliveryRows.length === 0">
+        <i class="material-icons">info</i>
+        <p>Không có dữ liệu outbound cho LSX này.</p>
+      </div>
       <div class="action-buttons">
-        <button class="done-btn" (click)="onDone()" [disabled]="!currentReceiveLine">
+        <button class="done-btn" (click)="onDone()">
           <i class="material-icons">check_circle</i>
           Done
         </button>
@@ -209,10 +301,10 @@
           <tr>
             <th>Thời gian</th>
             <th>Chức năng</th>
-            <th>Nhân viên</th>
+            <th>Nhân viên / NV nhận</th>
             <th>LSX</th>
-            <th>Nguyên liệu</th>
-            <th>Line nhận</th>
+            <th>Nguyên liệu / Outbound</th>
+            <th>Line giao</th>
           </tr>
         </thead>
         <tbody>
@@ -223,13 +315,12 @@
                 {{ record.mode === 'kiem-tra' ? 'Kiểm tra' : 'Giao hàng' }}
               </span>
             </td>
-            <td>{{ record.employeeName || record.employeeId }}</td>
+            <td>{{ record.mode === 'giao-hang' ? (record.receiverEmployeeName || record.receiverEmployeeId || record.employeeName || record.employeeId) : (record.employeeName || record.employeeId) }}</td>
             <td>{{ record.lsx }}</td>
             <td>
-              <span *ngIf="record.materials && record.materials.length > 0">
-                {{ record.materials.length }} mã
-              </span>
-              <span *ngIf="!record.materials || record.materials.length === 0">-</span>
+              <span *ngIf="record.materials && record.materials.length > 0">{{ record.materials.length }} mã</span>
+              <span *ngIf="record.outboundLines && record.outboundLines.length > 0">{{ record.outboundLines.length }} dòng</span>
+              <span *ngIf="(!record.materials || record.materials.length === 0) && (!record.outboundLines || record.outboundLines.length === 0)">-</span>
             </td>
             <td>{{ record.receiveLine || '-' }}</td>
           </tr>
