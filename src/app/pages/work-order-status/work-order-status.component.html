@@ -36,6 +36,15 @@
                   <button mat-raised-button color="accent" (click)="showAllWorkOrders()" class="btn btn-outline-warning">
                     <mat-icon>visibility</mat-icon> Hiển thị tất cả
                   </button>
+                  <span style="margin-left:12px;color:#999;">|</span>
+                  <button class="btn btn-outline-secondary" (click)="downloadPxkTemplate()" style="color: #607d8b;"
+                          title="Tải form mẫu import PXK">
+                    <i class="material-icons">download</i> Tải form PXK
+                  </button>
+                  <button class="btn btn-outline-warning" (click)="clearPxkImportedData()" [disabled]="isClearingPxk"
+                          style="color: #ff9800;" title="Xóa dữ liệu PXK đã import để import lại">
+                    <i class="material-icons">delete_sweep</i> Xóa dữ liệu PXK
+                  </button>
                 </div>
                 
                 <div class="import-info">
@@ -459,7 +468,7 @@
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;" [style.color]="hasPxkForWorkOrder(wo) ? '#2e7d32' : ''" [style.fontWeight]="hasPxkForWorkOrder(wo) ? '600' : ''">{{wo.productionOrder}}</td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <button class="print-qr-btn" (click)="openPrintOptionDialog(wo)" title="In QR Code / PXK">
+                            <button class="print-qr-btn" [class.pxk-imported]="hasPxkForWorkOrder(wo)" (click)="openPrintOptionDialog(wo)" title="In QR Code / PXK">
                               <i class="material-icons">print</i>
                               Print
                             </button>

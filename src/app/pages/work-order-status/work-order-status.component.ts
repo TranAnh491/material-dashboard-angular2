@@ -145,6 +145,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   // PXK Import
   pxkDataByLsx: PxkDataByLsx = {};
   isImportingPxk: boolean = false;
+  isClearingPxk: boolean = false;
   
   
 
@@ -316,6 +317,34 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       console.log('[PXK] Đã load từ Firebase:', Object.keys(this.pxkDataByLsx).length, 'LSX');
     } catch (e) {
       console.warn('[PXK] Không load được từ Firebase:', e);
+    }
+  }
+
+  /** Xóa toàn bộ dữ liệu PXK đã import (bộ nhớ + Firebase) để import lại */
+  async clearPxkImportedData(): Promise<void> {
+    const count = Object.keys(this.pxkDataByLsx).length;
+    if (count === 0) {
+      alert('Chưa có dữ liệu PXK nào được import.');
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn xóa toàn bộ dữ liệu PXK đã import (${count} LSX)?\nSau khi xóa có thể import lại file PXK mới.`)) {
+      return;
+    }
+    this.isClearingPxk = true;
+    try {
+      const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
+      for (const docSnap of snapshot.docs) {
+        await this.firestore.collection('pxk-import-data').doc(docSnap.id).delete();
+      }
+      this.pxkDataByLsx = {};
+      this.calculateSummary();
+      this.cdr.detectChanges();
+      alert(`Đã xóa dữ liệu PXK (${count} LSX). Bạn có thể import lại file PXK.`);
+    } catch (e) {
+      console.error('[PXK] Lỗi khi xóa:', e);
+      alert('Lỗi khi xóa dữ liệu PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+    } finally {
+      this.isClearingPxk = false;
     }
   }
   
@@ -1763,6 +1792,31 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     alert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
+  /** Tải form mẫu import PXK - A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Số lượng xuất thực tế, H=Đvt */
+  downloadPxkTemplate(): void {
+    const templateData = [
+      ['Mã Ctừ', 'Số Ctừ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã vật tư', 'Số PO', 'Số lượng xuất thực tế', 'Đvt'],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 1054.58, 'M'],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 100, 'PCS']
+    ];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    worksheet['!cols'] = [
+      { wch: 12 }, // Mã Ctừ
+      { wch: 12 }, // Số Ctừ
+      { wch: 22 }, // Số lệnh sản xuất
+      { wch: 15 }, // Mã sản phẩm
+      { wch: 15 }, // Mã vật tư
+      { wch: 12 }, // Số PO
+      { wch: 22 }, // Số lượng xuất thực tế
+      { wch: 8 }   // Đvt
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
+    const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, filename);
+    alert(`✅ Đã tải xuống form PXK: ${filename}`);
+  }
+
   // Selection functionality methods
   isSelected(workOrder: WorkOrder): boolean {
     return this.selectedWorkOrders.some(wo => wo.id === workOrder.id);
@@ -3124,29 +3178,41 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       let headerRowIndex = -1;
       for (let r = 0; r < Math.min(20, rows.length); r++) {
         const rowHeaders = (rows[r] || []).map((h: any) => String(h || '').trim());
+        const cellC = norm((rowHeaders[2] || '').trim());
+        if (r <= 1 && (cellC.includes('so lenh san xuat') || cellC.includes('lsx'))) {
+          headerRowIndex = r;
+          break;
+        }
         if (hasRequiredHeaders(rowHeaders)) {
           headerRowIndex = r;
           break;
         }
       }
       console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
-      const COL_C = 2, COL_E = 4, COL_I = 8, COL_N = 13, COL_Q = 16, COL_Z = 25;
+      // Format: A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Số lượng xuất thực tế, H=Đvt
+      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
       let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number;
-      idxSoLenhSX = COL_E;
-      idxMaVatTu = COL_I;
-      idxSoLuongXTT = COL_N;
-      idxDvt = COL_Q;
-      idxSoPO = COL_Z;
+      idxMaCtu = COL_A;
+      idxSoChungTu = COL_B;
+      idxSoLenhSX = COL_C;
+      idxMaVatTu = COL_E;
+      idxSoPO = COL_F;
+      idxSoLuongXTT = COL_G;
+      idxDvt = COL_H;
       if (headerRowIndex >= 0) {
         const headers = (rows[headerRowIndex] || []).map((h: any) => String(h || '').trim());
-        idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu', 'Mã chứng từ', 'Ma chung tu', 'Chứng từ');
-        if (idxMaCtu < 0) idxMaCtu = 0;
-        idxSoChungTu = COL_C; // Luôn lấy số chứng từ ở cột C
+        idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') >= 0 ? colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') : COL_A;
+        idxSoChungTu = colIdx(headers, 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') >= 0 ? colIdx(headers, 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') : COL_B;
+        idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') : COL_C;
+        idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_E;
+        idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_F;
+        idxSoLuongXTT = colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_G;
+        idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_H;
       } else {
         headerRowIndex = 0;
-        idxMaCtu = 0;
-        idxSoChungTu = COL_C;
+        idxMaCtu = COL_A;
+        idxSoChungTu = COL_B;
       }
       const allWo = [...this.workOrders, ...(this.filteredWorkOrders || [])];
       const woLsxList = [...new Set(allWo.map(wo => String(wo.productionOrder || '').trim()).filter(Boolean))];
@@ -3175,9 +3241,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const getFullLsxFromCell = (val: any): string => {
         if (val == null || val === '') return '';
         if (typeof val === 'string') return val.trim();
-        if (typeof val === 'number' && !Number.isInteger(val) && val < 1 && val > 0) return '';
+        if (typeof val === 'number' && val >= 0 && val < 1 && !Number.isInteger(val)) return '';
         return String(val).trim();
       };
+      /** Chuẩn LSX: 5 chữ cái + 4 số + / + 4 số (ví dụ: KZLSX0326/0089) - không đúng thì không tính */
+      const isValidLsxFormat = (s: string): boolean => /^[A-Za-z]{5}\d{4}\/\d{4}$/.test(String(s || '').trim());
+      /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number) => {
         const out: PxkDataByLsx = {};
         let cnt = 0;
@@ -3187,9 +3256,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           if (v !== 'PX' && !v.includes('PX') && !v.includes('PHIEU XUAT') && !v.includes('PHIẾU XUẤT')) continue;
           cnt++;
           const pxkLsxRaw = getFullLsxFromCell(row[lsxCol]);
-          const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || (pxkLsxRaw || null);
-          if (!matchedLsx) continue;
-          const storeKey = pxkLsxRaw && (pxkLsxRaw.includes('KZLSX') || pxkLsxRaw.includes('/') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+          if (!pxkLsxRaw) continue;
+          if (!isValidLsxFormat(pxkLsxRaw)) continue;
+          const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
+          const storeKey = (pxkLsxRaw.includes('KZLSX') || pxkLsxRaw.includes('/') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
           const soChungTu = String(row[soChungTuCol] ?? '').trim();
           const materialCode = String(row[vatTuCol] ?? '').trim();
           const qtyRaw = row[qtyCol];
@@ -3249,7 +3319,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
       if (total === 0) {
         if (rowsWithPx > 0) {
-          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không khớp LSX.\nWork Order LSX mẫu: ${woLsxList.slice(0, 5).join(', ')}\nPXK LSX mẫu: ${pxkLsxSamples.join(', ')}\nMở Console (F12) để xem chi tiết.`);
+          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format (5 chữ cái + 4 số + / + 4 số, ví dụ: KZLSX0326/0089).\nCác dòng LSX không đúng format đã được bỏ qua.\nCột LSX đang đọc: cột C.`);
         } else if (rows.length > dataStartRow) {
           alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
         } else {
@@ -3377,6 +3447,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   async printPxk(workOrder: WorkOrder): Promise<void> {
+    try {
     const lines = this.getPxkLinesForLsx(workOrder.productionOrder || '');
     if (lines.length === 0) {
       alert('Chưa có dữ liệu PXK cho LSX ' + workOrder.productionOrder + '. Vui lòng import file PXK trước.');
@@ -3522,6 +3593,12 @@ ${headerSection}
     if (w) {
       w.document.write(html);
       w.document.close();
+    } else {
+      alert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này (hoặc bấm Ctrl+P để in trang hiện tại).');
+    }
+    } catch (err) {
+      console.error('Lỗi khi in PXK:', err);
+      alert('Lỗi khi in PXK: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
     }
   }
 
