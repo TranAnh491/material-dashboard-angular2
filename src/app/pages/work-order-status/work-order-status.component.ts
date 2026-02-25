@@ -320,26 +320,47 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Xóa toàn bộ dữ liệu PXK đã import (bộ nhớ + Firebase) để import lại */
+  /** Xóa dữ liệu PXK theo LSX (nhập LSX cần xóa) */
   async clearPxkImportedData(): Promise<void> {
-    const count = Object.keys(this.pxkDataByLsx).length;
-    if (count === 0) {
-      alert('Chưa có dữ liệu PXK nào được import.');
+    const input = prompt('Nhập LSX cần xóa dữ liệu PXK:');
+    if (input == null || input === undefined) return;
+    const lsxToDelete = String(input).trim();
+    if (!lsxToDelete) {
+      alert('Chưa nhập LSX.');
       return;
     }
-    if (!confirm(`Bạn có chắc muốn xóa toàn bộ dữ liệu PXK đã import (${count} LSX)?\nSau khi xóa có thể import lại file PXK mới.`)) {
+    const normLsx = (s: string): string => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const targetNorm = normLsx(lsxToDelete);
+    if (!targetNorm) {
+      alert('LSX không đúng format (ví dụ: KZLSX0326/0089 hoặc 0326/0089).');
       return;
     }
     this.isClearingPxk = true;
     try {
       const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
-      for (const docSnap of snapshot.docs) {
-        await this.firestore.collection('pxk-import-data').doc(docSnap.id).delete();
+      const toDelete: { id: string; lsx: string }[] = [];
+      snapshot.docs.forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const docLsx = String(d?.lsx || '').trim();
+        if (normLsx(docLsx) === targetNorm) toDelete.push({ id: docSnap.id, lsx: docLsx });
+      });
+      if (toDelete.length === 0) {
+        alert(`Không tìm thấy dữ liệu PXK cho LSX: ${lsxToDelete}`);
+        return;
       }
-      this.pxkDataByLsx = {};
+      for (const { id } of toDelete) {
+        await this.firestore.collection('pxk-import-data').doc(id).delete();
+      }
+      Object.keys(this.pxkDataByLsx).forEach(k => {
+        if (normLsx(k) === targetNorm) delete this.pxkDataByLsx[k];
+      });
       this.calculateSummary();
       this.cdr.detectChanges();
-      alert(`Đã xóa dữ liệu PXK (${count} LSX). Bạn có thể import lại file PXK.`);
+      alert(`Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
     } catch (e) {
       console.error('[PXK] Lỗi khi xóa:', e);
       alert('Lỗi khi xóa dữ liệu PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
@@ -3510,6 +3531,30 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.warn('Không load được Lượng Scan từ outbound:', e);
     }
     const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
+    let nhanVienGiaoNhanStr = '-';
+    try {
+      const normLsxForDelivery = (s: string) => {
+        const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+        return m ? m[1].replace(/[-.]/g, '/') : t;
+      };
+      const woLsxNorm = normLsxForDelivery(lsx);
+      const deliverySnapshot = await firstValueFrom(this.firestore.collection('rm1-delivery-records', ref =>
+        ref.where('mode', '==', 'giao-hang').orderBy('timestamp', 'desc').limit(30)
+      ).get());
+      for (const doc of deliverySnapshot.docs) {
+        const d = doc.data() as any;
+        const docLsxNorm = normLsxForDelivery(d.lsx || '');
+        if (docLsxNorm && docLsxNorm === woLsxNorm) {
+          const giao = (d.employeeName || d.employeeId || '').trim() || '-';
+          const nhan = (d.receiverEmployeeName || d.receiverEmployeeId || '').trim() || '-';
+          nhanVienGiaoNhanStr = (giao !== '-' || nhan !== '-') ? `${giao} / ${nhan}` : '-';
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Không load được Nhân viên Giao/Nhận từ RM1 Delivery:', e);
+    }
     const getScanQty = (materialCode: string, po: string): number =>
       scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
@@ -3520,6 +3565,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
     const soChungTuList = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
     const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
+    const nonRLines = sortedLines.filter(l => String(l.materialCode || '').trim().toUpperCase().charAt(0) !== 'R');
+    const allScanZero = nonRLines.length === 0 || nonRLines.every(l => getScanQty(l.materialCode, l.po) === 0);
     const rowsHtml = sortedLines.map((l, i) => {
       const stt = i + 1;
       const matCode = String(l.materialCode || '').trim();
@@ -3527,8 +3574,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const location = getLocation(l.materialCode, l.po);
       const qtyStr = this.formatQuantityForPxk(l.quantity);
       const scanQty = isR ? 0 : getScanQty(l.materialCode, l.po);
-      const scanQtyStr = isR ? '' : this.formatQuantityForPxk(scanQty);
-      const soSanh = isR ? '' : getSoSanh(l.quantity, scanQty);
+      const scanQtyStr = (allScanZero && !isR) ? '' : (isR ? '' : this.formatQuantityForPxk(scanQty));
+      const soSanh = (allScanZero && !isR) ? '' : (isR ? '' : getSoSanh(l.quantity, scanQty));
       const soCt = (l.soChungTu || '').trim() || '-';
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
@@ -3563,9 +3610,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     ${lsxBox}
   </div>
   <div style="${rowStyle}">
-    ${infoBox('Nhân Viên Soạn', this.escapeHtmlForPrint(nhanVienSoanStr))}
-    ${soChungTuBox}
     ${infoBox('Nhà máy', this.escapeHtmlForPrint(factory))}
+    ${soChungTuBox}
+    ${infoBox('Nhân Viên Soạn', this.escapeHtmlForPrint(nhanVienSoanStr))}
+    ${infoBox('Nhân viên Giao và Nhận', this.escapeHtmlForPrint(nhanVienGiaoNhanStr))}
   </div>
 </div>`;
     const html = `
