@@ -1,0 +1,135 @@
+<div class="dsf-modal">
+
+  <!-- Header -->
+  <div class="dsf-header">
+    <div class="dsf-title">
+      <i class="material-icons">local_shipping</i>
+      <span>Giao Hàng</span>
+    </div>
+    <button class="dsf-close" (click)="closeModal()" title="Đóng">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+
+  <!-- 4 Step Boxes -->
+  <div class="dsf-steps">
+
+    <div class="step-box"
+         [class.active]="currentStep === 'nvGiao'"
+         [class.done]="nvGiaoId">
+      <i class="material-icons step-icon">{{ nvGiaoId ? 'check_circle' : 'person' }}</i>
+      <span class="step-name">NV Giao</span>
+      <span class="step-val" *ngIf="nvGiaoId">{{ nvGiaoId }}</span>
+    </div>
+
+    <div class="step-box"
+         [class.active]="currentStep === 'nvNhan'"
+         [class.done]="nvNhanId">
+      <i class="material-icons step-icon">{{ nvNhanId ? 'check_circle' : 'person_outline' }}</i>
+      <span class="step-name">NV Nhận</span>
+      <span class="step-val" *ngIf="nvNhanId">{{ nvNhanId }}</span>
+    </div>
+
+    <div class="step-box"
+         [class.active]="currentStep === 'lsx'"
+         [class.done]="lsx">
+      <i class="material-icons step-icon">{{ lsx ? 'check_circle' : 'assignment' }}</i>
+      <span class="step-name">LSX</span>
+      <span class="step-val" *ngIf="lsx">{{ lsx }}</span>
+    </div>
+
+    <div class="step-box"
+         [class.active]="currentStep === 'lineNhan'"
+         [class.done]="lineNhan">
+      <i class="material-icons step-icon">{{ lineNhan ? 'check_circle' : 'account_tree' }}</i>
+      <span class="step-name">Line</span>
+      <span class="step-val" *ngIf="lineNhan">{{ lineNhan }}</span>
+    </div>
+
+  </div>
+
+  <!-- Scan body (scrollable) -->
+  <div class="dsf-body">
+
+    <!-- Hướng dẫn bước hiện tại -->
+    <div class="step-hint">
+      <i class="material-icons">keyboard_return</i>
+      <span>{{ stepLabel }}</span>
+    </div>
+
+    <!-- Thông báo lỗi -->
+    <div class="error-bar" *ngIf="errorMessage">
+      <i class="material-icons">error_outline</i>
+      <span>{{ errorMessage }}</span>
+    </div>
+
+    <!-- Input scan -->
+    <div class="scan-row">
+      <input
+        #scanInput
+        type="text"
+        class="scan-input"
+        [(ngModel)]="scanValue"
+        (keyup.enter)="onScan()"
+        placeholder="Chờ máy scanner..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="btn-ok" (click)="onScan()" [disabled]="!scanValue.trim()">
+        <i class="material-icons">check</i>
+      </button>
+    </div>
+
+    <!-- Bảng PXK + scan check hàng (sau khi đã quét Line nhận) -->
+    <ng-container *ngIf="isCheckHangStep">
+
+      <div class="pxk-loading" *ngIf="isLoadingPxk">
+        <i class="material-icons spin">refresh</i>
+        <span>Đang tải danh sách PXK...</span>
+      </div>
+
+      <div class="pxk-wrap" *ngIf="!isLoadingPxk && pxkRows.length > 0">
+        <div class="pxk-label">PXK – {{ pxkRows.length }} dòng</div>
+        <div class="pxk-table-scroll">
+          <table class="pxk-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mã hàng</th>
+                <th>PO</th>
+                <th>SL PXK</th>
+                <th>SL Check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of pxkRows; let i = index"
+                  [class.row-scanned]="(row.checkQuantity ?? 0) > 0">
+                <td>{{ i + 1 }}</td>
+                <td>{{ row.materialCode }}</td>
+                <td>{{ row.poNumber }}</td>
+                <td>{{ row.quantity }}</td>
+                <td class="col-check">{{ row.checkQuantity != null ? row.checkQuantity : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pxk-empty" *ngIf="!isLoadingPxk && pxkRows.length === 0">
+        <i class="material-icons">info_outline</i>
+        <span>Không có dữ liệu PXK cho LSX này</span>
+      </div>
+
+    </ng-container>
+
+  </div>
+
+  <!-- Footer: nút Hoàn thành (chỉ ở bước check hàng) -->
+  <div class="dsf-footer" *ngIf="isCheckHangStep">
+    <button class="btn-done" (click)="onDone()">
+      <i class="material-icons">check_circle</i>
+      Hoàn thành
+    </button>
+  </div>
+
+</div>

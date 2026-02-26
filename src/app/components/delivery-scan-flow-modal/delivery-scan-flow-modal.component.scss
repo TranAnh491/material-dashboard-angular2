@@ -1,0 +1,355 @@
+// =====================================================
+// DeliveryScanFlowModal – giao diện tối ưu mobile/tablet
+// =====================================================
+
+.dsf-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 88vh;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+// ---- Header ----
+.dsf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+
+  .dsf-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+
+    .material-icons {
+      font-size: 22px;
+      color: #3b82f6;
+    }
+  }
+
+  .dsf-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    touch-action: manipulation;
+    min-width: 36px;
+    min-height: 36px;
+
+    .material-icons { font-size: 22px; }
+    &:hover, &:active { background: #f1f5f9; }
+  }
+}
+
+// ---- 4 Step Boxes ----
+.dsf-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 10px 12px 8px;
+  flex-shrink: 0;
+
+  .step-box {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 4px 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: #f8fafc;
+    transition: border-color 0.2s, background 0.2s;
+    overflow: hidden;
+
+    .step-icon {
+      font-size: 22px;
+      color: #94a3b8;
+      transition: color 0.2s;
+    }
+
+    .step-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+
+    .step-val {
+      font-size: 9px;
+      font-weight: 600;
+      color: #475569;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+      padding: 0 2px;
+    }
+
+    // --- Active (đang scan bước này) ---
+    &.active {
+      border-color: #3b82f6;
+      background: #eff6ff;
+
+      .step-icon { color: #3b82f6; }
+      .step-name { color: #1d4ed8; }
+    }
+
+    // --- Done (đã quét xong, màu xanh lá) ---
+    &.done {
+      border-color: #22c55e;
+      background: #f0fdf4;
+
+      .step-icon { color: #22c55e; }
+      .step-name { color: #15803d; }
+      .step-val  { color: #166534; }
+    }
+  }
+}
+
+// ---- Body (scrollable) ----
+.dsf-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  // Hướng dẫn bước hiện tại
+  .step-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-left: 3px solid #3b82f6;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+
+    .material-icons { font-size: 17px; color: #3b82f6; flex-shrink: 0; }
+  }
+
+  // Error bar
+  .error-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 9px 12px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+
+    .material-icons { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  }
+
+  // Scan input row
+  .scan-row {
+    display: flex;
+    gap: 8px;
+
+    .scan-input {
+      flex: 1;
+      padding: 13px 14px;
+      font-size: 16px;
+      font-weight: 600;
+      border: 2px solid #1e293b;
+      border-radius: 8px;
+      outline: none;
+      text-align: center;
+      color: #000;
+      background: #f9f9f9;
+      min-height: 50px;
+      transition: border-color 0.2s, background 0.2s;
+
+      &::placeholder {
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 400;
+        letter-spacing: 0;
+      }
+
+      &:focus {
+        border-color: #2563eb;
+        background: #ffffff;
+      }
+    }
+
+    .btn-ok {
+      background: #1e293b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0 16px;
+      min-height: 50px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      touch-action: manipulation;
+      flex-shrink: 0;
+      transition: background 0.2s;
+
+      .material-icons { font-size: 22px; }
+      &:hover, &:active { background: #334155; }
+      &:disabled { background: #cbd5e1; cursor: not-allowed; }
+    }
+  }
+
+  // PXK loading
+  .pxk-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-size: 13px;
+    padding: 8px 0;
+
+    .spin { animation: spin 1s linear infinite; color: #3b82f6; }
+  }
+
+  // PXK wrapper
+  .pxk-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .pxk-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .pxk-table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+
+      .pxk-table {
+        width: 100%;
+        min-width: 340px;
+        border-collapse: collapse;
+        font-size: 12px;
+
+        thead th {
+          padding: 8px 8px;
+          background: #f8fafc;
+          font-weight: 700;
+          color: #334155;
+          text-align: left;
+          border-bottom: 1px solid #e2e8f0;
+          white-space: nowrap;
+          font-size: 11px;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+
+        tbody td {
+          padding: 8px 8px;
+          color: #1e293b;
+          border-bottom: 1px solid #f1f5f9;
+          font-size: 12px;
+        }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        tbody tr.row-scanned td {
+          background: #f0fdf4;
+          color: #166534;
+        }
+
+        tbody tr:hover:not(.row-scanned) td { background: #f8fafc; }
+
+        .col-check {
+          font-weight: 700;
+          text-align: center;
+        }
+      }
+    }
+  }
+
+  // Empty PXK
+  .pxk-empty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 13px;
+    padding: 10px 0;
+
+    .material-icons { font-size: 18px; }
+  }
+}
+
+// ---- Footer ----
+.dsf-footer {
+  padding: 10px 14px 12px;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+
+  .btn-done {
+    width: 100%;
+    background: #16a34a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 50px;
+    touch-action: manipulation;
+    transition: background 0.2s;
+
+    .material-icons { font-size: 22px; }
+    &:hover, &:active { background: #15803d; }
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// Responsive – tablet+ (min 480px)
+@media (min-width: 480px) {
+  .dsf-steps .step-box {
+    padding: 10px 6px 8px;
+
+    .step-icon { font-size: 26px; }
+    .step-name { font-size: 12px; }
+    .step-val  { font-size: 10px; }
+  }
+
+  .dsf-body {
+    padding: 12px 18px 14px;
+
+    .scan-row .scan-input { font-size: 18px; }
+  }
+}

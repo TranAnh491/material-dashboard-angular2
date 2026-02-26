@@ -14,14 +14,15 @@
   // Modal Header
   .modal-header {
     display: flex;
-    justify-content: center; // Center the title
+    justify-content: space-between;
     align-items: center;
     padding: 12px 20px;
     border-bottom: 1px solid #e0e0e0;
     background: #ffffff;
     border-radius: 8px 8px 0 0;
     margin: 10px 10px 0 10px;
-    
+    position: relative;
+
     h2 {
       margin: 0;
       display: flex;
@@ -30,16 +31,32 @@
       font-size: 18px;
       font-weight: 600;
       color: #000000;
-      
+
       .material-icons {
         font-size: 24px;
         color: #000000;
       }
     }
-    
+
+    .btn-close-x {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      color: #333;
+
+      .material-icons {
+        font-size: 28px;
+      }
+
+      &:hover {
+        background: #f5f5f5;
+      }
+    }
+
     .close-btn {
       color: #666666;
-      
+
       &:hover {
         background: #f5f5f5;
       }

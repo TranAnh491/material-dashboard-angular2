@@ -1,0 +1,39 @@
+<div class="scanner-input-modal">
+  <!-- Header -->
+  <div class="modal-header">
+    <h2>
+      <i class="material-icons">barcode_reader</i>
+      {{ data.title }}
+    </h2>
+    <button class="btn-close-x" (click)="closeModal()" title="Đóng">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div class="modal-body">
+    <div class="scanner-icon-area">
+      <i class="material-icons scanner-icon">barcode_reader</i>
+    </div>
+
+    <p class="message">{{ data.message || 'Đưa máy scanner vào ô bên dưới và quét mã' }}</p>
+
+    <div class="input-wrapper">
+      <input
+        #scanInput
+        type="text"
+        class="scan-input"
+        [(ngModel)]="scanValue"
+        (keyup.enter)="onConfirm()"
+        placeholder="Chờ máy scanner..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <button class="confirm-btn" (click)="onConfirm()" [disabled]="!scanValue.trim()">
+      <i class="material-icons">check_circle</i>
+      Xác nhận
+    </button>
+  </div>
+</div>

@@ -17,6 +17,8 @@ import { DeleteConfirmationDialogComponent } from './delete-confirmation-dialog/
 import { NotificationDropdownComponent } from './notification-dropdown/notification-dropdown.component';
 import { ImportProgressDialogComponent } from './import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.component';
+import { ScannerInputModalComponent } from './scanner-input-modal/scanner-input-modal.component';
+import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/delivery-scan-flow-modal.component';
 
 @NgModule({
   imports: [
@@ -38,7 +40,9 @@ import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.com
     DeleteConfirmationDialogComponent,
     NotificationDropdownComponent,
     ImportProgressDialogComponent,
-    QRScannerModalComponent
+    QRScannerModalComponent,
+    ScannerInputModalComponent,
+    DeliveryScanFlowModalComponent
   ],
   exports: [
     FooterComponent,
@@ -47,7 +51,9 @@ import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.com
     DeleteConfirmationDialogComponent,
     NotificationDropdownComponent,
     ImportProgressDialogComponent,
-    QRScannerModalComponent
+    QRScannerModalComponent,
+    ScannerInputModalComponent,
+    DeliveryScanFlowModalComponent
   ]
 })
 export class ComponentsModule { }

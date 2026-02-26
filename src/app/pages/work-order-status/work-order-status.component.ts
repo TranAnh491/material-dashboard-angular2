@@ -3540,28 +3540,46 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
     let nhanVienGiaoStr = '-';
     let nhanVienNhanStr = '-';
+    const deliveryQtyMap = new Map<string, number>(); // materialCode|PO → checkQuantity
     try {
-      const normLsxForDelivery = (s: string) => {
-        const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-        return m ? m[1].replace(/[-.]/g, '/') : t;
-      };
-      const woLsxNorm = normLsxForDelivery(lsx);
       const deliverySnapshot = await firstValueFrom(this.firestore.collection('rm1-delivery-records', ref =>
-        ref.where('mode', '==', 'giao-hang').orderBy('timestamp', 'desc').limit(30)
+        ref.where('lsx', '==', lsx)
       ).get());
-      for (const doc of deliverySnapshot.docs) {
-        const d = doc.data() as any;
-        const docLsxNorm = normLsxForDelivery(d.lsx || '');
-        if (docLsxNorm && docLsxNorm === woLsxNorm) {
-          nhanVienGiaoStr = (d.employeeName || d.employeeId || '').trim() || '-';
-          nhanVienNhanStr = (d.receiverEmployeeName || d.receiverEmployeeId || '').trim() || '-';
-          break;
+      // Nếu không tìm thấy, thử normalize LSX
+      let deliveryDoc: any = null;
+      if (!deliverySnapshot.empty) {
+        deliveryDoc = deliverySnapshot.docs[0].data() as any;
+      } else {
+        // Thử tìm bằng cách normalize LSX (loại bỏ khoảng trắng, uppercase)
+        const normLsx = lsx.trim().toUpperCase();
+        const allDeliverySnap = await firstValueFrom(this.firestore.collection('rm1-delivery-records').get());
+        for (const doc of allDeliverySnap.docs) {
+          const d = doc.data() as any;
+          if ((d.lsx || '').trim().toUpperCase() === normLsx) {
+            deliveryDoc = d;
+            break;
+          }
         }
       }
+      if (deliveryDoc) {
+        nhanVienGiaoStr = (deliveryDoc.employeeName || deliveryDoc.employeeId || '').trim() || '-';
+        nhanVienNhanStr = (deliveryDoc.receiverEmployeeName || deliveryDoc.receiverEmployeeId || '').trim() || '-';
+        // Build delivery qty map từ pxkLines
+        (deliveryDoc.pxkLines || []).forEach((line: any) => {
+          const mat = String(line.materialCode || '').trim().toUpperCase();
+          const po  = String(line.poNumber || line.po || '').trim();
+          const qty = Number(line.checkQuantity ?? 0);
+          if (mat && po) {
+            const key = `${mat}|${po}`;
+            deliveryQtyMap.set(key, (deliveryQtyMap.get(key) || 0) + qty);
+          }
+        });
+      }
     } catch (e) {
-      console.warn('Không load được Nhân viên Giao/Nhận từ RM1 Delivery:', e);
+      console.warn('Không load được dữ liệu Delivery từ RM1 Delivery:', e);
     }
+    const getDeliveryQty = (materialCode: string, po: string): number =>
+      deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getScanQty = (materialCode: string, po: string): number =>
       scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
@@ -3569,11 +3587,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const diff = xuất - scan;
       return 'Thiếu ' + this.formatQuantityForPxk(diff);
     };
-    const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
-    const soChungTuList = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
+    // Loại bỏ mã bắt đầu bằng B033 trước khi in
+    const filteredLines = lines.filter(l => {
+      const code = String(l.materialCode || '').trim().toUpperCase();
+      return !code.startsWith('B033');
+    });
+    const sortedLines = [...filteredLines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+    const soChungTuList = [...new Set(filteredLines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
     const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
     const nonRLines = sortedLines.filter(l => String(l.materialCode || '').trim().toUpperCase().charAt(0) !== 'R');
     const allScanZero = nonRLines.length === 0 || nonRLines.every(l => getScanQty(l.materialCode, l.po) === 0);
+    const allDeliveryZero = nonRLines.every(l => getDeliveryQty(l.materialCode, l.po) === 0);
     const rowsHtml = sortedLines.map((l, i) => {
       const stt = i + 1;
       const matCode = String(l.materialCode || '').trim();
@@ -3584,6 +3608,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const scanQtyStr = (allScanZero && !isR) ? '' : (isR ? '' : this.formatQuantityForPxk(scanQty));
       const soSanh = (allScanZero && !isR) ? '' : (isR ? '' : getSoSanh(l.quantity, scanQty));
       const soCt = (l.soChungTu || '').trim() || '-';
+      // Cột Delivery: lấy checkQuantity từ RM1 Delivery theo materialCode + PO
+      const deliveryQty = isR ? 0 : getDeliveryQty(l.materialCode, l.po);
+      const deliveryQtyStr = (allDeliveryZero || isR) ? '' : this.formatQuantityForPxk(deliveryQty);
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soCt)}</td>
@@ -3591,26 +3618,25 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.unit)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${qtyStr}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(location)}</td>
+        <td class="col-vitri" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(location)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soSanh)}</td>
-        <td style="border:1px solid #000;padding:6px;"></td>
+        <td style="border:1px solid #000;padding:6px;text-align:right;">${deliveryQtyStr}</td>
       </tr>`;
     }).join('');
     const deliveryDateStr = workOrder.deliveryDate
       ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
       : '-';
-    const boxSize = '140px';
-    const boxStyle = `width:${boxSize};height:${boxSize};border:1px solid #000;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:10px;box-sizing:border-box;flex-shrink:0`;
+    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:10px;box-sizing:border-box`;
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong>${label}</strong><span style="margin-top:4px;word-break:break-all;line-height:1.2;">${value}</span></div>`;
     const lsxBox = `<div style="${boxStyle}"><strong>LSX</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lsx)}</span>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
     const lineNhanBox = `<div style="${boxStyle}"><strong>Line Nhận</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lineNhan)}</span>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
     const soChungTuBox = `<div style="${boxStyle}"><strong>Số Chứng Từ</strong><span style="margin-top:4px;word-break:break-all;line-height:1.4;font-size:9px;">${soChungTuDisplay}</span></div>`;
     const emptyBox = `<div style="${boxStyle}"></div>`;
-    const rowStyle = 'display:flex;flex-direction:row;gap:8px;justify-content:flex-start;align-items:flex-start;margin-bottom:8px';
+    const rowStyle = 'display:flex;flex-direction:row;gap:8px;width:100%;margin-bottom:8px';
     const headerSection = `
-<div style="margin-bottom:16px;">
+<div style="margin-bottom:16px;width:100%;box-sizing:border-box;">
   <div style="${rowStyle}">
     ${infoBox('Mã TP VN', this.escapeHtmlForPrint(workOrder.productCode || '-'))}
     ${infoBox('Ngày giao NVL', deliveryDateStr)}
@@ -3636,12 +3662,13 @@ body{font-family:Arial,sans-serif;padding:10mm;color:#000;font-size:12px}
 h2{margin-bottom:12px;font-size:16px}
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
-.pxk-table th{background:#f0f0f0;font-weight:bold}
+.pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
+.pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:120px;width:12%}
 </style></head><body>
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th>Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Delivery</th></tr></thead>
+<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Delivery</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 <p style="margin-top:16px;font-size:11px;">Ngày in: ${new Date().toLocaleString('vi-VN')}</p>

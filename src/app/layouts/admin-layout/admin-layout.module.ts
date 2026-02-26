@@ -37,6 +37,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatMenuModule } from '@angular/material/menu';
 import { SharedModule } from '../../shared/shared.module';
+import { ComponentsModule } from '../../components/components.module';
 import { InventoryOverviewASM1Module } from '../../pages/inventory-overview-asm1/inventory-overview-asm1.module';
 import { InventoryOverviewASM2Module } from '../../pages/inventory-overview-asm2/inventory-overview-asm2.module';
 
@@ -99,6 +100,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     MatMenuModule,
     DragDropModule,
     SharedModule,
+    ComponentsModule,
     InventoryOverviewASM1Module,
     InventoryOverviewASM2Module
   ],

@@ -58,3 +58,11 @@ html, body {
 div, section, main, article, aside {
   background-color: inherit !important;
 }
+
+/* ---- Delivery Scan Flow Dialog: bỏ padding mặc định của MatDialog ---- */
+.delivery-flow-dialog .mat-dialog-container {
+  padding: 0 !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+}

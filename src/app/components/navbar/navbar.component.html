@@ -3,8 +3,8 @@
         <div class="navbar-wrapper">
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
         </div>
-        <!-- Home Button - Ẩn ở trang Menu, QC, Settings và RM1 Check (có nút Về menu riêng) -->
-        <button mat-raised-button class="btn-home me-3" (click)="goToMenu()" *ngIf="!isMenuPage() && !isQCPage() && !isSettingsPage() && !isRm1CheckPage()" title="Về Menu">
+        <!-- Home Button - Ẩn ở trang Menu, QC, Settings, RM1 Check, RM1 Delivery (có nút Về menu riêng) -->
+        <button mat-raised-button class="btn-home me-3" (click)="goToMenu()" *ngIf="!isMenuPage() && !isQCPage() && !isSettingsPage() && !isRm1CheckPage() && !isRm1DeliveryPage()" title="Về Menu">
           <i class="material-icons">home</i>
         </button>
         <button mat-raised-button class="navbar-toggler" type="button" (click)="sidebarToggle()" *ngIf="false">
