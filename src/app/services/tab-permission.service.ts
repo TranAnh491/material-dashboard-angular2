@@ -198,7 +198,6 @@ export class TabPermissionService {
     { key: 'qc', name: 'Quality' },
     { key: 'wh-security', name: 'WH Security' },
     { key: 'rm1-delivery', name: 'RM1 Delivery' },
-    { key: 'rm1-check', name: 'RM1 Check' },
     { key: 'settings', name: 'Settings' }
   ];
 } 

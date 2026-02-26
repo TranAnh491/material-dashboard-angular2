@@ -64,7 +64,6 @@ import { IndexComponent } from '../../pages/index/index.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
-import { Rm1CheckComponent } from '../../pages/rm1-check/rm1-check.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 
@@ -129,7 +128,6 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     QCComponent,
     WhSecurityComponent,
     Rm1DeliveryComponent,
-    Rm1CheckComponent,
     PrintOptionDialogComponent,
 
     ChartComponent
