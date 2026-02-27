@@ -43,6 +43,8 @@ interface PxkLine {
   unit: string;
   po: string;
   soChungTu?: string; // Số chứng từ từ cột C
+  maKho?: string;    // Mã kho: NVL, NVL_E31, NVL_KE31, NVL_SX, NVL_KS, NVL_EXPIRED
+  loaiHinh?: string; // Loại hình
 }
 
 /** Dữ liệu PXK nhóm theo LSX */
@@ -1841,12 +1843,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     alert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
-  /** Tải form mẫu import PXK - A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Số lượng xuất thực tế, H=Đvt */
+  /** Tải form mẫu import PXK - A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Mã Kho, H=Số lượng, I=Đvt, J=Loại Hình */
   downloadPxkTemplate(): void {
     const templateData = [
-      ['Mã Ctừ', 'Số Ctừ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã vật tư', 'Số PO', 'Số lượng xuất thực tế', 'Đvt'],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 1054.58, 'M'],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 100, 'PCS']
+      ['Mã Ctừ', 'Số Ctừ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã vật tư', 'Số PO', 'Mã Kho', 'Số lượng xuất thực tế', 'Đvt', 'Loại Hình'],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 'NVL', 1054.58, 'M', ''],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 'NVL_SX', 100, 'PCS', '']
     ];
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -1857,8 +1859,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       { wch: 15 }, // Mã sản phẩm
       { wch: 15 }, // Mã vật tư
       { wch: 12 }, // Số PO
+      { wch: 14 }, // Mã Kho (NVL, NVL_E31, NVL_KE31, NVL_SX, NVL_KS, NVL_EXPIRED)
       { wch: 22 }, // Số lượng xuất thực tế
-      { wch: 8 }   // Đvt
+      { wch: 8 },  // Đvt
+      { wch: 12 }  // Loại Hình
     ];
     XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
     const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -3238,17 +3242,19 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         }
       }
       console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
-      // Format: A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Số lượng xuất thực tế, H=Đvt
-      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7;
+      // Format: A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Mã Kho, H=Số lượng, I=Đvt, J=Loại Hình
+      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
-      let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number;
+      let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number; let idxMaKho: number; let idxLoaiHinh: number;
       idxMaCtu = COL_A;
       idxSoChungTu = COL_B;
       idxSoLenhSX = COL_C;
       idxMaVatTu = COL_E;
       idxSoPO = COL_F;
-      idxSoLuongXTT = COL_G;
-      idxDvt = COL_H;
+      idxMaKho = -1; // Tìm theo header, -1 nếu file cũ không có cột Mã Kho
+      idxSoLuongXTT = COL_H;
+      idxDvt = COL_I;
+      idxLoaiHinh = -1; // Tìm theo header, -1 nếu file cũ không có cột Loại Hình
       if (headerRowIndex >= 0) {
         const headers = (rows[headerRowIndex] || []).map((h: any) => String(h || '').trim());
         idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') >= 0 ? colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') : COL_A;
@@ -3256,8 +3262,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') : COL_C;
         idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_E;
         idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_F;
-        idxSoLuongXTT = colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_G;
-        idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_H;
+        idxMaKho = colIdx(headers, 'Mã Kho', 'Ma Kho', 'MaKho');
+        idxSoLuongXTT = colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_H;
+        idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_I;
+        idxLoaiHinh = colIdx(headers, 'Loại Hình', 'Loai Hinh', 'LoaiHinh');
       } else {
         headerRowIndex = 0;
         idxMaCtu = COL_A;
@@ -3296,7 +3304,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       /** Chuẩn LSX: 5 chữ cái + 4 số + / + 4 số (ví dụ: KZLSX0326/0089) - không đúng thì không tính */
       const isValidLsxFormat = (s: string): boolean => /^[A-Za-z]{5}\d{4}\/\d{4}$/.test(String(s || '').trim());
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
-      const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number) => {
+      const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number) => {
         const out: PxkDataByLsx = {};
         let cnt = 0;
         for (let r = dataStartRow; r < rows.length; r++) {
@@ -3315,19 +3323,22 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const quantity = typeof qtyRaw === 'number' ? qtyRaw : parseFloat(String(qtyRaw ?? '0').replace(/,/g, '')) || 0;
           const unit = String(row[dvtCol] ?? '').trim();
           const po = String(row[poCol] ?? '').trim();
+          const maKho = maKhoCol >= 0 ? String(row[maKhoCol] ?? '').trim() : '';
+          const loaiHinh = loaiHinhCol >= 0 ? String(row[loaiHinhCol] ?? '').trim() : '';
           if (!out[storeKey]) out[storeKey] = [];
-          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined });
+          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined, maKho: maKho || undefined, loaiHinh: loaiHinh || undefined });
         }
         return { byLsx: out, rowsWithPx: cnt };
       };
       const dataStartRow = headerRowIndex + 1;
       let idxMaCtuFinal = idxMaCtu, idxSoLenhSXFinal = idxSoLenhSX, idxMaVatTuFinal = idxMaVatTu;
       let idxSoLuongXTTFinal = idxSoLuongXTT, idxDvtFinal = idxDvt, idxSoPOFinal = idxSoPO, idxSoChungTuFinal = idxSoChungTu;
+      let idxMaKhoFinal = idxMaKho, idxLoaiHinhFinal = idxLoaiHinh;
       let byLsx: PxkDataByLsx = {};
       let rowsWithPx = 0;
       const pxkLsxSamples: string[] = [];
       const tryParse = () => {
-        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal);
+        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal, idxMaKhoFinal, idxLoaiHinhFinal);
         byLsx = res.byLsx;
         rowsWithPx = res.rowsWithPx;
       };
@@ -3621,37 +3632,59 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (scan < xuất) return 'Thiếu ' + this.formatQuantityForPxk(xuất - scan);
       return 'Đủ'; // scan > xuất
     };
-    const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
-    const soChungTuList = [...new Set(sortedLines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
+    // Sắp xếp: nhóm 1 (NVL, NVL_E31, NVL_KE31, NVL_EXPIRED) trên cùng, nhóm 2 còn lại dưới, ngăn cách bằng dòng trắng
+    const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
+    const sortByMat = (a: PxkLine, b: PxkLine) => (a.materialCode || '').localeCompare(b.materialCode || '');
+    const group1 = lines.filter(l => TOP_MA_KHO.has(String((l as any).maKho || '').trim().toUpperCase())).sort(sortByMat);
+    const group2 = lines.filter(l => !TOP_MA_KHO.has(String((l as any).maKho || '').trim().toUpperCase())).sort(sortByMat);
+    const sortedLines: (PxkLine | null)[] = group1.length > 0 && group2.length > 0
+      ? [...group1, null, ...group2]   // null = dòng trống ngăn cách 2 nhóm
+      : [...group1, ...group2];
+    const soChungTuList = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
     const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
-    const hasAnyScanData = sortedLines.some(l => getScanQty(l.materialCode, l.po) > 0);
-    const hasAnyDeliveryData = sortedLines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
-    const rowsHtml = sortedLines.map((l, i) => {
-      const stt = i + 1;
+    const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po) > 0);
+    const hasAnyDeliveryData = lines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
+    let sttCounter = 0;
+    const rowsHtml = sortedLines.map((l) => {
+      if (l === null) {
+        return '<tr><td colspan="13" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
+      }
+      sttCounter++;
+      const stt = sttCounter;
       const matCode = String(l.materialCode || '').trim().toUpperCase();
+      const maKho = String((l as any).maKho || '').trim();
+      const isNvlSxOrKs = ['NVL_SX', 'NVL_KS'].includes(maKho.toUpperCase());
       const isR = matCode.charAt(0) === 'R';
       const isB033 = matCode.startsWith('B033');
       const isB030 = matCode.startsWith('B030');
-      const location = getLocation(l.materialCode, l.po);
+      const location = isNvlSxOrKs ? maKho : getLocation(l.materialCode, l.po);
       const qtyStr = this.formatQuantityForPxk(l.quantity);
-      // R, B030, B033: tự điền lượng Scan = quantity khi có ghi nhận scan từ bất cứ mã nào
-      const scanQty = (isR || isB030 || isB033) && hasAnyScanData
-        ? (Number(l.quantity) || 0)
-        : getScanQty(l.materialCode, l.po);
-      const scanQtyStr = !hasAnyScanData ? '' : this.formatQuantityForPxk(scanQty);
-      const soSanh = !hasAnyScanData ? '' : getSoSanh(l.quantity, scanQty);
+      let scanQtyStr: string; let soSanh: string; let deliveryQtyStr: string;
+      if (isNvlSxOrKs) {
+        scanQtyStr = 'Đã Giao';
+        soSanh = 'Đã Giao';
+        deliveryQtyStr = 'Đã Giao';
+      } else {
+        const scanQty = (isR || isB030 || isB033) && hasAnyScanData
+          ? (Number(l.quantity) || 0)
+          : getScanQty(l.materialCode, l.po);
+        scanQtyStr = !hasAnyScanData ? '' : this.formatQuantityForPxk(scanQty);
+        soSanh = !hasAnyScanData ? '' : getSoSanh(l.quantity, scanQty);
+        const deliveryQty = (isR || isB030 || isB033) && hasAnyDeliveryData
+          ? (Number(l.quantity) || 0)
+          : getDeliveryQty(l.materialCode, l.po);
+        deliveryQtyStr = !hasAnyDeliveryData ? '' : this.formatQuantityForPxk(deliveryQty);
+      }
       const soCt = (l.soChungTu || '').trim() || '-';
-      // R, B030, B033: tự điền lượng Giao = quantity khi có ghi nhận delivery từ bất cứ mã nào
-      const deliveryQty = (isR || isB030 || isB033) && hasAnyDeliveryData
-        ? (Number(l.quantity) || 0)
-        : getDeliveryQty(l.materialCode, l.po);
-      const deliveryQtyStr = !hasAnyDeliveryData ? '' : this.formatQuantityForPxk(deliveryQty);
+      const loaiHinh = String((l as any).loaiHinh || '').trim();
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soCt)}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(maKho)}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.unit)}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(loaiHinh)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${qtyStr}</td>
         <td class="col-vitri" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(location)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
@@ -3692,20 +3725,23 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>PXK - ${this.escapeHtmlForPrint(lsx)}</title>
 <style>
-@page{size:A4;margin:10mm}
+@page{size:A4;margin:5mm}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;padding:10mm;color:#000;font-size:12px}
+body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 h2{margin-bottom:12px;font-size:16px}
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:120px;width:12%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
-.pxk-top-header td{vertical-align:top;border:1px solid #000;padding:8px}
-.pxk-top-header .logo-cell{width:120px;text-align:center;font-weight:bold;font-size:14px}
-.pxk-top-header .title-cell{text-align:center;padding:12px}
-.pxk-top-header .title-cell .line1{font-size:14px;font-weight:bold;margin-bottom:6px}
-.pxk-top-header .title-cell .line2{font-size:12px}
+.pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
+.pxk-top-header .logo-cell{width:120px;text-align:center;vertical-align:middle}
+.pxk-top-header .logo-cell img{max-width:100%;max-height:80px;object-fit:contain}
+.pxk-top-header .title-cell{text-align:center;padding:8px}
+.pxk-top-header .title-inner{width:100%;border-collapse:collapse}
+.pxk-top-header .title-inner td{border:none;padding:8px;text-align:center}
+.pxk-top-header .title-line1{font-size:18px;font-weight:bold}
+.pxk-top-header .title-line2{font-size:14px;text-transform:uppercase}
 .pxk-top-header .meta-cell{width:200px}
 .pxk-top-header .meta-table{width:100%;border-collapse:collapse;font-size:11px}
 .pxk-top-header .meta-table td{border:1px solid #000;padding:4px 6px}
@@ -3714,10 +3750,9 @@ h2{margin-bottom:12px;font-size:16px}
 <div class="pxk-top-header-wrap">
 <table class="pxk-top-header">
 <tr>
-  <td class="logo-cell">AIRSPEED</td>
+  <td class="logo-cell"><img src="${(typeof window !== 'undefined' ? window.location.origin : '') + '/assets/img/logo.png'}" alt="AIRSPEED" /></td>
   <td class="title-cell">
-    <div class="line1">AIRSPEED MANUFACTURING VIET NAM</div>
-    <div class="line2">Danh sách vật tư theo lệnh sản xuất</div>
+    <table class="title-inner"><tr><td class="title-line1">AIRSPEED MANUFACTURING VIET NAM</td></tr><tr><td class="title-line2">DANH SÁCH VẬT TƯ THEO LỆNH SẢN XUẤT</td></tr></table>
   </td>
   <td class="meta-cell">
     <table class="meta-table">
@@ -3733,10 +3768,9 @@ h2{margin-bottom:12px;font-size:16px}
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th>SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>Đơn vị tính</th><th>Loại Hình</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th>SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
-<p style="margin-top:16px;font-size:11px;">Ngày in: ${new Date().toLocaleString('vi-VN')}</p>
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
     const w = window.open('', '_blank');

@@ -186,6 +186,7 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
     this.pxkRows = [];
     const target = this.normLsx(this.lsx);
 
+    const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
     this.firestore.collection('pxk-import-data').get().toPromise().then(snap => {
       const rows: PxkLineRow[] = [];
       (snap?.docs || []).forEach(doc => {
@@ -194,6 +195,13 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
         (Array.isArray(d?.lines) ? d.lines : []).forEach((ln: any) => {
           const code = String(ln.materialCode || '').trim().toUpperCase();
           if (!code) return;
+          // Chỉ hiển thị mã ở nhóm kho NVL, NVL_E31, NVL_KE31, NVL_EXPIRED, 00
+          const maKho = String(ln.maKho || '').trim().toUpperCase();
+          if (!TOP_MA_KHO.has(maKho)) return;
+          // Ẩn mã R và mã bắt đầu B033, B030
+          if (code.charAt(0) === 'R') return;
+          if (code.startsWith('B033')) return;
+          if (code.startsWith('B030')) return;
           rows.push({
             materialCode: code,
             poNumber: String(ln.po || ln.poNumber || '').trim(),
