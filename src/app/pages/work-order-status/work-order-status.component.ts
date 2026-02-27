@@ -48,8 +48,8 @@ interface PxkLine {
 /** Dữ liệu PXK nhóm theo LSX */
 type PxkDataByLsx = { [lsx: string]: PxkLine[] };
 
-/** Từ 01/03/2026: LSX có PXK import và So sánh có Thiếu thì không cho bấm Done */
-const RULE_DONE_BLOCK_DATE = new Date(2026, 2, 1); // 1 tháng 3 năm 2026
+/** LSX có PXK import và So sánh có Thiếu thì không cho chọn Transfer/Done */
+const RULE_THIEU_BLOCK_DATE = new Date(2025, 0, 1); // Luôn áp dụng
 
 @Component({
   selector: 'app-work-order-status',
@@ -97,6 +97,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   doneOrders: number = 0;
   delayOrders: number = 0;
   checkCount: number = 0; // Số LSX đã import PXK nhưng còn Thiếu (So sánh)
+  lsxWithThieuSet = new Set<string>();
+  workOrderIdsWithThieu = new Set<string>(); // wo.id có Thiếu - dùng để tô đỏ LSX
   
   // Form data for new work order
   newWorkOrder: Partial<WorkOrder> = {
@@ -435,7 +437,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     });
     
     this.workOrders = processedWorkOrders;
-    console.log(`✅ Processed ${processedWorkOrders.length} work orders with proper date handling`);
     
     // Auto-mark old completed work orders as completed
     this.markOldCompletedWorkOrders();
@@ -444,17 +445,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.assignSequentialNumbers();
     
     // Debug: Check current filters
-    console.log('🔍 Current filters:', {
-      yearFilter: this.yearFilter,
-      monthFilter: this.monthFilter,
-      statusFilter: this.statusFilter,
-      searchTerm: this.searchTerm
-    });
     
     this.applyFilters();
     this.calculateSummary();
     
-    console.log(`✅ After filtering: ${this.filteredWorkOrders.length} work orders displayed`);
     
     // Auto-adjust filters if no data is shown but data exists
     if (this.filteredWorkOrders.length === 0 && this.workOrders.length > 0) {
@@ -559,7 +553,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   // Auto-assign sequential numbers based on delivery date within each month
   private assignSequentialNumbers(): void {
-    console.log('🔢 Assigning sequential numbers based on delivery date...');
     
     // Group work orders by year and month from delivery date
     const groups: { [key: string]: WorkOrder[] } = {};
@@ -584,7 +577,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         }
         groups[key].push(wo);
         
-        console.log(`🏷️ Work Order ${wo.productCode} -> Group ${key}, Delivery: ${deliveryDate.toLocaleDateString('vi-VN')}`);
       } else {
         console.warn('Work order missing delivery date:', wo.id, wo.productCode);
       }
@@ -594,13 +586,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     Object.keys(groups).sort().forEach(key => {
       const workOrdersInMonth = groups[key];
       
-      console.log(`📅 Processing group ${key} with ${workOrdersInMonth.length} work orders:`);
-      
-      // Debug: log before sorting
-      workOrdersInMonth.forEach((wo, i) => {
-        const deliveryDate = wo.deliveryDate instanceof Date ? wo.deliveryDate : new Date(wo.deliveryDate!);
-        console.log(`  Before sort [${i}]: ${wo.productCode} - ${deliveryDate.toLocaleDateString('vi-VN')} (${deliveryDate.getTime()})`);
-      });
       
       // Sort by delivery date (earliest first)
       workOrdersInMonth.sort((a, b) => {
@@ -610,30 +595,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         const timeA = dateA.getTime();
         const timeB = dateB.getTime();
         
-        // Additional debug for sorting comparison
-        console.log(`    Comparing: ${a.productCode} (${dateA.toLocaleDateString('vi-VN')}, ${timeA}) vs ${b.productCode} (${dateB.toLocaleDateString('vi-VN')}, ${timeB}) = ${timeA - timeB}`);
-        
         return timeA - timeB;
       });
       
-      // Debug: log after sorting
-      console.log(`  After sort:`);
-      workOrdersInMonth.forEach((wo, i) => {
-        const deliveryDate = wo.deliveryDate instanceof Date ? wo.deliveryDate : new Date(wo.deliveryDate!);
-        console.log(`    [${i}]: ${wo.productCode} - ${deliveryDate.toLocaleDateString('vi-VN')}`);
-      });
-      
-      // Assign sequential numbers starting from 1
       workOrdersInMonth.forEach((wo, index) => {
-        const newOrderNumber = (index + 1).toString();
-        console.log(`  🔢 Assigning No.${newOrderNumber} to ${wo.productCode} (${wo.deliveryDate instanceof Date ? wo.deliveryDate.toLocaleDateString('vi-VN') : wo.deliveryDate})`);
-        wo.orderNumber = newOrderNumber;
+        wo.orderNumber = (index + 1).toString();
       });
-      
-      console.log(`📅 ${key}: Assigned numbers 1-${workOrdersInMonth.length} to ${workOrdersInMonth.length} work orders`);
     });
     
-    console.log('✅ Sequential number assignment completed');
   }
 
   applyFilters(): void {
@@ -659,10 +628,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         const normalizedSelected = this.normalizeFactoryName(this.selectedFactory);
         matchesFactory = normalizedData === normalizedSelected;
         
-        // Debug factory matching for ASM3
-        if (this.selectedFactory === 'ASM3' || wo.factory === 'ASM3' || wo.factory?.toUpperCase() === 'ASM3') {
-          console.log(`🔍 [ASM3 Debug] Factory comparison: "${wo.factory}" (normalized: "${normalizedData}") === "${this.selectedFactory}" (normalized: "${normalizedSelected}") = ${matchesFactory}`);
-        }
       } else {
         // No factory in work order, default to ASM1
         matchesFactory = this.selectedFactory === 'ASM1';
@@ -679,37 +644,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && matchesDoneFilter;
     });
     
-    // Debug: Log factory distribution
-    const factoryCounts: { [key: string]: number } = {};
-    this.workOrders.forEach(wo => {
-      const factory = wo.factory || 'No Factory';
-      factoryCounts[factory] = (factoryCounts[factory] || 0) + 1;
-    });
-    console.log('📊 Factory distribution in all work orders:', factoryCounts);
-    
-    // Debug: Log ASM3 work orders
-    const asm3WorkOrders = this.workOrders.filter(wo => {
-      const normalized = this.normalizeFactoryName(wo.factory || '');
-      return normalized === 'asm3';
-    });
-    console.log(`🔍 Found ${asm3WorkOrders.length} ASM3 work orders in all data`);
-    if (asm3WorkOrders.length > 0 && this.selectedFactory === 'ASM3') {
-      console.log('📋 ASM3 work orders:', asm3WorkOrders.map(wo => ({
-        id: wo.id,
-        factory: wo.factory,
-        productionOrder: wo.productionOrder,
-        productCode: wo.productCode
-      })));
-    }
-    
-    // Debug: Log filtered results
-    const filteredFactoryCounts: { [key: string]: number } = {};
-    this.filteredWorkOrders.forEach(wo => {
-      const factory = wo.factory || 'No Factory';
-      filteredFactoryCounts[factory] = (filteredFactoryCounts[factory] || 0) + 1;
-    });
-    console.log(`📊 Filtered work orders (${this.filteredWorkOrders.length} total):`, filteredFactoryCounts);
-    console.log(`🏭 Selected factory: "${this.selectedFactory}"`);
     
     // Sort filtered results: urgent first, then by delivery date (earliest first)
     this.filteredWorkOrders.sort((a, b) => {
@@ -723,16 +657,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       return dateA - dateB;
     });
     
-    console.log(`🔍 Filter applied: ${this.filteredWorkOrders.length}/${this.workOrders.length} work orders match filters`);
-    console.log(`📋 Filtered work orders sorted by No:`, this.filteredWorkOrders.map(wo => `${wo.orderNumber}: ${wo.productCode}`));
-    console.log(`🏭 Current factory filter: ${this.selectedFactory}`);
-    console.log(`📊 Work orders by factory:`, this.workOrders.map(wo => `${wo.orderNumber}: factory=${wo.factory || 'undefined'}`));
-    
-    // Debug: Show all unique factory values in data
-    const uniqueFactories = [...new Set(this.workOrders.map(wo => wo.factory).filter(f => f))];
-    console.log(`🏭 Unique factories in data:`, uniqueFactories);
-    console.log(`🔍 Selected factory: "${this.selectedFactory}"`);
-    console.log(`🔍 Looking for matches with case-insensitive comparison...`);
   }
 
   calculateSummary(): void {
@@ -747,30 +671,104 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.calculateCheckCount(); // Đếm LSX đã import PXK có Thiếu
   }
 
-  /** Đếm số LSX (đã import PXK) có So sánh Thiếu - hiển thị cảnh báo */
+  /** Đếm số LSX (đã import PXK) có So sánh Thiếu - load outbound 1 lần/factory để tránh lag */
   async calculateCheckCount(): Promise<void> {
+    this.lsxWithThieuSet.clear();
+    this.workOrderIdsWithThieu.clear();
     if (!this.isRuleEffectiveDate()) {
       this.checkCount = 0;
+      this.cdr.detectChanges();
       return;
     }
     const filtered = this.filteredWorkOrders;
-    const lsxMap = new Map<string, { lsx: string; factory: string }>(); // norm -> {lsx, factory}
+    const lsxMap = new Map<string, { lsx: string; factory: string }>();
     for (const wo of filtered) {
       if (!this.hasPxkForWorkOrder(wo)) continue;
       const lsx = (wo.productionOrder || '').trim();
       if (!lsx) continue;
       const norm = lsx.toUpperCase().replace(/\s/g, '');
-      if (!lsxMap.has(norm)) {
-        lsxMap.set(norm, { lsx, factory: wo.factory || this.selectedFactory || 'ASM1' });
-      }
+      if (!lsxMap.has(norm)) lsxMap.set(norm, { lsx, factory: wo.factory || this.selectedFactory || 'ASM1' });
+    }
+    const factories = [...new Set([...lsxMap.values()].map(e => e.factory))];
+    const normLsx = (s: string) => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const factoryToLsxScanMap = new Map<string, Map<string, Map<string, number>>>(); // factory -> lsxNorm -> mat|po -> qty
+    for (const fac of factories) {
+      const isAsm1 = (fac || 'ASM1').toUpperCase().includes('ASM1');
+      try {
+        const snap = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
+          ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
+        ).get());
+        const byLsx = new Map<string, Map<string, number>>();
+        snap.docs.forEach((doc: any) => {
+          const d = doc.data() as any;
+          const poLsxNorm = normLsx(d.productionOrder || '');
+          if (!poLsxNorm) return;
+          const mat = String(d.materialCode || '').trim();
+          if (mat.toUpperCase().charAt(0) !== 'B') return;
+          const po = String(d.poNumber ?? '').trim();
+          const qty = Number(d.exportQuantity || 0) || 0;
+          if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
+          const scanMap = byLsx.get(poLsxNorm)!;
+          const key = `${mat}|${po}`;
+          scanMap.set(key, (scanMap.get(key) || 0) + qty);
+        });
+        factoryToLsxScanMap.set(fac, byLsx);
+      } catch (_) {}
     }
     let count = 0;
     for (const entry of lsxMap.values()) {
-      const hasThieu = await this.hasPxkThieuForLsx(entry.lsx, entry.factory);
-      if (hasThieu) count++;
+      const woLsxNorm = normLsx(entry.lsx);
+      const byLsx = factoryToLsxScanMap.get(entry.factory);
+      const scanMap = byLsx?.get(woLsxNorm);
+      const lines = this.getPxkLinesForLsx(entry.lsx);
+      let hasThieu = false;
+      for (const l of lines) {
+        const prefix = String(l.materialCode || '').trim().toUpperCase().charAt(0);
+        if (prefix === 'R') continue;
+        const mat = String(l.materialCode || '').trim();
+        const po = String((l as any).po || (l as any).poNumber || '').trim();
+        const key = `${mat}|${po}`;
+        const qtyPxk = Number(l.quantity) || 0;
+        const qtyScan = scanMap?.get(key) || 0;
+        if (qtyPxk > qtyScan) { hasThieu = true; break; }
+      }
+      if (hasThieu) {
+        count++;
+        const entryNorm = normLsx(entry.lsx) || entry.lsx.toUpperCase().replace(/\s/g, '');
+        this.lsxWithThieuSet.add(entryNorm);
+        this.lsxWithThieuSet.add(entry.lsx.toUpperCase().replace(/\s/g, ''));
+        for (const wo of filtered) {
+          if (!wo.productionOrder || !wo.id || !this.hasPxkForWorkOrder(wo)) continue;
+          if (normLsx(wo.productionOrder) === entryNorm) {
+            this.lsxWithThieuSet.add((wo.productionOrder || '').trim().toUpperCase().replace(/\s/g, ''));
+            this.workOrderIdsWithThieu.add(wo.id);
+          }
+        }
+      }
     }
     this.checkCount = count;
     this.cdr.detectChanges();
+  }
+
+  /** Chuẩn hóa LSX giống hasPxkThieuForLsx để so khớp */
+  private normLsxForMatch(s: string): string {
+    const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+    const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+    return m ? m[1].replace(/[-.]/g, '/') : t;
+  }
+
+  /** Kiểm tra LSX có bị thiếu không (để disable option Transfer và tô đỏ cột LSX) */
+  isTransferDisabledForWorkOrder(wo: WorkOrder): boolean {
+    if (!wo) return false;
+    if (wo.id && this.workOrderIdsWithThieu.has(wo.id)) return true;
+    if (!wo.productionOrder || !this.hasPxkForWorkOrder(wo)) return false;
+    const raw = (wo.productionOrder || '').trim().toUpperCase().replace(/\s/g, '');
+    const norm = this.normLsxForMatch(wo.productionOrder);
+    return this.lsxWithThieuSet.has(raw) || this.lsxWithThieuSet.has(norm);
   }
 
   onSearchChange(): void {
@@ -881,10 +879,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   async onStatusChange(workOrder: WorkOrder, newStatus: string): Promise<void> {
     const newStatusEnum = this.convertStringToStatus(newStatus);
-    if (newStatusEnum === WorkOrderStatus.DONE) {
-      const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
-      if (blocked) {
+    const blocked = await this.isThieuBlockedForWorkOrder(workOrder);
+    if (blocked) {
+      if (newStatusEnum === WorkOrderStatus.DONE) {
         alert('Không thể chọn Done: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
+        return;
+      }
+      if (newStatusEnum === WorkOrderStatus.TRANSFER) {
+        alert('Không thể chọn Transfer: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
         return;
       }
     }
@@ -3430,7 +3432,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   private isRuleEffectiveDate(): boolean {
-    return new Date() >= RULE_DONE_BLOCK_DATE;
+    return new Date() >= RULE_THIEU_BLOCK_DATE;
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không (chỉ tính mã B, không tính R) */
@@ -3477,12 +3479,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return false;
   }
 
-  /** Từ 01/03/2026: nếu LSX có PXK và So sánh có Thiếu thì không cho bấm Done */
-  async isDoneBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
+  /** Nếu LSX có PXK và So sánh có Thiếu thì không cho chọn Done hoặc Transfer */
+  async isThieuBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
     if (!this.isRuleEffectiveDate()) return false;
     if (!this.hasPxkForWorkOrder(wo)) return false;
     const factory = wo.factory || this.selectedFactory || 'ASM1';
     return this.hasPxkThieuForLsx(wo.productionOrder || '', factory);
+  }
+
+  /** @deprecated Dùng isThieuBlockedForWorkOrder */
+  async isDoneBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
+    return this.isThieuBlockedForWorkOrder(wo);
   }
 
   private formatQuantityForPxk(n: number): string {
@@ -3613,30 +3620,30 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const diff = xuất - scan;
       return 'Thiếu ' + this.formatQuantityForPxk(diff);
     };
-    // Loại bỏ mã bắt đầu bằng B033 trước khi in
-    const filteredLines = lines.filter(l => {
-      const code = String(l.materialCode || '').trim().toUpperCase();
-      return !code.startsWith('B033');
-    });
-    const sortedLines = [...filteredLines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
-    const soChungTuList = [...new Set(filteredLines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
+    const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+    const soChungTuList = [...new Set(sortedLines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
     const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
-    const nonRLines = sortedLines.filter(l => String(l.materialCode || '').trim().toUpperCase().charAt(0) !== 'R');
-    const allScanZero = nonRLines.length === 0 || nonRLines.every(l => getScanQty(l.materialCode, l.po) === 0);
-    const allDeliveryZero = nonRLines.every(l => getDeliveryQty(l.materialCode, l.po) === 0);
+    const hasAnyScanData = sortedLines.some(l => getScanQty(l.materialCode, l.po) > 0);
+    const hasAnyDeliveryData = sortedLines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
     const rowsHtml = sortedLines.map((l, i) => {
       const stt = i + 1;
-      const matCode = String(l.materialCode || '').trim();
-      const isR = matCode.toUpperCase().charAt(0) === 'R';
+      const matCode = String(l.materialCode || '').trim().toUpperCase();
+      const isR = matCode.charAt(0) === 'R';
+      const isB033 = matCode.startsWith('B033');
       const location = getLocation(l.materialCode, l.po);
       const qtyStr = this.formatQuantityForPxk(l.quantity);
-      const scanQty = isR ? 0 : getScanQty(l.materialCode, l.po);
-      const scanQtyStr = (allScanZero && !isR) ? '' : (isR ? '' : this.formatQuantityForPxk(scanQty));
-      const soSanh = (allScanZero && !isR) ? '' : (isR ? '' : getSoSanh(l.quantity, scanQty));
+      // R và B033: tự điền lượng Scan = quantity khi có ghi nhận scan từ bất cứ mã nào
+      const scanQty = (isR || isB033) && hasAnyScanData
+        ? (Number(l.quantity) || 0)
+        : getScanQty(l.materialCode, l.po);
+      const scanQtyStr = !hasAnyScanData ? '' : this.formatQuantityForPxk(scanQty);
+      const soSanh = !hasAnyScanData ? '' : getSoSanh(l.quantity, scanQty);
       const soCt = (l.soChungTu || '').trim() || '-';
-      // Cột Delivery: lấy checkQuantity từ RM1 Delivery theo materialCode + PO
-      const deliveryQty = isR ? 0 : getDeliveryQty(l.materialCode, l.po);
-      const deliveryQtyStr = (allDeliveryZero || isR) ? '' : this.formatQuantityForPxk(deliveryQty);
+      // R và B033: tự điền lượng Giao = quantity khi có ghi nhận delivery từ bất cứ mã nào
+      const deliveryQty = (isR || isB033) && hasAnyDeliveryData
+        ? (Number(l.quantity) || 0)
+        : getDeliveryQty(l.materialCode, l.po);
+      const deliveryQtyStr = !hasAnyDeliveryData ? '' : this.formatQuantityForPxk(deliveryQty);
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soCt)}</td>

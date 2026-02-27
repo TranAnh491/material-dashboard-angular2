@@ -193,10 +193,7 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
         if (this.normLsx(String(d?.lsx || '')) !== target) return;
         (Array.isArray(d?.lines) ? d.lines : []).forEach((ln: any) => {
           const code = String(ln.materialCode || '').trim().toUpperCase();
-          // Bỏ qua mã bắt đầu bằng R hoặc B033
           if (!code) return;
-          if (code.startsWith('R')) return;
-          if (code.startsWith('B033')) return;
           rows.push({
             materialCode: code,
             poNumber: String(ln.po || ln.poNumber || '').trim(),

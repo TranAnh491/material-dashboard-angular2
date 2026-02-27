@@ -871,6 +871,17 @@ tr.selected-row {
   background-color: rgba(156, 39, 176, 0.08) !important;
 }
 
+// LSX thiếu: màu đỏ
+.lsx-cell.lsx-thieu {
+  color: #d32f2f !important;
+  font-weight: 600;
+}
+
+.lsx-cell.lsx-has-pxk:not(.lsx-thieu) {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
 // Bulk delete button styling
 .card-tools {
   .mr-2 {

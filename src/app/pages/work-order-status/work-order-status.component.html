@@ -123,7 +123,7 @@
               <div class="col-lg-2 col-md-4 col-sm-6">
                 <div class="card card-stats compact-stats summary-card" 
                      [class.card-warning]="checkCount > 0"
-                     [matTooltip]="checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX đã import PXK nhưng So sánh còn Thiếu. Không thể bấm Done.' : 'Số LSX đã import PXK có mã Thiếu'">
+                     [matTooltip]="checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX bị thiếu (So sánh). Không thể chọn Transfer hoặc Done.' : 'Số LSX đã import PXK có mã Thiếu'">
                   <div class="card-header">
                     <p class="card-category">Check</p>
                     <h3 class="card-title">{{checkCount}}</h3>
@@ -132,11 +132,6 @@
               </div>
             </div>
 
-            <!-- Cảnh báo LSX thiếu (đã import PXK) -->
-            <div *ngIf="checkCount > 0" class="alert alert-warning mb-3" role="alert" style="padding: 10px 15px; border-left: 4px solid #ff9800;">
-              <i class="material-icons" style="vertical-align: middle; margin-right: 8px; font-size: 20px;">warning</i>
-              <strong>Cảnh báo:</strong> {{checkCount}} LSX đã import PXK nhưng So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan. Những LSX này không thể bấm Done.
-            </div>
 
             <!-- Factory Selection -->
             <div class="row function-selection-row">
@@ -466,7 +461,7 @@
                             <span *ngIf="wo.status === 'done'" style="color: #4caf50; font-size: 20px; display: block; text-align: center;">✅</span>
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
-                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;" [style.color]="hasPxkForWorkOrder(wo) ? '#2e7d32' : ''" [style.fontWeight]="hasPxkForWorkOrder(wo) ? '600' : ''">{{wo.productionOrder}}</td>
+                          <td class="lsx-cell" style="font-size: 11.67px; text-align: center; vertical-align: middle;" [style.color]="isTransferDisabledForWorkOrder(wo) ? '#d32f2f' : (hasPxkForWorkOrder(wo) ? '#2e7d32' : null)" [style.font-weight]="hasPxkForWorkOrder(wo) ? '600' : null">{{wo.productionOrder}}</td>
                           <td style="text-align: center; vertical-align: middle;">
                             <button class="print-qr-btn" [class.pxk-imported]="hasPxkForWorkOrder(wo)" (click)="openPrintOptionDialog(wo)" title="In QR Code / PXK">
                               <i class="material-icons">print</i>
@@ -531,8 +526,8 @@
                               <option value="waiting">Waiting</option>
                               <option value="kitting">Kitting</option>
                               <option value="ready">Ready</option>
-                              <option value="transfer">Transfer</option>
-                              <option value="done">Done</option>
+                              <option value="transfer" [disabled]="isTransferDisabledForWorkOrder(wo)" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - không thể chọn Transfer' : ''">Transfer</option>
+                              <option value="done" [disabled]="isTransferDisabledForWorkOrder(wo)" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - không thể chọn Done' : ''">Done</option>
                               <option value="delay">Delay</option>
                             </select>
                             <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.status || 'Chưa có'}}</span>
