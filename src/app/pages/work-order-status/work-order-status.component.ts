@@ -3693,6 +3693,53 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
+    // Box kho NVL_SX, NVL_KS: Mã vật tư, PO, Mã Kho, LSX (LSX gần nhất mà mã hàng+po được xuất)
+    const nvlSxKsLines = lines.filter(l => ['NVL_SX', 'NVL_KS'].includes(String((l as any).maKho || '').trim().toUpperCase()));
+    let nvlSxKsBoxHtml = '';
+    if (nvlSxKsLines.length > 0) {
+      const matPotoLsxMap = new Map<string, { lsx: string; importedAt: number }>();
+      try {
+        const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data', ref =>
+          ref.where('factory', '==', factoryFilter)
+        ).get());
+        (pxkSnap?.docs || []).forEach((docSnap: any) => {
+          const d = docSnap.data();
+          const docLsx = String(d?.lsx || '').trim();
+          const impAt = d?.importedAt?.toMillis?.() ?? d?.importedAt?.getTime?.() ?? 0;
+          (Array.isArray(d?.lines) ? d.lines : []).forEach((ln: any) => {
+            const mk = String(ln.maKho || '').trim().toUpperCase();
+            if (mk !== 'NVL_SX' && mk !== 'NVL_KS') return;
+            const mat = String(ln.materialCode || '').trim();
+            const po = String(ln.po || ln.poNumber || '').trim();
+            const key = `${mat}|${po}`;
+            const cur = matPotoLsxMap.get(key);
+            if (!cur || impAt > cur.importedAt) matPotoLsxMap.set(key, { lsx: docLsx, importedAt: impAt });
+          });
+        });
+      } catch (e) {
+        console.warn('Không load LSX gần nhất cho NVL_SX/NVL_KS:', e);
+      }
+      const nvlRows = nvlSxKsLines.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || '')).map((l, i) => {
+        const key = `${String(l.materialCode || '').trim()}|${String(l.po || '').trim()}`;
+        const info = matPotoLsxMap.get(key);
+        const lsxVal = info?.lsx || lsx;
+        return `<tr>
+          <td style="border:1px solid #000;padding:6px;text-align:center;">${i + 1}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(String((l as any).maKho || '').trim())}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(lsxVal)}</td>
+        </tr>`;
+      }).join('');
+      nvlSxKsBoxHtml = `
+<div style="margin-top:16px;">
+  <div style="font-weight:bold;margin-bottom:6px;font-size:12px;">Kho NVL_SX / NVL_KS</div>
+  <table class="pxk-table" style="margin-top:4px;">
+    <thead><tr><th>STT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>LSX</th></tr></thead>
+    <tbody>${nvlRows}</tbody>
+  </table>
+</div>`;
+    }
     const deliveryDateStr = workOrder.deliveryDate
       ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
       : '-';
@@ -3725,7 +3772,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>PXK - ${this.escapeHtmlForPrint(lsx)}</title>
 <style>
-@page{size:A4;margin:5mm}
+@page{size:A4 landscape;margin:5mm}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 h2{margin-bottom:12px;font-size:16px}
@@ -3771,6 +3818,7 @@ ${headerSection}
 <thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>Đơn vị tính</th><th>Loại Hình</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th>SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
+${nvlSxKsBoxHtml}
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
     const w = window.open('', '_blank');

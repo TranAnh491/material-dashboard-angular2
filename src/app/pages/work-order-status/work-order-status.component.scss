@@ -592,15 +592,19 @@ html, body {
   }
 }
 
-// Loading indicators with pastel colors
+// Loading indicators with pastel colors (no animation)
 .loading-indicator {
   background: rgba(227, 242, 253, 0.9);
   border: 1px solid #90caf9;
   border-radius: 6px;
   
   .spinner {
+    width: 20px;
+    height: 20px;
     border: 2px solid #e3f2fd;
     border-top: 2px solid #42a5f5;
+    border-radius: 50%;
+    animation: none;
   }
 }
 
@@ -895,8 +899,6 @@ tr.selected-row {
     
     &:hover {
       background: linear-gradient(45deg, #d32f2f, #c2185b);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
     }
   }
 }
@@ -922,7 +924,7 @@ tr.selected-row {
 // Responsive adjustments for checkboxes
 @media (max-width: 768px) {
   .mat-checkbox {
-    transform: scale(0.8);
+    font-size: 0.9em;
   }
   
   .table th:first-child,
@@ -1154,11 +1156,9 @@ textarea.mat-input-element {
   }
 }
 
-// Improved table hover effects
+// Improved table hover effects (no transform/animation)
 .table-hover tbody tr:hover {
   background-color: rgba(0, 0, 0, 0.075);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 // Import Dialog Styling
@@ -1473,7 +1473,6 @@ textarea.mat-input-element {
         
         &:hover {
           background: #0056b3;
-          transform: translateY(-1px);
         }
         
         i {
@@ -1488,10 +1487,6 @@ textarea.mat-input-element {
         padding: 10px 20px;
         border-radius: 6px;
         transition: none;
-        
-        &:hover {
-          transform: translateY(-1px);
-        }
         
         i {
           font-size: 18px;
@@ -1549,6 +1544,7 @@ textarea.mat-input-element {
         border: 2px solid #f3f3f3;
         border-top: 2px solid #007bff;
         border-radius: 50%;
+        animation: none;
       }
     }
   }
@@ -1604,10 +1600,6 @@ textarea.mat-input-element {
         font-size: 18px;
       }
       
-      &:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
       
       &.active {
         background: #007bff;
@@ -3235,8 +3227,6 @@ textarea.mat-input-element {
         
         &:hover:not(:disabled) {
           background: #45a049;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
         }
         
         &:disabled {
