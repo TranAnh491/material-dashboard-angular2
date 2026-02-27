@@ -737,30 +737,13 @@ html, body {
   color: #388e3c !important;
 }
 
-// Urgent row styling with blinking effect
+// Urgent row styling (no animation)
 .urgent-row {
-  animation: blink-red 1.5s infinite;
   background-color: rgba(255, 87, 34, 0.1) !important;
   
   &:hover {
     background-color: rgba(255, 87, 34, 0.2) !important;
   }
-}
-
-@keyframes blink-red {
-  0%, 50% { 
-    background-color: rgba(255, 87, 34, 0.1) !important;
-    box-shadow: 0 0 5px rgba(255, 87, 34, 0.3);
-  }
-  51%, 100% { 
-    background-color: rgba(255, 87, 34, 0.05) !important;
-    box-shadow: 0 0 2px rgba(255, 87, 34, 0.1);
-  }
-}
-
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0.5; }
 }
 
 // Form styling
@@ -864,29 +847,12 @@ html, body {
   }
 }
 
-// Enhanced delete button styling
+// Enhanced delete button styling (no animation)
 .enhanced-delete {
-  transition: all 0.3s ease;
-  
   &:hover {
-    transform: scale(1.1);
     background-color: rgba(244, 67, 54, 0.1) !important;
-    
-    .mat-icon {
-      color: #d32f2f !important;
-      animation: shake 0.5s ease-in-out;
-    }
+    .mat-icon { color: #d32f2f !important; }
   }
-  
-  &:active {
-    transform: scale(0.95);
-  }
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-2px); }
-  75% { transform: translateX(2px); }
 }
 
 // Selection styling
@@ -1125,10 +1091,7 @@ tr.selected-row {
   }
 }
 
-// Animation for smooth transitions
-.card, .table tr {
-  transition: all 0.3s ease;
-}
+// No animation for performance
 
 // Material Design elevation
 .card:hover {
@@ -1264,7 +1227,7 @@ textarea.mat-input-element {
   border-radius: 6px;
   text-align: center;
   background: white;
-  transition: all 0.3s ease;
+  transition: none;
 
   &:hover {
     border-color: #2196f3;
@@ -1495,7 +1458,7 @@ textarea.mat-input-element {
         color: white;
         border-radius: 6px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: none;
         
         &:hover {
           background: #0056b3;
@@ -1513,7 +1476,7 @@ textarea.mat-input-element {
         gap: 8px;
         padding: 10px 20px;
         border-radius: 6px;
-        transition: all 0.3s ease;
+        transition: none;
         
         &:hover {
           transform: translateY(-1px);
@@ -1575,7 +1538,6 @@ textarea.mat-input-element {
         border: 2px solid #f3f3f3;
         border-top: 2px solid #007bff;
         border-radius: 50%;
-        animation: spin 1s linear infinite;
       }
     }
   }
@@ -1625,7 +1587,7 @@ textarea.mat-input-element {
       padding: 12px 20px;
       border-radius: 6px;
       font-weight: 500;
-      transition: all 0.3s ease;
+      transition: none;
       
       i {
         font-size: 18px;
@@ -1645,10 +1607,6 @@ textarea.mat-input-element {
   }
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
 
 // Action buttons styling
 .action-buttons {
@@ -1709,7 +1667,7 @@ textarea.mat-input-element {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
-  transition: all 0.2s ease;
+  transition: none;
   min-height: 32px;
   display: flex;
   align-items: center;
@@ -1993,7 +1951,7 @@ textarea.mat-input-element {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 3px;
-  transition: all 0.2s ease;
+  transition: none;
   min-height: 20px;
   display: flex;
   align-items: center;
@@ -2202,7 +2160,7 @@ textarea.mat-input-element {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 3px;
-  transition: all 0.2s ease;
+  transition: none;
   min-height: 20px;
   display: flex;
   align-items: center;
@@ -2393,7 +2351,7 @@ textarea.mat-input-element {
     min-width: 120px !important;
     
     .dropdown-item {
-      transition: background-color 0.2s ease;
+      transition: none;
       display: block !important;
       padding: 10px 15px !important;
       cursor: pointer !important;
@@ -2418,7 +2376,7 @@ textarea.mat-input-element {
     justify-content: center !important;
     padding: 6px 10px !important;
     border-radius: 4px !important;
-    transition: background-color 0.2s ease !important;
+    transition: none !important;
     border: 1px solid transparent !important;
     min-height: 32px !important;
     
@@ -2733,7 +2691,7 @@ textarea.mat-input-element {
   display: flex !important;
   align-items: center !important;
   gap: 4px !important;
-  transition: all 0.3s ease !important;
+  transition: none !important;
   width: 100% !important;
   justify-content: center !important;
   
@@ -2785,7 +2743,7 @@ textarea.mat-input-element {
     .btn {
       border: 1px solid #2196f3;
       color: #2196f3;
-      transition: all 0.3s ease;
+      transition: none;
       
       &:hover {
         background-color: #e3f2fd;
@@ -2901,7 +2859,6 @@ textarea.mat-input-element {
     .scanner-icon {
       font-size: 48px;
       color: #2196f3;
-      animation: pulse 2s infinite;
     }
     
     .status-info {
@@ -2957,7 +2914,7 @@ textarea.mat-input-element {
     background: white;
     border: 2px solid #ff9800;
     color: #000;
-    transition: all 0.3s ease;
+    transition: none;
     
     &.active {
       border: 2px solid #ff9800;
@@ -2988,7 +2945,7 @@ textarea.mat-input-element {
     background: white;
     border: 2px solid #ff9800;
     color: #000;
-    transition: all 0.3s ease;
+    transition: none;
     min-width: 100px;
     
     &.active {
@@ -3033,16 +2990,6 @@ textarea.mat-input-element {
   }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-}
 
 // Scan Page Styles
 .scan-page-view {
@@ -3146,7 +3093,7 @@ textarea.mat-input-element {
           
           tbody {
             .table-row {
-              transition: background-color 0.2s ease;
+              transition: none;
               
               &:nth-child(even) {
                 background-color: #f8f9fa;

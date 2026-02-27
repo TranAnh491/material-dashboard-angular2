@@ -12,7 +12,7 @@ import { QRScannerService, QRScanResult } from '../../services/qr-scanner.servic
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, where, limit, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
@@ -74,6 +74,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   doneFilter: 'notCompleted' | 'completed' = 'notCompleted'; // Default: show not completed
   yearFilter: number = new Date().getFullYear();
   monthFilter: number = new Date().getMonth() + 1;
+
+  displayLimit = 100; // Chỉ hiển thị 100 dòng đầu để tránh chậm
+  readonly DISPLAY_PAGE_SIZE = 100;
+
+  get displayedWorkOrders(): WorkOrder[] {
+    return this.filteredWorkOrders.slice(0, this.displayLimit);
+  }
+  get hasMoreToDisplay(): boolean {
+    return this.displayLimit < this.filteredWorkOrders.length;
+  }
+  get remainingCount(): number {
+    return this.filteredWorkOrders.length - this.displayLimit;
+  }
   
   // Summary data
   totalOrders: number = 0;
@@ -462,7 +475,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       
       try {
         console.log('📄 Trying AngularFirestore...');
-        this.firestore.collection('work-orders').snapshotChanges()
+        this.firestore.collection('work-orders', ref =>
+          ref.where('year', '==', this.yearFilter)
+             .where('month', '==', this.monthFilter)
+             .limit(500)
+        ).snapshotChanges()
           .pipe(takeUntil(this.destroy$))
           .subscribe({
             next: (actions) => {
@@ -492,11 +509,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   private async loadWorkOrdersWithFirebaseV9(): Promise<void> {
     try {
-      console.log('📄 Using Firebase v9 SDK to load work orders...');
+      console.log('📄 Using Firebase v9 SDK to load work orders (Năm:', this.yearFilter, ', Tháng:', this.monthFilter, ')...');
       
       const app = initializeApp(environment.firebase);
       const db = getFirestore(app);
-      const q = query(collection(db, 'work-orders'));
+      const q = query(
+        collection(db, 'work-orders'),
+        where('year', '==', this.yearFilter),
+        where('month', '==', this.monthFilter),
+        limit(500)
+      );
       
       const querySnapshot = await getDocs(q);
       const workOrders: WorkOrder[] = [];
@@ -615,6 +637,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   applyFilters(): void {
+    this.displayLimit = this.DISPLAY_PAGE_SIZE;
     this.filteredWorkOrders = this.workOrders.filter(wo => {
       const matchesSearch = !this.searchTerm || 
         wo.orderNumber.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
@@ -622,12 +645,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         wo.productionOrder.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         wo.customer.toLowerCase().includes(this.searchTerm.toLowerCase());
       
+      // Lọc theo thứ tự: Năm → Tháng → Trạng thái
+      const matchesYear = wo.year === this.yearFilter;
+      const matchesMonth = wo.month === this.monthFilter;
       const matchesStatus = this.statusFilter === 'all' || wo.status === this.statusFilter;
-      
-      // Only apply year/month filters if they are explicitly set by user (not default values)
-      // This allows showing all imported data initially
-      const matchesYear = true; // Show all years initially
-      const matchesMonth = true; // Show all months initially
       
       // Filter by selected factory - but be more flexible to handle missing factory data
       let matchesFactory = false;
@@ -758,6 +779,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.calculateSummary();
   }
 
+  loadMoreDisplayed(): void {
+    this.displayLimit = Math.min(
+      this.displayLimit + this.DISPLAY_PAGE_SIZE,
+      this.filteredWorkOrders.length
+    );
+  }
+
   onStatusFilterChange(): void {
     this.clearSelection();
     this.applyFilters();
@@ -772,14 +800,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   onYearFilterChange(): void {
     this.clearSelection();
-    this.applyFilters();
-    this.calculateSummary();
+    this.loadWorkOrders(); // Reload từ Firebase theo Năm+Tháng mới
   }
 
   onMonthFilterChange(): void {
     this.clearSelection();
-    this.applyFilters();
-    this.calculateSummary();
+    this.loadWorkOrders(); // Reload từ Firebase theo Năm+Tháng mới
   }
 
 
@@ -3622,6 +3648,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soSanh)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${deliveryQtyStr}</td>
+        <td style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
     const deliveryDateStr = workOrder.deliveryDate
@@ -3664,11 +3691,40 @@ h2{margin-bottom:12px;font-size:16px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:120px;width:12%}
+.pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
+.pxk-top-header td{vertical-align:top;border:1px solid #000;padding:8px}
+.pxk-top-header .logo-cell{width:120px;text-align:center;font-weight:bold;font-size:14px}
+.pxk-top-header .title-cell{text-align:center;padding:12px}
+.pxk-top-header .title-cell .line1{font-size:14px;font-weight:bold;margin-bottom:6px}
+.pxk-top-header .title-cell .line2{font-size:12px}
+.pxk-top-header .meta-cell{width:200px}
+.pxk-top-header .meta-table{width:100%;border-collapse:collapse;font-size:11px}
+.pxk-top-header .meta-table td{border:1px solid #000;padding:4px 6px}
+.pxk-top-header .meta-table .meta-label{width:55%;background:#f5f5f5}
 </style></head><body>
+<div class="pxk-top-header-wrap">
+<table class="pxk-top-header">
+<tr>
+  <td class="logo-cell">AIRSPEED</td>
+  <td class="title-cell">
+    <div class="line1">AIRSPEED MANUFACTURING VIET NAM</div>
+    <div class="line2">Danh sách vật tư theo lệnh sản xuất</div>
+  </td>
+  <td class="meta-cell">
+    <table class="meta-table">
+      <tr><td class="meta-label">Mã quản lý</td><td></td></tr>
+      <tr><td class="meta-label">Phiên bản</td><td></td></tr>
+      <tr><td class="meta-label">Ngày ban hành</td><td></td></tr>
+      <tr><td class="meta-label">Số Trang</td><td></td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+</div>
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Delivery</th></tr></thead>
+<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Đơn vị tính</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th>SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 <p style="margin-top:16px;font-size:11px;">Ngày in: ${new Date().toLocaleString('vi-VN')}</p>

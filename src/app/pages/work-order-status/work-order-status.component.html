@@ -448,7 +448,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr *ngFor="let wo of filteredWorkOrders; let i = index" 
+                        <tr *ngFor="let wo of displayedWorkOrders; let i = index" 
                             [class]="getStatusClass(wo.status || 'waiting') + ' ' + getPriorityClass(wo.deliveryDate) + (isSelected(wo) ? ' selected-row' : '') + (wo.isUrgent && wo.status !== 'done' ? ' urgent-row' : '')">
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.factory || selectedFactory}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.year}}</td>
@@ -587,6 +587,13 @@
                         </tr>
                       </tbody>
                     </table>
+                    
+                    <div *ngIf="hasMoreToDisplay" class="load-more-row" style="padding: 12px; text-align: center; border-top: 1px solid #e9ecef;">
+                      <button mat-stroked-button (click)="loadMoreDisplayed()" style="min-width: 160px;">
+                        <mat-icon>expand_more</mat-icon>
+                        Hiển thị thêm (còn {{ remainingCount }})
+                      </button>
+                    </div>
                     
                     <div *ngIf="filteredWorkOrders.length === 0" class="no-data">
                       <p>No work orders found for the selected criteria.</p>
