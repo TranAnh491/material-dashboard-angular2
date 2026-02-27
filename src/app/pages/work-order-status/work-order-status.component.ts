@@ -3690,7 +3690,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soSanh)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${deliveryQtyStr}</td>
-        <td style="border:1px solid #000;padding:6px;"></td>
+        <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
     // Box kho NVL_SX, NVL_KS: Mã vật tư, PO, Mã Kho, LSX (LSX gần nhất mà mã hàng+po được xuất)
@@ -3700,6 +3700,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const normLsxForCompare = (s: string) => String(s || '').trim().toUpperCase().replace(/\s/g, '');
       const currentLsxNorm = normLsxForCompare(lsx);
       const matPotoLsxMap = new Map<string, { lsx: string; importedAt: number }>();
+      const lsxToLineMap = new Map<string, string>();
       try {
         const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data', ref =>
           ref.where('factory', '==', factoryFilter)
@@ -3719,6 +3720,21 @@ Kiểm tra chi tiết lỗi trong popup import.`);
             if (!cur || impAt > cur.importedAt) matPotoLsxMap.set(key, { lsx: docLsx, importedAt: impAt });
           });
         });
+        // Load Line từ work-orders cho các LSX tìm được
+        const lsxSet = new Set([...matPotoLsxMap.values()].map(v => normLsxForCompare(v.lsx)));
+        if (lsxSet.size > 0) {
+          const woSnap = await this.firestore.collection('work-orders', ref =>
+            ref.where('factory', '==', factoryFilter).limit(500)
+          ).get().toPromise();
+          (woSnap?.docs || []).forEach((docSnap: any) => {
+            const wo = docSnap.data();
+            const woLsx = String(wo?.productionOrder || '').trim();
+            if (lsxSet.has(normLsxForCompare(woLsx))) {
+              const line = String(wo?.productionLine || '').trim();
+              if (line) lsxToLineMap.set(normLsxForCompare(woLsx), line);
+            }
+          });
+        }
       } catch (e) {
         console.warn('Không load LSX gần nhất cho NVL_SX/NVL_KS:', e);
       }
@@ -3726,19 +3742,21 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const key = `${String(l.materialCode || '').trim()}|${String(l.po || '').trim()}`;
         const info = matPotoLsxMap.get(key);
         const lsxVal = info?.lsx || '-';
+        const lineVal = info ? lsxToLineMap.get(normLsxForCompare(info.lsx)) || '' : '';
         return `<tr>
           <td style="border:1px solid #000;padding:6px;text-align:center;">${i + 1}</td>
           <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
           <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
           <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(String((l as any).maKho || '').trim())}</td>
           <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(lsxVal)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(lineVal)}</td>
         </tr>`;
       }).join('');
       nvlSxKsBoxHtml = `
 <div style="margin-top:16px;">
-  <div style="font-weight:bold;margin-bottom:6px;font-size:12px;">Kho NVL_SX / NVL_KS</div>
+  <div style="font-weight:bold;margin-bottom:6px;font-size:12px;">Kho NVL_SX / NVL_KS được sử dụng gần nhất</div>
   <table class="pxk-table" style="margin-top:4px;">
-    <thead><tr><th>STT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>LSX</th></tr></thead>
+    <thead><tr><th>STT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>LSX</th><th>Line</th></tr></thead>
     <tbody>${nvlRows}</tbody>
   </table>
 </div>`;
@@ -3782,7 +3800,8 @@ h2{margin-bottom:12px;font-size:16px}
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
-.pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:120px;width:12%}
+.pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:80px;width:9.6%}
+.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:80px;width:12%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
 .pxk-top-header .logo-cell{width:120px;text-align:center;vertical-align:middle}
@@ -3818,7 +3837,7 @@ h2{margin-bottom:12px;font-size:16px}
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>Đơn vị tính</th><th>Loại Hình</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th>SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>Đơn vị tính</th><th>Loại Hình</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th class="col-sx-tra">SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}
