@@ -3697,6 +3697,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const nvlSxKsLines = lines.filter(l => ['NVL_SX', 'NVL_KS'].includes(String((l as any).maKho || '').trim().toUpperCase()));
     let nvlSxKsBoxHtml = '';
     if (nvlSxKsLines.length > 0) {
+      const normLsxForCompare = (s: string) => String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const currentLsxNorm = normLsxForCompare(lsx);
       const matPotoLsxMap = new Map<string, { lsx: string; importedAt: number }>();
       try {
         const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data', ref =>
@@ -3705,6 +3707,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         (pxkSnap?.docs || []).forEach((docSnap: any) => {
           const d = docSnap.data();
           const docLsx = String(d?.lsx || '').trim();
+          if (normLsxForCompare(docLsx) === currentLsxNorm) return; // Bỏ qua LSX hiện tại, chỉ tìm LSX cũ hơn
           const impAt = d?.importedAt?.toMillis?.() ?? d?.importedAt?.getTime?.() ?? 0;
           (Array.isArray(d?.lines) ? d.lines : []).forEach((ln: any) => {
             const mk = String(ln.maKho || '').trim().toUpperCase();
@@ -3722,7 +3725,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const nvlRows = nvlSxKsLines.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || '')).map((l, i) => {
         const key = `${String(l.materialCode || '').trim()}|${String(l.po || '').trim()}`;
         const info = matPotoLsxMap.get(key);
-        const lsxVal = info?.lsx || lsx;
+        const lsxVal = info?.lsx || '-';
         return `<tr>
           <td style="border:1px solid #000;padding:6px;text-align:center;">${i + 1}</td>
           <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
