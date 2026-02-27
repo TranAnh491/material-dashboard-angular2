@@ -3616,9 +3616,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const getScanQty = (materialCode: string, po: string): number =>
       scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
-      if (scan >= xuất) return 'Đủ';
-      const diff = xuất - scan;
-      return 'Thiếu ' + this.formatQuantityForPxk(diff);
+      const diff = Math.abs(xuất - scan);
+      if (diff < 1) return 'Đủ'; // Thiếu hoặc dư dưới 1 vẫn tính Đủ
+      if (scan < xuất) return 'Thiếu ' + this.formatQuantityForPxk(xuất - scan);
+      return 'Đủ'; // scan > xuất
     };
     const sortedLines = [...lines].sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
     const soChungTuList = [...new Set(sortedLines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
@@ -3630,17 +3631,18 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const matCode = String(l.materialCode || '').trim().toUpperCase();
       const isR = matCode.charAt(0) === 'R';
       const isB033 = matCode.startsWith('B033');
+      const isB030 = matCode.startsWith('B030');
       const location = getLocation(l.materialCode, l.po);
       const qtyStr = this.formatQuantityForPxk(l.quantity);
-      // R và B033: tự điền lượng Scan = quantity khi có ghi nhận scan từ bất cứ mã nào
-      const scanQty = (isR || isB033) && hasAnyScanData
+      // R, B030, B033: tự điền lượng Scan = quantity khi có ghi nhận scan từ bất cứ mã nào
+      const scanQty = (isR || isB030 || isB033) && hasAnyScanData
         ? (Number(l.quantity) || 0)
         : getScanQty(l.materialCode, l.po);
       const scanQtyStr = !hasAnyScanData ? '' : this.formatQuantityForPxk(scanQty);
       const soSanh = !hasAnyScanData ? '' : getSoSanh(l.quantity, scanQty);
       const soCt = (l.soChungTu || '').trim() || '-';
-      // R và B033: tự điền lượng Giao = quantity khi có ghi nhận delivery từ bất cứ mã nào
-      const deliveryQty = (isR || isB033) && hasAnyDeliveryData
+      // R, B030, B033: tự điền lượng Giao = quantity khi có ghi nhận delivery từ bất cứ mã nào
+      const deliveryQty = (isR || isB030 || isB033) && hasAnyDeliveryData
         ? (Number(l.quantity) || 0)
         : getDeliveryQty(l.materialCode, l.po);
       const deliveryQtyStr = !hasAnyDeliveryData ? '' : this.formatQuantityForPxk(deliveryQty);
