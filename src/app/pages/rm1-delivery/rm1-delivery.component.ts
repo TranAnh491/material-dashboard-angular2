@@ -8,6 +8,7 @@ import {
   DeliveryScanFlowModalComponent,
   DeliveryScanFlowResult
 } from '../../components/delivery-scan-flow-modal/delivery-scan-flow-modal.component';
+import { FactorySelectDialogComponent } from '../../components/factory-select-dialog/factory-select-dialog.component';
 
 export interface DeliveryRecord {
   id?: string;
@@ -64,19 +65,28 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
   // ─── Giao hàng ────────────────────────────────────────────
   selectGiaoHang(): void {
-    const dialogRef = this.dialog.open(DeliveryScanFlowModalComponent, {
-      width: '95vw',
-      maxWidth: '500px',
-      maxHeight: '92vh',
-      data: {},
+    const factoryDialogRef = this.dialog.open(FactorySelectDialogComponent, {
+      width: 'auto',
+      maxWidth: '95vw',
       disableClose: false,
-      autoFocus: false,
-      panelClass: 'delivery-flow-dialog'
+      panelClass: 'factory-select-dialog'
     });
-    dialogRef.afterClosed().subscribe((result: DeliveryScanFlowResult) => {
-      if (result?.success) {
-        this.saveDelivery(result);
-      }
+    factoryDialogRef.afterClosed().subscribe((factory: 'ASM1' | 'ASM2' | null) => {
+      if (!factory) return;
+      const deliveryDialogRef = this.dialog.open(DeliveryScanFlowModalComponent, {
+        width: '95vw',
+        maxWidth: '500px',
+        maxHeight: '92vh',
+        data: { factory },
+        disableClose: false,
+        autoFocus: false,
+        panelClass: 'delivery-flow-dialog'
+      });
+      deliveryDialogRef.afterClosed().subscribe((result: DeliveryScanFlowResult) => {
+        if (result?.success) {
+          this.saveDelivery(result);
+        }
+      });
     });
   }
 

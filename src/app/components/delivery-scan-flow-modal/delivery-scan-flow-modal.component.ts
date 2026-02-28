@@ -56,9 +56,14 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
     checkHang: 'Quét mã hàng  (Mã hàng | PO | Số lượng)'
   };
 
+  /** factory: ASM1 | ASM2 - dùng filter PXK theo nhà máy */
+  get factoryFilter(): string {
+    return (this.data?.factory as string) || 'ASM1';
+  }
+
   constructor(
     public dialogRef: MatDialogRef<DeliveryScanFlowModalComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { title?: string },
+    @Inject(MAT_DIALOG_DATA) public data: { title?: string; factory?: string },
     private firestore: AngularFirestore
   ) {}
 
@@ -135,7 +140,18 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
         break;
       }
       case 'lsx': {
-        this.lsx = raw;
+        const lsxUpper = raw.trim().toUpperCase();
+        if (this.factoryFilter === 'ASM2') {
+          if (lsxUpper.startsWith('KZLSX')) {
+            this.setError('ASM2 chỉ dùng LSX dạng LHLSX (vd: LHLSX0326/0012). KZLSX là LSX của ASM1.');
+            return;
+          }
+          if (!lsxUpper.startsWith('LHLSX')) {
+            this.setError('ASM2 chỉ dùng LSX dạng LHLSX (vd: LHLSX0326/0012).');
+            return;
+          }
+        }
+        this.lsx = raw.trim();
         this.scanValue = '';
         this.currentStep = 'lineNhan';
         this.loadPxk();
@@ -187,7 +203,9 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
     const target = this.normLsx(this.lsx);
 
     const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
-    this.firestore.collection('pxk-import-data').get().toPromise().then(snap => {
+    this.firestore.collection('pxk-import-data', ref =>
+      ref.where('factory', '==', this.factoryFilter)
+    ).get().toPromise().then(snap => {
       const rows: PxkLineRow[] = [];
       (snap?.docs || []).forEach(doc => {
         const d = doc.data() as any;

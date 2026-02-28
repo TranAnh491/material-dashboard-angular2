@@ -2000,8 +2000,6 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           this.isProductionOrderScanned = true;
           console.log('✅ LSX detected by length:', this.batchProductionOrder);
           this.showScanStatus();
-          
-          // 🔧 SỬA LỖI: Cập nhật currentScanStep thành 'material' sau khi scan LSX
           if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
             this.currentScanStep = 'material';
             console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');

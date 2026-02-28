@@ -123,7 +123,7 @@
               <div class="col-lg-2 col-md-4 col-sm-6">
                 <div class="card card-stats compact-stats summary-card" 
                      [class.card-warning]="checkCount > 0"
-                     [matTooltip]="checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX bị thiếu (So sánh). Không thể chọn Transfer hoặc Done.' : 'Số LSX đã import PXK có mã Thiếu'">
+                     [matTooltip]="checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX bị thiếu (So sánh). Chọn Transfer/Done sẽ yêu cầu pass vượt quyền.' : 'Số LSX đã import PXK có mã Thiếu'">
                   <div class="card-header">
                     <p class="card-category">Check</p>
                     <h3 class="card-title">{{checkCount}}</h3>
@@ -526,8 +526,8 @@
                               <option value="waiting">Waiting</option>
                               <option value="kitting">Kitting</option>
                               <option value="ready">Ready</option>
-                              <option value="transfer" [disabled]="isTransferDisabledForWorkOrder(wo)" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - không thể chọn Transfer' : ''">Transfer</option>
-                              <option value="done" [disabled]="isTransferDisabledForWorkOrder(wo)" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - không thể chọn Done' : ''">Done</option>
+                              <option value="transfer" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Transfer</option>
+                              <option value="done" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Done</option>
                               <option value="delay">Delay</option>
                             </select>
                             <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.status || 'Chưa có'}}</span>

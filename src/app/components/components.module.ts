@@ -19,6 +19,7 @@ import { ImportProgressDialogComponent } from './import-progress-dialog/import-p
 import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.component';
 import { ScannerInputModalComponent } from './scanner-input-modal/scanner-input-modal.component';
 import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/delivery-scan-flow-modal.component';
+import { FactorySelectDialogComponent } from './factory-select-dialog/factory-select-dialog.component';
 
 @NgModule({
   imports: [
@@ -42,7 +43,8 @@ import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/deliv
     ImportProgressDialogComponent,
     QRScannerModalComponent,
     ScannerInputModalComponent,
-    DeliveryScanFlowModalComponent
+    DeliveryScanFlowModalComponent,
+    FactorySelectDialogComponent
   ],
   exports: [
     FooterComponent,
@@ -53,7 +55,8 @@ import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/deliv
     ImportProgressDialogComponent,
     QRScannerModalComponent,
     ScannerInputModalComponent,
-    DeliveryScanFlowModalComponent
+    DeliveryScanFlowModalComponent,
+    FactorySelectDialogComponent
   ]
 })
 export class ComponentsModule { }

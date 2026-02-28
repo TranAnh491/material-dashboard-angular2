@@ -353,7 +353,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     };
     const targetNorm = normLsx(lsxToDelete);
     if (!targetNorm) {
-      alert('LSX không đúng format (ví dụ: KZLSX0326/0089 hoặc 0326/0089).');
+      alert('LSX không đúng format. ASM1: KZLSX0326/0089; ASM2: LHLSX0326/0012; hoặc 0326/0089.');
       return;
     }
     this.isClearingPxk = true;
@@ -879,16 +879,25 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     };
   }
 
+  readonly BYPASS_PASSWORD = '111';
+
+  /** Kiểm tra pass vượt quyền khi LSX thiếu - trả về true nếu được phép vượt */
+  async checkBypassPasswordForThieu(): Promise<boolean> {
+    const pass = prompt('LSX đang thiếu. Nhập mật khẩu vượt quyền để tiếp tục:');
+    if (pass === this.BYPASS_PASSWORD) return true;
+    alert('Mật khẩu không đúng. Không thể vượt quyền.');
+    return false;
+  }
+
   async onStatusChange(workOrder: WorkOrder, newStatus: string): Promise<void> {
+    const oldStatus = workOrder.status;
     const newStatusEnum = this.convertStringToStatus(newStatus);
     const blocked = await this.isThieuBlockedForWorkOrder(workOrder);
-    if (blocked) {
-      if (newStatusEnum === WorkOrderStatus.DONE) {
-        alert('Không thể chọn Done: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
-        return;
-      }
-      if (newStatusEnum === WorkOrderStatus.TRANSFER) {
-        alert('Không thể chọn Transfer: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
+    if (blocked && (newStatusEnum === WorkOrderStatus.DONE || newStatusEnum === WorkOrderStatus.TRANSFER)) {
+      const bypass = await this.checkBypassPasswordForThieu();
+      if (!bypass) {
+        workOrder.status = oldStatus;
+        this.cdr.detectChanges();
         return;
       }
     }
@@ -1848,7 +1857,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const templateData = [
       ['Mã Ctừ', 'Số Ctừ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã vật tư', 'Số PO', 'Mã Kho', 'Số lượng xuất thực tế', 'Đvt', 'Loại Hình'],
       ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 'NVL', 1054.58, 'M', ''],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 'NVL_SX', 100, 'PCS', '']
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 'NVL_SX', 100, 'PCS', ''],
+      ['PX', 'LHPX0226/0001', 'LHLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 'NVL', 500, 'M', '']
     ];
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -2099,12 +2109,20 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const seenInBatch = new Set<string>();
       
       const duplicates: string[] = [];
+      const invalidLsxFactory: string[] = []; // ASM2 dùng KZLSX (sai format)
       const validWorkOrders: WorkOrder[] = [];
 
       for (const workOrder of newWorkOrderData) {
         const lsx = workOrder.productionOrder?.trim();
         if (!lsx) {
           console.warn(`⚠️ Skipping work order with empty LSX:`, workOrder);
+          continue;
+        }
+        
+        // ASM2 chỉ dùng LHLSX, không dùng KZLSX
+        const factory = (workOrder.factory || this.selectedFactory || '').toUpperCase();
+        if (factory === 'ASM2' && lsx.toUpperCase().startsWith('KZLSX')) {
+          invalidLsxFactory.push(`${lsx} (ASM2 phải dùng LHLSX, không dùng KZLSX)`);
           continue;
         }
         
@@ -2182,6 +2200,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (duplicates.length > 0) {
         const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
         alert(duplicateMessage);
+      }
+
+      if (invalidLsxFactory.length > 0) {
+        alert(`⚠️ Bỏ qua ${invalidLsxFactory.length} dòng vì ASM2 phải dùng LSX dạng LHLSX:\n${invalidLsxFactory.join('\n')}`);
       }
 
       // Validate data before saving
@@ -2589,8 +2611,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
     const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
     if (blocked) {
-      alert('Không thể bấm Done: LSX có PXK đã import và So sánh còn mã Thiếu. Vui lòng kiểm tra Lượng Scan.');
-      return;
+      const bypass = await this.checkBypassPasswordForThieu();
+      if (!bypass) return;
     }
     console.log('🔄 Bắt đầu hoàn thành work order:', workOrder.productCode, 'ID:', workOrder.id);
     
@@ -3278,11 +3300,20 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const m = t.match(/(\d{4}[\/\-\.]\d+)/);
         return m ? m[1].replace(/[-.]/g, '/') : t;
       };
-      const woNormToOriginal = new Map<string, string>();
+      const woNormToOriginal = new Map<string, string[]>();
       woLsxList.forEach(lsx => {
         const n = normalizeLsx(lsx);
-        if (n) woNormToOriginal.set(n, lsx);
+        if (n) {
+          const arr = woNormToOriginal.get(n) || [];
+          if (!arr.includes(lsx)) arr.push(lsx);
+          woNormToOriginal.set(n, arr);
+        }
       });
+      const samePrefix = (a: string, b: string): boolean => {
+        const ua = (a || '').toUpperCase();
+        const ub = (b || '').toUpperCase();
+        return (ua.startsWith('KZ') && ub.startsWith('KZ')) || (ua.startsWith('LH') && ub.startsWith('LH'));
+      };
       const findMatchingWoLsx = (pxkLsx: string): string | null => {
         const trimmed = String(pxkLsx || '').trim();
         if (!trimmed) return null;
@@ -3290,10 +3321,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         for (const wo of woLsxList) {
           const woUpper = wo.toUpperCase();
           if (woUpper === upper) return wo;
-          if (woUpper.includes(upper) || upper.includes(woUpper)) return wo;
+          if (samePrefix(trimmed, wo) && (woUpper.includes(upper) || upper.includes(woUpper))) return wo;
         }
         const n = normalizeLsx(trimmed);
-        return woNormToOriginal.get(n) || null;
+        const candidates = woNormToOriginal.get(n) || [];
+        return candidates.find(c => samePrefix(trimmed, c)) || candidates[0] || null;
       };
       const getFullLsxFromCell = (val: any): string => {
         if (val == null || val === '') return '';
@@ -3301,8 +3333,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         if (typeof val === 'number' && val >= 0 && val < 1 && !Number.isInteger(val)) return '';
         return String(val).trim();
       };
-      /** Chuẩn LSX: 5 chữ cái + 4 số + / + 4 số (ví dụ: KZLSX0326/0089) - không đúng thì không tính */
-      const isValidLsxFormat = (s: string): boolean => /^[A-Za-z]{5}\d{4}\/\d{4}$/.test(String(s || '').trim());
+      /** Chuẩn LSX: ASM1 = KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089); ASM2 = LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089) */
+      const isValidLsxFormat = (s: string): boolean => /^(KZLSX|LHLSX)\d{4}\/\d{4}$/i.test(String(s || '').trim());
+      /** Xác định factory từ prefix LSX: KZ → ASM1, LH → ASM2 */
+      const getFactoryFromLsx = (lsxStr: string): 'ASM1' | 'ASM2' =>
+        String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number) => {
         const out: PxkDataByLsx = {};
@@ -3316,7 +3351,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           if (!pxkLsxRaw) continue;
           if (!isValidLsxFormat(pxkLsxRaw)) continue;
           const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
-          const storeKey = (pxkLsxRaw.includes('KZLSX') || pxkLsxRaw.includes('/') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+          const storeKey = (pxkLsxRaw.toUpperCase().startsWith('KZLSX') || pxkLsxRaw.toUpperCase().startsWith('LHLSX') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
           const soChungTu = String(row[soChungTuCol] ?? '').trim();
           const materialCode = String(row[vatTuCol] ?? '').trim();
           const qtyRaw = row[qtyCol];
@@ -3379,16 +3414,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
       if (total === 0) {
         if (rowsWithPx > 0) {
-          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format (5 chữ cái + 4 số + / + 4 số, ví dụ: KZLSX0326/0089).\nCác dòng LSX không đúng format đã được bỏ qua.\nCột LSX đang đọc: cột C.`);
+          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột LSX đang đọc: cột C.`);
         } else if (rows.length > dataStartRow) {
           alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
         } else {
           alert('Import PXK: Không có dữ liệu sau dòng tiêu đề.');
         }
       } else {
-        const factorySave = (this.selectedFactory || 'ASM1').toUpperCase().includes('ASM1') ? 'ASM1' : 'ASM2';
         try {
           for (const [lsxKey, lines] of Object.entries(this.pxkDataByLsx)) {
+            const factorySave = getFactoryFromLsx(lsxKey); // KZ → ASM1, LH → ASM2
             const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
             await this.firestore.collection('pxk-import-data').doc(docId).set({
               lsx: lsxKey,
@@ -3426,11 +3461,21 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const m = t.match(/(\d{4}[\/\-\.]\d+)/);
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
+    /** ASM1=KZLSX, ASM2=LHLSX - không match chéo */
+    const samePrefix = (a: string, b: string): boolean => {
+      const ua = (a || '').toUpperCase();
+      const ub = (b || '').toUpperCase();
+      const aKz = ua.startsWith('KZLSX') || ua.startsWith('KZ');
+      const bKz = ub.startsWith('KZLSX') || ub.startsWith('KZ');
+      const aLh = ua.startsWith('LHLSX') || ua.startsWith('LH');
+      const bLh = ub.startsWith('LHLSX') || ub.startsWith('LH');
+      return (aKz && bKz) || (aLh && bLh);
+    };
     const woNorm = normalizeLsx(woLsx);
     for (const key of Object.keys(this.pxkDataByLsx)) {
       if (key.toUpperCase() === woUpper) return this.pxkDataByLsx[key] || [];
-      if (woUpper.includes(key.toUpperCase()) || key.toUpperCase().includes(woUpper)) return this.pxkDataByLsx[key] || [];
-      if (woNorm && normalizeLsx(key) === woNorm) return this.pxkDataByLsx[key] || [];
+      if (samePrefix(woLsx, key) && (woUpper.includes(key.toUpperCase()) || key.toUpperCase().includes(woUpper))) return this.pxkDataByLsx[key] || [];
+      if (samePrefix(woLsx, key) && woNorm && normalizeLsx(key) === woNorm) return this.pxkDataByLsx[key] || [];
     }
     if (Object.keys(this.pxkDataByLsx).length > 0) {
       console.log('[PXK Lookup] Không tìm thấy cho LSX:', JSON.stringify(woLsx), '| Các key đang có:', Object.keys(this.pxkDataByLsx).slice(0, 15));

@@ -38,6 +38,7 @@ export class MenuComponent implements OnInit {
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
     { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Main' },
     { path: '/location', title: 'Location', icon: 'place', category: 'Main' },
+    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
     
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'download', category: 'ASM1 RM' },
@@ -46,7 +47,6 @@ export class MenuComponent implements OnInit {
     { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'bar_chart', category: 'ASM1 RM' },
     { path: '/qc', title: 'Quality', icon: 'verified', category: 'ASM1 RM' },
     { path: '/label', title: 'Label', icon: 'local_offer', category: 'ASM1 RM' },
-    { path: '/rm1-delivery', title: 'RM1 Delivery', icon: 'local_shipping', category: 'ASM1 RM' },
     // ASM2 RM
     { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'download', category: 'ASM2 RM' },
     { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'upload', category: 'ASM2 RM' },

@@ -3,7 +3,7 @@
         <div class="navbar-wrapper">
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
         </div>
-        <!-- Home Button - Ẩn ở trang Menu, QC, Settings, RM1 Delivery (có nút Về menu riêng) -->
+        <!-- Home Button - Ẩn ở trang Menu, QC, Settings, RM Delivery (có nút Về menu riêng) -->
         <button mat-raised-button class="btn-home me-3" (click)="goToMenu()" *ngIf="!isMenuPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage()" title="Về Menu">
           <i class="material-icons">home</i>
         </button>

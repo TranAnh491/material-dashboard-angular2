@@ -10,6 +10,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
+  { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: '' },
   { 
     path: '', 
     title: 'ASM1 RM', 
@@ -19,8 +20,7 @@ export const ROUTES: RouteInfo[] = [
       { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'IB', class: '' },
       { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'OB', class: '' },
       { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'IV', class: '' },
-      { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' },
-      { path: '/rm1-delivery', title: 'RM1 Delivery', icon: 'DL', class: '' }
+      { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' }
     ]
   },
   { 

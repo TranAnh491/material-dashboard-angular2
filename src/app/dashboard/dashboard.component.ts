@@ -122,7 +122,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Tools' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Tools' },
     { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
-    { path: '/rm1-delivery', title: 'RM1 Delivery', icon: 'local_shipping', category: 'Tools' },
+    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
     { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Tools' },
     { path: '/location', title: 'Location', icon: 'location_on', category: 'Tools' },
     { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', category: 'Tools' },
