@@ -42,8 +42,12 @@
                     <i class="material-icons">download</i> Tải form PXK
                   </button>
                   <button class="btn btn-outline-warning" (click)="clearPxkImportedData()" [disabled]="isClearingPxk"
-                          style="color: #ff9800;" title="Xóa dữ liệu PXK đã import để import lại">
+                          style="background-color: #fff; color: #ff9800;" title="Xóa dữ liệu PXK đã import để import lại">
                     <i class="material-icons">delete_sweep</i> Xóa dữ liệu PXK
+                  </button>
+                  <button class="btn btn-outline-secondary" (click)="showPxkDownloadDialog = true"
+                          style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
+                    <i class="material-icons">download</i> Tải PXK
                   </button>
                 </div>
                 
@@ -696,6 +700,40 @@
             </div>
 
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PXK Download Dialog -->
+  <div class="time-range-dialog-overlay pxk-download-overlay" *ngIf="showPxkDownloadDialog">
+    <div class="time-range-dialog pxk-download-dialog">
+      <div class="dialog-header">
+        <h4>Tải lịch sử PXK theo tháng</h4>
+        <button mat-icon-button (click)="showPxkDownloadDialog = false">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <div class="form-group">
+          <label>Chọn tháng/năm:</label>
+          <mat-form-field class="full-width">
+            <input matInput [matDatepicker]="pxkMonthPicker" [(ngModel)]="pxkDownloadDate" placeholder="Chọn tháng" readonly [disabled]="pxkDownloadAllMonths">
+            <mat-datepicker-toggle matSuffix [for]="pxkMonthPicker"></mat-datepicker-toggle>
+            <mat-datepicker #pxkMonthPicker startView="year" yPosition="above"></mat-datepicker>
+          </mat-form-field>
+        </div>
+        <div class="form-group">
+          <mat-checkbox [(ngModel)]="pxkDownloadAllMonths">Tải tất cả (không lọc theo tháng)</mat-checkbox>
+        </div>
+        <div class="dialog-actions">
+          <button mat-raised-button color="primary" (click)="downloadPxkHistoryByMonth()"
+                  [disabled]="isDownloadingPxk">
+            <mat-icon>download</mat-icon> {{ isDownloadingPxk ? 'Đang tải...' : 'Tải về' }}
+          </button>
+          <button mat-raised-button (click)="showPxkDownloadDialog = false">
+            <mat-icon>cancel</mat-icon> Hủy
+          </button>
         </div>
       </div>
     </div>

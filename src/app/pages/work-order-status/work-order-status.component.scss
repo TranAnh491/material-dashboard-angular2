@@ -2052,6 +2052,15 @@ textarea.mat-input-element {
   z-index: 9999;
 }
 
+// Datepicker trong dialog cần nổi trên dialog (z-index cao hơn 9999)
+::ng-deep .cdk-overlay-container {
+  z-index: 10000 !important;
+}
+
+.pxk-download-dialog .dialog-content {
+  min-height: 120px;
+}
+
 .time-range-dialog {
   background: white;
   border-radius: 8px;

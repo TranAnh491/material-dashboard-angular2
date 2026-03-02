@@ -163,6 +163,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   pxkDataByLsx: PxkDataByLsx = {};
   isImportingPxk: boolean = false;
   isClearingPxk: boolean = false;
+  showPxkDownloadDialog: boolean = false;
+  pxkDownloadDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  pxkDownloadAllMonths: boolean = false; // true = tải tất cả, false = lọc theo tháng
+  isDownloadingPxk: boolean = false;
   
   
 
@@ -1912,6 +1916,76 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(workbook, filename);
     alert(`✅ Đã tải xuống form PXK: ${filename}`);
+  }
+
+  /** Tải lịch sử PXK theo tháng - tất cả các cột từ PXK. Nếu pxkDownloadAllMonths=true thì tải tất cả không lọc tháng. */
+  async downloadPxkHistoryByMonth(): Promise<void> {
+    this.isDownloadingPxk = true;
+    try {
+      const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
+      const y = this.pxkDownloadDate.getFullYear();
+      const m = this.pxkDownloadDate.getMonth() + 1;
+      const startOfMonth = new Date(y, m - 1, 1);
+      const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999);
+      const filterByMonth = !this.pxkDownloadAllMonths;
+      const rows: any[][] = [
+        ['Mã Ctừ', 'Số CT', 'LSX', 'Mã SP', 'Mã vật tư', 'Số PO', 'Mã Kho', 'Số lượng xuất thực tế', 'Đvt', 'Loại Hình', 'Nhà máy', 'Ngày import']
+      ];
+      let totalRows = 0;
+      snapshot.docs.forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const lsx = String(d?.lsx || '').trim();
+        const lines = Array.isArray(d?.lines) ? d.lines : [];
+        let importedAt: Date | null = null;
+        if (d?.importedAt) {
+          const t = d.importedAt;
+          importedAt = t?.toDate ? t.toDate() : (t instanceof Date ? t : new Date(t));
+        }
+        if (filterByMonth && (!importedAt || importedAt < startOfMonth || importedAt > endOfMonth)) return;
+        if (!lsx || lines.length === 0) return;
+        for (const line of lines) {
+          const l = line as any;
+          const factoryVal = (d?.factory ?? l?.factory ?? this.selectedFactory ?? '') as string;
+          rows.push([
+            'PX',
+            l?.soChungTu ?? '',
+            lsx,
+            l?.maSanPham ?? '', // Mã SP - không lưu trong PxkLine, để trống
+            l?.materialCode ?? '',
+            l?.po ?? '',
+            l?.maKho ?? '',
+            l?.quantity ?? 0,
+            l?.unit ?? '',
+            l?.loaiHinh ?? '',
+            factoryVal,
+            importedAt ? importedAt.toLocaleDateString('vi-VN') : ''
+          ]);
+          totalRows++;
+        }
+      });
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 8 }, { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 15 },
+        { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 14 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
+      const monthName = this.months.find(mo => mo.value === m)?.name || String(m);
+      const filename = this.pxkDownloadAllMonths
+        ? `PXK_LichSu_TatCa_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `PXK_LichSu_${y}_${String(m).padStart(2, '0')}_${monthName}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+      const msg = this.pxkDownloadAllMonths
+        ? `Đã tải xuống ${totalRows} dòng PXK (tất cả): ${filename}`
+        : `Đã tải xuống ${totalRows} dòng PXK tháng ${m}/${y}: ${filename}`;
+      alert(`✅ ${msg}`);
+    } catch (e) {
+      console.error('[PXK Download]', e);
+      alert('Lỗi khi tải PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+    } finally {
+      this.isDownloadingPxk = false;
+      this.showPxkDownloadDialog = false;
+    }
   }
 
   // Selection functionality methods
@@ -3733,13 +3807,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const matCode = String(l.materialCode || '').trim().toUpperCase();
       const maKho = String((l as any).maKho || '').trim();
       const isNvlSxOrKs = ['NVL_SX', 'NVL_KS'].includes(maKho.toUpperCase());
+      const isNvlSxOnly = maKho.toUpperCase() === 'NVL_SX'; // Chỉ NVL_SX hiển thị "Đã Giao"; NVL_KS dùng dữ liệu thực
       const isR = matCode.charAt(0) === 'R';
       const isB033 = matCode.startsWith('B033');
       const isB030 = matCode.startsWith('B030');
       const location = isNvlSxOrKs ? maKho : getLocation(l.materialCode, l.po);
       const qtyStr = this.formatQuantityForPxk(l.quantity);
       let scanQtyStr: string; let soSanh: string; let deliveryQtyStr: string;
-      if (isNvlSxOrKs) {
+      if (isNvlSxOnly) {
         scanQtyStr = 'Đã Giao';
         soSanh = 'Đã Giao';
         deliveryQtyStr = 'Đã Giao';
