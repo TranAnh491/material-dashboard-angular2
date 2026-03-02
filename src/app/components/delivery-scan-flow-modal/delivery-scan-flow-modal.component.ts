@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, Inject, ViewChild, ElementRef } from '@an
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, take } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 
 export type DeliveryScanStep = 'nvGiao' | 'nvNhan' | 'lsx' | 'lineNhan' | 'checkHang';
 
@@ -207,26 +208,89 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
       const ub = (b || '').toUpperCase();
       return (ua.startsWith('KZ') && ub.startsWith('KZ')) || (ua.startsWith('LH') && ub.startsWith('LH'));
     };
-    try {
-      const snap = await this.firestore.collection('work-orders', ref =>
-        ref.where('factory', '==', this.factoryFilter).limit(500)
-      ).get().toPromise();
-      const lsxNorm = norm(lsx);
-      const woList = (snap?.docs || []).map(d => {
-        const data = d.data();
-        return Object.assign({ id: d.id }, data && typeof data === 'object' ? data : {}) as any;
+    const normFactory = (f: string) => String(f || '').trim().toUpperCase();
+    const targetFactory = normFactory(this.factoryFilter);
+    const matchesFactory = (wo: any) => normFactory(wo.factory) === targetFactory;
+
+    const flattenDocToWoList = (d: any, woList: any[]) => {
+      const data = d.data() as any;
+      if (!data || typeof data !== 'object') return;
+      if (data.productionOrder != null) {
+        const wo = { id: d.id, ...data };
+        if (matchesFactory(wo)) woList.push(wo);
+        return;
+      }
+      const arr = Array.isArray(data.data) ? data.data : [];
+      arr.forEach((item: any) => {
+        if (item && typeof item === 'object' && item.productionOrder != null && matchesFactory(item)) {
+          woList.push({ id: d.id, ...item });
+        }
       });
-      const match = woList.find(wo => {
+    };
+
+    try {
+      const now = new Date();
+      const currYear = now.getFullYear();
+      const currMonth = now.getMonth() + 1;
+      const woList: any[] = [];
+
+      const getDocsFromSnapshot = (actions: any[]) =>
+        (actions || []).map((a: any) => a.payload?.doc).filter(Boolean);
+
+      // Query 1: theo year + month (giống Work Order tab)
+      try {
+        const actions1 = await firstValueFrom(
+          this.firestore.collection('work-orders', ref =>
+            ref.where('year', '==', currYear).where('month', '==', currMonth).limit(500)
+          ).snapshotChanges().pipe(take(1))
+        );
+        getDocsFromSnapshot(actions1).forEach((d: any) => flattenDocToWoList(d, woList));
+      } catch (_) { /* year/month có thể không có index */ }
+
+      // Query 2: theo factory (fallback cho single WO)
+      try {
+        const actions2 = await firstValueFrom(
+          this.firestore.collection('work-orders', ref =>
+            ref.where('factory', '==', this.factoryFilter).limit(500)
+          ).snapshotChanges().pipe(take(1))
+        );
+        getDocsFromSnapshot(actions2).forEach((d: any) => flattenDocToWoList(d, woList));
+      } catch (_) {}
+
+      // Query 3: load tất cả (limit 500) nếu vẫn chưa đủ
+      if (woList.length === 0) {
+        try {
+          const actions3 = await firstValueFrom(
+            this.firestore.collection('work-orders', ref => ref.limit(500)).snapshotChanges().pipe(take(1))
+          );
+          getDocsFromSnapshot(actions3).forEach((d: any) => flattenDocToWoList(d, woList));
+        } catch (_) {}
+      }
+
+      // Dedupe by productionOrder
+      const seen = new Set<string>();
+      const uniqueList = woList.filter(wo => {
+        const key = String(wo.productionOrder || '').trim().toUpperCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      const lsxNorm = norm(lsx);
+      const match = uniqueList.find(wo => {
         const po = String(wo.productionOrder || '').trim();
         if (!po) return false;
         if (!samePrefix(lsx, po)) return false;
         return norm(po) === lsxNorm || po.toUpperCase() === lsx.toUpperCase();
       });
+
       if (!match) {
-        this.setError(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order.`);
+        this.setError(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order (Năm ${currYear}, Tháng ${currMonth}).`);
         return false;
       }
-      const status = String(match.status || '').toLowerCase();
+
+      const statusRaw = match.status;
+      const status = statusRaw != null ? String(statusRaw).trim().toLowerCase() : '';
       if (status !== 'transfer') {
         this.setError(`LSX "${lsx}" chưa ở trạng thái Transfer. Cột Tình trạng ở tab Work Order phải là Transfer mới được Scan Giao Hàng.`);
         return false;
