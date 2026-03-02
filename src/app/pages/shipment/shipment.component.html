@@ -305,7 +305,9 @@
               {{ getDisplayScannedValue(shipment) | number:'1.0-0':'en-US' }}
             </td>
             <td class="check-status-cell">
-              <i class="material-icons check-ok-icon" [class.check-ok-icon-carton]="getCheckModeForKey(shipment) === 'pn'" *ngIf="isCheckOK(shipment)">check_circle</i>
+              <span *ngIf="isCheckOK(shipment)" [class.check-ok-qty]="getCheckModeForKey(shipment) === 'pn-qty'" [class.check-ok-carton]="getCheckModeForKey(shipment) === 'pn'">
+                {{ getCheckModeForKey(shipment) === 'pn' ? 'Thùng OK' : 'Lượng OK' }}
+              </span>
             </td>
             <td class="code-cell">
               <input type="text"

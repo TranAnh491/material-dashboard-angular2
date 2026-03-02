@@ -1,6 +1,34 @@
 :host {
   display: block;
   height: 100%;
+
+  /* Tắt toàn bộ animation/transition của Angular Material trong component này */
+  .mat-mdc-button-ripple,
+  .mat-ripple-element,
+  .mdc-button__ripple::after,
+  .mdc-button__ripple::before {
+    display: none !important;
+  }
+
+  .mat-mdc-select-panel,
+  .mat-mdc-autocomplete-panel {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .mat-mdc-tooltip {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .mdc-checkbox__checkmark,
+  .mdc-checkbox__mixedmark {
+    transition: none !important;
+  }
+
+  .mdc-checkbox .mdc-checkbox__background {
+    transition: none !important;
+  }
 }
 
 .work-order-iframe {
@@ -2035,6 +2063,17 @@ textarea.mat-input-element {
   
   .card-body {
     padding: 8px 12px !important; /* Reduced padding */
+  }
+}
+
+// Scan Status Select Dialog - nút chọn trạng thái sau khi scan LSX
+.scan-status-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  button {
+    min-width: 90px;
   }
 }
 

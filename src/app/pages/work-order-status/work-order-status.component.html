@@ -195,7 +195,7 @@
                     <i class="material-icons">arrow_back</i> BACK
                   </button>
                   <button class="btn btn-outline-primary" 
-                          (click)="openScanPage()"
+                          (click)="openScanPopup()"
                           style="color: #2196f3; border: none;">
                     <i class="material-icons">qr_code_scanner</i> Scan QR
                   </button>
@@ -733,6 +733,58 @@
           </button>
           <button mat-raised-button (click)="showPxkDownloadDialog = false">
             <mat-icon>cancel</mat-icon> Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan QR: Popup chờ quét LSX (máy scanner) -->
+  <div class="time-range-dialog-overlay" *ngIf="showScanLSXPopup">
+    <div class="time-range-dialog" style="max-width: 400px;">
+      <div class="dialog-header">
+        <h4><mat-icon>qr_code_scanner</mat-icon> Quét LSX</h4>
+        <button mat-icon-button (click)="closeScanLSXPopup()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p style="margin-bottom: 16px; font-size: 15px;">
+          <mat-icon style="vertical-align: middle; color: #4caf50;">qr_code_scanner</mat-icon>
+          Đang chờ máy scanner. Quét mã LSX.
+        </p>
+        <div class="dialog-actions">
+          <button mat-button (click)="closeScanLSXPopup()">
+            <mat-icon>close</mat-icon> Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan QR: Chọn trạng thái sau khi scan LSX -->
+  <div class="time-range-dialog-overlay" *ngIf="showScanStatusSelectDialog && scanStatusSelectWorkOrder">
+    <div class="time-range-dialog" style="max-width: 420px;">
+      <div class="dialog-header">
+        <h4><mat-icon>qr_code_scanner</mat-icon> Chọn tình trạng</h4>
+        <button mat-icon-button (click)="closeScanStatusSelectDialog()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p style="margin-bottom: 16px;"><strong>LSX:</strong> {{ scanStatusSelectWorkOrder.productionOrder }}</p>
+        <p style="font-size: 12px; color: #666; margin-bottom: 12px;">Chọn trạng thái cập nhật (rule giống cột Tình trạng):</p>
+        <div class="scan-status-buttons">
+          <button mat-stroked-button (click)="onScanStatusSelect('waiting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'waiting')">Waiting</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('kitting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting') ? 'Chỉ chọn Kitting khi đang Waiting' : ''">Kitting</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('ready')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready') ? 'Chỉ chọn Ready khi đang Kitting' : ''">Ready</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('transfer')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : '')">Transfer</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('done')" [matTooltip]="isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Done</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('delay')">Delay</button>
+        </div>
+        <div class="dialog-actions" style="margin-top: 16px;">
+          <button mat-button (click)="closeScanStatusSelectDialog()">
+            <mat-icon>close</mat-icon> Hủy
           </button>
         </div>
       </div>

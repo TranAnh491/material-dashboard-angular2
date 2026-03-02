@@ -658,11 +658,11 @@
 }
 
 .check-status-cell {
-  min-width: 48px;
-  width: 48px;
+  min-width: 72px;
+  width: 72px;
   text-align: center;
   vertical-align: middle;
-  padding: 6px 2px;
+  padding: 6px 4px;
 }
 
 .check-ok-icon {
@@ -674,6 +674,19 @@
 /* Tick cột CHECK khi kiểm tra bằng thùng và khớp carton: màu xanh da trời */
 .check-ok-icon.check-ok-icon-carton {
   color: #2196F3;
+}
+
+/* Check OK text: Lượng OK = xanh lá, Thùng OK = xanh da trời (70% size) */
+.check-status-cell .check-ok-qty {
+  color: #4CAF50;
+  font-weight: 600;
+  font-size: 8.4px;
+}
+
+.check-status-cell .check-ok-carton {
+  color: #2196F3;
+  font-weight: 600;
+  font-size: 8.4px;
 }
 
 .shipment-check-result {

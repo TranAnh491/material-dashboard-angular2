@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { MAT_RIPPLE_GLOBAL_OPTIONS, RippleGlobalOptions } from '@angular/material/core';
 import { Router } from '@angular/router';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
 import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
@@ -53,10 +54,15 @@ type PxkDataByLsx = { [lsx: string]: PxkLine[] };
 /** LSX có PXK import và So sánh có Thiếu thì không cho chọn Transfer/Done */
 const RULE_THIEU_BLOCK_DATE = new Date(2025, 0, 1); // Luôn áp dụng
 
+const globalRippleConfig: RippleGlobalOptions = { disabled: true };
+
 @Component({
   selector: 'app-work-order-status',
   templateUrl: './work-order-status.component.html',
-  styleUrls: ['./work-order-status.component.scss']
+  styleUrls: ['./work-order-status.component.scss'],
+  providers: [
+    { provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig }
+  ]
 })
 export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   Object = Object;
@@ -152,6 +158,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isProcessingScan: boolean = false;
   scannedItems: ScannedItem[] = [];
   allWorkOrdersForScan: WorkOrder[] = []; // Store all work orders across factories for scan lookup
+
+  // Scan QR -> Chọn trạng thái dialog (sau khi scan LSX)
+  showScanStatusSelectDialog: boolean = false;
+  scanStatusSelectWorkOrder: WorkOrder | null = null;
+
+  /** true = đang chờ máy scanner (popup mode, không dùng camera) */
+  isScanPopupMode: boolean = false;
+
+  /** Popup chờ quét LSX (hiển thị thay vì alert) */
+  showScanLSXPopup: boolean = false;
 
   // Physical scanner support
   isPhysicalScannerMode: boolean = true; // Default to physical scanner
@@ -4030,11 +4046,21 @@ ${nvlSxKsBoxHtml}
 
 
   // Page Navigation
+  /** Mở scan QR - chỉ dùng máy scanner (không camera) */
+  async openScanPopup(): Promise<void> {
+    console.log('🚀 Opening scan - máy scanner...');
+    await this.loadAllWorkOrdersForScan();
+    this.isScanPopupMode = true;
+    this.isPhysicalScannerMode = true;
+    this.showScanLSXPopup = true;
+    this.startPhysicalScanner();
+  }
+
   async openScanPage(): Promise<void> {
     console.log('🚀 Opening scan page...');
     this.currentView = 'scan';
     this.scannedItems = [];
-    
+
     // Load all work orders first, then start scanner
     await this.loadAllWorkOrdersForScan();
     
@@ -4194,21 +4220,18 @@ ${nvlSxKsBoxHtml}
   async processLSXQRCode(lsxValue: string): Promise<void> {
     console.log('🔍 Looking for Work Order with LSX:', lsxValue);
     
-    // Extract base LSX (remove everything after / if exists)
-    const baseLsx = lsxValue.split('/')[0];
-    console.log('🔍 Base LSX:', baseLsx);
+    const trimUpper = (s: string) => String(s || '').trim().toUpperCase();
+    const scanNorm = trimUpper(lsxValue);
     
-    // Find work order by LSX
-    let workOrder = this.allWorkOrdersForScan.find(wo => 
-      wo.productionOrder === lsxValue
-    );
-    
-    if (!workOrder) {
-      // Try with base LSX
-      workOrder = this.allWorkOrdersForScan.find(wo => 
-        wo.productionOrder === baseLsx
-      );
-    }
+    // Find work order by LSX (exact, base, hoặc normalize)
+    let workOrder = this.allWorkOrdersForScan.find(wo => {
+      const po = String(wo.productionOrder || '').trim();
+      if (po === lsxValue || po === scanNorm) return true;
+      if (trimUpper(po) === scanNorm) return true;
+      const baseScan = lsxValue.split('/')[0];
+      if (po === baseScan || trimUpper(po) === trimUpper(baseScan)) return true;
+      return false;
+    });
 
     if (!workOrder) {
       console.log('❌ Available work orders count:', this.allWorkOrdersForScan.length);
@@ -4216,74 +4239,49 @@ ${nvlSxKsBoxHtml}
         lsx: wo.productionOrder,
         factory: wo.factory
       })));
-      console.log('❌ Looking for LSX:', lsxValue, 'Base LSX:', baseLsx);
+      console.log('❌ Looking for LSX:', lsxValue);
       alert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}.\n\nCó ${this.allWorkOrdersForScan.length} work orders trong hệ thống.`);
       return;
     }
     
     console.log('✅ Found work order:', workOrder);
 
-    // Check work order status - only allow scan if not delay or done
-    if (workOrder.status === 'delay') {
-      console.log(`⚠️ Work Order ${lsxValue} đang delay - không thể scan`);
-      alert('⚠️ Work Order này đang Delay - không thể scan!');
-      return;
+    // Đóng popup chờ quét, mở dialog chọn trạng thái
+    this.showScanLSXPopup = false;
+    this.scanStatusSelectWorkOrder = workOrder;
+    this.showScanStatusSelectDialog = true;
+    console.log('✅ Mở dialog chọn trạng thái cho LSX:', lsxValue);
+  }
+
+  closeScanStatusSelectDialog(): void {
+    this.showScanStatusSelectDialog = false;
+    this.scanStatusSelectWorkOrder = null;
+    this.stopScanPopupMode();
+  }
+
+  /** Đóng popup chờ quét LSX và dừng scanner */
+  closeScanLSXPopup(): void {
+    this.showScanLSXPopup = false;
+    this.stopScanPopupMode();
+  }
+
+  private stopScanPopupMode(): void {
+    if (this.isScanPopupMode) {
+      this.isScanPopupMode = false;
+      this.stopPhysicalScanner();
     }
+  }
 
-    if (workOrder.status === 'done') {
-      console.log(`⚠️ Work Order ${lsxValue} đã hoàn thành - không thể scan`);
-      alert('⚠️ Work Order này đã hoàn thành - không thể scan!');
-      return;
+  async onScanStatusSelect(newStatus: string): Promise<void> {
+    const wo = this.scanStatusSelectWorkOrder;
+    if (!wo) return;
+    await this.onStatusChange(wo, newStatus);
+    this.closeScanStatusSelectDialog();
+    // Cập nhật allWorkOrdersForScan để lần scan sau có data mới
+    const idx = this.allWorkOrdersForScan.findIndex(w => w.id === wo.id);
+    if (idx >= 0) {
+      this.allWorkOrdersForScan[idx] = { ...this.allWorkOrdersForScan[idx], status: newStatus as WorkOrderStatus };
     }
-
-    // Allow scan for: waiting, kitting, ready, transfer
-    if (!['waiting', 'kitting', 'ready', 'transfer'].includes(workOrder.status)) {
-      console.log(`⚠️ Work Order ${lsxValue} có trạng thái không hợp lệ: ${workOrder.status}`);
-      alert(`⚠️ Trạng thái Work Order không hợp lệ: ${workOrder.status}`);
-      return;
-    }
-
-    // Check if already scanned in current session
-    const alreadyScanned = this.scannedItems.find(item => item.lsx === lsxValue);
-    if (alreadyScanned) {
-      console.log(`⚠️ LSX ${lsxValue} đã được scan trong session này rồi!`);
-      return;
-    }
-
-    // Get current scan count from database
-    const currentScanCount = await this.getScanCountForWorkOrder(workOrder.id!);
-    const newScanCount = currentScanCount + 1;
-    
-    // Determine next status based on current status
-    let status = '';
-    switch (workOrder.status) {
-      case 'waiting':
-        status = 'Kitting';
-        break;
-      case 'kitting':
-        status = 'Ready';
-        break;
-      case 'ready':
-        status = 'Transfer';
-        break;
-      case 'transfer':
-        status = 'Done';
-        break;
-      default:
-        status = 'Kitting';
-    }
-
-    // Create scanned item with current and new status
-    const scannedItem: ScannedItem = {
-      lsx: lsxValue,
-      currentStatus: workOrder.status,
-      newStatus: status,
-      workOrderId: workOrder.id
-    };
-
-    this.scannedItems.push(scannedItem);
-    console.log('✅ Added scanned item:', scannedItem);
-    // Removed alert - data goes directly to table
   }
 
 
@@ -4410,8 +4408,9 @@ ${nvlSxKsBoxHtml}
   }
 
   private handlePhysicalScannerInput(event: KeyboardEvent): void {
-    // Only process if scanner mode is active and scan page is open
-    if (!this.isPhysicalScannerMode || this.currentView !== 'scan') {
+    // Chấp nhận khi: (1) scan page mở, hoặc (2) scan popup mode (nút Scan QR - chỉ máy scanner)
+    const isActive = this.isPhysicalScannerMode && (this.currentView === 'scan' || this.isScanPopupMode);
+    if (!isActive) {
       return;
     }
 
