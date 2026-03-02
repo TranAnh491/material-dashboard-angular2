@@ -291,9 +291,53 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.isDropdownOpen = false;
     this.cdr.detectChanges();
   }
+
+  /** Kiểm tra Work Order của LSX có trạng thái Kitting không - bắt buộc để quét LSX trong Outbound */
+  private async checkWorkOrderKittingStatus(lsx: string): Promise<boolean> {
+    const norm = (s: string) => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const samePrefix = (a: string, b: string) => {
+      const ua = (a || '').toUpperCase();
+      const ub = (b || '').toUpperCase();
+      return (ua.startsWith('KZ') && ub.startsWith('KZ')) || (ua.startsWith('LH') && ub.startsWith('LH'));
+    };
+    try {
+      const snap = await this.firestore.collection('work-orders', ref =>
+        ref.where('factory', '==', this.selectedFactory).limit(500)
+      ).get().toPromise();
+      const lsxNorm = norm(lsx);
+      const woList = (snap?.docs || []).map(d => {
+        const data = d.data();
+        return Object.assign({ id: d.id }, data && typeof data === 'object' ? data : {}) as any;
+      });
+      const match = woList.find(wo => {
+        const po = String(wo.productionOrder || '').trim();
+        if (!po) return false;
+        if (!samePrefix(lsx, po)) return false;
+        return norm(po) === lsxNorm || po.toUpperCase() === lsx.toUpperCase();
+      });
+      if (!match) {
+        alert(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order Status.`);
+        return false;
+      }
+      const status = String(match.status || '').toLowerCase();
+      if (status !== 'kitting') {
+        alert(`LSX "${lsx}" chưa ở trạng thái Kitting. Cột Tình trạng ở tab Work Order Status phải là Kitting mới được quét LSX.`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn('checkWorkOrderKittingStatus error:', e);
+      alert('Không kiểm tra được trạng thái Work Order. Vui lòng thử lại.');
+      return false;
+    }
+  }
   
   // Search by Production Order (LSX) - Only load when user enters LSX
-  searchByProductionOrder(): void {
+  async searchByProductionOrder(): Promise<void> {
     if (!this.searchProductionOrder || !this.searchProductionOrder.trim()) {
       alert('⚠️ Vui lòng nhập lệnh sản xuất!');
       return;
@@ -320,6 +364,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log(`💡 Tip: Available LSX in DB:`, this.availableProductionOrders.slice(0, 5));
     }
     
+    const lsxToCheck = this.selectedProductionOrder;
+    const ok = await this.checkWorkOrderKittingStatus(lsxToCheck);
+    if (!ok) return;
     this.loadMaterials(); // Load data for this LSX
   }
   
@@ -366,20 +413,19 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // Handle LSX scan in modal (auto-detect from scanner input)
   onLSXScanned(lsx: string): void {
     if (!lsx || !lsx.trim()) return;
-    
-    this.batchProductionOrder = lsx.trim();
-    this.isProductionOrderScanned = true;
-    this.scanningSetupStep = 'employee';
-    console.log(`✅ LSX scanned: ${lsx} - Moving to employee scan`);
-    
-    // Clear scanner buffer for next scan
-    this.scannerBuffer = '';
-    
-    // 🔧 ENHANCED AUTO-FOCUS: Tự động focus cho bước tiếp theo với delay lâu hơn
-    setTimeout(() => {
-      this.focusScannerInput();
-      console.log('📍 Auto-focused scanner input for Employee ID step');
-    }, 500);
+    const lsxTrim = lsx.trim();
+    this.checkWorkOrderKittingStatus(lsxTrim).then(ok => {
+      if (!ok) return;
+      this.batchProductionOrder = lsxTrim;
+      this.isProductionOrderScanned = true;
+      this.scanningSetupStep = 'employee';
+      console.log(`✅ LSX scanned: ${lsx} - Moving to employee scan`);
+      this.scannerBuffer = '';
+      setTimeout(() => {
+        this.focusScannerInput();
+        console.log('📍 Auto-focused scanner input for Employee ID step');
+      }, 500);
+    });
   }
   
   // Handle Employee ID scan in modal (auto-detect from scanner input)
@@ -1956,13 +2002,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     try {
       // 🔧 LOGIC ĐƠN GIẢN: Xử lý theo thứ tự ưu tiên
       
-      // 1. Nếu chưa scan LSX, ưu tiên scan LSX
+      // 1. Nếu chưa scan LSX, ưu tiên scan LSX (kiểm tra Work Order phải ở trạng thái Kitting)
       if (!this.isProductionOrderScanned) {
-        if (scannedData.includes('LSX') || scannedData.includes('KZLSX')) {
-          this.batchProductionOrder = scannedData;
-          this.isProductionOrderScanned = true;
-          console.log('✅ LSX scanned:', this.batchProductionOrder);
-          this.showScanStatus();
+        if (scannedData.includes('LSX') || scannedData.includes('KZLSX') || scannedData.includes('LHLSX')) {
+          this.checkWorkOrderKittingStatus(scannedData).then(ok => {
+            if (!ok) return;
+            this.batchProductionOrder = scannedData;
+            this.isProductionOrderScanned = true;
+            console.log('✅ LSX scanned:', this.batchProductionOrder);
+            this.showScanStatus();
+            if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+              this.currentScanStep = 'material';
+              console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+            }
+          });
           return;
         }
       }
@@ -1997,16 +2050,18 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       // 4. Nếu không nhận diện được, thử xử lý theo độ dài
       if (!this.isProductionOrderScanned && !this.isEmployeeIdScanned) {
         if (scannedData.length > 10) {
-          this.batchProductionOrder = scannedData;
-          this.isProductionOrderScanned = true;
-          console.log('✅ LSX detected by length:', this.batchProductionOrder);
-          this.showScanStatus();
-          
-          // 🔧 SỬA LỖI: Cập nhật currentScanStep thành 'material' sau khi scan LSX
-          if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-            this.currentScanStep = 'material';
-            console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
-          }
+          this.checkWorkOrderKittingStatus(scannedData).then(ok => {
+            if (!ok) return;
+            this.batchProductionOrder = scannedData;
+            this.isProductionOrderScanned = true;
+            console.log('✅ LSX detected by length:', this.batchProductionOrder);
+            this.showScanStatus();
+            if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
+              this.currentScanStep = 'material';
+              console.log('✅ Both LSX and Employee ID scanned, ready for material scanning');
+            }
+          });
+          return;
         } else {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
           const extractedId = scannedData.substring(0, 7);
