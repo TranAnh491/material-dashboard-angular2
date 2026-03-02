@@ -101,6 +101,16 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       checkQuantity: r.checkQuantity
     }));
 
+    const overItems = newLines.filter(l => (l.checkQuantity ?? 0) > (l.quantity ?? 0));
+    if (overItems.length > 0) {
+      const msg = overItems.map(l =>
+        `${l.materialCode} / ${l.poNumber}: PXK=${l.quantity}, Giao=${l.checkQuantity ?? 0}`
+      ).join('\n');
+      if (!confirm(`⚠️ Cảnh báo: Lượng giao vượt PXK:\n\n${msg}\n\nBạn có chắc muốn lưu?`)) {
+        return;
+      }
+    }
+
     try {
       // Tìm document hiện tại của LSX này
       const snap = await this.firestore.collection('rm1-delivery-records', ref =>

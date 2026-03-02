@@ -111,7 +111,7 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
     };
   }
 
-  onScan(): void {
+  async onScan(): Promise<void> {
     const raw = this.scanValue.trim();
     if (!raw) return;
     this.errorMessage = '';
@@ -151,7 +151,12 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
             return;
           }
         }
-        this.lsx = raw.trim();
+        const lsxTrimmed = raw.trim();
+        const woOk = await this.checkWorkOrderTransferStatus(lsxTrimmed);
+        if (!woOk) {
+          return;
+        }
+        this.lsx = lsxTrimmed;
         this.scanValue = '';
         this.currentStep = 'lineNhan';
         this.loadPxk();
@@ -188,6 +193,50 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
           else this.nvNhanName = name;
         }
       }).catch(() => {});
+  }
+
+  /** Kiểm tra Work Order của LSX có trạng thái Transfer không - bắt buộc để Scan Giao Hàng */
+  private async checkWorkOrderTransferStatus(lsx: string): Promise<boolean> {
+    const norm = (s: string) => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const samePrefix = (a: string, b: string) => {
+      const ua = (a || '').toUpperCase();
+      const ub = (b || '').toUpperCase();
+      return (ua.startsWith('KZ') && ub.startsWith('KZ')) || (ua.startsWith('LH') && ub.startsWith('LH'));
+    };
+    try {
+      const snap = await this.firestore.collection('work-orders', ref =>
+        ref.where('factory', '==', this.factoryFilter).limit(500)
+      ).get().toPromise();
+      const lsxNorm = norm(lsx);
+      const woList = (snap?.docs || []).map(d => {
+        const data = d.data();
+        return Object.assign({ id: d.id }, data && typeof data === 'object' ? data : {}) as any;
+      });
+      const match = woList.find(wo => {
+        const po = String(wo.productionOrder || '').trim();
+        if (!po) return false;
+        if (!samePrefix(lsx, po)) return false;
+        return norm(po) === lsxNorm || po.toUpperCase() === lsx.toUpperCase();
+      });
+      if (!match) {
+        this.setError(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order.`);
+        return false;
+      }
+      const status = String(match.status || '').toLowerCase();
+      if (status !== 'transfer') {
+        this.setError(`LSX "${lsx}" chưa ở trạng thái Transfer. Cột Tình trạng ở tab Work Order phải là Transfer mới được Scan Giao Hàng.`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn('checkWorkOrderTransferStatus error:', e);
+      this.setError('Không kiểm tra được trạng thái Work Order. Vui lòng thử lại.');
+      return false;
+    }
   }
 
   private normLsx(s: string): string {

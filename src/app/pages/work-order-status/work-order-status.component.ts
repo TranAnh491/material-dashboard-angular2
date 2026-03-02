@@ -889,9 +889,43 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return false;
   }
 
+  /** Kiểm tra option có bị disable theo rule chuyển trạng thái không */
+  isStatusOptionDisabled(wo: WorkOrder, optionValue: string): boolean {
+    const current = (wo?.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    const next = this.convertStringToStatus(optionValue);
+    const check = this.isStatusTransitionAllowed(current, next);
+    return !check.allowed;
+  }
+
+  /** Rule: Transfer phải từ Ready, Ready phải từ Kitting, Kitting phải từ Waiting */
+  private isStatusTransitionAllowed(current: WorkOrderStatus, next: WorkOrderStatus): { allowed: boolean; message?: string } {
+    const rules: [WorkOrderStatus, WorkOrderStatus][] = [
+      [WorkOrderStatus.WAITING, WorkOrderStatus.KITTING],
+      [WorkOrderStatus.KITTING, WorkOrderStatus.READY],
+      [WorkOrderStatus.READY, WorkOrderStatus.TRANSFER]
+    ];
+    const rule = rules.find(([, to]) => to === next);
+    if (rule) {
+      const [requiredFrom] = rule;
+      if (current !== requiredFrom) {
+        const reqText = requiredFrom === WorkOrderStatus.WAITING ? 'Waiting' : requiredFrom === WorkOrderStatus.KITTING ? 'Kitting' : 'Ready';
+        return { allowed: false, message: `Chỉ được chọn ${next === WorkOrderStatus.KITTING ? 'Kitting' : next === WorkOrderStatus.READY ? 'Ready' : 'Transfer'} khi tình trạng hiện tại là ${reqText}.` };
+      }
+    }
+    return { allowed: true };
+  }
+
   async onStatusChange(workOrder: WorkOrder, newStatus: string): Promise<void> {
     const oldStatus = workOrder.status;
     const newStatusEnum = this.convertStringToStatus(newStatus);
+    const currentStatus = (workOrder.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    const transitionCheck = this.isStatusTransitionAllowed(currentStatus, newStatusEnum);
+    if (!transitionCheck.allowed) {
+      alert(transitionCheck.message);
+      workOrder.status = oldStatus;
+      this.cdr.detectChanges();
+      return;
+    }
     const blocked = await this.isThieuBlockedForWorkOrder(workOrder);
     if (blocked && (newStatusEnum === WorkOrderStatus.DONE || newStatusEnum === WorkOrderStatus.TRANSFER)) {
       const bypass = await this.checkBypassPasswordForThieu();
@@ -3813,7 +3847,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong>${label}</strong><span style="margin-top:4px;word-break:break-all;line-height:1.2;">${value}</span></div>`;
     const lsxBox = `<div style="${boxStyle}"><strong>LSX</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lsx)}</span>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
-    const lineNhanBox = `<div style="${boxStyle}"><strong>Line Nhận</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lineNhan)}</span>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
+    const isUsbCLine = /USB\s*C/i.test(lineNhan);
+    const cameraIconHtml = isUsbCLine ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
+    const lineNhanBoxStyle = boxStyle + (isUsbCLine ? ';position:relative;' : '');
+    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${cameraIconHtml}<strong>Line Nhận</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lineNhan)}</span>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
     const soChungTuBox = `<div style="${boxStyle}"><strong>Số Chứng Từ</strong><span style="margin-top:4px;word-break:break-all;line-height:1.4;font-size:9px;">${soChungTuDisplay}</span></div>`;
     const emptyBox = `<div style="${boxStyle}"></div>`;
     const rowStyle = 'display:flex;flex-direction:row;gap:8px;width:100%;margin-bottom:8px';

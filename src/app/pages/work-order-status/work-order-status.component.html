@@ -524,9 +524,9 @@
                                     style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
                               <option value="">Chọn tình trạng</option>
                               <option value="waiting">Waiting</option>
-                              <option value="kitting">Kitting</option>
-                              <option value="ready">Ready</option>
-                              <option value="transfer" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Transfer</option>
+                              <option value="kitting" [disabled]="isStatusOptionDisabled(wo, 'kitting')" [title]="isStatusOptionDisabled(wo, 'kitting') ? 'Chỉ chọn Kitting khi đang Waiting' : ''">Kitting</option>
+                              <option value="ready" [disabled]="isStatusOptionDisabled(wo, 'ready')" [title]="isStatusOptionDisabled(wo, 'ready') ? 'Chỉ chọn Ready khi đang Kitting' : ''">Ready</option>
+                              <option value="transfer" [disabled]="isStatusOptionDisabled(wo, 'transfer')" [title]="isStatusOptionDisabled(wo, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : '')">Transfer</option>
                               <option value="done" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Done</option>
                               <option value="delay">Delay</option>
                             </select>
