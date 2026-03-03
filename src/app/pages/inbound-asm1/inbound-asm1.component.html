@@ -20,8 +20,8 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- Start Batch Processing Button -->
-        <div class="start-batch-container">
+        <!-- Start Batch Processing Button - Dòng 1 -->
+        <div class="start-batch-container mobile-row1">
           <button class="start-batch-btn" 
                   [class.active]="isBatchActive"
                   (click)="openBatchModal()"
@@ -53,14 +53,14 @@
           </div>
         </div>
         
-        <!-- Nhận hàng trả Button -->
-        <button class="return-goods-btn" (click)="openReturnGoodsModal()">
+        <!-- Nhận hàng trả Button - Ẩn trên mobile -->
+        <button class="return-goods-btn mobile-hide" (click)="openReturnGoodsModal()">
           <i class="material-icons">assignment_return</i>
           Nhận hàng trả
         </button>
         
-        <!-- In toàn bộ QR Button -->
-        <button class="print-all-qr-btn" 
+        <!-- In toàn bộ QR Button - Ẩn trên mobile -->
+        <button class="print-all-qr-btn mobile-hide" 
                 (click)="printAllQRCodes()"
                 [disabled]="!canGenerateQR || getPrintableMaterialsCount() === 0"
                 [title]="getPrintableMaterialsCount() === 0 ? 'Không có material nào có thể in QR' : 'In tất cả QR codes trong danh sách'">
@@ -68,44 +68,47 @@
           In toàn bộ
         </button>
         
-        <!-- Filter Buttons: Hàng Trả / Hàng Nhập -->
-        <div class="batch-type-filters">
+        <!-- Filter Buttons: Hàng Trả / Hàng Nhập - Dòng 1 -->
+        <div class="batch-type-filters mobile-row1">
           <label class="filter-checkbox-label">
             <input type="checkbox" 
                    [(ngModel)]="filterReturnGoods" 
                    (change)="onBatchTypeFilterChange()"
                    class="filter-checkbox">
-            <span class="filter-checkbox-text">Hàng Trả</span>
+            <span class="filter-checkbox-text">Trả</span>
           </label>
           <label class="filter-checkbox-label">
             <input type="checkbox" 
                    [(ngModel)]="filterNormalGoods" 
                    (change)="onBatchTypeFilterChange()"
                    class="filter-checkbox">
-            <span class="filter-checkbox-text">Hàng Nhập</span>
+            <span class="filter-checkbox-text">Nhập</span>
           </label>
         </div>
         
-        <!-- Return Goods Counter Box -->
-        <div class="return-goods-counter-box">
+        <!-- Return Goods Counter Box - Dòng 2 -->
+        <div class="return-goods-counter-box mobile-row2">
           <i class="material-icons">assignment_return</i>
           <span class="counter-label">Hàng trả chờ nhập:</span>
           <span class="counter-value">{{ pendingReturnGoodsCount }}</span>
         </div>
         
-        <!-- More Button - Opens Popup -->
-        <button class="more-btn" (click)="openMorePopup()">
+        <!-- More Button - Ẩn trên mobile -->
+        <button class="more-btn mobile-hide" (click)="openMorePopup()">
           <i class="material-icons">more_vert</i>
           More
         </button>
         
-        <!-- Total Materials Counter -->
-        <div class="total-counter-box">
+        <!-- Total Materials Counter - Dòng 1 -->
+        <div class="total-counter-box mobile-row1">
           <span>Tổng: {{filteredMaterials.length}} materials</span>
         </div>
         
-        <!-- Search Box -->
-        <div class="search-box">
+        <!-- Ngắt dòng trên mobile (dòng 2) -->
+        <span class="mobile-flex-break"></span>
+        
+        <!-- Search Box - Dòng 2 -->
+        <div class="search-box mobile-row2">
           <input type="text" 
                  [placeholder]="getSearchPlaceholder()"
                  [(ngModel)]="searchTerm"
@@ -113,8 +116,8 @@
                  class="search-input">
         </div>
         
-        <!-- Filter Buttons -->
-        <div class="filter-buttons">
+        <!-- Filter Buttons - Dòng 3 trên mobile -->
+        <div class="filter-buttons mobile-row3">
           <!-- Search Type Filter -->
           <div class="filter-group">
             <select class="filter-select" 
@@ -151,8 +154,8 @@
 
         </div>
         
-        <!-- Date Range Selector -->
-        <div class="date-range-selector">
+        <!-- Date Range Selector - Dòng 4 trên mobile -->
+        <div class="date-range-selector mobile-row4">
           <input type="date" 
                  [(ngModel)]="startDate" 
                  (change)="applyFilters()"

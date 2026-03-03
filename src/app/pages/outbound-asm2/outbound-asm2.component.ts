@@ -237,17 +237,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       currentSelectedMethod: this.selectedScanMethod
     });
     
-    // 🔧 SỬA LỖI: Chỉ set default khi chưa có lựa chọn, không reset lựa chọn của user
-    if (this.selectedScanMethod === null) {
-      if (this.isMobile) {
-        console.log('📱 Mobile device detected - Default to camera mode');
-        this.selectedScanMethod = 'camera';
-      } else {
-        console.log('🖥️ Desktop device detected - Default to scanner mode');
-        this.selectedScanMethod = 'scanner';
-      }
+    // Mobile: luôn dùng scanner (không camera). Desktop: scanner
+    if (this.selectedScanMethod === null || (this.isMobile && this.selectedScanMethod === 'camera')) {
+      this.selectedScanMethod = 'scanner';
+      console.log(`📱 Device: ${this.isMobile ? 'Mobile' : 'Desktop'} - Chỉ dùng Scanner`);
     } else {
-      console.log(`📱 Device detection: ${this.isMobile ? 'Mobile' : 'Desktop'}, keeping user selection: ${this.selectedScanMethod}`);
+      console.log(`📱 Device detection: ${this.isMobile ? 'Mobile' : 'Desktop'}, keeping: ${this.selectedScanMethod}`);
     }
   }
 

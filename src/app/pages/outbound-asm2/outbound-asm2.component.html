@@ -6,35 +6,20 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- Mobile Scanner Method Selection -->
+        <!-- Mobile: Chỉ dùng Scanner (không camera) -->
         <div class="mobile-scanner-selection" *ngIf="isMobile">
           <div class="scanner-method-buttons">
-            <button class="method-btn" 
-                    [class.active]="selectedScanMethod === 'camera'"
-                    (click)="selectScanMethod('camera')"
-                    title="Sử dụng Camera để quét QR">
-              <i class="material-icons">camera_alt</i>
-              <span>Camera</span>
-            </button>
-            <button class="method-btn" 
-                    [class.active]="selectedScanMethod === 'scanner'"
-                    (click)="selectScanMethod('scanner')"
-                    title="Sử dụng Scanner vật lý">
-              <i class="material-icons">qr_code_scanner</i>
-              <span>Scanner</span>
-            </button>
             <button class="start-btn-mobile" 
-                    [disabled]="!selectedScanMethod"
-                    (click)="selectedScanMethod === 'scanner' ? startBatchScanningMode() : startCameraScanning()"
-                    title="Bắt đầu chế độ scan">
-              <i class="material-icons">play_arrow</i>
+                    (click)="startBatchScanningMode()"
+                    title="Bắt đầu chế độ scan (máy scanner)">
+              <i class="material-icons">qr_code_scanner</i>
               <span>Start</span>
             </button>
           </div>
         </div>
 
-        <!-- Scanner Input for Batch Mode - Always Active for Setup Modal -->
-        <div class="scanner-input-group" [class.mobile-hidden]="selectedScanMethod === 'camera'">
+        <!-- Scanner Input for Batch Mode - Always Active (mobile chỉ dùng scanner) -->
+        <div class="scanner-input-group">
           <input type="text" 
                  #scannerInput
                  [(ngModel)]="scannerBuffer"
@@ -136,13 +121,6 @@
               <i class="material-icons">done</i>
               <span>Done ({{ pendingScanData.length }})</span>
             </button>
-            <button class="stop-camera-btn-mobile" 
-                    (click)="stopCameraScanning()"
-                    title="Tắt camera"
-                    *ngIf="isMobile && selectedScanMethod === 'camera'">
-              <i class="material-icons">videocam_off</i>
-              <span>Tắt Camera</span>
-            </button>
           </div>
           
           <!-- 🔧 SỬA LỖI: Thêm dòng chữ hướng dẫn khi đã scan đủ LSX và mã nhân viên -->
@@ -150,46 +128,6 @@
             <i class="material-icons">info</i>
             <span>Được phép scan xuất kho sau khi scan xong lệnh sản xuất và mã nhân viên</span>
             
-            <!-- Camera scanning controls for materials -->
-            <div class="material-scan-controls" *ngIf="selectedScanMethod === 'camera'">
-              <button class="camera-scan-btn" 
-                      (click)="startMaterialCameraScanning()"
-                      title="Mở camera để quét mã hàng">
-                <i class="material-icons">camera_alt</i>
-                <span>Quét Mã Hàng</span>
-              </button>
-              
-              <button class="review-btn" 
-                      (click)="showScanReview()"
-                      title="Xem danh sách đã quét"
-                      *ngIf="pendingScanData.length > 0">
-                <i class="material-icons">list</i>
-                <span>Xem Danh Sách ({{ pendingScanData.length }})</span>
-              </button>
-              
-              <button class="save-btn" 
-                      (click)="saveScannedData()"
-                      title="Lưu dữ liệu vào outbound"
-                      *ngIf="pendingScanData.length > 0">
-                <i class="material-icons">save</i>
-                <span>Lưu ({{ pendingScanData.length }})</span>
-              </button>
-              
-              <button class="stop-camera-btn" 
-                      (click)="stopCameraScanning()"
-                      title="Tắt camera">
-                <i class="material-icons">videocam_off</i>
-                <span>Tắt Camera</span>
-              </button>
-              
-              <button class="reset-btn" 
-                      (click)="resetScanningData()"
-                      title="Bắt đầu lại từ đầu">
-                <i class="material-icons">refresh</i>
-                <span>Bắt Đầu Lại</span>
-              </button>
-              
-            </div>
           </div>
         </div>
         

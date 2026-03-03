@@ -1944,47 +1944,242 @@ iframe {
   }
 }
 
+// Ẩn trên mobile (In toàn bộ, More)
+.mobile-hide {
+  @media (max-width: 768px) {
+    display: none !important;
+  }
+}
+
 @media (max-width: 768px) {
   .action-controls-horizontal {
-    flex-direction: column;
+    display: flex !important;
+    flex-wrap: wrap;
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px 10px;
     align-items: stretch;
-    gap: 10px;
-    padding: 6px 12px;
     
-    .search-box {
+    // Ngắt dòng
+    .mobile-flex-break {
+      flex-basis: 100%;
       width: 100%;
+      height: 0;
+      order: 10;
+      display: block;
+    }
+    
+    // Dòng 1: Cân bằng - mỗi item flex: 1 (trừ Start cố định)
+    .start-batch-container.mobile-row1 {
+      order: 1;
+      flex: 0 0 auto;
+      min-width: 72px;
+    }
+    .batch-type-filters.mobile-row1 {
+      order: 2;
+      flex: 1 1 0;
+      min-width: 0;
+      justify-content: center;
+    }
+    .total-counter-box.mobile-row1 {
+      order: 3;
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    
+    // Dòng 2: Cân bằng 50/50
+    .return-goods-counter-box.mobile-row2 {
+      order: 11;
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .search-box.mobile-row2 {
+      order: 12;
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    
+    // Dòng 3, 4
+    .filter-buttons.mobile-row3 {
+      order: 20;
+      width: 100%;
+      display: flex;
+      gap: 8px;
+      justify-content: stretch;
       
-      .search-input {
+      .filter-group {
+        flex: 1;
+        min-width: 0;
+      }
+      .filter-select {
         width: 100%;
+        min-width: 0;
+      }
+    }
+    .date-range-selector.mobile-row4 {
+      order: 21;
+      width: 100%;
+      flex: 1 1 auto;
+      
+      .date-input {
+        flex: 1;
+        min-width: 0;
       }
     }
     
-    .date-range-selector {
-      width: 100%;
-      justify-content: center;
+    // Chiều cao và font thống nhất
+    .start-batch-container {
+      .start-batch-btn {
+        height: 36px;
+        padding: 6px 10px;
+        font-size: 11px;
+        min-width: 64px;
+        
+        i {
+          font-size: 16px;
+        }
+      }
+      .batch-info {
+        font-size: 10px;
+        gap: 8px;
+      }
+    }
+    
+    .batch-type-filters {
+      height: 36px;
+      padding: 0 8px;
+      gap: 6px;
       
-      .date-input {
-        width: 120px;
+      .filter-checkbox {
+        width: 15px;
+        height: 15px;
+      }
+      .filter-checkbox-text {
+        font-size: 11px;
+      }
+    }
+    
+    .return-goods-counter-box {
+      height: 36px;
+      padding: 6px 8px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      
+      i {
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      .counter-label {
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .counter-value {
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+    }
+    
+    .total-counter-box {
+      height: 36px;
+      padding: 6px 8px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .search-box {
+      min-width: 0;
+      .search-input {
+        width: 100%;
+        height: 36px;
+        padding: 6px 10px;
+        font-size: 11px;
+        box-sizing: border-box;
       }
     }
     
     .filter-buttons {
-      width: 100%;
-      justify-content: center;
-      gap: 20px;
-      
-      .filter-group {
-        gap: 6px;
-        
-        .filter-select {
-          min-width: 100px;
-          height: 36px; // Slightly larger on mobile for better touch
-        }
+      .filter-select {
+        height: 36px;
+        padding: 6px 8px;
+        font-size: 11px;
       }
     }
     
-    .action-buttons {
-      justify-content: center;
+    .date-range-selector {
+      height: 36px;
+      gap: 8px;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      
+      .date-input {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 32px;
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+      .date-separator {
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+    }
+  }
+  
+  // Bảng: cân bằng cột trên mobile (ngoài action-controls)
+  .excel-table {
+    th, td {
+      padding: 6px 4px;
+      font-size: 10px;
+    }
+    .factory-cell {
+      min-width: 60px;
+      width: 60px;
+    }
+    .row-header {
+      min-width: 28px;
+      width: 28px;
+      font-size: 9px;
+    }
+    .date-cell {
+      min-width: 70px;
+      width: 70px;
+    }
+    .batch-cell {
+      min-width: 70px;
+      width: 70px;
+    }
+    .lot-cell {
+      min-width: 80px;
+      width: 80px;
+    }
+    .code-cell {
+      min-width: 90px;
+      width: 90px;
+    }
+    .po-cell {
+      min-width: 80px;
+      width: 80px;
+    }
+    .number-cell {
+      min-width: 65px;
+      width: 65px;
+    }
+    .location-cell {
+      min-width: 70px;
+      width: 70px;
+    }
+    .status-cell {
+      min-width: 55px;
+      width: 55px;
     }
   }
 }
