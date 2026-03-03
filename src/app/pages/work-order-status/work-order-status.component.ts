@@ -756,7 +756,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         const key = `${mat}|${po}`;
         const qtyPxk = Number(l.quantity) || 0;
         const qtyScan = scanMap?.get(key) || 0;
-        if (qtyPxk > qtyScan) { hasThieu = true; break; }
+        if (qtyPxk - qtyScan >= 1) { hasThieu = true; break; } // diff < 1 vẫn tính Đủ (đồng bộ cột So sánh)
       }
       if (hasThieu) {
         count++;
@@ -3654,7 +3654,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const key = `${matCode}|${(l.po || '').trim()}`;
       const qtyPxk = Number(l.quantity) || 0;
       const qtyScan = scanMap.get(key) || 0;
-      if (qtyPxk > qtyScan) return true;
+      if (qtyPxk - qtyScan >= 1) return true; // diff < 1 vẫn tính Đủ (đồng bộ cột So sánh)
     }
     return false;
   }
