@@ -729,9 +729,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
           const d = doc.data() as any;
           const poLsxNorm = normLsx(d.productionOrder || '');
           if (!poLsxNorm) return;
-          const mat = String(d.materialCode || '').trim();
-          if (mat.toUpperCase().charAt(0) !== 'B') return;
-          const po = String(d.poNumber ?? '').trim();
+          const mat = String(d.materialCode || '').trim().toUpperCase();
+          if (mat.charAt(0) !== 'B') return;
+          const po = String(d.poNumber ?? d.po ?? '').trim();
           const qty = Number(d.exportQuantity || 0) || 0;
           if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
           const scanMap = byLsx.get(poLsxNorm)!;
@@ -741,22 +741,40 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         factoryToLsxScanMap.set(fac, byLsx);
       } catch (_) {}
     }
+    const getSoSanhForCheck = (xuất: number, scan: number): string => {
+      const diff = Math.abs(xuất - scan);
+      if (diff < 1) return 'Đủ';
+      if (scan < xuất) return 'Thiếu';
+      return 'Đủ';
+    };
     let count = 0;
     for (const entry of lsxMap.values()) {
       const woLsxNorm = normLsx(entry.lsx);
       const byLsx = factoryToLsxScanMap.get(entry.factory);
       const scanMap = byLsx?.get(woLsxNorm);
       const lines = this.getPxkLinesForLsx(entry.lsx);
+      const getScanQty = (mat: string, po: string) => scanMap?.get(`${String(mat || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+      const hasAnyScanData = lines.some(l => {
+        if (String(l.materialCode || '').trim().toUpperCase().charAt(0) === 'R') return false;
+        return getScanQty(l.materialCode, (l as any).po || (l as any).poNumber) > 0;
+      });
       let hasThieu = false;
       for (const l of lines) {
-        const prefix = String(l.materialCode || '').trim().toUpperCase().charAt(0);
-        if (prefix === 'R') continue;
-        const mat = String(l.materialCode || '').trim();
+        const matCode = String(l.materialCode || '').trim().toUpperCase();
+        const maKho = String((l as any).maKho || '').trim().toUpperCase();
+        const isNvlSxOnly = maKho === 'NVL_SX';
+        const isR = matCode.charAt(0) === 'R';
+        const isB033 = matCode.startsWith('B033');
+        const isB030 = matCode.startsWith('B030');
         const po = String((l as any).po || (l as any).poNumber || '').trim();
-        const key = `${mat}|${po}`;
+        let scanQty: number;
+        if (isNvlSxOnly) scanQty = Number(l.quantity) || 0;
+        else if ((isR || isB030 || isB033) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
+        else scanQty = getScanQty(l.materialCode, po);
+        if (isR) continue;
         const qtyPxk = Number(l.quantity) || 0;
-        const qtyScan = scanMap?.get(key) || 0;
-        if (qtyPxk - qtyScan >= 1) { hasThieu = true; break; } // diff < 1 vẫn tính Đủ (đồng bộ cột So sánh)
+        const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanhForCheck(qtyPxk, scanQty);
+        if (soSanh.startsWith('Thiếu')) { hasThieu = true; break; }
       }
       if (hasThieu) {
         count++;
@@ -3615,7 +3633,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return new Date() >= RULE_THIEU_BLOCK_DATE;
   }
 
-  /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không (chỉ tính mã B, không tính R) */
+  /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */
   async hasPxkThieuForLsx(lsx: string, factory: string): Promise<boolean> {
     const lines = this.getPxkLinesForLsx(lsx);
     if (lines.length === 0) return false;
@@ -3636,10 +3654,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const d = doc.data() as any;
         const poLsxNorm = normLsx(d.productionOrder || '');
         if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
-        const mat = String(d.materialCode || '').trim();
-        const prefix = mat.toUpperCase().charAt(0);
-        if (prefix !== 'B') return;
-        const po = String(d.poNumber ?? '').trim();
+        const mat = String(d.materialCode || '').trim().toUpperCase();
+        if (mat.charAt(0) !== 'B') return;
+        const po = String(d.poNumber ?? d.po ?? '').trim();
         const qty = Number(d.exportQuantity || 0) || 0;
         const key = `${mat}|${po}`;
         scanMap.set(key, (scanMap.get(key) || 0) + qty);
@@ -3647,14 +3664,35 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     } catch (e) {
       return false;
     }
+    const getScanQty = (materialCode: string, po: string): number =>
+      scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+    const getSoSanh = (xuất: number, scan: number): string => {
+      const diff = Math.abs(xuất - scan);
+      if (diff < 1) return 'Đủ';
+      if (scan < xuất) return 'Thiếu';
+      return 'Đủ';
+    };
+    const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po || (l as any).poNumber) > 0);
     for (const l of lines) {
-      const matCode = String(l.materialCode || '').trim();
-      const prefix = matCode.toUpperCase().charAt(0);
-      if (prefix === 'R') continue;
-      const key = `${matCode}|${(l.po || '').trim()}`;
+      const matCode = String(l.materialCode || '').trim().toUpperCase();
+      const maKho = String((l as any).maKho || '').trim().toUpperCase();
+      const isNvlSxOnly = maKho === 'NVL_SX';
+      const isR = matCode.charAt(0) === 'R';
+      const isB033 = matCode.startsWith('B033');
+      const isB030 = matCode.startsWith('B030');
+      const po = String((l as any).po || (l as any).poNumber || '').trim();
+      let scanQty: number;
+      if (isNvlSxOnly) {
+        scanQty = Number(l.quantity) || 0; // Đã Giao
+      } else if ((isR || isB030 || isB033) && hasAnyScanData) {
+        scanQty = Number(l.quantity) || 0; // Coi như đủ
+      } else {
+        scanQty = getScanQty(l.materialCode, po);
+      }
       const qtyPxk = Number(l.quantity) || 0;
-      const qtyScan = scanMap.get(key) || 0;
-      if (qtyPxk - qtyScan >= 1) return true; // diff < 1 vẫn tính Đủ (đồng bộ cột So sánh)
+      if (isR) continue; // R không tính thiếu
+      const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
+      if (soSanh.startsWith('Thiếu')) return true;
     }
     return false;
   }
