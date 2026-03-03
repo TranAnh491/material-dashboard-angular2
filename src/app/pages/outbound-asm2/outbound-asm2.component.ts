@@ -298,26 +298,55 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       const m = t.match(/(\d{4}[\/\-\.]\d+)/);
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
-    const samePrefix = (a: string, b: string) => {
-      const ua = (a || '').toUpperCase();
-      const ub = (b || '').toUpperCase();
-      return (ua.startsWith('KZ') && ub.startsWith('KZ')) || (ua.startsWith('LH') && ub.startsWith('LH'));
-    };
+    const lsxTrim = lsx.trim();
+    const lsxNorm = norm(lsxTrim);
+
+    const toWoList = (snap: any) => (snap?.docs || []).map((d: any) => {
+      const data = d.data();
+      return Object.assign({ id: d.id }, data && typeof data === 'object' ? data : {}) as any;
+    });
+
+    const findMatch = (woList: any[]) => woList.find(wo => {
+      const po = String(wo.productionOrder || '').trim();
+      if (!po) return false;
+      return norm(po) === lsxNorm || po.toUpperCase() === lsxTrim.toUpperCase();
+    });
+
     try {
-      const snap = await this.firestore.collection('work-orders', ref =>
-        ref.where('factory', '==', this.selectedFactory).limit(500)
+      // Bước 1: Query trực tiếp theo productionOrder (nhanh, không bị giới hạn 500)
+      const snapExact = await this.firestore.collection('work-orders', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('productionOrder', '==', lsxTrim)
+           .limit(5)
       ).get().toPromise();
-      const lsxNorm = norm(lsx);
-      const woList = (snap?.docs || []).map(d => {
-        const data = d.data();
-        return Object.assign({ id: d.id }, data && typeof data === 'object' ? data : {}) as any;
-      });
-      const match = woList.find(wo => {
-        const po = String(wo.productionOrder || '').trim();
-        if (!po) return false;
-        if (!samePrefix(lsx, po)) return false;
-        return norm(po) === lsxNorm || po.toUpperCase() === lsx.toUpperCase();
-      });
+
+      let match = findMatch(toWoList(snapExact));
+
+      // Bước 2: Nếu không tìm thấy, thử query theo năm/tháng trích từ mã LSX
+      if (!match) {
+        const dateMatch = lsxNorm.match(/(\d{2})(\d{2})/);
+        if (dateMatch) {
+          const month = parseInt(dateMatch[1], 10);
+          const year = 2000 + parseInt(dateMatch[2], 10);
+          if (month >= 1 && month <= 12 && year >= 2020) {
+            const snapYM = await this.firestore.collection('work-orders', ref =>
+              ref.where('factory', '==', this.selectedFactory)
+                 .where('year', '==', year)
+                 .where('month', '==', month)
+            ).get().toPromise();
+            match = findMatch(toWoList(snapYM));
+          }
+        }
+      }
+
+      // Bước 3: Fallback - query toàn bộ factory (không limit)
+      if (!match) {
+        const snapAll = await this.firestore.collection('work-orders', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+        ).get().toPromise();
+        match = findMatch(toWoList(snapAll));
+      }
+
       if (!match) {
         alert(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order Status.`);
         return false;
