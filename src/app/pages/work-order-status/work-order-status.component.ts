@@ -178,6 +178,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   // PXK Import
   pxkDataByLsx: PxkDataByLsx = {};
+  private _pxkLinesCache = new Map<string, PxkLine[]>();  // cache kết quả lookup
   isImportingPxk: boolean = false;
   isClearingPxk: boolean = false;
   showPxkDownloadDialog: boolean = false;
@@ -344,17 +345,25 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     try {
       const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
       this.pxkDataByLsx = {};
+      let skipped = 0;
       snapshot.docs.forEach((docSnap: any) => {
         const d = docSnap.data();
         const lsx = String(d?.lsx || '').trim();
         const lines = Array.isArray(d?.lines) ? d.lines : [];
         if (lsx && lines.length > 0) {
           this.pxkDataByLsx[lsx] = lines;
+        } else {
+          skipped++;
+          console.warn(`[PXK Load] Bỏ qua doc ${docSnap.id}: lsx="${lsx}", lines=${lines.length}`);
         }
       });
-      console.log('[PXK] Đã load từ Firebase:', Object.keys(this.pxkDataByLsx).length, 'LSX');
+      this.invalidatePxkCache();
+      console.log(`[PXK Load] ✅ Tổng docs: ${snapshot.docs.length}, Loaded: ${Object.keys(this.pxkDataByLsx).length} LSX, Bỏ qua: ${skipped}`);
+      if (snapshot.docs.length === 0) {
+        console.warn('[PXK Load] ⚠️ Collection pxk-import-data TRỐNG — chưa có dữ liệu nào được lưu');
+      }
     } catch (e) {
-      console.warn('[PXK] Không load được từ Firebase:', e);
+      console.error('[PXK Load] ❌ Lỗi khi load:', e);
     }
   }
 
@@ -396,6 +405,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       Object.keys(this.pxkDataByLsx).forEach(k => {
         if (normLsx(k) === targetNorm) delete this.pxkDataByLsx[k];
       });
+      this.invalidatePxkCache();
       this.calculateSummary();
       this.cdr.detectChanges();
       alert(`Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
@@ -3533,7 +3543,19 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const phanTramHaoHut = phanTramHaoHutCol >= 0 ? String(row[phanTramHaoHutCol] ?? '').trim() : undefined;
           const ghiChu = ghiChuCol >= 0 ? String(row[ghiChuCol] ?? '').trim() : undefined;
           if (!out[storeKey]) out[storeKey] = [];
-          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined, maKho: maKho || undefined, loaiHinh: loaiHinh || undefined, tenVatTu: tenVatTu || undefined, dinhMuc: dinhMuc || undefined, tenTP: tenTP || undefined, tongSLYCau: tongSLYCau || undefined, maKhachHang: maKhachHang || undefined, soPOKH: soPOKH || undefined, phanTramHaoHut: phanTramHaoHut || undefined, ghiChu: ghiChu || undefined });
+          const lineObj: any = { materialCode, quantity, unit, po };
+          if (soChungTu)     lineObj.soChungTu     = soChungTu;
+          if (maKho)         lineObj.maKho         = maKho;
+          if (loaiHinh)      lineObj.loaiHinh      = loaiHinh;
+          if (tenVatTu)      lineObj.tenVatTu      = tenVatTu;
+          if (dinhMuc)       lineObj.dinhMuc       = dinhMuc;
+          if (tenTP)         lineObj.tenTP         = tenTP;
+          if (tongSLYCau)    lineObj.tongSLYCau    = tongSLYCau;
+          if (maKhachHang)   lineObj.maKhachHang   = maKhachHang;
+          if (soPOKH)        lineObj.soPOKH        = soPOKH;
+          if (phanTramHaoHut) lineObj.phanTramHaoHut = phanTramHaoHut;
+          if (ghiChu)        lineObj.ghiChu        = ghiChu;
+          out[storeKey].push(lineObj);
         }
         return { byLsx: out, rowsWithPx: cnt };
       };
@@ -3583,6 +3605,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const kept = existing.filter(l => !newSoCtSet.has(l.soChungTu ?? ''));
         this.pxkDataByLsx[lsxKey] = [...kept, ...newLines];
       }
+      this.invalidatePxkCache();
       const total = Object.values(byLsx).reduce((s, arr) => s + arr.length, 0);
       const storedKeys = Object.keys(byLsx);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
@@ -3595,19 +3618,39 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           alert('Import PXK: Không có dữ liệu sau dòng tiêu đề.');
         }
       } else {
-        try {
-          for (const [lsxKey, lines] of Object.entries(this.pxkDataByLsx)) {
-            const factorySave = getFactoryFromLsx(lsxKey); // KZ → ASM1, LH → ASM2
-            const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+        // Loại bỏ undefined khỏi object trước khi lưu Firestore (Firestore không chấp nhận undefined)
+        const sanitizeLine = (line: any): any => {
+          const out: any = {};
+          for (const [k, v] of Object.entries(line)) {
+            if (v !== undefined && v !== null && v !== '') out[k] = v;
+          }
+          return out;
+        };
+        let saveOk = 0;
+        let saveErrors = 0;
+        // Chỉ lưu các LSX vừa import, dùng dữ liệu đã merge (this.pxkDataByLsx)
+        for (const lsxKey of Object.keys(byLsx)) {
+          const lines = this.pxkDataByLsx[lsxKey] || [];
+          const factorySave = getFactoryFromLsx(lsxKey);
+          const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+          const sanitizedLines = lines.map(sanitizeLine);
+          try {
             await this.firestore.collection('pxk-import-data').doc(docId).set({
               lsx: lsxKey,
               factory: factorySave,
-              lines: lines,
+              lines: sanitizedLines,
               importedAt: new Date()
             });
+            saveOk++;
+            console.log(`[PXK Save] ✅ Đã lưu LSX ${lsxKey} (${sanitizedLines.length} dòng), docId: ${docId}`);
+          } catch (innerErr) {
+            saveErrors++;
+            console.error(`[PXK Save] ❌ Lỗi LSX ${lsxKey}:`, innerErr);
           }
-        } catch (e) {
-          console.warn('Không lưu PXK vào Firebase:', e);
+        }
+        console.log(`[PXK Save] Kết quả: ${saveOk} LSX lưu thành công, ${saveErrors} lỗi`);
+        if (saveErrors > 0) {
+          alert(`⚠️ Import PXK: ${saveOk} LSX lưu thành công, ${saveErrors} LSX bị lỗi. Mở F12 Console để xem chi tiết.`);
         }
         const lsxList = Object.keys(byLsx).sort();
         const maxShow = 15;
@@ -3626,16 +3669,22 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  /** Xóa cache khi dữ liệu PXK thay đổi (sau load hoặc import) */
+  private invalidatePxkCache(): void {
+    this._pxkLinesCache.clear();
+  }
+
   getPxkLinesForLsx(lsx: string): PxkLine[] {
     if (!lsx) return [];
     const woLsx = String(lsx).trim();
+    if (this._pxkLinesCache.has(woLsx)) return this._pxkLinesCache.get(woLsx)!;
+
     const woUpper = woLsx.toUpperCase();
     const normalizeLsx = (s: string): string => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
       const m = t.match(/(\d{4}[\/\-\.]\d+)/);
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
-    /** ASM1=KZLSX, ASM2=LHLSX - không match chéo */
     const samePrefix = (a: string, b: string): boolean => {
       const ua = (a || '').toUpperCase();
       const ub = (b || '').toUpperCase();
@@ -3646,15 +3695,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       return (aKz && bKz) || (aLh && bLh);
     };
     const woNorm = normalizeLsx(woLsx);
+    let result: PxkLine[] = [];
     for (const key of Object.keys(this.pxkDataByLsx)) {
-      if (key.toUpperCase() === woUpper) return this.pxkDataByLsx[key] || [];
-      if (samePrefix(woLsx, key) && (woUpper.includes(key.toUpperCase()) || key.toUpperCase().includes(woUpper))) return this.pxkDataByLsx[key] || [];
-      if (samePrefix(woLsx, key) && woNorm && normalizeLsx(key) === woNorm) return this.pxkDataByLsx[key] || [];
+      if (key.toUpperCase() === woUpper
+        || (samePrefix(woLsx, key) && (woUpper.includes(key.toUpperCase()) || key.toUpperCase().includes(woUpper)))
+        || (samePrefix(woLsx, key) && woNorm && normalizeLsx(key) === woNorm)) {
+        result = this.pxkDataByLsx[key] || [];
+        break;
+      }
     }
-    if (Object.keys(this.pxkDataByLsx).length > 0) {
-      console.log('[PXK Lookup] Không tìm thấy cho LSX:', JSON.stringify(woLsx), '| Các key đang có:', Object.keys(this.pxkDataByLsx).slice(0, 15));
-    }
-    return [];
+    this._pxkLinesCache.set(woLsx, result);
+    return result;
   }
 
   hasPxkForWorkOrder(wo: WorkOrder): boolean {
