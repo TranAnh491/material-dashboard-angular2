@@ -43,9 +43,10 @@ interface PxkLine {
   quantity: number;
   unit: string;
   po: string;
-  soChungTu?: string; // Số chứng từ từ cột C
+  soChungTu?: string; // Số chứng từ
   maKho?: string;    // Mã kho: NVL, NVL_E31, NVL_KE31, NVL_SX, NVL_KS, NVL_EXPIRED
   loaiHinh?: string; // Loại hình
+  tenVatTu?: string; dinhMuc?: string; tenTP?: string; tongSLYCau?: string; soPOKH?: string; phanTramHaoHut?: string; maKhachHang?: string;
 }
 
 /** Dữ liệu PXK nhóm theo LSX */
@@ -1924,27 +1925,34 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     alert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
-  /** Tải form mẫu import PXK - A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Mã Kho, H=Số lượng, I=Đvt, J=Loại Hình */
+  /** Tải form mẫu import PXK - cập nhật theo template in PXK. Cột E=Mã Khách Hàng, cột P=Số PO KH */
   downloadPxkTemplate(): void {
     const templateData = [
-      ['Mã Ctừ', 'Số Ctừ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã vật tư', 'Số PO', 'Mã Kho', 'Số lượng xuất thực tế', 'Đvt', 'Loại Hình'],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 'NVL', 1054.58, 'M', ''],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', 'B009598', 'PO002', 'NVL_SX', 100, 'PCS', ''],
-      ['PX', 'LHPX0226/0001', 'LHLSX0326/0089', 'P005363_A', 'B006006', 'PO001', 'NVL', 500, 'M', '']
+      ['Mã Ctừ', 'Số Chứng Từ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã Khách Hàng', 'Mã vật tư', 'Tên Vật Tư', 'Đơn vị tính', 'Số PO', 'Xuất Kho', 'Mã Kho', 'Định Mức', 'Loại Hình', 'Tên TP', 'Tổng SL Y/Cầu', 'Số PO KH', 'Phần Trăm Hao Hụt'],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 1054.58, 'NVL', '', '', '', '', '', ''],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', '', 'B009598', '', 'PCS', 'PO002', 100, 'NVL_SX', '', '', '', '', '', ''],
+      ['PX', 'LHPX0226/0001', 'LHLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 500, 'NVL', '', '', '', '', '', '']
     ];
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
     worksheet['!cols'] = [
-      { wch: 12 }, // Mã Ctừ
-      { wch: 12 }, // Số Ctừ
-      { wch: 22 }, // Số lệnh sản xuất
-      { wch: 15 }, // Mã sản phẩm
-      { wch: 15 }, // Mã vật tư
-      { wch: 12 }, // Số PO
-      { wch: 14 }, // Mã Kho (NVL, NVL_E31, NVL_KE31, NVL_SX, NVL_KS, NVL_EXPIRED)
-      { wch: 22 }, // Số lượng xuất thực tế
-      { wch: 8 },  // Đvt
-      { wch: 12 }  // Loại Hình
+      { wch: 12 }, // A: Mã Ctừ
+      { wch: 15 }, // B: Số Chứng Từ
+      { wch: 22 }, // C: Số lệnh sản xuất
+      { wch: 15 }, // D: Mã sản phẩm
+      { wch: 18 }, // E: Mã Khách Hàng
+      { wch: 15 }, // F: Mã vật tư
+      { wch: 20 }, // G: Tên Vật Tư
+      { wch: 12 }, // H: Đơn vị tính
+      { wch: 12 }, // I: Số PO
+      { wch: 12 }, // J: Xuất Kho
+      { wch: 14 }, // K: Mã Kho
+      { wch: 12 }, // L: Định Mức
+      { wch: 12 }, // M: Loại Hình
+      { wch: 15 }, // N: Tên TP
+      { wch: 14 }, // O: Tổng SL Y/Cầu
+      { wch: 12 }, // P: Số PO KH
+      { wch: 16 }  // Q: Phần Trăm Hao Hụt
     ];
     XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
     const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -3410,6 +3418,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
       let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number; let idxMaKho: number; let idxLoaiHinh: number;
+      let idxTenVatTu: number; let idxDinhMuc: number; let idxTenTP: number; let idxTongSLYCau: number; let idxMaKhachHang: number; let idxSoPOKH: number; let idxPhanTramHaoHut: number;
       idxMaCtu = COL_A;
       idxSoChungTu = COL_B;
       idxSoLenhSX = COL_C;
@@ -3422,18 +3431,28 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (headerRowIndex >= 0) {
         const headers = (rows[headerRowIndex] || []).map((h: any) => String(h || '').trim());
         idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') >= 0 ? colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') : COL_A;
-        idxSoChungTu = colIdx(headers, 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') >= 0 ? colIdx(headers, 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') : COL_B;
+        idxSoChungTu = colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') >= 0 ? colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') : COL_B;
         idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') : COL_C;
         idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_E;
         idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_F;
         idxMaKho = colIdx(headers, 'Mã Kho', 'Ma Kho', 'MaKho');
-        idxSoLuongXTT = colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_H;
+        idxSoLuongXTT = colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_H;
         idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_I;
         idxLoaiHinh = colIdx(headers, 'Loại Hình', 'Loai Hinh', 'LoaiHinh');
+        idxTenVatTu = colIdx(headers, 'Tên Vật Tư', 'Ten Vat Tu');
+        idxDinhMuc = colIdx(headers, 'Định Mức', 'Dinh Muc');
+        idxTenTP = colIdx(headers, 'Tên TP', 'Ten TP');
+        idxTongSLYCau = colIdx(headers, 'Tổng SL Y/Cầu', 'Tong SL Y/Cau');
+        // Luôn dùng cố định: cột E (index 4) = Mã Khách Hàng, cột P (index 15) = Số PO KH
+        idxMaKhachHang = 4;
+        idxSoPOKH = 15;
+        idxPhanTramHaoHut = colIdx(headers, 'Phần Trăm Hao Hụt', 'Phan Tram Hao Hut');
       } else {
         headerRowIndex = 0;
         idxMaCtu = COL_A;
         idxSoChungTu = COL_B;
+        idxTenVatTu = idxDinhMuc = idxTenTP = idxTongSLYCau = idxSoPOKH = idxPhanTramHaoHut = -1;
+        idxMaKhachHang = 4; // Cột E
       }
       const allWo = [...this.workOrders, ...(this.filteredWorkOrders || [])];
       const woLsxList = [...new Set(allWo.map(wo => String(wo.productionOrder || '').trim()).filter(Boolean))];
@@ -3481,7 +3500,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const getFactoryFromLsx = (lsxStr: string): 'ASM1' | 'ASM2' =>
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
-      const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number) => {
+      const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number,
+        tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1) => {
         const out: PxkDataByLsx = {};
         let cnt = 0;
         for (let r = dataStartRow; r < rows.length; r++) {
@@ -3502,8 +3522,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const po = String(row[poCol] ?? '').trim();
           const maKho = maKhoCol >= 0 ? String(row[maKhoCol] ?? '').trim() : '';
           const loaiHinh = loaiHinhCol >= 0 ? String(row[loaiHinhCol] ?? '').trim() : '';
+          const tenVatTu = tenVatTuCol >= 0 ? String(row[tenVatTuCol] ?? '').trim() : undefined;
+          const dinhMuc = dinhMucCol >= 0 ? String(row[dinhMucCol] ?? '').trim() : undefined;
+          const tenTP = tenTPCol >= 0 ? String(row[tenTPCol] ?? '').trim() : undefined;
+          const tongSLYCau = tongSLYCauCol >= 0 ? String(row[tongSLYCauCol] ?? '').trim() : undefined;
+          const maKhachHang = maKhachHangCol >= 0 ? String(row[maKhachHangCol] ?? '').trim() : undefined;
+          const soPOKH = soPOKHCol >= 0 ? String(row[soPOKHCol] ?? '').trim() : undefined;
+          const phanTramHaoHut = phanTramHaoHutCol >= 0 ? String(row[phanTramHaoHutCol] ?? '').trim() : undefined;
           if (!out[storeKey]) out[storeKey] = [];
-          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined, maKho: maKho || undefined, loaiHinh: loaiHinh || undefined });
+          out[storeKey].push({ materialCode, quantity, unit, po, soChungTu: soChungTu || undefined, maKho: maKho || undefined, loaiHinh: loaiHinh || undefined, tenVatTu: tenVatTu || undefined, dinhMuc: dinhMuc || undefined, tenTP: tenTP || undefined, tongSLYCau: tongSLYCau || undefined, maKhachHang: maKhachHang || undefined, soPOKH: soPOKH || undefined, phanTramHaoHut: phanTramHaoHut || undefined });
         }
         return { byLsx: out, rowsWithPx: cnt };
       };
@@ -3511,11 +3538,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       let idxMaCtuFinal = idxMaCtu, idxSoLenhSXFinal = idxSoLenhSX, idxMaVatTuFinal = idxMaVatTu;
       let idxSoLuongXTTFinal = idxSoLuongXTT, idxDvtFinal = idxDvt, idxSoPOFinal = idxSoPO, idxSoChungTuFinal = idxSoChungTu;
       let idxMaKhoFinal = idxMaKho, idxLoaiHinhFinal = idxLoaiHinh;
+      let idxTenVatTuFinal = idxTenVatTu ?? -1, idxDinhMucFinal = idxDinhMuc ?? -1, idxTenTPFinal = idxTenTP ?? -1;
+      let idxTongSLYCauFinal = idxTongSLYCau ?? -1, idxMaKhachHangFinal = 4, idxSoPOKHFinal = 15, idxPhanTramHaoHutFinal = idxPhanTramHaoHut ?? -1;
       let byLsx: PxkDataByLsx = {};
       let rowsWithPx = 0;
       const pxkLsxSamples: string[] = [];
       const tryParse = () => {
-        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal, idxMaKhoFinal, idxLoaiHinhFinal);
+        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal, idxMaKhoFinal, idxLoaiHinhFinal, idxTenVatTuFinal, idxDinhMucFinal, idxTenTPFinal, idxTongSLYCauFinal, idxMaKhachHangFinal, idxSoPOKHFinal, idxPhanTramHaoHutFinal);
         byLsx = res.byLsx;
         rowsWithPx = res.rowsWithPx;
       };
@@ -3849,55 +3878,57 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       : [...group1, ...group2];
     const soChungTuList = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort();
     const soChungTuDisplay = soChungTuList.length > 0 ? soChungTuList.map(s => this.escapeHtmlForPrint(s)).join('<br>') : '-';
+    const tenTPDisplay = lines.length > 0 ? String((lines[0] as any).tenTP || '').trim() : '';
+    const soPOKHDisplay = lines.map(l => String((l as any).soPOKH || '').trim()).find(v => v) || '';
+    const phanTramHaoHutDisplay = lines.length > 0 ? String((lines[0] as any).phanTramHaoHut || '').trim() : '';
     const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po) > 0);
     const hasAnyDeliveryData = lines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
     let sttCounter = 0;
     const rowsHtml = sortedLines.map((l) => {
       if (l === null) {
-        return '<tr><td colspan="13" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
+        return '<tr><td colspan="14" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
       }
       sttCounter++;
-      const stt = sttCounter;
       const matCode = String(l.materialCode || '').trim().toUpperCase();
-      const maKho = String((l as any).maKho || '').trim();
-      const isNvlSxOrKs = ['NVL_SX', 'NVL_KS'].includes(maKho.toUpperCase());
-      const isNvlSxOnly = maKho.toUpperCase() === 'NVL_SX'; // Chỉ NVL_SX hiển thị "Đã Giao"; NVL_KS dùng dữ liệu thực
+      const maKho = String((l as any).maKho || '').trim().toUpperCase();
+      const qtyStr = this.formatQuantityForPxk(l.quantity);
+      const loaiHinh = String((l as any).loaiHinh || '').trim();
+      const tenVatTu = String((l as any).tenVatTu || '').trim();
+      const dinhMuc = String((l as any).dinhMuc || '').trim();
+      const tongSLYCau = String((l as any).tongSLYCau || '').trim();
+      const po = String(l.po || '').trim();
+      const isNvlSxOnly = maKho === 'NVL_SX';
       const isR = matCode.charAt(0) === 'R';
       const isB033 = matCode.startsWith('B033');
       const isB030 = matCode.startsWith('B030');
-      const location = isNvlSxOrKs ? maKho : getLocation(l.materialCode, l.po);
-      const qtyStr = this.formatQuantityForPxk(l.quantity);
-      let scanQtyStr: string; let soSanh: string; let deliveryQtyStr: string;
+      let scanQty: number;
       if (isNvlSxOnly) {
-        scanQtyStr = 'Đã Giao';
-        soSanh = 'Đã Giao';
-        deliveryQtyStr = 'Đã Giao';
+        scanQty = Number(l.quantity) || 0;
+      } else if ((isR || isB030 || isB033) && hasAnyScanData) {
+        scanQty = Number(l.quantity) || 0;
       } else {
-        const scanQty = (isR || isB030 || isB033) && hasAnyScanData
-          ? (Number(l.quantity) || 0)
-          : getScanQty(l.materialCode, l.po);
-        scanQtyStr = !hasAnyScanData ? '' : this.formatQuantityForPxk(scanQty);
-        soSanh = !hasAnyScanData ? '' : getSoSanh(l.quantity, scanQty);
-        const deliveryQty = (isR || isB030 || isB033) && hasAnyDeliveryData
-          ? (Number(l.quantity) || 0)
-          : getDeliveryQty(l.materialCode, l.po);
-        deliveryQtyStr = !hasAnyDeliveryData ? '' : this.formatQuantityForPxk(deliveryQty);
+        scanQty = getScanQty(l.materialCode, po);
       }
-      const soCt = (l.soChungTu || '').trim() || '-';
-      const loaiHinh = String((l as any).loaiHinh || '').trim();
+      const qtyPxk = Number(l.quantity) || 0;
+      const soSanhStr = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
+      const soSanhColor = soSanhStr.startsWith('Thiếu') ? 'color:red;font-weight:bold;' : soSanhStr === 'Đủ' ? 'color:green;' : '';
+      const scanQtyStr = scanQty > 0 ? this.formatQuantityForPxk(scanQty) : '';
+      const deliveryQty = getDeliveryQty(l.materialCode, po);
+      const deliveryQtyStr = deliveryQty > 0 ? this.formatQuantityForPxk(deliveryQty) : '';
       return `<tr>
-        <td style="border:1px solid #000;padding:6px;text-align:center;">${stt}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soCt)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${sttCounter}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.po)}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(maKho)}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.unit)}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(loaiHinh)}</td>
+        <td class="col-ten-vat-tu" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(tenVatTu || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(l.unit)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(dinhMuc || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(tongSLYCau || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(po)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${qtyStr}</td>
-        <td class="col-vitri" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(location)}</td>
-        <td style="border:1px solid #000;padding:6px;text-align:right;">${scanQtyStr}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(soSanh)}</td>
-        <td style="border:1px solid #000;padding:6px;text-align:right;">${deliveryQtyStr}</td>
+        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(maKho)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(loaiHinh)}</td>
+        <td class="col-luong-scan" style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(scanQtyStr)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.escapeHtmlForPrint(soSanhStr)}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(deliveryQtyStr)}</td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
@@ -3972,28 +4003,41 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const deliveryDateStr = workOrder.deliveryDate
       ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
       : '-';
-    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:10px;box-sizing:border-box`;
+    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:15px;box-sizing:border-box;position:relative`;
     const infoBox = (label: string, value: string) =>
-      `<div style="${boxStyle}"><strong>${label}</strong><span style="margin-top:4px;word-break:break-all;line-height:1.2;">${value}</span></div>`;
-    const lsxBox = `<div style="${boxStyle}"><strong>LSX</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lsx)}</span>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
+      `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">${label}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${value}</span></div></div>`;
+    const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
+    const isKZ = lsxUpper.startsWith('KZ');
+    const isLH = lsxUpper.startsWith('LH');
+    const factoryIconHtml = isKZ
+      ? `<span style="position:absolute;top:6px;right:6px;font-size:18px;font-weight:bold;">ASM1</span>`
+      : isLH
+        ? `<span style="position:absolute;top:6px;right:6px;font-size:18px;font-weight:bold;">ASM2</span>`
+        : '';
+    const maTPVNBox = `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Mã TP VN</strong>${factoryIconHtml}<div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.escapeHtmlForPrint(workOrder.productCode || '-')}</span></div></div>`;
+    const maKhachHangDisplay = lines.map(l => String((l as any).maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
+    const maKhachHangBox = infoBox('Mã Khách Hàng', this.escapeHtmlForPrint(maKhachHangDisplay));
+    const lsxBox = `<div style="${boxStyle};flex-direction:row;align-items:center;justify-content:space-between;gap:6px;"><div style="flex:1;display:flex;flex-direction:column;"><strong style="text-transform:uppercase;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:13px;">${this.escapeHtmlForPrint(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
     const isUsbCLine = /USB\s*C/i.test(lineNhan);
     const cameraIconHtml = isUsbCLine ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
-    const lineNhanBoxStyle = boxStyle + (isUsbCLine ? ';position:relative;' : '');
-    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${cameraIconHtml}<strong>Line Nhận</strong><span style="margin-top:2px;word-break:break-all;font-size:9px;">${this.escapeHtmlForPrint(lineNhan)}</span>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;margin-top:2px;display:block;" />` : ''}</div>`;
-    const soChungTuBox = `<div style="${boxStyle}"><strong>Số Chứng Từ</strong><span style="margin-top:4px;word-break:break-all;line-height:1.4;font-size:9px;">${soChungTuDisplay}</span></div>`;
+    const lineNhanBoxStyle = boxStyle + ';flex-direction:row;align-items:center;justify-content:space-between;gap:6px;';
+    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;"><strong style="text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:13px;">${this.escapeHtmlForPrint(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
+    const soChungTuBox = `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Số Chứng Từ</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.4;font-size:13px;padding-top:18px;"><span>${soChungTuDisplay}</span></div></div>`;
     const emptyBox = `<div style="${boxStyle}"></div>`;
     const rowStyle = 'display:flex;flex-direction:row;gap:8px;width:100%;margin-bottom:8px';
     const headerSection = `
 <div style="margin-bottom:16px;width:100%;box-sizing:border-box;">
   <div style="${rowStyle}">
-    ${infoBox('Mã TP VN', this.escapeHtmlForPrint(workOrder.productCode || '-'))}
-    ${infoBox('Ngày giao NVL', deliveryDateStr)}
-    ${infoBox('Lượng sản phẩm', this.formatQuantityForPxk(workOrder.quantity || 0))}
+    ${maTPVNBox}
+    ${maKhachHangBox}
+    ${infoBox('Phần Trăm Hao Hụt', phanTramHaoHutDisplay ? this.escapeHtmlForPrint(phanTramHaoHutDisplay) + '%' : '')}
+    ${`<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Lượng sản phẩm</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.formatQuantityForPxk(workOrder.quantity || 0)}</span></div>${deliveryDateStr !== '-' ? `<span style="position:absolute;bottom:6px;left:6px;font-size:13px;">Ngày giao: ${this.escapeHtmlForPrint(deliveryDateStr)}</span>` : ''}</div>`}
     ${lsxBox}
     ${lineNhanBox}
   </div>
   <div style="${rowStyle}">
-    ${infoBox('Nhà máy', this.escapeHtmlForPrint(factory))}
+    ${infoBox('Tên TP', this.escapeHtmlForPrint(tenTPDisplay || ''))}
+    ${infoBox('Số PO KH', this.escapeHtmlForPrint(soPOKHDisplay || ''))}
     ${soChungTuBox}
     ${infoBox('Nhân Viên Soạn', this.escapeHtmlForPrint(nhanVienSoanStr))}
     ${infoBox('Nhân viên Giao', this.escapeHtmlForPrint(nhanVienGiaoStr))}
@@ -4011,8 +4055,9 @@ h2{margin-bottom:12px;font-size:16px}
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
+.pxk-table th.col-ten-vat-tu,.pxk-table td.col-ten-vat-tu{min-width:120px;width:14%}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:80px;width:9.6%}
-.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:80px;width:12%}
+.pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:8.5%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
 .pxk-top-header .logo-cell{width:120px;text-align:center;vertical-align:middle}
@@ -4048,7 +4093,7 @@ h2{margin-bottom:12px;font-size:16px}
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Số CT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>Đơn vị tính</th><th>Loại Hình</th><th>Lượng xuất</th><th class="col-vitri">Vị trí</th><th>Lượng Scan</th><th>So Sánh</th><th>Lượng giao</th><th class="col-sx-tra">SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng SL Y/Cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-sx-tra">SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}

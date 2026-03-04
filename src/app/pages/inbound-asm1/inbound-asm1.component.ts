@@ -308,6 +308,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // 1. Ngày nhập (ngày cũ nhất lên đầu) - ưu tiên cao nhất
         // 2. Lô hàng/DNNK (batchNumber) - ưu tiên thứ 2
         // 3. Mã hàng (materialCode) theo A, B, C - ưu tiên thứ 3
+        // 4. Số P.O (poNumber) - ưu tiên thứ 4
         this.materials = asm1Materials.sort((a, b) => {
             // 1. Sắp xếp theo ngày nhập (ngày cũ nhất lên đầu)
             const dateCompare = a.importDate.getTime() - b.importDate.getTime();
@@ -320,7 +321,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             if (batchCompare !== 0) return batchCompare;
             
             // 3. Nếu cùng ngày và cùng lô hàng, sắp xếp theo mã hàng (A, B, C)
-            return a.materialCode.localeCompare(b.materialCode);
+            const matCompare = a.materialCode.localeCompare(b.materialCode);
+            if (matCompare !== 0) return matCompare;
+            
+            // 4. Nếu cùng ngày, lô hàng và mã hàng, sắp xếp theo Số P.O
+            return (a.poNumber || '').localeCompare(b.poNumber || '');
           });
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
@@ -569,6 +574,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     // 1. Ngày nhập (ngày cũ nhất lên đầu) - ưu tiên cao nhất
     // 2. Lô hàng/DNNK (batchNumber) - ưu tiên thứ 2
     // 3. Mã hàng (materialCode) theo A, B, C - ưu tiên thứ 3
+    // 4. Số P.O (poNumber) - ưu tiên thứ 4
     filtered.sort((a, b) => {
       // 1. Sắp xếp theo ngày nhập (ngày cũ nhất lên đầu)
       const dateCompare = a.importDate.getTime() - b.importDate.getTime();
@@ -581,7 +587,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       if (batchCompare !== 0) return batchCompare;
       
       // 3. Nếu cùng ngày và cùng lô hàng, sắp xếp theo mã hàng (A, B, C)
-      return a.materialCode.localeCompare(b.materialCode);
+      const matCompare = a.materialCode.localeCompare(b.materialCode);
+      if (matCompare !== 0) return matCompare;
+      
+      // 4. Nếu cùng ngày, lô hàng và mã hàng, sắp xếp theo Số P.O
+      return (a.poNumber || '').localeCompare(b.poNumber || '');
     });
     
     this.filteredMaterials = filtered;

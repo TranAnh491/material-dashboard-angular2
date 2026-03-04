@@ -389,10 +389,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log(`💡 Tip: Available LSX in DB:`, this.availableProductionOrders.slice(0, 5));
     }
     
-    const lsxToCheck = this.selectedProductionOrder;
-    const ok = await this.checkWorkOrderKittingStatus(lsxToCheck);
-    if (!ok) return;
-    this.loadMaterials(); // Load data for this LSX
+    this.loadMaterials(); // Load data for this LSX (không kiểm tra trạng thái khi search)
   }
   
   // Clear Production Order filter (hide all data)
