@@ -3998,7 +3998,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }).join('');
       nvlSxKsBoxHtml = `
 <div style="margin-top:16px;">
-  <div style="font-weight:bold;margin-bottom:6px;font-size:12px;">Kho NVL_SX / NVL_KS được sử dụng gần nhất</div>
+  <div style="font-weight:bold;margin-bottom:6px;font-size:10px;">Kho NVL_SX / NVL_KS được sử dụng gần nhất</div>
   <table class="pxk-table" style="margin-top:4px;">
     <thead><tr><th>STT</th><th>Mã vật tư</th><th>PO</th><th>Mã Kho</th><th>LSX</th><th>Line</th></tr></thead>
     <tbody>${nvlRows}</tbody>
@@ -4008,26 +4008,27 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const deliveryDateStr = workOrder.deliveryDate
       ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
       : '-';
-    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:15px;box-sizing:border-box;position:relative`;
+    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:13px;box-sizing:border-box;position:relative`;
     const infoBox = (label: string, value: string) =>
-      `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">${label}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${value}</span></div></div>`;
+      `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${label}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${value}</span></div></div>`;
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
     const isKZ = lsxUpper.startsWith('KZ');
     const isLH = lsxUpper.startsWith('LH');
+    const isWHE = lineNhan.trim().toUpperCase() === 'WH E';
     const factoryIconHtml = isKZ
-      ? `<span style="position:absolute;top:6px;right:6px;font-size:18px;font-weight:bold;">ASM1</span>`
+      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${isWHE ? 'ASM3' : 'ASM1'}</span>`
       : isLH
-        ? `<span style="position:absolute;top:6px;right:6px;font-size:18px;font-weight:bold;">ASM2</span>`
+        ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">ASM2</span>`
         : '';
-    const maTPVNBox = `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Mã TP VN</strong>${factoryIconHtml}<div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.escapeHtmlForPrint(workOrder.productCode || '-')}</span></div></div>`;
+    const maTPVNBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Mã TP VN</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.escapeHtmlForPrint(workOrder.productCode || '-')}</span></div></div>`;
     const maKhachHangDisplay = lines.map(l => String((l as any).maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
     const maKhachHangBox = infoBox('Mã Khách Hàng', this.escapeHtmlForPrint(maKhachHangDisplay));
-    const lsxBox = `<div style="${boxStyle};flex-direction:row;align-items:center;justify-content:space-between;gap:6px;"><div style="flex:1;display:flex;flex-direction:column;"><strong style="text-transform:uppercase;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:13px;">${this.escapeHtmlForPrint(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
+    const lsxBox = `<div style="${boxStyle};flex-direction:row;align-items:center;justify-content:space-between;gap:6px;"><div style="flex:1;display:flex;flex-direction:column;"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:11px;">${this.escapeHtmlForPrint(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
     const isUsbCLine = /USB\s*C/i.test(lineNhan);
     const cameraIconHtml = isUsbCLine ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
     const lineNhanBoxStyle = boxStyle + ';flex-direction:row;align-items:center;justify-content:space-between;gap:6px;';
-    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;"><strong style="text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:13px;">${this.escapeHtmlForPrint(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
-    const soChungTuBox = `<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Số Chứng Từ</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.4;font-size:13px;padding-top:18px;"><span>${soChungTuDisplay}</span></div></div>`;
+    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${factoryIconHtml}${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;padding-top:${factoryIconHtml ? '22px' : '0'};"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:11px;">${this.escapeHtmlForPrint(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
+    const soChungTuBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Số Chứng Từ</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.4;font-size:11px;padding-top:18px;"><span>${soChungTuDisplay}</span></div></div>`;
     const emptyBox = `<div style="${boxStyle}"></div>`;
     const rowStyle = 'display:flex;flex-direction:row;gap:8px;width:100%;margin-bottom:8px';
     const headerSection = `
@@ -4036,7 +4037,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     ${maTPVNBox}
     ${maKhachHangBox}
     ${infoBox('Phần Trăm Hao Hụt', phanTramHaoHutDisplay ? this.escapeHtmlForPrint(phanTramHaoHutDisplay) + '%' : '')}
-    ${`<div style="${boxStyle}"><strong style="text-transform:uppercase;position:absolute;top:6px;left:6px;">Lượng sản phẩm</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.formatQuantityForPxk(workOrder.quantity || 0)}</span></div>${deliveryDateStr !== '-' ? `<span style="position:absolute;bottom:6px;left:6px;font-size:13px;">Ngày giao: ${this.escapeHtmlForPrint(deliveryDateStr)}</span>` : ''}</div>`}
+    ${`<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Lượng sản phẩm</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.formatQuantityForPxk(workOrder.quantity || 0)}</span></div>${deliveryDateStr !== '-' ? `<span style="position:absolute;bottom:6px;left:6px;font-size:11px;">Ngày giao: ${this.escapeHtmlForPrint(deliveryDateStr)}</span>` : ''}</div>`}
     ${lsxBox}
     ${lineNhanBox}
   </div>
@@ -4051,15 +4052,20 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 </div>`;
     const html = `
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>PXK - ${this.escapeHtmlForPrint(lsx)}</title>
+<html><head><meta charset="utf-8"><title></title>
 <style>
-@page{size:A4 landscape;margin:0}
+@page{size:A4 landscape;margin:0;marks:none}
 *{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
+@media print{
+  html::before,html::after,body::before,body::after{display:none!important;content:none!important}
+  head,header,footer,nav{display:none!important}
+}
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
-.pxk-table th,.pxk-table td{border:1px solid #000;padding:6px}
+.pxk-table th,.pxk-table td{border:1px solid #000;padding:6px;font-size:10px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
-.pxk-table th.col-ten-vat-tu,.pxk-table td.col-ten-vat-tu{min-width:120px;width:14%}
+.pxk-table th.col-ten-vat-tu{min-width:120px;width:14%}.pxk-table td.col-ten-vat-tu{min-width:120px;width:14%;font-size:8px}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:80px;width:9.6%}
 .pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:7%}.pxk-table th.col-ghi-chu,.pxk-table td.col-ghi-chu{min-width:80px;width:9%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
