@@ -21,11 +21,11 @@ export class MenuComponent implements OnInit {
     '/fg-in',
     '/fg-out',
     '/fg-inventory',
-    '/index',
     '/utilization',
     '/checklist',
     '/equipment',
     '/manage',
+    '/sxxk',
     '/settings'
   ];
   
@@ -67,8 +67,8 @@ export class MenuComponent implements OnInit {
     { path: '/safety', title: 'Safety Stock', icon: 'shield', category: 'Tools' },
     
     // Admin & Reports
-    { path: '/index', title: 'Bonded Report', icon: 'summarize', category: 'Admin' },
     { path: '/utilization', title: 'Utilization', icon: 'trending_up', category: 'Admin' },
+    { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'school', category: 'Admin' },
     { path: '/manage', title: 'Manage', icon: 'tune', category: 'Admin' },

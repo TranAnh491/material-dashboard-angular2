@@ -148,6 +148,7 @@ export class TabPermissionGuard implements CanActivate {
       '/label': 'label',
       '/index': 'index',
       '/utilization': 'utilization',
+      '/sxxk': 'sxxk',
       '/find-rm1': 'find-rm1',
       '/checklist': 'checklist',
       '/safety': 'safety',

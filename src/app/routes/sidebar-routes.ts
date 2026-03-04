@@ -60,6 +60,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 
   { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
+  { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
   { path: '/settings', title: 'Settings', icon: 'settings', class: '' }

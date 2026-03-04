@@ -127,6 +127,7 @@ export class FilteredRoutesService {
       '/label': 'label',
       '/index': 'index',
       '/utilization': 'utilization',
+      '/sxxk': 'sxxk',
       '/find-rm1': 'find-rm1',
       '/checklist': 'checklist',
       '/safety': 'safety',

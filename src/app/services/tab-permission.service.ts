@@ -192,6 +192,7 @@ export class TabPermissionService {
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
     { key: 'utilization', name: 'Utilization' },
+    { key: 'sxxk', name: 'SXXK' },
     { key: 'checklist', name: 'Safety & Quality' },
     { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },

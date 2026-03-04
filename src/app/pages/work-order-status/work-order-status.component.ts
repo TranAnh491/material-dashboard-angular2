@@ -3929,6 +3929,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td class="col-luong-scan" style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(scanQtyStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.escapeHtmlForPrint(soSanhStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(deliveryQtyStr)}</td>
+        <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;"></td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
@@ -4057,7 +4058,7 @@ h2{margin-bottom:12px;font-size:16px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
 .pxk-table th.col-ten-vat-tu,.pxk-table td.col-ten-vat-tu{min-width:120px;width:14%}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:80px;width:9.6%}
-.pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:8.5%}
+.pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:7%}.pxk-table th.col-ghi-chu,.pxk-table td.col-ghi-chu{min-width:80px;width:9%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
 .pxk-top-header .logo-cell{width:120px;text-align:center;vertical-align:middle}
@@ -4093,7 +4094,7 @@ h2{margin-bottom:12px;font-size:16px}
 <h2>Production Order Material List</h2>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng SL Y/Cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-sx-tra">SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng SL Y/Cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}
