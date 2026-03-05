@@ -62,6 +62,7 @@ import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
+import { ScrapComponent } from '../../pages/scrap/scrap.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
@@ -127,6 +128,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     PrintLabelComponent,
     IndexComponent,
     SxxkComponent,
+    ScrapComponent,
     QCComponent,
     WhSecurityComponent,
     Rm1DeliveryComponent,

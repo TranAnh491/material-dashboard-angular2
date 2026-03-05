@@ -29,6 +29,7 @@ import { FindRm1Component } from '../../pages/find-rm1/find-rm1.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { ManageComponent } from '../../pages/manage/manage.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
+import { ScrapComponent } from '../../pages/scrap/scrap.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
@@ -77,6 +78,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'manage',               component: ManageComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'sxxk',                component: SxxkComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'scrap',               component: ScrapComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'rm1-delivery',         component: Rm1DeliveryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'wh-security',          component: WhSecurityComponent, canActivate: [AuthGuard, TabPermissionGuard] },

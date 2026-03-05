@@ -4140,17 +4140,18 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 .pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:7%}.pxk-table th.col-ghi-chu,.pxk-table td.col-ghi-chu{min-width:80px;width:9%}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
-.pxk-top-header .logo-cell{width:120px;text-align:center;vertical-align:middle}
+.pxk-top-header .logo-cell{width:230px;min-width:230px;text-align:center;vertical-align:middle}
 .pxk-top-header .logo-cell img{max-width:100%;max-height:80px;object-fit:contain}
 .pxk-top-header .title-cell{text-align:center;padding:8px}
 .pxk-top-header .title-inner{width:100%;border-collapse:collapse}
 .pxk-top-header .title-inner td{border:none;padding:8px;text-align:center}
 .pxk-top-header .title-line1{font-size:18px;font-weight:bold}
 .pxk-top-header .title-line2{font-size:14px;text-transform:uppercase}
-.pxk-top-header .meta-cell{width:200px}
+.pxk-top-header .meta-cell{width:230px;min-width:230px}
 .pxk-top-header .meta-table{width:100%;border-collapse:collapse;font-size:11px}
 .pxk-top-header .meta-table td{border:1px solid #000;padding:4px 6px}
-.pxk-top-header .meta-table .meta-label{width:55%;background:#f5f5f5}
+.pxk-top-header .meta-table td:not(.meta-label){white-space:nowrap}
+.pxk-top-header .meta-table .meta-label{width:45%;background:#f5f5f5}
 </style></head><body>
 <div class="pxk-top-header-wrap">
 <table class="pxk-top-header">
@@ -4161,10 +4162,10 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
   </td>
   <td class="meta-cell">
     <table class="meta-table">
-      <tr><td class="meta-label">Mã quản lý</td><td></td></tr>
-      <tr><td class="meta-label">Phiên bản</td><td></td></tr>
-      <tr><td class="meta-label">Ngày ban hành</td><td></td></tr>
-      <tr><td class="meta-label">Số Trang</td><td></td></tr>
+      <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr>
+      <tr><td class="meta-label">Phiên bản</td><td>00</td></tr>
+      <tr><td class="meta-label">Ngày ban hành</td><td>05/03/2026</td></tr>
+      <tr><td class="meta-label">Số Trang</td><td>01</td></tr>
     </table>
   </td>
 </tr>

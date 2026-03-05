@@ -1,0 +1,212 @@
+<div class="scrap-container">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-title">
+      <mat-icon>delete_sweep</mat-icon>
+      <span>SCRAP</span>
+    </div>
+    <div class="toolbar-actions">
+      <div class="search-wrap">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input class="search-input" type="text" placeholder="Tìm mã hàng / mã thùng…"
+               [(ngModel)]="searchTerm" />
+      </div>
+      <button class="btn-scan" (click)="startScan()" *ngIf="scanStep === 'idle'">
+        <mat-icon>qr_code_scanner</mat-icon>
+        <span>Scan</span>
+      </button>
+      <button class="btn-print" (click)="openPrintModal()">
+        <mat-icon>print</mat-icon>
+        <span>Print</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Print Modal -->
+  <div class="modal-overlay" *ngIf="showPrintModal" (click)="closePrintModal()">
+    <div class="modal-box" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In tem mã thùng</h3>
+        <button class="btn-close-modal" (click)="closePrintModal()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="print-hint">
+          Ngày {{ formatDateShort() }} → Mã bắt đầu: <strong>{{ nextPreviewCode }}</strong>
+        </div>
+        <div class="form-row">
+          <label>Số thùng cần in</label>
+          <input type="number" min="1" max="99"
+                 [(ngModel)]="printBoxCount"
+                 (ngModelChange)="updatePrintPreview()"
+                 placeholder="VD: 4" />
+        </div>
+        <div class="print-preview" *ngIf="printPreviewLabels.length > 0">
+          Sẽ in: {{ printPreviewLabels.join(', ') }}
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" (click)="closePrintModal()">Huỷ</button>
+        <button class="btn-modal-print" (click)="doPrintLabels()" [disabled]="printBoxCount < 1 || isPrinting">
+          <mat-icon>print</mat-icon>
+          {{ isPrinting ? 'Đang xử lý…' : 'In' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan Panel -->
+  <div class="scan-panel" *ngIf="scanStep !== 'idle'">
+
+    <!-- Step 1: Scan box -->
+    <div class="scan-step" *ngIf="scanStep === 'scan-box'">
+      <div class="step-header">
+        <mat-icon class="step-icon box-icon">inventory_2</mat-icon>
+        <span>Quét TEM MÃ THÙNG</span>
+      </div>
+      <div class="input-row">
+        <input #boxInput class="scan-input" type="text"
+               placeholder="Scan hoặc nhập mã thùng…"
+               [(ngModel)]="boxInputVal"
+               (keydown)="onBoxKeydown($event)"
+               autocomplete="off" />
+        <button class="btn-confirm" (click)="confirmBoxCode()">
+          <mat-icon>check</mat-icon>
+        </button>
+        <button class="btn-cancel" (click)="cancelScan()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Scan materials -->
+    <div class="scan-step" *ngIf="scanStep === 'scan-materials'">
+      <div class="step-header">
+        <mat-icon class="step-icon mat-icon-box">inventory_2</mat-icon>
+        <span class="box-label">Thùng: <strong>{{ currentBoxCode }}</strong></span>
+        <span class="mat-count">{{ currentMaterials.length }} NVL</span>
+      </div>
+      <div class="input-row">
+        <input #materialInput class="scan-input" type="text"
+               placeholder="Scan tem nguyên liệu liên tiếp…"
+               [(ngModel)]="materialInputVal"
+               (keydown)="onMaterialKeydown($event)"
+               autocomplete="off" />
+        <button class="btn-confirm" (click)="addMaterial()">
+          <mat-icon>add</mat-icon>
+        </button>
+      </div>
+
+      <!-- Scanned materials list -->
+      <div class="materials-list" *ngIf="currentMaterials.length > 0">
+        <div class="mat-chip" *ngFor="let m of currentMaterials; let i = index">
+          <span class="mat-num">{{ i + 1 }}</span>
+          <span class="mat-code">{{ m }}</span>
+          <button class="btn-remove" (click)="removeMaterial(i)">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+      <div class="no-materials" *ngIf="currentMaterials.length === 0">
+        Chưa có nguyên liệu nào. Hãy quét tem nguyên liệu.
+      </div>
+
+      <div class="scan-actions">
+        <button class="btn-cancel-full" (click)="cancelScan()">
+          <mat-icon>cancel</mat-icon> Huỷ
+        </button>
+        <button class="btn-done" (click)="saveSession()" [disabled]="isLoading">
+          <mat-icon>save</mat-icon>
+          {{ isLoading ? 'Đang lưu…' : 'Done – Lưu' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Message -->
+  <div class="saved-msg" *ngIf="savedMsg">{{ savedMsg }}</div>
+
+  <!-- Loading -->
+  <div class="loading-wrap" *ngIf="isLoading && scanStep === 'idle'">
+    <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+  </div>
+
+  <!-- Data Table -->
+  <div class="table-wrap" *ngIf="!isLoading || sessions.length > 0">
+    <div class="table-meta">
+      {{ filtered.length }} bản ghi
+      <span *ngIf="searchTerm"> (lọc từ {{ sessions.length }})</span>
+    </div>
+
+    <!-- Desktop table -->
+    <table class="data-table desktop-table">
+      <thead>
+        <tr>
+          <th class="col-stt">STT</th>
+          <th class="col-box">Mã Thùng</th>
+          <th class="col-count">Số NVL</th>
+          <th class="col-bag">Bag</th>
+          <th class="col-materials">Danh sách NVL (Mã | Bag)</th>
+          <th class="col-date">Thời gian</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let s of filtered; let i = index">
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td class="col-box"><strong>{{ s.boxCode }}</strong></td>
+          <td class="col-count">{{ getMaterialsWithBags(s.materials).length }}</td>
+          <td class="col-bag">{{ s.materials.length }}</td>
+          <td class="col-materials">
+            <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBags(s.materials)">
+              <span class="mat-code">{{ x.code }}</span>
+              <span class="mat-bag">| {{ x.bags }}</span>
+            </div>
+            <span class="no-mat" *ngIf="!s.materials?.length">—</span>
+          </td>
+          <td class="col-date">{{ formatDate(s.createdAt) }}</td>
+          <td class="col-action">
+            <button class="btn-delete" (click)="deleteSession(s)" title="Xóa">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </tr>
+        <tr *ngIf="filtered.length === 0">
+          <td colspan="7" class="empty-row">Không có dữ liệu</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Mobile cards -->
+    <div class="mobile-cards">
+      <div class="record-card" *ngFor="let s of filtered; let i = index">
+        <div class="card-header">
+          <div class="card-box-code">
+            <mat-icon>inventory_2</mat-icon>
+            <span>{{ s.boxCode }}</span>
+          </div>
+          <div class="card-meta">
+            <span class="card-count">{{ getMaterialsWithBags(s.materials).length }} NVL · {{ s.materials.length }} Bag</span>
+            <button class="btn-delete" (click)="deleteSession(s)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+        <div class="card-materials">
+          <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBags(s.materials)">
+            <span class="mat-code">{{ x.code }}</span>
+            <span class="mat-bag">| {{ x.bags }}</span>
+          </div>
+          <span class="no-mat" *ngIf="!s.materials?.length">Không có NVL</span>
+        </div>
+        <div class="card-date">{{ formatDate(s.createdAt) }}</div>
+      </div>
+      <div class="empty-card" *ngIf="filtered.length === 0">
+        Không có dữ liệu
+      </div>
+    </div>
+  </div>
+
+</div>

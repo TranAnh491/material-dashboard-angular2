@@ -69,6 +69,7 @@ export class MenuComponent implements OnInit {
     // Admin & Reports
     { path: '/utilization', title: 'Utilization', icon: 'trending_up', category: 'Admin' },
     { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
+    { path: '/scrap', title: 'SCRAP', icon: 'delete_sweep', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'school', category: 'Admin' },
     { path: '/manage', title: 'Manage', icon: 'tune', category: 'Admin' },

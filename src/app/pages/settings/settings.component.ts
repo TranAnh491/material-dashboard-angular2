@@ -75,6 +75,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'index', name: 'Bonded Report' },
     { key: 'utilization', name: 'Utilization' },
     { key: 'sxxk', name: 'SXXK' },
+    { key: 'scrap', name: 'SCRAP' },
     { key: 'checklist', name: 'Safety & Quality' },
     { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
