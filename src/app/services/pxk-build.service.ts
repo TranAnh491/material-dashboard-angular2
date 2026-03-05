@@ -39,6 +39,7 @@ export interface PxkBuildParams {
   nhanVienSoanStr: string;
   nhanVienGiaoStr: string;
   nhanVienNhanStr: string;
+  lineNhanOverride?: string; // Dùng khi workOrder.productionLine trống, lấy từ line PXK hoặc work order khác
   nvlSxKsBoxHtml?: string;
 }
 
@@ -65,14 +66,17 @@ export class PxkBuildService {
   async buildHtml(p: PxkBuildParams): Promise<string> {
     const { lsx, lines, workOrder, factory, scanQtyMap, deliveryQtyMap, locationMap } = p;
     const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
-    const lineNhan = (workOrder.productionLine || '').trim() || '-';
+    const lineNhanRaw = (p.lineNhanOverride || workOrder.productionLine || '').trim();
+    const lineNhan = lineNhanRaw || '-';
     let qrImage = '';
     let qrImageLine = '';
     try {
       qrImage = await QRCode.toDataURL(lsx, { width: 120, margin: 1 });
     } catch {}
     try {
-      if (lineNhan !== '-') qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
+      if (lineNhan !== '-' && lineNhan.length > 0) {
+        qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
+      }
     } catch {}
 
     const getLocation = (materialCode: string, po: string): string =>
@@ -82,10 +86,10 @@ export class PxkBuildService {
     const getScanQty = (materialCode: string, po: string): number =>
       scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
-      const diff = Math.abs(xuất - scan);
-      if (diff < 1) return 'Đủ';
-      if (scan < xuất) return 'Thiếu ' + this.formatQty(xuất - scan);
-      return 'Đủ';
+      const diff = scan - xuất;
+      if (Math.abs(diff) < 1) return 'Đủ';
+      if (diff < 0) return 'Thiếu ' + this.formatQty(xuất - scan);
+      return 'Dư ' + this.formatQty(scan - xuất);
     };
 
     const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
@@ -126,7 +130,7 @@ export class PxkBuildService {
       else scanQty = getScanQty(l.materialCode, po);
       const qtyPxk = Number(l.quantity) || 0;
       const soSanhStr = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
-      const soSanhColor = soSanhStr.startsWith('Thiếu') ? 'color:red;font-weight:bold;' : soSanhStr === 'Đủ' ? 'color:green;' : '';
+      const soSanhColor = soSanhStr.startsWith('Thiếu') ? 'color:red;font-weight:bold;' : soSanhStr === 'Đủ' ? 'color:green;font-weight:bold;' : soSanhStr.startsWith('Dư') ? 'color:orange;font-weight:bold;' : '';
       const scanQtyStr = scanQty > 0 ? this.formatQty(scanQty) : '';
       const deliveryQty = getDeliveryQty(l.materialCode, po);
       const deliveryQtyStr = deliveryQty > 0 ? this.formatQty(deliveryQty) : '';
@@ -154,9 +158,9 @@ export class PxkBuildService {
       ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
       : '-';
     const maKhachHangDisplay = lines.map(l => String((l as any).maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
-    const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:13px;box-sizing:border-box;position:relative`;
+    const boxStyle = `flex:1;min-width:80px;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:13px;box-sizing:border-box;position:relative`;
     const infoBox = (label: string, value: string) =>
-      `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${label}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${value}</span></div></div>`;
+      `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${this.esc(label)}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.esc(value || '-')}</span></div></div>`;
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
     const isKZ = lsxUpper.startsWith('KZ');
     const isLH = lsxUpper.startsWith('LH');
@@ -169,10 +173,10 @@ export class PxkBuildService {
     const lsxBox = `<div style="${boxStyle};flex-direction:row;align-items:center;justify-content:space-between;gap:6px;"><div style="flex:1;display:flex;flex-direction:column;"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:11px;">${this.esc(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
     const isUsbCLine = /USB\s*C/i.test(lineNhan);
     const cameraIconHtml = isUsbCLine ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
-    const lineNhanBoxStyle = boxStyle + ';flex-direction:row;align-items:center;justify-content:space-between;gap:6px;';
-    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${factoryIconHtml}${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;padding-top:${factoryIconHtml ? '22px' : '0'};"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:11px;">${this.esc(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
+    const lineNhanBoxStyle = boxStyle + ';flex-direction:row;align-items:center;justify-content:space-between;gap:6px;position:relative;';
+    const lineNhanBox = `<div style="${lineNhanBoxStyle}">${factoryIconHtml}${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;padding-top:${factoryIconHtml ? '22px' : '0'};min-width:0;"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:11px;">${this.esc(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
     const soChungTuBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Số Chứng Từ</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.4;font-size:11px;padding-top:18px;"><span>${soChungTuDisplay}</span></div></div>`;
-    const rowStyle = 'display:flex;flex-direction:row;gap:8px;width:100%;margin-bottom:8px';
+    const rowStyle = 'display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;width:100%;margin-bottom:8px';
     const headerSection = `
 <div style="margin-bottom:16px;width:100%;box-sizing:border-box;">
   <div style="${rowStyle}">
@@ -194,12 +198,38 @@ export class PxkBuildService {
 </div>`;
 
     const nvlBox = p.nvlSxKsBoxHtml || '';
+    const logoUrl = typeof window !== 'undefined' ? (window.location.origin + '/assets/img/logo.png') : '/assets/img/logo.png';
     return `
 <div class="pxk-preview-content">
+<style>
+.pxk-preview-content .pxk-top-header-wrap{width:100%;margin-bottom:12px}
+.pxk-preview-content .pxk-top-header{width:100%;border-collapse:collapse;table-layout:fixed}
+.pxk-preview-content .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
+.pxk-preview-content .pxk-top-header .logo-cell{width:230px;min-width:150px;text-align:center}
+.pxk-preview-content .pxk-top-header .logo-cell img{max-width:100%;max-height:80px;object-fit:contain;display:block;margin:0 auto}
+.pxk-preview-content .pxk-top-header .title-cell{text-align:center;width:auto}
+.pxk-preview-content .pxk-top-header .title-inner{width:100%;border-collapse:collapse}
+.pxk-preview-content .pxk-top-header .title-inner td{border:none;padding:6px 8px;text-align:center}
+.pxk-preview-content .pxk-top-header .title-line1{font-size:18px;font-weight:bold}
+.pxk-preview-content .pxk-top-header .title-line2{font-size:14px;text-transform:uppercase}
+.pxk-preview-content .pxk-top-header .meta-cell{width:230px;min-width:180px}
+.pxk-preview-content .pxk-top-header .meta-table{width:100%;border-collapse:collapse;font-size:11px}
+.pxk-preview-content .pxk-top-header .meta-table td{border:1px solid #000;padding:4px 6px}
+.pxk-preview-content .pxk-top-header .meta-table .meta-label{width:45%;background:#f5f5f5}
+.pxk-preview-content .pxk-top-header .meta-table td:not(.meta-label){white-space:nowrap}
+.pxk-preview-content .pxk-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:10px}
+.pxk-preview-content .pxk-table th,.pxk-preview-content .pxk-table td{border:1px solid #000;padding:6px}
+.pxk-preview-content .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
+.pxk-preview-content .pxk-table th.col-ten-vat-tu,.pxk-preview-content .pxk-table td.col-ten-vat-tu{min-width:120px;width:14%}
+.pxk-preview-content .pxk-table td.col-ten-vat-tu{font-size:8px}
+.pxk-preview-content .pxk-table th.col-vitri,.pxk-preview-content .pxk-table td.col-vitri{min-width:80px;width:9.6%}
+.pxk-preview-content .pxk-table th.col-luong-scan,.pxk-preview-content .pxk-table td.col-luong-scan,.pxk-preview-content .pxk-table th.col-sx-tra,.pxk-preview-content .pxk-table td.col-sx-tra{min-width:70px;width:7%}
+.pxk-preview-content .pxk-table th.col-ghi-chu,.pxk-preview-content .pxk-table td.col-ghi-chu{min-width:80px;width:9%}
+</style>
 <div class="pxk-top-header-wrap">
 <table class="pxk-top-header">
 <tr>
-  <td class="logo-cell"><img src="${typeof window !== 'undefined' ? window.location.origin : ''}/assets/img/logo.png" alt="AIRSPEED" /></td>
+  <td class="logo-cell"><img src="${logoUrl}" alt="AIRSPEED" /></td>
   <td class="title-cell"><table class="title-inner"><tr><td class="title-line1">AIRSPEED MANUFACTURING VIET NAM</td></tr><tr><td class="title-line2">DANH SÁCH VẬT TƯ THEO LỆNH SẢN XUẤT</td></tr></table></td>
   <td class="meta-cell"><table class="meta-table"><tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr><tr><td class="meta-label">Phiên bản</td><td>00</td></tr><tr><td class="meta-label">Ngày ban hành</td><td>05/03/2026</td></tr><tr><td class="meta-label">Số Trang</td><td>01</td></tr></table></td>
 </tr>

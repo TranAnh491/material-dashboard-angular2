@@ -39,22 +39,22 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     this.subs.add(
       this.firestore.collection('pxk-import-data').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild())
+      ).subscribe(() => this.rebuild(true))
     );
     this.subs.add(
       this.firestore.collection('outbound-materials').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild())
+      ).subscribe(() => this.rebuild(true))
     );
     this.subs.add(
       this.firestore.collection('rm1-delivery-records').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild())
+      ).subscribe(() => this.rebuild(true))
     );
     this.subs.add(
       this.firestore.collection('inventory-materials').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild())
+      ).subscribe(() => this.rebuild(true))
     );
   }
 
@@ -70,22 +70,25 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     this.rebuild();
   }
 
-  async rebuild(): Promise<void> {
+  async rebuild(backgroundSync = false): Promise<void> {
     const lsx = this.lsx.trim();
     if (!lsx) {
       this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
       this.errorMsg = '';
       return;
     }
-    this.isLoading = true;
-    this.errorMsg = '';
+    if (!backgroundSync) {
+      this.isLoading = true;
+      this.errorMsg = '';
+    }
     try {
       const pxkDataByLsx = await this.loadPxkData();
       const lines = this.getLinesForLsx(pxkDataByLsx, lsx);
       if (lines.length === 0) {
-        this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
-        this.errorMsg = 'Chưa có dữ liệu PXK cho LSX này. Vui lòng import file PXK trước.';
-        this.isLoading = false;
+        if (!backgroundSync) {
+          this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+          this.errorMsg = 'Chưa có dữ liệu PXK cho LSX này. Vui lòng import file PXK trước.';
+        }
         return;
       }
       const factory = this.detectFactory(lsx);
@@ -97,15 +100,19 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         this.loadScanQtyAndEmployees(lsx, factoryFilter),
         this.loadDeliveryData(lsx),
         this.loadDeliveryNames(lsx),
-        Promise.resolve('')
+        this.loadNvlSxKsBox(lsx, lines, factoryFilter)
       ]);
       const [scanQtyMap, nhanVienSoanStr] = scanResult;
+      const lineNhanFromWo = (workOrder?.productionLine || '').trim();
+      const lineNhanFromLines = lines.map(l => String((l as any).lineNhan || '').trim()).find(v => v);
+      const lineNhanFromDelivery = (deliveryNames[2] || '').trim(); // lineNhan từ rm1-delivery-records
+      const lineNhanOverride = lineNhanFromWo || lineNhanFromDelivery || lineNhanFromLines || undefined;
       const wo: PxkWorkOrder = {
         productionOrder: lsx,
         productCode: workOrder?.productCode || '-',
         quantity: workOrder?.quantity || 0,
         deliveryDate: workOrder?.deliveryDate || null,
-        productionLine: workOrder?.productionLine || '-',
+        productionLine: lineNhanOverride || workOrder?.productionLine || '-',
         customer: workOrder?.customer || '-'
       };
       const [giaoStr, nhanStr] = deliveryNames;
@@ -120,15 +127,20 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         nhanVienSoanStr,
         nhanVienGiaoStr: giaoStr || '-',
         nhanVienNhanStr: nhanStr || '-',
+        lineNhanOverride,
         nvlSxKsBoxHtml: nvlBox
       };
       const html = await this.pxkBuild.buildHtml(params);
       this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml(html);
     } catch (e) {
-      this.errorMsg = 'Lỗi: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.');
-      this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+      if (!backgroundSync) {
+        this.errorMsg = 'Lỗi: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.');
+        this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+      }
     } finally {
-      this.isLoading = false;
+      if (!backgroundSync) {
+        this.isLoading = false;
+      }
     }
   }
 
@@ -171,15 +183,44 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async loadWorkOrder(lsx: string, factory: string): Promise<any> {
-    let snap = await this.firestore.collection('work-orders', ref =>
-      ref.where('factory', '==', factory).limit(200)
-    ).get().toPromise();
     const norm = (s: string) => String(s || '').trim().toUpperCase().replace(/\s/g, '').replace(/[-_.]/g, '/');
+    const extractNum = (s: string) => (s || '').match(/(\d{4}[\/\-\.]\d{2,6})/)?.[1]?.replace(/[-.]/g, '/') || '';
     const woNorm = norm(lsx);
+    const lsxNum = extractNum(lsx);
+    const lsxUpper = lsx.trim().toUpperCase();
+    const match = (data: any): boolean => {
+      const po = String(data?.productionOrder || '').trim();
+      const poUpper = po.toUpperCase();
+      if (poUpper === lsxUpper) return true;
+      if (norm(po) === woNorm) return true;
+      const samePrefix = (lsxUpper.startsWith('KZ') && poUpper.startsWith('KZ')) || (lsxUpper.startsWith('LH') && poUpper.startsWith('LH'));
+      if (lsxNum && extractNum(po) === lsxNum && samePrefix) return true;
+      if (poUpper.includes(lsxUpper) || lsxUpper.includes(poUpper)) return true;
+      return false;
+    };
+    // Thử tìm trực tiếp bằng field productionOrder (chính xác)
+    const directSnap = await this.firestore.collection('work-orders', ref =>
+      ref.where('productionOrder', '==', lsx).limit(5)
+    ).get().toPromise();
+    for (const d of directSnap?.docs || []) {
+      const data = d.data() as any;
+      if (match(data)) return data;
+    }
+    // Fallback: load theo factory (tăng limit lên 2000)
+    const snap = await this.firestore.collection('work-orders', ref =>
+      ref.where('factory', '==', factory).limit(2000)
+    ).get().toPromise();
     for (const d of snap?.docs || []) {
       const data = d.data() as any;
-      const po = String(data?.productionOrder || '').trim();
-      if (po.toUpperCase() === lsx.toUpperCase() || norm(po) === woNorm) return data;
+      if (match(data)) return data;
+    }
+    // Fallback cuối: không lọc factory
+    const allSnap = await this.firestore.collection('work-orders', ref =>
+      ref.limit(3000)
+    ).get().toPromise();
+    for (const d of allSnap?.docs || []) {
+      const data = d.data() as any;
+      if (match(data)) return data;
     }
     return null;
   }
@@ -252,7 +293,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     return map;
   }
 
-  private async loadDeliveryNames(lsx: string): Promise<[string, string]> {
+  private async loadDeliveryNames(lsx: string): Promise<[string, string, string]> {
     const snap = await this.firestore.collection('rm1-delivery-records', ref =>
       ref.where('lsx', '==', lsx)
     ).get().toPromise();
@@ -268,6 +309,88 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const giao = (doc?.employeeName || doc?.employeeId || '').trim();
     const nhan = (doc?.receiverEmployeeName || doc?.receiverEmployeeId || '').trim();
-    return [giao || '-', nhan || '-'];
+    const lineNhan = (doc?.lineNhan || '').trim();
+    return [giao || '-', nhan || '-', lineNhan];
+  }
+
+  private esc(s: string): string {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  private async loadNvlSxKsBox(lsx: string, lines: PxkLine[], factoryFilter: string): Promise<string> {
+    const nvlSxKsLines = lines.filter(l => ['NVL_SX', 'NVL_KS'].includes(String((l as any).maKho || '').trim().toUpperCase()));
+    if (nvlSxKsLines.length === 0) return '';
+    const normLsxForCompare = (s: string) => String(s || '').trim().toUpperCase().replace(/\s/g, '');
+    const currentLsxNorm = normLsxForCompare(lsx);
+    const matPotoLsxMap = new Map<string, { lsx: string; importedAt: number }>();
+    const lsxToLineMap = new Map<string, string>();
+    try {
+      const pxkSnap = await this.firestore.collection('pxk-import-data', ref =>
+        ref.where('factory', '==', factoryFilter)
+      ).get().toPromise();
+      (pxkSnap?.docs || []).forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const docLsx = String(d?.lsx || '').trim();
+        if (normLsxForCompare(docLsx) === currentLsxNorm) return;
+        const impAt = d?.importedAt?.toMillis?.() ?? d?.importedAt?.getTime?.() ?? 0;
+        (Array.isArray(d?.lines) ? d.lines : []).forEach((ln: any) => {
+          const mk = String(ln.maKho || '').trim().toUpperCase();
+          if (mk !== 'NVL_SX' && mk !== 'NVL_KS') return;
+          const mat = String(ln.materialCode || '').trim();
+          const po = String(ln.po || ln.poNumber || '').trim();
+          const key = `${mat}|${po}`;
+          const cur = matPotoLsxMap.get(key);
+          if (!cur || impAt > cur.importedAt) matPotoLsxMap.set(key, { lsx: docLsx, importedAt: impAt });
+        });
+      });
+      const lsxSet = new Set([...matPotoLsxMap.values()].map(v => normLsxForCompare(v.lsx)));
+      if (lsxSet.size > 0) {
+        const woSnap = await this.firestore.collection('work-orders', ref =>
+          ref.where('factory', '==', factoryFilter).limit(500)
+        ).get().toPromise();
+        (woSnap?.docs || []).forEach((docSnap: any) => {
+          const wo = docSnap.data() as any;
+          const woLsx = String(wo?.productionOrder || '').trim();
+          if (lsxSet.has(normLsxForCompare(woLsx))) {
+            const line = String(wo?.productionLine || '').trim();
+            if (line) lsxToLineMap.set(normLsxForCompare(woLsx), line);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('loadNvlSxKsBox error:', e);
+    }
+    const nvlRows = nvlSxKsLines
+      .sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''))
+      .map((l, i) => {
+        const key = `${String(l.materialCode || '').trim()}|${String(l.po || '').trim()}`;
+        const info = matPotoLsxMap.get(key);
+        const lsxVal = info?.lsx || '-';
+        const lineVal = info ? lsxToLineMap.get(normLsxForCompare(info.lsx)) || '' : '';
+        return `<tr>
+          <td style="border:1px solid #000;padding:6px;text-align:center;">${i + 1}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.esc(l.materialCode)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.esc(l.po)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.esc(String((l as any).maKho || '').trim())}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.esc(lsxVal)}</td>
+          <td style="border:1px solid #000;padding:6px;">${this.esc(lineVal)}</td>
+        </tr>`;
+      }).join('');
+    return `
+<div style="margin-top:16px;">
+  <div style="font-weight:bold;margin-bottom:6px;font-size:10px;">Kho NVL_SX / NVL_KS được sử dụng gần nhất</div>
+  <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:10px;">
+    <thead><tr>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">STT</th>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">Mã vật tư</th>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">PO</th>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">Mã Kho</th>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">LSX</th>
+      <th style="border:1px solid #000;padding:6px;background:#f0f0f0;">Line</th>
+    </tr></thead>
+    <tbody>${nvlRows}</tbody>
+  </table>
+</div>`;
   }
 }

@@ -772,10 +772,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       } catch (_) {}
     }
     const getSoSanhForCheck = (xuất: number, scan: number): string => {
-      const diff = Math.abs(xuất - scan);
-      if (diff < 1) return 'Đủ';
-      if (scan < xuất) return 'Thiếu';
-      return 'Đủ';
+      const diff = scan - xuất;
+      if (Math.abs(diff) < 1) return 'Đủ';
+      if (diff < 0) return 'Thiếu';
+      return 'Dư';
     };
     let count = 0;
     for (const entry of lsxMap.values()) {
@@ -3769,10 +3769,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const getScanQty = (materialCode: string, po: string): number =>
       scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
-      const diff = Math.abs(xuất - scan);
-      if (diff < 1) return 'Đủ';
-      if (scan < xuất) return 'Thiếu';
-      return 'Đủ';
+      const diff = scan - xuất;
+      if (Math.abs(diff) < 1) return 'Đủ';
+      if (diff < 0) return 'Thiếu';
+      return 'Dư';
     };
     const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po || (l as any).poNumber) > 0);
     for (const l of lines) {
@@ -3936,10 +3936,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const getScanQty = (materialCode: string, po: string): number =>
       scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
-      const diff = Math.abs(xuất - scan);
-      if (diff < 1) return 'Đủ'; // Thiếu hoặc dư dưới 1 vẫn tính Đủ
-      if (scan < xuất) return 'Thiếu ' + this.formatQuantityForPxk(xuất - scan);
-      return 'Đủ'; // scan > xuất
+      const diff = scan - xuất;
+      if (Math.abs(diff) < 1) return 'Đủ';
+      if (diff < 0) return 'Thiếu ' + this.formatQuantityForPxk(xuất - scan);
+      return 'Dư ' + this.formatQuantityForPxk(scan - xuất);
     };
     // Sắp xếp: nhóm 1 (NVL, NVL_E31, NVL_KE31, NVL_EXPIRED) trên cùng, nhóm 2 còn lại dưới, ngăn cách bằng dòng trắng
     const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
@@ -3984,7 +3984,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
       const qtyPxk = Number(l.quantity) || 0;
       const soSanhStr = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
-      const soSanhColor = soSanhStr.startsWith('Thiếu') ? 'color:red;font-weight:bold;' : soSanhStr === 'Đủ' ? 'color:green;' : '';
+      const soSanhColor = soSanhStr.startsWith('Thiếu') ? 'color:red;font-weight:bold;' : soSanhStr === 'Đủ' ? 'color:green;font-weight:bold;' : soSanhStr.startsWith('Dư') ? 'color:orange;font-weight:bold;' : '';
       const scanQtyStr = scanQty > 0 ? this.formatQuantityForPxk(scanQty) : '';
       const deliveryQty = getDeliveryQty(l.materialCode, po);
       const deliveryQtyStr = deliveryQty > 0 ? this.formatQuantityForPxk(deliveryQty) : '';
