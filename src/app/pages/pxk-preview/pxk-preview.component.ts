@@ -3,7 +3,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { PxkBuildService, PxkLine, PxkWorkOrder } from '../../services/pxk-build.service';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 
 @Component({
@@ -24,6 +24,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   private rebuildSeq = 0;
   private currentFactory = 'ASM1';
   private patchSeq = 0;
+  private inputSubject = new Subject<void>();
 
   constructor(
     private route: ActivatedRoute,
@@ -34,10 +35,16 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   ) {}
 
   ngOnInit(): void {
+    // Auto-rebuild khi input dừng gõ (dành cho quét barcode không gửi Enter)
+    this.subs.add(
+      this.inputSubject.pipe(debounceTime(500)).subscribe(() => {
+        if (this.lsx.trim().length >= 5) this.rebuild();
+      })
+    );
     this.route.queryParams.subscribe(q => {
       const qLsx = (q['lsx'] || '').trim();
       if (qLsx) {
-        this.lsx = qLsx;
+        this.lsx = qLsx.toUpperCase();
         this.rebuild();
       }
     });
@@ -72,7 +79,13 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   applyLsx(): void {
+    this.lsx = this.lsx.trim().toUpperCase();
     this.rebuild();
+  }
+
+  onLsxInput(): void {
+    this.lsx = this.lsx.toUpperCase();
+    this.inputSubject.next();
   }
 
   async rebuild(backgroundSync = false): Promise<void> {
@@ -97,7 +110,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         if (seq !== this.rebuildSeq) return;
         if (!backgroundSync) {
           this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
-          this.errorMsg = 'Chưa có dữ liệu PXK cho LSX này. Vui lòng import file PXK trước.';
+          this.errorMsg = `Không tìm thấy dữ liệu PXK cho LSX: ${lsx}`;
         }
         return;
       }
@@ -105,19 +118,18 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
       const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
       this.currentFactory = factoryFilter;
-      const [workOrder, locationMap, scanResult, deliveryQtyMap, deliveryNames, nvlBox] = await Promise.all([
+      const [workOrder, locationMap, scanResult, delivery, nvlBox] = await Promise.all([
         this.loadWorkOrder(lsx, factoryFilter),
         this.loadLocationMap(isAsm1),
         this.loadScanQtyAndEmployees(lsx, factoryFilter),
-        this.loadDeliveryData(lsx),
-        this.loadDeliveryNames(lsx),
+        this.loadDelivery(lsx),
         this.loadNvlSxKsBox(lsx, lines, factoryFilter)
       ]);
-      if (seq !== this.rebuildSeq) return; // có rebuild mới hơn hoàn thành trước, bỏ qua
+      if (seq !== this.rebuildSeq) return;
       const [scanQtyMap, nhanVienSoanStr] = scanResult;
+      const [deliveryQtyMap, giaoStr, nhanStr, lineNhanFromDelivery] = delivery;
       const lineNhanFromWo = (workOrder?.productionLine || '').trim();
       const lineNhanFromLines = lines.map(l => String((l as any).lineNhan || '').trim()).find(v => v);
-      const lineNhanFromDelivery = (deliveryNames[2] || '').trim();
       const lineNhanOverride = lineNhanFromWo || lineNhanFromDelivery || lineNhanFromLines || undefined;
       const wo: PxkWorkOrder = {
         productionOrder: lsx,
@@ -127,7 +139,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         productionLine: lineNhanOverride || workOrder?.productionLine || '-',
         customer: workOrder?.customer || '-'
       };
-      const [giaoStr, nhanStr] = deliveryNames;
       const params = {
         lsx,
         lines,
@@ -159,14 +170,27 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async loadPxkData(): Promise<Record<string, PxkLine[]>> {
-    const snap = await this.firestore.collection('pxk-import-data').get().toPromise();
+    const lsx = this.lsx.trim();
     const out: Record<string, PxkLine[]> = {};
-    (snap?.docs || []).forEach((d: any) => {
-      const data = d.data();
-      const lsx = String(data?.lsx || '').trim();
-      const lines = Array.isArray(data?.lines) ? data.lines : [];
-      if (lsx && lines.length > 0) out[lsx] = lines;
-    });
+    const addDocs = (docs: any[]) => {
+      docs.forEach((d: any) => {
+        const data = d.data();
+        const key = String(data?.lsx || '').trim();
+        const lines = Array.isArray(data?.lines) ? data.lines : [];
+        if (key && lines.length > 0) out[key] = lines;
+      });
+    };
+    // Query trực tiếp theo LSX (nhanh nhất)
+    const directSnap = await this.firestore.collection('pxk-import-data', ref =>
+      ref.where('lsx', '==', lsx).limit(5)
+    ).get().toPromise();
+    if (directSnap && !directSnap.empty) {
+      addDocs(directSnap.docs);
+      return out;
+    }
+    // Fallback: load toàn bộ nếu không tìm thấy khớp chính xác (LSX có thể khác format nhỏ)
+    const allSnap = await this.firestore.collection('pxk-import-data').get().toPromise();
+    addDocs(allSnap?.docs || []);
     return out;
   }
 
@@ -212,27 +236,20 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       if (poUpper.includes(lsxUpper) || lsxUpper.includes(poUpper)) return true;
       return false;
     };
-    // Thử tìm trực tiếp bằng field productionOrder (chính xác)
-    const directSnap = await this.firestore.collection('work-orders', ref =>
-      ref.where('productionOrder', '==', lsx).limit(5)
-    ).get().toPromise();
+    // Query song song: exact match + factory filter
+    const [directSnap, factorySnap] = await Promise.all([
+      this.firestore.collection('work-orders', ref =>
+        ref.where('productionOrder', '==', lsx).limit(3)
+      ).get().toPromise(),
+      this.firestore.collection('work-orders', ref =>
+        ref.where('factory', '==', factory).limit(2000)
+      ).get().toPromise()
+    ]);
     for (const d of directSnap?.docs || []) {
       const data = d.data() as any;
       if (match(data)) return data;
     }
-    // Fallback: load theo factory (tăng limit lên 2000)
-    const snap = await this.firestore.collection('work-orders', ref =>
-      ref.where('factory', '==', factory).limit(2000)
-    ).get().toPromise();
-    for (const d of snap?.docs || []) {
-      const data = d.data() as any;
-      if (match(data)) return data;
-    }
-    // Fallback cuối: không lọc factory
-    const allSnap = await this.firestore.collection('work-orders', ref =>
-      ref.limit(3000)
-    ).get().toPromise();
-    for (const d of allSnap?.docs || []) {
+    for (const d of factorySnap?.docs || []) {
       const data = d.data() as any;
       if (match(data)) return data;
     }
@@ -281,16 +298,18 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     return [map, nhanVienSoanStr];
   }
 
-  private async loadDeliveryData(lsx: string): Promise<Map<string, number>> {
+  /** Gộp 2 hàm cũ: trả về [qtyMap, giaoStr, nhanStr, lineNhanStr] — chỉ query 1 lần */
+  private async loadDelivery(lsx: string): Promise<[Map<string, number>, string, string, string]> {
     const map = new Map<string, number>();
     const snap = await this.firestore.collection('rm1-delivery-records', ref =>
       ref.where('lsx', '==', lsx)
     ).get().toPromise();
     let doc: any = null;
-    if (snap && !snap.empty) doc = snap.docs[0].data();
-    else {
+    if (snap && !snap.empty) {
+      doc = snap.docs[0].data();
+    } else {
       const all = await this.firestore.collection('rm1-delivery-records').get().toPromise();
-      const n = (lsx || '').trim().toUpperCase();
+      const n = lsx.trim().toUpperCase();
       for (const d of all?.docs || []) {
         const data = d.data() as any;
         if ((data?.lsx || '').trim().toUpperCase() === n) { doc = data; break; }
@@ -304,27 +323,10 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         if (mat && po) map.set(`${mat}|${po}`, (map.get(`${mat}|${po}`) || 0) + qty);
       });
     }
-    return map;
-  }
-
-  private async loadDeliveryNames(lsx: string): Promise<[string, string, string]> {
-    const snap = await this.firestore.collection('rm1-delivery-records', ref =>
-      ref.where('lsx', '==', lsx)
-    ).get().toPromise();
-    let doc: any = null;
-    if (snap && !snap.empty) doc = snap.docs[0].data();
-    else {
-      const all = await this.firestore.collection('rm1-delivery-records').get().toPromise();
-      const n = (lsx || '').trim().toUpperCase();
-      for (const d of all?.docs || []) {
-        const data = d.data() as any;
-        if ((data?.lsx || '').trim().toUpperCase() === n) { doc = data; break; }
-      }
-    }
-    const giao = (doc?.employeeName || doc?.employeeId || '').trim();
-    const nhan = (doc?.receiverEmployeeName || doc?.receiverEmployeeId || '').trim();
+    const giao = (doc?.employeeName || doc?.employeeId || '').trim() || '-';
+    const nhan = (doc?.receiverEmployeeName || doc?.receiverEmployeeId || '').trim() || '-';
     const lineNhan = (doc?.lineNhan || '').trim();
-    return [giao || '-', nhan || '-', lineNhan];
+    return [map, giao, nhan, lineNhan];
   }
 
   private esc(s: string): string {
@@ -351,10 +353,11 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     const seq = ++this.patchSeq;
     const factory = this.currentFactory;
     try {
-      const [scanResult, deliveryQtyMap] = await Promise.all([
+      const [scanResult, deliveryResult] = await Promise.all([
         this.loadScanQtyAndEmployees(lsx, factory),
-        this.loadDeliveryData(lsx)
+        this.loadDelivery(lsx)
       ]);
+      const [deliveryQtyMap] = deliveryResult;
       if (seq !== this.patchSeq) return;
       const [scanQtyMap] = scanResult;
 

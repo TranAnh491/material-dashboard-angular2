@@ -7,7 +7,7 @@
     <div class="toolbar-form">
       <input #lsxInput type="text" placeholder="Quét LSX hoặc nhập tay LSX…"
              [(ngModel)]="lsx"
-             (input)="lsx = lsx.toUpperCase()"
+             (input)="onLsxInput()"
              (keydown.enter)="applyLsx()"
              style="text-transform:uppercase;" />
       <button class="btn-apply" (click)="applyLsx()">
