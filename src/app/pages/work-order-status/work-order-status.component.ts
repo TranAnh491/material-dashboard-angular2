@@ -369,23 +369,42 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   /** Xóa dữ liệu PXK theo LSX (nhập LSX cần xóa) */
   async clearPxkImportedData(): Promise<void> {
-    const input = prompt('Nhập LSX cần xóa dữ liệu PXK:');
+    const input = prompt(
+      'Nhập LSX cần xóa dữ liệu PXK:\n' +
+      '  ASM1 / Sample 1 → KZLSX0326/0089\n' +
+      '  ASM2 / Sample 2 → LHLSX0326/0012\n\n' +
+      '⚠️ Phải nhập đầy đủ prefix KZLSX hoặc LHLSX để tránh xóa nhầm nhà máy.'
+    );
     if (input == null || input === undefined) return;
     const lsxToDelete = String(input).trim();
-    if (!lsxToDelete) {
-      alert('Chưa nhập LSX.');
-      return;
-    }
+    if (!lsxToDelete) { alert('Chưa nhập LSX.'); return; }
+
+    // Normalize GIỮ NGUYÊN prefix KZ/LH để phân biệt ASM1 và ASM2
     const normLsx = (s: string): string => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
       const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-      return m ? m[1].replace(/[-.]/g, '/') : t;
+      const numPart = m ? m[1].replace(/[-.]/g, '/') : '';
+      if (!numPart) return t;
+      const prefix = t.startsWith('KZ') ? 'KZ' : t.startsWith('LH') ? 'LH' : '';
+      return prefix ? `${prefix}_${numPart}` : numPart;
     };
+
     const targetNorm = normLsx(lsxToDelete);
     if (!targetNorm) {
-      alert('LSX không đúng format. ASM1: KZLSX0326/0089; ASM2: LHLSX0326/0012; hoặc 0326/0089.');
+      alert('LSX không đúng format.\nASM1: KZLSX0326/0089\nASM2: LHLSX0326/0012');
       return;
     }
+
+    // Cảnh báo nếu nhập thiếu prefix
+    const upper = lsxToDelete.toUpperCase().replace(/\s/g, '');
+    if (!upper.startsWith('KZ') && !upper.startsWith('LH')) {
+      const confirm = window.confirm(
+        `⚠️ LSX "${lsxToDelete}" không có prefix KZLSX/LHLSX.\n` +
+        `Sẽ xóa tất cả LSX có phần số khớp (cả ASM1 lẫn ASM2).\n\nTiếp tục?`
+      );
+      if (!confirm) return;
+    }
+
     this.isClearingPxk = true;
     try {
       const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
@@ -408,7 +427,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.invalidatePxkCache();
       this.calculateSummary();
       this.cdr.detectChanges();
-      alert(`Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
+      alert(`✅ Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
     } catch (e) {
       console.error('[PXK] Lỗi khi xóa:', e);
       alert('Lỗi khi xóa dữ liệu PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
@@ -3984,7 +4003,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td class="col-luong-scan" style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(scanQtyStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.escapeHtmlForPrint(soSanhStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(deliveryQtyStr)}</td>
-        <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;"></td>
+        <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(String((l as any).ghiChu || ''))}</td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
