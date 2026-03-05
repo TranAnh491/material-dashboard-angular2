@@ -130,6 +130,7 @@ export class FilteredRoutesService {
       '/sxxk': 'sxxk',
       '/scrap': 'scrap',
       '/find-rm1': 'find-rm1',
+      '/pxk-preview': 'pxk-preview',
       '/checklist': 'checklist',
       '/safety': 'safety',
       '/equipment': 'equipment',

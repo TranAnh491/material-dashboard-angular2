@@ -37,6 +37,7 @@ export class MenuComponent implements OnInit {
     { path: '/work-order-status', title: 'Work Order', icon: 'description', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
     { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Main' },
+    { path: '/pxk-preview', title: 'PXK Preview', icon: 'preview', category: 'Main' },
     { path: '/location', title: 'Location', icon: 'place', category: 'Main' },
     { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
     

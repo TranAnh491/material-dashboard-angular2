@@ -1,0 +1,30 @@
+<div class="pxk-preview-page">
+  <div class="toolbar">
+    <div class="toolbar-title">
+      <i class="material-icons">preview</i>
+      <span>PXK Preview</span>
+    </div>
+    <div class="toolbar-form">
+      <input #lsxInput type="text" placeholder="Quét LSX hoặc nhập tay LSX…"
+             [(ngModel)]="lsx"
+             (keydown.enter)="applyLsx()" />
+      <button class="btn-apply" (click)="applyLsx()">
+        <i class="material-icons">search</i>
+        Xem
+      </button>
+    </div>
+  </div>
+
+  <div class="error-msg" *ngIf="errorMsg">{{ errorMsg }}</div>
+
+  <div class="loading-wrap" *ngIf="isLoading">
+    <i class="material-icons rotating">sync</i>
+    <span>Đang tải…</span>
+  </div>
+
+  <div class="preview-wrap" *ngIf="!isLoading && pxkHtml" [innerHTML]="pxkHtml"></div>
+
+  <div class="empty-hint" *ngIf="!isLoading && !pxkHtml && !errorMsg">
+    Quét mã LSX hoặc nhập tay, sau đó bấm Xem. Dữ liệu cập nhật real-time.
+  </div>
+</div>

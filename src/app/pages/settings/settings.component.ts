@@ -67,6 +67,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Other tabs
     { key: 'location', name: 'Location' },
     { key: 'find-rm1', name: 'Find RM1' },
+    { key: 'pxk-preview', name: 'PXK Preview' },
     { key: 'warehouse-loading', name: 'Loading' },
     { key: 'trace-back', name: 'Trace Back' },
     { key: 'manage', name: 'Manage' },

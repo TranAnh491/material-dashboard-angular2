@@ -30,6 +30,7 @@ import { IndexComponent } from '../../pages/index/index.component';
 import { ManageComponent } from '../../pages/manage/manage.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
+import { PxkPreviewComponent } from '../../pages/pxk-preview/pxk-preview.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
@@ -68,6 +69,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'find-rm1',            component: FindRm1Component, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'pxk-preview',         component: PxkPreviewComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'index',                component: IndexComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'documents',            component: DocumentsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'kpi-reports',          component: KpiReportsComponent, canActivate: [AuthGuard, TabPermissionGuard] },

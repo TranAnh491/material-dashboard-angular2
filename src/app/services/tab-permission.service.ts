@@ -177,6 +177,7 @@ export class TabPermissionService {
     
     // Find RM1 tab
     { key: 'find-rm1', name: 'Find RM1' },
+    { key: 'pxk-preview', name: 'PXK Preview' },
     
     // Warehouse Loading tab
     { key: 'warehouse-loading', name: 'Loading' },
