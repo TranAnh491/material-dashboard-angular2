@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -14,18 +14,23 @@ import { debounceTime } from 'rxjs/operators';
 export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('lsxInput') lsxInputRef!: ElementRef<HTMLInputElement>;
+  @ViewChild('previewWrap') previewWrapRef!: ElementRef<HTMLElement>;
 
   lsx = '';
   pxkHtml: SafeHtml = '';
   isLoading = false;
   errorMsg = '';
   private subs = new Subscription();
+  private rebuildSeq = 0;
+  private currentFactory = 'ASM1';
+  private patchSeq = 0;
 
   constructor(
     private route: ActivatedRoute,
     private firestore: AngularFirestore,
     private pxkBuild: PxkBuildService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -43,13 +48,13 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     );
     this.subs.add(
       this.firestore.collection('outbound-materials').valueChanges().pipe(
-        debounceTime(300)
-      ).subscribe(() => this.rebuild(true))
+        debounceTime(400)
+      ).subscribe(() => this.patchScanCells())
     );
     this.subs.add(
       this.firestore.collection('rm1-delivery-records').valueChanges().pipe(
-        debounceTime(300)
-      ).subscribe(() => this.rebuild(true))
+        debounceTime(400)
+      ).subscribe(() => this.patchScanCells())
     );
     this.subs.add(
       this.firestore.collection('inventory-materials').valueChanges().pipe(
@@ -71,10 +76,13 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async rebuild(backgroundSync = false): Promise<void> {
+    const seq = ++this.rebuildSeq; // tăng version mỗi lần rebuild bắt đầu
     const lsx = this.lsx.trim();
     if (!lsx) {
-      this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
-      this.errorMsg = '';
+      if (seq === this.rebuildSeq) {
+        this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+        this.errorMsg = '';
+      }
       return;
     }
     if (!backgroundSync) {
@@ -83,8 +91,10 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     try {
       const pxkDataByLsx = await this.loadPxkData();
+      if (seq !== this.rebuildSeq) return; // có rebuild mới hơn đang chạy, bỏ qua
       const lines = this.getLinesForLsx(pxkDataByLsx, lsx);
       if (lines.length === 0) {
+        if (seq !== this.rebuildSeq) return;
         if (!backgroundSync) {
           this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
           this.errorMsg = 'Chưa có dữ liệu PXK cho LSX này. Vui lòng import file PXK trước.';
@@ -94,6 +104,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       const factory = this.detectFactory(lsx);
       const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
       const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
+      this.currentFactory = factoryFilter;
       const [workOrder, locationMap, scanResult, deliveryQtyMap, deliveryNames, nvlBox] = await Promise.all([
         this.loadWorkOrder(lsx, factoryFilter),
         this.loadLocationMap(isAsm1),
@@ -102,10 +113,11 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         this.loadDeliveryNames(lsx),
         this.loadNvlSxKsBox(lsx, lines, factoryFilter)
       ]);
+      if (seq !== this.rebuildSeq) return; // có rebuild mới hơn hoàn thành trước, bỏ qua
       const [scanQtyMap, nhanVienSoanStr] = scanResult;
       const lineNhanFromWo = (workOrder?.productionLine || '').trim();
       const lineNhanFromLines = lines.map(l => String((l as any).lineNhan || '').trim()).find(v => v);
-      const lineNhanFromDelivery = (deliveryNames[2] || '').trim(); // lineNhan từ rm1-delivery-records
+      const lineNhanFromDelivery = (deliveryNames[2] || '').trim();
       const lineNhanOverride = lineNhanFromWo || lineNhanFromDelivery || lineNhanFromLines || undefined;
       const wo: PxkWorkOrder = {
         productionOrder: lsx,
@@ -131,14 +143,16 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         nvlSxKsBoxHtml: nvlBox
       };
       const html = await this.pxkBuild.buildHtml(params);
+      if (seq !== this.rebuildSeq) return; // kiểm tra lần cuối trước khi ghi UI
       this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml(html);
     } catch (e) {
+      if (seq !== this.rebuildSeq) return;
       if (!backgroundSync) {
         this.errorMsg = 'Lỗi: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.');
         this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
       }
     } finally {
-      if (!backgroundSync) {
+      if (seq === this.rebuildSeq && !backgroundSync) {
         this.isLoading = false;
       }
     }
@@ -258,7 +272,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!woNorm || poNorm !== woNorm) return;
       const empId = String(data?.employeeId || data?.exportedBy || '').trim();
       if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
-      const mat = String(data?.materialCode || '').trim();
+      const mat = String(data?.materialCode || '').trim().toUpperCase();
       const po = String(data?.poNumber || data?.po || '').trim();
       const qty = Number(data?.exportQuantity || 0);
       if (mat && po) map.set(`${mat}|${po}`, (map.get(`${mat}|${po}`) || 0) + qty);
@@ -316,6 +330,81 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   private esc(s: string): string {
     if (s == null) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  private fmtQty(n: number): string {
+    const fixed = Number(n).toFixed(2);
+    const [int, dec] = fixed.split('.');
+    return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + dec;
+  }
+
+  private soSanhText(xuất: number, scan: number): string {
+    const diff = scan - xuất;
+    if (Math.abs(diff) < 1) return 'Đủ';
+    if (diff < 0) return 'Thiếu ' + this.fmtQty(xuất - scan);
+    return 'Dư ' + this.fmtQty(scan - xuất);
+  }
+
+  async patchScanCells(): Promise<void> {
+    const lsx = this.lsx.trim();
+    if (!lsx) return;
+    const seq = ++this.patchSeq;
+    const factory = this.currentFactory;
+    try {
+      const [scanResult, deliveryQtyMap] = await Promise.all([
+        this.loadScanQtyAndEmployees(lsx, factory),
+        this.loadDeliveryData(lsx)
+      ]);
+      if (seq !== this.patchSeq) return;
+      const [scanQtyMap] = scanResult;
+
+      const container = this.previewWrapRef?.nativeElement;
+      if (!container) { this.rebuild(true); return; }
+
+      // Tính hasAnyScanData từ các ô thực tế trên DOM
+      const scanCells = Array.from(container.querySelectorAll('[data-scan-key]')) as HTMLElement[];
+      if (scanCells.length === 0) return; // HTML chưa render, bỏ qua
+
+      let hasAnyScanData = false;
+      for (const cell of scanCells) {
+        const isNvlSx = cell.dataset['isNvlSx'] === '1';
+        const isRb = cell.dataset['isRb'] === '1';
+        if (!isNvlSx && !isRb) {
+          const key = cell.dataset['scanKey'] || '';
+          if ((scanQtyMap.get(key) || 0) > 0) { hasAnyScanData = true; break; }
+        }
+      }
+
+      for (const cell of scanCells) {
+        const key = cell.dataset['scanKey'] || '';
+        const qtyPxk = parseFloat(cell.dataset['qtyPxk'] || '0');
+        const isNvlSx = cell.dataset['isNvlSx'] === '1';
+        const isRb = cell.dataset['isRb'] === '1';
+
+        let scanQty: number;
+        if (isNvlSx) scanQty = qtyPxk;
+        else if (isRb && hasAnyScanData) scanQty = qtyPxk;
+        else scanQty = scanQtyMap.get(key) || 0;
+
+        cell.textContent = scanQty > 0 ? this.fmtQty(scanQty) : '';
+
+        const soSanhCell = container.querySelector(`[data-sosanh-key="${key}"]`) as HTMLElement | null;
+        if (soSanhCell) {
+          const soSanhStr = (!hasAnyScanData && scanQty === 0) ? '' : this.soSanhText(qtyPxk, scanQty);
+          soSanhCell.textContent = soSanhStr;
+          soSanhCell.style.color = soSanhStr.startsWith('Thiếu') ? 'red' : soSanhStr === 'Đủ' ? 'green' : soSanhStr.startsWith('Dư') ? 'orange' : '';
+          soSanhCell.style.fontWeight = soSanhStr ? 'bold' : '';
+        }
+
+        const deliveryCell = container.querySelector(`[data-delivery-key="${key}"]`) as HTMLElement | null;
+        if (deliveryCell) {
+          const dqty = deliveryQtyMap.get(key) || 0;
+          deliveryCell.textContent = dqty > 0 ? this.fmtQty(dqty) : '';
+        }
+      }
+    } catch (e) {
+      console.warn('patchScanCells error:', e);
+    }
   }
 
   private async loadNvlSxKsBox(lsx: string, lines: PxkLine[], factoryFilter: string): Promise<string> {

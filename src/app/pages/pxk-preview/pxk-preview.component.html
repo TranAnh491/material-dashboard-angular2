@@ -7,7 +7,9 @@
     <div class="toolbar-form">
       <input #lsxInput type="text" placeholder="Quét LSX hoặc nhập tay LSX…"
              [(ngModel)]="lsx"
-             (keydown.enter)="applyLsx()" />
+             (input)="lsx = lsx.toUpperCase()"
+             (keydown.enter)="applyLsx()"
+             style="text-transform:uppercase;" />
       <button class="btn-apply" (click)="applyLsx()">
         <i class="material-icons">search</i>
         Xem
@@ -22,7 +24,7 @@
     <span>Đang tải…</span>
   </div>
 
-  <div class="preview-wrap" *ngIf="!isLoading && pxkHtml" [innerHTML]="pxkHtml"></div>
+  <div #previewWrap class="preview-wrap" *ngIf="!isLoading && pxkHtml" [innerHTML]="pxkHtml"></div>
 
   <div class="empty-hint" *ngIf="!isLoading && !pxkHtml && !errorMsg">
     Quét mã LSX hoặc nhập tay, sau đó bấm Xem. Dữ liệu cập nhật real-time.

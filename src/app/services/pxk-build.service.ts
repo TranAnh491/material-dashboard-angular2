@@ -84,7 +84,7 @@ export class PxkBuildService {
     const getDeliveryQty = (materialCode: string, po: string): number =>
       deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getScanQty = (materialCode: string, po: string): number =>
-      scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
+      scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
       if (Math.abs(diff) < 1) return 'Đủ';
@@ -146,9 +146,9 @@ export class PxkBuildService {
         <td style="border:1px solid #000;padding:6px;">${this.esc(maKho)}</td>
         <td class="col-vitri" style="border:1px solid #000;padding:6px;">${this.esc(getLocation(l.materialCode, l.po))}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.esc(loaiHinh)}</td>
-        <td class="col-luong-scan" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(scanQtyStr)}</td>
-        <td style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.esc(soSanhStr)}</td>
-        <td style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(deliveryQtyStr)}</td>
+        <td class="col-luong-scan" data-scan-key="${matCode}|${po}" data-qty-pxk="${qtyPxk}" data-is-nvl-sx="${isNvlSxOnly?'1':'0'}" data-is-rb="${(isR||isB030||isB033)?'1':'0'}" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(scanQtyStr)}</td>
+        <td data-sosanh-key="${matCode}|${po}" style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.esc(soSanhStr)}</td>
+        <td data-delivery-key="${matCode}|${po}" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(deliveryQtyStr)}</td>
         <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;">${this.esc(String((l as any).ghiChu || ''))}</td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;

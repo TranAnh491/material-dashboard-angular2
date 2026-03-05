@@ -3879,7 +3879,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
         const empId = String(d.employeeId || d.exportedBy || '').trim();
         if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
-        const mat = String(d.materialCode || '').trim();
+        const mat = String(d.materialCode || '').trim().toUpperCase();
         const po = String(d.poNumber || d.po || '').trim();
         const exportQty = Number(d.exportQuantity || 0);
         if (mat && po) {
@@ -3934,7 +3934,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const getDeliveryQty = (materialCode: string, po: string): number =>
       deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getScanQty = (materialCode: string, po: string): number =>
-      scanQtyMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || 0;
+      scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
       if (Math.abs(diff) < 1) return 'Đủ';
