@@ -91,6 +91,7 @@
             <th class="th-two-line"><span class="th-vi">Ghi chú</span><span class="th-en">NOTES</span></th>
             <th class="th-two-line"><span class="th-vi">Khách</span><span class="th-en">CUSTOMER</span></th>
             <th class="th-two-line"><span class="th-vi">Khóa</span><span class="th-en">LOCK</span></th>
+            <th class="th-two-line"><span class="th-vi">Print</span><span class="th-en">PRINT</span></th>
             <th class="th-two-line"><span class="th-vi">Xóa</span><span class="th-en">DELETE</span></th>
           </tr>
         </thead>
@@ -128,6 +129,11 @@
                            [matTooltip]="material.isReceived ? 'Đang khóa – Bỏ tick để mở khóa và chỉnh sửa' : 'Chưa khóa – Tick để khóa (chuyển vào Inventory)'"
                            [class.received-checked]="material.isReceived">
               </mat-checkbox>
+            </td>
+            <td class="status-cell">
+              <button mat-icon-button color="primary" (click)="printTem(material)" matTooltip="In tem QR">
+                <mat-icon>print</mat-icon>
+              </button>
             </td>
             <td class="status-cell">
               <button mat-icon-button color="warn" (click)="deleteMaterial(material)" 
@@ -193,7 +199,8 @@
       </div>
       <div class="input-group">
         <label class="input-label">LSX</label>
-        <input type="text" class="custom-input full-width" [(ngModel)]="newNhapKhoItem.lsx" placeholder="LSX">
+        <input type="text" class="custom-input full-width" [(ngModel)]="newNhapKhoItem.lsx"
+               [placeholder]="newNhapKhoItem.factory === 'ASM2' ? 'Chỉ nhập số, tự thêm LHLSX (vd: 0126/0022)' : 'Chỉ nhập số, tự thêm KZLSX (vd: 0126/0022)'">
       </div>
     </div>
     <div class="modal-footer">

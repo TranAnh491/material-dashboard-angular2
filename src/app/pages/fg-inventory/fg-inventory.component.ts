@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -67,9 +67,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   
-  // Factory filter - FG Inventory is only for ASM1
-  selectedFactory: string = 'ASM1';
-  availableFactories: string[] = ['ASM1'];
+  // Factory filter — mặc định TOTAL để hiển thị tất cả tồn kho
+  selectedFactory: string = 'TOTAL';
+  availableFactories: string[] = ['ASM1', 'ASM2', 'TOTAL'];
 
   // Catalog data (loaded once)
   catalogItems: ProductCatalogItem[] = [];
@@ -84,10 +84,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Loading state
   isLoading: boolean = false;
   
-  // Time range filter
+  // Time range filter — dùng string 'yyyy-MM-dd' để tương thích với <input type="date">
   showTimeRangeDialog: boolean = false;
-  startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  endDate: Date = new Date();
+  startDate: string = '2020-01-01';
+  endDate: string = '2030-12-31';
   
   // Create PX dialog
   showCreatePXDialog: boolean = false;
@@ -113,7 +113,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private fgExportService: FgExportService,
     private fgInService: FgInService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -121,8 +122,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.loadCatalogFromFirebase(); // Load catalog first
     this.loadMappingFromFirebase(); // Load mapping for customer names
     this.loadMaterialsFromFirebase();
-    this.startDate = new Date(2020, 0, 1);
-    this.endDate = new Date(2030, 11, 31);
+    this.startDate = '2020-01-01';
+    this.endDate = '2030-12-31';
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
@@ -144,64 +145,66 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Load materials from Firebase - OPTIMIZED for performance
+  // Load materials from Firebase - Real-time listener để tự động cập nhật khi FG In thêm mới
   loadMaterialsFromFirebase(): void {
     this.isLoading = true;
-    
-    // Use .get() instead of snapshotChanges() for better performance
+
     this.firestore.collection('fg-inventory')
-      .get()
+      .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((querySnapshot) => {
-        const firebaseMaterials = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          const id = doc.id;
-          
-          // Skip logging for performance
-          
+      .subscribe((actions) => {
+        const firebaseMaterials = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          const id = action.payload.doc.id;
+
+          // Tồn kho = tonDau + nhap - xuat (ưu tiên đọc trực tiếp từ Firebase nếu đã tính sẵn)
+          const tonDau = data.tonDau || 0;
+          const nhap   = data.nhap   || data.quantity || 0;
+          const xuat   = data.xuat   || data.exported || 0;
+          const ton    = data.ton    != null ? data.ton : (data.stock != null ? data.stock : (tonDau + nhap - xuat));
+
+          // Firestore Timestamp: có thể là .toDate() hoặc .seconds
+          const toDate = (v: any) => {
+            if (!v) return new Date();
+            if (typeof v?.toDate === 'function') return v.toDate();
+            if (v?.seconds != null) return new Date(v.seconds * 1000);
+            return v instanceof Date ? v : new Date(v);
+          };
+
           return {
-            id: id,
-            factory: data.factory || 'ASM1',
-            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
-            receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
-            batchNumber: data.batchNumber || '',
+            id,
+            factory:      data.factory      || 'ASM1',
+            importDate:   toDate(data.importDate),
+            receivedDate: toDate(data.receivedDate),
+            batchNumber:  data.batchNumber  || '',
             materialCode: data.materialCode || data.maTP || '',
-            lot: data.lot || data.Lot || '',
-            lsx: data.lsx || data.LSX || '',
-            quantity: data.quantity || 0,
-            standard: data.standard || 0,
-            carton: data.carton || 0,
-            odd: data.odd || 0,
-            tonDau: data.tonDau || 0,
-            nhap: data.nhap || data.quantity || 0,
-            xuat: data.xuat || data.exported || 0,
-            ton: data.ton || data.stock || 0,
-            location: data.location || data.viTri || 'Temporary',
-            notes: data.notes || data.ghiChu || '',
-            customer: data.customer || data.khach || '',
-            isReceived: data.isReceived || false,
-            isCompleted: data.isCompleted || false,
-            isDuplicate: data.isDuplicate || false,
-            createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
-            updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
+            lot:          data.lot          || data.Lot  || '',
+            lsx:          data.lsx          || data.LSX  || '',
+            quantity:     data.quantity     || 0,
+            standard:     data.standard     || 0,
+            carton:       data.carton       || 0,
+            odd:          data.odd          || 0,
+            tonDau,
+            nhap,
+            xuat,
+            ton,
+            location:     data.location     || data.viTri || 'Temporary',
+            notes:        data.notes        || data.ghiChu || '',
+            customer:     data.customer     || data.khach  || '',
+            isReceived:   data.isReceived   || false,
+            isCompleted:  data.isCompleted  || false,
+            isDuplicate:  data.isDuplicate  || false,
+            createdAt:    toDate(data.createdAt),
+            updatedAt:    toDate(data.updatedAt)
           };
         });
-        
+
         this.materials = firebaseMaterials;
-        
-        // Initialize tonDau if missing (for new materials)
-        this.materials.forEach(material => {
-          if (!material.tonDau) {
-            material.tonDau = 0;
-          }
-        });
-        
-        // Load export data for each material
-        this.loadExportDataForMaterials();
-        
+
         this.sortMaterials();
         this.applyFilters();
         this.isLoading = false;
+        this.cdr.detectChanges();
       });
   }
 
@@ -361,8 +364,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Apply search filters
   applyFilters(): void {
     this.filteredMaterials = this.materials.filter(material => {
-      // Filter by search term (nếu có)
+      // Filter by search term (chuẩn hóa: bỏ dấu chấm để "P011022.E" khớp "P011022")
       if (this.searchTerm && this.searchTerm.trim() !== '') {
+        const term = (this.searchTerm || '').trim().toUpperCase();
+        const termNorm = term.replace(/\./g, '');
         const searchableText = [
           material.materialCode,
           material.batchNumber,
@@ -373,9 +378,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           material.notes,
           material.customer
         ].filter(Boolean).join(' ').toUpperCase();
-        if (!searchableText.includes(this.searchTerm)) {
-          return false;
-        }
+        const textNorm = searchableText.replace(/\./g, '');
+        const match = searchableText.includes(term) || textNorm.includes(termNorm);
+        if (!match) return false;
       }
 
       // Filter by factory (TOTAL = xem tất cả)
@@ -386,13 +391,20 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         }
       }
       
-      // Filter by date range
-      const importDate = new Date(material.importDate);
-      const isInDateRange = importDate >= this.startDate && importDate <= this.endDate;
-      
+      // Filter by date range (startDate/endDate là string 'yyyy-MM-dd')
+      let isInDateRange = true;
+      if (this.startDate && this.endDate) {
+        const importDate = new Date(material.importDate);
+        const start = new Date(this.startDate + 'T00:00:00');
+        const end   = new Date(this.endDate   + 'T23:59:59');
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          isInDateRange = importDate >= start && importDate <= end;
+        }
+      }
+
       // Filter by completed status
       const isCompletedVisible = this.showCompleted || !material.isCompleted;
-      
+
       return isInDateRange && isCompletedVisible;
     });
     
@@ -511,11 +523,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.hasCompletePermission = true;
   }
 
-  // Load factory access permissions - FG Inventory is only for ASM1
+  // Load factory access permissions
   private loadFactoryAccess(): void {
-    // FG Inventory is only for ASM1, so no need to load factory access
-    this.selectedFactory = 'ASM1';
-    this.availableFactories = ['ASM1'];
+    this.availableFactories = ['ASM1', 'ASM2', 'TOTAL'];
     
     console.log('🏭 Factory access set for FG Inventory (ASM1 only):', {
       selectedFactory: this.selectedFactory,
@@ -1060,12 +1070,11 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
 
   viewAllMaterials(): void {
-    // Clear search term to hide all materials (as per new requirement)
     this.searchTerm = '';
-    this.startDate = new Date(2020, 0, 1);
-    this.endDate = new Date(2030, 11, 31);
+    this.startDate = '2020-01-01';
+    this.endDate = '2030-12-31';
     this.showCompleted = true;
-    this.selectedFactory = '';
+    this.selectedFactory = 'TOTAL';
     this.applyFilters();
     this.showTimeRangeDialog = false;
     

@@ -38,6 +38,8 @@ interface StockCheckMaterial {
     changeDate?: Date; // Ngày đổi vị trí
     changedBy?: string; // Người đổi (nếu có)
   };
+  // KHSX: có trong danh sách KHSX hay không
+  hasKhsx?: boolean;
 }
 
 interface StockCheckData {
@@ -110,7 +112,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scannedCount = 0; // Đếm số mã đã scan trong session
 
   // Filter state
-  filterMode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' = 'all';
+  filterMode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' | 'khsx-unchecked' = 'all';
+
+  // KHSX
+  showKhsxDialog: boolean = false;
+  khsxCodes: string[] = []; // Danh sách mã có KHSX (loaded từ Firebase)
   
   // Search
   searchInput: string = '';
@@ -182,10 +188,20 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }).length;
   }
 
+  /** Số mã có KHSX nhưng chưa được stock check */
+  get khsxUncheckedCount(): number {
+    return this.allMaterials.filter(m => m.hasKhsx && m.stockCheck !== '✓').length;
+  }
+
+  /** Tổng số mã có KHSX */
+  get khsxTotalCount(): number {
+    return this.allMaterials.filter(m => m.hasKhsx).length;
+  }
+
   /**
    * Set filter mode
    */
-  setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change'): void {
+  setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' | 'khsx-unchecked'): void {
     this.filterMode = mode;
     this.applyFilter();
   }
@@ -280,17 +296,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } else if (this.filterMode === 'unchecked') {
       filtered = filtered.filter(m => m.stockCheck !== '✓');
     } else if (this.filterMode === 'outside') {
-      // Hiển thị mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
       filtered = filtered.filter(m => {
         if (m.isNewMaterial === true) return true;
-        // Tính stock hiện tại
         const openingStockValue = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
         const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
         return currentStock === 0 || currentStock < 0;
       });
     } else if (this.filterMode === 'location-change') {
-      // Hiển thị các mã đã đổi vị trí
       filtered = filtered.filter(m => m.locationChangeInfo?.hasChanged === true);
+    } else if (this.filterMode === 'khsx-unchecked') {
+      filtered = filtered.filter(m => m.hasKhsx && m.stockCheck !== '✓');
     }
     
     // Then apply search
@@ -434,6 +449,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
         return currentStock === 0 || currentStock < 0;
       });
+    } else if (this.filterMode === 'khsx-unchecked') {
+      // Mã có KHSX nhưng chưa được stock check
+      filtered = filtered.filter(m => m.hasKhsx && m.stockCheck !== '✓');
     }
     
     // Sort based on current sort mode
@@ -803,6 +821,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         // Load stock check data from Firebase
         await this.loadStockCheckData(materialsArray);
+
+        // Load KHSX data và đánh dấu materials
+        await this.loadKhsxData(materialsArray);
 
         this.allMaterials = materialsArray;
         
@@ -1803,6 +1824,111 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
   }
   
+  // ======================== KHSX FEATURE ========================
+
+  /** Mở dialog KHSX */
+  openKhsxDialog(): void {
+    this.showKhsxDialog = true;
+  }
+
+  /** Đóng dialog KHSX */
+  closeKhsxDialog(): void {
+    this.showKhsxDialog = false;
+  }
+
+  /** Tải template Excel KHSX (1 cột: Mã hàng) */
+  downloadKhsxTemplate(): void {
+    const templateData = [{ 'Mã hàng': 'A001234' }, { 'Mã hàng': 'B056789' }];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    ws['!cols'] = [{ wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'KHSX');
+    XLSX.writeFile(wb, 'Template_KHSX.xlsx');
+  }
+
+  /** Xử lý chọn file KHSX để import */
+  onKhsxFileSelected(event: any): void {
+    const file: File = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+        const codes: string[] = rows
+          .map(row => {
+            const val = row['Mã hàng'] || row['MA HANG'] || row['ma hang'] || Object.values(row)[0];
+            return val ? String(val).trim().toUpperCase() : '';
+          })
+          .filter(c => c.length > 0);
+        if (codes.length === 0) {
+          alert('❌ Không tìm thấy dữ liệu mã hàng trong file. Vui lòng kiểm tra cột "Mã hàng".');
+          return;
+        }
+        this.saveKhsxCodes(codes);
+      } catch (err) {
+        console.error('❌ Error reading KHSX file:', err);
+        alert('❌ Lỗi khi đọc file Excel.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    // Reset input để có thể chọn lại cùng file
+    event.target.value = '';
+  }
+
+  /** Lưu danh sách mã KHSX vào Firebase (ghi đè dữ liệu cũ) */
+  async saveKhsxCodes(codes: string[]): Promise<void> {
+    if (!this.selectedFactory) return;
+    try {
+      const docId = `${this.selectedFactory}_khsx_list`;
+      await this.firestore.collection('khsx').doc(docId).set({
+        factory: this.selectedFactory,
+        codes: codes,
+        updatedAt: new Date(),
+        count: codes.length
+      });
+      this.khsxCodes = codes;
+      this.applyKhsxToMaterials();
+      this.applyFilter();
+      this.closeKhsxDialog();
+      alert(`✅ Đã import ${codes.length} mã KHSX thành công!`);
+    } catch (error) {
+      console.error('❌ Error saving KHSX codes:', error);
+      alert('❌ Lỗi khi lưu dữ liệu KHSX.');
+    }
+  }
+
+  /** Load danh sách mã KHSX từ Firebase */
+  async loadKhsxData(materials?: StockCheckMaterial[]): Promise<void> {
+    if (!this.selectedFactory) return;
+    try {
+      const docId = `${this.selectedFactory}_khsx_list`;
+      const doc = await this.firestore.collection('khsx').doc(docId).get().toPromise();
+      if (doc && doc.exists) {
+        const data = doc.data() as any;
+        this.khsxCodes = (data.codes || []).map((c: string) => String(c).trim().toUpperCase());
+      } else {
+        this.khsxCodes = [];
+      }
+      // Áp dụng lên mảng materials truyền vào (hoặc allMaterials)
+      this.applyKhsxToMaterials(materials);
+    } catch (error) {
+      console.error('❌ Error loading KHSX data:', error);
+      this.khsxCodes = [];
+    }
+  }
+
+  /** Đánh dấu hasKhsx cho từng material dựa vào khsxCodes */
+  applyKhsxToMaterials(materials?: StockCheckMaterial[]): void {
+    const target = materials || this.allMaterials;
+    const khsxSet = new Set(this.khsxCodes);
+    target.forEach(m => {
+      m.hasKhsx = khsxSet.has((m.materialCode || '').trim().toUpperCase());
+    });
+  }
+
   /**
    * Export stock check report to Excel
    */
@@ -1813,20 +1939,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
 
     // Prepare data for export
-    const exportData = this.allMaterials.map(mat => ({
-      'STT': mat.stt,
-      'Mã hàng': mat.materialCode,
-      'PO': mat.poNumber,
-      'IMD': mat.imd,
-      'Tồn Kho': mat.stock,
-      'Vị trí': mat.location,
-      'Standard Packing': mat.standardPacking || '',
-      'Stock Check': mat.stockCheck || '',
-      'Qty Check': mat.qtyCheck || '',
-      'So Sánh Stock': mat.qtyCheck !== null ? (mat.stock - (mat.qtyCheck || 0)) : '',
-      'ID Check': mat.idCheck || '',
-      'Date Check': mat.dateCheck ? new Date(mat.dateCheck).toLocaleString('vi-VN') : ''
-    }));
+    const exportData = this.allMaterials.map(mat => {
+      const stockVal = mat.stock != null ? parseFloat(mat.stock.toFixed(2)) : 0;
+      const qtyCheckVal = mat.qtyCheck != null ? mat.qtyCheck : null;
+      const soSanh = qtyCheckVal !== null ? parseFloat((stockVal - qtyCheckVal).toFixed(2)) : '';
+      return {
+        'STT': mat.stt,
+        'Mã hàng': mat.materialCode,
+        'PO': mat.poNumber,
+        'IMD': mat.imd,
+        'Tồn Kho': stockVal,
+        'KHSX': mat.hasKhsx ? '✔' : '',
+        'Vị trí': mat.location,
+        'Standard Packing': mat.standardPacking || '',
+        'Stock Check': mat.stockCheck || '',
+        'Qty Check': qtyCheckVal !== null ? qtyCheckVal : '',
+        'So Sánh Stock': soSanh,
+        'ID Check': mat.idCheck || '',
+        'Date Check': mat.dateCheck ? new Date(mat.dateCheck).toLocaleString('vi-VN') : ''
+      };
+    });
 
     // Create workbook
     const wb = XLSX.utils.book_new();
@@ -1841,6 +1973,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       { wch: 12 }, // PO
       { wch: 10 }, // IMD
       { wch: 10 }, // Tồn Kho
+      { wch: 8 },  // KHSX
       { wch: 12 }, // Vị trí
       { wch: 18 }, // Standard Packing
       { wch: 12 }, // Stock Check

@@ -88,6 +88,11 @@
           <span>SẮP XẾP</span>
         </button>
         
+        <button class="khsx-btn desktop-only" (click)="openKhsxDialog()" title="Quản lý danh sách KHSX">
+          <i class="material-icons">playlist_add_check</i>
+          KHSX
+        </button>
+
         <button class="report-btn desktop-only" (click)="exportStockCheckReport()">
           <i class="material-icons">download</i>
           REPORT
@@ -170,6 +175,22 @@
           <div class="counter-value">{{ uncheckedMaterials }}</div>
         </div>
       </div>
+
+      <!-- KHSX counter box -->
+      <div class="counter-box khsx-box clickable"
+           [class.active]="filterMode === 'khsx-unchecked'"
+           (click)="setFilterMode('khsx-unchecked')"
+           title="Mã có KHSX nhưng chưa được stock check - Click để lọc">
+        <div class="counter-icon">
+          <i class="material-icons">playlist_add_check</i>
+        </div>
+        <div class="counter-info">
+          <div class="counter-label">KHSX CHƯA CHECK</div>
+          <div class="counter-value">{{ khsxUncheckedCount }}
+            <span class="counter-sub" *ngIf="khsxTotalCount > 0"> / {{ khsxTotalCount }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Loading -->
@@ -188,6 +209,7 @@
             <th>PO</th>
             <th>IMD</th>
             <th>TỒN KHO</th>
+            <th>KHSX</th>
             <th>VỊ TRÍ (DỮ LIỆU)</th>
             <th>VỊ TRÍ THỰC TẾ</th>
             <th>ĐỔI VỊ TRÍ</th>
@@ -206,7 +228,11 @@
             <td>{{ material.materialCode }}</td>
             <td>{{ material.poNumber }}</td>
             <td>{{ material.imd }}</td>
-            <td>{{ material.stock }}</td>
+            <td>{{ material.stock | number:'1.0-2' }}</td>
+            <td class="khsx-cell">
+              <span *ngIf="material.hasKhsx" class="khsx-tick" title="Có KHSX">✔</span>
+              <span *ngIf="!material.hasKhsx" style="color:#ccc;">-</span>
+            </td>
             <td>{{ material.location }}</td>
             <td [ngClass]="{'mismatch-location': material.actualLocation && material.actualLocation !== material.location}">
               <span *ngIf="material.actualLocation; else noActualLoc">
@@ -248,9 +274,9 @@
                 [class.negative]="(material.stock - (material.qtyCheck || 0)) < 0"
                 [class.equal]="material.stock === (material.qtyCheck || 0)">
               <span *ngIf="material.qtyCheck !== null">
-                {{ material.stock - (material.qtyCheck || 0) }}
+                {{ (material.stock - (material.qtyCheck || 0)) | number:'1.0-2' }}
                 <span class="compare-label">
-                  ({{ material.stock }} - {{ material.qtyCheck }})
+                  ({{ material.stock | number:'1.0-2' }} - {{ material.qtyCheck }})
                 </span>
               </span>
               <span *ngIf="material.qtyCheck === null" style="color: #999;">-</span>
@@ -708,6 +734,59 @@
           Đóng
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- KHSX Dialog — đặt ngoài stock-check-container để tránh transform stacking context -->
+<div class="khsx-modal" *ngIf="showKhsxDialog && selectedFactory">
+  <div class="modal-overlay" (click)="closeKhsxDialog()"></div>
+  <div class="modal-content khsx-modal-content">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">playlist_add_check</i>
+        QUẢN LÝ DANH SÁCH KHSX
+      </h3>
+      <button class="close-btn" (click)="closeKhsxDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="khsx-info-row" *ngIf="khsxCodes.length > 0">
+        <i class="material-icons" style="color:#4CAF50;">check_circle</i>
+        <span>Hiện có <strong>{{ khsxCodes.length }}</strong> mã trong danh sách KHSX ({{ selectedFactory }})</span>
+      </div>
+      <div class="khsx-info-row" *ngIf="khsxCodes.length === 0">
+        <i class="material-icons" style="color:#FF9800;">info</i>
+        <span>Chưa có danh sách KHSX nào. Tải template và import để bắt đầu.</span>
+      </div>
+      <div class="khsx-note">
+        <strong>Hướng dẫn:</strong>
+        <ol>
+          <li>Tải template Excel (1 cột: <em>Mã hàng</em>)</li>
+          <li>Điền danh sách mã hàng KHSX vào cột <em>Mã hàng</em></li>
+          <li>Import file → dữ liệu mới sẽ <strong>ghi đè</strong> dữ liệu cũ</li>
+        </ol>
+      </div>
+      <div class="khsx-preview" *ngIf="khsxCodes.length > 0">
+        <h4>Danh sách mã KHSX hiện tại ({{ khsxCodes.length }} mã):</h4>
+        <div class="khsx-code-list">
+          <span class="khsx-code-chip" *ngFor="let code of khsxCodes | slice:0:50">{{ code }}</span>
+          <span *ngIf="khsxCodes.length > 50" style="color:#999;font-size:12px;">...và {{ khsxCodes.length - 50 }} mã khác</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions khsx-actions">
+      <button class="khsx-template-btn" (click)="downloadKhsxTemplate()">
+        <i class="material-icons">download</i>
+        Tải Template
+      </button>
+      <label class="khsx-import-btn">
+        <i class="material-icons">upload_file</i>
+        Import KHSX
+        <input type="file" accept=".xlsx,.xls" style="display:none" (change)="onKhsxFileSelected($event)">
+      </label>
+      <button class="cancel-btn" (click)="closeKhsxDialog()">Đóng</button>
     </div>
   </div>
 </div>

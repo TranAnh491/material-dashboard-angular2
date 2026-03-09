@@ -73,6 +73,7 @@
       <table class="excel-table">
         <thead>
           <tr>
+            <th class="drag-col"></th>
             <th>Factory</th>
             <th class="row-header">No</th>
             <th>Shipment</th>
@@ -96,7 +97,15 @@
         <tbody>
           <ng-container *ngFor="let row of displayRows; let i = index">
             <!-- Dòng chi tiết -->
-            <tr *ngIf="row.type === 'detail'" class="detail-row">
+            <tr *ngIf="row.type === 'detail'" class="detail-row"
+                draggable="true"
+                [class.dragging]="dragMainIndex === row.matIdx"
+                [class.drag-over]="dragMainOverIndex === row.matIdx && dragMainIndex !== row.matIdx"
+                (dragstart)="onMainDragStart(row.matIdx)"
+                (dragover)="onMainDragOver($event, row.matIdx)"
+                (drop)="onMainDrop(row.matIdx)"
+                (dragend)="onMainDragEnd()">
+              <td class="drag-handle" title="Kéo để sắp xếp">&#8942;&#8942;</td>
               <td>{{row.material.factory || 'ASM1'}}</td>
               <td class="row-header">{{i + 1}}</td>
               <td>
@@ -204,7 +213,7 @@
             </tr>
             <!-- Dòng cộng tổng theo Mã TP trong mỗi shipment – tổng QTY thẳng cột QTY Xuất -->
             <tr *ngIf="row.type === 'subtotal'" class="subtotal-row">
-              <td colspan="7"></td>
+              <td colspan="8"></td>
               <td class="subtotal-label">Tổng {{row.materialCode}}</td>
               <td colspan="2"></td>
               <td class="number-cell subtotal-qty"><strong>{{row.totalQty | number}}</strong></td>
@@ -220,10 +229,10 @@
 <!-- Time Range Dialog -->
 <div class="custom-modal" [class.show]="showTimeRangeDialog" [style.display]="showTimeRangeDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showTimeRangeDialog = false"></div>
-  <div class="modal-container">
+  <div class="modal-container modal-date-range">
     <div class="modal-header">
       <h5 class="modal-title">
-        <i class="material-icons">schedule</i>
+        <i class="material-icons">calendar_today</i>
         Chọn khung thời gian
       </h5>
       <button type="button" class="close-btn" (click)="showTimeRangeDialog = false">
@@ -234,12 +243,27 @@
       <div class="date-inputs">
         <div class="input-group">
           <label class="input-label">Từ ngày</label>
-          <input type="date" class="date-input" [(ngModel)]="startDate">
+          <mat-form-field appearance="outline" class="date-picker-field">
+            <input matInput [matDatepicker]="pickerStart" [(ngModel)]="startDate" placeholder="dd/mm/yyyy">
+            <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
+            <mat-datepicker #pickerStart></mat-datepicker>
+          </mat-form-field>
         </div>
         <div class="input-group">
           <label class="input-label">Đến ngày</label>
-          <input type="date" class="date-input" [(ngModel)]="endDate">
+          <mat-form-field appearance="outline" class="date-picker-field">
+            <input matInput [matDatepicker]="pickerEnd" [(ngModel)]="endDate" placeholder="dd/mm/yyyy">
+            <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
+            <mat-datepicker #pickerEnd></mat-datepicker>
+          </mat-form-field>
         </div>
+      </div>
+      <!-- Nút chọn nhanh -->
+      <div class="quick-range-btns">
+        <button type="button" class="btn-quick-range" (click)="setQuickRange(7)">7 ngày</button>
+        <button type="button" class="btn-quick-range" (click)="setQuickRange(14)">2 tuần</button>
+        <button type="button" class="btn-quick-range" (click)="setQuickRange(30)">30 ngày</button>
+        <button type="button" class="btn-quick-range" (click)="setQuickRange(0)">Tất cả</button>
       </div>
     </div>
     <div class="modal-footer">
@@ -437,43 +461,6 @@
   </div>
 </div>
 
-<!-- Time Range Dialog -->
-<div class="modal-overlay" *ngIf="showTimeRangeDialog" (click)="showTimeRangeDialog = false">
-  <div class="modal-dialog" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>Lọc theo thời gian</h3>
-      <button class="close-btn" (click)="showTimeRangeDialog = false">
-        <i class="material-icons">close</i>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Từ ngày:</label>
-        <input type="date" 
-               class="form-input" 
-               [(ngModel)]="startDate"
-               [value]="formatDateForInput(startDate)">
-      </div>
-      <div class="form-group">
-        <label>Đến ngày:</label>
-        <input type="date" 
-               class="form-input" 
-               [(ngModel)]="endDate"
-               [value]="formatDateForInput(endDate)">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="showTimeRangeDialog = false">
-        <i class="material-icons">close</i>
-        Hủy
-      </button>
-      <button type="button" class="btn btn-apply" (click)="applyTimeRangeFilter()">
-        <i class="material-icons">search</i>
-        Lọc
-      </button>
-    </div>
-  </div>
-</div>
 
 <!-- Xuất Kho Dialog -->
 <div class="custom-modal" [class.show]="showXuatKhoDialog" [style.display]="showXuatKhoDialog ? 'flex' : 'none'">
@@ -543,6 +530,7 @@
           <table class="excel-table">
             <thead>
               <tr>
+                <th class="drag-col"></th>
                 <th>
                   <input type="checkbox" 
                          [checked]="isAllSelected()"
@@ -563,17 +551,26 @@
             <tbody>
               <tr *ngFor="let item of xuatKhoPreviewItems; let i = index" 
                   [class.error-row]="item.inventoryId && item.quantity > item.availableStock"
-                  [class.selected-row]="item.selected">
+                  [class.selected-row]="item.selected"
+                  [class.no-stock-row]="!item.inventoryId && item.availableStock === 0"
+                  draggable="true"
+                  [class.dragging]="dragXkIndex === i"
+                  [class.drag-over]="dragXkOverIndex === i && dragXkIndex !== i"
+                  (dragstart)="onXkDragStart(i)"
+                  (dragover)="onXkDragOver($event, i)"
+                  (drop)="onXkDrop(i)"
+                  (dragend)="onXkDragEnd()">
+                <td class="drag-handle" title="Kéo để sắp xếp">&#8942;&#8942;</td>
                 <td>
                   <input type="checkbox" 
                          [(ngModel)]="item.selected">
                 </td>
                 <td>{{i + 1}}</td>
                 <td><input type="text" class="editable-input" [(ngModel)]="item.materialCode"></td>
-                <td><input type="text" class="editable-input" [(ngModel)]="item.batchNumber"></td>
-                <td><input type="text" class="editable-input" [(ngModel)]="item.lot"></td>
-                <td><input type="text" class="editable-input" [(ngModel)]="item.lsx"></td>
-                <td class="number-cell">{{item.availableStock}}</td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.batchNumber" [placeholder]="!item.inventoryId ? 'Trống' : ''"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.lot" [placeholder]="!item.inventoryId ? 'Trống' : ''"></td>
+                <td><input type="text" class="editable-input" [(ngModel)]="item.lsx" [placeholder]="!item.inventoryId ? 'Trống' : ''"></td>
+                <td class="number-cell" [style.color]="item.availableStock === 0 ? '#e74c3c' : 'inherit'">{{item.availableStock}}</td>
                 <td>
                   <input type="number" 
                          class="editable-input number-input" 

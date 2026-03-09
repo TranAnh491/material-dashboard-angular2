@@ -7,6 +7,93 @@
   padding: 0;
 }
 
+// Drag & Drop
+.drag-col {
+  width: 20px;
+  min-width: 20px;
+  padding: 0 !important;
+}
+
+.drag-handle {
+  cursor: grab;
+  text-align: center;
+  color: #bbb;
+  font-size: 14px;
+  letter-spacing: -2px;
+  user-select: none;
+  padding: 0 4px !important;
+  width: 20px;
+  min-width: 20px;
+
+  &:hover {
+    color: #555;
+  }
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+tr.dragging {
+  opacity: 0.4;
+  background: #e3f2fd !important;
+}
+
+tr.drag-over {
+  border-top: 3px solid #2196F3 !important;
+  background: #e8f5e9 !important;
+}
+
+// Dòng không có tồn kho trong xuất kho dialog
+.no-stock-row {
+  background-color: #fff8e1 !important;
+  td { color: #e65100; }
+}
+
+// Modal lọc thời gian
+.modal-date-range {
+  min-width: 360px;
+  max-width: 420px;
+}
+
+.date-picker-field {
+  width: 100%;
+  margin-top: 4px;
+
+  .mat-form-field-wrapper {
+    padding-bottom: 0;
+  }
+}
+
+// Nút chọn nhanh khoảng ngày
+.quick-range-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.btn-quick-range {
+  flex: 1;
+  min-width: 70px;
+  padding: 6px 10px;
+  border: 1px solid #90caf9;
+  border-radius: 16px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: #1976d2;
+    color: #fff;
+    border-color: #1976d2;
+  }
+}
+
 // Xuất Kho Dialog Styles
 .xuat-kho-section {
   padding: 15px;

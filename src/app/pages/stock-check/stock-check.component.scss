@@ -2879,3 +2879,192 @@
     }
   }
 }
+
+// ======================== KHSX STYLES ========================
+
+// Nút KHSX trong toolbar
+.khsx-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #9c27b0, #673ab7);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+
+  &:hover { opacity: 0.85; }
+  i { font-size: 18px; }
+}
+
+// Counter box KHSX
+.counter-box.khsx-box {
+  background: linear-gradient(135deg, #9c27b0, #673ab7);
+  color: white;
+
+  .counter-icon i { color: rgba(255,255,255,0.85); }
+  .counter-label { color: rgba(255,255,255,0.8); font-size: 11px; }
+  .counter-value { color: white; font-size: 28px; font-weight: 700; }
+  .counter-sub { font-size: 14px; font-weight: 400; color: rgba(255,255,255,0.75); }
+
+  &.active {
+    box-shadow: 0 0 0 3px rgba(156,39,176,0.5), 0 4px 16px rgba(0,0,0,0.2);
+  }
+}
+
+// Cột KHSX trong bảng
+.khsx-cell {
+  text-align: center;
+  width: 60px;
+  min-width: 60px;
+}
+
+.khsx-tick {
+  color: #9c27b0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+// KHSX Modal
+.khsx-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+  }
+
+  .khsx-modal-content {
+    position: relative;
+    z-index: 1;
+    background: #fff;
+    border-radius: 12px;
+    width: 520px;
+    max-width: 95vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    display: flex;
+    flex-direction: column;
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid #eee;
+
+      h3 {
+        flex: 1;
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        color: #673ab7;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+
+    .modal-body {
+      padding: 18px 20px;
+      flex: 1;
+    }
+
+    .khsx-info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #f3e5f5;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+
+    .khsx-note {
+      background: #fffde7;
+      border-left: 3px solid #ffc107;
+      padding: 10px 14px;
+      font-size: 13px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+
+      ol { margin: 6px 0 0 16px; padding: 0; }
+      li { margin-bottom: 4px; }
+    }
+
+    .khsx-preview {
+      h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #555; }
+    }
+
+    .khsx-code-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .khsx-code-chip {
+      background: #ede7f6;
+      color: #673ab7;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .khsx-actions {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px;
+      border-top: 1px solid #eee;
+      align-items: center;
+    }
+
+    .khsx-template-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      background: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+
+      &:hover { background: #388e3c; }
+      i { font-size: 18px; }
+    }
+
+    .khsx-import-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      background: #9c27b0;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+
+      &:hover { background: #6a1b9a; }
+      i { font-size: 18px; }
+    }
+  }
+}

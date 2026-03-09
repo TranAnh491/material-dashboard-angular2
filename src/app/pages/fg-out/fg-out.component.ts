@@ -68,7 +68,7 @@ export interface XuatKhoPreviewItem {
 
 /** Dòng hiển thị: chi tiết hoặc dòng cộng tổng theo Mã TP trong mỗi shipment */
 export type FgOutDisplayRow =
-  | { type: 'detail'; material: FgOutItem }
+  | { type: 'detail'; material: FgOutItem; matIdx: number }
   | { type: 'subtotal'; shipment: string; materialCode: string; totalQty: number };
 
 @Component({
@@ -139,6 +139,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
 
+  // Drag-and-drop state — bảng chính
+  dragMainIndex: number | null = null;
+  dragMainOverIndex: number | null = null;
+  // Drag-and-drop state — bảng xuất kho dialog
+  dragXkIndex: number | null = null;
+  dragXkOverIndex: number | null = null;
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -150,8 +157,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
-    this.startDate = new Date(2020, 0, 1);
-    this.endDate = new Date(2030, 11, 31);
+    // Mặc định lọc 1 tuần gần đây
+    const today = new Date();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(today.getDate() - 7);
+    oneWeekAgo.setHours(0, 0, 0, 0);
+    today.setHours(23, 59, 59, 999);
+    this.startDate = oneWeekAgo;
+    this.endDate = today;
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
@@ -465,6 +478,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     // Build display rows: chi tiết + dòng cộng tổng theo (shipment, Mã TP)
     this.displayRows = [];
     let i = 0;
+    let matIdx = 0;
     while (i < this.filteredMaterials.length) {
       const m = this.filteredMaterials[i];
       const groupKey = (m.shipment || '') + '|' + (m.materialCode || '');
@@ -472,7 +486,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       while (i < this.filteredMaterials.length &&
         ((this.filteredMaterials[i].shipment || '') + '|' + (this.filteredMaterials[i].materialCode || '')) === groupKey) {
         const row = this.filteredMaterials[i];
-        this.displayRows.push({ type: 'detail', material: row });
+        this.displayRows.push({ type: 'detail', material: row, matIdx: matIdx++ });
         totalQty += Number(row.quantity) || 0;
         i++;
       }
@@ -1226,6 +1240,101 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.showTimeRangeDialog = false;
   }
 
+  // Chọn nhanh khoảng thời gian (days = 0 → tất cả)
+  setQuickRange(days: number): void {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    this.endDate = today;
+    if (days === 0) {
+      const all = new Date(2020, 0, 1);
+      this.startDate = all;
+    } else {
+      const from = new Date();
+      from.setDate(from.getDate() - days);
+      from.setHours(0, 0, 0, 0);
+      this.startDate = from;
+    }
+  }
+
+  // ==================== DRAG & DROP — BẢNG CHÍNH ====================
+
+  onMainDragStart(matIdx: number): void {
+    this.dragMainIndex = matIdx;
+  }
+
+  onMainDragOver(event: DragEvent, matIdx: number): void {
+    event.preventDefault();
+    this.dragMainOverIndex = matIdx;
+  }
+
+  onMainDrop(matIdx: number): void {
+    if (this.dragMainIndex === null || this.dragMainIndex === matIdx) {
+      this.dragMainIndex = null;
+      this.dragMainOverIndex = null;
+      return;
+    }
+    // Reorder filteredMaterials
+    const [moved] = this.filteredMaterials.splice(this.dragMainIndex, 1);
+    this.filteredMaterials.splice(matIdx, 0, moved);
+    // Rebuild displayRows without resorting
+    this.rebuildDisplayRows();
+    this.dragMainIndex = null;
+    this.dragMainOverIndex = null;
+  }
+
+  onMainDragEnd(): void {
+    this.dragMainIndex = null;
+    this.dragMainOverIndex = null;
+  }
+
+  // Rebuild displayRows từ filteredMaterials hiện tại (không sort lại)
+  private rebuildDisplayRows(): void {
+    this.displayRows = [];
+    let i = 0;
+    let matIdx = 0;
+    while (i < this.filteredMaterials.length) {
+      const m = this.filteredMaterials[i];
+      const groupKey = (m.shipment || '') + '|' + (m.materialCode || '');
+      let totalQty = 0;
+      while (i < this.filteredMaterials.length &&
+        ((this.filteredMaterials[i].shipment || '') + '|' + (this.filteredMaterials[i].materialCode || '')) === groupKey) {
+        const row = this.filteredMaterials[i];
+        this.displayRows.push({ type: 'detail', material: row, matIdx: matIdx++ });
+        totalQty += Number(row.quantity) || 0;
+        i++;
+      }
+      this.displayRows.push({ type: 'subtotal', shipment: m.shipment || '', materialCode: m.materialCode || '', totalQty });
+    }
+  }
+
+  // ==================== DRAG & DROP — DIALOG XUẤT KHO ====================
+
+  onXkDragStart(index: number): void {
+    this.dragXkIndex = index;
+  }
+
+  onXkDragOver(event: DragEvent, index: number): void {
+    event.preventDefault();
+    this.dragXkOverIndex = index;
+  }
+
+  onXkDrop(index: number): void {
+    if (this.dragXkIndex === null || this.dragXkIndex === index) {
+      this.dragXkIndex = null;
+      this.dragXkOverIndex = null;
+      return;
+    }
+    const [moved] = this.xuatKhoPreviewItems.splice(this.dragXkIndex, 1);
+    this.xuatKhoPreviewItems.splice(index, 0, moved);
+    this.dragXkIndex = null;
+    this.dragXkOverIndex = null;
+  }
+
+  onXkDragEnd(): void {
+    this.dragXkIndex = null;
+    this.dragXkOverIndex = null;
+  }
+
   // Add new row manually
   addNewRow(): void {
     const newMaterial: FgOutItem = {
@@ -1628,8 +1737,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
             });
             remaining -= take;
           }
+          // Không đủ tồn hoặc không có tồn: vẫn thêm dòng với Mã TP, để trống Batch/LOT/LSX
           if (remaining > 0) {
             console.warn(`⚠️ Thiếu tồn cho mã TP ${materialCodeNorm}: cần ${qtyNeeded}, đã phân bổ ${qtyNeeded - remaining}`);
+            this.xuatKhoPreviewItems.push({
+              materialCode: materialCodeNorm,
+              batchNumber: '',
+              lot: '',
+              lsx: '',
+              quantity: remaining,
+              availableStock: 0,
+              location: '',
+              notes: 'Không có tồn kho',
+              inventoryId: undefined,
+              selected: true
+            });
           }
         });
 
@@ -1637,8 +1759,27 @@ export class FgOutComponent implements OnInit, OnDestroy {
           this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
           console.log('✅ Loaded', this.xuatKhoPreviewItems.length, 'dòng xuất (FIFO) cho shipment', shipmentCode);
+        } else if (materialCodesNeeded.length > 0) {
+          // Không có tồn kho nào → vẫn list ra các mã TP với dòng trống
+          materialCodesNeeded.forEach(code => {
+            const qty = demandByMaterial.get(code) || 0;
+            this.xuatKhoPreviewItems.push({
+              materialCode: code,
+              batchNumber: '',
+              lot: '',
+              lsx: '',
+              quantity: qty,
+              availableStock: 0,
+              location: '',
+              notes: 'Không có tồn kho',
+              inventoryId: undefined,
+              selected: true
+            });
+          });
+          this.xuatKhoStep = 2;
+          this.xuatKhoChecked = true;
         } else {
-          alert('❌ Không có tồn kho phù hợp với danh sách hàng của shipment này (hoặc tồn = 0).');
+          alert('❌ Không tìm thấy dòng hàng nào của shipment này.');
         }
       });
     });

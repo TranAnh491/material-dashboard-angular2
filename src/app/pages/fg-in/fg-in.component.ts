@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -257,9 +258,14 @@ export class FgInComponent implements OnInit, OnDestroy {
       quantity: material.quantity,
       carton: carton,
       odd: odd,
+      // Các trường chuẩn FG Inventory: tonDau + nhap - xuat = ton
+      tonDau: 0,
+      nhap: material.quantity,
+      xuat: 0,
+      ton: material.quantity,
       exported: 0,
       stock: material.quantity,
-                   location: material.location || 'Temporary',
+      location: material.location || 'Temporary',
       notes: material.notes || '',
       customer: material.customer || customerFromCatalog || '',
       isReceived: true,
@@ -447,6 +453,109 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.showNhapKhoSuggestions = false;
   }
 
+  /** In tem QR (57mm x 32mm, giống inbound-asm1): QR bên trái, thông tin bên phải */
+  async printTem(material: FgInItem): Promise<void> {
+    try {
+      const mc = (material.materialCode || '').trim();
+      const batch = (material.batchNumber || '').trim();
+      const lsx = (material.lsx || '').trim();
+      const lot = (material.lot || '').trim();
+      const qty = material.quantity ?? 0;
+      const importDateStr = material.importDate
+        ? (material.importDate instanceof Date
+          ? material.importDate.toLocaleDateString('vi-VN')
+          : new Date((material.importDate as any)?.seconds * 1000).toLocaleDateString('vi-VN'))
+        : new Date().toLocaleDateString('vi-VN');
+
+      const qrData = `${mc}|${batch}|${lsx}|${lot}|${qty}`;
+
+      const qrImage = await QRCode.toDataURL(qrData, {
+        width: 240,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+
+      const user = await this.afAuth.currentUser;
+      const currentUser = user
+        ? (user.email || user.uid).split('@')[0].toUpperCase()
+        : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+
+      const html = `
+        <html>
+          <head><title></title>
+          <style>
+            * { margin: 0 !important; padding: 0 !important; box-sizing: border-box !important; }
+            body { font-family: Arial, sans-serif; margin: 0 !important; padding: 0 !important;
+              background: white !important; overflow: hidden !important; width: 57mm !important; height: 32mm !important; }
+            .qr-container { display: flex !important; margin: 0 !important; padding: 0 !important;
+              border: 1px solid #000 !important; width: 57mm !important; height: 32mm !important;
+              page-break-inside: avoid !important; background: white !important; box-sizing: border-box !important; }
+            .qr-section { width: 30mm !important; height: 30mm !important; display: flex !important;
+              align-items: center !important; justify-content: center !important; border-right: 1px solid #ccc !important;
+              box-sizing: border-box !important; }
+            .qr-image { width: 28mm !important; height: 28mm !important; display: block !important; }
+            .info-section { flex: 1 !important; padding: 1mm !important; display: flex !important;
+              flex-direction: column !important; justify-content: space-between !important;
+              font-size: 9.6px !important; line-height: 1.2 !important; box-sizing: border-box !important;
+              color: #000 !important; text-align: left !important; }
+            .info-row { margin: 0.2mm 0 !important; font-weight: bold !important; color: #000 !important;
+              text-align: left !important; display: block !important; white-space: nowrap !important;
+              font-family: Arial, sans-serif !important; }
+            .info-row.material-code { font-size: 18.43px !important; font-weight: bold !important; }
+            .info-row.small { font-size: 8.4px !important; color: #000 !important; }
+            @media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; overflow: hidden !important; }
+              @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; }
+              .qr-container { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important;
+                page-break-inside: avoid !important; border: 1px solid #000 !important; }
+              .qr-section { width: 30mm !important; height: 30mm !important; }
+              .qr-image { width: 28mm !important; height: 28mm !important; } }
+          </style>
+          </head>
+          <body>
+            <div class="qr-container">
+              <div class="qr-section"><img src="${qrImage}" class="qr-image" alt="QR"></div>
+              <div class="info-section">
+                <div>
+                  <div class="info-row material-code">${mc}</div>
+                  <div class="info-row">Batch: ${batch}</div>
+                  <div class="info-row">LSX: ${lsx}</div>
+                  <div class="info-row">LOT: ${lot}</div>
+                  <div class="info-row">SL: ${qty}</div>
+                  <div class="info-row">Ngày: ${importDateStr}</div>
+                </div>
+                <div>
+                  <div class="info-row small">Date: ${printDate}</div>
+                  <div class="info-row small">NV: ${currentUser}</div>
+                </div>
+              </div>
+            </div>
+            <script>
+              window.onload = function() { document.title = ''; setTimeout(function() { window.print(); }, 300); };
+            </script>
+          </body>
+        </html>`;
+
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+      }
+    } catch (e) {
+      console.error('Error printing tem:', e);
+      alert('Có lỗi khi in tem. Vui lòng thử lại.');
+    }
+  }
+
+  /** ASM1 → KZLSX, ASM2 → LHLSX. Chỉ thêm prefix nếu user chưa nhập sẵn. */
+  private getLsxWithPrefix(lsx: string, factory: string): string {
+    const raw = (lsx || '').trim().toUpperCase();
+    if (!raw) return '';
+    const prefix = factory === 'ASM2' ? 'LHLSX' : 'KZLSX';
+    if (raw.startsWith(prefix)) return raw;
+    return prefix + raw;
+  }
+
   submitNhapKho(): void {
     const code = (this.newNhapKhoItem.materialCode || '').trim();
     const qty = this.newNhapKhoItem.quantity != null ? Number(this.newNhapKhoItem.quantity) : 0;
@@ -460,6 +569,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
     const factory = (this.newNhapKhoItem.factory || 'ASM1').trim().toUpperCase();
     const validFactory = factory === 'ASM2' ? 'ASM2' : 'ASM1';
+    const lsxRaw = (this.newNhapKhoItem.lsx || '').trim();
     const materialData = {
       factory: validFactory,
       importDate: new Date(),
@@ -467,7 +577,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       materialCode: code,
       rev: '',
       lot: (this.newNhapKhoItem.lot || '').trim(),
-      lsx: (this.newNhapKhoItem.lsx || '').trim(),
+      lsx: this.getLsxWithPrefix(lsxRaw, validFactory),
       quantity: qty,
       carton: 0,
       odd: 0,
