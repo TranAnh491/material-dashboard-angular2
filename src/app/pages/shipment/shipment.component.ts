@@ -1781,6 +1781,55 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Báo cáo ngày chuẩn bị: theo tháng, tổng carton được chuẩn bị trong 1, 2, 3 và từ 4 ngày trở lên */
+  downloadDayPreReport(): void {
+    const valid = this.shipments.filter(s => {
+      if (!s.actualShipDate || !s.fullDate) return false;
+      const carton = Number(s.carton) || 0;
+      return carton > 0;
+    });
+    if (valid.length === 0) {
+      alert('ℹ️ Không có dữ liệu (cần Dispatch Date, Ngày chuẩn bị/Full Date và Carton > 0)');
+      return;
+    }
+    const monthMap = new Map<string, { d1: number; d2: number; d3: number; d4p: number }>();
+    valid.forEach(s => {
+      const dayPre = this.calcDayPre(s);
+      if (dayPre === null) return;
+      const d = new Date(s.actualShipDate!);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(key)) monthMap.set(key, { d1: 0, d2: 0, d3: 0, d4p: 0 });
+      const row = monthMap.get(key)!;
+      const carton = Number(s.carton) || 0;
+      if (dayPre === 1) row.d1 += carton;
+      else if (dayPre === 2) row.d2 += carton;
+      else if (dayPre === 3) row.d3 += carton;
+      else if (dayPre >= 4) row.d4p += carton;
+    });
+    const months = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const reportData = months.map(([key, row]) => {
+      const [y, m] = key.split('-');
+      return {
+        'Tháng': `${m}/${y}`,
+        '1 ngày': row.d1,
+        '2 ngày': row.d2,
+        '3 ngày': row.d3,
+        '4+ ngày': row.d4p,
+        'Tổng': row.d1 + row.d2 + row.d3 + row.d4p
+      };
+    });
+    try {
+      const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(reportData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ngày chuẩn bị');
+      XLSX.writeFile(wb, `Bao_cao_ngay_chuan_bi_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      alert(`✅ Đã tải báo cáo ngày chuẩn bị (${reportData.length} tháng)`);
+    } catch (e) {
+      console.error('downloadDayPreReport:', e);
+      alert('❌ Lỗi khi tải báo cáo.');
+    }
+  }
+
   // Import file functionality
   importFile(): void {
     const fileInput = document.createElement('input');

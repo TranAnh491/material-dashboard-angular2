@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
-import { Subject, forkJoin } from 'rxjs';
+import { Subject, forkJoin, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -66,10 +66,11 @@ export interface XuatKhoPreviewItem {
   selected: boolean; // Checkbox để chọn item
 }
 
-/** Dòng hiển thị: chi tiết hoặc dòng cộng tổng theo Mã TP trong mỗi shipment */
+/** Dòng hiển thị: chi tiết, dòng cộng tổng theo Mã TP, hoặc tổng carton theo pallet */
 export type FgOutDisplayRow =
-  | { type: 'detail'; material: FgOutItem; matIdx: number }
-  | { type: 'subtotal'; shipment: string; materialCode: string; totalQty: number };
+  | { type: 'detail'; material: FgOutItem; matIdx: number; renderShipmentCell?: boolean; palletGroup?: number }
+  | { type: 'subtotal'; shipment: string; materialCode: string; totalQty: number; pallet?: string; palletGroup?: number }
+  | { type: 'palletTotal'; pallet: string; totalCarton: number; shipment?: string; palletGroup?: number };
 
 @Component({
   selector: 'app-fg-out',
@@ -145,6 +146,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Drag-and-drop state — bảng xuất kho dialog
   dragXkIndex: number | null = null;
   dragXkOverIndex: number | null = null;
+
+  // Dropdown chọn Batch / LOT / LSX từ FG Inventory (mỗi cột xổ danh sách tương ứng)
+  inventoryDropdownMaterial: FgOutItem | null = null;
+  inventoryDropdownXKItem: XuatKhoPreviewItem | null = null;
+  inventoryDropdownField: 'batch' | 'lot' | 'lsx' = 'batch';
+  inventoryDropdownOptions: string[] = [];
+  showInventoryDropdown: boolean = false;
+  inventoryDropdownPos: { top: number; left: number } = { top: 0, left: 0 };
+  private inventoryDropdownBlurTimer: any;
 
   constructor(
     private firestore: AngularFirestore,
@@ -298,6 +308,43 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.updateMaterialInFirebase(material);
   }
 
+  /** Số carton để tính tổng (từ Standard nếu có, ngược lại dùng material.carton). */
+  getCartonForMaterial(material: FgOutItem): number {
+    const { carton, hasStandard } = this.getCartonOdd(material);
+    return hasStandard ? carton : (Number(material.carton) || 0);
+  }
+
+  /** Danh sách shipment đang hiển thị (từ filteredMaterials), dạng chuỗi. */
+  get displayedShipmentsText(): string {
+    const set = new Set<string>();
+    this.filteredMaterials.forEach(m => {
+      const s = (m.shipment || '').toString().trim();
+      if (s) set.add(s);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b)).join(', ') || '—';
+  }
+
+  /** Shipment mặc định khi thêm dòng mới (giống shipment đang hiển thị). */
+  get displayedShipmentForNewRow(): string {
+    const set = new Set<string>();
+    this.filteredMaterials.forEach(m => {
+      const s = (m.shipment || '').toString().trim();
+      if (s) set.add(s);
+    });
+    const arr = Array.from(set).sort((a, b) => a.localeCompare(b));
+    if (arr.length > 0) return arr[0];
+    return (this.searchTerm || '').toString().trim();
+  }
+
+  /** Class nền theo nhóm Pallet (lẻ: hồng nhạt, chẵn: xanh nhạt). */
+  getPalletRowClass(row: FgOutDisplayRow): { [klass: string]: boolean } {
+    const group = (row as { palletGroup?: number }).palletGroup || 0;
+    return {
+      'pallet-odd': group > 0 && group % 2 === 1,
+      'pallet-even': group > 0 && group % 2 === 0
+    };
+  }
+
   /** Định dạng số có dấu phẩy (ví dụ 1,000). */
   formatNumber(value: number | undefined | null): string {
     if (value == null || isNaN(value)) return '';
@@ -325,46 +372,37 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return mapping ? (mapping.description || '') : '';
   }
 
-  // Sort materials by date, shipment, materialCode, LSX, Batch
+  // Sort materials: Pallet → Mã TP → LSX (thứ tự ưu tiên), sau đó Shipment, Date, Batch
   sortMaterials(): void {
-    console.log('🔄 Sorting FG Out materials by: Date → Shipment → MaterialCode → LSX → Batch');
-    
+    console.log('🔄 Sorting FG Out materials by: Pallet → Mã TP → LSX');
     this.materials.sort((a, b) => {
-      // 1. Sort by date (newest first)
-      const dateA = new Date(a.exportDate).getTime();
-      const dateB = new Date(b.exportDate).getTime();
-      if (dateA !== dateB) {
-        return dateB - dateA; // Newest first
-      }
-      
-      // 2. Sort by shipment (A-Z)
-      const shipmentA = (a.shipment || '').toString().toUpperCase();
-      const shipmentB = (b.shipment || '').toString().toUpperCase();
-      if (shipmentA !== shipmentB) {
-        return shipmentA.localeCompare(shipmentB);
-      }
-      
-      // 3. Sort by materialCode (A-Z)
+      const palletA = (a.pallet || '').toString().toUpperCase();
+      const palletB = (b.pallet || '').toString().toUpperCase();
+      if (palletA !== palletB) return palletA.localeCompare(palletB);
       const materialA = (a.materialCode || '').toString().toUpperCase();
       const materialB = (b.materialCode || '').toString().toUpperCase();
-      if (materialA !== materialB) {
-        return materialA.localeCompare(materialB);
-      }
-      
-      // 4. Sort by LSX (A-Z)
+      if (materialA !== materialB) return materialA.localeCompare(materialB);
       const lsxA = (a.lsx || '').toString().toUpperCase();
       const lsxB = (b.lsx || '').toString().toUpperCase();
-      if (lsxA !== lsxB) {
-        return lsxA.localeCompare(lsxB);
-      }
-      
-      // 5. Sort by Batch (A-Z)
+      if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
+      const shipmentA = (a.shipment || '').toString().toUpperCase();
+      const shipmentB = (b.shipment || '').toString().toUpperCase();
+      if (shipmentA !== shipmentB) return shipmentA.localeCompare(shipmentB);
+      const dateA = new Date(a.exportDate).getTime();
+      const dateB = new Date(b.exportDate).getTime();
+      if (dateA !== dateB) return dateB - dateA;
       const batchA = (a.batchNumber || '').toString().toUpperCase();
       const batchB = (b.batchNumber || '').toString().toUpperCase();
       return batchA.localeCompare(batchB);
     });
-    
     console.log(`✅ Sorted ${this.materials.length} FG Out materials`);
+  }
+
+  /** Cập nhật Firebase và sắp xếp lại (dòng nhảy tới vị trí theo Shipment, Pallet, Mã TP) */
+  onMaterialFieldChange(material: FgOutItem): void {
+    this.updateMaterialInFirebase(material);
+    this.sortMaterials();
+    this.applyFilters();
   }
 
   // Update material in Firebase
@@ -408,6 +446,91 @@ export class FgOutComponent implements OnInit, OnDestroy {
           console.error('Error creating FG Out material in Firebase:', error);
         });
     }
+  }
+
+  /** Load FG Inventory theo Mã TP, lấy danh sách unique Batch / LOT / LSX */
+  async loadInventoryOptionsForMaterial(
+    materialCode: string,
+    factory: string,
+    field: 'batch' | 'lot' | 'lsx'
+  ): Promise<string[]> {
+    const code = (materialCode || '').trim().toUpperCase();
+    const fact = (factory || 'ASM1').trim().toUpperCase();
+    if (!code) return [];
+    const snapshot = await firstValueFrom(
+      this.firestore.collection('fg-inventory', ref =>
+        ref.where('materialCode', '==', code).where('factory', '==', fact)
+      ).get()
+    );
+    const set = new Set<string>();
+    snapshot.docs.forEach(doc => {
+      const d = doc.data() as any;
+      const ton = d.ton ?? d.stock ?? (d.quantity ?? 0) - (d.exported ?? 0);
+      if (ton > 0) {
+        const v = field === 'batch' ? (d.batchNumber || '') : field === 'lot' ? (d.lot || d.Lot || '') : (d.lsx || d.LSX || '');
+        if (String(v).trim()) set.add(String(v).trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Bấm ô Batch/LOT/LSX (bảng chính) → xổ danh sách tương ứng */
+  async onInventoryFieldFocus(event: Event, material: FgOutItem, field: 'batch' | 'lot' | 'lsx'): Promise<void> {
+    if (this.inventoryDropdownBlurTimer) clearTimeout(this.inventoryDropdownBlurTimer);
+    const mc = (material.materialCode || '').trim();
+    if (!mc) return;
+    const factory = (material.factory || this.selectedFactory || 'ASM1').trim();
+    const opts = await this.loadInventoryOptionsForMaterial(mc, factory, field);
+    this.inventoryDropdownMaterial = material;
+    this.inventoryDropdownXKItem = null;
+    this.inventoryDropdownField = field;
+    this.inventoryDropdownOptions = opts;
+    this.showInventoryDropdown = true;
+    const el = event.target as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    this.inventoryDropdownPos = { top: rect.bottom + 2, left: rect.left };
+  }
+
+  /** Bấm ô Batch/LOT/LSX (dialog Xuất Kho) → xổ danh sách tương ứng */
+  async onInventoryFieldFocusXK(event: Event, item: XuatKhoPreviewItem, field: 'batch' | 'lot' | 'lsx'): Promise<void> {
+    if (this.inventoryDropdownBlurTimer) clearTimeout(this.inventoryDropdownBlurTimer);
+    const mc = (item.materialCode || '').trim();
+    if (!mc) return;
+    const factory = (this.xuatKhoShipmentFactory || 'ASM1').trim();
+    const opts = await this.loadInventoryOptionsForMaterial(mc, factory, field);
+    this.inventoryDropdownMaterial = null;
+    this.inventoryDropdownXKItem = item;
+    this.inventoryDropdownField = field;
+    this.inventoryDropdownOptions = opts;
+    this.showInventoryDropdown = true;
+    const el = event.target as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    this.inventoryDropdownPos = { top: rect.bottom + 2, left: rect.left };
+  }
+
+  onInventoryFieldBlur(): void {
+    this.inventoryDropdownBlurTimer = setTimeout(() => this.closeInventoryDropdown(), 250);
+  }
+
+  closeInventoryDropdown(): void {
+    this.showInventoryDropdown = false;
+    this.inventoryDropdownMaterial = null;
+    this.inventoryDropdownXKItem = null;
+    this.inventoryDropdownOptions = [];
+  }
+
+  selectInventoryOption(value: string): void {
+    if (this.inventoryDropdownMaterial) {
+      if (this.inventoryDropdownField === 'batch') this.inventoryDropdownMaterial.batchNumber = value;
+      else if (this.inventoryDropdownField === 'lot') this.inventoryDropdownMaterial.lot = value;
+      else this.inventoryDropdownMaterial.lsx = value;
+      this.updateMaterialInFirebase(this.inventoryDropdownMaterial);
+    } else if (this.inventoryDropdownXKItem) {
+      if (this.inventoryDropdownField === 'batch') this.inventoryDropdownXKItem.batchNumber = value;
+      else if (this.inventoryDropdownField === 'lot') this.inventoryDropdownXKItem.lot = value;
+      else this.inventoryDropdownXKItem.lsx = value;
+    }
+    this.closeInventoryDropdown();
   }
 
   // Delete material
@@ -459,39 +582,83 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return isInDateRange;
     });
     
-    // Sắp xếp: Ngày, Shipment, Mã TP, Batch
+    // Sắp xếp: Pallet → Mã TP → LSX → Shipment → Ngày → Batch
     this.filteredMaterials.sort((a, b) => {
-      const dateA = new Date(a.exportDate).getTime();
-      const dateB = new Date(b.exportDate).getTime();
-      if (dateA !== dateB) return dateB - dateA; // Mới nhất trước
-      const shipA = (a.shipment || '').toUpperCase();
-      const shipB = (b.shipment || '').toUpperCase();
-      if (shipA !== shipB) return shipA.localeCompare(shipB);
+      const palletA = (a.pallet || '').toUpperCase();
+      const palletB = (b.pallet || '').toUpperCase();
+      if (palletA !== palletB) return palletA.localeCompare(palletB);
       const codeA = (a.materialCode || '').toUpperCase();
       const codeB = (b.materialCode || '').toUpperCase();
       if (codeA !== codeB) return codeA.localeCompare(codeB);
+      const lsxA = (a.lsx || '').toUpperCase();
+      const lsxB = (b.lsx || '').toUpperCase();
+      if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
+      const shipA = (a.shipment || '').toUpperCase();
+      const shipB = (b.shipment || '').toUpperCase();
+      if (shipA !== shipB) return shipA.localeCompare(shipB);
+      const dateA = new Date(a.exportDate).getTime();
+      const dateB = new Date(b.exportDate).getTime();
+      if (dateA !== dateB) return dateB - dateA;
       const batchA = (a.batchNumber || '').toUpperCase();
       const batchB = (b.batchNumber || '').toUpperCase();
       return batchA.localeCompare(batchB);
     });
 
-    // Build display rows: chi tiết + dòng cộng tổng theo (shipment, Mã TP)
-    this.displayRows = [];
-    let i = 0;
-    let matIdx = 0;
-    while (i < this.filteredMaterials.length) {
-      const m = this.filteredMaterials[i];
-      const groupKey = (m.shipment || '') + '|' + (m.materialCode || '');
-      let totalQty = 0;
-      while (i < this.filteredMaterials.length &&
-        ((this.filteredMaterials[i].shipment || '') + '|' + (this.filteredMaterials[i].materialCode || '')) === groupKey) {
-        const row = this.filteredMaterials[i];
-        this.displayRows.push({ type: 'detail', material: row, matIdx: matIdx++ });
-        totalQty += Number(row.quantity) || 0;
-        i++;
+    // Build display rows: chỉ chi tiết (không có dòng tổng theo Mã TP)
+    this.displayRows = this.filteredMaterials.map((m, i) =>
+      ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
+
+    // Chèn dòng tổng carton theo pallet (chỉ khi có pallet)
+    const withPalletTotals: FgOutDisplayRow[] = [];
+    let prevPallet = '';
+    let cartonAccum = 0;
+    let lastShipment = '';
+    for (const r of this.displayRows) {
+      if (r.type === 'detail') {
+        lastShipment = r.material?.shipment ?? '';
+        const pallet = (r.material?.pallet ?? '').toString().trim();
+        if (pallet) {
+          if (pallet !== prevPallet && prevPallet) {
+            withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+            cartonAccum = 0;
+          }
+          prevPallet = pallet;
+          cartonAccum += this.getCartonForMaterial(r.material);
+        }
       }
-      this.displayRows.push({ type: 'subtotal', shipment: m.shipment || '', materialCode: m.materialCode || '', totalQty });
+      withPalletTotals.push(r);
     }
+    if (prevPallet && cartonAccum > 0) {
+      withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+    }
+    this.displayRows = withPalletTotals;
+
+    // Tô màu theo nhóm pallet (cùng pallet = cùng màu; pallet tiếp theo đổi màu)
+    let palletGroup = 0;
+    let currentPallet = '';
+    this.displayRows.forEach(r => {
+      const pallet =
+        r.type === 'detail' ? ((r.material?.pallet ?? '').toString().trim())
+        : ((r as { pallet?: string }).pallet ?? '').toString().trim();
+      if (!pallet) return;
+      if (pallet !== currentPallet) {
+        palletGroup += 1;
+        currentPallet = pallet;
+      }
+      (r as { palletGroup?: number }).palletGroup = palletGroup;
+    });
+
+    // Dòng đầu mỗi shipment hiển thị ô Shipment có input, các dòng sau chỉ hiển thị text (để cột luôn đồng đều)
+    const seenShipment = new Set<string>();
+    this.displayRows.forEach(r => {
+      const ship = r.type === 'detail' ? (r.material?.shipment ?? '') : ((r as { shipment?: string }).shipment ?? '');
+      const key = ship === '' ? '__empty__' : ship;
+      if (seenShipment.has(key)) return;
+      seenShipment.add(key);
+      if (r.type === 'detail') {
+        (r as { renderShipmentCell?: boolean }).renderShipmentCell = true;
+      }
+    });
     
     console.log('FG Out search results:', {
       searchTerm: this.searchTerm,
@@ -1287,24 +1454,60 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.dragMainOverIndex = null;
   }
 
-  // Rebuild displayRows từ filteredMaterials hiện tại (không sort lại)
+  // Rebuild displayRows từ filteredMaterials (chỉ chi tiết + dòng tổng carton theo pallet)
   private rebuildDisplayRows(): void {
-    this.displayRows = [];
-    let i = 0;
-    let matIdx = 0;
-    while (i < this.filteredMaterials.length) {
-      const m = this.filteredMaterials[i];
-      const groupKey = (m.shipment || '') + '|' + (m.materialCode || '');
-      let totalQty = 0;
-      while (i < this.filteredMaterials.length &&
-        ((this.filteredMaterials[i].shipment || '') + '|' + (this.filteredMaterials[i].materialCode || '')) === groupKey) {
-        const row = this.filteredMaterials[i];
-        this.displayRows.push({ type: 'detail', material: row, matIdx: matIdx++ });
-        totalQty += Number(row.quantity) || 0;
-        i++;
+    this.displayRows = this.filteredMaterials.map((m, i) =>
+      ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
+
+    const withPalletTotals: FgOutDisplayRow[] = [];
+    let prevPallet = '';
+    let cartonAccum = 0;
+    let lastShipment = '';
+    for (const r of this.displayRows) {
+      if (r.type === 'detail') {
+        lastShipment = r.material?.shipment ?? '';
+        const pallet = (r.material?.pallet ?? '').toString().trim();
+        if (pallet) {
+          if (pallet !== prevPallet && prevPallet) {
+            withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+            cartonAccum = 0;
+          }
+          prevPallet = pallet;
+          cartonAccum += this.getCartonForMaterial(r.material);
+        }
       }
-      this.displayRows.push({ type: 'subtotal', shipment: m.shipment || '', materialCode: m.materialCode || '', totalQty });
+      withPalletTotals.push(r);
     }
+    if (prevPallet && cartonAccum > 0) {
+      withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+    }
+    this.displayRows = withPalletTotals;
+
+    // Tô màu theo nhóm pallet (cùng pallet = cùng màu; pallet tiếp theo đổi màu)
+    let palletGroup = 0;
+    let currentPallet = '';
+    this.displayRows.forEach(r => {
+      const pallet =
+        r.type === 'detail' ? ((r.material?.pallet ?? '').toString().trim())
+        : ((r as { pallet?: string }).pallet ?? '').toString().trim();
+      if (!pallet) return;
+      if (pallet !== currentPallet) {
+        palletGroup += 1;
+        currentPallet = pallet;
+      }
+      (r as { palletGroup?: number }).palletGroup = palletGroup;
+    });
+
+    const seenShipment = new Set<string>();
+    this.displayRows.forEach(r => {
+      const ship = r.type === 'detail' ? (r.material?.shipment ?? '') : (r.shipment ?? '');
+      const key = ship === '' ? '__empty__' : ship;
+      if (seenShipment.has(key)) return;
+      seenShipment.add(key);
+      if (r.type === 'detail') {
+        (r as { renderShipmentCell?: boolean }).renderShipmentCell = true;
+      }
+    });
   }
 
   // ==================== DRAG & DROP — DIALOG XUẤT KHO ====================
@@ -1337,11 +1540,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Add new row manually
   addNewRow(): void {
+    const factory = this.selectedFactory === 'ASM2' ? 'ASM2' : 'ASM1';
     const newMaterial: FgOutItem = {
       id: '', // Will be set when saved to Firebase
-      factory: 'ASM1',
+      factory,
       exportDate: new Date(),
-      shipment: this.selectedShipment || '',
+      shipment: this.displayedShipmentForNewRow || '',
       pallet: '',
       xp: '',
       materialCode: '',

@@ -144,6 +144,10 @@
                       <i class="material-icons">calendar_today</i>
                       Tải về theo tháng
                     </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="downloadDayPreReport(); closeDropdown()">
+                      <i class="material-icons">assessment</i>
+                      Báo cáo ngày chuẩn bị
+                    </a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllShipments(); closeDropdown()" *ngIf="filteredShipments.length > 0">
                       <i class="material-icons">delete_forever</i>
@@ -437,6 +441,7 @@
                 <option value="">Chọn FWD</option>
                 <option value="AIR">AIR</option>
                 <option value="SEA">SEA</option>
+                <option value="Truck">Truck</option>
                 <option value="DHL">DHL</option>
                 <option value="FEDEX">FEDEX</option>
                 <option value="UPS">UPS</option>
@@ -615,6 +620,7 @@
               <option value="">Chọn phương thức</option>
               <option value="AIR">AIR</option>
               <option value="SEA">SEA</option>
+              <option value="Truck">Truck</option>
               <option value="DHL">DHL</option>
               <option value="FEDEX">FEDEX</option>
               <option value="UPS">UPS</option>

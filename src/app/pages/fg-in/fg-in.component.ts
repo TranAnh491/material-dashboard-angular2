@@ -13,6 +13,7 @@ export interface FgInItem {
   importDate: Date;
   batchNumber: string; // Tạo theo tuần và số thứ tự 4 số (ví dụ: 390001)
   materialCode: string; // Mã TP
+  poNumber?: string;   // Số PO (cột N)
   rev: string; // REV
   lot: string; // LOT
   lsx: string; // LSX
@@ -191,6 +192,7 @@ export class FgInComponent implements OnInit, OnDestroy {
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             batchNumber: data.batchNumber || data.batch || '',
             materialCode: data.materialCode || data.maTP || '',
+            poNumber: data.poNumber || data.soPO || '',
             rev: data.rev || '',
             lot: data.lot || data.Lot || '',
             lsx: data.lsx || data.Lsx || '',
@@ -252,6 +254,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       receivedDate: new Date(),
       batchNumber: material.batchNumber,
       materialCode: material.materialCode,
+      poNumber: material.poNumber,
       rev: material.rev,
       lot: material.lot,
       lsx: material.lsx,
@@ -576,6 +579,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       batchNumber: this.generateBatchNumber(0),
       materialCode: code,
       rev: '',
+      poNumber: '',
       lot: (this.newNhapKhoItem.lot || '').trim(),
       lsx: this.getLsxWithPrefix(lsxRaw, validFactory),
       quantity: qty,
@@ -749,6 +753,97 @@ export class FgInComponent implements OnInit, OnDestroy {
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
+  }
+
+  /** Import phiếu nhập TP: cột F = Mã TP, J = Số lượng, M = LSX, U = LOT. Batch tự tạo. */
+  importPhieuNhapTP(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) this.processPhiếuNhapTPFile(file);
+    };
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+  }
+
+  private async processPhiếuNhapTPFile(file: File): Promise<void> {
+    try {
+      const rows = await this.readExcelFileAsRows(file);
+      const materials = this.parsePhiếuNhapTPData(rows);
+      if (materials.length === 0) {
+        alert('Không có dòng nào hợp lệ (cần có Mã TP ở cột F).');
+        return;
+      }
+      await this.saveMaterialsToFirebase(materials);
+      this.refreshData();
+      alert(`✅ Đã import phiếu nhập TP: ${materials.length} dòng.`);
+    } catch (e) {
+      console.error('Import phiếu nhập TP:', e);
+      alert('❌ Lỗi import: ' + (e?.message || e));
+    }
+  }
+
+  /** Đọc Excel trả về mảng dòng (header: 1) — cột A = index 0, F = 5, J = 9, M = 12, U = 20 */
+  private readExcelFileAsRows(file: File): Promise<any[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          resolve(rows);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /** Parse theo cột: F=Mã TP, N=Số PO, J=Số lượng, M=LSX, U=LOT. Dữ liệu đọc từ dòng 8. LOT tối đa 8 ký tự. */
+  private parsePhiếuNhapTPData(rows: any[][]): FgInItem[] {
+    const factory = this.selectedFactory === 'TOTAL' ? 'ASM1' : (this.selectedFactory || 'ASM1');
+    const result: FgInItem[] = [];
+    const colF = 5, colJ = 9, colM = 12, colN = 13, colU = 20;
+    const dataRows = rows.slice(7);
+    dataRows.forEach((row) => {
+      const maTP = row && (row[colF] != null) ? String(row[colF]).trim() : '';
+      if (!maTP) return;
+      const soLuong = Number(row[colJ]);
+      const qty = isNaN(soLuong) || soLuong <= 0 ? 0 : Math.floor(soLuong);
+      const lsx = row && (row[colM] != null) ? String(row[colM]).trim() : '';
+      const poNumber = row && (row[colN] != null) ? String(row[colN]).trim() : '';
+      let lot = row && (row[colU] != null) ? String(row[colU]).trim() : '';
+      if (lot.length > 8) lot = lot.substring(0, 8);
+      result.push({
+        factory,
+        importDate: new Date(),
+        batchNumber: this.generateBatchNumber(result.length),
+        materialCode: maTP,
+        rev: '',
+        poNumber: poNumber || undefined,
+        lot,
+        lsx,
+        quantity: qty,
+        carton: 0,
+        odd: 0,
+        location: 'Temporary',
+        notes: '',
+        customer: '',
+        isReceived: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+    return result;
   }
 
   private async processExcelFile(file: File): Promise<void> {

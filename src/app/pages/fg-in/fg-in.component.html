@@ -69,6 +69,11 @@
           Nhập Kho
         </button>
 
+        <button class="custom-btn" (click)="importPhieuNhapTP()" title="Import phiếu nhập TP (cột F=Mã TP, J=Số lượng, M=LSX, U=LOT)">
+          <i class="material-icons">file_upload</i>
+          Import
+        </button>
+
       </div>
     </div>
 
@@ -82,6 +87,7 @@
             <th class="th-two-line"><span class="th-vi">Ngày</span><span class="th-en">DATE</span></th>
             <th class="th-two-line"><span class="th-vi">Batch</span><span class="th-en">BATCH</span></th>
             <th class="th-two-line"><span class="th-vi">Mã TP</span><span class="th-en">MATERIAL CODE</span></th>
+            <th class="th-two-line"><span class="th-vi">Số PO</span><span class="th-en">PO NO</span></th>
             <th class="th-two-line"><span class="th-vi">LOT</span><span class="th-en">LOT</span></th>
             <th class="th-two-line"><span class="th-vi">LSX</span><span class="th-en">LSX</span></th>
             <th class="th-two-line"><span class="th-vi">Số lượng</span><span class="th-en">QTY</span></th>
@@ -104,6 +110,7 @@
             <td>{{material.batchNumber}}</td>
             <td class="code-cell" 
                 [class.material-received]="material.isReceived">{{material.materialCode}}</td>
+            <td>{{material.poNumber || ''}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
             <td class="number-cell">{{ material.quantity | number:'1.0-0' }}</td>
