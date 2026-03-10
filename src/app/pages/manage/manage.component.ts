@@ -590,26 +590,27 @@ export class ManageComponent implements OnInit, OnDestroy {
       this.summaryData = [];
       return;
     }
+    const searchCode = this.materialCode.toUpperCase().trim();
 
     this.isLoading = true;
     try {
       // Load catalog data for unitWeight and standardPacking (giống tab utilization)
       await this.loadCatalogData();
       
-      // Load từ inventory-materials (giống tab materials-asm1)
-      console.log(`🔍 Searching in inventory-materials for factory: ${this.selectedFactory}, material: ${this.materialCode}`);
-      
+      // Load từ inventory-materials: query theo factory, lọc prefix mã ở client (tránh cần composite index)
+      console.log(`🔍 Searching in inventory-materials for factory: ${this.selectedFactory}, material prefix: ${searchCode}`);
+
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
-          .where('materialCode', '==', this.materialCode.toUpperCase().trim())
       ).get().toPromise();
 
        this.materials = [];
        if (snapshot) {
          snapshot.forEach(doc => {
            const data = doc.data() as any;
-           const materialCode = data.materialCode.toUpperCase().trim();
-           
+           const materialCode = (data.materialCode || '').toString().toUpperCase().trim();
+           if (!materialCode.startsWith(searchCode)) return;
+
            // Get unitWeight and standardPacking from catalog
            const catalogItem = this.catalogCache.get(materialCode);
            

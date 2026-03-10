@@ -35,7 +35,7 @@
               <i class="material-icons">data_usage</i>
               Kiểm tra dữ liệu
             </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="resetAllData(); $event.preventDefault()">
+            <a class="dropdown-item" href="javascript:void(0)" (click)="openResetDialog(); $event.preventDefault()">
               <i class="material-icons">delete_sweep</i>
               Reset về 0
             </a>
@@ -293,6 +293,59 @@
       <button type="button" class="btn btn-apply" (click)="createPX()" [disabled]="!isPXFormValid()">
         <i class="material-icons">add_shopping_cart</i>
         Tạo PX
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Dialog - Chọn nhà máy trước khi reset -->
+<div class="custom-modal" [class.show]="showResetDialog" [style.display]="showResetDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeResetDialog()"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">delete_sweep</i>
+        Reset FG Inventory về 0
+      </h5>
+      <button type="button" class="close-btn" (click)="closeResetDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="reset-warning">
+        <i class="material-icons">warning</i>
+        Trước khi reset, hệ thống sẽ tự động tải xuống báo cáo tồn kho tại thời điểm hiện tại.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Chọn nhà máy cần reset:</label>
+        <div class="factory-options">
+          <label class="factory-option">
+            <input type="radio" name="resetFactory" [(ngModel)]="resetSelectedFactory" value="ASM1">
+            ASM1
+          </label>
+          <label class="factory-option">
+            <input type="radio" name="resetFactory" [(ngModel)]="resetSelectedFactory" value="ASM2">
+            ASM2
+          </label>
+          <label class="factory-option">
+            <input type="radio" name="resetFactory" [(ngModel)]="resetSelectedFactory" value="TOTAL">
+            TẤT CẢ
+          </label>
+        </div>
+      </div>
+      <p *ngIf="getResetMaterialCount() > 0" class="reset-count">
+        Sẽ xóa <strong>{{ getResetMaterialCount() }}</strong> dòng dữ liệu.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeResetDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply btn-danger" (click)="confirmResetWithFactory()" 
+              [disabled]="getResetMaterialCount() === 0">
+        <i class="material-icons">delete_sweep</i>
+        Tải báo cáo & Reset
       </button>
     </div>
   </div>

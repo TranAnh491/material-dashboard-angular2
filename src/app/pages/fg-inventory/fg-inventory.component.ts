@@ -97,6 +97,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     quantity: 0,
     notes: ''
   };
+
+  // Reset dialog
+  showResetDialog: boolean = false;
+  resetSelectedFactory: string = 'ASM1';
   
   // Display options
   showCompleted: boolean = true;
@@ -615,7 +619,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   private parseExcelData(data: any[]): FGInventoryItem[] {
     return data.map((row: any, index: number) => ({
-      factory: 'ASM1',
+      factory: (row['Factory'] || row['Nhà máy'] || 'ASM1').toString().trim() || 'ASM1',
       importDate: new Date(),
       receivedDate: new Date(),
       batchNumber: row['Batch'] || '',
@@ -631,7 +635,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       xuat: 0, // Not in new template - will be set to 0
       ton: parseInt(row['Tồn Đầu']) || 0, // Initial ton = tonDau
       location: row['Vị Trí'] || 'Temporary',
-      notes: '', // Not in new template
+      notes: (row['Ghi chú'] || row['Ghi chu'] || '').toString().trim() || '',
       customer: row['Khách'] || '',
       isReceived: true,
       isCompleted: false,
@@ -681,30 +685,36 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   downloadTemplate(): void {
     const templateData = [
       {
+        'Factory': 'ASM1',
         'Batch': '010001',
         'Mã TP': 'P001234',
         'LOT': 'LOT001',
         'LSX': '0124/0001',
         'Tồn Đầu': 100,
         'Vị Trí': 'A1-01',
+        'Ghi chú': 'Ghi chú mẫu',
         'Khách': 'Customer A'
       },
       {
+        'Factory': 'ASM1',
         'Batch': '010002',
         'Mã TP': 'P002345',
         'LOT': 'LOT002',
         'LSX': '0124/0002',
         'Tồn Đầu': 200,
         'Vị Trí': 'A1-02',
+        'Ghi chú': '',
         'Khách': 'Customer B'
       },
       {
+        'Factory': 'ASM2',
         'Batch': '020001',
         'Mã TP': 'P003456',
         'LOT': 'LOT003',
         'LSX': '0224/0001',
         'Tồn Đầu': 150,
         'Vị Trí': 'B1-01',
+        'Ghi chú': '',
         'Khách': 'Customer C'
       }
     ];
@@ -714,12 +724,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     
     // Set column widths for better readability
     const colWidths = [
+      { wch: 8 },  // Factory
       { wch: 10 }, // Batch
       { wch: 12 }, // Mã TP
       { wch: 10 }, // LOT
       { wch: 12 }, // LSX
       { wch: 12 }, // Tồn Đầu
       { wch: 10 }, // Vị Trí
+      { wch: 20 }, // Ghi chú
       { wch: 15 }  // Khách
     ];
     ws['!cols'] = colWidths;
@@ -1026,45 +1038,101 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     console.log('=== END CHECKING RAW DATA ===');
   }
 
-  // Reset all data to zero
-  resetAllData(): void {
-    if (this.materials.length === 0) {
-      alert('✅ Không có dữ liệu để reset!');
+  // Reset dialog
+  openResetDialog(): void {
+    this.resetSelectedFactory = 'ASM1';
+    this.showResetDialog = true;
+  }
+
+  closeResetDialog(): void {
+    this.showResetDialog = false;
+  }
+
+  getResetMaterialCount(): number {
+    if (this.resetSelectedFactory === 'TOTAL') {
+      return this.materials.length;
+    }
+    return this.materials.filter(m => (m.factory || 'ASM1') === this.resetSelectedFactory).length;
+  }
+
+  /** Tải báo cáo tồn kho trước khi reset */
+  downloadInventoryReport(factory: string): void {
+    const list = factory === 'TOTAL'
+      ? [...this.materials]
+      : this.materials.filter(m => (m.factory || 'ASM1') === factory);
+    if (list.length === 0) return;
+
+    const excelData = list.map((m, i) => ({
+      'No': i + 1,
+      'Factory': m.factory || 'ASM1',
+      'Batch': m.batchNumber,
+      'Mã TP': m.materialCode,
+      'LOT': m.lot,
+      'LSX': m.lsx,
+      'Tồn đầu': m.tonDau,
+      'Nhập': m.nhap,
+      'Xuất': m.xuat,
+      'Tồn kho': m.ton,
+      'Carton': m.carton,
+      'ODD': m.odd,
+      'Vị trí': m.location || 'Temporary',
+      'Ghi chú': m.notes || '',
+      'Khách': this.getCustomerNameFromMapping(m.materialCode)
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'FG_Inventory_Report');
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `FG_Inventory_BaoCao_${factory}_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    console.log(`✅ Đã tải báo cáo tồn kho: ${filename}`);
+  }
+
+  /** Xác nhận reset: tải báo cáo trước, rồi xóa dữ liệu nhà máy đã chọn */
+  confirmResetWithFactory(): void {
+    const count = this.getResetMaterialCount();
+    if (count === 0) {
+      alert('Không có dữ liệu để reset cho nhà máy đã chọn.');
       return;
     }
+    const factoryLabel = this.resetSelectedFactory === 'TOTAL' ? 'TẤT CẢ' : this.resetSelectedFactory;
+    const msg = `⚠️ Xác nhận reset?\n\nSẽ xóa ${count} dòng dữ liệu của nhà máy ${factoryLabel}.\n\nTrước khi xóa, báo cáo tồn kho sẽ được tải xuống tự động.\n\nHành động này KHÔNG THỂ HOÀN TÁC!`;
+    if (!confirm(msg)) return;
 
-    const confirmMessage = `⚠️ CẢNH BÁO!\n\nBạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu trong FG Inventory?\n\nSẽ xóa ${this.materials.length} materials.\n\nHành động này KHÔNG THỂ HOÀN TÁC!`;
-    
-    if (confirm(confirmMessage)) {
-      this.isLoading = true;
-      console.log('🗑️ Starting reset of all FG Inventory data...');
-      
-      // Delete all materials from Firebase
-      const batch = this.firestore.firestore.batch();
-      this.materials.forEach(material => {
-        if (material.id) {
-          const materialRef = this.firestore.collection('fg-inventory').doc(material.id).ref;
-          batch.delete(materialRef);
-        }
-      });
-      
-      batch.commit()
-        .then(() => {
-          console.log('✅ All FG Inventory data deleted successfully');
-          
-          // Clear local data
-          this.materials = [];
-          this.filteredMaterials = [];
-          
-          this.isLoading = false;
-          alert(`✅ Đã xóa thành công tất cả materials!\n\nFG Inventory đã được reset về 0.`);
-        })
-        .catch(error => {
-          console.error('❌ Error deleting FG Inventory data:', error);
-          this.isLoading = false;
-          alert(`❌ Lỗi khi xóa dữ liệu: ${error.message}`);
+    this.showResetDialog = false;
+    this.isLoading = true;
+
+    // 1. Tải báo cáo trước
+    this.downloadInventoryReport(this.resetSelectedFactory);
+
+    const toDelete = this.resetSelectedFactory === 'TOTAL'
+      ? this.materials.filter(m => m.id)
+      : this.materials.filter(m => (m.factory || 'ASM1') === this.resetSelectedFactory && m.id);
+
+    const batch = this.firestore.firestore.batch();
+    toDelete.forEach(material => {
+      if (material.id) {
+        const ref = this.firestore.collection('fg-inventory').doc(material.id).ref;
+        batch.delete(ref);
+      }
+    });
+
+    batch.commit()
+      .then(() => {
+        toDelete.forEach(m => {
+          const idx = this.materials.indexOf(m);
+          if (idx > -1) this.materials.splice(idx, 1);
         });
-    }
+        this.filteredMaterials = this.materials.filter(() => true);
+        this.isLoading = false;
+        alert(`✅ Đã reset thành công!\n\nĐã xóa ${toDelete.length} dòng.\nBáo cáo tồn kho đã được tải xuống trước khi reset.`);
+      })
+      .catch(error => {
+        console.error('❌ Error resetting FG Inventory:', error);
+        this.isLoading = false;
+        alert(`❌ Lỗi khi reset: ${error.message}`);
+      });
   }
 
 
