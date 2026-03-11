@@ -18,6 +18,9 @@
   left: 0;
   width: 100%;
   z-index: 1;
+  
+  // Ensure content doesn't go under floating elements
+  padding-top: 0;
 }
 
 // Excel-like table styling - Minimal & Fast
@@ -233,7 +236,25 @@
     background: #ffffff;
     border-bottom: 1px solid #000000;
     padding: 12px 16px;
+    padding-right: 70px; // Space for home button
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 48px;
+    
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      .header-icon {
+        display: none; // Hidden on desktop
+        font-size: 24px;
+        color: #ff9800;
+      }
+    }
     
     h4 {
       margin: 0;
@@ -241,6 +262,7 @@
       font-weight: 600;
       color: #000000;
       font-family: Arial, sans-serif;
+      flex-shrink: 0;
     }
   }
   
@@ -886,15 +908,1560 @@ mat-checkbox {
   }
 }
 
-// Mobile modal adjustments
-@media (max-width: 768px) {
+// Pending row styling (clickable)
+.pending-row {
+  &:hover {
+    background: #e8f5e9 !important;
+    cursor: pointer;
+  }
+}
+
+// Confirm Receipt Modal
+.confirm-receipt-modal {
+  max-width: 500px !important;
+  width: 95% !important;
+  
+  .modal-body {
+    padding: 20px;
+    
+    .confirm-instruction {
+      margin: 0 0 16px 0;
+      font-size: 13px;
+      color: #333333;
+      font-weight: 500;
+    }
+    
+    .confirm-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    
+    // Row container for side-by-side fields
+    .confirm-row {
+      display: flex;
+      gap: 8px;
+      
+      .confirm-field {
+        flex: 1;
+        min-width: 0; // Allow shrinking
+      }
+    }
+    
+    .confirm-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #f5f5f5;
+      border: 2px solid #e0e0e0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      
+      &.full-width {
+        width: 100%;
+      }
+      
+      &:hover {
+        background: #e8e8e8;
+        border-color: #bdbdbd;
+      }
+      
+      &.confirmed {
+        background: #e8f5e9;
+        border-color: #4caf50;
+        
+        .field-check .material-icons {
+          color: #4caf50;
+        }
+      }
+      
+      // Info-only field (display only, no confirmation needed)
+      &.info-only {
+        cursor: default;
+        background: #e3f2fd;
+        border-color: #90caf9;
+        
+        &:hover {
+          background: #e3f2fd;
+          border-color: #90caf9;
+        }
+        
+        .field-check .material-icons {
+          color: #1976d2;
+        }
+        
+        .field-content .field-value {
+          color: #1565c0;
+        }
+      }
+      
+      .field-check {
+        flex-shrink: 0;
+        
+        .material-icons {
+          font-size: 20px;
+          color: #bdbdbd;
+        }
+      }
+      
+      .field-content {
+        flex: 1;
+        min-width: 0; // Allow text truncation
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        
+        .field-label {
+          font-size: 10px;
+          color: #666666;
+          font-weight: 500;
+          text-transform: uppercase;
+        }
+        
+        .field-value {
+          font-size: 13px;
+          color: #000000;
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+    }
+    
+    .location-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+      
+      h6 {
+        margin: 0 0 10px 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: #000000;
+      }
+      
+      .location-display {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: #fff3e0;
+        border: 2px dashed #ff9800;
+        margin-bottom: 10px;
+        min-height: 44px;
+        
+        .material-icons {
+          color: #ff9800;
+          font-size: 20px;
+        }
+        
+        span {
+          font-size: 14px;
+          color: #e65100;
+          font-weight: 500;
+          
+          &:empty {
+            // When empty, show nothing
+            display: none;
+          }
+        }
+        
+        &.has-location {
+          background: #e8f5e9;
+          border: 2px solid #4caf50;
+          border-style: solid;
+          
+          .material-icons {
+            color: #4caf50;
+          }
+          
+          span {
+            display: inline;
+            color: #2e7d32;
+            font-weight: 600;
+          }
+        }
+      }
+      
+      .location-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        
+        .custom-btn {
+          flex: 1;
+          min-width: 130px;
+          justify-content: center;
+          
+          &.scan-btn {
+            background: #2196f3 !important;
+            color: #ffffff !important;
+            border-color: #2196f3 !important;
+            
+            .material-icons {
+              color: #ffffff !important;
+            }
+            
+            &:hover {
+              background: #1976d2 !important;
+              border-color: #1976d2 !important;
+            }
+          }
+        }
+      }
+    }
+    
+    .confirm-status {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: #fff8e1;
+      border: 1px solid #ffc107;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      .material-icons {
+        color: #f57c00;
+        font-size: 18px;
+      }
+      
+      span {
+        font-size: 12px;
+        color: #e65100;
+        font-weight: 500;
+      }
+      
+      &.all-confirmed {
+        background: #e8f5e9;
+        border-color: #4caf50;
+        
+        .material-icons {
+          color: #4caf50;
+        }
+        
+        span {
+          color: #2e7d32;
+        }
+      }
+    }
+  }
+  
+  .modal-footer {
+    .btn-done {
+      background: #4caf50 !important;
+      color: #ffffff !important;
+      border-color: #4caf50 !important;
+      
+      .material-icons {
+        color: #ffffff !important;
+      }
+      
+      &:hover:not(:disabled) {
+        background: #43a047 !important;
+        border-color: #43a047 !important;
+      }
+      
+      &:disabled {
+        background: #bdbdbd !important;
+        border-color: #bdbdbd !important;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+    }
+  }
+}
+
+// =====================================================
+// PENDING COUNT BADGE
+// =====================================================
+.pending-count-badge {
+  background: #ff5722;
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// =====================================================
+// TABLET/MOBILE HEADER ADJUSTMENTS
+// =====================================================
+@media (max-width: 1024px) {
+  .excel-container .excel-header {
+    padding: 10px 12px;
+    padding-right: 60px; // Space for home button on tablet
+    min-height: 44px;
+    
+    .header-title {
+      .header-icon {
+        display: inline-block; // Show icon on tablet
+        font-size: 22px;
+      }
+    }
+    
+    h4 {
+      font-size: 14px;
+    }
+  }
+  
+  .pending-count-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .excel-container .excel-header {
+    padding: 8px 10px;
+    padding-right: 55px; // Space for home button on mobile
+    min-height: 40px;
+    
+    .header-title {
+      .header-icon {
+        display: inline-block; // Show icon on mobile
+        font-size: 20px;
+      }
+    }
+    
+    h4 {
+      font-size: 12px;
+    }
+  }
+  
+  .pending-count-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
+
+// =====================================================
+// HIDE/SHOW CLASSES FOR RESPONSIVE
+// =====================================================
+.hide-on-tablet {
+  display: block;
+}
+
+.show-on-tablet {
+  display: none !important;
+}
+
+.hide-on-mobile {
+  display: flex;
+}
+
+// =====================================================
+// MOBILE CARD VIEW STYLES
+// =====================================================
+.mobile-card-view {
+  padding: 12px;
+  padding-top: 8px;
+  background: #f5f5f5;
+  height: calc(100vh - 56px); // Adjusted for header height
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  
+  .mobile-header {
+    margin-bottom: 12px;
+    padding-right: 50px; // Space for home button if overlaps
+    
+    h5 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #000000;
+    }
+  }
+  
+  .pending-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  
+  .pending-card {
+    background: #ffffff;
+    border: 2px solid #000000;
+    padding: 16px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    
+    &:active {
+      transform: scale(0.98);
+      background: #f0f0f0;
+    }
+    
+    .card-material-code {
+      font-size: 18px;
+      font-weight: 700;
+      color: #000000;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    
+    .card-details {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #666666;
+      margin-bottom: 4px;
+      
+      .card-qty {
+        font-weight: 600;
+        color: #000000;
+      }
+      
+      .card-batch {
+        color: #888888;
+      }
+    }
+    
+    .card-lsx {
+      font-size: 11px;
+      color: #666666;
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .card-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #4caf50;
+      font-weight: 500;
+      
+      .material-icons {
+        font-size: 16px;
+      }
+    }
+  }
+  
+  .no-pending-message {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #4caf50;
+    
+    .material-icons {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+    
+    span {
+      font-size: 18px;
+      font-weight: 500;
+    }
+  }
+}
+
+// =====================================================
+// SQUARE CHECKBOX STYLES FOR CONFIRM MODAL
+// =====================================================
+.square-check {
+  .material-icons {
+    font-size: 22px !important;
+  }
+}
+
+// =====================================================
+// TABLET OPTIMIZATIONS (7", 11", 13" screens)
+// =====================================================
+
+// Large Tablet (13" - 1024px to 1366px)
+@media (min-width: 1024px) and (max-width: 1366px) {
+  .excel-table {
+    min-width: 1000px;
+    font-size: 12px;
+    
+    th, td {
+      padding: 8px 6px;
+      max-width: 100px;
+    }
+    
+    th {
+      font-size: 12px;
+      
+      &.th-two-line {
+        .th-vi { font-size: 11px; }
+        .th-en { font-size: 10px; }
+      }
+    }
+    
+    td {
+      font-size: 12px;
+      
+      &.status-cell {
+        width: 55px;
+        min-width: 55px;
+        
+        .mat-icon-button {
+          width: 32px;
+          height: 32px;
+          line-height: 32px;
+          
+          .mat-icon {
+            font-size: 18px;
+          }
+        }
+      }
+      
+      &.code-cell {
+        font-size: 12px;
+      }
+    }
+  }
+  
+  .excel-actions {
+    .action-controls {
+      gap: 10px;
+      padding: 10px 16px;
+    }
+    
+    .custom-btn {
+      height: 36px !important;
+      padding: 8px 14px !important;
+      font-size: 13px !important;
+      
+      .material-icons {
+        font-size: 18px !important;
+      }
+    }
+    
+    .custom-input {
+      height: 36px !important;
+      font-size: 13px !important;
+    }
+  }
+  
+  // Larger checkbox for touch
+  mat-checkbox {
+    ::ng-deep .mat-checkbox-inner-container {
+      width: 20px !important;
+      height: 20px !important;
+    }
+  }
+}
+
+// Medium Tablet (11" - 768px to 1024px)
+@media (min-width: 768px) and (max-width: 1024px) {
+  // Show card view, hide table view on tablets
+  .hide-on-tablet {
+    display: none !important;
+  }
+  
+  .show-on-tablet {
+    display: block !important;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  // Smaller confirm modal
+  .confirm-receipt-modal {
+    max-width: 420px !important;
+    
+    .modal-body {
+      padding: 16px;
+      
+      .confirm-instruction {
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+      
+      .confirm-fields {
+        gap: 6px;
+      }
+      
+      .confirm-field {
+        padding: 10px 14px;
+        
+        .field-check.square-check .material-icons {
+          font-size: 20px !important;
+        }
+        
+        .field-content {
+          .field-label { font-size: 10px; }
+          .field-value { font-size: 14px; }
+        }
+      }
+      
+      .location-section {
+        margin-top: 14px;
+        padding-top: 14px;
+        
+        h6 { font-size: 13px; }
+        
+        .location-display {
+          padding: 10px 14px;
+          
+          .material-icons { font-size: 20px; }
+          span { font-size: 13px; }
+        }
+        
+        .location-actions .custom-btn {
+          height: 40px !important;
+          font-size: 13px !important;
+        }
+      }
+      
+      .confirm-status {
+        padding: 10px 14px;
+        
+        .material-icons { font-size: 18px; }
+        span { font-size: 12px; }
+      }
+    }
+    
+    .modal-footer .btn {
+      height: 40px;
+      font-size: 13px;
+      padding: 8px 14px;
+    }
+  }
+  
+  // Card view optimizations for 11" tablet
+  .mobile-card-view {
+    padding: 16px;
+    
+    .pending-cards-container {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    
+    .pending-card {
+      padding: 18px;
+      
+      .card-material-code {
+        font-size: 20px;
+      }
+    }
+  }
+
+  .excel-table {
+    min-width: 900px;
+    font-size: 12px;
+    
+    th, td {
+      padding: 10px 6px;
+      max-width: 90px;
+    }
+    
+    th {
+      font-size: 12px;
+      
+      &.row-header {
+        width: 35px;
+        min-width: 35px;
+      }
+      
+      &.th-two-line {
+        .th-vi { font-size: 11px; }
+        .th-en { font-size: 9px; }
+      }
+    }
+    
+    td {
+      font-size: 12px;
+      
+      &.row-header {
+        width: 35px;
+        min-width: 35px;
+      }
+      
+      &.date-cell {
+        width: 85px;
+        min-width: 85px;
+        max-width: 85px;
+      }
+      
+      &.code-cell {
+        width: 90px;
+        min-width: 90px;
+        font-size: 12px;
+      }
+      
+      &.status-cell {
+        width: 50px;
+        min-width: 50px;
+        
+        .mat-icon-button {
+          width: 36px;
+          height: 36px;
+          line-height: 36px;
+          
+          .mat-icon {
+            font-size: 20px;
+          }
+        }
+      }
+    }
+  }
+  
+  .excel-container {
+    .excel-header {
+      padding: 10px 12px;
+      
+      h4 {
+        font-size: 15px;
+      }
+    }
+  }
+  
+  .excel-actions {
+    .action-controls {
+      gap: 8px;
+      padding: 10px 12px;
+    }
+    
+    .custom-btn {
+      height: 40px !important;
+      padding: 10px 14px !important;
+      font-size: 13px !important;
+      
+      .material-icons {
+        font-size: 20px !important;
+      }
+    }
+    
+    .custom-input {
+      height: 40px !important;
+      font-size: 14px !important;
+      min-width: 180px !important;
+    }
+  }
+  
+  // Larger touch targets
+  mat-checkbox {
+    ::ng-deep .mat-checkbox-inner-container {
+      width: 22px !important;
+      height: 22px !important;
+    }
+    
+    ::ng-deep .mat-checkbox-frame {
+      border-width: 2px !important;
+    }
+  }
+  
+  .editable-location {
+    padding: 8px 10px;
+    font-size: 12px;
+    min-height: 24px;
+  }
+  
+  .editable-input {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  
+  // Modal optimizations for 11" tablet
+  .custom-modal {
+    .modal-container {
+      max-width: 500px;
+      
+      .modal-header {
+        padding: 14px 18px;
+        
+        .modal-title {
+          font-size: 17px;
+        }
+      }
+      
+      .modal-body {
+        padding: 18px;
+      }
+      
+      .modal-footer {
+        padding: 14px 18px;
+        
+        .btn {
+          padding: 10px 18px;
+          font-size: 13px;
+        }
+      }
+    }
+  }
+  
+  .confirm-receipt-modal {
+    max-width: 520px !important;
+    
+    .modal-body {
+      .confirm-field {
+        padding: 14px 18px;
+        
+        .field-check .material-icons {
+          font-size: 28px;
+        }
+        
+        .field-content {
+          .field-label { font-size: 12px; }
+          .field-value { font-size: 15px; }
+        }
+      }
+      
+      .location-section {
+        .location-display {
+          padding: 14px 18px;
+          
+          .material-icons { font-size: 24px; }
+          span { font-size: 15px; }
+        }
+        
+        .location-actions .custom-btn {
+          height: 44px !important;
+          font-size: 14px !important;
+          
+          .material-icons { font-size: 22px !important; }
+        }
+      }
+      
+      .confirm-status {
+        padding: 14px 18px;
+        
+        .material-icons { font-size: 24px; }
+        span { font-size: 14px; }
+      }
+    }
+    
+    .modal-footer .btn {
+      height: 44px;
+      font-size: 14px;
+    }
+  }
+}
+
+// Small Tablet (7" - 600px to 768px)
+@media (min-width: 600px) and (max-width: 768px) {
+  // Show card view, hide table view on small tablets
+  .hide-on-tablet {
+    display: none !important;
+  }
+  
+  .show-on-tablet {
+    display: block !important;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  // Smaller confirm modal for 7" tablet
+  .confirm-receipt-modal {
+    max-width: 380px !important;
+    
+    .modal-body {
+      padding: 14px;
+      
+      .confirm-instruction {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      
+      .confirm-fields {
+        gap: 6px;
+      }
+      
+      .confirm-row {
+        gap: 6px;
+      }
+      
+      .confirm-field {
+        padding: 8px 10px;
+        gap: 8px;
+        
+        .field-check.square-check .material-icons {
+          font-size: 18px !important;
+        }
+        
+        .field-content {
+          .field-label { font-size: 9px; }
+          .field-value { font-size: 12px; }
+        }
+      }
+      
+      .location-section {
+        margin-top: 12px;
+        padding-top: 12px;
+        
+        h6 { font-size: 12px; }
+        
+        .location-display {
+          padding: 10px 12px;
+          min-height: 40px;
+          
+          .material-icons { font-size: 18px; }
+          span { font-size: 12px; }
+        }
+        
+        .location-actions {
+          flex-direction: column;
+          
+          .custom-btn {
+            height: 44px !important;
+            font-size: 13px !important;
+            width: 100%;
+          }
+        }
+      }
+      
+      .confirm-status {
+        padding: 10px 12px;
+        
+        .material-icons { font-size: 16px; }
+        span { font-size: 11px; }
+      }
+    }
+    
+    .modal-footer {
+      flex-direction: column;
+      gap: 8px;
+      
+      .btn {
+        width: 100%;
+        height: 44px;
+        font-size: 13px;
+      }
+    }
+  }
+  
+  // Card view optimizations for 7" tablet
+  .mobile-card-view {
+    padding: 12px;
+    
+    .mobile-header h5 {
+      font-size: 16px;
+    }
+    
+    .pending-cards-container {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    
+    .pending-card {
+      padding: 14px;
+      
+      .card-material-code {
+        font-size: 16px;
+      }
+      
+      .card-details {
+        font-size: 11px;
+      }
+      
+      .card-lsx {
+        font-size: 10px;
+      }
+      
+      .card-status {
+        font-size: 10px;
+        
+        .material-icons { font-size: 14px; }
+      }
+    }
+  }
+
+  .excel-table {
+    min-width: 750px;
+    font-size: 11px;
+    
+    th, td {
+      padding: 10px 4px;
+      max-width: 70px;
+    }
+    
+    th {
+      font-size: 11px;
+      
+      &.row-header {
+        width: 30px;
+        min-width: 30px;
+      }
+      
+      &.th-two-line {
+        .th-vi { font-size: 10px; }
+        .th-en { display: none; } // Hide English labels on small tablets
+      }
+    }
+    
+    td {
+      font-size: 11px;
+      
+      &.row-header {
+        width: 30px;
+        min-width: 30px;
+      }
+      
+      &.date-cell {
+        width: 75px;
+        min-width: 75px;
+        max-width: 75px;
+        
+        .date-input {
+          width: 70px !important;
+        }
+      }
+      
+      &.code-cell {
+        width: 80px;
+        min-width: 80px;
+        font-size: 11px;
+      }
+      
+      &.status-cell {
+        width: 44px;
+        min-width: 44px;
+        
+        .mat-icon-button {
+          width: 40px;
+          height: 40px;
+          line-height: 40px;
+          
+          .mat-icon {
+            font-size: 22px;
+          }
+        }
+      }
+    }
+  }
+  
+  .excel-container {
+    .excel-header {
+      padding: 8px 10px;
+      
+      h4 {
+        font-size: 14px;
+      }
+    }
+  }
+  
+  .excel-actions {
+    .action-controls {
+      gap: 6px;
+      padding: 8px 10px;
+      flex-wrap: wrap;
+    }
+    
+    .custom-btn {
+      height: 44px !important;
+      padding: 10px 12px !important;
+      font-size: 12px !important;
+      flex: 0 0 auto;
+      
+      .material-icons {
+        font-size: 22px !important;
+      }
+      
+      // Hide text on some buttons, show only icons
+      &.dropdown-toggle {
+        span:not(.material-icons) {
+          display: none;
+        }
+      }
+    }
+    
+    .custom-input {
+      height: 44px !important;
+      font-size: 14px !important;
+      min-width: 150px !important;
+      flex: 1;
+    }
+    
+    // Stack factory filter
+    .factory-filter-dropdown {
+      order: -1;
+      width: 100%;
+      
+      .custom-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+    
+    .search-box {
+      width: 100%;
+      order: 0;
+      
+      .custom-input {
+        width: 100% !important;
+      }
+    }
+  }
+  
+  // Large touch targets for 7" tablet
+  mat-checkbox {
+    ::ng-deep .mat-checkbox-inner-container {
+      width: 26px !important;
+      height: 26px !important;
+    }
+    
+    ::ng-deep .mat-checkbox-frame {
+      border-width: 2px !important;
+    }
+  }
+  
+  .editable-location {
+    padding: 10px 12px;
+    font-size: 12px;
+    min-height: 28px;
+  }
+  
+  .editable-input {
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+  
+  // Modal optimizations for 7" tablet
   .custom-modal {
     .modal-container {
       width: 95%;
-      margin: 20px;
+      max-width: none;
+      margin: 10px;
+      max-height: 95vh;
+      
+      .modal-header {
+        padding: 12px 16px;
+        
+        .modal-title {
+          font-size: 16px;
+          
+          .material-icons { font-size: 22px; }
+        }
+        
+        .close-btn {
+          padding: 8px;
+          
+          .material-icons { font-size: 24px; }
+        }
+      }
       
       .modal-body {
         padding: 16px;
+        overflow-y: auto;
+        max-height: calc(95vh - 140px);
+        
+        .date-inputs {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        
+        .input-group {
+          .input-label {
+            font-size: 13px;
+          }
+          
+          .date-input, .custom-input {
+            height: 48px;
+            font-size: 15px;
+            padding: 12px 14px;
+          }
+        }
+      }
+      
+      .modal-footer {
+        padding: 12px 16px;
+        
+        .btn {
+          height: 48px;
+          padding: 12px 20px;
+          font-size: 14px;
+          flex: 1;
+          justify-content: center;
+          
+          .material-icons { font-size: 20px; }
+        }
+      }
+    }
+  }
+  
+  // Confirm Receipt Modal for 7" tablet
+  .confirm-receipt-modal {
+    .modal-body {
+      padding: 14px;
+      
+      .confirm-instruction {
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+      
+      .confirm-fields {
+        gap: 10px;
+      }
+      
+      .confirm-field {
+        padding: 16px;
+        
+        .field-check .material-icons {
+          font-size: 32px;
+        }
+        
+        .field-content {
+          .field-label { font-size: 12px; }
+          .field-value { font-size: 16px; }
+        }
+      }
+      
+      .location-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        
+        h6 { font-size: 15px; }
+        
+        .location-display {
+          padding: 16px;
+          
+          .material-icons { font-size: 28px; }
+          span { font-size: 16px; }
+        }
+        
+        .location-actions {
+          flex-direction: column;
+          
+          .custom-btn {
+            height: 52px !important;
+            font-size: 15px !important;
+            width: 100%;
+            
+            .material-icons { font-size: 26px !important; }
+          }
+        }
+      }
+      
+      .confirm-status {
+        padding: 16px;
+        
+        .material-icons { font-size: 28px; }
+        span { font-size: 15px; }
+      }
+    }
+    
+    .modal-footer {
+      flex-direction: column;
+      gap: 10px;
+      
+      .btn {
+        width: 100%;
+        height: 52px;
+        font-size: 15px;
+      }
+    }
+  }
+  
+  // Catalog modal for 7" tablet
+  .catalog-modal {
+    .modal-body {
+      max-height: calc(95vh - 140px);
+    }
+    
+    .catalog-actions {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      
+      .custom-btn {
+        width: 100%;
+        justify-content: center;
+      }
+      
+      .search-box {
+        margin-left: 0;
+        width: 100%;
+        
+        .custom-input {
+          width: 100% !important;
+          min-width: 100% !important;
+        }
+      }
+    }
+    
+    .add-item-form {
+      padding: 14px;
+      
+      .form-row {
+        flex-direction: column;
+        gap: 10px;
+        
+        .custom-input {
+          width: 100%;
+          min-width: 100%;
+          height: 44px;
+        }
+        
+        .custom-btn {
+          width: 100%;
+          height: 48px;
+          justify-content: center;
+        }
+      }
+    }
+    
+    .catalog-table-container {
+      .catalog-table {
+        min-width: 500px;
+        
+        th, td {
+          padding: 10px 6px;
+          font-size: 12px;
+        }
+      }
+    }
+  }
+  
+  // Nhập Kho modal for 7" tablet
+  .nhap-kho-form-body {
+    gap: 14px;
+    
+    .input-group {
+      .input-label {
+        font-size: 14px;
+      }
+      
+      .custom-input, select {
+        height: 48px !important;
+        font-size: 15px !important;
+        padding: 12px 14px !important;
+      }
+    }
+    
+    .nhap-kho-suggestions {
+      li {
+        padding: 14px 16px;
+        
+        .suggestion-code { font-size: 14px; }
+        .suggestion-meta { font-size: 12px; }
+      }
+    }
+  }
+}
+
+// Landscape mode optimizations for tablets
+@media (min-height: 500px) and (max-height: 800px) and (orientation: landscape) {
+  .excel-container {
+    .excel-header {
+      padding: 6px 12px;
+      
+      h4 { font-size: 14px; }
+    }
+  }
+  
+  .excel-actions {
+    .action-controls {
+      padding: 6px 12px;
+    }
+    
+    .custom-btn {
+      height: 36px !important;
+      padding: 6px 10px !important;
+    }
+    
+    .custom-input {
+      height: 36px !important;
+    }
+  }
+  
+  .custom-modal {
+    .modal-container {
+      max-height: 90vh;
+      
+      .modal-body {
+        max-height: calc(90vh - 120px);
+        padding: 12px;
+      }
+    }
+  }
+  
+  .confirm-receipt-modal {
+    .modal-body {
+      .confirm-field {
+        padding: 10px 14px;
+      }
+      
+      .location-section {
+        margin-top: 12px;
+        padding-top: 12px;
+      }
+    }
+  }
+}
+
+// Touch device optimizations (hover states)
+@media (hover: none) and (pointer: coarse) {
+  .excel-table {
+    tbody tr:hover {
+      background: transparent;
+    }
+    
+    .pending-row:hover {
+      background: transparent !important;
+    }
+    
+    // Active state for touch
+    tbody tr:active {
+      background: #f0f0f0;
+    }
+    
+    .pending-row:active {
+      background: #e8f5e9 !important;
+    }
+  }
+  
+  .custom-btn:hover {
+    background: #ffffff !important;
+  }
+  
+  .custom-btn:active {
+    background: #e0e0e0 !important;
+  }
+  
+  .editable-location:hover {
+    background: transparent;
+  }
+  
+  .editable-location:active {
+    background: #f0f0f0;
+  }
+  
+  .confirm-field:hover {
+    background: #f5f5f5;
+    border-color: #e0e0e0;
+  }
+  
+  .confirm-field:active {
+    background: #e8e8e8;
+    border-color: #bdbdbd;
+  }
+}
+
+// Mobile modal adjustments (phones < 600px)
+@media (max-width: 600px) {
+  // Show card view, hide table view on phones
+  .hide-on-tablet {
+    display: none !important;
+  }
+  
+  .show-on-tablet {
+    display: block !important;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  .excel-table {
+    min-width: 600px;
+    font-size: 10px;
+    
+    th, td {
+      padding: 8px 3px;
+    }
+    
+    th.th-two-line .th-en {
+      display: none;
+    }
+    
+    td.status-cell .mat-icon-button {
+      width: 44px;
+      height: 44px;
+      
+      .mat-icon { font-size: 24px; }
+    }
+  }
+  
+  .excel-actions {
+    .action-controls {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 8px;
+    }
+    
+    .custom-btn {
+      width: 100%;
+      height: 48px !important;
+      justify-content: center;
+    }
+    
+    .custom-input {
+      width: 100% !important;
+      min-width: 100% !important;
+      height: 48px !important;
+    }
+  }
+  
+  mat-checkbox {
+    ::ng-deep .mat-checkbox-inner-container {
+      width: 28px !important;
+      height: 28px !important;
+    }
+  }
+  
+  // Card view for mobile
+  .mobile-card-view {
+    padding: 10px;
+    height: calc(100vh - 50px);
+    
+    .mobile-header h5 {
+      font-size: 15px;
+    }
+    
+    .pending-cards-container {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    
+    .pending-card {
+      padding: 12px;
+      
+      .card-material-code {
+        font-size: 14px;
+        margin-bottom: 6px;
+      }
+      
+      .card-details {
+        font-size: 10px;
+        margin-bottom: 3px;
+      }
+      
+      .card-lsx {
+        font-size: 9px;
+        margin-bottom: 6px;
+      }
+      
+      .card-status {
+        font-size: 9px;
+        
+        .material-icons { font-size: 12px; }
+      }
+    }
+    
+    .no-pending-message {
+      padding: 40px 16px;
+      
+      .material-icons { font-size: 48px; }
+      span { font-size: 14px; }
+    }
+  }
+  
+  .custom-modal {
+    .modal-container {
+      width: 100%;
+      height: auto;
+      max-height: 95vh;
+      margin: 10px;
+      border: 1px solid #000000;
+      
+      .modal-body {
+        padding: 12px;
+        max-height: calc(95vh - 120px);
+        overflow-y: auto;
         
         .date-inputs {
           grid-template-columns: 1fr;
@@ -903,11 +2470,13 @@ mat-checkbox {
       }
       
       .modal-footer {
-        padding: 12px 16px;
+        padding: 10px 12px;
         flex-direction: column;
+        gap: 8px;
         
         .btn {
           width: 100%;
+          height: 48px;
           justify-content: center;
         }
       }
@@ -936,6 +2505,98 @@ mat-checkbox {
             min-width: 100%;
           }
         }
+      }
+    }
+  }
+  
+  // Compact confirm modal for mobile
+  .confirm-receipt-modal {
+    max-width: none !important;
+    width: calc(100% - 20px) !important;
+    
+    .modal-header {
+      padding: 10px 14px;
+      
+      .modal-title {
+        font-size: 14px;
+        
+        .material-icons { font-size: 18px; }
+      }
+    }
+    
+    .modal-body {
+      padding: 12px;
+      
+      .confirm-instruction {
+        font-size: 11px;
+        margin-bottom: 10px;
+      }
+      
+      .confirm-fields {
+        gap: 5px;
+      }
+      
+      .confirm-row {
+        gap: 5px;
+      }
+      
+      .confirm-field {
+        padding: 8px;
+        gap: 8px;
+        
+        .field-check.square-check .material-icons { 
+          font-size: 16px !important; 
+        }
+        
+        .field-content {
+          .field-label { font-size: 8px; }
+          .field-value { font-size: 11px; }
+        }
+      }
+      
+      .location-section {
+        margin-top: 10px;
+        padding-top: 10px;
+        
+        h6 { font-size: 12px; margin-bottom: 8px; }
+        
+        .location-display {
+          padding: 10px;
+          min-height: 38px;
+          
+          .material-icons { font-size: 18px; }
+          span { font-size: 12px; }
+        }
+        
+        .location-actions {
+          flex-direction: column;
+          gap: 6px;
+          
+          .custom-btn {
+            width: 100%;
+            height: 44px !important;
+            font-size: 12px !important;
+            
+            .material-icons { font-size: 18px !important; }
+          }
+        }
+      }
+      
+      .confirm-status {
+        padding: 10px;
+        margin-top: 10px;
+        
+        .material-icons { font-size: 16px; }
+        span { font-size: 11px; }
+      }
+    }
+    
+    .modal-footer {
+      padding: 10px 12px;
+      
+      .btn {
+        height: 44px;
+        font-size: 13px;
       }
     }
   }

@@ -41,12 +41,12 @@ export const ROUTES: RouteInfo[] = [
     icon: 'check_circle_outline', 
     class: 'asm1-fg-parent',
     children: [
-      { path: '/fg-in', title: 'FG In', icon: 'IB', class: '' },
-      { path: '/fg-out', title: 'FG Out', icon: 'OB', class: '' },
-      { path: '/fg-check', title: 'FG Check', icon: 'CHK', class: '' },
-      { path: '/fg-inventory', title: 'FG Inventory', icon: 'IV', class: '' },
-      { path: '/fg-location', title: 'FG Location', icon: 'LOC', class: '' },
-      { path: '/pallet-id', title: 'Pallet ID', icon: 'PLT', class: '' }
+      { path: '/fg-in', title: 'FG In', icon: 'move_to_inbox', class: 'material-child-icon' },
+      { path: '/fg-out', title: 'FG Out', icon: 'outbox', class: 'material-child-icon' },
+      { path: '/fg-check', title: 'FG Check', icon: 'fact_check', class: 'material-child-icon' },
+      { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory', class: 'material-child-icon' },
+      { path: '/fg-location', title: 'FG Location', icon: 'location_on', class: 'material-child-icon' },
+      { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', class: 'material-child-icon' }
     ]
   },
   { path: '/label', title: 'Label', icon: 'label', class: '' },

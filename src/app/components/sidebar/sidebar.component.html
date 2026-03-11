@@ -21,9 +21,10 @@
       </a>
       <div class="collapse" [class.show]="menuItem.expanded" *ngIf="menuItem.children">
         <ul class="nav">
-          <li routerLinkActive="active" *ngFor="let child of menuItem.children" class="nav-item">
+          <li routerLinkActive="active" *ngFor="let child of menuItem.children" class="nav-item {{child.class}}">
             <a class="nav-link" [routerLink]="[child.path]">
-              <span class="child-icon">{{child.icon}}</span>
+              <i class="material-icons child-material-icon" *ngIf="child.class === 'material-child-icon'">{{child.icon}}</i>
+              <span class="child-icon" *ngIf="child.class !== 'material-child-icon'">{{child.icon}}</span>
               <span class="sidebar-normal">{{child.title}}</span>
             </a>
           </li>

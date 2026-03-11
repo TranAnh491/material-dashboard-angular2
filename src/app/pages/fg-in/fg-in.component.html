@@ -3,13 +3,19 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📦 FG IN - Nhập thành phẩm</h4>
+      <div class="header-title">
+        <i class="material-icons header-icon">inventory</i>
+        <h4>FG IN - Nhập thành phẩm</h4>
+      </div>
+      <span class="pending-count-badge" *ngIf="getPendingCount() > 0">
+        {{ getPendingCount() }} chờ
+      </span>
     </div>
     
-    <!-- Excel-like Actions -->
-    <div class="excel-actions">
+    <!-- Excel-like Actions (Hidden on tablet/mobile) -->
+    <div class="excel-actions hide-on-tablet">
       <div class="action-controls">
-        <div class="dropdown">
+        <div class="dropdown hide-on-mobile">
           <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             <i class="material-icons">more_vert</i>
             More
@@ -34,7 +40,7 @@
           </div>
         </div>
 
-        <div class="dropdown factory-filter-dropdown">
+        <div class="dropdown factory-filter-dropdown hide-on-mobile">
           <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             <i class="material-icons">business</i>
             Factory: {{ selectedFactory }}
@@ -46,7 +52,7 @@
           </div>
         </div>
 
-        <div class="search-box">
+        <div class="search-box hide-on-mobile">
           <input type="text" 
                  placeholder="TÌM KIẾM..." 
                  [(ngModel)]="searchTerm"
@@ -54,22 +60,22 @@
                  class="custom-input search-input-uppercase">
         </div>
 
-        <button class="custom-btn" (click)="showTimeRangeDialog = true">
+        <button class="custom-btn hide-on-mobile" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
           Chọn thời gian
         </button>
         
-        <button class="custom-btn" (click)="openUnhideDialog()">
+        <button class="custom-btn hide-on-mobile" (click)="openUnhideDialog()">
           <i class="material-icons">visibility</i>
           Unhide
         </button>
 
-        <button class="custom-btn nhap-kho-btn" (click)="openNhapKho()">
+        <button class="custom-btn nhap-kho-btn hide-on-mobile" (click)="openNhapKho()">
           <i class="material-icons">add_box</i>
           Nhập Kho
         </button>
 
-        <button class="custom-btn" (click)="importPhieuNhapTP()" title="Import phiếu nhập TP (cột F=Mã TP, J=Số lượng, M=LSX, U=LOT)">
+        <button class="custom-btn hide-on-mobile" (click)="importPhieuNhapTP()" title="Import phiếu nhập TP (cột F=Mã TP, J=Số lượng, M=LSX, U=LOT)">
           <i class="material-icons">file_upload</i>
           Import
         </button>
@@ -77,8 +83,35 @@
       </div>
     </div>
 
-    <!-- Excel-like Body -->
-    <div class="excel-body">
+    <!-- Mobile/Tablet Card View for Pending Items -->
+    <div class="mobile-card-view show-on-tablet">
+      <div class="mobile-header">
+        <h5>Phiếu chờ xử lý ({{ getPendingCount() }})</h5>
+      </div>
+      <div class="pending-cards-container">
+        <div class="pending-card" 
+             *ngFor="let material of getPendingMaterials()"
+             (click)="openConfirmReceiptDialog(material)">
+          <div class="card-material-code">{{ material.materialCode }}</div>
+          <div class="card-details">
+            <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <span class="card-batch">{{ material.batchNumber }}</span>
+          </div>
+          <div class="card-lsx">{{ material.lsx }}</div>
+          <div class="card-status">
+            <i class="material-icons">touch_app</i>
+            Bấm để xác nhận
+          </div>
+        </div>
+        <div class="no-pending-message" *ngIf="getPendingCount() === 0">
+          <i class="material-icons">check_circle</i>
+          <span>Không có phiếu chờ xử lý</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Excel-like Body (Hidden on tablet/mobile) -->
+    <div class="excel-body hide-on-tablet">
       <table class="excel-table">
         <thead>
           <tr>
@@ -103,7 +136,10 @@
         </thead>
         <tbody>
           <tr *ngFor="let material of filteredMaterials; let i = index" 
-              [class.received-row]="material.isReceived">
+              [class.received-row]="material.isReceived"
+              [class.pending-row]="!material.isReceived"
+              (click)="openConfirmReceiptDialog(material)"
+              [style.cursor]="material.isReceived ? 'default' : 'pointer'">
             <td>{{ material.factory || 'ASM1' }}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{material.importDate | date:'dd/MM/yyyy'}}</td>
@@ -116,12 +152,12 @@
             <td class="number-cell">{{ material.quantity | number:'1.0-0' }}</td>
             <td class="number-cell">{{calculateCartonAndOdd(material).carton}}</td>
             <td class="number-cell">{{calculateCartonAndOdd(material).odd}}</td>
-            <td>
+            <td (click)="$event.stopPropagation()">
               <div class="editable-location" (click)="editLocation(material)">
                 {{material.location || 'Temporary'}}
               </div>
             </td>
-            <td>
+            <td (click)="$event.stopPropagation()">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.notes" 
@@ -130,19 +166,19 @@
                      [disabled]="!canEditMaterial(material)">
             </td>
             <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
-            <td class="status-cell">
+            <td class="status-cell" (click)="$event.stopPropagation()">
               <mat-checkbox [checked]="material.isReceived" 
                            (change)="updateLockStatus(material, $event.checked)" 
                            [matTooltip]="material.isReceived ? 'Đang khóa – Bỏ tick để mở khóa và chỉnh sửa' : 'Chưa khóa – Tick để khóa (chuyển vào Inventory)'"
                            [class.received-checked]="material.isReceived">
               </mat-checkbox>
             </td>
-            <td class="status-cell">
+            <td class="status-cell" (click)="$event.stopPropagation()">
               <button mat-icon-button color="primary" (click)="printTem(material)" matTooltip="In tem QR">
                 <mat-icon>print</mat-icon>
               </button>
             </td>
-            <td class="status-cell">
+            <td class="status-cell" (click)="$event.stopPropagation()">
               <button mat-icon-button color="warn" (click)="deleteMaterial(material)" 
                       matTooltip="Xóa"
                       *ngIf="hasDeletePermission">
@@ -441,6 +477,146 @@
               [disabled]="!reportMonth">
         <i class="material-icons">download</i>
         Tải báo cáo
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Receipt Dialog (Xác nhận phiếu nhập kho) -->
+<div class="custom-modal" [class.show]="showConfirmReceiptDialog" [style.display]="showConfirmReceiptDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeConfirmReceiptDialog()"></div>
+  <div class="modal-container confirm-receipt-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">fact_check</i>
+        Xác nhận phiếu nhập kho
+      </h5>
+      <button type="button" class="close-btn" (click)="closeConfirmReceiptDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="selectedReceiptMaterial">
+      <p class="confirm-instruction">Bấm vào từng ô để xác nhận thông tin đã đúng:</p>
+      
+      <div class="confirm-fields">
+        <!-- Row 1: Mã TP + PO -->
+        <div class="confirm-row">
+          <div class="confirm-field" 
+               [class.confirmed]="confirmReceiptData.materialCodeConfirmed"
+               (click)="toggleFieldConfirmation('materialCodeConfirmed')">
+            <div class="field-check square-check">
+              <i class="material-icons">{{ confirmReceiptData.materialCodeConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">Mã TP</span>
+              <span class="field-value">{{ selectedReceiptMaterial.materialCode }}</span>
+            </div>
+          </div>
+
+          <div class="confirm-field" 
+               [class.confirmed]="confirmReceiptData.poConfirmed"
+               (click)="toggleFieldConfirmation('poConfirmed')">
+            <div class="field-check square-check">
+              <i class="material-icons">{{ confirmReceiptData.poConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">PO</span>
+              <span class="field-value">{{ selectedReceiptMaterial.poNumber || 'N/A' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: LSX + Carton -->
+        <div class="confirm-row">
+          <div class="confirm-field" 
+               [class.confirmed]="confirmReceiptData.lsxConfirmed"
+               (click)="toggleFieldConfirmation('lsxConfirmed')">
+            <div class="field-check square-check">
+              <i class="material-icons">{{ confirmReceiptData.lsxConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">LSX</span>
+              <span class="field-value">{{ selectedReceiptMaterial.lsx }}</span>
+            </div>
+          </div>
+
+          <div class="confirm-field info-only">
+            <div class="field-check square-check">
+              <i class="material-icons">inventory_2</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">Carton</span>
+              <span class="field-value">{{ calculateCartonAndOdd(selectedReceiptMaterial).carton }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: LOT + Số lượng -->
+        <div class="confirm-row">
+          <div class="confirm-field" 
+               [class.confirmed]="confirmReceiptData.lotConfirmed"
+               (click)="toggleFieldConfirmation('lotConfirmed')">
+            <div class="field-check square-check">
+              <i class="material-icons">{{ confirmReceiptData.lotConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">LOT</span>
+              <span class="field-value">{{ selectedReceiptMaterial.lot }}</span>
+            </div>
+          </div>
+
+          <div class="confirm-field" 
+               [class.confirmed]="confirmReceiptData.quantityConfirmed"
+               (click)="toggleFieldConfirmation('quantityConfirmed')">
+            <div class="field-check square-check">
+              <i class="material-icons">{{ confirmReceiptData.quantityConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
+            </div>
+            <div class="field-content">
+              <span class="field-label">Số lượng</span>
+              <span class="field-value">{{ selectedReceiptMaterial.quantity | number:'1.0-0' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Location Section -->
+      <div class="location-section">
+        <h6>Vị trí lưu kho:</h6>
+        <div class="location-display" [class.has-location]="confirmReceiptData.location">
+          <i class="material-icons">place</i>
+          <span>{{ confirmReceiptData.location || '' }}</span>
+        </div>
+        <div class="location-actions">
+          <button class="custom-btn scan-btn" (click)="scanReceiptLocation(); $event.stopPropagation()">
+            <i class="material-icons">qr_code_scanner</i>
+            Scan QR/Barcode
+          </button>
+          <button class="custom-btn" (click)="editReceiptLocation(); $event.stopPropagation()">
+            <i class="material-icons">edit</i>
+            Nhập thủ công
+          </button>
+        </div>
+      </div>
+
+      <!-- Confirmation Status -->
+      <div class="confirm-status" [class.all-confirmed]="isAllFieldsConfirmed() && confirmReceiptData.location">
+        <i class="material-icons">{{ isAllFieldsConfirmed() && confirmReceiptData.location ? 'verified' : 'pending' }}</i>
+        <span *ngIf="!isAllFieldsConfirmed()">Còn {{ getRemainingConfirmCount() }} thông tin chưa xác nhận</span>
+        <span *ngIf="isAllFieldsConfirmed() && !confirmReceiptData.location">Cần scan hoặc nhập vị trí</span>
+        <span *ngIf="isAllFieldsConfirmed() && confirmReceiptData.location">Sẵn sàng khóa phiếu!</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeConfirmReceiptDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" 
+              class="btn btn-done" 
+              (click)="confirmAndLockReceipt()"
+              [disabled]="!isAllFieldsConfirmed() || !confirmReceiptData.location">
+        <i class="material-icons">lock</i>
+        Done - Khóa phiếu
       </button>
     </div>
   </div>

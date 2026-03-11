@@ -6,6 +6,8 @@ import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { MatDialog } from '@angular/material/dialog';
+import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
 export interface FgInItem {
   id?: string;
@@ -145,12 +147,25 @@ export class FgInComponent implements OnInit, OnDestroy {
   private nhapKhoSuggestionsBlurTimer: any;
   private readonly NHAP_KHO_MIN_CHARS = 4; // Chỉ lọc khi nhập đủ 4 ký tự để hạn chế lag
   
+  // Confirm Receipt Dialog (Xác nhận phiếu nhập kho)
+  showConfirmReceiptDialog: boolean = false;
+  selectedReceiptMaterial: FgInItem | null = null;
+  confirmReceiptData = {
+    materialCodeConfirmed: false,
+    poConfirmed: false,
+    lsxConfirmed: false,
+    lotConfirmed: false,
+    quantityConfirmed: false,
+    location: ''
+  };
+  
   private destroy$ = new Subject<void>();
 
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private factoryAccessService: FactoryAccessService
+    private factoryAccessService: FactoryAccessService,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -1929,6 +1944,163 @@ export class FgInComponent implements OnInit, OnDestroy {
   getMaterialCodeFromCustomerCode(customerCode: string): string {
     const mapping = this.mappingItems.find(item => item.customerCode === customerCode);
     return mapping ? mapping.materialCode : '';
+  }
+
+  // ===== CONFIRM RECEIPT DIALOG METHODS =====
+
+  // Open confirm receipt dialog when clicking on a pending receipt
+  openConfirmReceiptDialog(material: FgInItem): void {
+    if (material.isReceived) {
+      return; // Already locked, don't open
+    }
+    
+    this.selectedReceiptMaterial = material;
+    this.confirmReceiptData = {
+      materialCodeConfirmed: false,
+      poConfirmed: false,
+      lsxConfirmed: false,
+      lotConfirmed: false,
+      quantityConfirmed: false,
+      location: material.location || ''
+    };
+    this.showConfirmReceiptDialog = true;
+  }
+
+  // Close confirm receipt dialog
+  closeConfirmReceiptDialog(): void {
+    this.showConfirmReceiptDialog = false;
+    this.selectedReceiptMaterial = null;
+    this.confirmReceiptData = {
+      materialCodeConfirmed: false,
+      poConfirmed: false,
+      lsxConfirmed: false,
+      lotConfirmed: false,
+      quantityConfirmed: false,
+      location: ''
+    };
+  }
+
+  // Toggle confirmation for a field
+  toggleFieldConfirmation(field: 'materialCodeConfirmed' | 'poConfirmed' | 'lsxConfirmed' | 'lotConfirmed' | 'quantityConfirmed'): void {
+    this.confirmReceiptData[field] = !this.confirmReceiptData[field];
+  }
+
+  // Check if all fields are confirmed
+  isAllFieldsConfirmed(): boolean {
+    return this.confirmReceiptData.materialCodeConfirmed &&
+           this.confirmReceiptData.poConfirmed &&
+           this.confirmReceiptData.lsxConfirmed &&
+           this.confirmReceiptData.lotConfirmed &&
+           this.confirmReceiptData.quantityConfirmed;
+  }
+
+  // Get count of remaining unconfirmed fields
+  getRemainingConfirmCount(): number {
+    let count = 0;
+    if (!this.confirmReceiptData.materialCodeConfirmed) count++;
+    if (!this.confirmReceiptData.poConfirmed) count++;
+    if (!this.confirmReceiptData.lsxConfirmed) count++;
+    if (!this.confirmReceiptData.lotConfirmed) count++;
+    if (!this.confirmReceiptData.quantityConfirmed) count++;
+    return count;
+  }
+
+  // Get pending materials (not yet locked)
+  getPendingMaterials(): FgInItem[] {
+    return this.filteredMaterials.filter(m => !m.isReceived);
+  }
+
+  // Get pending count
+  getPendingCount(): number {
+    return this.filteredMaterials.filter(m => !m.isReceived).length;
+  }
+
+  // Scan location using QR scanner
+  scanReceiptLocation(): void {
+    if (!this.selectedReceiptMaterial) return;
+
+    const dialogData: QRScannerData = {
+      title: `Scan QR Code - Vị trí cho ${this.selectedReceiptMaterial.materialCode}`,
+      message: `Vị trí hiện tại: ${this.confirmReceiptData.location || 'Chưa có'}`,
+      materialCode: this.selectedReceiptMaterial.materialCode
+    };
+
+    const dialogRef = this.dialog.open(QRScannerModalComponent, {
+      width: '500px',
+      maxWidth: '95vw',
+      data: dialogData,
+      disableClose: true,
+      panelClass: 'qr-scanner-dialog'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.success) {
+        const location = result.location || result.text || '';
+        if (location.trim() !== '') {
+          this.confirmReceiptData.location = location.toUpperCase();
+          console.log(`Scanned location: ${this.confirmReceiptData.location}`);
+        }
+      }
+    });
+  }
+
+  // Edit location manually
+  editReceiptLocation(): void {
+    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa):', this.confirmReceiptData.location || '');
+    if (newLocation !== null) {
+      this.confirmReceiptData.location = newLocation.toUpperCase();
+    }
+  }
+
+  // Confirm and lock the receipt
+  confirmAndLockReceipt(): void {
+    if (!this.selectedReceiptMaterial) {
+      alert('❌ Không có phiếu được chọn');
+      return;
+    }
+
+    if (!this.isAllFieldsConfirmed()) {
+      alert('❌ Vui lòng xác nhận tất cả các thông tin trước khi khóa phiếu');
+      return;
+    }
+
+    if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
+      alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
+      return;
+    }
+
+    const confirmMsg = `✅ Xác nhận khóa phiếu?\n\n` +
+      `Mã TP: ${this.selectedReceiptMaterial.materialCode}\n` +
+      `PO: ${this.selectedReceiptMaterial.poNumber || 'N/A'}\n` +
+      `LSX: ${this.selectedReceiptMaterial.lsx}\n` +
+      `LOT: ${this.selectedReceiptMaterial.lot}\n` +
+      `Số lượng: ${this.selectedReceiptMaterial.quantity}\n` +
+      `Vị trí: ${this.confirmReceiptData.location}\n\n` +
+      `Dữ liệu sẽ được chuyển vào FG Inventory.`;
+
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    // Update location and lock status
+    this.selectedReceiptMaterial.location = this.confirmReceiptData.location;
+    this.selectedReceiptMaterial.isReceived = true;
+    this.selectedReceiptMaterial.updatedAt = new Date();
+
+    // Update in Firebase
+    this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+
+    // Add to FG Inventory
+    this.addToInventory(this.selectedReceiptMaterial);
+
+    // Close dialog
+    this.closeConfirmReceiptDialog();
+
+    // Show success message
+    alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
+    
+    // Refresh data
+    this.refreshData();
   }
 
 }

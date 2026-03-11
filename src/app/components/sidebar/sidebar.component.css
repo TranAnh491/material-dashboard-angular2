@@ -355,6 +355,31 @@
   margin-right: 14px !important; /* Same margin as parent icon */
 }
 
+/* Material Icon styling for child items (ASM FG group) */
+.collapse .nav li a .child-material-icon {
+  font-size: 18px !important; /* Size for Material icons */
+  margin-right: 14px !important; /* Same margin as parent icon */
+  color: #8ba1be !important; /* Default color for child icons */
+  min-width: 22px !important; /* Match parent icon width */
+  text-align: center !important; /* Center the icon */
+  display: inline-block !important;
+  flex-shrink: 0 !important; /* Prevent shrinking */
+  margin-left: 0 !important; /* Ensure no left margin */
+  position: absolute !important; /* Position absolutely */
+  left: 22px !important; /* Align exactly with parent icon */
+}
+
+.collapse .nav li a:hover .child-material-icon {
+  color: #ffffff !important; /* White icon color for hover state */
+}
+
+/* Child tab Material icons get white color when active */
+.collapse .nav li a.active .child-material-icon,
+.collapse .nav li.active > a .child-material-icon,
+.collapse .nav li.nav-item.active > a .child-material-icon {
+  color: #ffffff !important; /* White icon color for active state */
+}
+
 .collapse .nav li a .sidebar-normal {
   font-size: 0.85em !important; /* Ensure text is smaller */
   flex: 1 !important; /* Take remaining space */
