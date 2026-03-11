@@ -118,6 +118,7 @@ export class FilteredRoutesService {
       '/fg-check': 'fg-check',
       '/fg-inventory': 'fg-inventory',
       '/fg-location': 'fg-location',
+      '/pallet-id': 'pallet-id',
       
       // Other routes
       '/location': 'location',

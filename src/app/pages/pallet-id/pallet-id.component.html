@@ -1,0 +1,121 @@
+<div class="pallet-id-container">
+  <!-- Header -->
+  <div class="page-header">
+    <h2>Pallet ID</h2>
+    <p class="subtitle">Quản lý mã Pallet cho từng nhà máy</p>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-section">
+    <!-- Factory Selection -->
+    <div class="factory-select">
+      <label>Nhà máy:</label>
+      <select [(ngModel)]="selectedFactory" (change)="onFactoryChange()">
+        <option *ngFor="let factory of factories" [value]="factory">{{ factory }}</option>
+      </select>
+    </div>
+
+    <!-- Create New Pallet Button -->
+    <button class="btn-create" (click)="createNewPallet()" [disabled]="isCreating">
+      <i class="material-icons">add</i>
+      <span>{{ isCreating ? 'Đang tạo...' : 'Tạo Pallet Mới' }}</span>
+    </button>
+  </div>
+
+  <!-- Pallet Table -->
+  <div class="table-container">
+    <table class="pallet-table">
+      <thead>
+        <tr>
+          <th class="col-stt">STT</th>
+          <th class="col-code">Mã Pallet</th>
+          <th class="col-factory">Nhà máy</th>
+          <th class="col-date">Ngày tạo</th>
+          <th class="col-print-count">Lượt in</th>
+          <th class="col-actions">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="isLoading">
+          <td colspan="6" class="loading-row">
+            <i class="material-icons spin">refresh</i>
+            Đang tải...
+          </td>
+        </tr>
+        <tr *ngIf="!isLoading && pallets.length === 0">
+          <td colspan="6" class="empty-row">
+            <i class="material-icons">inbox</i>
+            <p>Chưa có pallet nào cho {{ selectedFactory }}</p>
+          </td>
+        </tr>
+        <tr *ngFor="let pallet of pallets; let i = index">
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td class="col-code">
+            <span class="pallet-code-cell">{{ pallet.palletCode }}</span>
+          </td>
+          <td class="col-factory">
+            <span class="factory-badge" [class.asm1]="pallet.factory === 'ASM1'" [class.asm2]="pallet.factory === 'ASM2'">
+              {{ pallet.factory }}
+            </span>
+          </td>
+          <td class="col-date">{{ formatDateTime(pallet.createdAt) }}</td>
+          <td class="col-print-count">
+            <span class="print-count-badge" [class.printed]="pallet.printCount > 0">
+              {{ pallet.printCount || 0 }}
+            </span>
+          </td>
+          <td class="col-actions">
+            <button class="btn-action btn-print" (click)="openPrintPreview(pallet)" title="In tem">
+              <i class="material-icons">print</i>
+            </button>
+            <button class="btn-action btn-delete" (click)="deletePallet(pallet)" title="Xóa">
+              <i class="material-icons">delete</i>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Total Count -->
+  <div class="total-count" *ngIf="!isLoading">
+    Tổng: <strong>{{ pallets.length }}</strong> pallet
+  </div>
+
+  <!-- Print Preview Modal -->
+  <div class="modal-overlay" *ngIf="showPrintPreview" (click)="closePrintPreview()">
+    <div class="modal-content print-preview-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Xem trước tem Pallet</h3>
+        <button class="btn-close" (click)="closePrintPreview()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body" *ngIf="selectedPallet">
+        <div class="label-preview">
+          <div class="preview-factory">{{ selectedPallet.factory }}</div>
+          <div class="preview-qr">
+            <i class="material-icons">qr_code_2</i>
+          </div>
+          <div class="preview-code">{{ selectedPallet.palletCode }}</div>
+          <div class="preview-date">Ngày tạo: {{ formatDate(selectedPallet.createdAt) }}</div>
+        </div>
+        
+        <div class="print-info">
+          <p>Kích thước tem: <strong>100mm (rộng) x 130mm (cao)</strong></p>
+          <p>Số lượng: <strong>4 tem</strong> (dán 4 mặt pallet)</p>
+          <p>Đã in: <strong>{{ selectedPallet.printCount || 0 }}</strong> lần</p>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closePrintPreview()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printPalletLabel()">
+          <i class="material-icons">print</i>
+          In 4 Tem
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

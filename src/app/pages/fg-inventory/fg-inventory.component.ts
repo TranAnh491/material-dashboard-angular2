@@ -580,19 +580,21 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   private async processExcelFile(file: File): Promise<void> {
     try {
+      this.isLoading = true;
       const data = await this.readExcelFile(file);
       const materials = this.parseExcelData(data);
       
-      this.materials = [...this.materials, ...materials];
-      this.applyFilters();
+      // Save to Firebase FIRST and wait for completion
+      await this.saveMaterialsToFirebase(materials);
       
-      // Save to Firebase
-      this.saveMaterialsToFirebase(materials);
+      // Data will be loaded automatically via snapshotChanges listener
+      this.isLoading = false;
       
       alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
+      this.isLoading = false;
       alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
@@ -658,9 +660,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return new Date(dateStr);
   }
 
-  // Save materials to Firebase
-  saveMaterialsToFirebase(materials: FGInventoryItem[]): void {
-    materials.forEach(material => {
+  // Save materials to Firebase - returns Promise that resolves when ALL items are saved
+  async saveMaterialsToFirebase(materials: FGInventoryItem[]): Promise<void> {
+    const savePromises = materials.map(material => {
       const materialData = {
         ...material,
         importDate: material.importDate,
@@ -671,14 +673,19 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       
       delete materialData.id;
       
-      this.firestore.collection('fg-inventory').add(materialData)
+      return this.firestore.collection('fg-inventory').add(materialData)
         .then((docRef) => {
           console.log('FG Inventory material saved to Firebase successfully with ID:', docRef.id);
         })
         .catch(error => {
           console.error('Error saving FG Inventory material to Firebase:', error);
+          throw error; // Re-throw to fail the whole batch
         });
     });
+    
+    // Wait for ALL items to be saved before resolving
+    await Promise.all(savePromises);
+    console.log(`✅ All ${materials.length} materials saved to Firebase successfully`);
   }
 
   // Download template

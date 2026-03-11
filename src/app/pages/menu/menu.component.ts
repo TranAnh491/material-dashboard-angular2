@@ -60,6 +60,7 @@ export class MenuComponent implements OnInit {
     { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
+    { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
     
     // Tools & Operations
     { path: '/warehouse-loading', title: 'Loading', icon: 'storage', category: 'Tools' },

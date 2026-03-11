@@ -64,6 +64,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'fg-check',             loadChildren: () => import('../../pages/fg-check/fg-check.module').then(m => m.FGCheckModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-location',          loadChildren: () => import('../../pages/fg-location/fg-location.module').then(m => m.FgLocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'pallet-id',            loadChildren: () => import('../../pages/pallet-id/pallet-id.module').then(m => m.PalletIdModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
   { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'safety',               loadChildren: () => import('../../pages/safety/safety.module').then(m => m.SafetyModule), canActivate: [AuthGuard, TabPermissionGuard] },
