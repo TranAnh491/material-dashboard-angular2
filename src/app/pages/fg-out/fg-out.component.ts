@@ -25,6 +25,7 @@ export interface FgOutItem {
   qtyBox: number; // Số lượng hàng trong 1 carton
   odd: number;
   location: string; // Thêm trường vị trí
+  productType?: string; // Loại hàng: Mass, ĐL, SAMPLE
   notes: string;
   updateCount: number;
   pushNo: string; // Thêm PushNo
@@ -125,6 +126,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Danh mục (fg-catalog) – Standard theo Mã TP để tính Carton/ODD
   catalogItems: FgCatalogItem[] = [];
   
+  // Product types for dropdown
+  productTypes: string[] = ['MASS', 'ĐL', 'SAMPLE'];
+  
   // Xuất Kho Dialog
   showXuatKhoDialog: boolean = false;
   xuatKhoInputText: string = '';
@@ -133,7 +137,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   xuatKhoSelectedShipment: string = '';
   /** Factory của shipment đang xuất (từ tab Shipment: ASM1/ASM2) – dùng lọc tồn và ghi FG Out */
   xuatKhoShipmentFactory: string = 'ASM1';
-  xuatKhoAvailableShipments: string[] = [];
+  xuatKhoAvailableShipments: { code: string; factory: string }[] = [];
   xuatKhoStep: number = 1; // 1: Chọn shipment, 2: Preview items
   /** Trạng thái tồn cho shipment đã chọn: đủ stock (xanh), thiếu stock (cam) */
   shipmentStockStatus: 'unknown' | 'loading' | 'enough' | 'insufficient' = 'unknown';
@@ -1294,6 +1298,36 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.showPrintDialog = true;
   }
 
+  // Open print dialog by shipment - get available shipments from filtered materials
+  openPrintByShipment(): void {
+    // Get unique shipments from filtered materials
+    const shipments = [...new Set(this.filteredMaterials.map(m => m.shipment).filter(s => s && s.trim()))];
+    
+    if (shipments.length === 0) {
+      alert('Không có shipment nào để in. Vui lòng tìm kiếm hoặc xem tất cả dữ liệu trước.');
+      return;
+    }
+    
+    if (shipments.length === 1) {
+      // Only one shipment, print directly
+      this.selectedShipment = shipments[0];
+      this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
+      this.showPrintDialog = true;
+    } else {
+      // Multiple shipments, ask user to select
+      const shipmentList = shipments.join('\n');
+      const selected = prompt(`Chọn Shipment để in:\n\n${shipmentList}\n\nNhập mã Shipment:`, shipments[0]);
+      
+      if (selected && shipments.includes(selected.trim())) {
+        this.selectedShipment = selected.trim();
+        this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
+        this.showPrintDialog = true;
+      } else if (selected) {
+        alert('Shipment không hợp lệ!');
+      }
+    }
+  }
+
   // Print document
   printDocument(): void {
     const printContent = document.getElementById('printContent');
@@ -1707,14 +1741,22 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.firestore.collection('shipments', ref =>
       ref.where('status', '==', 'Chờ soạn').limit(500)
     ).get().subscribe(snapshot => {
-      const shipments = new Set<string>();
+      const shipmentMap = new Map<string, string>(); // code -> factory
       snapshot.docs.forEach(doc => {
         const data = doc.data() as any;
         if (data.shipmentCode) {
-          shipments.add(data.shipmentCode);
+          const code = data.shipmentCode;
+          const factory = (data.factory || 'ASM1').toString().trim().toUpperCase();
+          // Nếu đã có thì không ghi đè (giữ factory đầu tiên)
+          if (!shipmentMap.has(code)) {
+            shipmentMap.set(code, factory);
+          }
         }
       });
-      this.xuatKhoAvailableShipments = Array.from(shipments).sort();
+      // Convert map to array of objects
+      this.xuatKhoAvailableShipments = Array.from(shipmentMap.entries())
+        .map(([code, factory]) => ({ code, factory }))
+        .sort((a, b) => a.code.localeCompare(b.code));
       console.log('✅ Loaded', this.xuatKhoAvailableShipments.length, 'shipments (Chờ soạn)');
     });
   }
@@ -1755,6 +1797,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
     this.shipmentStockStatus = 'loading';
     this.checkStockForSelectedShipment(this.xuatKhoSelectedShipment.trim());
+  }
+
+  // Chọn shipment từ grid (popup)
+  selectShipmentFromGrid(shipment: { code: string; factory: string }): void {
+    this.xuatKhoSelectedShipment = shipment.code;
+    this.xuatKhoShipmentFactory = shipment.factory;
+    this.shipmentStockStatus = 'loading';
+    this.checkStockForSelectedShipment(shipment.code);
+    console.log('✅ Selected shipment from grid:', shipment.code, 'Factory:', shipment.factory);
+  }
+
+  // Xóa selection shipment
+  clearShipmentSelection(): void {
+    this.xuatKhoSelectedShipment = '';
+    this.shipmentStockStatus = 'unknown';
   }
 
   // Kiểm tra đủ/thiếu tồn cho shipment (chỉ set shipmentStockStatus, không load danh sách)

@@ -74,6 +74,11 @@
           Xuất Kho
         </button>
 
+        <button class="custom-btn btn-print" (click)="openPrintByShipment()">
+          <i class="material-icons">print</i>
+          Print
+        </button>
+
       </div>
     </div>
     
@@ -95,6 +100,7 @@
           <col style="width: 70px">
           <col style="width: 60px">
           <col style="width: 45px">
+          <col style="width: 70px">
           <col style="width: 70px">
           <col style="width: 80px">
           <col style="width: 70px">
@@ -118,6 +124,7 @@
             <th>Carton</th>
             <th>ODD</th>
             <th>Vị Trí</th>
+            <th>Loại hàng</th>
             <th>Ghi chú</th>
             <th>Khách</th>
             <th>Duyệt Xuất</th>
@@ -228,6 +235,14 @@
                        (change)="updateMaterialInFirebase(row.material)"
                        placeholder="Vị trí">
               </td>
+              <td class="product-type-cell">
+                <select class="editable-input product-type-select"
+                        [(ngModel)]="row.material.productType"
+                        (change)="updateMaterialInFirebase(row.material)">
+                  <option value="">--</option>
+                  <option *ngFor="let type of productTypes" [value]="type">{{type}}</option>
+                </select>
+              </td>
               <td>
                 <input type="text"
                        class="editable-input"
@@ -256,7 +271,7 @@
               <td class="pallet-total-label">Tổng Carton Pallet {{row.pallet}}</td>
               <td colspan="2"></td>
               <td class="number-cell pallet-total-qty"><strong>{{row.totalCarton | number}}</strong></td>
-              <td colspan="7"></td>
+              <td colspan="8"></td>
             </tr>
           </ng-container>
         </tbody>
@@ -465,6 +480,7 @@
                 <th>QTY Xuất</th>
                 <th>Carton</th>
                 <th>Vị trí</th>
+                <th>Loại hàng</th>
                 <th>Ghi chú</th>
               </tr>
             </thead>
@@ -478,6 +494,7 @@
                 <td>{{material.quantity}}</td>
                 <td>{{material.carton}}</td>
                 <td>{{material.location}}</td>
+                <td>{{material.productType || ''}}</td>
                 <td>{{material.notes}}</td>
               </tr>
             </tbody>
@@ -534,20 +551,50 @@
       <!-- Step 1: Chọn Shipment -->
       <div class="xuat-kho-section" *ngIf="xuatKhoStep === 1">
         <h6>Bước 1: Chọn Shipment</h6>
-        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-          Chọn shipment để tự động load danh sách hàng từ kho
+        <p style="font-size: 12px; color: #666; margin-bottom: 15px;">
+          Bấm chọn shipment để tự động load danh sách hàng từ kho
         </p>
         
-        <div class="shipment-selection">
-          <select class="form-input" 
-                  [(ngModel)]="xuatKhoSelectedShipment"
-                  (ngModelChange)="onXuatKhoShipmentChange($event)"
-                  style="width: 100%; padding: 10px; font-size: 14px;">
-            <option value="">-- Chọn Shipment --</option>
-            <option *ngFor="let shipment of xuatKhoAvailableShipments" [value]="shipment">
-              {{shipment}}
-            </option>
-          </select>
+        <!-- Shipment Selected Display -->
+        <div class="selected-shipment-display" *ngIf="xuatKhoSelectedShipment">
+          <span class="selected-label">Đã chọn:</span>
+          <span class="selected-factory-badge" [class.asm1]="xuatKhoShipmentFactory === 'ASM1'" [class.asm2]="xuatKhoShipmentFactory === 'ASM2'">
+            {{ xuatKhoShipmentFactory }}
+          </span>
+          <span class="selected-value">{{ xuatKhoSelectedShipment }}</span>
+          <button type="button" class="btn-clear-selection" (click)="clearShipmentSelection()">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        
+        <!-- Shipment Grid -->
+        <div class="shipment-grid-container">
+          <div class="shipment-grid-header">
+            <span>Danh sách Shipment ({{ xuatKhoAvailableShipments.length }} shipment đang chờ soạn)</span>
+            <button type="button" class="btn-refresh-shipments" (click)="loadAvailableShipmentsForXuatKho()">
+              <i class="material-icons">refresh</i>
+            </button>
+          </div>
+          
+          <div class="shipment-grid" *ngIf="xuatKhoAvailableShipments.length > 0">
+            <div *ngFor="let shipment of xuatKhoAvailableShipments" 
+                 class="shipment-card"
+                 [class.selected]="xuatKhoSelectedShipment === shipment.code"
+                 [class.asm1]="shipment.factory === 'ASM1'"
+                 [class.asm2]="shipment.factory === 'ASM2'"
+                 (click)="selectShipmentFromGrid(shipment)">
+              <span class="factory-badge" [class.asm1]="shipment.factory === 'ASM1'" [class.asm2]="shipment.factory === 'ASM2'">
+                {{ shipment.factory }}
+              </span>
+              <i class="material-icons">local_shipping</i>
+              <span class="shipment-code">{{ shipment.code }}</span>
+            </div>
+          </div>
+          
+          <div class="shipment-grid-empty" *ngIf="xuatKhoAvailableShipments.length === 0">
+            <i class="material-icons">inbox</i>
+            <p>Không có shipment nào đang chờ soạn</p>
+          </div>
         </div>
         
         <div style="margin-top: 15px;">

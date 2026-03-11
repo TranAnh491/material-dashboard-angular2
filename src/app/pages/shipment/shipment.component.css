@@ -1526,6 +1526,133 @@ input[type="date"]::-webkit-clear-button {
   border-color: #495057;
 }
 
+.print-option-btn.pkl-btn {
+  border-color: #0d6efd;
+  color: #0d6efd;
+}
+.print-option-btn.pkl-btn:hover {
+  background: #e7f1ff;
+  border-color: #0a58ca;
+}
+
+/* PKL (Packing List) Modal Styles */
+.pkl-modal {
+  max-width: 1000px;
+  width: 95%;
+  max-height: 90vh;
+}
+
+.pkl-body {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.pkl-summary {
+  display: flex;
+  gap: 30px;
+  padding: 15px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.pkl-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pkl-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.pkl-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+}
+
+.pkl-pallets {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pkl-pallet-group {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pkl-pallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: #e9ecef;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.pkl-pallet-name {
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.pkl-pallet-stats {
+  font-size: 12px;
+  color: #666;
+}
+
+.pkl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.pkl-table th,
+.pkl-table td {
+  padding: 8px 10px;
+  border: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.pkl-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  text-align: center;
+  font-size: 11px;
+}
+
+.pkl-table td.text-right {
+  text-align: right;
+}
+
+.pkl-table td.text-center {
+  text-align: center;
+}
+
+.pkl-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.pkl-empty {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.pkl-empty i {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+.pkl-empty p {
+  font-size: 14px;
+}
+
 /* Check Status Icon - Nổi bật cho shipment đã check */
 .check-status-icon {
   margin-left: 8px;

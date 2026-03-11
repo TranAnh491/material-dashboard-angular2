@@ -912,28 +912,23 @@ export class ManageComponent implements OnInit, OnDestroy {
       });
     }
     
-    // Sắp xếp: nếu search theo vị trí thì sắp xếp theo ngày import (cũ nhất lên trên)
-    // Nếu search theo mã thì sắp xếp theo PO và IMD
+    // Sắp xếp: luôn sắp xếp theo Mã nguyên liệu (a,b,c) trước, sau đó theo PO và IMD
     // NHƯNG nếu đang filter theo Top N, thì không sort lại (để giữ nguyên thứ tự theo giá trị)
     if (this.topFilter === null || this.topFilter === 0) {
-      if (this.locationSearch && !this.materialCode) {
-        // Search theo vị trí: sắp xếp theo ngày import (cũ nhất lên trên)
-        this.summaryData.sort((a, b) => {
-          if (!a.lastActionDate && !b.lastActionDate) return 0;
-          if (!a.lastActionDate) return 1; // Không có ngày thì xuống dưới
-          if (!b.lastActionDate) return -1; // Không có ngày thì xuống dưới
-          return a.lastActionDate.getTime() - b.lastActionDate.getTime(); // Cũ nhất lên trên
-        });
-        console.log(`📊 Sorted by import date (oldest first) for location search`);
-      } else {
-        // Search theo mã: sắp xếp theo PO và IMD
-        this.summaryData.sort((a, b) => {
-          if (a.poNumber !== b.poNumber) {
-            return a.poNumber.localeCompare(b.poNumber);
-          }
-          return a.imd.localeCompare(b.imd);
-        });
-      }
+      // Sắp xếp theo Mã nguyên liệu (a,b,c), sau đó theo PO và IMD
+      this.summaryData.sort((a, b) => {
+        // So sánh theo materialCode trước (a,b,c)
+        const materialCompare = a.materialCode.localeCompare(b.materialCode);
+        if (materialCompare !== 0) return materialCompare;
+        
+        // Nếu cùng materialCode thì sắp xếp theo PO
+        const poCompare = a.poNumber.localeCompare(b.poNumber);
+        if (poCompare !== 0) return poCompare;
+        
+        // Nếu cùng PO thì sắp xếp theo IMD
+        return a.imd.localeCompare(b.imd);
+      });
+      console.log(`📊 Sorted by materialCode (a,b,c), then PO, then IMD`);
     }
 
     console.log(`📊 Summary calculated: ${this.summaryData.length} unique PO/IMD combinations`);

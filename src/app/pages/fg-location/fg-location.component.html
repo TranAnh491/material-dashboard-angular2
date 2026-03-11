@@ -1,0 +1,172 @@
+<div class="fg-location-container">
+  <!-- Header -->
+  <div class="header">
+    <h2>FG Location</h2>
+    <p class="subtitle">Đổi vị trí thành phẩm</p>
+  </div>
+
+  <!-- Step 1: Select Factory -->
+  <div class="step-container" *ngIf="currentStep === 'select-factory'">
+    <div class="step-header">
+      <span class="step-number">1</span>
+      <span class="step-title">Chọn nhà máy</span>
+    </div>
+    
+    <div class="factory-buttons">
+      <button 
+        *ngFor="let factory of availableFactories"
+        class="factory-btn"
+        [class.selected]="selectedFactory === factory"
+        (click)="selectFactory(factory)">
+        <span class="factory-icon">🏭</span>
+        <span class="factory-name">{{ factory }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 2: Scan Product -->
+  <div class="step-container" *ngIf="currentStep === 'scan-product'">
+    <div class="step-header">
+      <span class="step-number">2</span>
+      <span class="step-title">Scan mã hàng (Batch)</span>
+    </div>
+    
+    <div class="factory-badge">
+      Nhà máy: <strong>{{ selectedFactory }}</strong>
+    </div>
+    
+    <div class="scan-input-container">
+      <input 
+        #productInput
+        type="text" 
+        class="scan-input"
+        [(ngModel)]="productScanInput"
+        (ngModelChange)="onProductInputChange()"
+        (keypress)="onProductScanKeyPress($event)"
+        placeholder="Scan hoặc nhập Batch..."
+        autocomplete="off"
+        autocapitalize="characters">
+      
+      <button 
+        class="scan-btn primary"
+        [disabled]="isLoading || !productScanInput"
+        (click)="scanProduct()">
+        <span *ngIf="!isLoading">🔍 Tìm kiếm</span>
+        <span *ngIf="isLoading">⏳ Đang tìm...</span>
+      </button>
+    </div>
+    
+    <button class="back-btn" (click)="backToFactorySelection()">
+      ← Đổi nhà máy
+    </button>
+  </div>
+
+  <!-- Step 3: Show Current Location -->
+  <div class="step-container" *ngIf="currentStep === 'show-current'">
+    <div class="step-header">
+      <span class="step-number">3</span>
+      <span class="step-title">Thông tin sản phẩm</span>
+    </div>
+    
+    <div class="product-info-card" *ngIf="scannedProduct">
+      <div class="info-row">
+        <span class="label">Mã TP:</span>
+        <span class="value highlight">{{ scannedProduct.materialCode }}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Batch:</span>
+        <span class="value">{{ scannedProduct.batchNumber }}</span>
+      </div>
+      <div class="info-row" *ngIf="scannedProduct.lot">
+        <span class="label">LOT:</span>
+        <span class="value">{{ scannedProduct.lot }}</span>
+      </div>
+      <div class="info-row" *ngIf="scannedProduct.lsx">
+        <span class="label">LSX:</span>
+        <span class="value">{{ scannedProduct.lsx }}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Tồn kho:</span>
+        <span class="value">{{ scannedProduct.ton | number }}</span>
+      </div>
+      <div class="info-row location-row">
+        <span class="label">Vị trí hiện tại:</span>
+        <span class="value current-location">{{ scannedProduct.location }}</span>
+      </div>
+    </div>
+    
+    <div class="action-buttons">
+      <button class="action-btn primary" (click)="proceedToScanLocation()">
+        📍 Đổi vị trí
+      </button>
+      <button class="action-btn secondary" (click)="backToProductScan()">
+        ← Scan sản phẩm khác
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 4: Scan New Location -->
+  <div class="step-container" *ngIf="currentStep === 'scan-location'">
+    <div class="step-header">
+      <span class="step-number">4</span>
+      <span class="step-title">Scan vị trí mới</span>
+    </div>
+    
+    <div class="product-summary" *ngIf="scannedProduct">
+      <strong>{{ scannedProduct.materialCode }}</strong> ({{ scannedProduct.batchNumber }})
+      <br>
+      <span class="old-location">Vị trí cũ: {{ scannedProduct.location }}</span>
+    </div>
+    
+    <div class="scan-input-container">
+      <input 
+        #locationInput
+        type="text" 
+        class="scan-input location-input"
+        [(ngModel)]="locationScanInput"
+        (ngModelChange)="onLocationInputChange()"
+        (keypress)="onLocationScanKeyPress($event)"
+        placeholder="Scan hoặc nhập vị trí mới..."
+        autocomplete="off"
+        autocapitalize="characters">
+      
+      <button 
+        class="scan-btn success"
+        [disabled]="isLoading || !locationScanInput"
+        (click)="saveNewLocation()">
+        <span *ngIf="!isLoading">✅ Lưu vị trí</span>
+        <span *ngIf="isLoading">⏳ Đang lưu...</span>
+      </button>
+    </div>
+    
+    <button class="back-btn" (click)="backToProductScan()">
+      ← Quay lại
+    </button>
+  </div>
+
+  <!-- Step 5: Success -->
+  <div class="step-container success-container" *ngIf="currentStep === 'success'">
+    <div class="success-icon">✅</div>
+    <div class="success-message">{{ successMessage }}</div>
+    
+    <div class="action-buttons">
+      <button class="action-btn primary" (click)="scanAnotherProduct()">
+        📦 Scan sản phẩm tiếp theo
+      </button>
+      <button class="action-btn secondary" (click)="resetAll()">
+        🏭 Đổi nhà máy
+      </button>
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  <div class="error-message" *ngIf="errorMessage">
+    ⚠️ {{ errorMessage }}
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <span>Đang xử lý...</span>
+  </div>
+</div>

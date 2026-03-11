@@ -54,11 +54,12 @@ export class MenuComponent implements OnInit {
     { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'warehouse', category: 'ASM2 RM' },
     { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'bar_chart', category: 'ASM2 RM' },
     
-    // ASM1 FG
-    { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM1 FG' },
-    { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM1 FG' },
-    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM1 FG' },
-    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM1 FG' },
+    // ASM FG
+    { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM FG' },
+    { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM FG' },
+    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
+    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
+    { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
     
     // Tools & Operations
     { path: '/warehouse-loading', title: 'Loading', icon: 'storage', category: 'Tools' },

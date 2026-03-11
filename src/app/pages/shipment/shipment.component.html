@@ -769,6 +769,15 @@
             <small class="btn-desc">In A4: toàn bộ thông tin shipment, mã QR, ký tên soạn</small>
           </div>
         </button>
+        
+        <button class="print-option-btn pkl-btn" (click)="openPKLDialog()">
+          <i class="material-icons">inventory_2</i>
+          <div class="btn-content">
+            <span class="btn-title">PACKING LIST (PKL)</span>
+            <small class="btn-desc">In A4: danh sách FG Out chia theo Pallet, có QR code</small>
+          </div>
+        </button>
+        
         <button class="print-option-btn preview-order-btn" (click)="previewShipmentOrder()" type="button">
           <i class="material-icons">visibility</i>
           <div class="btn-content">
@@ -858,6 +867,99 @@
       <button type="button" class="btn btn-cancel" (click)="closeScheduleDialog()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PKL (Packing List) Dialog -->
+<div class="custom-modal" [class.show]="showPKLDialog" [style.display]="showPKLDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closePKLDialog()"></div>
+  <div class="modal-container pkl-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">inventory_2</i>
+        PACKING LIST (PKL) - Shipment: {{ pklShipmentCode }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closePKLDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body pkl-body">
+      <!-- Summary -->
+      <div class="pkl-summary">
+        <div class="pkl-summary-item">
+          <span class="pkl-label">Tổng Pallet:</span>
+          <span class="pkl-value">{{ pklData.length }}</span>
+        </div>
+        <div class="pkl-summary-item">
+          <span class="pkl-label">Tổng Carton:</span>
+          <span class="pkl-value">{{ pklTotalCarton }}</span>
+        </div>
+        <div class="pkl-summary-item">
+          <span class="pkl-label">Tổng số lượng:</span>
+          <span class="pkl-value">{{ pklTotalQty | number }}</span>
+        </div>
+      </div>
+      
+      <!-- Pallet Groups -->
+      <div class="pkl-pallets" *ngIf="pklData.length > 0">
+        <div class="pkl-pallet-group" *ngFor="let palletGroup of pklData">
+          <div class="pkl-pallet-header">
+            <span class="pkl-pallet-name">📦 {{ palletGroup.pallet }}</span>
+            <span class="pkl-pallet-stats">
+              Carton: <strong>{{ palletGroup.totalCarton }}</strong> | 
+              Số lượng: <strong>{{ palletGroup.totalQty | number }}</strong>
+            </span>
+          </div>
+          <table class="pkl-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã TP</th>
+                <th>Batch</th>
+                <th>LOT</th>
+                <th>LSX</th>
+                <th>Số lượng</th>
+                <th>Carton</th>
+                <th>ODD</th>
+                <th>Vị trí</th>
+                <th>Loại hàng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of palletGroup.items; let idx = index">
+                <td>{{ idx + 1 }}</td>
+                <td>{{ item.materialCode }}</td>
+                <td>{{ item.batchNumber }}</td>
+                <td>{{ item.lot }}</td>
+                <td>{{ item.lsx }}</td>
+                <td class="text-right">{{ item.quantity | number }}</td>
+                <td class="text-center">{{ item.carton }}</td>
+                <td class="text-center">{{ item.odd }}</td>
+                <td>{{ item.location }}</td>
+                <td>{{ item.productType }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="pkl-empty" *ngIf="pklData.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Không có dữ liệu FG Out cho shipment này</p>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closePKLDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="btn btn-apply" (click)="printPKL()" [disabled]="pklData.length === 0">
+        <i class="material-icons">print</i>
+        In PKL (A4)
       </button>
     </div>
   </div>

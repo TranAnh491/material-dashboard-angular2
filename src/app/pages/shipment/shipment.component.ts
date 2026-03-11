@@ -89,6 +89,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
 
+  // PKL (Packing List) dialog
+  showPKLDialog: boolean = false;
+  pklData: any[] = []; // FG Out data grouped by pallet
+  pklShipmentCode: string = '';
+  pklTotalCarton: number = 0;
+  pklTotalQty: number = 0;
+
   // Danh mục mã khách (để hiển thị Customer trong Shipment Order)
   customerMappingItems: { id: string; customerCode: string; materialCode: string; description: string }[] = [];
   
@@ -2290,6 +2297,269 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   closePrintLabelDialog(): void {
     this.showPrintLabelDialog = false;
     this.selectedShipmentForPrint = null;
+  }
+
+  // Open PKL Dialog - Load FG Out data for shipment
+  async openPKLDialog(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+
+    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '').trim().toUpperCase();
+    if (!shipmentCode) {
+      alert('❌ Mã Shipment không hợp lệ!');
+      return;
+    }
+
+    this.pklShipmentCode = shipmentCode;
+    this.pklData = [];
+    this.pklTotalCarton = 0;
+    this.pklTotalQty = 0;
+
+    try {
+      // Load FG Out data for this shipment
+      const snapshot = await this.firestore.collection('fg-out', ref =>
+        ref.where('shipment', '==', shipmentCode)
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
+        return;
+      }
+
+      const fgOutItems: any[] = [];
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        fgOutItems.push({
+          id: doc.id,
+          materialCode: data.materialCode || '',
+          batchNumber: data.batchNumber || '',
+          lot: data.lot || '',
+          lsx: data.lsx || '',
+          quantity: data.quantity || 0,
+          carton: data.carton || 0,
+          odd: data.odd || 0,
+          pallet: data.pallet || '',
+          location: data.location || '',
+          productType: data.productType || '',
+          notes: data.notes || '',
+          approved: data.approved || false
+        });
+      });
+
+      // Group by pallet
+      const palletGroups = new Map<string, any[]>();
+      fgOutItems.forEach(item => {
+        const pallet = item.pallet || 'Không có Pallet';
+        if (!palletGroups.has(pallet)) {
+          palletGroups.set(pallet, []);
+        }
+        palletGroups.get(pallet)!.push(item);
+      });
+
+      // Convert to array for display
+      this.pklData = Array.from(palletGroups.entries()).map(([pallet, items]) => ({
+        pallet,
+        items,
+        totalCarton: items.reduce((sum, item) => sum + (item.carton || 0), 0),
+        totalQty: items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+      }));
+
+      // Sort pallets
+      this.pklData.sort((a, b) => {
+        if (a.pallet === 'Không có Pallet') return 1;
+        if (b.pallet === 'Không có Pallet') return -1;
+        return a.pallet.localeCompare(b.pallet);
+      });
+
+      // Calculate totals
+      this.pklTotalCarton = fgOutItems.reduce((sum, item) => sum + (item.carton || 0), 0);
+      this.pklTotalQty = fgOutItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+      this.showPKLDialog = true;
+      this.showPrintLabelDialog = false;
+
+      console.log('✅ Loaded PKL data:', this.pklData.length, 'pallets,', fgOutItems.length, 'items');
+    } catch (error) {
+      console.error('❌ Error loading PKL data:', error);
+      alert('❌ Lỗi khi tải dữ liệu PKL: ' + error.message);
+    }
+  }
+
+  closePKLDialog(): void {
+    this.showPKLDialog = false;
+    this.pklData = [];
+    this.pklShipmentCode = '';
+  }
+
+  // Print PKL (Packing List) - A4 format
+  async printPKL(): Promise<void> {
+    if (!this.pklShipmentCode || this.pklData.length === 0) {
+      alert('❌ Không có dữ liệu PKL để in!');
+      return;
+    }
+
+    // Generate QR code
+    let qrDataUrl = '';
+    try {
+      qrDataUrl = await QRCode.toDataURL(this.pklShipmentCode, { width: 120, margin: 1 });
+    } catch (e) {
+      console.error('QR generate error:', e);
+    }
+
+    const currentDate = new Date().toLocaleDateString('vi-VN');
+    const shipment = this.selectedShipmentForPrint;
+    const dispatchDate = shipment?.actualShipDate 
+      ? new Date(shipment.actualShipDate).toLocaleDateString('vi-VN') 
+      : '—';
+
+    // Build pallet sections HTML
+    let palletsHtml = '';
+    this.pklData.forEach((palletGroup, palletIndex) => {
+      const itemsHtml = palletGroup.items.map((item: any, idx: number) => `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td>${this.escapeHtml(item.materialCode)}</td>
+          <td>${this.escapeHtml(item.batchNumber)}</td>
+          <td>${this.escapeHtml(item.lot)}</td>
+          <td>${this.escapeHtml(item.lsx)}</td>
+          <td style="text-align: right;">${item.quantity?.toLocaleString() || 0}</td>
+          <td style="text-align: center;">${item.carton || 0}</td>
+          <td style="text-align: center;">${item.odd || 0}</td>
+          <td>${this.escapeHtml(item.location)}</td>
+          <td>${this.escapeHtml(item.productType)}</td>
+        </tr>
+      `).join('');
+
+      palletsHtml += `
+        <div class="pallet-section ${palletIndex > 0 ? 'page-break' : ''}">
+          <div class="pallet-header">
+            <span class="pallet-name">📦 ${this.escapeHtml(palletGroup.pallet)}</span>
+            <span class="pallet-summary">Carton: <strong>${palletGroup.totalCarton}</strong> | Số lượng: <strong>${palletGroup.totalQty.toLocaleString()}</strong></span>
+          </div>
+          <table class="pkl-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">STT</th>
+                <th>Mã TP</th>
+                <th>Batch</th>
+                <th>LOT</th>
+                <th>LSX</th>
+                <th style="width: 80px;">Số lượng</th>
+                <th style="width: 60px;">Carton</th>
+                <th style="width: 50px;">ODD</th>
+                <th>Vị trí</th>
+                <th style="width: 70px;">Loại hàng</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PKL - PACKING LIST - ${this.escapeHtml(this.pklShipmentCode)}</title>
+  <style>
+    @page { size: A4; margin: 10mm; }
+    @media print { .page-break { page-break-before: always; } }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 10mm; }
+    
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border: 2px solid #000; padding: 15px; margin-bottom: 15px; }
+    .header-left { }
+    .header-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
+    .header-shipment { font-size: 16px; margin-bottom: 5px; }
+    .header-info { font-size: 12px; color: #333; }
+    .header-right { text-align: right; }
+    .header-qr img { width: 100px; height: 100px; }
+    .header-qr-label { font-size: 10px; margin-top: 3px; }
+    
+    .summary-box { display: flex; gap: 20px; margin-bottom: 15px; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; }
+    .summary-item { font-size: 13px; }
+    .summary-item strong { font-size: 15px; }
+    
+    .pallet-section { margin-bottom: 20px; }
+    .pallet-header { background: #e8e8e8; padding: 10px; border: 2px solid #000; border-bottom: none; display: flex; justify-content: space-between; align-items: center; }
+    .pallet-name { font-size: 14px; font-weight: bold; }
+    .pallet-summary { font-size: 12px; }
+    
+    .pkl-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .pkl-table th, .pkl-table td { border: 1px solid #000; padding: 6px 8px; }
+    .pkl-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+    .pkl-table td { vertical-align: middle; }
+    
+    .footer { margin-top: 30px; border-top: 2px solid #000; padding-top: 15px; }
+    .signature-row { display: flex; justify-content: space-between; gap: 30px; }
+    .signature-box { flex: 1; text-align: center; }
+    .signature-label { font-size: 12px; font-weight: bold; margin-bottom: 40px; }
+    .signature-line { border-bottom: 1px solid #000; height: 1px; margin-bottom: 5px; }
+    .signature-hint { font-size: 10px; color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <div class="header-title">PACKING LIST (PKL)</div>
+      <div class="header-shipment">Shipment: <strong>${this.escapeHtml(this.pklShipmentCode)}</strong></div>
+      <div class="header-info">Ngày xuất hàng: ${dispatchDate}</div>
+      <div class="header-info">Ngày in: ${currentDate}</div>
+    </div>
+    <div class="header-right">
+      <div class="header-qr">
+        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code">` : ''}
+        <div class="header-qr-label">${this.escapeHtml(this.pklShipmentCode)}</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="summary-box">
+    <div class="summary-item">Tổng Pallet: <strong>${this.pklData.length}</strong></div>
+    <div class="summary-item">Tổng Carton: <strong>${this.pklTotalCarton}</strong></div>
+    <div class="summary-item">Tổng số lượng: <strong>${this.pklTotalQty.toLocaleString()}</strong></div>
+  </div>
+  
+  ${palletsHtml}
+  
+  <div class="footer">
+    <div class="signature-row">
+      <div class="signature-box">
+        <div class="signature-label">Người soạn hàng</div>
+        <div class="signature-line"></div>
+        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
+      </div>
+      <div class="signature-box">
+        <div class="signature-label">Người kiểm tra</div>
+        <div class="signature-line"></div>
+        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
+      </div>
+      <div class="signature-box">
+        <div class="signature-label">Người xuất kho</div>
+        <div class="signature-line"></div>
+        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 300);
+      };
+    }
   }
 
   async printShipmentLabel(): Promise<void> {

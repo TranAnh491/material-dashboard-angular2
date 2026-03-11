@@ -55,12 +55,12 @@
     </div>
   </div>
   
-  <!-- ASM1 FG Group -->
+  <!-- ASM FG Group -->
   <div class="menu-section">
-    <h5 class="menu-category-title">ASM1 FG</h5>
+    <h5 class="menu-category-title">ASM FG</h5>
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM1 FG' && (!isMobile || !isDesktopOnly(tab.path))" 
+        <div *ngIf="tab.category === 'ASM FG' && (!isMobile || !isDesktopOnly(tab.path))" 
              class="menu-item menu-item-asm1-fg" 
              (click)="navigateToTab(tab.path)">
           <i class="material-icons">{{tab.icon}}</i>

@@ -58,11 +58,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm2', name: 'RM2 Overview' },
     
-    // ASM1 FG tabs
+    // ASM FG tabs
     { key: 'fg-in', name: 'FG In' },
     { key: 'fg-out', name: 'FG Out' },
     { key: 'fg-check', name: 'FG Check' },
     { key: 'fg-inventory', name: 'FG Inventory' },
+    { key: 'fg-location', name: 'FG Location' },
     
     // Other tabs
     { key: 'location', name: 'Location' },
