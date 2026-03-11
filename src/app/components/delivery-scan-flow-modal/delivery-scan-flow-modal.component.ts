@@ -14,6 +14,13 @@ export interface PxkLineRow {
   checkQuantity?: number;
 }
 
+export interface ScanHistoryEntry {
+  materialCode: string;
+  poNumber: string;
+  quantity: number;
+  scanTime: Date;
+}
+
 export interface DeliveryScanFlowResult {
   success: boolean;
   cancelled?: boolean;
@@ -24,6 +31,7 @@ export interface DeliveryScanFlowResult {
   lsx?: string;
   lineNhan?: string;
   pxkLines?: PxkLineRow[];
+  scanHistory?: ScanHistoryEntry[];
 }
 
 @Component({
@@ -45,6 +53,7 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
   lsx = '';
   lineNhan = '';
   pxkRows: PxkLineRow[] = [];
+  scanHistory: ScanHistoryEntry[] = [];
   isLoadingPxk = false;
 
   private destroy$ = new Subject<void>();
@@ -364,8 +373,18 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Cộng dồn: mỗi lần scan thêm qty (hoặc +1 nếu không có qty) vào số lượng hiện tại
-    row.checkQuantity = (row.checkQuantity ?? 0) + (qty > 0 ? qty : 1);
+    const scanQty = qty > 0 ? qty : 1;
+
+    // Ghi nhận lịch sử scan chi tiết
+    this.scanHistory.push({
+      materialCode: code,
+      poNumber: po,
+      quantity: scanQty,
+      scanTime: new Date()
+    });
+
+    // Cộng dồn: mỗi lần scan thêm qty (hoặc +1 nếu không có qty) vào số lượng hiện tại (để hiển thị)
+    row.checkQuantity = (row.checkQuantity ?? 0) + scanQty;
     this.errorMessage = '';
     this.scanValue = '';
     this.focusInput();
@@ -380,7 +399,8 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
       employeeNhanName: this.nvNhanName,
       lsx: this.lsx,
       lineNhan: this.lineNhan,
-      pxkLines: this.pxkRows
+      pxkLines: this.pxkRows,
+      scanHistory: this.scanHistory
     } as DeliveryScanFlowResult);
   }
 

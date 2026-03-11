@@ -6,7 +6,8 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { MatDialog } from '@angular/material/dialog';
 import {
   DeliveryScanFlowModalComponent,
-  DeliveryScanFlowResult
+  DeliveryScanFlowResult,
+  ScanHistoryEntry
 } from '../../components/delivery-scan-flow-modal/delivery-scan-flow-modal.component';
 import { FactorySelectDialogComponent } from '../../components/factory-select-dialog/factory-select-dialog.component';
 
@@ -24,6 +25,12 @@ export interface DeliveryRecord {
     poNumber: string;
     quantity: number;
     checkQuantity?: number;
+  }>;
+  scanHistory?: Array<{
+    materialCode: string;
+    poNumber: string;
+    quantity: number;
+    scanTime: Date;
   }>;
   timestamp: Date;
   createdAt?: Date;
@@ -101,6 +108,14 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       checkQuantity: r.checkQuantity
     }));
 
+    // Lịch sử scan chi tiết từ phiên này
+    const newScanHistory = (result.scanHistory || []).map(h => ({
+      materialCode: h.materialCode,
+      poNumber: h.poNumber,
+      quantity: h.quantity,
+      scanTime: h.scanTime
+    }));
+
     const overItems = newLines.filter(l => (l.checkQuantity ?? 0) > (l.quantity ?? 0));
     if (overItems.length > 0) {
       const msg = overItems.map(l =>
@@ -133,6 +148,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
         const existingDoc = snap.docs[0];
         const existingData = existingDoc.data() as any;
         const oldLines: any[] = existingData.pxkLines || [];
+        const oldScanHistory: any[] = existingData.scanHistory || [];
 
         // Key trùng = materialCode+PO có trong new scan
         const newKeys = new Set(newLines.map(l => `${l.materialCode}||${l.poNumber}`));
@@ -142,15 +158,20 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
         );
         const mergedLines = [...keptOldLines, ...newLines];
 
+        // Gộp lịch sử scan: giữ lịch sử cũ + thêm lịch sử mới
+        const mergedScanHistory = [...oldScanHistory, ...newScanHistory];
+
         await this.firestore.collection('rm1-delivery-records').doc(existingDoc.id).update({
           ...baseRecord,
-          pxkLines: mergedLines
+          pxkLines: mergedLines,
+          scanHistory: mergedScanHistory
         });
       } else {
         // Tạo mới
         await this.firestore.collection('rm1-delivery-records').add({
           ...baseRecord,
           pxkLines: newLines,
+          scanHistory: newScanHistory,
           createdAt: new Date()
         });
       }
@@ -220,7 +241,8 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
             receiverEmployeeName: d.receiverEmployeeName || d.receiverEmployeeId || '—',
             lineNhan: d.lineNhan || '—',
             timestamp: d.timestamp?.toDate() || new Date(),
-            pxkLines: d.pxkLines || []
+            pxkLines: d.pxkLines || [],
+            scanHistory: d.scanHistory || []
           };
         })
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
@@ -237,8 +259,11 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
     let rowsHtml = '';
     records.forEach((rec, idx) => {
-      const lines = (rec.pxkLines || []) as any[];
-      const linesHtml = lines.map((ln: any, i: number) => `
+      const scanHistory = (rec.scanHistory || []) as any[];
+      const pxkLines = (rec.pxkLines || []) as any[];
+
+      // Tạo bảng tổng hợp từ pxkLines
+      const summaryHtml = pxkLines.map((ln: any, i: number) => `
         <tr>
           <td style="text-align:center">${i + 1}</td>
           <td>${ln.materialCode || ''}</td>
@@ -246,6 +271,20 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
           <td style="text-align:center">${ln.quantity ?? ''}</td>
           <td style="text-align:center;font-weight:700">${ln.checkQuantity != null ? ln.checkQuantity : '—'}</td>
         </tr>`).join('');
+
+      // Tạo bảng lịch sử scan chi tiết
+      const historyHtml = scanHistory.map((h: any, i: number) => {
+        const scanTime = h.scanTime?.toDate?.()?.toLocaleString('vi-VN') ||
+                        (h.scanTime instanceof Date ? h.scanTime.toLocaleString('vi-VN') : '—');
+        return `
+        <tr>
+          <td style="text-align:center">${i + 1}</td>
+          <td>${h.materialCode || ''}</td>
+          <td>${h.poNumber || ''}</td>
+          <td style="text-align:center">${h.quantity ?? ''}</td>
+          <td style="text-align:center">${scanTime}</td>
+        </tr>`;
+      }).join('');
 
       rowsHtml += `
         <div class="record">
@@ -259,12 +298,22 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
             <div class="ic"><div class="il">Line</div><div class="iv">${rec.lineNhan}</div></div>
             <div class="ic"><div class="il">LSX</div><div class="iv">${rec.lsx}</div></div>
           </div>
+          <h4 style="margin:10px 8px 5px;font-size:12px;color:#333;">📦 Tổng hợp giao hàng</h4>
           <table>
             <thead>
-              <tr><th>STT</th><th>Mã Nguyên Liệu</th><th>PO</th><th>Số lượng</th><th>Lượng Giao</th></tr>
+              <tr><th>STT</th><th>Mã Nguyên Liệu</th><th>PO</th><th>SL PXK</th><th>Tổng Giao</th></tr>
             </thead>
-            <tbody>${linesHtml || '<tr><td colspan="5" style="text-align:center;color:#999">Không có dữ liệu</td></tr>'}</tbody>
+            <tbody>${summaryHtml || '<tr><td colspan="5" style="text-align:center;color:#999">Không có dữ liệu</td></tr>'}</tbody>
           </table>
+          ${scanHistory.length > 0 ? `
+          <h4 style="margin:14px 8px 5px;font-size:12px;color:#333;">📋 Chi tiết từng lần scan</h4>
+          <table>
+            <thead>
+              <tr><th>STT</th><th>Mã Nguyên Liệu</th><th>PO</th><th>SL Scan</th><th>Thời gian Scan</th></tr>
+            </thead>
+            <tbody>${historyHtml}</tbody>
+          </table>
+          ` : ''}
         </div>`;
     });
 
@@ -349,7 +398,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const header = ['Thời gian', 'LSX', 'NV Giao', 'NV Nhận', 'Line', 'Mã Nguyên Liệu', 'PO', 'Số lượng', 'Lượng Giao'];
+      const header = ['Thời gian Scan', 'LSX', 'NV Giao', 'NV Nhận', 'Line', 'Mã Nguyên Liệu', 'PO', 'SL Scan'];
       const rows: string[][] = [header];
 
       const sortedDocs = [...(snap?.docs || [])].sort((a, b) => {
@@ -360,22 +409,36 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
       sortedDocs.forEach(doc => {
         const d = doc.data() as any;
-        const ts  = d.timestamp?.toDate()?.toLocaleString('vi-VN') || '';
         const lsx = d.lsx || '';
         const nv  = d.employeeName  || d.employeeId  || '';
         const rec = d.receiverEmployeeName || d.receiverEmployeeId || '';
         const ln  = d.lineNhan || '';
-        const lines = Array.isArray(d.pxkLines) ? d.pxkLines : [];
+        const scanHistory = Array.isArray(d.scanHistory) ? d.scanHistory : [];
 
-        if (lines.length === 0) {
-          rows.push([ts, lsx, nv, rec, ln, '', '', '', '']);
+        if (scanHistory.length === 0) {
+          // Fallback: nếu không có scanHistory thì dùng pxkLines
+          const lines = Array.isArray(d.pxkLines) ? d.pxkLines : [];
+          const ts = d.timestamp?.toDate()?.toLocaleString('vi-VN') || '';
+          if (lines.length === 0) {
+            rows.push([ts, lsx, nv, rec, ln, '', '', '']);
+          } else {
+            lines.forEach((line: any) => {
+              rows.push([ts, lsx, nv, rec, ln,
+                line.materialCode || '',
+                line.poNumber || '',
+                String(line.checkQuantity ?? line.quantity ?? '')
+              ]);
+            });
+          }
         } else {
-          lines.forEach((line: any) => {
-            rows.push([ts, lsx, nv, rec, ln,
-              line.materialCode || '',
-              line.poNumber || '',
-              String(line.quantity ?? ''),
-              String(line.checkQuantity ?? '')
+          // Xuất chi tiết từng lần scan
+          scanHistory.forEach((scan: any) => {
+            const scanTime = scan.scanTime?.toDate?.()?.toLocaleString('vi-VN') ||
+                            (scan.scanTime instanceof Date ? scan.scanTime.toLocaleString('vi-VN') : '');
+            rows.push([scanTime, lsx, nv, rec, ln,
+              scan.materialCode || '',
+              scan.poNumber || '',
+              String(scan.quantity ?? '')
             ]);
           });
         }
@@ -472,6 +535,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       lsx: data.lsx || '',
       lineNhan: data.lineNhan || '',
       pxkLines: data.pxkLines || [],
+      scanHistory: data.scanHistory || [],
       timestamp: data.timestamp?.toDate() || new Date(),
       createdAt: data.createdAt?.toDate()
     } as DeliveryRecord;
