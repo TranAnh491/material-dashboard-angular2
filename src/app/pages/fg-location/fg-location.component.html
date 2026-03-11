@@ -24,11 +24,11 @@
     </div>
   </div>
 
-  <!-- Step 2: Scan Product -->
-  <div class="step-container" *ngIf="currentStep === 'scan-product'">
+  <!-- Step 2: Scan Location -->
+  <div class="step-container" *ngIf="currentStep === 'scan-location'">
     <div class="step-header">
       <span class="step-number">2</span>
-      <span class="step-title">Scan mã hàng (Batch)</span>
+      <span class="step-title">Scan vị trí hiện tại</span>
     </div>
     
     <div class="factory-badge">
@@ -37,21 +37,21 @@
     
     <div class="scan-input-container">
       <input 
-        #productInput
+        #locationInput
         type="text" 
         class="scan-input"
-        [(ngModel)]="productScanInput"
-        (ngModelChange)="onProductInputChange()"
-        (keypress)="onProductScanKeyPress($event)"
-        placeholder="Scan hoặc nhập Batch..."
+        [(ngModel)]="locationScanInput"
+        (ngModelChange)="onLocationInputChange()"
+        (keypress)="onLocationScanKeyPress($event)"
+        placeholder="Scan vị trí..."
         autocomplete="off"
         autocapitalize="characters">
       
       <button 
         class="scan-btn primary"
-        [disabled]="isLoading || !productScanInput"
-        (click)="scanProduct()">
-        <span *ngIf="!isLoading">🔍 Tìm kiếm</span>
+        [disabled]="isLoading || !locationScanInput"
+        (click)="scanLocation()">
+        <span *ngIf="!isLoading">🔍 Tìm hàng tại vị trí</span>
         <span *ngIf="isLoading">⏳ Đang tìm...</span>
       </button>
     </div>
@@ -61,86 +61,113 @@
     </button>
   </div>
 
-  <!-- Step 3: Show Current Location -->
-  <div class="step-container" *ngIf="currentStep === 'show-current'">
+  <!-- Step 3: Show Items at Location -->
+  <div class="step-container" *ngIf="currentStep === 'show-items'">
     <div class="step-header">
       <span class="step-number">3</span>
-      <span class="step-title">Thông tin sản phẩm</span>
+      <span class="step-title">Chọn hàng cần di chuyển</span>
     </div>
     
-    <div class="product-info-card" *ngIf="scannedProduct">
-      <div class="info-row">
-        <span class="label">Mã TP:</span>
-        <span class="value highlight">{{ scannedProduct.materialCode }}</span>
+    <div class="location-badge">
+      📍 Vị trí: <strong>{{ currentLocation }}</strong>
+      <span class="item-count">({{ itemsAtLocation.length }} mã hàng)</span>
+    </div>
+    
+    <!-- Select All -->
+    <div class="select-all-row" (click)="toggleSelectAll()">
+      <div class="checkbox-wrapper">
+        <i class="material-icons">{{ selectAll ? 'check_box' : 'check_box_outline_blank' }}</i>
       </div>
-      <div class="info-row">
-        <span class="label">Batch:</span>
-        <span class="value">{{ scannedProduct.batchNumber }}</span>
+      <span class="select-all-text">Chọn toàn bộ ({{ itemsAtLocation.length }})</span>
+    </div>
+    
+    <!-- Items List -->
+    <div class="items-list">
+      <div 
+        class="item-card"
+        *ngFor="let item of itemsAtLocation"
+        [class.selected]="item.selected"
+        (click)="toggleItemSelection(item)">
+        <div class="item-checkbox">
+          <i class="material-icons">{{ item.selected ? 'check_box' : 'check_box_outline_blank' }}</i>
+        </div>
+        <div class="item-info">
+          <div class="item-code">{{ item.materialCode }}</div>
+          <div class="item-details">
+            <span class="detail-item" *ngIf="item.lot">LOT: {{ item.lot }}</span>
+            <span class="detail-item" *ngIf="item.lsx">LSX: {{ item.lsx }}</span>
+          </div>
+          <div class="item-quantity">
+            SL: <strong>{{ item.ton | number }}</strong>
+          </div>
+        </div>
       </div>
-      <div class="info-row" *ngIf="scannedProduct.lot">
-        <span class="label">LOT:</span>
-        <span class="value">{{ scannedProduct.lot }}</span>
-      </div>
-      <div class="info-row" *ngIf="scannedProduct.lsx">
-        <span class="label">LSX:</span>
-        <span class="value">{{ scannedProduct.lsx }}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Tồn kho:</span>
-        <span class="value">{{ scannedProduct.ton | number }}</span>
-      </div>
-      <div class="info-row location-row">
-        <span class="label">Vị trí hiện tại:</span>
-        <span class="value current-location">{{ scannedProduct.location }}</span>
-      </div>
+    </div>
+    
+    <!-- Selected Count -->
+    <div class="selected-summary" *ngIf="getSelectedCount() > 0">
+      ✅ Đã chọn: <strong>{{ getSelectedCount() }}</strong> / {{ itemsAtLocation.length }} mã hàng
     </div>
     
     <div class="action-buttons">
-      <button class="action-btn primary" (click)="proceedToScanLocation()">
-        📍 Đổi vị trí
+      <button 
+        class="action-btn primary" 
+        [disabled]="!hasSelectedItems()"
+        (click)="proceedToScanNewLocation()">
+        📍 Tiếp tục - Scan vị trí mới
       </button>
-      <button class="action-btn secondary" (click)="backToProductScan()">
-        ← Scan sản phẩm khác
+      <button class="action-btn secondary" (click)="backToLocationScan()">
+        ← Scan vị trí khác
       </button>
     </div>
   </div>
 
   <!-- Step 4: Scan New Location -->
-  <div class="step-container" *ngIf="currentStep === 'scan-location'">
+  <div class="step-container" *ngIf="currentStep === 'scan-new-location'">
     <div class="step-header">
       <span class="step-number">4</span>
       <span class="step-title">Scan vị trí mới</span>
     </div>
     
-    <div class="product-summary" *ngIf="scannedProduct">
-      <strong>{{ scannedProduct.materialCode }}</strong> ({{ scannedProduct.batchNumber }})
-      <br>
-      <span class="old-location">Vị trí cũ: {{ scannedProduct.location }}</span>
+    <div class="move-summary">
+      <div class="from-location">
+        <span class="label">Từ vị trí:</span>
+        <span class="location-value old">{{ currentLocation }}</span>
+      </div>
+      <div class="move-arrow">➡️</div>
+      <div class="to-location">
+        <span class="label">Đến vị trí:</span>
+        <span class="location-value new">{{ newLocationScanInput || '?' }}</span>
+      </div>
+    </div>
+    
+    <div class="selected-items-summary">
+      Di chuyển <strong>{{ getSelectedCount() }}</strong> mã hàng
     </div>
     
     <div class="scan-input-container">
       <input 
-        #locationInput
+        #newLocationInput
         type="text" 
         class="scan-input location-input"
-        [(ngModel)]="locationScanInput"
-        (ngModelChange)="onLocationInputChange()"
-        (keypress)="onLocationScanKeyPress($event)"
-        placeholder="Scan hoặc nhập vị trí mới..."
+        [(ngModel)]="newLocationScanInput"
+        (ngModelChange)="onNewLocationInputChange()"
+        (keypress)="onNewLocationScanKeyPress($event)"
+        placeholder="Scan vị trí mới..."
         autocomplete="off"
         autocapitalize="characters">
       
       <button 
         class="scan-btn success"
-        [disabled]="isLoading || !locationScanInput"
-        (click)="saveNewLocation()">
-        <span *ngIf="!isLoading">✅ Lưu vị trí</span>
-        <span *ngIf="isLoading">⏳ Đang lưu...</span>
+        [disabled]="isLoading || !newLocationScanInput"
+        (click)="moveToNewLocation()">
+        <span *ngIf="!isLoading">✅ Di chuyển</span>
+        <span *ngIf="isLoading">⏳ Đang xử lý...</span>
       </button>
     </div>
     
-    <button class="back-btn" (click)="backToProductScan()">
-      ← Quay lại
+    <button class="back-btn" (click)="backToItemSelection()">
+      ← Quay lại chọn hàng
     </button>
   </div>
 
@@ -150,8 +177,8 @@
     <div class="success-message">{{ successMessage }}</div>
     
     <div class="action-buttons">
-      <button class="action-btn primary" (click)="scanAnotherProduct()">
-        📦 Scan sản phẩm tiếp theo
+      <button class="action-btn primary" (click)="scanAnotherLocation()">
+        📍 Scan vị trí khác
       </button>
       <button class="action-btn secondary" (click)="resetAll()">
         🏭 Đổi nhà máy

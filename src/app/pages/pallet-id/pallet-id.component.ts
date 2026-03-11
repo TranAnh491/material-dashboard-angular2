@@ -174,11 +174,11 @@ export class PalletIdComponent implements OnInit, OnDestroy {
 
     const pallet = this.selectedPallet;
     
-    // Generate QR code
+    // Generate QR code - larger size for better scanning
     let qrCodeDataUrl = '';
     try {
       qrCodeDataUrl = await QRCode.toDataURL(pallet.palletCode, {
-        width: 200,
+        width: 400,
         margin: 1,
         errorCorrectionLevel: 'M'
       });
@@ -224,18 +224,24 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             padding: 0;
             box-sizing: border-box;
           }
+          html, body {
+            width: 100mm;
+            height: 130mm;
+          }
           body {
             font-family: Arial, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .label-container {
             width: 100mm;
             height: 130mm;
-            border: 2px solid #000;
+            border: 3px solid #000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 5mm;
+            padding: 3mm;
             page-break-after: always;
             box-sizing: border-box;
           }
@@ -243,38 +249,41 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             page-break-after: avoid;
           }
           .factory-name {
-            font-size: 18pt;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5mm;
-          }
-          .qr-code {
-            margin-bottom: 5mm;
-          }
-          .qr-code img {
-            width: 50mm;
-            height: 50mm;
-          }
-          .pallet-code {
-            font-size: 36pt;
+            font-size: 32pt;
             font-weight: bold;
             color: #000;
-            letter-spacing: 2px;
-            margin-bottom: 5mm;
-          }
-          .created-date {
-            font-size: 12pt;
-            color: #666;
             margin-bottom: 3mm;
           }
+          .qr-code {
+            margin-bottom: 3mm;
+          }
+          .qr-code img {
+            width: 70mm;
+            height: 70mm;
+          }
+          .pallet-code {
+            font-size: 52pt;
+            font-weight: bold;
+            color: #000;
+            letter-spacing: 3px;
+            margin-bottom: 2mm;
+          }
+          .created-date {
+            font-size: 16pt;
+            color: #333;
+            margin-bottom: 2mm;
+          }
           .label-number {
-            font-size: 10pt;
-            color: #999;
-            margin-top: 3mm;
+            font-size: 14pt;
+            color: #666;
           }
           @media print {
+            html, body {
+              width: 100mm;
+              height: 130mm;
+            }
             .label-container {
-              border: 2px solid #000;
+              border: 3px solid #000;
             }
           }
         </style>

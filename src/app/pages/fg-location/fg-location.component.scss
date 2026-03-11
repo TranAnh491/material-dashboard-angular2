@@ -212,62 +212,202 @@
   }
 }
 
-// Product Info Card
-.product-info-card {
-  background: #fafafa;
-  border-radius: 8px;
-  padding: 16px;
+// Location Badge
+.location-badge {
+  background: #fff3e0;
+  color: #e65100;
+  padding: 12px 16px;
+  border-radius: 6px;
+  text-align: center;
   margin-bottom: 16px;
-  border: 1px solid #e0e0e0;
+  font-size: 14px;
+  border: 1px solid #ffe0b2;
+  
+  strong {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  
+  .item-count {
+    font-size: 13px;
+    color: #666;
+    margin-left: 8px;
+  }
 }
 
-.info-row {
+// Select All Row
+.select-all-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 12px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  border: 1px solid #bbdefb;
+  
+  &:active {
+    background: #bbdefb;
+  }
+  
+  .checkbox-wrapper {
+    color: #1976D2;
+    
+    .material-icons {
+      font-size: 24px;
+    }
+  }
+  
+  .select-all-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1565c0;
+  }
+}
+
+// Items List
+.items-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.item-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
   border-bottom: 1px solid #eeeeee;
+  cursor: pointer;
+  transition: background 0.15s;
   
   &:last-child {
     border-bottom: none;
   }
   
-  .label {
-    font-size: 13px;
-    color: #666;
-    font-weight: 500;
+  &:active {
+    background: #f5f5f5;
   }
   
-  .value {
-    font-size: 14px;
-    font-weight: 600;
-    color: #333;
+  &.selected {
+    background: #e8f5e9;
     
-    &.highlight {
-      color: #1976D2;
+    .item-checkbox {
+      color: #388E3C;
+    }
+  }
+  
+  .item-checkbox {
+    color: #bdbdbd;
+    padding-top: 2px;
+    
+    .material-icons {
+      font-size: 22px;
+    }
+  }
+  
+  .item-info {
+    flex: 1;
+    
+    .item-code {
       font-size: 16px;
+      font-weight: 700;
+      color: #1976D2;
+      margin-bottom: 4px;
+    }
+    
+    .item-details {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+      
+      .detail-item {
+        font-size: 12px;
+        color: #666;
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    }
+    
+    .item-quantity {
+      font-size: 14px;
+      color: #333;
+      
+      strong {
+        color: #388E3C;
+      }
     }
   }
 }
 
-.location-row {
-  background: #fff3e0;
-  margin: 8px -16px -16px -16px;
-  padding: 12px 16px;
-  border-radius: 0 0 8px 8px;
-  border-top: 1px solid #ffe0b2;
+// Selected Summary
+.selected-summary {
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  border: 1px solid #c8e6c9;
   
-  .current-location {
-    color: #e65100;
-    font-size: 18px;
-    font-weight: 700;
+  strong {
+    font-size: 16px;
   }
 }
 
-// Product Summary
-.product-summary {
+// Move Summary
+.move-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #e0e0e0;
+  
+  .from-location, .to-location {
+    text-align: center;
+    
+    .label {
+      font-size: 11px;
+      color: #666;
+      display: block;
+      margin-bottom: 4px;
+    }
+    
+    .location-value {
+      font-size: 18px;
+      font-weight: 700;
+      display: block;
+      
+      &.old {
+        color: #e65100;
+      }
+      
+      &.new {
+        color: #388E3C;
+      }
+    }
+  }
+  
+  .move-arrow {
+    font-size: 24px;
+  }
+}
+
+// Selected Items Summary
+.selected-items-summary {
   background: #e3f2fd;
-  padding: 12px;
+  color: #1565c0;
+  padding: 10px;
   border-radius: 6px;
   text-align: center;
   margin-bottom: 16px;
@@ -276,12 +416,6 @@
   
   strong {
     font-size: 16px;
-    color: #1565c0;
-  }
-  
-  .old-location {
-    color: #e65100;
-    font-weight: 600;
   }
 }
 
