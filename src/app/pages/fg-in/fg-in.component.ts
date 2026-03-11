@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -158,6 +158,10 @@ export class FgInComponent implements OnInit, OnDestroy {
     quantityConfirmed: false,
     location: ''
   };
+  
+  // Scanner input for location
+  locationScannerValue: string = '';
+  @ViewChild('locationScannerInput') locationScannerInput: ElementRef;
   
   private destroy$ = new Subject<void>();
 
@@ -1953,7 +1957,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (material.isReceived) {
       return; // Already locked, don't open
     }
-    
+
     this.selectedReceiptMaterial = material;
     this.confirmReceiptData = {
       materialCodeConfirmed: false,
@@ -1961,9 +1965,13 @@ export class FgInComponent implements OnInit, OnDestroy {
       lsxConfirmed: false,
       lotConfirmed: false,
       quantityConfirmed: false,
-      location: material.location || ''
+      location: ''  // Always empty - requires scanning
     };
+    this.locationScannerValue = '';  // Clear scanner input
     this.showConfirmReceiptDialog = true;
+    
+    // Auto focus scanner input
+    this.focusLocationScanner();
   }
 
   // Close confirm receipt dialog
@@ -1978,6 +1986,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       quantityConfirmed: false,
       location: ''
     };
+    this.locationScannerValue = '';
   }
 
   // Toggle confirmation for a field
@@ -2015,41 +2024,48 @@ export class FgInComponent implements OnInit, OnDestroy {
     return this.filteredMaterials.filter(m => !m.isReceived).length;
   }
 
-  // Scan location using QR scanner
-  scanReceiptLocation(): void {
-    if (!this.selectedReceiptMaterial) return;
-
-    const dialogData: QRScannerData = {
-      title: `Scan QR Code - Vị trí cho ${this.selectedReceiptMaterial.materialCode}`,
-      message: `Vị trí hiện tại: ${this.confirmReceiptData.location || 'Chưa có'}`,
-      materialCode: this.selectedReceiptMaterial.materialCode
-    };
-
-    const dialogRef = this.dialog.open(QRScannerModalComponent, {
-      width: '500px',
-      maxWidth: '95vw',
-      data: dialogData,
-      disableClose: true,
-      panelClass: 'qr-scanner-dialog'
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && result.success) {
-        const location = result.location || result.text || '';
-        if (location.trim() !== '') {
-          this.confirmReceiptData.location = location.toUpperCase();
-          console.log(`Scanned location: ${this.confirmReceiptData.location}`);
-        }
-      }
-    });
+  // Handle scanner input - auto uppercase
+  onLocationScannerInput(): void {
+    if (this.locationScannerValue) {
+      this.locationScannerValue = this.locationScannerValue.toUpperCase();
+    }
   }
 
-  // Edit location manually
-  editReceiptLocation(): void {
-    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa):', this.confirmReceiptData.location || '');
-    if (newLocation !== null) {
-      this.confirmReceiptData.location = newLocation.toUpperCase();
+  // Handle Enter key from scanner
+  onLocationScannerKeyPress(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.saveScannedLocation();
     }
+  }
+
+  // Save the scanned location
+  saveScannedLocation(): void {
+    if (this.locationScannerValue && this.locationScannerValue.trim() !== '') {
+      this.confirmReceiptData.location = this.locationScannerValue.trim().toUpperCase();
+      console.log(`✅ Location saved: ${this.confirmReceiptData.location}`);
+    }
+  }
+
+  // Clear scanner input
+  clearLocationScanner(): void {
+    this.locationScannerValue = '';
+    this.confirmReceiptData.location = '';
+    // Focus back to input
+    setTimeout(() => {
+      if (this.locationScannerInput) {
+        this.locationScannerInput.nativeElement.focus();
+      }
+    }, 100);
+  }
+
+  // Focus scanner input when dialog opens
+  focusLocationScanner(): void {
+    setTimeout(() => {
+      if (this.locationScannerInput) {
+        this.locationScannerInput.nativeElement.focus();
+      }
+    }, 300);
   }
 
   // Confirm and lock the receipt

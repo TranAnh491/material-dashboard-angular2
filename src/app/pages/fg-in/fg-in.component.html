@@ -582,19 +582,29 @@
       <!-- Location Section -->
       <div class="location-section">
         <h6>Vị trí lưu kho:</h6>
-        <div class="location-display" [class.has-location]="confirmReceiptData.location">
-          <i class="material-icons">place</i>
-          <span>{{ confirmReceiptData.location || '' }}</span>
+        <div class="scanner-input-container">
+          <i class="material-icons scanner-icon">qr_code_scanner</i>
+          <input 
+            #locationScannerInput
+            type="text" 
+            class="scanner-input"
+            [(ngModel)]="locationScannerValue"
+            (keypress)="onLocationScannerKeyPress($event)"
+            (input)="onLocationScannerInput()"
+            placeholder="Scan hoặc nhập vị trí..."
+            autocomplete="off"
+            autocapitalize="characters"
+            (click)="$event.stopPropagation()">
+          <button 
+            class="clear-btn" 
+            *ngIf="locationScannerValue"
+            (click)="clearLocationScanner(); $event.stopPropagation()">
+            <i class="material-icons">close</i>
+          </button>
         </div>
-        <div class="location-actions">
-          <button class="custom-btn scan-btn" (click)="scanReceiptLocation(); $event.stopPropagation()">
-            <i class="material-icons">qr_code_scanner</i>
-            Scan QR/Barcode
-          </button>
-          <button class="custom-btn" (click)="editReceiptLocation(); $event.stopPropagation()">
-            <i class="material-icons">edit</i>
-            Nhập thủ công
-          </button>
+        <div class="location-result" *ngIf="confirmReceiptData.location">
+          <i class="material-icons">check_circle</i>
+          <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
         </div>
       </div>
 

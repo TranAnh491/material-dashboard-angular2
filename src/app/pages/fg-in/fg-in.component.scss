@@ -1035,14 +1035,92 @@ mat-checkbox {
       margin-top: 16px;
       padding-top: 16px;
       border-top: 1px solid #e0e0e0;
-      
+
       h6 {
         margin: 0 0 10px 0;
         font-size: 13px;
         font-weight: 600;
         color: #000000;
       }
-      
+
+      .scanner-input-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 8px;
+        background: #ffffff;
+        border: 2px solid #2196f3;
+        border-radius: 6px;
+        margin-bottom: 10px;
+
+        .scanner-icon {
+          color: #2196f3;
+          font-size: 24px;
+        }
+
+        .scanner-input {
+          flex: 1;
+          border: none;
+          outline: none;
+          font-size: 16px;
+          font-weight: 600;
+          text-transform: uppercase;
+          padding: 10px 0;
+          background: transparent;
+
+          &::placeholder {
+            color: #999;
+            font-weight: normal;
+            text-transform: none;
+          }
+        }
+
+        .clear-btn {
+          background: transparent;
+          border: none;
+          padding: 4px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          .material-icons {
+            color: #999;
+            font-size: 20px;
+          }
+
+          &:hover .material-icons {
+            color: #f44336;
+          }
+        }
+      }
+
+      .location-result {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: #e8f5e9;
+        border: 1px solid #4caf50;
+        border-radius: 6px;
+        margin-bottom: 10px;
+
+        .material-icons {
+          color: #4caf50;
+          font-size: 20px;
+        }
+
+        span {
+          font-size: 14px;
+          color: #2e7d32;
+
+          strong {
+            font-size: 16px;
+            color: #1b5e20;
+          }
+        }
+      }
+
       .location-display {
         display: flex;
         align-items: center;
@@ -1052,12 +1130,12 @@ mat-checkbox {
         border: 2px dashed #ff9800;
         margin-bottom: 10px;
         min-height: 44px;
-        
+
         .material-icons {
           color: #ff9800;
           font-size: 20px;
         }
-        
+
         span {
           font-size: 14px;
           color: #e65100;

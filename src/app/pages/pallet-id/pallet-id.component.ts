@@ -203,8 +203,10 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             <img src="${qrCodeDataUrl}" alt="QR Code" />
           </div>
           <div class="pallet-code">${pallet.palletCode}</div>
-          <div class="created-date">Ngày tạo: ${this.formatDate(pallet.createdAt)}</div>
-          <div class="label-number">Tem ${i}/4</div>
+          <div class="label-footer">
+            <div class="created-date">${this.formatDate(pallet.createdAt)}</div>
+            <div class="label-number">${i}/4</div>
+          </div>
         </div>
       `;
     }
@@ -217,7 +219,27 @@ export class PalletIdComponent implements OnInit, OnDestroy {
         <style>
           @page {
             size: 100mm 130mm;
-            margin: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          @media print {
+            @page {
+              size: 100mm 130mm;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            html {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            /* Hide browser headers and footers */
+            head, header, footer {
+              display: none !important;
+            }
           }
           * {
             margin: 0;
@@ -227,64 +249,69 @@ export class PalletIdComponent implements OnInit, OnDestroy {
           html, body {
             width: 100mm;
             height: 130mm;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           body {
-            font-family: Arial, sans-serif;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            font-family: Arial, Helvetica, sans-serif;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
           }
           .label-container {
             width: 100mm;
             height: 130mm;
-            border: 3px solid #000;
+            border: 2px solid #000;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 3mm;
+            justify-content: space-between;
+            padding: 4mm 3mm;
             page-break-after: always;
+            page-break-inside: avoid;
             box-sizing: border-box;
+            overflow: hidden;
           }
           .label-container:last-child {
             page-break-after: avoid;
           }
           .factory-name {
-            font-size: 32pt;
+            font-size: 36pt;
             font-weight: bold;
             color: #000;
-            margin-bottom: 3mm;
+            text-align: center;
           }
           .qr-code {
-            margin-bottom: 3mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
           .qr-code img {
-            width: 70mm;
-            height: 70mm;
+            width: 75mm;
+            height: 75mm;
+            max-width: 75mm;
+            max-height: 75mm;
           }
           .pallet-code {
-            font-size: 52pt;
+            font-size: 48pt;
             font-weight: bold;
             color: #000;
-            letter-spacing: 3px;
-            margin-bottom: 2mm;
+            letter-spacing: 2px;
+            text-align: center;
+          }
+          .label-footer {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 2mm;
           }
           .created-date {
-            font-size: 16pt;
+            font-size: 12pt;
             color: #333;
-            margin-bottom: 2mm;
           }
           .label-number {
-            font-size: 14pt;
-            color: #666;
-          }
-          @media print {
-            html, body {
-              width: 100mm;
-              height: 130mm;
-            }
-            .label-container {
-              border: 3px solid #000;
-            }
+            font-size: 12pt;
+            color: #333;
           }
         </style>
       </head>
