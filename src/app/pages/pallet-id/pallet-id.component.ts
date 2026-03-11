@@ -178,8 +178,8 @@ export class PalletIdComponent implements OnInit, OnDestroy {
     let qrCodeDataUrl = '';
     try {
       qrCodeDataUrl = await QRCode.toDataURL(pallet.palletCode, {
-        width: 400,
-        margin: 1,
+        width: 600,
+        margin: 0,
         errorCorrectionLevel: 'M'
       });
     } catch (err) {
@@ -228,17 +228,15 @@ export class PalletIdComponent implements OnInit, OnDestroy {
               margin: 0 !important;
               padding: 0 !important;
             }
-            html {
+            html, body {
               margin: 0 !important;
               padding: 0 !important;
+              width: 100mm !important;
+              height: 130mm !important;
             }
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-            /* Hide browser headers and footers */
-            head, header, footer {
-              display: none !important;
+            .label-container {
+              width: 100mm !important;
+              height: 130mm !important;
             }
           }
           * {
@@ -249,8 +247,8 @@ export class PalletIdComponent implements OnInit, OnDestroy {
           html, body {
             width: 100mm;
             height: 130mm;
-            margin: 0 !important;
-            padding: 0 !important;
+            margin: 0;
+            padding: 0;
           }
           body {
             font-family: Arial, Helvetica, sans-serif;
@@ -261,12 +259,12 @@ export class PalletIdComponent implements OnInit, OnDestroy {
           .label-container {
             width: 100mm;
             height: 130mm;
-            border: 2px solid #000;
+            border: 3px solid #000;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 4mm 3mm;
+            justify-content: space-around;
+            padding: 2mm;
             page-break-after: always;
             page-break-inside: avoid;
             box-sizing: border-box;
@@ -276,42 +274,45 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             page-break-after: avoid;
           }
           .factory-name {
-            font-size: 36pt;
+            font-size: 72pt;
             font-weight: bold;
             color: #000;
             text-align: center;
+            line-height: 1;
           }
           .qr-code {
             display: flex;
             align-items: center;
             justify-content: center;
+            flex: 1;
           }
           .qr-code img {
-            width: 75mm;
-            height: 75mm;
-            max-width: 75mm;
-            max-height: 75mm;
+            width: 180mm;
+            height: 180mm;
           }
           .pallet-code {
-            font-size: 48pt;
+            font-size: 84pt;
             font-weight: bold;
             color: #000;
-            letter-spacing: 2px;
+            letter-spacing: 4px;
             text-align: center;
+            line-height: 1;
           }
           .label-footer {
             display: flex;
             justify-content: space-between;
             width: 100%;
-            padding: 0 2mm;
+            padding: 0 5mm;
           }
           .created-date {
-            font-size: 12pt;
-            color: #333;
+            font-size: 24pt;
+            color: #000;
+            font-weight: 600;
           }
           .label-number {
-            font-size: 12pt;
-            color: #333;
+            font-size: 24pt;
+            color: #000;
+            font-weight: 600;
           }
         </style>
       </head>

@@ -579,6 +579,36 @@
         </div>
       </div>
 
+      <!-- Multiple Pallet Section -->
+      <div class="multiple-pallet-section">
+        <div class="multiple-pallet-checkbox" (click)="toggleMultiplePallet(); $event.stopPropagation()">
+          <i class="material-icons">{{ isMultiplePallet ? 'check_box' : 'check_box_outline_blank' }}</i>
+          <span>Nhập nhiều pallet (chia số lượng)</span>
+        </div>
+        
+        <div class="partial-quantity-input" *ngIf="isMultiplePallet">
+          <div class="quantity-row">
+            <span class="qty-label">Số lượng gốc:</span>
+            <span class="qty-value original">{{ originalQuantity | number:'1.0-0' }}</span>
+          </div>
+          <div class="quantity-row editable">
+            <span class="qty-label">Số lượng xác nhận:</span>
+            <input 
+              type="number" 
+              class="qty-input"
+              [(ngModel)]="confirmQuantity"
+              (ngModelChange)="onConfirmQuantityChange()"
+              [max]="originalQuantity"
+              min="1"
+              (click)="$event.stopPropagation()">
+          </div>
+          <div class="quantity-row remaining" *ngIf="confirmQuantity < originalQuantity">
+            <span class="qty-label">Còn lại:</span>
+            <span class="qty-value remaining-value">{{ originalQuantity - confirmQuantity | number:'1.0-0' }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Location Section -->
       <div class="location-section">
         <h6>Vị trí lưu kho:</h6>

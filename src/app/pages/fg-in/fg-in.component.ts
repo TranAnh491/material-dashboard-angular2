@@ -163,6 +163,11 @@ export class FgInComponent implements OnInit, OnDestroy {
   locationScannerValue: string = '';
   @ViewChild('locationScannerInput') locationScannerInput: ElementRef;
   
+  // Multiple pallet (partial confirmation)
+  isMultiplePallet: boolean = false;
+  confirmQuantity: number = 0;
+  originalQuantity: number = 0;
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -247,46 +252,48 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Add material to Inventory when received
-  private addToInventory(material: FgInItem): void {
-    console.log(`Adding ${material.materialCode} to FG Inventory...`);
-    
+  // Add material to Inventory when received (supports partial quantity and custom batch)
+  private addToInventory(material: FgInItem, customQuantity?: number, customBatch?: string): void {
+    const quantity = customQuantity !== undefined ? customQuantity : material.quantity;
+    const batchNumber = customBatch !== undefined ? customBatch : material.batchNumber;
+    console.log(`Adding ${material.materialCode} to FG Inventory with quantity: ${quantity}, batch: ${batchNumber}...`);
+
     // Tìm thông tin từ catalog
     const catalogItem = this.catalogItems.find(item => item.materialCode === material.materialCode);
     const customerFromCatalog = catalogItem ? catalogItem.customer : '';
     const standardFromCatalog = catalogItem ? catalogItem.standard : '';
-    
+
     // Tính toán Carton và ODD từ Standard
     let carton = 0;
     let odd = 0;
-    
+
     if (standardFromCatalog && !isNaN(parseFloat(standardFromCatalog)) && parseFloat(standardFromCatalog) > 0) {
       const standard = parseFloat(standardFromCatalog);
-      carton = Math.ceil(material.quantity / standard); // Làm tròn lên
-      odd = material.quantity % standard; // Số lẻ
+      carton = Math.ceil(quantity / standard); // Làm tròn lên
+      odd = quantity % standard; // Số lẻ
     }
-    
+
     // Create inventory material from inbound material
     const inventoryMaterial = {
       factory: material.factory || 'ASM1',
       importDate: material.importDate,
       receivedDate: new Date(),
-      batchNumber: material.batchNumber,
+      batchNumber: batchNumber,
       materialCode: material.materialCode,
       poNumber: material.poNumber,
       rev: material.rev,
       lot: material.lot,
       lsx: material.lsx,
-      quantity: material.quantity,
+      quantity: quantity,
       carton: carton,
       odd: odd,
       // Các trường chuẩn FG Inventory: tonDau + nhap - xuat = ton
       tonDau: 0,
-      nhap: material.quantity,
+      nhap: quantity,
       xuat: 0,
-      ton: material.quantity,
+      ton: quantity,
       exported: 0,
-      stock: material.quantity,
+      stock: quantity,
       location: material.location || 'Temporary',
       notes: material.notes || '',
       customer: material.customer || customerFromCatalog || '',
@@ -296,7 +303,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    
+
     this.firestore.collection('fg-inventory').add(inventoryMaterial)
       .then((docRef) => {
         console.log(`Successfully added ${material.materialCode} to FG inventory with ID: ${docRef.id}`);
@@ -1968,6 +1975,12 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''  // Always empty - requires scanning
     };
     this.locationScannerValue = '';  // Clear scanner input
+    
+    // Multiple pallet - initialize
+    this.isMultiplePallet = false;
+    this.originalQuantity = material.quantity || 0;
+    this.confirmQuantity = this.originalQuantity;
+    
     this.showConfirmReceiptDialog = true;
     
     // Auto focus scanner input
@@ -1987,6 +2000,11 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''
     };
     this.locationScannerValue = '';
+    
+    // Reset multiple pallet
+    this.isMultiplePallet = false;
+    this.confirmQuantity = 0;
+    this.originalQuantity = 0;
   }
 
   // Toggle confirmation for a field
@@ -2068,6 +2086,58 @@ export class FgInComponent implements OnInit, OnDestroy {
     }, 300);
   }
 
+  // Parse batch number to get base and suffix (e.g. 11030001A -> base: 11030001, suffix: A)
+  private getBatchBaseAndSuffix(batchNumber: string): { base: string; suffix: string } {
+    if (!batchNumber || batchNumber.trim() === '') {
+      return { base: '', suffix: '' };
+    }
+    const batch = batchNumber.trim();
+    const lastChar = batch.slice(-1).toUpperCase();
+    if (lastChar >= 'A' && lastChar <= 'Z') {
+      return { base: batch.slice(0, -1), suffix: lastChar };
+    }
+    return { base: batch, suffix: '' };
+  }
+
+  // Get next suffix: '' -> A, A -> B, ..., Z -> AA
+  private getNextSuffix(suffix: string): string {
+    if (!suffix) return 'A';
+    const chars = suffix.toUpperCase().split('');
+    for (let i = chars.length - 1; i >= 0; i--) {
+      if (chars[i] < 'Z') {
+        chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+        return chars.join('');
+      }
+      chars[i] = 'A';
+      if (i === 0) return 'A' + chars.join('');
+    }
+    return 'A';
+  }
+
+  // Get batch with suffix (e.g. 11030001 + A -> 11030001A)
+  private getBatchWithSuffix(base: string, suffix: string): string {
+    return base + suffix;
+  }
+
+  // Toggle multiple pallet checkbox
+  toggleMultiplePallet(): void {
+    this.isMultiplePallet = !this.isMultiplePallet;
+    if (!this.isMultiplePallet) {
+      // Reset to original quantity when unchecked
+      this.confirmQuantity = this.originalQuantity;
+    }
+  }
+
+  // Validate confirm quantity input
+  onConfirmQuantityChange(): void {
+    if (this.confirmQuantity < 0) {
+      this.confirmQuantity = 0;
+    }
+    if (this.confirmQuantity > this.originalQuantity) {
+      this.confirmQuantity = this.originalQuantity;
+    }
+  }
+
   // Confirm and lock the receipt
   confirmAndLockReceipt(): void {
     if (!this.selectedReceiptMaterial) {
@@ -2085,36 +2155,99 @@ export class FgInComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const confirmMsg = `✅ Xác nhận khóa phiếu?\n\n` +
+    // Validate confirm quantity for multiple pallet
+    if (this.isMultiplePallet) {
+      if (this.confirmQuantity <= 0) {
+        alert('❌ Số lượng xác nhận phải lớn hơn 0');
+        return;
+      }
+      if (this.confirmQuantity > this.originalQuantity) {
+        alert('❌ Số lượng xác nhận không được lớn hơn số lượng gốc');
+        return;
+      }
+    }
+
+    const quantityToConfirm = this.isMultiplePallet ? this.confirmQuantity : this.originalQuantity;
+    const remainingQuantity = this.originalQuantity - quantityToConfirm;
+    const isPartialConfirm = this.isMultiplePallet && remainingQuantity > 0;
+
+    // Batch suffix for multiple pallet: A, B, C...
+    let batchForInventory = this.selectedReceiptMaterial.batchNumber || '';
+    let batchForRemaining = '';
+    if (isPartialConfirm) {
+      const { base, suffix } = this.getBatchBaseAndSuffix(this.selectedReceiptMaterial.batchNumber || '');
+      const currentSuffix = suffix || 'A';
+      batchForInventory = this.getBatchWithSuffix(base, currentSuffix);
+      batchForRemaining = this.getBatchWithSuffix(base, this.getNextSuffix(currentSuffix));
+    }
+
+    let confirmMsg = `✅ Xác nhận khóa phiếu?\n\n` +
       `Mã TP: ${this.selectedReceiptMaterial.materialCode}\n` +
       `PO: ${this.selectedReceiptMaterial.poNumber || 'N/A'}\n` +
       `LSX: ${this.selectedReceiptMaterial.lsx}\n` +
-      `LOT: ${this.selectedReceiptMaterial.lot}\n` +
-      `Số lượng: ${this.selectedReceiptMaterial.quantity}\n` +
-      `Vị trí: ${this.confirmReceiptData.location}\n\n` +
+      `LOT: ${this.selectedReceiptMaterial.lot}\n`;
+
+    if (isPartialConfirm) {
+      confirmMsg += `\n📦 NHẬP NHIỀU PALLET:\n` +
+        `Batch vào kho: ${batchForInventory}\n` +
+        `Số lượng: ${quantityToConfirm.toLocaleString()}\n` +
+        `Batch còn lại: ${batchForRemaining}\n` +
+        `Số lượng còn lại: ${remainingQuantity.toLocaleString()}\n`;
+    } else {
+      confirmMsg += `Batch: ${batchForInventory}\n` +
+        `Số lượng: ${quantityToConfirm.toLocaleString()}\n`;
+    }
+
+    confirmMsg += `Vị trí: ${this.confirmReceiptData.location}\n\n` +
       `Dữ liệu sẽ được chuyển vào FG Inventory.`;
 
     if (!confirm(confirmMsg)) {
       return;
     }
 
-    // Update location and lock status
+    // Update location
     this.selectedReceiptMaterial.location = this.confirmReceiptData.location;
-    this.selectedReceiptMaterial.isReceived = true;
     this.selectedReceiptMaterial.updatedAt = new Date();
 
-    // Update in Firebase
-    this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+    if (isPartialConfirm) {
+      // PARTIAL CONFIRMATION: Add suffix A, B, C... to batch
+      console.log(`📦 Partial confirmation: ${quantityToConfirm} of ${this.originalQuantity}, batch ${batchForInventory} -> FG, ${batchForRemaining} remaining`);
+      
+      // Add confirmed quantity to FG Inventory with batch suffix (e.g. 11030001A)
+      this.addToInventory(this.selectedReceiptMaterial, quantityToConfirm, batchForInventory);
+      
+      // Update fg-in record: remaining quantity with next batch suffix (e.g. 11030001B)
+      this.selectedReceiptMaterial.quantity = remainingQuantity;
+      this.selectedReceiptMaterial.batchNumber = batchForRemaining;
+      this.selectedReceiptMaterial.isReceived = false;
+      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+      
+      // Close dialog
+      this.closeConfirmReceiptDialog();
+      
+      // Show success message
+      alert(`✅ Đã xác nhận ${quantityToConfirm.toLocaleString()} sản phẩm!\n\n` +
+        `Batch vào kho: ${batchForInventory}\n` +
+        `Vị trí: ${this.confirmReceiptData.location}\n` +
+        `Batch còn lại: ${batchForRemaining}\n` +
+        `Số lượng còn lại: ${remainingQuantity.toLocaleString()} sản phẩm chờ xác nhận`);
+    } else {
+      // FULL CONFIRMATION: Confirm entire quantity
+      this.selectedReceiptMaterial.isReceived = true;
+      
+      // Update in Firebase
+      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+      
+      // Add to FG Inventory
+      this.addToInventory(this.selectedReceiptMaterial);
+      
+      // Close dialog
+      this.closeConfirmReceiptDialog();
+      
+      // Show success message
+      alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
+    }
 
-    // Add to FG Inventory
-    this.addToInventory(this.selectedReceiptMaterial);
-
-    // Close dialog
-    this.closeConfirmReceiptDialog();
-
-    // Show success message
-    alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
-    
     // Refresh data
     this.refreshData();
   }

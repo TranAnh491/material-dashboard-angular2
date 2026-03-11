@@ -920,17 +920,23 @@ mat-checkbox {
 .confirm-receipt-modal {
   max-width: 500px !important;
   width: 95% !important;
-  
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+
   .modal-body {
     padding: 20px;
-    
+    overflow-y: auto;
+    flex: 1;
+    max-height: calc(90vh - 140px);
+
     .confirm-instruction {
       margin: 0 0 16px 0;
       font-size: 13px;
       color: #333333;
       font-weight: 500;
     }
-    
+
     .confirm-fields {
       display: flex;
       flex-direction: column;
@@ -1031,6 +1037,96 @@ mat-checkbox {
       }
     }
     
+    // Multiple Pallet Section
+    .multiple-pallet-section {
+      margin-top: 16px;
+      padding: 12px;
+      background: #fff8e1;
+      border: 1px solid #ffcc02;
+      border-radius: 8px;
+
+      .multiple-pallet-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        padding: 4px 0;
+
+        .material-icons {
+          color: #ff9800;
+          font-size: 22px;
+        }
+
+        span {
+          font-size: 14px;
+          font-weight: 600;
+          color: #e65100;
+        }
+      }
+
+      .partial-quantity-input {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed #ffcc02;
+
+        .quantity-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 0;
+
+          .qty-label {
+            font-size: 13px;
+            color: #666;
+          }
+
+          .qty-value {
+            font-size: 15px;
+            font-weight: 700;
+
+            &.original {
+              color: #333;
+            }
+
+            &.remaining-value {
+              color: #f44336;
+            }
+          }
+
+          &.editable {
+            background: #ffffff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ff9800;
+            margin: 4px 0;
+          }
+
+          &.remaining {
+            background: #ffebee;
+            padding: 8px 12px;
+            border-radius: 6px;
+          }
+
+          .qty-input {
+            width: 120px;
+            padding: 8px 12px;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: right;
+            border: 2px solid #ff9800;
+            border-radius: 4px;
+            outline: none;
+            color: #e65100;
+
+            &:focus {
+              border-color: #f57c00;
+              box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
+            }
+          }
+        }
+      }
+    }
+
     .location-section {
       margin-top: 16px;
       padding-top: 16px;
@@ -1228,6 +1324,14 @@ mat-checkbox {
   }
   
   .modal-footer {
+    position: sticky;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid #e0e0e0;
+    padding: 12px 20px;
+    flex-shrink: 0;
+    z-index: 10;
+    
     .btn-done {
       background: #4caf50 !important;
       color: #ffffff !important;

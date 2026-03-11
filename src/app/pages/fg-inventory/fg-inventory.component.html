@@ -351,4 +351,64 @@
   </div>
 </div>
 
+<!-- Import Progress Dialog (hiển thị trong quá trình import) -->
+<div class="custom-modal" [class.show]="showImportProgressDialog" [style.display]="showImportProgressDialog ? 'flex' : 'none'">
+  <div class="modal-overlay"></div>
+  <div class="modal-container import-progress-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons spinning">sync</i>
+        Đang import tồn đầu...
+      </h5>
+    </div>
+    <div class="modal-body">
+      <div class="import-progress-content">
+        <p class="progress-text">
+          Đã import <strong>{{ importProgressImportedCount | number }}</strong> / {{ importProgressTotalCount | number }} dòng
+        </p>
+        <p class="progress-batch">
+          Batch <strong>{{ importProgressCurrentBatch }}</strong> / {{ importProgressTotalBatches }}
+        </p>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" 
+               [style.width.%]="importProgressTotalBatches > 0 ? (importProgressCurrentBatch / importProgressTotalBatches * 100) : 0">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Success Dialog -->
+<div class="custom-modal" [class.show]="showImportSuccessDialog" [style.display]="showImportSuccessDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeImportSuccessDialog()"></div>
+  <div class="modal-container import-success-modal">
+    <div class="modal-header success-header">
+      <h5 class="modal-title">
+        <i class="material-icons">check_circle</i>
+        Import tồn đầu thành công
+      </h5>
+      <button type="button" class="close-btn" (click)="closeImportSuccessDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="import-success-content">
+        <i class="material-icons success-icon">done_all</i>
+        <p class="success-message">Đã import thành công <strong>{{ importSuccessCount | number }}</strong> dòng tồn đầu.</p>
+        <p class="success-skipped" *ngIf="importSkippedCount > 0">
+          Bỏ qua <strong>{{ importSkippedCount | number }}</strong> dòng trùng (Mã TP + LOT + LSX + Tồn đầu + Vị trí).
+        </p>
+        <p class="success-note">Batch tự sinh: TDAU000001, TDAU000002...</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-apply" (click)="closeImportSuccessDialog()">
+        <i class="material-icons">check</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
 

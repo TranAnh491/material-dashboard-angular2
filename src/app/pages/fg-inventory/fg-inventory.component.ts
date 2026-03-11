@@ -101,6 +101,18 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Reset dialog
   showResetDialog: boolean = false;
   resetSelectedFactory: string = 'ASM1';
+
+  // Import progress dialog (hiển thị trong quá trình import)
+  showImportProgressDialog: boolean = false;
+  importProgressCurrentBatch: number = 0;
+  importProgressTotalBatches: number = 0;
+  importProgressImportedCount: number = 0;
+  importProgressTotalCount: number = 0;
+
+  // Import success dialog
+  showImportSuccessDialog: boolean = false;
+  importSuccessCount: number = 0;
+  importSkippedCount: number = 0;  // Số dòng bỏ qua do trùng
   
   // Display options
   showCompleted: boolean = true;
@@ -581,25 +593,52 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   private async processExcelFile(file: File): Promise<void> {
     try {
       this.isLoading = true;
-      const data = await this.readExcelFile(file);
-      const materials = this.parseExcelData(data);
+      const rawData = await this.readExcelFile(file);
+      const materials = this.parseExcelData(rawData);
       
-      // Save to Firebase FIRST and wait for completion
+      // Tính Carton, ODD từ catalog (nếu có)
+      materials.forEach(m => {
+        const catalogItem = this.catalogItems.find(c => c.materialCode === m.materialCode);
+        const standard = catalogItem?.standard ? parseFloat(String(catalogItem.standard)) : 0;
+        if (standard > 0) {
+          m.carton = Math.ceil(m.tonDau / standard);
+          m.odd = m.tonDau % standard;
+        }
+      });
+      
+      // Hiển thị popup tiến trình import
+      const totalBatches = Math.ceil(materials.length / this.IMPORT_CHUNK_SIZE);
+      this.importProgressTotalBatches = totalBatches;
+      this.importProgressTotalCount = materials.length;
+      this.importProgressCurrentBatch = 0;
+      this.importProgressImportedCount = 0;
+      this.showImportProgressDialog = true;
+      this.cdr.detectChanges();
+      
+      // Save to Firebase - chia nhỏ từng phần
       await this.saveMaterialsToFirebase(materials);
       
-      // Data will be loaded automatically via snapshotChanges listener
+      // Đóng popup tiến trình, hiển thị popup thành công
+      this.showImportProgressDialog = false;
       this.isLoading = false;
-      
-      alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
+      this.importSuccessCount = materials.length - this.importSkippedCount;  // Số dòng thực sự đã thêm
+      this.showImportSuccessDialog = true;
+      this.cdr.detectChanges();
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
       this.isLoading = false;
+      this.showImportProgressDialog = false;
       alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
-  private async readExcelFile(file: File): Promise<any[]> {
+  closeImportSuccessDialog(): void {
+    this.showImportSuccessDialog = false;
+    this.importSuccessCount = 0;
+  }
+
+  private async readExcelFile(file: File): Promise<any[][]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e: any) => {
@@ -608,8 +647,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          resolve(jsonData);
+          // header: 1 = array of arrays (theo cột A, B, C...)
+          const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          resolve(rawData);
         } catch (error) {
           reject(error);
         }
@@ -619,32 +659,93 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  private parseExcelData(data: any[]): FGInventoryItem[] {
-    return data.map((row: any, index: number) => ({
-      factory: (row['Factory'] || row['Nhà máy'] || 'ASM1').toString().trim() || 'ASM1',
-      importDate: new Date(),
-      receivedDate: new Date(),
-      batchNumber: row['Batch'] || '',
-      materialCode: row['Mã TP'] || '',
-      lot: row['LOT'] || '',
-      lsx: row['LSX'] || '',
-      quantity: 0, // Not used in FG Inventory
-      standard: 0, // Will be calculated from catalog
-      carton: 0, // Will be calculated
-      odd: 0, // Will be calculated
-      tonDau: parseInt(row['Tồn Đầu']) || 0,
-      nhap: 0, // Not in new template - will be set to 0
-      xuat: 0, // Not in new template - will be set to 0
-      ton: parseInt(row['Tồn Đầu']) || 0, // Initial ton = tonDau
-      location: row['Vị Trí'] || 'Temporary',
-      notes: (row['Ghi chú'] || row['Ghi chu'] || '').toString().trim() || '',
-      customer: row['Khách'] || '',
-      isReceived: true,
-      isCompleted: false,
-      isDuplicate: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }));
+  // Kiểm tra row có phải header không
+  private isHeaderRow(row: any[]): boolean {
+    if (!row || row.length === 0) return true;
+    const first = String(row[0] || '').toLowerCase();
+    const third = String(row[2] || '').toLowerCase();
+    return first.includes('nhà máy') || first.includes('factory') ||
+           third.includes('mã') || third.includes('ma tp');
+  }
+
+  // Parse dữ liệu import tồn đầu - cột: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú
+  // Batch tự sinh: TDAU000001, TDAU000002... (đọc batch biết là import tồn đầu)
+  // Loại trùng: gộp các dòng trùng (Factory + Mã TP + LOT + LSX + Vị trí) bằng cách cộng dồn tồn đầu
+  private parseExcelData(rawData: any[][]): FGInventoryItem[] {
+    const rows = rawData.filter(r => r && r.length > 0);
+    let startIndex = 0;
+    if (rows.length > 0 && this.isHeaderRow(rows[0])) {
+      startIndex = 1; // Bỏ qua dòng header
+    }
+
+    // Bước 1: Parse và gộp trùng theo key (factory|materialCode|lot|lsx|location)
+    const mergedMap = new Map<string, { factory: string; materialCode: string; lot: string; lsx: string; location: string; tonDau: number; notes: string[] }>();
+    
+    for (let i = startIndex; i < rows.length; i++) {
+      const row = rows[i];
+      const factory = String(row[0] || '').trim() || 'ASM1';
+      const materialCode = String(row[2] || '').trim(); // Cột C
+      const lot = String(row[3] || '').trim();          // Cột D
+      const lsx = String(row[4] || '').trim();          // Cột E
+      const tonDau = parseInt(String(row[5] || '0'), 10) || 0;  // Cột F
+      const location = String(row[6] || '').trim() || 'Temporary'; // Cột G
+      const notes = String(row[7] || '').trim();        // Cột H
+
+      // Bỏ qua dòng trống (không có mã TP hoặc tồn đầu = 0)
+      if (!materialCode && tonDau === 0) continue;
+
+      const key = `${factory}|${materialCode}|${lot}|${lsx}|${location}`.toUpperCase();
+      const existing = mergedMap.get(key);
+      
+      if (existing) {
+        existing.tonDau += tonDau;
+        if (notes) existing.notes.push(notes);
+      } else {
+        mergedMap.set(key, {
+          factory,
+          materialCode,
+          lot,
+          lsx,
+          location,
+          tonDau,
+          notes: notes ? [notes] : []
+        });
+      }
+    }
+
+    // Bước 2: Chuyển thành FGInventoryItem với batch tự sinh
+    const materials: FGInventoryItem[] = [];
+    let seq = 1;
+    mergedMap.forEach((item) => {
+      const notes = item.notes.filter(n => n).join('; ');
+      materials.push({
+        factory: item.factory || 'ASM1',
+        importDate: new Date(),
+        receivedDate: new Date(),
+        batchNumber: `TDAU${seq.toString().padStart(6, '0')}`,
+        materialCode: item.materialCode || '',
+        lot: item.lot,
+        lsx: item.lsx,
+        quantity: 0,
+        standard: 0,
+        carton: 0,
+        odd: 0,
+        tonDau: item.tonDau,
+        nhap: 0,
+        xuat: 0,
+        ton: item.tonDau,
+        location: item.location,
+        notes,
+        customer: '',
+        isReceived: true,
+        isCompleted: false,
+        isDuplicate: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      seq++;
+    });
+    return materials;
   }
 
   private parseDate(dateStr: string): Date | null {
@@ -660,91 +761,108 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return new Date(dateStr);
   }
 
-  // Save materials to Firebase - returns Promise that resolves when ALL items are saved
+  // Save materials to Firebase - chia nhỏ từng phần (chunk), ghi tuần tự từng dòng tránh lỗi "Document already exists"
+  private readonly IMPORT_CHUNK_SIZE = 50;
+
   async saveMaterialsToFirebase(materials: FGInventoryItem[]): Promise<void> {
-    const savePromises = materials.map(material => {
-      const materialData = {
-        ...material,
-        importDate: material.importDate,
-        receivedDate: material.receivedDate,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      
-      delete materialData.id;
-      
-      return this.firestore.collection('fg-inventory').add(materialData)
-        .then((docRef) => {
-          console.log('FG Inventory material saved to Firebase successfully with ID:', docRef.id);
-        })
-        .catch(error => {
-          console.error('Error saving FG Inventory material to Firebase:', error);
-          throw error; // Re-throw to fail the whole batch
-        });
-    });
+    let batchIndex = 0;
+    let savedCount = 0;
+    this.importSkippedCount = 0;
     
-    // Wait for ALL items to be saved before resolving
-    await Promise.all(savePromises);
-    console.log(`✅ All ${materials.length} materials saved to Firebase successfully`);
+    for (let i = 0; i < materials.length; i += this.IMPORT_CHUNK_SIZE) {
+      const chunk = materials.slice(i, i + this.IMPORT_CHUNK_SIZE);
+      batchIndex++;
+      
+      for (const material of chunk) {
+        // Kiểm tra trùng: Mã TP + LOT + LSX + Tồn đầu + Vị trí
+        const exists = await this.checkDuplicateExists(material);
+        if (exists) {
+          this.importSkippedCount++;
+          continue;
+        }
+        
+        const materialData: any = {
+          factory: material.factory,
+          importDate: material.importDate,
+          receivedDate: material.receivedDate,
+          batchNumber: material.batchNumber,
+          materialCode: material.materialCode,
+          lot: material.lot,
+          lsx: material.lsx,
+          quantity: material.quantity,
+          standard: material.standard,
+          carton: material.carton,
+          odd: material.odd,
+          tonDau: material.tonDau,
+          nhap: material.nhap,
+          xuat: material.xuat,
+          ton: material.ton,
+          location: material.location,
+          notes: material.notes,
+          customer: material.customer,
+          isReceived: material.isReceived,
+          isCompleted: material.isCompleted,
+          isDuplicate: material.isDuplicate,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        await this.firestore.collection('fg-inventory').add(materialData);
+        savedCount++;
+      }
+      
+      // Cập nhật tiến trình cho popup
+      this.importProgressCurrentBatch = batchIndex;
+      this.importProgressImportedCount = savedCount + this.importSkippedCount;
+      this.cdr.detectChanges();
+      
+      console.log(`✅ Batch ${batchIndex}/${this.importProgressTotalBatches}: saved ${chunk.length} items`);
+    }
+    console.log(`✅ Import done: ${savedCount} saved, ${this.importSkippedCount} skipped (duplicate)`);
   }
 
-  // Download template
+  // Kiểm tra đã tồn tại record trùng: Mã TP + LOT + LSX + Tồn đầu + Vị trí
+  private async checkDuplicateExists(material: FGInventoryItem): Promise<boolean> {
+    const snapshot = await this.firestore.collection('fg-inventory', ref =>
+      ref.where('materialCode', '==', material.materialCode || '')
+         .where('lot', '==', material.lot || '')
+         .where('lsx', '==', material.lsx || '')
+         .where('tonDau', '==', material.tonDau)
+         .where('location', '==', material.location || '')
+         .where('factory', '==', material.factory || 'ASM1')
+         .limit(1)
+    ).get().toPromise();
+    
+    return snapshot && !snapshot.empty;
+  }
+
+  // Download template - Import tồn đầu: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú
+  // Batch tự sinh (TDAU000001...) khi import
   downloadTemplate(): void {
     const templateData = [
-      {
-        'Factory': 'ASM1',
-        'Batch': '010001',
-        'Mã TP': 'P001234',
-        'LOT': 'LOT001',
-        'LSX': '0124/0001',
-        'Tồn Đầu': 100,
-        'Vị Trí': 'A1-01',
-        'Ghi chú': 'Ghi chú mẫu',
-        'Khách': 'Customer A'
-      },
-      {
-        'Factory': 'ASM1',
-        'Batch': '010002',
-        'Mã TP': 'P002345',
-        'LOT': 'LOT002',
-        'LSX': '0124/0002',
-        'Tồn Đầu': 200,
-        'Vị Trí': 'A1-02',
-        'Ghi chú': '',
-        'Khách': 'Customer B'
-      },
-      {
-        'Factory': 'ASM2',
-        'Batch': '020001',
-        'Mã TP': 'P003456',
-        'LOT': 'LOT003',
-        'LSX': '0224/0001',
-        'Tồn Đầu': 150,
-        'Vị Trí': 'B1-01',
-        'Ghi chú': '',
-        'Khách': 'Customer C'
-      }
+      ['Nhà máy', '', 'Mã TP', 'LOT', 'LSX', 'Tồn đầu', 'Vị trí', 'Ghi chú'],
+      ['ASM1', '', 'P001234', 'LOT001', '0124/0001', 100, 'A1-01', 'Ghi chú mẫu'],
+      ['ASM1', '', 'P002345', 'LOT002', '0124/0002', 200, 'A1-02', ''],
+      ['ASM2', '', 'P003456', 'LOT003', '0224/0001', 150, 'B1-01', '']
     ];
 
     const wb: XLSX.WorkBook = XLSX.utils.book_new();
-    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
+    const ws: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(templateData);
     
-    // Set column widths for better readability
     const colWidths = [
-      { wch: 8 },  // Factory
-      { wch: 10 }, // Batch
-      { wch: 12 }, // Mã TP
-      { wch: 10 }, // LOT
-      { wch: 12 }, // LSX
-      { wch: 12 }, // Tồn Đầu
-      { wch: 10 }, // Vị Trí
-      { wch: 20 }, // Ghi chú
-      { wch: 15 }  // Khách
+      { wch: 10 },  // A: Nhà máy
+      { wch: 5 },   // B: (trống)
+      { wch: 12 },  // C: Mã TP
+      { wch: 10 },  // D: LOT
+      { wch: 12 },  // E: LSX
+      { wch: 10 },  // F: Tồn đầu
+      { wch: 10 },  // G: Vị trí
+      { wch: 20 }   // H: Ghi chú
     ];
     ws['!cols'] = colWidths;
     
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'FG_Inventory_Template.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Tồn đầu');
+    XLSX.writeFile(wb, 'FG_Inventory_TonDau_Template.xlsx');
   }
 
   // Additional methods needed for the component

@@ -726,6 +726,86 @@ mat-checkbox {
       }
     }
     
+    // Import Progress Modal
+    &.import-progress-modal {
+      .modal-header .close-btn {
+        display: none;
+      }
+    }
+    .import-progress-content {
+      text-align: center;
+      padding: 24px 16px;
+      .progress-text, .progress-batch {
+        font-size: 16px;
+        color: #333;
+        margin-bottom: 12px;
+        strong {
+          color: #1976d2;
+          font-size: 20px;
+        }
+      }
+      .progress-bar-container {
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 16px;
+      }
+      .progress-bar-fill {
+        height: 100%;
+        background: #4caf50;
+        transition: width 0.3s ease;
+      }
+    }
+    .spinning {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    // Import Success Modal
+    &.import-success-modal {
+      .success-header .modal-title {
+        color: #2e7d32;
+      }
+      .success-header .material-icons {
+        color: #4caf50;
+      }
+    }
+    .import-success-content {
+      text-align: center;
+      padding: 24px 16px;
+      .success-icon {
+        font-size: 64px;
+        color: #4caf50;
+        margin-bottom: 16px;
+      }
+      .success-message {
+        font-size: 18px;
+        color: #333;
+        margin-bottom: 8px;
+        strong {
+          color: #2e7d32;
+          font-size: 22px;
+        }
+      }
+      .success-skipped {
+        font-size: 14px;
+        color: #ff9800;
+        margin-bottom: 8px;
+        strong {
+          color: #e65100;
+        }
+      }
+      .success-note {
+        font-size: 13px;
+        color: #666;
+        margin: 0;
+      }
+    }
+
     .reset-warning {
       display: flex;
       align-items: center;
