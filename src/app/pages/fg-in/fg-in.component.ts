@@ -344,49 +344,29 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Delete material - Using same approach as clearAllData
+  // Delete material - Xóa ngay không cần xác nhận
   deleteMaterial(material: FgInItem): void {
-    console.log('=== DELETE MATERIAL CALLED ===');
-    console.log('Material object:', material);
-    console.log('Material ID:', material.id);
-    console.log('Material Code:', material.materialCode);
-    console.log('Material has ID:', !!material.id);
-    
-    // Check if material has ID
     if (!material.id) {
       console.error('❌ Material has no ID - cannot delete');
-      alert('❌ Không thể xóa: Material không có ID. Vui lòng refresh và thử lại.');
       return;
     }
     
-    // Simple confirmation
-    const confirmMessage = `Xác nhận xóa material "${material.materialCode || 'Unknown'}"?`;
-    console.log('Confirmation message:', confirmMessage);
+    const materialId = material.id;
     
-    if (confirm(confirmMessage)) {
-      console.log('✅ User confirmed deletion');
-      console.log('Attempting to delete from Firebase with ID:', material.id);
-      
-      // Use the same approach as clearAllData - get document reference and delete
-      this.firestore.collection('fg-in').doc(material.id).get().subscribe(doc => {
-        if (doc.exists) {
-          doc.ref.delete().then(() => {
-            console.log('✅ FG In material deleted from Firebase successfully');
-            alert(`✅ Đã xóa material "${material.materialCode}" thành công!`);
-            // Refresh data after successful deletion
-            this.refreshData();
-          }).catch(error => {
-            console.error('❌ Error deleting FG In material from Firebase:', error);
-            alert(`❌ Lỗi khi xóa material: ${error.message || error}`);
-          });
-        } else {
-          console.error('❌ Document does not exist in Firebase');
-          alert('❌ Không tìm thấy material trong Firebase');
-        }
+    // Xóa khỏi local arrays ngay lập tức để UI cập nhật nhanh
+    this.materials = this.materials.filter(m => m.id !== materialId);
+    this.filteredMaterials = this.filteredMaterials.filter(m => m.id !== materialId);
+    
+    // Xóa từ Firebase
+    this.firestore.collection('fg-in').doc(materialId).delete()
+      .then(() => {
+        console.log('✅ Deleted:', material.materialCode);
+      })
+      .catch(error => {
+        console.error('❌ Error deleting:', error);
+        // Nếu lỗi, refresh lại data
+        this.refreshData();
       });
-    } else {
-      console.log('❌ User cancelled deletion');
-    }
   }
 
   // Apply search filters - Optimized for performance
@@ -816,9 +796,10 @@ export class FgInComponent implements OnInit, OnDestroy {
   /** 
    * Parse Bảng kê nhập 02:
    * - Mã TP: cột M (index 12)
+   * - LSX: cột N (index 13)
+   * - Số lượng: cột S (index 18)
    * - Số PO: cột AL (index 37)
    * - Số LOT: cột AU (index 46) - nếu có chữ cái thì bỏ chữ cái và số sau nó
-   * - LSX: cột N (index 13)
    * - Dữ liệu từ dòng 8 (bỏ 7 dòng header)
    */
   private parseBangKeNhap02Data(rows: any[][]): FgInItem[] {
@@ -826,6 +807,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     const result: FgInItem[] = [];
     const colM = 12;   // Mã TP
     const colN = 13;   // LSX
+    const colS = 18;   // Số lượng
     const colAL = 37;  // Số PO
     const colAU = 46;  // Số LOT
     
@@ -837,6 +819,10 @@ export class FgInComponent implements OnInit, OnDestroy {
       
       const lsx = row && (row[colN] != null) ? String(row[colN]).trim() : '';
       const poNumber = row && (row[colAL] != null) ? String(row[colAL]).trim() : '';
+      
+      // Số lượng
+      const soLuong = Number(row[colS]);
+      const qty = isNaN(soLuong) || soLuong <= 0 ? 0 : Math.floor(soLuong);
       
       // LOT: nếu có chữ cái thì bỏ chữ cái và số sau nó
       let lotRaw = row && (row[colAU] != null) ? String(row[colAU]).trim() : '';
@@ -851,7 +837,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         poNumber: poNumber,
         lot,
         lsx,
-        quantity: 0,
+        quantity: qty,
         carton: 0,
         odd: 0,
         location: 'Temporary',
