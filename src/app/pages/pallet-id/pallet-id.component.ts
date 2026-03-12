@@ -174,11 +174,11 @@ export class PalletIdComponent implements OnInit, OnDestroy {
 
     const pallet = this.selectedPallet;
     
-    // Generate QR code - kích thước vừa tem, có margin tránh bị cắt
+    // Generate QR code - kích thước lớn gấp đôi
     let qrCodeDataUrl = '';
     try {
       qrCodeDataUrl = await QRCode.toDataURL(pallet.palletCode, {
-        width: 400,
+        width: 800,
         margin: 2,
         errorCorrectionLevel: 'M'
       });
@@ -219,24 +219,23 @@ export class PalletIdComponent implements OnInit, OnDestroy {
         <style>
           @page {
             size: 100mm 130mm;
-            margin: 5mm !important;
+            margin: 0 !important;
           }
           @media print {
             @page {
               size: 100mm 130mm;
-              margin: 5mm !important;
+              margin: 0 !important;
             }
             html, body {
               margin: 0 !important;
               padding: 0 !important;
-              width: 90mm !important;
-              height: 120mm !important;
+              width: 100mm !important;
+              height: 130mm !important;
             }
             .label-container {
-              width: 90mm !important;
-              height: 120mm !important;
-              max-width: 90mm !important;
-              max-height: 120mm !important;
+              width: 100mm !important;
+              height: 130mm !important;
+              border: none !important;
             }
           }
           * {
@@ -245,8 +244,8 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             box-sizing: border-box;
           }
           html, body {
-            width: 90mm;
-            height: 120mm;
+            width: 100mm;
+            height: 130mm;
             margin: 0;
             padding: 0;
           }
@@ -257,14 +256,14 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             color-adjust: exact !important;
           }
           .label-container {
-            width: 90mm;
-            height: 120mm;
+            width: 100mm;
+            height: 130mm;
             border: 2px solid #000;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-around;
-            padding: 5mm;
+            justify-content: space-between;
+            padding: 3mm 4mm;
             page-break-after: always;
             page-break-inside: avoid;
             box-sizing: border-box;
@@ -274,35 +273,32 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             page-break-after: avoid;
           }
           .factory-name {
-            font-size: 42pt;
+            font-size: 28pt;
             font-weight: bold;
             color: #000;
             text-align: center;
             line-height: 1;
-            flex-shrink: 0;
           }
           .qr-code {
             display: flex;
             align-items: center;
             justify-content: center;
             flex: 1;
-            min-height: 0;
           }
           .qr-code img {
-            width: 55mm !important;
-            height: 55mm !important;
-            max-width: 55mm !important;
-            max-height: 55mm !important;
+            width: 70mm !important;
+            height: 70mm !important;
+            max-width: 70mm !important;
+            max-height: 70mm !important;
             object-fit: contain;
           }
           .pallet-code {
-            font-size: 48pt;
+            font-size: 32pt;
             font-weight: bold;
             color: #000;
             letter-spacing: 2px;
             text-align: center;
             line-height: 1;
-            flex-shrink: 0;
             font-family: 'Courier New', monospace;
           }
           .label-footer {
@@ -310,15 +306,15 @@ export class PalletIdComponent implements OnInit, OnDestroy {
             justify-content: space-between;
             width: 100%;
             padding: 0 2mm;
-            flex-shrink: 0;
+            margin-top: 2mm;
           }
           .created-date {
-            font-size: 18pt;
+            font-size: 14pt;
             color: #000;
             font-weight: 600;
           }
           .label-number {
-            font-size: 18pt;
+            font-size: 14pt;
             color: #000;
             font-weight: 600;
           }
