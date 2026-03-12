@@ -39,6 +39,10 @@
               <i class="material-icons">delete_sweep</i>
               Reset về 0
             </a>
+            <a class="dropdown-item" href="javascript:void(0)" (click)="openDuplicateBatchDialog(); $event.preventDefault()">
+              <i class="material-icons">content_copy</i>
+              Trùng Batch
+            </a>
           </div>
         </div>
 
@@ -399,13 +403,96 @@
         <p class="success-skipped" *ngIf="importSkippedCount > 0">
           Bỏ qua <strong>{{ importSkippedCount | number }}</strong> dòng trùng (Mã TP + LOT + LSX + Tồn đầu + Vị trí).
         </p>
-        <p class="success-note">Batch tự sinh: TDAU000001, TDAU000002...</p>
+        <p class="success-note">Batch tự sinh: ASM1 → TDAU1-000001...; ASM2 → TDAU2-000001...</p>
       </div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-apply" (click)="closeImportSuccessDialog()">
         <i class="material-icons">check</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicate Batch Dialog -->
+<div class="custom-modal" [class.show]="showDuplicateBatchDialog" [style.display]="showDuplicateBatchDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeDuplicateBatchDialog()"></div>
+  <div class="modal-container duplicate-batch-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">content_copy</i>
+        Trùng Batch
+      </h5>
+      <button type="button" class="close-btn" (click)="closeDuplicateBatchDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Password form -->
+      <div *ngIf="!duplicateBatchAuthenticated" class="duplicate-batch-password-form">
+        <p class="form-label">Nhập mật khẩu để truy cập:</p>
+        <input type="password" 
+               class="form-input" 
+               [(ngModel)]="duplicateBatchPassword" 
+               placeholder="Mật khẩu"
+               (keyup.enter)="verifyDuplicateBatchPassword()">
+        <p *ngIf="duplicateBatchPasswordError" class="error-text">{{ duplicateBatchPasswordError }}</p>
+      </div>
+      <!-- List of duplicate batches -->
+      <div *ngIf="duplicateBatchAuthenticated" class="duplicate-batch-content">
+        <p *ngIf="getDuplicateBatchGroups().length === 0" class="no-duplicates-msg">
+          <i class="material-icons">check_circle</i>
+          Không có batch trùng.
+        </p>
+        <div *ngIf="getDuplicateBatchGroups().length > 0" class="duplicate-batch-list">
+          <div *ngFor="let group of getDuplicateBatchGroups()" class="duplicate-batch-group">
+            <div class="group-header">
+              <strong>Batch: {{ group.batchKey }}</strong>
+              <span class="group-count">({{ group.materials.length }} dòng)</span>
+            </div>
+            <table class="duplicate-batch-table">
+              <thead>
+                <tr>
+                  <th>Factory</th>
+                  <th>Mã TP</th>
+                  <th>LOT</th>
+                  <th>LSX</th>
+                  <th>Tồn đầu</th>
+                  <th>Vị trí</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let m of group.materials">
+                  <td>{{ m.factory }}</td>
+                  <td>{{ m.materialCode }}</td>
+                  <td>{{ m.lot }}</td>
+                  <td>{{ m.lsx }}</td>
+                  <td>{{ m.tonDau }}</td>
+                  <td>{{ m.location }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeDuplicateBatchDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button *ngIf="duplicateBatchAuthenticated && getDuplicateBatchGroups().length > 0" 
+              type="button" class="btn btn-apply" 
+              (click)="fixDuplicateBatches()" 
+              [disabled]="isFixingDuplicateBatches">
+        <i class="material-icons" *ngIf="!isFixingDuplicateBatches">edit</i>
+        <i class="material-icons spinning" *ngIf="isFixingDuplicateBatches">sync</i>
+        {{ isFixingDuplicateBatches ? 'Đang sửa...' : 'Sửa số batch' }}
+      </button>
+      <button *ngIf="!duplicateBatchAuthenticated" class="btn btn-apply" (click)="verifyDuplicateBatchPassword()">
+        <i class="material-icons">lock_open</i>
+        Đăng nhập
       </button>
     </div>
   </div>

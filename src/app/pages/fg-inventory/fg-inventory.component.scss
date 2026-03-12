@@ -59,11 +59,8 @@
   height: 100vh;
   overflow: hidden;
   background: #ffffff;
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative;
   width: 100%;
-  z-index: 1;
 }
 
 // Excel-like table styling - Minimal & Fast
@@ -301,15 +298,17 @@
 .excel-actions {
   background: #ffffff;
   border-bottom: 1px solid #000000;
+  position: relative;
+  z-index: 100;
   
   .action-controls {
-  display: flex;
-  align-items: center;
+    display: flex;
+    align-items: center;
     gap: 8px;
     padding: 8px 16px;
     flex-wrap: wrap;
     position: relative;
-    z-index: 1500 !important;
+    z-index: 101;
   }
   
   .custom-btn {
@@ -803,6 +802,79 @@ mat-checkbox {
         font-size: 13px;
         color: #666;
         margin: 0;
+      }
+    }
+
+    // Duplicate Batch Modal
+    &.duplicate-batch-modal {
+      max-width: 700px;
+    }
+    .duplicate-batch-password-form {
+      padding: 16px 0;
+      .form-label {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      .form-input {
+        width: 100%;
+        max-width: 280px;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      .error-text {
+        color: #f44336;
+        font-size: 13px;
+        margin-top: 8px;
+      }
+    }
+    .duplicate-batch-content {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .no-duplicates-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 24px;
+      color: #4caf50;
+      font-size: 16px;
+    }
+    .duplicate-batch-list {
+      .duplicate-batch-group {
+        margin-bottom: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .group-header {
+        padding: 10px 14px;
+        background: #f5f5f5;
+        font-size: 14px;
+        .group-count {
+          color: #666;
+          font-weight: normal;
+          margin-left: 6px;
+        }
+      }
+      .duplicate-batch-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        th, td {
+          padding: 8px 12px;
+          text-align: left;
+          border-bottom: 1px solid #eee;
+        }
+        th {
+          background: #fafafa;
+          font-weight: 600;
+          color: #333;
+        }
+        tr:last-child td {
+          border-bottom: none;
+        }
       }
     }
 

@@ -67,8 +67,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   
-  // Factory filter — mặc định TOTAL để hiển thị tất cả tồn kho
-  selectedFactory: string = 'TOTAL';
+  // Factory filter — mặc định ASM1 (không dùng TOTAL khi mở tab)
+  selectedFactory: string = 'ASM1';
   availableFactories: string[] = ['ASM1', 'ASM2', 'TOTAL'];
 
   // Catalog data (loaded once)
@@ -113,6 +113,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   showImportSuccessDialog: boolean = false;
   importSuccessCount: number = 0;
   importSkippedCount: number = 0;  // Số dòng bỏ qua do trùng
+
+  // Duplicate batch dialog
+  showDuplicateBatchDialog: boolean = false;
+  duplicateBatchPassword: string = '';
+  duplicateBatchPasswordError: string = '';
+  duplicateBatchAuthenticated: boolean = false;
+  isFixingDuplicateBatches: boolean = false;
+  private readonly DUPLICATE_BATCH_PASSWORD = '111';
   
   // Display options
   showCompleted: boolean = true;
@@ -380,6 +388,11 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Apply search filters
   applyFilters(): void {
     this.filteredMaterials = this.materials.filter(material => {
+      // ASM1: không hiển thị danh sách khi chưa search, phải bấm search mới hiện
+      if (this.selectedFactory === 'ASM1' && (!this.searchTerm || this.searchTerm.trim() === '')) {
+        return false;
+      }
+
       // Filter by search term (chuẩn hóa: bỏ dấu chấm để "P011022.E" khớp "P011022")
       if (this.searchTerm && this.searchTerm.trim() !== '') {
         const term = (this.searchTerm || '').trim().toUpperCase();
@@ -531,6 +544,82 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   getDuplicateBatchMessage(): string {
     const batches = this.getDuplicateBatchKeys();
     return batches.length === 0 ? '' : batches.join('; ');
+  }
+
+  /** Danh sách nhóm trùng batch: mỗi nhóm có batchKey và materials */
+  getDuplicateBatchGroups(): { batchKey: string; materials: FGInventoryItem[] }[] {
+    const keys = this.getDuplicateBatchKeys();
+    return keys.map(batchKey => ({
+      batchKey,
+      materials: this.filteredMaterials.filter(m => this.getBatchNormalized(m) === batchKey)
+    }));
+  }
+
+  // --- Duplicate Batch Dialog ---
+  openDuplicateBatchDialog(): void {
+    this.showDuplicateBatchDialog = true;
+    this.duplicateBatchPassword = '';
+    this.duplicateBatchPasswordError = '';
+    this.duplicateBatchAuthenticated = false;
+    this.cdr.detectChanges();
+  }
+
+  closeDuplicateBatchDialog(): void {
+    this.showDuplicateBatchDialog = false;
+    this.duplicateBatchPassword = '';
+    this.duplicateBatchPasswordError = '';
+    this.duplicateBatchAuthenticated = false;
+    this.cdr.detectChanges();
+  }
+
+  verifyDuplicateBatchPassword(): void {
+    this.duplicateBatchPasswordError = '';
+    if (this.duplicateBatchPassword.trim() === this.DUPLICATE_BATCH_PASSWORD) {
+      this.duplicateBatchAuthenticated = true;
+      this.duplicateBatchPassword = '';
+    } else {
+      this.duplicateBatchPasswordError = 'Mật khẩu không đúng.';
+    }
+    this.cdr.detectChanges();
+  }
+
+  async fixDuplicateBatches(): Promise<void> {
+    if (this.isFixingDuplicateBatches) return;
+    const groups = this.getDuplicateBatchGroups();
+    if (groups.length === 0) return;
+
+    this.isFixingDuplicateBatches = true;
+    this.cdr.detectChanges();
+
+    try {
+      let updatedCount = 0;
+      for (const group of groups) {
+        const { materials } = group;
+        const baseBatch = materials[0].batchNumber || group.batchKey;
+        // Giữ dòng đầu, sửa các dòng còn lại: thêm suffix -02, -03, -04...
+        for (let i = 1; i < materials.length; i++) {
+          const m = materials[i];
+          const newBatch = `${baseBatch}-${(i + 1).toString().padStart(2, '0')}`;
+          if (m.id) {
+            await this.firestore.collection('fg-inventory').doc(m.id).update({
+              batchNumber: newBatch,
+              updatedAt: new Date()
+            });
+            m.batchNumber = newBatch;
+            updatedCount++;
+          }
+        }
+      }
+      // Dữ liệu sẽ tự cập nhật qua snapshot listener
+      this.closeDuplicateBatchDialog();
+      alert(`✅ Đã sửa ${updatedCount} số batch trùng.`);
+    } catch (err) {
+      console.error('Error fixing duplicate batches:', err);
+      alert('Lỗi khi sửa batch: ' + (err as Error).message);
+    } finally {
+      this.isFixingDuplicateBatches = false;
+      this.cdr.detectChanges();
+    }
   }
 
   // Load user permissions
@@ -713,16 +802,20 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Bước 2: Chuyển thành FGInventoryItem với batch tự sinh
+    // Bước 2: Chuyển thành FGInventoryItem với batch tự sinh (ASM1: TDAU1-xxx, ASM2: TDAU2-xxx)
     const materials: FGInventoryItem[] = [];
-    let seq = 1;
+    const seqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1 };
     mergedMap.forEach((item) => {
+      const factory = item.factory || 'ASM1';
+      const prefix = factory === 'ASM2' ? 'TDAU2' : 'TDAU1';
+      const seq = seqByFactory[factory] || 1;
+      seqByFactory[factory] = seq + 1;
       const notes = item.notes.filter(n => n).join('; ');
       materials.push({
-        factory: item.factory || 'ASM1',
+        factory,
         importDate: new Date(),
         receivedDate: new Date(),
-        batchNumber: `TDAU${seq.toString().padStart(6, '0')}`,
+        batchNumber: `${prefix}-${seq.toString().padStart(6, '0')}`,
         materialCode: item.materialCode || '',
         lot: item.lot,
         lsx: item.lsx,
@@ -743,7 +836,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-      seq++;
     });
     return materials;
   }
