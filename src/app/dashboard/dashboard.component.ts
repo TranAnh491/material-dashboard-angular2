@@ -667,12 +667,83 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const matAccuracy = [99.9, 99.93, 99.80, 99.91, 99.87, 99.86];
     const fgAccuracy = [100, 100, 100, 100, 100, 100];
     
-    // FGs Inventory Turnover - 12 tháng dữ liệu
-    const fgTurnover12Months = [1.21, 0.98, 1.29, 1.63, 1.70, 1.26, 1.63, 1.95, 1.44, 1.56, 1.35, 1.5];
-    
     this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', 99.85, '#4caf50');
     this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', 100, '#2196f3');
-    this.createDonutChart('completedTasksChart', 'FGs Inventory Turnover', fgTurnover12Months);
+    
+    // FGs Inventory Turnover 2026: current = 1.4, target = 16, 2/12 tháng
+    this.createInventoryTurnoverChart('completedTasksChart', 1.4, 16, 2, 12);
+  }
+
+  // Create inventory turnover chart with target and progress
+  createInventoryTurnoverChart(canvasId: string, currentValue: number, target: number, monthsActive: number, totalMonths: number) {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Calculate percentage of target achieved
+    const percentage = (currentValue / target) * 100;
+    
+    // Colors
+    const achievedColor = '#2196f3'; // Blue for achieved
+    const remainingColor = '#e0e0e0'; // Gray for remaining
+
+    const chart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Achieved', 'Remaining'],
+        datasets: [{
+          data: [currentValue, target - currentValue],
+          backgroundColor: [achievedColor, remainingColor],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '70%',
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                if (context.dataIndex === 0) {
+                  return `Achieved: ${currentValue}`;
+                } else {
+                  return `Remaining: ${(target - currentValue).toFixed(1)}`;
+                }
+              }
+            }
+          }
+        }
+      },
+      plugins: [{
+        id: 'turnoverCenterText',
+        afterDraw: (chart) => {
+          const ctx = chart.ctx;
+          const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+          const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+
+          ctx.save();
+          
+          // Main value
+          ctx.font = 'bold 28px Arial';
+          ctx.fillStyle = achievedColor;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(currentValue.toString(), centerX, centerY - 10);
+          
+          // Target text
+          ctx.font = '12px Arial';
+          ctx.fillStyle = '#666666';
+          ctx.fillText(`Target: ${target}`, centerX, centerY + 15);
+          
+          ctx.restore();
+        }
+      }]
+    });
   }
 
   // Method to handle factory selection changes
