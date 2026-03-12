@@ -9,42 +9,10 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls">
-        <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
-              <i class="material-icons">file_upload</i>
-              Import
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Tải Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugCartonOdd(); $event.preventDefault()">
-              <i class="material-icons">bug_report</i>
-              Debug Carton/ODD
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="forceCalculateTon(); $event.preventDefault()">
-              <i class="material-icons">calculate</i>
-              Tính Tồn
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="checkRawData(); $event.preventDefault()">
-              <i class="material-icons">data_usage</i>
-              Kiểm tra dữ liệu
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="openResetDialog(); $event.preventDefault()">
-              <i class="material-icons">delete_sweep</i>
-              Reset về 0
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="openDuplicateBatchDialog(); $event.preventDefault()">
-              <i class="material-icons">content_copy</i>
-              Trùng Batch
-            </a>
-          </div>
-        </div>
+        <button class="custom-btn" (click)="showMoreMenu = true">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
 
         <div class="dropdown factory-filter-dropdown">
           <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -498,4 +466,51 @@
   </div>
 </div>
 
+<!-- More Menu Popup -->
+<div class="custom-modal" [class.show]="showMoreMenu" [style.display]="showMoreMenu ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showMoreMenu = false"></div>
+  <div class="modal-container more-menu-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">menu</i>
+        Menu
+      </h5>
+      <button type="button" class="close-btn" (click)="showMoreMenu = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="more-menu-list">
+        <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
+          <i class="material-icons">file_upload</i>
+          <span>Import tồn đầu</span>
+        </button>
+        <button class="more-menu-item" (click)="downloadTemplate(); showMoreMenu = false">
+          <i class="material-icons">download</i>
+          <span>Tải Template</span>
+        </button>
+        <button class="more-menu-item" (click)="debugCartonOdd(); showMoreMenu = false">
+          <i class="material-icons">bug_report</i>
+          <span>Debug Carton/ODD</span>
+        </button>
+        <button class="more-menu-item" (click)="forceCalculateTon(); showMoreMenu = false">
+          <i class="material-icons">calculate</i>
+          <span>Tính Tồn</span>
+        </button>
+        <button class="more-menu-item" (click)="checkRawData(); showMoreMenu = false">
+          <i class="material-icons">data_usage</i>
+          <span>Kiểm tra dữ liệu</span>
+        </button>
+        <button class="more-menu-item" (click)="openResetDialog(); showMoreMenu = false">
+          <i class="material-icons text-danger">delete_sweep</i>
+          <span>Reset về 0</span>
+        </button>
+        <button class="more-menu-item" (click)="openDuplicateBatchDialog(); showMoreMenu = false">
+          <i class="material-icons">content_copy</i>
+          <span>Trùng Batch</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 

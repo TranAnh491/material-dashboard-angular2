@@ -95,8 +95,12 @@ export class FgInComponent implements OnInit, OnDestroy {
   hasDeletePermission: boolean = false;
   hasCompletePermission: boolean = false;
   
+  // More menu popup
+  showMoreMenu: boolean = false;
+  
   // Product Catalog
   showCatalogDialog: boolean = false;
+  showCatalogHelp: boolean = false;
   catalogItems: ProductCatalogItem[] = [];
   filteredCatalogItems: ProductCatalogItem[] = [];
   catalogSearchTerm: string = '';
@@ -1298,53 +1302,125 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   // Import Excel gộp: cột Mã TP, Standard, Mã KH, Tên KH -> ghi cả catalog + mapping
+  // Nếu trùng Mã TP + Mã KH → ghi đè Standard và Tên KH
+  // Nếu không trùng → thêm mới
   importMergedCatalog(): void {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls';
     fileInput.style.display = 'none';
-    fileInput.onchange = (e: any) => {
+    fileInput.onchange = async (e: any) => {
       const file = e.target.files[0];
       if (!file) return;
-      this.readExcelFile(file).then((data: any[]) => {
+      try {
+        const data: any[] = await this.readExcelFile(file);
         const rows = (data || []).map((row: any) => ({
           materialCode: (row['Mã TP'] || '').toString().trim(),
           standard: (row['Standard'] || '').toString().trim(),
           customerCode: (row['Mã KH'] || row['Mã khách hàng'] || row['Mã Khách Hàng'] || '').toString().trim(),
           description: (row['Tên KH'] || row['Khách'] || row['Mô Tả'] || '').toString().trim()
         })).filter(r => r.materialCode || r.customerCode);
+        
         if (rows.length === 0) {
           alert('❌ Không có dòng hợp lệ (cần Mã TP hoặc Mã KH)');
           return;
         }
+        
         const key = (mc: string, cc: string) => `${mc.toUpperCase()}|${cc.toUpperCase()}`;
-        const existingKeys = new Set(this.mergedCatalogItems.map(m => key(m.materialCode, m.customerCode)));
-        const toAdd = rows.filter(r => !existingKeys.has(key(r.materialCode, r.customerCode)));
-        toAdd.forEach(r => {
-          this.firestore.collection('fg-catalog').add({
-            materialCode: r.materialCode,
-            standard: r.standard,
-            customer: r.description,
-            customerCode: r.customerCode,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-          this.firestore.collection('fg-customer-mapping').add({
-            customerCode: r.customerCode,
-            materialCode: r.materialCode,
-            description: r.description,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-        });
+        let addedCount = 0;
+        let updatedCount = 0;
+        
+        for (const r of rows) {
+          const rowKey = key(r.materialCode, r.customerCode);
+          const existing = this.mergedCatalogItems.find(m => key(m.materialCode, m.customerCode) === rowKey);
+          
+          if (existing && existing.catalogId) {
+            // Trùng → ghi đè Standard và Tên KH
+            await this.firestore.collection('fg-catalog').doc(existing.catalogId).update({
+              standard: r.standard,
+              customer: r.description,
+              updatedAt: new Date()
+            });
+            // Cập nhật mapping nếu có
+            if (existing.mappingId) {
+              await this.firestore.collection('fg-customer-mapping').doc(existing.mappingId).update({
+                description: r.description,
+                updatedAt: new Date()
+              });
+            }
+            updatedCount++;
+          } else {
+            // Không trùng → thêm mới
+            await this.firestore.collection('fg-catalog').add({
+              materialCode: r.materialCode,
+              standard: r.standard,
+              customer: r.description,
+              customerCode: r.customerCode,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+            await this.firestore.collection('fg-customer-mapping').add({
+              customerCode: r.customerCode,
+              materialCode: r.materialCode,
+              description: r.description,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+            addedCount++;
+          }
+        }
+        
         this.loadCatalogFromFirebase();
         this.loadMappingFromFirebase();
-        alert(`✅ Đã import ${toAdd.length} dòng (bỏ qua ${rows.length - toAdd.length} trùng)`);
-      }).catch(err => alert('❌ Lỗi đọc file: ' + (err?.message || err)));
+        alert(`✅ Import hoàn tất!\n- Thêm mới: ${addedCount} dòng\n- Ghi đè: ${updatedCount} dòng`);
+      } catch (err: any) {
+        alert('❌ Lỗi đọc file: ' + (err?.message || err));
+      }
     };
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
+  }
+
+  // Xóa toàn bộ danh mục để import lại từ đầu
+  async deleteAllCatalog(): Promise<void> {
+    const count = this.mergedCatalogItems.length;
+    if (count === 0) {
+      alert('❌ Danh mục đang trống!');
+      return;
+    }
+    
+    if (!confirm(`⚠️ Bạn có chắc muốn xóa TẤT CẢ ${count} dòng danh mục?\n\nHành động này không thể hoàn tác!`)) {
+      return;
+    }
+    
+    // Yêu cầu nhập mật khẩu
+    const password = prompt('Nhập mật khẩu để xác nhận xóa:');
+    if (password !== '111') {
+      alert('❌ Mật khẩu không đúng!');
+      return;
+    }
+    
+    try {
+      let deletedCount = 0;
+      
+      for (const item of this.mergedCatalogItems) {
+        if (item.catalogId) {
+          await this.firestore.collection('fg-catalog').doc(item.catalogId).delete();
+        }
+        if (item.mappingId) {
+          await this.firestore.collection('fg-customer-mapping').doc(item.mappingId).delete();
+        }
+        deletedCount++;
+      }
+      
+      this.loadCatalogFromFirebase();
+      this.loadMappingFromFirebase();
+      alert(`✅ Đã xóa ${deletedCount} dòng danh mục!`);
+    } catch (err: any) {
+      console.error('Error deleting catalog:', err);
+      alert('❌ Lỗi khi xóa: ' + (err?.message || err));
+    }
   }
 
   downloadMergedCatalogTemplate(): void {

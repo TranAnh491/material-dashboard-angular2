@@ -102,6 +102,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   showResetDialog: boolean = false;
   resetSelectedFactory: string = 'ASM1';
 
+  // More menu popup
+  showMoreMenu: boolean = false;
+
   // Import progress dialog (hiển thị trong quá trình import)
   showImportProgressDialog: boolean = false;
   importProgressCurrentBatch: number = 0;

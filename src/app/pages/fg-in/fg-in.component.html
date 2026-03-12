@@ -15,30 +15,10 @@
     <!-- Excel-like Actions (Hidden on tablet/mobile) -->
     <div class="excel-actions hide-on-tablet">
       <div class="action-controls">
-        <div class="dropdown hide-on-mobile">
-          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
-              <i class="material-icons">file_upload</i>
-              Import
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Tải Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="openReportDialog(); $event.preventDefault()">
-              <i class="material-icons">assessment</i>
-              Tải báo cáo
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showCatalog(); $event.preventDefault()">
-              <i class="material-icons">list</i>
-              Danh mục
-            </a>
-          </div>
-        </div>
+        <button class="custom-btn hide-on-mobile" (click)="showMoreMenu = true">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
 
         <div class="dropdown factory-filter-dropdown hide-on-mobile">
           <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -325,6 +305,14 @@
           <i class="material-icons">download</i>
           Tải Danh Mục
         </button>
+        <button class="custom-btn btn-danger" (click)="deleteAllCatalog()">
+          <i class="material-icons">delete_sweep</i>
+          Xóa Danh Mục
+        </button>
+        <button class="custom-btn btn-help" (click)="showCatalogHelp = true">
+          <i class="material-icons">help_outline</i>
+          Hướng dẫn
+        </button>
         <div class="search-box">
           <input type="text" 
                  placeholder="TÌM KIẾM..." 
@@ -395,6 +383,79 @@
       <button type="button" class="btn btn-cancel" (click)="closeCatalog()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Catalog Help Dialog -->
+<div class="custom-modal" [class.show]="showCatalogHelp" [style.display]="showCatalogHelp ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showCatalogHelp = false"></div>
+  <div class="modal-container catalog-help-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">help_outline</i>
+        Hướng dẫn sử dụng Danh mục
+      </h5>
+      <button type="button" class="close-btn" (click)="showCatalogHelp = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body catalog-help-content">
+      <div class="help-section">
+        <h6><i class="material-icons">file_upload</i> Import</h6>
+        <ul>
+          <li>Import danh mục từ file Excel (.xlsx, .xls)</li>
+          <li>Cột bắt buộc: <strong>Mã TP</strong>, <strong>Standard</strong>, <strong>Mã KH</strong>, <strong>Tên KH</strong></li>
+          <li><strong>Trùng Mã TP + Mã KH:</strong> Ghi đè Standard và Tên KH</li>
+          <li><strong>Không trùng:</strong> Thêm mới vào danh mục</li>
+        </ul>
+      </div>
+      
+      <div class="help-section">
+        <h6><i class="material-icons">download</i> Tải Template</h6>
+        <ul>
+          <li>Tải file Excel mẫu với các cột đúng định dạng</li>
+          <li>Điền dữ liệu vào template rồi Import lại</li>
+        </ul>
+      </div>
+      
+      <div class="help-section">
+        <h6><i class="material-icons">download</i> Tải Danh Mục</h6>
+        <ul>
+          <li>Tải toàn bộ danh mục hiện tại ra file Excel</li>
+          <li>Có thể chỉnh sửa và Import lại</li>
+        </ul>
+      </div>
+      
+      <div class="help-section">
+        <h6><i class="material-icons">delete_sweep</i> Xóa Danh Mục</h6>
+        <ul>
+          <li>Xóa <strong>TOÀN BỘ</strong> danh mục để import lại từ đầu</li>
+          <li>Yêu cầu xác nhận và nhập mật khẩu: <strong>111</strong></li>
+          <li class="warning">⚠️ Hành động không thể hoàn tác!</li>
+        </ul>
+      </div>
+      
+      <div class="help-section">
+        <h6><i class="material-icons">add</i> Thêm mới</h6>
+        <ul>
+          <li>Nhập thủ công từng dòng: Mã TP, Standard, Mã KH, Tên KH</li>
+          <li>Bấm nút <strong>Thêm</strong> để lưu vào danh mục</li>
+        </ul>
+      </div>
+      
+      <div class="help-section">
+        <h6><i class="material-icons">search</i> Tìm kiếm</h6>
+        <ul>
+          <li>Gõ từ khóa để lọc danh mục theo Mã TP, Mã KH, Tên KH</li>
+        </ul>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-apply" (click)="showCatalogHelp = false">
+        <i class="material-icons">check</i>
+        Đã hiểu
       </button>
     </div>
   </div>
@@ -658,6 +719,42 @@
         <i class="material-icons">lock</i>
         Done - Khóa phiếu
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- More Menu Popup -->
+<div class="custom-modal" [class.show]="showMoreMenu" [style.display]="showMoreMenu ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showMoreMenu = false"></div>
+  <div class="modal-container more-menu-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">menu</i>
+        Menu
+      </h5>
+      <button type="button" class="close-btn" (click)="showMoreMenu = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="more-menu-list">
+        <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
+          <i class="material-icons">file_upload</i>
+          <span>Import</span>
+        </button>
+        <button class="more-menu-item" (click)="downloadTemplate(); showMoreMenu = false">
+          <i class="material-icons">download</i>
+          <span>Tải Template</span>
+        </button>
+        <button class="more-menu-item" (click)="openReportDialog(); showMoreMenu = false">
+          <i class="material-icons">assessment</i>
+          <span>Tải báo cáo</span>
+        </button>
+        <button class="more-menu-item" (click)="showCatalog(); showMoreMenu = false">
+          <i class="material-icons">list</i>
+          <span>Danh mục</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>

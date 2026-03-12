@@ -878,6 +878,61 @@ mat-checkbox {
       }
     }
 
+    // More Menu Popup
+    &.more-menu-modal {
+      max-width: 320px;
+      width: 90%;
+      
+      .modal-body {
+        padding: 0;
+      }
+    }
+    
+    .more-menu-list {
+      display: flex;
+      flex-direction: column;
+      
+      .more-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 20px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 14px;
+        color: #333;
+        text-align: left;
+        transition: background 0.2s;
+        border-bottom: 1px solid #f0f0f0;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        &:hover {
+          background: #f5f5f5;
+        }
+        
+        &:active {
+          background: #e0e0e0;
+        }
+        
+        .material-icons {
+          font-size: 22px;
+          color: #666;
+          
+          &.text-danger {
+            color: #f44336;
+          }
+        }
+        
+        span {
+          font-weight: 500;
+        }
+      }
+    }
+
     .reset-warning {
       display: flex;
       align-items: center;
