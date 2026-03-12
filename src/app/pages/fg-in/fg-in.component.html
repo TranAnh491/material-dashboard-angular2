@@ -55,7 +55,7 @@
           Nhập Kho
         </button>
 
-        <button class="custom-btn hide-on-mobile" (click)="importPhieuNhapTP()" title="Import phiếu nhập TP (cột F=Mã TP, J=Số lượng, M=LSX, U=LOT)">
+        <button class="custom-btn hide-on-mobile" (click)="importFile()" title="Import Bảng kê nhập 02">
           <i class="material-icons">file_upload</i>
           Import
         </button>
@@ -755,6 +755,79 @@
           <span>Danh mục</span>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Factory Dialog -->
+<div class="custom-modal" [class.show]="showImportFactoryDialog" [style.display]="showImportFactoryDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showImportFactoryDialog = false"></div>
+  <div class="modal-container import-factory-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">cloud_upload</i>
+        Import Bảng kê nhập 02
+      </h5>
+      <button type="button" class="close-btn" (click)="showImportFactoryDialog = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="factory-selection">
+        <label class="selection-label">Chọn nhà máy:</label>
+        <div class="factory-options">
+          <button class="factory-option" 
+                  [class.selected]="importSelectedFactory === 'ASM1'"
+                  (click)="importSelectedFactory = 'ASM1'">
+            <i class="material-icons">business</i>
+            <span>ASM1</span>
+          </button>
+          <button class="factory-option" 
+                  [class.selected]="importSelectedFactory === 'ASM2'"
+                  (click)="importSelectedFactory = 'ASM2'">
+            <i class="material-icons">business</i>
+            <span>ASM2</span>
+          </button>
+        </div>
+      </div>
+      
+      <div class="import-help-section">
+        <button class="help-toggle-btn" (click)="showImportHelp = !showImportHelp">
+          <i class="material-icons">{{ showImportHelp ? 'expand_less' : 'help_outline' }}</i>
+          <span>Hướng dẫn import</span>
+        </button>
+        
+        <div class="import-help-content" *ngIf="showImportHelp">
+          <div class="help-title">
+            <i class="material-icons">info</i>
+            Nguyên tắc đọc file "Bảng kê nhập 02"
+          </div>
+          <ul class="help-list">
+            <li><strong>Mã TP:</strong> Cột M</li>
+            <li><strong>Số PO:</strong> Cột AL</li>
+            <li><strong>Số LOT:</strong> Cột AU <span class="note">(nếu có chữ cái thì bỏ chữ cái và số phía sau)</span></li>
+            <li><strong>LSX:</strong> Cột N</li>
+          </ul>
+          <div class="help-note">
+            <i class="material-icons">arrow_forward</i>
+            Dữ liệu được đọc từ <strong>dòng 8</strong> trở đi (bỏ 7 dòng header)
+          </div>
+          <div class="help-note warning">
+            <i class="material-icons">warning</i>
+            Số Batch sẽ tự động tạo theo format: <strong>A</strong>DDMM0001 (ASM1) hoặc <strong>B</strong>DDMM0001 (ASM2)
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showImportFactoryDialog = false">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-confirm" (click)="confirmImportFactory()">
+        <i class="material-icons">cloud_upload</i>
+        Chọn file import
+      </button>
     </div>
   </div>
 </div>

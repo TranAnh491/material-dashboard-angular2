@@ -37,6 +37,10 @@
           Xem tất cả
         </button>
         
+        <button class="custom-btn btn-today" (click)="showTodayImportDialog()">
+          <i class="material-icons">today</i>
+          NK hôm nay
+        </button>
 
       </div>
     </div>
@@ -541,6 +545,74 @@
           <span>TOTAL (Tất cả)</span>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Today Import Dialog -->
+<div class="custom-modal" [class.show]="showTodayImport" [style.display]="showTodayImport ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showTodayImport = false"></div>
+  <div class="modal-container today-import-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">today</i>
+        Nhập kho hôm nay ({{ getTodayDateString() }})
+      </h5>
+      <button type="button" class="close-btn" (click)="showTodayImport = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="today-import-summary">
+        <div class="summary-item">
+          <span class="summary-label">Tổng số dòng:</span>
+          <span class="summary-value">{{ todayImportItems.length }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Tổng số lượng:</span>
+          <span class="summary-value">{{ getTodayTotalQuantity() | number }}</span>
+        </div>
+      </div>
+      
+      <div class="today-import-list" *ngIf="todayImportItems.length > 0">
+        <table class="today-import-table">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Factory</th>
+              <th>Batch</th>
+              <th>Mã TP</th>
+              <th>LOT</th>
+              <th>LSX</th>
+              <th>Tồn đầu</th>
+              <th>Vị trí</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of todayImportItems; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ item.factory }}</td>
+              <td>{{ item.batchNumber }}</td>
+              <td class="code-cell">{{ item.materialCode }}</td>
+              <td>{{ item.lot }}</td>
+              <td>{{ item.lsx }}</td>
+              <td class="number-cell">{{ item.tonDau | number }}</td>
+              <td>{{ item.location }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="no-data-message" *ngIf="todayImportItems.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Chưa có mã TP nào được nhập kho hôm nay</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="showTodayImport = false">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
     </div>
   </div>
 </div>

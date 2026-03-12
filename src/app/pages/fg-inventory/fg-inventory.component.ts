@@ -108,6 +108,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Factory menu popup
   showFactoryMenu: boolean = false;
 
+  // Today import dialog
+  showTodayImport: boolean = false;
+  todayImportItems: FGInventoryItem[] = [];
+
   // Import progress dialog (hiển thị trong quá trình import)
   showImportProgressDialog: boolean = false;
   importProgressCurrentBatch: number = 0;
@@ -1373,6 +1377,47 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       totalMaterials: this.materials.length,
       filteredMaterials: this.filteredMaterials.length
     });
+  }
+
+  showTodayImportDialog(): void {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    this.todayImportItems = this.materials.filter(m => {
+      if (!m.createdAt) return false;
+      let createdDate: Date;
+      if (m.createdAt instanceof Date) {
+        createdDate = m.createdAt;
+      } else if (m.createdAt && typeof (m.createdAt as any).toDate === 'function') {
+        createdDate = (m.createdAt as any).toDate();
+      } else {
+        createdDate = new Date(m.createdAt as any);
+      }
+      return createdDate >= today && createdDate < tomorrow;
+    });
+
+    this.todayImportItems.sort((a, b) => {
+      const factoryA = a.factory || 'ASM1';
+      const factoryB = b.factory || 'ASM1';
+      if (factoryA !== factoryB) return factoryA.localeCompare(factoryB);
+      return (a.batchNumber || '').localeCompare(b.batchNumber || '');
+    });
+
+    this.showTodayImport = true;
+  }
+
+  getTodayDateString(): string {
+    const today = new Date();
+    const dd = ('0' + today.getDate()).slice(-2);
+    const mm = ('0' + (today.getMonth() + 1)).slice(-2);
+    const yyyy = today.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  getTodayTotalQuantity(): number {
+    return this.todayImportItems.reduce((sum, item) => sum + (item.tonDau || 0), 0);
   }
 
   applyTimeRangeFilter(): void {

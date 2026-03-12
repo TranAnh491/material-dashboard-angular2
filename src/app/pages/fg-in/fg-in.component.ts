@@ -98,6 +98,11 @@ export class FgInComponent implements OnInit, OnDestroy {
   // More menu popup
   showMoreMenu: boolean = false;
   
+  // Import Factory Dialog
+  showImportFactoryDialog: boolean = false;
+  importSelectedFactory: string = 'ASM1';
+  showImportHelp: boolean = false;
+  
   // Product Catalog
   showCatalogDialog: boolean = false;
   showCatalogHelp: boolean = false;
@@ -768,6 +773,12 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Import file functionality
   importFile(): void {
+    this.importSelectedFactory = 'ASM1';
+    this.showImportFactoryDialog = true;
+  }
+
+  confirmImportFactory(): void {
+    this.showImportFactoryDialog = false;
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls';
@@ -776,13 +787,93 @@ export class FgInComponent implements OnInit, OnDestroy {
     fileInput.onchange = (event: any) => {
       const file = event.target.files[0];
       if (file) {
-        this.processExcelFile(file);
+        this.processImportFile(file);
       }
     };
       
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
+  }
+
+  private async processImportFile(file: File): Promise<void> {
+    try {
+      const rows = await this.readExcelFileAsRows(file);
+      const materials = this.parseBangKeNhap02Data(rows);
+      if (materials.length === 0) {
+        alert('Không có dòng nào hợp lệ (cần có Mã TP ở cột M).');
+        return;
+      }
+      await this.saveMaterialsToFirebase(materials);
+      this.refreshData();
+      alert(`✅ Đã import bảng kê nhập 02: ${materials.length} dòng.`);
+    } catch (e) {
+      console.error('Import bảng kê nhập 02:', e);
+      alert('❌ Lỗi import: ' + (e?.message || e));
+    }
+  }
+
+  /** 
+   * Parse Bảng kê nhập 02:
+   * - Mã TP: cột M (index 12)
+   * - Số PO: cột AL (index 37)
+   * - Số LOT: cột AU (index 46) - nếu có chữ cái thì bỏ chữ cái và số sau nó
+   * - LSX: cột N (index 13)
+   * - Dữ liệu từ dòng 8 (bỏ 7 dòng header)
+   */
+  private parseBangKeNhap02Data(rows: any[][]): FgInItem[] {
+    const factory = this.importSelectedFactory;
+    const result: FgInItem[] = [];
+    const colM = 12;   // Mã TP
+    const colN = 13;   // LSX
+    const colAL = 37;  // Số PO
+    const colAU = 46;  // Số LOT
+    
+    const dataRows = rows.slice(7); // Bỏ 7 dòng header, lấy từ dòng 8
+    
+    dataRows.forEach((row) => {
+      const maTP = row && (row[colM] != null) ? String(row[colM]).trim() : '';
+      if (!maTP) return;
+      
+      const lsx = row && (row[colN] != null) ? String(row[colN]).trim() : '';
+      const poNumber = row && (row[colAL] != null) ? String(row[colAL]).trim() : '';
+      
+      // LOT: nếu có chữ cái thì bỏ chữ cái và số sau nó
+      let lotRaw = row && (row[colAU] != null) ? String(row[colAU]).trim() : '';
+      let lot = this.extractLotNumber(lotRaw);
+      
+      result.push({
+        factory,
+        importDate: new Date(),
+        batchNumber: this.generateBatchNumber(result.length, factory),
+        materialCode: maTP,
+        rev: '',
+        poNumber: poNumber || undefined,
+        lot,
+        lsx,
+        quantity: 0,
+        carton: 0,
+        odd: 0,
+        location: 'Temporary',
+        notes: '',
+        customer: '',
+        isReceived: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+    return result;
+  }
+
+  /** Trích xuất số LOT: nếu có chữ cái thì bỏ chữ cái và tất cả ký tự sau nó */
+  private extractLotNumber(lotRaw: string): string {
+    if (!lotRaw) return '';
+    // Tìm vị trí chữ cái đầu tiên
+    const match = lotRaw.match(/[a-zA-Z]/);
+    if (match && match.index !== undefined) {
+      return lotRaw.substring(0, match.index);
+    }
+    return lotRaw;
   }
 
   /** Import phiếu nhập TP: cột F = Mã TP, J = Số lượng, M = LSX, U = LOT. Batch tự tạo. */
