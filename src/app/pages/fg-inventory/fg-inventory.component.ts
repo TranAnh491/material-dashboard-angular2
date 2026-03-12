@@ -104,6 +104,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // More menu popup
   showMoreMenu: boolean = false;
+  
+  // Factory menu popup
+  showFactoryMenu: boolean = false;
 
   // Import progress dialog (hiển thị trong quá trình import)
   showImportProgressDialog: boolean = false;

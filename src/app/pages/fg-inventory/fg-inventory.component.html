@@ -14,17 +14,10 @@
           More
         </button>
 
-        <div class="dropdown factory-filter-dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" id="factoryFilterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            <i class="material-icons">business</i>
-            Factory: {{ selectedFactory }}
-          </button>
-          <div class="dropdown-menu" aria-labelledby="factoryFilterDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM1'); $event.preventDefault()">ASM1</a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('ASM2'); $event.preventDefault()">ASM2</a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="setFactoryFilter('TOTAL'); $event.preventDefault()">TOTAL</a>
-          </div>
-        </div>
+        <button class="custom-btn" (click)="showFactoryMenu = true">
+          <i class="material-icons">business</i>
+          Factory: {{ selectedFactory }}
+        </button>
         
         <div class="search-box">
           <input type="text" 
@@ -508,6 +501,44 @@
         <button class="more-menu-item" (click)="openDuplicateBatchDialog(); showMoreMenu = false">
           <i class="material-icons">content_copy</i>
           <span>Trùng Batch</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Factory Menu Popup -->
+<div class="custom-modal" [class.show]="showFactoryMenu" [style.display]="showFactoryMenu ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showFactoryMenu = false"></div>
+  <div class="modal-container factory-menu-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">business</i>
+        Chọn nhà máy
+      </h5>
+      <button type="button" class="close-btn" (click)="showFactoryMenu = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="factory-menu-list">
+        <button class="factory-menu-item" 
+                [class.active]="selectedFactory === 'ASM1'"
+                (click)="setFactoryFilter('ASM1'); showFactoryMenu = false">
+          <i class="material-icons">{{ selectedFactory === 'ASM1' ? 'radio_button_checked' : 'radio_button_unchecked' }}</i>
+          <span>ASM1</span>
+        </button>
+        <button class="factory-menu-item"
+                [class.active]="selectedFactory === 'ASM2'"
+                (click)="setFactoryFilter('ASM2'); showFactoryMenu = false">
+          <i class="material-icons">{{ selectedFactory === 'ASM2' ? 'radio_button_checked' : 'radio_button_unchecked' }}</i>
+          <span>ASM2</span>
+        </button>
+        <button class="factory-menu-item"
+                [class.active]="selectedFactory === 'TOTAL'"
+                (click)="setFactoryFilter('TOTAL'); showFactoryMenu = false">
+          <i class="material-icons">{{ selectedFactory === 'TOTAL' ? 'radio_button_checked' : 'radio_button_unchecked' }}</i>
+          <span>TOTAL (Tất cả)</span>
         </button>
       </div>
     </div>

@@ -606,7 +606,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     const materialData = {
       factory: validFactory,
       importDate: new Date(),
-      batchNumber: this.generateBatchNumber(0),
+      batchNumber: this.generateBatchNumber(0, validFactory),
       materialCode: code,
       rev: '',
       poNumber: '',
@@ -856,7 +856,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       result.push({
         factory,
         importDate: new Date(),
-        batchNumber: this.generateBatchNumber(result.length),
+        batchNumber: this.generateBatchNumber(result.length, factory),
         materialCode: maTP,
         rev: '',
         poNumber: poNumber || undefined,
@@ -922,7 +922,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       return {
         factory,
         importDate: new Date(),
-        batchNumber: this.generateBatchNumber(index),
+        batchNumber: this.generateBatchNumber(index, factory),
         materialCode: row['Mã TP'] || '',
         rev: row['REV'] || '',
         lot: row['LOT'] || '',
@@ -981,25 +981,35 @@ export class FgInComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Batch 8 số: DDMM + 4 số thứ tự (0001, 0002, ...). offset dùng khi import nhiều dòng cùng lúc.
-  private generateBatchNumber(offset: number = 0): string {
+  // Batch 9 số: Prefix Factory + DDMM + 4 số thứ tự
+  // ASM1: A11030001, ASM2: B11030001
+  private generateBatchNumber(offset: number = 0, factory: string = 'ASM1'): string {
     const now = new Date();
     const dd = ('0' + now.getDate()).slice(-2);
     const mm = ('0' + (now.getMonth() + 1)).slice(-2);
-    const prefix = dd + mm;
+    const datePrefix = dd + mm;
+    const factoryPrefix = factory === 'ASM2' ? 'B' : 'A';
+    const fullPrefix = factoryPrefix + datePrefix; // A1103 hoặc B1103
+    
+    // Lọc materials cùng factory và cùng ngày
     const todayBatchNumbers = this.materials.filter(m => {
-      const d = m.importDate instanceof Date ? m.importDate : new Date(m.importDate);
-      const md = ('0' + d.getDate()).slice(-2);
-      const mMonth = ('0' + (d.getMonth() + 1)).slice(-2);
-      return (md + mMonth) === prefix && (m.batchNumber || '').length >= 8;
+      if ((m.factory || 'ASM1') !== factory) return false;
+      const batch = (m.batchNumber || '').toUpperCase();
+      // Kiểm tra batch bắt đầu bằng đúng prefix (A1103 hoặc B1103)
+      return batch.startsWith(fullPrefix) && batch.length >= 9;
     });
+    
     let maxSeq = 0;
     todayBatchNumbers.forEach(m => {
-      const seq = parseInt((m.batchNumber || '').slice(-4), 10);
+      const batch = (m.batchNumber || '').toUpperCase();
+      // Lấy 4 số cuối (bỏ qua suffix A, B, C nếu có)
+      const seqPart = batch.slice(5, 9); // Ví dụ: A11030001 -> 0001
+      const seq = parseInt(seqPart, 10);
       if (!isNaN(seq)) maxSeq = Math.max(maxSeq, seq);
     });
+    
     const nextSeq = maxSeq + 1 + offset;
-    return prefix + nextSeq.toString().padStart(4, '0');
+    return fullPrefix + nextSeq.toString().padStart(4, '0');
   }
 
     // Download template - khớp form Nhập kho: Factory, Mã TP, LOT, LSX, Lượng Nhập, Vị trí, Ghi chú

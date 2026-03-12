@@ -933,6 +933,70 @@ mat-checkbox {
       }
     }
 
+    // Factory Menu Popup
+    &.factory-menu-modal {
+      max-width: 280px;
+      width: 85%;
+      
+      .modal-body {
+        padding: 0;
+      }
+    }
+    
+    .factory-menu-list {
+      display: flex;
+      flex-direction: column;
+      
+      .factory-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 15px;
+        color: #333;
+        text-align: left;
+        transition: background 0.2s;
+        border-bottom: 1px solid #f0f0f0;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        &:hover {
+          background: #f5f5f5;
+        }
+        
+        &:active {
+          background: #e0e0e0;
+        }
+        
+        &.active {
+          background: #e3f2fd;
+          
+          .material-icons {
+            color: #1976d2;
+          }
+          
+          span {
+            color: #1976d2;
+            font-weight: 600;
+          }
+        }
+        
+        .material-icons {
+          font-size: 22px;
+          color: #999;
+        }
+        
+        span {
+          font-weight: 500;
+        }
+      }
+    }
+
     .reset-warning {
       display: flex;
       align-items: center;
