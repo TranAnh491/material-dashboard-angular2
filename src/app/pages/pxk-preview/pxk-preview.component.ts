@@ -6,6 +6,16 @@ import { PxkBuildService, PxkLine, PxkWorkOrder } from '../../services/pxk-build
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 
+interface LsxItem {
+  lsx: string;
+  factory: string;
+  lineCount: number;
+  status: 'pending' | 'partial' | 'complete';
+  importedAt: Date | null;
+  workOrderStatus: string;
+  deliveryDate: Date | null;
+}
+
 @Component({
   selector: 'app-pxk-preview',
   templateUrl: './pxk-preview.component.html',
@@ -20,6 +30,18 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   pxkHtml: SafeHtml = '';
   isLoading = false;
   errorMsg = '';
+  
+  // Factory Selection
+  showFactorySelection = true;
+  selectedFactory: string = '';
+  
+  // LSX List
+  lsxList: LsxItem[] = [];
+  filteredLsxList: LsxItem[] = [];
+  selectedLsx: string = '';
+  isLoadingList = false;
+  searchTerm = '';
+  
   private subs = new Subscription();
   private rebuildSeq = 0;
   private currentFactory = 'ASM1';
@@ -35,7 +57,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   ) {}
 
   ngOnInit(): void {
-    // Auto-rebuild khi input dừng gõ (dành cho quét barcode không gửi Enter)
     this.subs.add(
       this.inputSubject.pipe(debounceTime(500)).subscribe(() => {
         if (this.lsx.trim().length >= 5) this.rebuild();
@@ -43,20 +64,34 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     );
     this.route.queryParams.subscribe(q => {
       const qLsx = (q['lsx'] || '').trim();
+      const qFactory = (q['factory'] || '').trim().toUpperCase();
       if (qLsx) {
         this.lsx = qLsx.toUpperCase();
+        this.selectedLsx = this.lsx;
+        this.selectedFactory = qFactory || this.detectFactory(this.lsx);
+        this.showFactorySelection = false;
         this.rebuild();
       }
     });
     this.subs.add(
       this.firestore.collection('pxk-import-data').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild(true))
+      ).subscribe(() => {
+        if (this.selectedFactory && !this.showFactorySelection) {
+          this.loadLsxList();
+        }
+        if (this.selectedLsx) this.rebuild(true);
+      })
     );
     this.subs.add(
       this.firestore.collection('outbound-materials').valueChanges().pipe(
         debounceTime(400)
-      ).subscribe(() => this.patchScanCells())
+      ).subscribe(() => {
+        if (this.selectedFactory && !this.showFactorySelection) {
+          this.updateLsxStatuses();
+        }
+        this.patchScanCells();
+      })
     );
     this.subs.add(
       this.firestore.collection('rm1-delivery-records').valueChanges().pipe(
@@ -66,8 +101,27 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     this.subs.add(
       this.firestore.collection('inventory-materials').valueChanges().pipe(
         debounceTime(300)
-      ).subscribe(() => this.rebuild(true))
+      ).subscribe(() => {
+        if (this.selectedLsx) this.rebuild(true);
+      })
     );
+  }
+
+  selectFactoryAndLoad(factory: string): void {
+    this.selectedFactory = factory;
+    this.showFactorySelection = false;
+    this.loadLsxList();
+  }
+
+  backToFactorySelection(): void {
+    this.showFactorySelection = true;
+    this.selectedFactory = '';
+    this.selectedLsx = '';
+    this.lsx = '';
+    this.lsxList = [];
+    this.filteredLsxList = [];
+    this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+    this.errorMsg = '';
   }
 
   ngAfterViewInit(): void {
@@ -78,9 +132,164 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     this.subs.unsubscribe();
   }
 
+  async loadLsxList(): Promise<void> {
+    this.isLoadingList = true;
+    try {
+      // Load PXK data và work-orders song song
+      const [pxkSnap, woSnap] = await Promise.all([
+        this.firestore.collection('pxk-import-data').get().toPromise(),
+        this.firestore.collection('work-orders', ref => 
+          ref.where('factory', '==', this.selectedFactory)
+        ).get().toPromise()
+      ]);
+      
+      // Build work order map: lsx -> { status, deliveryDate }
+      const woMap = new Map<string, { status: string; deliveryDate: Date | null }>();
+      (woSnap?.docs || []).forEach((d: any) => {
+        const data = d.data();
+        const po = String(data?.productionOrder || '').trim().toUpperCase();
+        const status = String(data?.status || data?.tinhTrang || '').trim();
+        let deliveryDate: Date | null = null;
+        if (data?.deliveryDate) {
+          deliveryDate = data.deliveryDate.toDate?.() || new Date(data.deliveryDate);
+        } else if (data?.ngayGiaoNvl) {
+          deliveryDate = data.ngayGiaoNvl.toDate?.() || new Date(data.ngayGiaoNvl);
+        }
+        if (po) woMap.set(po, { status, deliveryDate });
+      });
+      
+      // Prefix filter: ASM1 -> KZ, ASM2 -> LH
+      const prefix = this.selectedFactory === 'ASM2' ? 'LH' : 'KZ';
+      
+      const items: LsxItem[] = [];
+      (pxkSnap?.docs || []).forEach((d: any) => {
+        const data = d.data();
+        const lsx = String(data?.lsx || '').trim();
+        const lsxUpper = lsx.toUpperCase();
+        const lines = Array.isArray(data?.lines) ? data.lines : [];
+        
+        // Chỉ lấy LSX bắt đầu bằng prefix đúng
+        if (!lsxUpper.startsWith(prefix)) return;
+        if (!lsx || lines.length === 0) return;
+        
+        const factory = this.detectFactory(lsx);
+        const importedAt = data?.importedAt?.toDate?.() || null;
+        
+        // Lấy thông tin từ work-order
+        const woInfo = woMap.get(lsxUpper);
+        const woStatus = woInfo?.status || '';
+        const deliveryDate = woInfo?.deliveryDate || null;
+        
+        // Loại bỏ LSX có trạng thái Done hoặc Delay
+        const statusLower = woStatus.toLowerCase();
+        if (statusLower === 'done' || statusLower === 'delay') return;
+        
+        items.push({
+          lsx,
+          factory,
+          lineCount: lines.length,
+          status: 'pending',
+          importedAt,
+          workOrderStatus: woStatus,
+          deliveryDate
+        });
+      });
+      
+      // Sắp xếp theo LSX A-Z
+      items.sort((a, b) => a.lsx.localeCompare(b.lsx));
+      
+      this.lsxList = items;
+      this.filterLsxList();
+      await this.updateLsxStatuses();
+    } catch (e) {
+      console.error('Load LSX list error:', e);
+    } finally {
+      this.isLoadingList = false;
+    }
+  }
+
+  async updateLsxStatuses(): Promise<void> {
+    const snap = await this.firestore.collection('outbound-materials').get().toPromise();
+    const scannedLsx = new Map<string, number>();
+    
+    (snap?.docs || []).forEach((d: any) => {
+      const data = d.data();
+      const po = String(data?.productionOrder || '').trim().toUpperCase();
+      if (po) {
+        scannedLsx.set(po, (scannedLsx.get(po) || 0) + 1);
+      }
+    });
+    
+    this.lsxList.forEach(item => {
+      const lsxUpper = item.lsx.toUpperCase();
+      const scanCount = scannedLsx.get(lsxUpper) || 0;
+      if (scanCount === 0) {
+        item.status = 'pending';
+      } else if (scanCount >= item.lineCount) {
+        item.status = 'complete';
+      } else {
+        item.status = 'partial';
+      }
+    });
+    
+    this.filterLsxList();
+  }
+
+  filterLsxList(): void {
+    const term = this.searchTerm.trim().toUpperCase();
+    // Loại bỏ các LSX đã hoàn thành
+    let filtered = this.lsxList.filter(item => item.status !== 'complete');
+    
+    if (term) {
+      filtered = filtered.filter(item => 
+        item.lsx.toUpperCase().includes(term)
+      );
+    }
+    
+    this.filteredLsxList = filtered;
+  }
+
+  onSearchTermChange(): void {
+    this.filterLsxList();
+  }
+
+  selectLsx(item: LsxItem): void {
+    this.selectedLsx = item.lsx;
+    this.lsx = item.lsx;
+    this.rebuild();
+  }
+
+  backToList(): void {
+    this.selectedLsx = '';
+    this.lsx = '';
+    this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml('');
+    this.errorMsg = '';
+  }
+
+  getStatusText(status: string): string {
+    switch (status) {
+      case 'complete': return 'Hoàn thành';
+      case 'partial': return 'Đang scan';
+      case 'pending': return 'Chờ scan';
+      default: return '';
+    }
+  }
+
+  getLsxNumber(lsx: string): string {
+    // Bỏ prefix KZ hoặc LH, chỉ lấy phần số
+    const upper = lsx.toUpperCase();
+    if (upper.startsWith('KZ') || upper.startsWith('LH')) {
+      return lsx.substring(2);
+    }
+    return lsx;
+  }
+
   applyLsx(): void {
     this.lsx = this.lsx.trim().toUpperCase();
-    this.rebuild();
+    if (this.lsx) {
+      this.selectedLsx = this.lsx;
+      this.rebuild();
+    }
   }
 
   onLsxInput(): void {
@@ -89,7 +298,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async rebuild(backgroundSync = false): Promise<void> {
-    const seq = ++this.rebuildSeq; // tăng version mỗi lần rebuild bắt đầu
+    const seq = ++this.rebuildSeq;
     const lsx = this.lsx.trim();
     if (!lsx) {
       if (seq === this.rebuildSeq) {
@@ -104,7 +313,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     try {
       const pxkDataByLsx = await this.loadPxkData();
-      if (seq !== this.rebuildSeq) return; // có rebuild mới hơn đang chạy, bỏ qua
+      if (seq !== this.rebuildSeq) return;
       const lines = this.getLinesForLsx(pxkDataByLsx, lsx);
       if (lines.length === 0) {
         if (seq !== this.rebuildSeq) return;
@@ -154,7 +363,7 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         nvlSxKsBoxHtml: nvlBox
       };
       const html = await this.pxkBuild.buildHtml(params);
-      if (seq !== this.rebuildSeq) return; // kiểm tra lần cuối trước khi ghi UI
+      if (seq !== this.rebuildSeq) return;
       this.pxkHtml = this.sanitizer.bypassSecurityTrustHtml(html);
     } catch (e) {
       if (seq !== this.rebuildSeq) return;
@@ -180,7 +389,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
         if (key && lines.length > 0) out[key] = lines;
       });
     };
-    // Query trực tiếp theo LSX (nhanh nhất)
     const directSnap = await this.firestore.collection('pxk-import-data', ref =>
       ref.where('lsx', '==', lsx).limit(5)
     ).get().toPromise();
@@ -188,7 +396,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       addDocs(directSnap.docs);
       return out;
     }
-    // Fallback: load toàn bộ nếu không tìm thấy khớp chính xác (LSX có thể khác format nhỏ)
     const allSnap = await this.firestore.collection('pxk-import-data').get().toPromise();
     addDocs(allSnap?.docs || []);
     return out;
@@ -236,7 +443,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       if (poUpper.includes(lsxUpper) || lsxUpper.includes(poUpper)) return true;
       return false;
     };
-    // Query song song: exact match + factory filter
     const [directSnap, factorySnap] = await Promise.all([
       this.firestore.collection('work-orders', ref =>
         ref.where('productionOrder', '==', lsx).limit(3)
@@ -298,7 +504,6 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
     return [map, nhanVienSoanStr];
   }
 
-  /** Gộp 2 hàm cũ: trả về [qtyMap, giaoStr, nhanStr, lineNhanStr] — chỉ query 1 lần */
   private async loadDelivery(lsx: string): Promise<[Map<string, number>, string, string, string]> {
     const map = new Map<string, number>();
     const snap = await this.firestore.collection('rm1-delivery-records', ref =>
@@ -364,9 +569,8 @@ export class PxkPreviewComponent implements OnInit, OnDestroy, AfterViewInit {
       const container = this.previewWrapRef?.nativeElement;
       if (!container) { this.rebuild(true); return; }
 
-      // Tính hasAnyScanData từ các ô thực tế trên DOM
       const scanCells = Array.from(container.querySelectorAll('[data-scan-key]')) as HTMLElement[];
-      if (scanCells.length === 0) return; // HTML chưa render, bỏ qua
+      if (scanCells.length === 0) return;
 
       let hasAnyScanData = false;
       for (const cell of scanCells) {

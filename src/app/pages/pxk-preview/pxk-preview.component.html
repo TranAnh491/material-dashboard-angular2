@@ -1,32 +1,110 @@
 <div class="pxk-preview-page">
-  <div class="toolbar">
-    <div class="toolbar-title">
-      <i class="material-icons">preview</i>
-      <span>PXK Preview</span>
-    </div>
-    <div class="toolbar-form">
-      <input #lsxInput type="text" placeholder="Quét LSX hoặc nhập tay LSX…"
-             [(ngModel)]="lsx"
-             (input)="onLsxInput()"
-             (keydown.enter)="applyLsx()"
-             style="text-transform:uppercase;" />
-      <button class="btn-apply" (click)="applyLsx()">
-        <i class="material-icons">search</i>
-        Xem
-      </button>
+  <!-- Factory Selection Screen -->
+  <div class="factory-selection-screen" *ngIf="showFactorySelection">
+    <div class="factory-selection-card">
+      <div class="factory-title">
+        <i class="material-icons">business</i>
+        <span>Chọn Nhà Máy</span>
+      </div>
+      <div class="factory-buttons">
+        <button class="factory-btn asm1" (click)="selectFactoryAndLoad('ASM1')">
+          <i class="material-icons">factory</i>
+          <span class="factory-name">ASM1</span>
+          <span class="factory-prefix">LSX: KZ...</span>
+        </button>
+        <button class="factory-btn asm2" (click)="selectFactoryAndLoad('ASM2')">
+          <i class="material-icons">factory</i>
+          <span class="factory-name">ASM2</span>
+          <span class="factory-prefix">LSX: LH...</span>
+        </button>
+      </div>
     </div>
   </div>
 
-  <div class="error-msg" *ngIf="errorMsg">{{ errorMsg }}</div>
+  <!-- Main Content (after factory selected) -->
+  <div class="main-content" *ngIf="!showFactorySelection">
+    <!-- Compact Toolbar -->
+    <div class="toolbar compact">
+      <div class="toolbar-left">
+        <button class="btn-back" *ngIf="selectedLsx" (click)="backToList()">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <button class="btn-back" *ngIf="!selectedLsx" (click)="backToFactorySelection()">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <div class="toolbar-title">
+          <span class="factory-badge">{{ selectedFactory }}</span>
+          <span>{{ selectedLsx ? selectedLsx : 'Danh sách LSX' }}</span>
+        </div>
+      </div>
+      <div class="toolbar-form compact" *ngIf="!selectedLsx">
+        <input type="text" placeholder="Tìm LSX..."
+               [(ngModel)]="searchTerm"
+               (input)="onSearchTermChange()"
+               class="search-input" />
+      </div>
+      <div class="toolbar-form compact" *ngIf="selectedLsx">
+        <input #lsxInput type="text" placeholder="Nhập LSX khác..."
+               [(ngModel)]="lsx"
+               (input)="onLsxInput()"
+               (keydown.enter)="applyLsx()"
+               style="text-transform:uppercase;" />
+        <button class="btn-apply compact" (click)="applyLsx()">
+          <i class="material-icons">search</i>
+        </button>
+      </div>
+    </div>
 
-  <div class="loading-wrap" *ngIf="isLoading">
-    <i class="material-icons rotating">sync</i>
-    <span>Đang tải…</span>
-  </div>
+    <!-- LSX Grid View -->
+    <div class="lsx-grid-container" *ngIf="!selectedLsx">
+      <div class="loading-wrap" *ngIf="isLoadingList">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải danh sách LSX...</span>
+      </div>
 
-  <div #previewWrap class="preview-wrap" *ngIf="!isLoading && pxkHtml" [innerHTML]="pxkHtml"></div>
+      <div class="lsx-grid" *ngIf="!isLoadingList">
+        <div class="lsx-box" 
+             *ngFor="let item of filteredLsxList"
+             [class.status-pending]="item.status === 'pending'"
+             [class.status-partial]="item.status === 'partial'"
+             [class.status-complete]="item.status === 'complete'"
+             (click)="selectLsx(item)">
+          <div class="lsx-code">{{ getLsxNumber(item.lsx) }}</div>
+          <div class="lsx-info">
+            <span class="lsx-lines">{{ item.lineCount }} dòng</span>
+            <span class="lsx-wo-status" *ngIf="item.workOrderStatus">{{ item.workOrderStatus }}</span>
+          </div>
+          <div class="lsx-delivery" *ngIf="item.deliveryDate">
+            <i class="material-icons">event</i>
+            <span>{{ item.deliveryDate | date:'dd/MM/yyyy' }}</span>
+          </div>
+          <div class="lsx-status">
+            <span class="status-dot"></span>
+            <span class="status-text">{{ getStatusText(item.status) }}</span>
+          </div>
+        </div>
+      </div>
 
-  <div class="empty-hint" *ngIf="!isLoading && !pxkHtml && !errorMsg">
-    Quét mã LSX hoặc nhập tay, sau đó bấm Xem. Dữ liệu cập nhật real-time.
+      <div class="empty-hint" *ngIf="!isLoadingList && filteredLsxList.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Không tìm thấy LSX nào</p>
+      </div>
+    </div>
+
+    <!-- PXK Detail View -->
+    <div class="pxk-detail-container" *ngIf="selectedLsx">
+      <div class="error-msg" *ngIf="errorMsg">{{ errorMsg }}</div>
+
+      <div class="loading-wrap" *ngIf="isLoading">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải...</span>
+      </div>
+
+      <div #previewWrap class="preview-wrap" *ngIf="!isLoading && pxkHtml" [innerHTML]="pxkHtml"></div>
+
+      <div class="empty-hint" *ngIf="!isLoading && !pxkHtml && !errorMsg">
+        Không có dữ liệu PXK cho LSX này.
+      </div>
+    </div>
   </div>
 </div>
