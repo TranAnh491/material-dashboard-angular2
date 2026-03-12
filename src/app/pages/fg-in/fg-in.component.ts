@@ -848,7 +848,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         batchNumber: this.generateBatchNumber(result.length, factory),
         materialCode: maTP,
         rev: '',
-        poNumber: poNumber || undefined,
+        poNumber: poNumber,
         lot,
         lsx,
         quantity: 0,
