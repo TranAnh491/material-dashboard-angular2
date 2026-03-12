@@ -100,6 +100,7 @@
           <col style="width: 70px">
           <col style="width: 60px">
           <col style="width: 45px">
+          <col style="width: 55px">
           <col style="width: 70px">
           <col style="width: 70px">
           <col style="width: 80px">
@@ -123,6 +124,7 @@
             <th>QTY Xuất</th>
             <th>Carton</th>
             <th>ODD</th>
+            <th>Tồn kho</th>
             <th>Vị Trí</th>
             <th>Loại hàng</th>
             <th>Ghi chú</th>
@@ -213,7 +215,7 @@
                 <input type="text"
                        class="editable-input number-input"
                        [value]="formatNumber(row.material.quantity)"
-                       (input)="onQtyInput($event, row.material)"
+                       (focus)="onQtyFocus($event, row.material)"
                        (blur)="onQtyBlur($event, row.material)"
                        placeholder="QTY Xuất">
               </td>
@@ -228,6 +230,7 @@
                 <ng-container *ngIf="!(row.material.materialCode || '').trim()">{{ 0 }}</ng-container>
                 <ng-container *ngIf="(row.material.materialCode || '').trim()">{{ getCartonOdd(row.material).odd }}</ng-container>
               </td>
+              <td class="number-cell stock-cell">{{ getInventoryStock(row.material) | number }}</td>
               <td class="location-cell">
                 <input type="text"
                        class="editable-input"
@@ -271,7 +274,7 @@
               <td class="pallet-total-label">Tổng Carton Pallet {{row.pallet}}</td>
               <td colspan="2"></td>
               <td class="number-cell pallet-total-qty"><strong>{{row.totalCarton | number}}</strong></td>
-              <td colspan="8"></td>
+              <td colspan="9"></td>
             </tr>
           </ng-container>
         </tbody>

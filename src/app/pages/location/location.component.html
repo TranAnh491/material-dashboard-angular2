@@ -3,7 +3,7 @@
   <div class="excel-container">
     <!-- Report Title -->
     <div class="excel-header">
-      <h4>📍 LOCATION MANAGEMENT</h4>
+      <h4><i class="material-icons">location_on</i> LOCATION MANAGEMENT</h4>
     </div>
     
     <!-- Excel Actions -->
@@ -96,12 +96,17 @@
             <i class="material-icons">swap_horiz</i>
             Đổi Vị Trí
           </button>
+          <!-- Move Shelf Button -->
+          <button class="move-shelf-btn" (click)="openMoveShelfModal()" title="Dời kệ - chuyển nhiều mã hàng">
+            <i class="material-icons">local_shipping</i>
+            Dời Kệ
+          </button>
         </div>
         
         <!-- Search Box -->
         <div class="search-box">
           <input type="text"
-                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [placeholder]="isLoading ? 'Đang tải...' : 'Tìm kiếm vị trí'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchInput($event)"
                  (keyup)="onSearchKeyUp($event)"
@@ -127,7 +132,7 @@
 
     <!-- Add New Item Form -->
     <div class="add-item-form">
-      <h5>➕ Thêm Vị Trí Mới</h5>
+      <h5><i class="material-icons">add</i> Thêm Vị Trí Mới</h5>
       <div class="form-row">
         <div class="form-group">
           <label for="newViTri">Vị Trí:</label>
@@ -149,7 +154,7 @@
               ⚠️ Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)
             </span>
             <span *ngIf="validateViTriInput(newItem.viTri)">
-              ✅ Định dạng hợp lệ
+              Định dạng hợp lệ
             </span>
           </div>
         </div>
@@ -222,7 +227,7 @@
                     ⚠️ Chỉ cho phép chữ cái, số, dấu chấm (.) và dấu gạch ngang (-)
                   </span>
                   <span *ngIf="validateViTriInput(editingItem.viTri)">
-                    ✅ Định dạng hợp lệ
+                    Định dạng hợp lệ
                   </span>
                 </div>
               </ng-template>
@@ -278,7 +283,7 @@
       <div class="empty-state" *ngIf="!searchTerm && filteredItems.length === 0 && !isLoading">
         <div class="empty-state-content">
           <i class="material-icons">location_off</i>
-          <h3>📍 Chưa có vị trí nào</h3>
+          <h3>Chưa có vị trí nào</h3>
           <p>Hãy thêm vị trí mới để bắt đầu quản lý</p>
           
           <!-- Quick Stats -->
@@ -303,7 +308,7 @@
       <div class="no-results" *ngIf="searchTerm && filteredItems.length === 0 && !isLoading">
         <div class="no-results-content">
           <i class="material-icons">search_off</i>
-          <h4>🔍 Không tìm thấy kết quả</h4>
+          <h4>Không tìm thấy kết quả</h4>
           <p>Không tìm thấy vị trí nào cho "<strong>{{searchTerm}}</strong>"</p>
           
           <!-- Search Tips -->
@@ -322,7 +327,7 @@
       <div class="loading-state" *ngIf="isLoading">
         <div class="loading-content">
           <i class="material-icons rotating">sync</i>
-          <h4>🔍 Đang tìm kiếm...</h4>
+          <h4>Đang tìm kiếm...</h4>
           <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Location</p>
         </div>
       </div>
@@ -438,7 +443,7 @@
         <div class="material-scan-results" *ngIf="materialScanCompleted && foundRM1Item">
           <div class="success-header">
             <i class="material-icons success-icon">check_circle</i>
-            <h5>✅ Đã quét thành công mã hàng!</h5>
+            <h5>Đã quét thành công mã hàng</h5>
           </div>
           
           <div class="scanned-info-card">
@@ -712,7 +717,7 @@
         
         <!-- All Current Locations (clickable) -->
         <div class="other-locations-section" *ngIf="suggestedLocations.length > 0">
-          <p class="locations-title">📍 Các vị trí hiện có của mã hàng này (bấm để chọn):</p>
+          <p class="locations-title">Các vị trí hiện có (bấm để chọn):</p>
           <div class="location-options">
             <button 
               *ngFor="let loc of suggestedLocations"
@@ -931,6 +936,176 @@
       <button class="btn btn-cancel" (click)="closeCustomerModal()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Move Shelf (Dời Kệ) Modal -->
+<div class="modal-overlay" *ngIf="showMoveShelfModal" (click)="closeMoveShelfModal()">
+  <div class="modal-content move-shelf-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">local_shipping</i>
+        Dời Kệ
+      </h3>
+      <button class="close-btn" (click)="closeMoveShelfModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step 1: Scan Current Location -->
+      <div *ngIf="moveShelfStep === 'scan-location'" class="move-shelf-step">
+        <div class="step-title">
+          <h4>Bước 1: Scan vị trí cần dời</h4>
+        </div>
+        
+        <div class="scan-input-container">
+          <input 
+            type="text" 
+            id="moveShelfLocationInput"
+            [(ngModel)]="moveShelfCurrentLocation"
+            (keyup.enter)="processMoveShelfLocation()"
+            placeholder="Scan hoặc nhập vị trí..."
+            class="scan-input"
+            [disabled]="isMoveShelfLoading">
+          
+          <button 
+            class="scan-btn"
+            (click)="processMoveShelfLocation()"
+            [disabled]="isMoveShelfLoading || !moveShelfCurrentLocation.trim()">
+            <i class="material-icons">{{ isMoveShelfLoading ? 'hourglass_empty' : 'search' }}</i>
+          </button>
+        </div>
+        
+        <div *ngIf="isMoveShelfLoading" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Đang tải mã hàng...</span>
+        </div>
+      </div>
+
+      <!-- Step 2: Select Items -->
+      <div *ngIf="moveShelfStep === 'select-items'" class="move-shelf-step">
+        <div class="step-title">
+          <h4>Bước 2: Chọn mã hàng cần dời</h4>
+          <p class="step-description">
+            Vị trí: <strong>{{ moveShelfCurrentLocation }}</strong> | 
+            Đã chọn: <strong>{{ moveShelfSelectedItems.size }}/{{ moveShelfItems.length }}</strong>
+          </p>
+        </div>
+        
+        <!-- Select All Button -->
+        <div class="select-all-container">
+          <button class="select-all-btn" (click)="selectAllMoveShelfItems()">
+            <i class="material-icons">
+              {{ moveShelfSelectedItems.size === moveShelfItems.length ? 'check_box' : 'check_box_outline_blank' }}
+            </i>
+            {{ moveShelfSelectedItems.size === moveShelfItems.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}
+          </button>
+        </div>
+        
+        <!-- Items Grid -->
+        <div class="items-grid">
+          <div 
+            *ngFor="let item of moveShelfItems"
+            class="item-box"
+            [class.selected]="isMoveShelfItemSelected(item.id)"
+            (click)="toggleMoveShelfItem(item.id)">
+            <div class="item-checkbox">
+              <i class="material-icons">
+                {{ isMoveShelfItemSelected(item.id) ? 'check_box' : 'check_box_outline_blank' }}
+              </i>
+            </div>
+            <div class="item-info">
+              <div class="item-code">{{ item.materialCode }}</div>
+              <div class="item-details">
+                <span class="item-po">{{ item.poNumber }}</span>
+                <span class="item-stock">SL: {{ item.stock | number:'1.0-0' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div *ngIf="moveShelfItems.length === 0" class="empty-state">
+          <i class="material-icons">inbox</i>
+          <p>Không có mã hàng nào ở vị trí này</p>
+        </div>
+      </div>
+
+      <!-- Step 3: Scan New Location -->
+      <div *ngIf="moveShelfStep === 'scan-new-location'" class="move-shelf-step">
+        <div class="step-title">
+          <h4>Bước 3: Scan vị trí mới</h4>
+          <p class="step-description">
+            Dời <strong>{{ moveShelfSelectedItems.size }}</strong> mã hàng từ <strong>{{ moveShelfCurrentLocation }}</strong>
+          </p>
+        </div>
+        
+        <div class="scan-input-container">
+          <input 
+            type="text" 
+            id="moveShelfNewLocationInput"
+            [(ngModel)]="moveShelfNewLocation"
+            (keyup.enter)="confirmMoveShelf()"
+            placeholder="Scan hoặc nhập vị trí mới..."
+            class="scan-input"
+            [disabled]="isMoveShelfLoading">
+          
+          <button 
+            class="scan-btn"
+            (click)="confirmMoveShelf()"
+            [disabled]="isMoveShelfLoading || !moveShelfNewLocation.trim()">
+            <i class="material-icons">{{ isMoveShelfLoading ? 'hourglass_empty' : 'check' }}</i>
+          </button>
+        </div>
+        
+        <div *ngIf="isMoveShelfLoading" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Đang cập nhật...</span>
+        </div>
+      </div>
+
+      <!-- Step 4: Complete -->
+      <div *ngIf="moveShelfStep === 'complete'" class="move-shelf-step">
+        <div class="complete-message">
+          <i class="material-icons success-icon">check_circle</i>
+          <h4>Dời kệ thành công!</h4>
+          <p>Đã dời {{ moveShelfSelectedItems.size }} mã hàng đến {{ moveShelfNewLocation }}</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn btn-cancel" (click)="closeMoveShelfModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      
+      <button 
+        *ngIf="moveShelfStep === 'select-items'"
+        class="btn btn-back"
+        (click)="moveShelfStep = 'scan-location'; moveShelfCurrentLocation = ''">
+        <i class="material-icons">arrow_back</i>
+        Quay lại
+      </button>
+      
+      <button 
+        *ngIf="moveShelfStep === 'select-items'"
+        class="btn btn-confirm"
+        (click)="proceedToNewLocationScan()"
+        [disabled]="moveShelfSelectedItems.size === 0">
+        <i class="material-icons">arrow_forward</i>
+        Tiếp tục ({{ moveShelfSelectedItems.size }})
+      </button>
+      
+      <button 
+        *ngIf="moveShelfStep === 'scan-new-location'"
+        class="btn btn-back"
+        (click)="goBackToSelectItems()">
+        <i class="material-icons">arrow_back</i>
+        Quay lại
       </button>
     </div>
   </div>

@@ -384,6 +384,12 @@ tr.drag-over {
 .carton-cell {
   min-width: 90px;
 }
+.stock-cell {
+  min-width: 55px;
+  text-align: center;
+  color: #2196F3;
+  font-weight: 500;
+}
 .carton-warning {
   color: #d32f2f;
   font-weight: 600;

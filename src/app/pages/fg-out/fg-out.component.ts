@@ -121,6 +121,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private locationCache = new Map<string, string>(); // Cache for locations
   private loadLocationsSubject = new Subject<void>(); // Subject for debouncing location loading
   
+  // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
+  private inventoryStockCache = new Map<string, number>();
+  
   // Customer Code Mapping (Tên Khách Hàng = description)
   mappingItems: CustomerCodeMappingItem[] = [];
   // Danh mục (fg-catalog) – Standard theo Mã TP để tính Carton/ODD
@@ -171,6 +174,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
+    this.loadInventoryStockCache(); // Load tồn kho từ fg-inventory
     // Mặc định lọc 1 tuần gần đây
     const today = new Date();
     const oneWeekAgo = new Date();
@@ -197,6 +201,35 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     this.loadLocationsSubject.complete();
     this.locationCache.clear();
+    this.inventoryStockCache.clear();
+  }
+
+  // Load tồn kho từ fg-inventory vào cache - cộng dồn theo mã TP
+  loadInventoryStockCache(): void {
+    this.firestore.collection('fg-inventory')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.inventoryStockCache.clear();
+        actions.forEach(action => {
+          const data = action.payload.doc.data() as any;
+          const materialCode = (data.materialCode || '').toString().trim().toUpperCase();
+          const ton = data.ton || 0;
+          if (materialCode) {
+            // Cộng dồn tồn kho theo mã TP
+            const currentStock = this.inventoryStockCache.get(materialCode) || 0;
+            this.inventoryStockCache.set(materialCode, currentStock + ton);
+          }
+        });
+        console.log(`📦 Loaded inventory stock for ${this.inventoryStockCache.size} material codes`);
+      });
+  }
+
+  // Lấy tồn kho từ cache theo mã TP (cộng dồn)
+  getInventoryStock(material: FgOutItem): number {
+    if (!material.materialCode) return 0;
+    const materialKey = (material.materialCode || '').toString().trim().toUpperCase();
+    return this.inventoryStockCache.get(materialKey) || 0;
   }
 
   // Load materials from Firebase - Only last 10 days
@@ -356,18 +389,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   /** Xử lý nhập QTY (parse số, cập nhật model). */
-  onQtyInput(event: Event, material: FgOutItem): void {
+  // Khi focus vào ô QTY: hiển thị số không có dấu phẩy để dễ sửa
+  onQtyFocus(event: Event, material: FgOutItem): void {
+    const input = event.target as HTMLInputElement;
+    input.value = material.quantity > 0 ? material.quantity.toString() : '';
+    input.select(); // Chọn toàn bộ text để dễ thay thế
+  }
+
+  /** Sau khi blur ô QTY: parse số và hiển thị lại có dấu phẩy. */
+  onQtyBlur(event: Event, material: FgOutItem): void {
     const input = event.target as HTMLInputElement;
     const raw = (input.value || '').replace(/,/g, '').trim();
     const num = parseInt(raw, 10);
     material.quantity = isNaN(num) ? 0 : num;
-    this.onQuantityChange(material);
-  }
-
-  /** Sau khi blur ô QTY: hiển thị lại có dấu phẩy. */
-  onQtyBlur(event: Event, material: FgOutItem): void {
-    const input = event.target as HTMLInputElement;
     input.value = this.formatNumber(material.quantity);
+    this.onQuantityChange(material);
   }
 
   // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
@@ -558,17 +594,22 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Apply search filters
+  // Apply search filters - PHẢI có searchTerm (shipment) mới hiển thị
   applyFilters(): void {
+    // Nếu không có searchTerm → không hiển thị gì
+    if (!this.searchTerm || !this.searchTerm.trim()) {
+      this.filteredMaterials = [];
+      this.displayRows = [];
+      return;
+    }
+
     this.filteredMaterials = this.materials.filter(material => {
       // Search theo Shipment hoặc Mã TP (contains, không phân biệt hoa thường)
-      if (this.searchTerm && this.searchTerm.trim()) {
-        const term = this.searchTerm.trim().toUpperCase();
-        const ship = (material.shipment || '').toUpperCase();
-        const code = (material.materialCode || '').toUpperCase();
-        if (!ship.includes(term) && !code.includes(term)) {
-          return false;
-        }
+      const term = this.searchTerm.trim().toUpperCase();
+      const ship = (material.shipment || '').toUpperCase();
+      const code = (material.materialCode || '').toUpperCase();
+      if (!ship.includes(term) && !code.includes(term)) {
+        return false;
       }
       
       // Filter by factory

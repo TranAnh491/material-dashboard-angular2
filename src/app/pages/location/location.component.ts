@@ -140,6 +140,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   customerSearchTerm = '';
   showCustomerModal = false;
   
+  // Dời Kệ (Move Shelf) Modal
+  showMoveShelfModal = false;
+  moveShelfStep: 'scan-location' | 'select-items' | 'scan-new-location' | 'complete' = 'scan-location';
+  moveShelfCurrentLocation = '';
+  moveShelfNewLocation = '';
+  moveShelfItems: any[] = [];
+  moveShelfSelectedItems: Set<string> = new Set();
+  isMoveShelfLoading = false;
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -2053,6 +2062,199 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   clearCustomerSearch() {
     this.customerSearchTerm = '';
     this.filteredCustomerCodes = [...this.customerCodes];
+  }
+
+  // ==================== MOVE SHELF (DỜI KỆ) METHODS ====================
+
+  openMoveShelfModal(): void {
+    this.showMoveShelfModal = true;
+    this.moveShelfStep = 'scan-location';
+    this.moveShelfCurrentLocation = '';
+    this.moveShelfNewLocation = '';
+    this.moveShelfItems = [];
+    this.moveShelfSelectedItems = new Set();
+    this.isMoveShelfLoading = false;
+    
+    // Auto focus input
+    setTimeout(() => {
+      const input = document.getElementById('moveShelfLocationInput') as HTMLInputElement;
+      if (input) input.focus();
+    }, 150);
+  }
+
+  closeMoveShelfModal(): void {
+    this.showMoveShelfModal = false;
+    this.moveShelfStep = 'scan-location';
+    this.moveShelfCurrentLocation = '';
+    this.moveShelfNewLocation = '';
+    this.moveShelfItems = [];
+    this.moveShelfSelectedItems = new Set();
+    this.isMoveShelfLoading = false;
+  }
+
+  async processMoveShelfLocation(): Promise<void> {
+    const location = this.moveShelfCurrentLocation.trim().toUpperCase();
+    if (!location) {
+      alert('⚠️ Vui lòng nhập hoặc scan vị trí');
+      return;
+    }
+
+    this.isMoveShelfLoading = true;
+
+    try {
+      // Load all materials at this location from inventory-materials
+      const snapshot = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('location', '==', location)
+        )
+        .get()
+        .toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${location}`);
+        this.isMoveShelfLoading = false;
+        return;
+      }
+
+      this.moveShelfItems = [];
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        // Calculate stock
+        const openingStock = Number(data.openingStock) || 0;
+        const quantity = Number(data.quantity) || 0;
+        const exported = Number(data.exported) || 0;
+        const xt = Number(data.xt) || 0;
+        const stock = openingStock + quantity - exported - xt;
+
+        this.moveShelfItems.push({
+          id: doc.id,
+          materialCode: data.materialCode || '',
+          poNumber: data.poNumber || '',
+          location: data.location || '',
+          stock: stock,
+          batchNumber: data.batchNumber || ''
+        });
+      });
+
+      // Sort by materialCode
+      this.moveShelfItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+
+      console.log(`✅ Found ${this.moveShelfItems.length} items at location: ${location}`);
+      
+      // Move to next step
+      this.moveShelfStep = 'select-items';
+      this.isMoveShelfLoading = false;
+
+    } catch (error) {
+      console.error('❌ Error loading items:', error);
+      alert(`❌ Lỗi khi tải dữ liệu: ${error}`);
+      this.isMoveShelfLoading = false;
+    }
+  }
+
+  toggleMoveShelfItem(itemId: string): void {
+    if (this.moveShelfSelectedItems.has(itemId)) {
+      this.moveShelfSelectedItems.delete(itemId);
+    } else {
+      this.moveShelfSelectedItems.add(itemId);
+    }
+  }
+
+  selectAllMoveShelfItems(): void {
+    if (this.moveShelfSelectedItems.size === this.moveShelfItems.length) {
+      // Deselect all
+      this.moveShelfSelectedItems.clear();
+    } else {
+      // Select all
+      this.moveShelfItems.forEach(item => {
+        this.moveShelfSelectedItems.add(item.id);
+      });
+    }
+  }
+
+  isMoveShelfItemSelected(itemId: string): boolean {
+    return this.moveShelfSelectedItems.has(itemId);
+  }
+
+  proceedToNewLocationScan(): void {
+    if (this.moveShelfSelectedItems.size === 0) {
+      alert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
+      return;
+    }
+    
+    this.moveShelfStep = 'scan-new-location';
+    this.moveShelfNewLocation = '';
+    
+    // Auto focus input
+    setTimeout(() => {
+      const input = document.getElementById('moveShelfNewLocationInput') as HTMLInputElement;
+      if (input) input.focus();
+    }, 150);
+  }
+
+  async confirmMoveShelf(): Promise<void> {
+    const newLocation = this.moveShelfNewLocation.trim().toUpperCase();
+    if (!newLocation) {
+      alert('⚠️ Vui lòng nhập hoặc scan vị trí mới');
+      return;
+    }
+
+    // Validate location format
+    if (!this.validateViTriInput(newLocation)) {
+      alert('❌ Vị trí không hợp lệ');
+      return;
+    }
+
+    // Check if location exists
+    const locationExists = this.locationItems.some(item =>
+      this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocation)
+    );
+
+    if (!locationExists) {
+      alert(`❌ Vị trí "${newLocation}" không tồn tại trong danh sách vị trí`);
+      return;
+    }
+
+    this.isMoveShelfLoading = true;
+
+    try {
+      const batch = this.firestore.firestore.batch();
+      const selectedItemIds = Array.from(this.moveShelfSelectedItems);
+      
+      for (const itemId of selectedItemIds) {
+        const docRef = this.firestore.collection('inventory-materials').doc(itemId).ref;
+        batch.update(docRef, {
+          location: newLocation,
+          lastModified: new Date(),
+          modifiedBy: 'move-shelf-scanner'
+        });
+      }
+
+      await batch.commit();
+
+      console.log(`✅ Moved ${selectedItemIds.length} items to ${newLocation}`);
+      
+      // Show success
+      this.moveShelfStep = 'complete';
+      this.isMoveShelfLoading = false;
+
+      alert(`✅ Đã dời ${selectedItemIds.length} mã hàng từ ${this.moveShelfCurrentLocation} đến ${newLocation}`);
+      
+      // Close modal after short delay
+      setTimeout(() => {
+        this.closeMoveShelfModal();
+      }, 500);
+
+    } catch (error) {
+      console.error('❌ Error moving items:', error);
+      alert(`❌ Lỗi khi dời kệ: ${error}`);
+      this.isMoveShelfLoading = false;
+    }
+  }
+
+  goBackToSelectItems(): void {
+    this.moveShelfStep = 'select-items';
+    this.moveShelfNewLocation = '';
   }
 
   // Print Customer Label
