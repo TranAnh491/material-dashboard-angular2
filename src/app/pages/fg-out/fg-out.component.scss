@@ -1,4 +1,8 @@
-// FG Out - Black & White Interface (Speed Optimized)
+// FG Out - Giao diện đơn giản, nền trắng viền đen
+$fg-font-family: 'Segoe UI', Arial, sans-serif;
+$fg-font-size-base: 13px;
+$fg-cell-padding: 8px 6px;
+
 :host {
   display: block;
   width: 100%;
@@ -393,8 +397,99 @@ tr.drag-over {
 .carton-warning {
   color: #d32f2f;
   font-weight: 600;
-  font-size: 10px;
+  font-size: 12px;
+  font-family: $fg-font-family;
   white-space: nowrap;
+}
+
+// Dòng filter - nền trắng, viền đen, chữ đen
+.filter-row th {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #000000 !important;
+  padding: 6px 4px !important;
+  font-size: $fg-font-size-base;
+  font-family: $fg-font-family;
+  text-transform: uppercase;
+  text-align: center;
+}
+.col-filter-input,
+.col-filter-select {
+  width: 100%;
+  max-width: 110px;
+  padding: 6px 8px;
+  font-size: $fg-font-size-base;
+  font-family: $fg-font-family;
+  border: 1px solid #000000;
+  border-radius: 0;
+  background: #ffffff;
+  color: #000000;
+}
+.col-filter-select {
+  cursor: pointer;
+  min-height: 28px;
+}
+.clear-filter-btn-small {
+  padding: 6px 10px;
+  font-size: $fg-font-size-base;
+  font-family: $fg-font-family;
+  background: #ffffff;
+  border: 1px solid #000000;
+  color: #000000;
+  cursor: pointer;
+  font-weight: 500;
+  text-transform: uppercase;
+  &:hover { background: #f0f0f0; }
+}
+
+// More popup - bấm More hiện popup, các chức năng trong box kích thước bằng nhau
+.more-popup-content {
+  max-width: 420px;
+}
+
+.popup-section {
+  margin-bottom: 0;
+  .popup-section-title {
+    margin: 0 0 14px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+  }
+  .popup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .popup-action-btn {
+    flex: 1 1 0;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px 16px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 2px;
+    font-size: 13px;
+    cursor: pointer;
+    min-height: 88px;
+    box-sizing: border-box;
+    transition: background 0.15s, border-color 0.15s;
+    i.material-icons {
+      font-size: 28px;
+      color: #333;
+    }
+    span {
+      font-weight: 500;
+      color: #1a1a1a;
+    }
+    &:hover {
+      background: #f5f5f5;
+      border-color: #999;
+    }
+  }
 }
 
 .factory-filter {
@@ -415,6 +510,18 @@ tr.drag-over {
       border-color: #000 !important;
     }
   }
+}
+
+.total-summary-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 12px;
+  background: #e8f5e9;
+  border: 1px solid #c8e6c9;
+  border-radius: 4px;
+  font-size: 13px;
+  .total-summary-item { color: #2e7d32; }
 }
 
 .shipment-box {
@@ -440,7 +547,8 @@ tr.drag-over {
   background-color: #fff3e0 !important; // màu cam lạt
   td {
     border-top: 1px solid #999;
-    font-size: 11px;
+    font-size: $fg-font-size-base;
+    font-family: $fg-font-family;
     color: #000;
   }
 }
@@ -511,28 +619,28 @@ tr.pallet-even td {
   z-index: 1;
 }
 
-// Excel-like table styling - Minimal & Fast
+// Excel-like table styling - Dòng tiêu đề và filter: nền trắng, viền đen, chữ đen, viết hoa 100%
 .excel-table {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
-  font-family: Arial, sans-serif;
-  font-size: 11px;
-  min-width: 1500px; // Increased for new columns including location
+  font-family: $fg-font-family;
+  font-size: $fg-font-size-base;
+  min-width: 1500px;
   position: relative;
   
   thead {
     position: sticky !important;
     top: 0 !important;
     z-index: 1000 !important;
-    background: #000000 !important;
+    background: #ffffff !important;
   }
   
   th, td {
     border: 1px solid #000000;
-    padding: 6px 4px;
-    text-align: left;
+    padding: $fg-cell-padding;
+    text-align: center;
     vertical-align: middle;
     white-space: nowrap;
     overflow: hidden;
@@ -540,38 +648,41 @@ tr.pallet-even td {
     transition: none;
     max-width: 80px;
     background: transparent;
+    font-family: $fg-font-family;
   }
   
-  th {
-    background: #000000 !important;
-    color: #ffffff !important;
+  // Dòng tiêu đề chính
+  thead tr:first-child th {
+    background: #ffffff !important;
+    color: #000000 !important;
     font-weight: 600;
-    font-size: 11px;
+    font-size: $fg-font-size-base;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
     position: sticky !important;
     top: 0 !important;
-    z-index: 1000 !important;
-    border-bottom: 2px solid #000000;
-    padding: 6px 4px;
+    z-index: 1001 !important;
+    border: 1px solid #000000;
+    padding: 10px 6px;
+    min-height: 44px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: center;
     
     &.row-header {
-      background: #000000;
-      color: #ffffff;
-      font-size: 11px;
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-size: $fg-font-size-base;
       text-align: center;
       width: 40px;
       min-width: 40px;
     }
 
     &.update-header {
-      background: #000000;
-      color: #ffffff;
-      font-size: 11px;
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-size: $fg-font-size-base;
       text-align: center;
       width: 60px;
       min-width: 60px;
@@ -596,19 +707,20 @@ tr.pallet-even td {
   }
   
   td {
-    font-size: 11px;
+    font-size: $fg-font-size-base;
     color: #000000;
     border-color: #000000;
     text-align: center;
-    font-family: Arial, sans-serif;
+    font-family: $fg-font-family;
+    padding: $fg-cell-padding;
     background-color: transparent;
     
     &.row-header {
       background: transparent;
       color: #000000;
-      font-size: 11px;
+      font-size: $fg-font-size-base;
       text-align: center;
-      font-family: Arial, sans-serif;
+      font-family: $fg-font-family;
       font-weight: normal;
       width: 40px;
       min-width: 40px;
@@ -617,9 +729,9 @@ tr.pallet-even td {
     &.update-cell {
       background: transparent;
       color: #000000;
-      font-size: 11px;
+      font-size: $fg-font-size-base;
       text-align: center;
-      font-family: Arial, sans-serif;
+      font-family: $fg-font-family;
       font-weight: bold;
       width: 60px;
       min-width: 60px;
@@ -633,8 +745,8 @@ tr.pallet-even td {
     }
     
     &.date-cell {
-      font-family: Arial, sans-serif;
-      font-size: 11px;
+      font-family: $fg-font-family;
+      font-size: $fg-font-size-base;
       color: #000000;
       position: relative;
       z-index: 1;
@@ -668,19 +780,32 @@ tr.pallet-even td {
     
     &.number-cell {
       text-align: center;
-      font-family: Arial, sans-serif;
+      font-family: $fg-font-family;
       font-weight: normal;
       color: #000000;
-      font-size: 11px;
+      font-size: $fg-font-size-base;
+    }
+    &.qty-cell {
+      font-size: calc(#{$fg-font-size-base} * 1.2);
+      .editable-input,
+      input {
+        font-size: calc(#{$fg-font-size-base} * 1.2) !important;
+      }
     }
     
     &.code-cell {
       font-weight: 600;
       color: #000000;
-      font-family: Arial, sans-serif;
-      font-size: 11px;
-      width: 100px;
-      min-width: 100px;
+      font-family: $fg-font-family;
+      font-size: $fg-font-size-base;
+    }
+    &.material-code-wrong {
+      color: #c62828 !important;
+      background-color: #ffebee !important;
+      .editable-input {
+        color: #c62828 !important;
+        font-weight: 700;
+      }
     }
     
     &.status-cell {
@@ -749,8 +874,9 @@ tr.pallet-even td {
 
 .product-type-select {
   width: 100%;
-  padding: 4px 2px !important;
-  font-size: 11px !important;
+  padding: 6px 4px !important;
+  font-size: $fg-font-size-base !important;
+  font-family: $fg-font-family !important;
   border: none !important;
   background: transparent !important;
   cursor: pointer;
@@ -784,17 +910,17 @@ tr.pallet-even td {
     .excel-header {
     background: #ffffff;
     border-bottom: 1px solid #000000;
-    padding: 12px 16px;
+    padding: 14px 18px;
     flex-shrink: 0;
       
       h4 {
         margin: 0;
-      font-size: 16px;
+        font-size: 18px;
         font-weight: 600;
-      color: #000000;
-      font-family: Arial, sans-serif;
+        color: #000000;
+        font-family: $fg-font-family;
+      }
     }
-  }
   
   .excel-body {
     overflow: auto;
@@ -840,13 +966,14 @@ tr.pallet-even td {
   }
   
   .custom-btn {
-    height: 32px !important;
-    padding: 6px 12px !important;
+    height: 36px !important;
+    padding: 8px 14px !important;
     border: 1px solid #000000 !important;
     background: #ffffff !important;
     color: #000000 !important;
     font-weight: 500 !important;
-    font-size: 12px !important;
+    font-size: $fg-font-size-base !important;
+    font-family: $fg-font-family !important;
     border-radius: 0 !important;
     display: flex !important;
     align-items: center !important;
@@ -929,12 +1056,13 @@ tr.pallet-even td {
   }
   
   .custom-input {
-    height: 32px !important;
-    padding: 6px 8px !important;
+    height: 36px !important;
+    padding: 8px 10px !important;
     border: 1px solid #000000 !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 12px !important;
+    font-size: $fg-font-size-base !important;
+    font-family: $fg-font-family !important;
     border-radius: 0 !important;
     min-width: 150px !important;
     transition: none !important;
@@ -1001,14 +1129,14 @@ mat-checkbox {
 // Editable location
 .editable-location {
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border: none;
   background: transparent;
-  min-height: 16px;
+  min-height: 20px;
   text-transform: uppercase;
   font-weight: 500;
-  font-family: Arial, sans-serif;
-  font-size: 11px;
+  font-family: $fg-font-family;
+  font-size: $fg-font-size-base;
   color: #000000;
   
   &:hover {
@@ -1030,12 +1158,12 @@ mat-checkbox {
   }
 }
 
-// Date input styling - Minimal
+// Date input styling
 .date-input {
   border: none;
-  padding: 4px;
-  font-size: 11px;
-  font-family: Arial, sans-serif;
+  padding: 6px 8px;
+  font-size: $fg-font-size-base;
+  font-family: $fg-font-family;
   background: transparent;
   text-align: center;
   width: 100%;
@@ -1069,15 +1197,15 @@ mat-checkbox {
   }
 }
 
-// Editable input styling - Minimal
+// Editable input styling
 .editable-input {
   border: none;
   background: transparent;
-  font-family: Arial, sans-serif;
-  font-size: 11px;
+  font-family: $fg-font-family;
+  font-size: $fg-font-size-base;
   color: #000000;
   width: 100%;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 0;
   
   &:focus {
@@ -1130,10 +1258,10 @@ mat-checkbox {
   font-family: 'Courier New', monospace;
 }
 
-// Date Input
-.date-input {
-  font-size: 10px;
-  padding: 1px 2px;
+// Date Input overrides (for table cells)
+.excel-table .date-input {
+  font-size: $fg-font-size-base;
+  padding: 4px 6px;
 }
 
 .date-input::-webkit-calendar-picker-indicator {
@@ -1639,6 +1767,191 @@ mat-checkbox {
   }
 }
 
+// PKL Import modal - giao diện đẹp, pro, không đổ bóng, không màu tím
+.modal-pkl-wrapper .modal-container.modal-pkl {
+  box-shadow: none !important;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  .modal-header {
+    background: #1a1a1a;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 18px 24px;
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      .material-icons { font-size: 22px; opacity: 0.95; }
+    }
+  }
+  .modal-body {
+    padding: 28px 24px;
+    background: #fafafa;
+  }
+  .modal-footer {
+    background: #fff;
+    border-top: 1px solid #e0e0e0;
+    padding: 16px 24px;
+  }
+}
+
+.pkl-step {
+  h6 {
+    margin: 0 0 20px 0;
+    font-weight: 600;
+    font-size: 14px;
+    color: #1a1a1a;
+    letter-spacing: 0.2px;
+  }
+  .pkl-step-hint {
+    font-size: 13px;
+    color: #555;
+    margin: -4px 0 18px 0;
+    line-height: 1.5;
+  }
+  .form-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    .input-group {
+      min-width: 140px;
+      flex: 1;
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #333;
+      }
+    }
+  }
+  .file-upload-section {
+    margin-bottom: 20px;
+    .input-label {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #333;
+    }
+    .file-upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 2px;
+      padding: 32px 24px;
+      text-align: center;
+      cursor: pointer;
+      background: #fff;
+      transition: border-color 0.15s, background 0.15s;
+      &:hover {
+        background: #f5f5f5;
+        border-color: #999;
+      }
+      &.has-file {
+        border-color: #2e7d32;
+        border-style: solid;
+        background: #f1f8f1;
+      }
+      .upload-placeholder {
+        i {
+          font-size: 42px;
+          color: #888;
+          display: block;
+          margin-bottom: 12px;
+        }
+        p {
+          font-size: 14px;
+          font-weight: 500;
+          color: #333;
+          margin: 0 0 4px 0;
+        }
+        small {
+          font-size: 12px;
+          color: #888;
+        }
+      }
+      .file-selected {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        i { font-size: 24px; color: #2e7d32; }
+        span { font-weight: 500; color: #1a1a1a; }
+        .remove-file {
+          background: none;
+          border: none;
+          color: #b71c1c;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 50%;
+          &:hover { background: #ffebee; }
+        }
+      }
+    }
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 2px;
+      font-size: 14px;
+      background: #fff;
+      color: #1a1a1a;
+      &:focus {
+        outline: none;
+        border-color: #1a1a1a;
+        box-shadow: none;
+      }
+    }
+  }
+}
+
+.pkl-preview-raw, .pkl-table-wrap {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.pkl-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: $fg-font-family;
+  th, td {
+    border: 1px solid #e0e0e0;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  th {
+    background: #f5f5f5;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+  .pkl-row-num {
+    background: #fafafa;
+    font-weight: 500;
+    width: 44px;
+    color: #666;
+  }
+  tr.pkl-header-row td {
+    background: #f0f0f0;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+}
+
+.pkl-mapping-info {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.pkl-step .file-upload-section {
+  margin-top: 4px;
+}
+
 // Checkbox styling for Push column
 .push-checkbox {
   width: 16px;
@@ -1652,9 +1965,17 @@ mat-checkbox {
   }
 }
 
-// Shipment input styling
+// Shipment column - căn giữa ô toàn bộ (ngang + dọc)
 .shipment-cell {
-  vertical-align: top;
+  vertical-align: middle !important;
+  text-align: center !important;
+  .editable-input,
+  input,
+  span {
+    text-align: center !important;
+    display: block;
+    width: 100%;
+  }
 }
 
 .shipment-input {
@@ -1688,9 +2009,9 @@ mat-checkbox {
   }
 }
 
-// Print dialog styling
+// Print dialog styling - A4 landscape
 .print-container {
-  max-width: 90vw;
+  max-width: 95vw;
   max-height: 90vh;
   
   .print-body {
@@ -1700,81 +2021,65 @@ mat-checkbox {
   
   .print-content {
     background: white;
-    padding: 20px;
+    padding: 16px;
+    min-width: 800px;
     
-    .print-header {
+    .print-header-boxes {
+      display: flex;
+      justify-content: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    
+    .print-box {
+      border: 1px solid #000;
+      padding: 10px 16px;
+      min-width: 100px;
       text-align: center;
+      .print-box-label {
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+      .print-box-shipment, .print-box-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .print-qr {
+        display: block;
+        width: 80px;
+        height: 80px;
+        margin: 6px auto 0;
+      }
+    }
+    
+    .print-pallet-title {
+      font-weight: bold;
+      margin: 12px 0 4px;
+      font-size: 12px;
+    }
+    
+    .print-tables {
       margin-bottom: 20px;
-      border-bottom: 2px solid #333;
-      padding-bottom: 15px;
-      
-      h2 {
-        color: #333;
-        margin: 0 0 10px 0;
-        font-size: 24px;
+    }
+    
+    .print-table-content {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      th, td {
+        border: 1px solid #333;
+        padding: 5px 6px;
+        text-align: center;
+      }
+      th {
+        background-color: #f5f5f5;
         font-weight: bold;
       }
-      
-      .print-info {
-        text-align: left;
-        margin: 0;
-        
-        p {
-          margin: 5px 0;
-          font-size: 14px;
-        }
-      }
-    }
-    
-    .print-table {
-      margin-bottom: 30px;
-      
-      .print-table-content {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-        
-        th, td {
-          border: 1px solid #333;
-          padding: 8px;
-          text-align: center;
-        }
-        
-        th {
-          background-color: #f5f5f5;
-          font-weight: bold;
-        }
-        
-        tr:nth-child(even) {
-          background-color: #f9f9f9;
-        }
-      }
-    }
-    
-    .print-footer {
-      margin-top: 30px;
-      
-      .signature-section {
-        display: flex;
-        justify-content: space-around;
-        margin-top: 40px;
-        
-        .signature-box {
-          text-align: center;
-          
-          p {
-            margin: 0 0 10px 0;
-            font-weight: bold;
-            font-size: 14px;
-          }
-          
-          .signature-line {
-            border-bottom: 1px solid #333;
-            width: 150px;
-            height: 40px;
-            margin: 0 auto;
-          }
-        }
+      tr:nth-child(even) {
+        background-color: #fafafa;
       }
     }
   }

@@ -9,22 +9,10 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls">
-        <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importFile(); $event.preventDefault()">
-              <i class="material-icons">file_upload</i>
-              Import
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Tải Template
-            </a>
-          </div>
-        </div>
+        <button class="custom-btn" (click)="openMorePopup()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
         
         <div class="search-box">
           <input type="text" 
@@ -36,6 +24,10 @@
         <div class="shipment-box" *ngIf="filteredMaterials.length">
           <span class="shipment-box-label">Shipment:</span>
           <span class="shipment-box-value">{{ displayedShipmentsText }}</span>
+        </div>
+        <div class="total-summary-box" *ngIf="filteredMaterials.length">
+          <span class="total-summary-item">Tổng QTY: <strong>{{ getTotalQty() | number }}</strong></span>
+          <span class="total-summary-item">Tổng Carton: <strong>{{ getTotalCarton() | number }}</strong></span>
         </div>
         
         <div class="factory-filter">
@@ -86,51 +78,86 @@
     <div class="excel-body">
       <table class="excel-table">
         <colgroup>
-          <col style="width: 28px">
-          <col style="width: 52px">
-          <col style="width: 40px">
-          <col style="width: 70px">
-          <col style="width: 70px">
+          <col style="width: 32px">
+          <col style="width: 58px">
+          <col style="width: 44px">
+          <col style="width: 78px">
+          <col style="width: 78px">
+          <col style="width: 54px">
+          <col style="width: 96px">
+          <col style="width: 78px">
+          <col style="width: 108px">
+          <col style="width: 96px">
+          <col style="width: 96px">
+          <col style="width: 76px">
+          <col style="width: 66px">
           <col style="width: 50px">
-          <col style="width: 88px">
-          <col style="width: 70px">
-          <col style="width: 100px">
           <col style="width: 60px">
+          <col style="width: 76px">
+          <col style="width: 76px">
+          <col style="width: 86px">
+          <col style="width: 76px">
           <col style="width: 60px">
-          <col style="width: 70px">
-          <col style="width: 60px">
-          <col style="width: 45px">
-          <col style="width: 55px">
-          <col style="width: 70px">
-          <col style="width: 70px">
-          <col style="width: 80px">
-          <col style="width: 70px">
-          <col style="width: 55px">
-          <col style="width: 48px">
+          <col style="width: 52px">
         </colgroup>
         <thead>
           <tr>
             <th class="drag-col"></th>
-            <th>Factory</th>
-            <th class="row-header">No</th>
-            <th>Shipment</th>
-            <th>Pallet</th>
+            <th>FACTORY</th>
+            <th class="row-header">NO</th>
+            <th>SHIPMENT</th>
+            <th>PALLET</th>
             <th>XP</th>
-            <th class="date-header">Ngày</th>
-            <th>Batch</th>
-            <th>Mã TP</th>
+            <th class="date-header">NGÀY</th>
+            <th>BATCH</th>
+            <th>MÃ TP</th>
             <th>LOT</th>
             <th>LSX</th>
-            <th>QTY Xuất</th>
-            <th>Carton</th>
+            <th>QTY XUẤT</th>
+            <th>CARTON</th>
             <th>ODD</th>
-            <th>Tồn kho</th>
-            <th>Vị Trí</th>
-            <th>Loại hàng</th>
-            <th>Ghi chú</th>
-            <th>Khách</th>
-            <th>Duyệt Xuất</th>
-            <th>Xóa</th>
+            <th>TỒN KHO</th>
+            <th>VỊ TRÍ</th>
+            <th>LOẠI HÀNG</th>
+            <th>GHI CHÚ</th>
+            <th>KHÁCH</th>
+            <th>DUYỆT XUẤT</th>
+            <th>XÓA</th>
+          </tr>
+          <tr class="filter-row">
+            <th class="drag-col"></th>
+            <th></th>
+            <th></th>
+            <th>
+              <select class="col-filter-select" [(ngModel)]="colFilterShipment" (ngModelChange)="onColumnFilterChange()">
+                <option value="">-- TẤT CẢ --</option>
+                <option *ngFor="let v of colFilterOptionsShipment" [value]="v">{{ v }}</option>
+              </select>
+            </th>
+            <th>
+              <select class="col-filter-select" [(ngModel)]="colFilterPallet" (ngModelChange)="onColumnFilterChange()">
+                <option value="">-- TẤT CẢ --</option>
+                <option *ngFor="let v of colFilterOptionsPallet" [value]="v">{{ v }}</option>
+              </select>
+            </th>
+            <th></th>
+            <th></th>
+            <th>
+              <select class="col-filter-select" [(ngModel)]="colFilterBatch" (ngModelChange)="onColumnFilterChange()">
+                <option value="">-- TẤT CẢ --</option>
+                <option *ngFor="let v of colFilterOptionsBatch" [value]="v">{{ v }}</option>
+              </select>
+            </th>
+            <th>
+              <select class="col-filter-select" [(ngModel)]="colFilterMaterialCode" (ngModelChange)="onColumnFilterChange()">
+                <option value="">-- TẤT CẢ --</option>
+                <option *ngFor="let v of colFilterOptionsMaterialCode" [value]="v">{{ v }}</option>
+              </select>
+            </th>
+            <th colspan="3"></th>
+            <th colspan="9">
+              <button type="button" class="clear-filter-btn-small" (click)="clearColumnFilters()">Xóa lọc cột</button>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -186,7 +213,7 @@
                        (change)="updateMaterialInFirebase(row.material)"
                        placeholder="Batch">
               </td>
-              <td class="code-cell">
+              <td class="code-cell" [class.material-code-wrong]="row.type === 'detail' && isMaterialCodeQtyWrong(row.material)">
                 <input type="text"
                        class="editable-input"
                        [(ngModel)]="row.material.materialCode"
@@ -295,6 +322,34 @@
        class="inventory-dropdown-item"
        (mousedown)="selectInventoryOption(opt)">
     {{opt}}
+  </div>
+</div>
+
+<!-- More Options Popup -->
+<div class="custom-modal" [class.show]="showMorePopup" [style.display]="showMorePopup ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeMorePopup()"></div>
+  <div class="modal-container more-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">More Options</h5>
+      <button type="button" class="close-btn" (click)="closeMorePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="popup-section">
+        <h4 class="popup-section-title">Export/Import</h4>
+        <div class="popup-actions">
+          <button class="popup-action-btn" (click)="openPKLImportModal(); closeMorePopup()">
+            <i class="material-icons">file_upload</i>
+            <span>Import</span>
+          </button>
+          <button class="popup-action-btn" (click)="downloadTemplate(); closeMorePopup()">
+            <i class="material-icons">description</i>
+            <span>Tải Template</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -447,6 +502,135 @@
   </div>
 </div>
 
+<!-- PKL Import Dialog -->
+<div class="custom-modal modal-pkl-wrapper" [class.show]="showPKLImportModal" [style.display]="showPKLImportModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closePKLImportModal()"></div>
+  <div class="modal-container modal-large modal-pkl">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">file_upload</i>
+        Import Packing List (PKL)
+      </h5>
+      <button type="button" class="close-btn" (click)="closePKLImportModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Step 1: Shipment + File -->
+      <div *ngIf="pklStep === 1" class="pkl-step">
+        <h6>Bước 1: Nhập shipment và chọn file</h6>
+        <div class="form-row">
+          <div class="input-group">
+            <label class="input-label">Shipment *</label>
+            <input type="text" class="form-input" [(ngModel)]="pklShipment" placeholder="Nhập số shipment">
+          </div>
+        </div>
+        <div class="file-upload-section">
+          <label class="input-label">Chọn file Packing List *</label>
+          <div class="file-upload-area" (click)="selectPKLFile()" [class.has-file]="pklFile">
+            <div *ngIf="!pklFile" class="upload-placeholder">
+              <i class="material-icons">cloud_upload</i>
+              <p>Click để chọn file Excel</p>
+              <small>Hỗ trợ .xlsx, .xls</small>
+            </div>
+            <div *ngIf="pklFile" class="file-selected">
+              <i class="material-icons">description</i>
+              <span>{{ pklFile.name }}</span>
+              <button type="button" class="remove-file" (click)="removePKLFile(); $event.stopPropagation()">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+          <input #pklFileInput type="file" (change)="onPKLFileSelected($event)" accept=".xlsx,.xls" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Step 2: Chọn dòng bắt đầu và kết thúc -->
+      <div *ngIf="pklStep === 2" class="pkl-step">
+        <h6>Bước 2: Chọn dòng bắt đầu và kết thúc dữ liệu</h6>
+        <p class="pkl-step-hint">Dòng bắt đầu = dòng chứa tên cột (PART NO., P/NO., Quantity...). Hệ thống tự gợi ý dòng header.</p>
+        <div class="form-row">
+          <div class="input-group">
+            <label class="input-label">Dòng bắt đầu (header) = dòng trong file</label>
+            <select class="form-input" [(ngModel)]="pklStartRow" (ngModelChange)="pklApplyRowRange()">
+              <option *ngFor="let r of pklRowOptions" [ngValue]="r">{{ r + 1 }}</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Dòng kết thúc</label>
+            <select class="form-input" [(ngModel)]="pklEndRow" (ngModelChange)="pklApplyRowRange()">
+              <option *ngFor="let r of pklRowOptions" [ngValue]="r">{{ r + 1 }}</option>
+            </select>
+          </div>
+          <button class="custom-btn" (click)="pklApplyRowRange()">Áp dụng</button>
+        </div>
+        <div class="pkl-preview-raw">
+          <p>Preview (số bên trái = dòng trong file Excel):</p>
+          <div class="pkl-table-wrap">
+            <table class="pkl-preview-table">
+              <tr *ngFor="let row of pklPreviewRows; let ri = index" [class.pkl-header-row]="ri === 0">
+                <td class="pkl-row-num">{{ pklPreviewStartRow + ri + 1 }}</td>
+                <td *ngFor="let cell of row">{{ cell }}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Xem kết quả và Import -->
+      <div *ngIf="pklStep === 3" class="pkl-step">
+        <h6>Bước 3: Dữ liệu sẽ import vào FG Out</h6>
+        <p class="pkl-mapping-info">Đã map theo cột có sẵn ở FG Out (Mã TP, Batch, LOT, LSX, QTY, PO, Carton, Pallet, Ghi chú, Vị trí...). Cột không có sẽ bỏ qua.</p>
+        <div class="pkl-table-wrap">
+          <table class="pkl-preview-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mã TP</th>
+                <th>Batch</th>
+                <th>LOT</th>
+                <th>LSX</th>
+                <th>QTY</th>
+                <th>PO</th>
+                <th>Carton</th>
+                <th>Pallet</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let m of pklParsedItems; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td>{{ m.materialCode }}</td>
+                <td>{{ m.batchNumber }}</td>
+                <td>{{ m.lot }}</td>
+                <td>{{ m.lsx }}</td>
+                <td>{{ m.quantity }}</td>
+                <td>{{ m.poShip }}</td>
+                <td>{{ m.carton }}</td>
+                <td>{{ m.pallet }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closePKLImportModal()">Hủy</button>
+      <button *ngIf="pklStep === 1" type="button" class="btn btn-apply" (click)="pklNextStep()" [disabled]="!pklShipment.trim() || !pklFile">
+        Tiếp theo
+      </button>
+      <button *ngIf="pklStep === 2" type="button" class="btn btn-cancel" (click)="pklStep = 1">Quay lại</button>
+      <button *ngIf="pklStep === 2" type="button" class="btn btn-apply" (click)="pklParseAndShowPreview()">
+        Xem kết quả & Import
+      </button>
+      <button *ngIf="pklStep === 3" type="button" class="btn btn-cancel" (click)="pklStep = 2">Quay lại</button>
+      <button *ngIf="pklStep === 3" type="button" class="btn btn-apply" (click)="pklConfirmImport()" [disabled]="pklParsedItems.length === 0">
+        <i class="material-icons">file_upload</i>
+        Import {{ pklParsedItems.length }} dòng
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Print Dialog -->
 <div class="custom-modal" [class.show]="showPrintDialog" [style.display]="showPrintDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showPrintDialog = false"></div>
@@ -462,63 +646,71 @@
     </div>
     <div class="modal-body print-body">
       <div class="print-content" id="printContent">
-        <div class="print-header">
-          <h2>PHIẾU XUẤT HÀNG</h2>
-          <div class="print-info">
-            <p><strong>Shipment:</strong> {{selectedShipment}}</p>
-            <p><strong>Ngày in:</strong> {{getCurrentDate()}}</p>
-            <p><strong>Người in:</strong> {{getCurrentUser()}}</p>
+        <!-- 4 box header -->
+        <div class="print-header-boxes">
+          <div class="print-box">
+            <div class="print-box-label">SHIPMENT</div>
+            <div class="print-box-shipment">{{selectedShipment}}</div>
+            <img *ngIf="printQrDataUrl" [src]="printQrDataUrl" alt="QR" class="print-qr">
+          </div>
+          <div class="print-box">
+            <div class="print-box-label">MÃ NHÂN VIÊN SOẠN</div>
+            <div class="print-box-value">{{getCurrentUser()}}</div>
+          </div>
+          <div class="print-box">
+            <div class="print-box-label">NHÀ MÁY</div>
+            <div class="print-box-value">{{printFactory}}</div>
+          </div>
+          <div class="print-box">
+            <div class="print-box-label">NGÀY GIAO</div>
+            <div class="print-box-value">{{printDispatchDate || '—'}}</div>
           </div>
         </div>
-        
-        <div class="print-table">
+        <!-- Nội dung theo pallet -->
+        <div class="print-tables" *ngFor="let group of printRowsByPallet">
+          <div class="print-pallet-title" *ngIf="group.pallet">Pallet: {{group.pallet}}</div>
           <table class="print-table-content">
             <thead>
               <tr>
-                <th>STT</th>
-                <th>Mã TP</th>
-                <th>Batch</th>
+                <th>NO</th>
+                <th>SHIPMENT</th>
+                <th>PALLET</th>
+                <th>XP</th>
+                <th>NGÀY</th>
+                <th>BATCH</th>
+                <th>MÃ TP</th>
                 <th>LOT</th>
                 <th>LSX</th>
-                <th>QTY Xuất</th>
-                <th>Carton</th>
-                <th>Vị trí</th>
-                <th>Loại hàng</th>
-                <th>Ghi chú</th>
+                <th>QTY XUẤT</th>
+                <th>CARTON</th>
+                <th>ODD</th>
+                <th>TỒN KHO</th>
+                <th>VỊ TRÍ</th>
+                <th>LOẠI HÀNG</th>
+                <th>GHI CHÚ</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let material of printMaterials; let i = index">
+              <tr *ngFor="let material of group.materials; let i = index">
                 <td>{{i + 1}}</td>
+                <td>{{material.shipment}}</td>
+                <td>{{material.pallet || ''}}</td>
+                <td>{{material.xp || ''}}</td>
+                <td>{{material.exportDate | date:'dd/MM/yyyy'}}</td>
+                <td>{{material.batchNumber || ''}}</td>
                 <td>{{material.materialCode}}</td>
-                <td>{{material.batchNumber}}</td>
-                <td>{{material.lot}}</td>
-                <td>{{material.lsx}}</td>
-                <td>{{material.quantity}}</td>
-                <td>{{material.carton}}</td>
-                <td>{{material.location}}</td>
+                <td>{{material.lot || ''}}</td>
+                <td>{{material.lsx || ''}}</td>
+                <td>{{material.quantity | number}}</td>
+                <td>{{getCartonOdd(material).carton | number}}</td>
+                <td>{{getCartonOdd(material).odd | number}}</td>
+                <td>{{getInventoryStock(material) | number}}</td>
+                <td>{{material.location || ''}}</td>
                 <td>{{material.productType || ''}}</td>
-                <td>{{material.notes}}</td>
+                <td>{{material.notes || ''}}</td>
               </tr>
             </tbody>
           </table>
-        </div>
-        
-        <div class="print-footer">
-          <div class="signature-section">
-            <div class="signature-box">
-              <p>Người soạn hàng</p>
-              <div class="signature-line"></div>
-            </div>
-            <div class="signature-box">
-              <p>Người kiểm tra</p>
-              <div class="signature-line"></div>
-            </div>
-            <div class="signature-box">
-              <p>Người xuất kho</p>
-              <div class="signature-line"></div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

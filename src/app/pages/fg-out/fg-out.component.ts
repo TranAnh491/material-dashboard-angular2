@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/co
 import { Subject, forkJoin, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -104,6 +105,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
   selectedShipment: string = '';
   availableShipments: string[] = [];
   
+  // More popup
+  showMorePopup: boolean = false;
+
+  // Column filters (dropdown)
+  colFilterMaterialCode: string = '';
+  colFilterBatch: string = '';
+  colFilterPallet: string = '';
+  colFilterShipment: string = '';
+  colFilterOptionsShipment: string[] = [];
+  colFilterOptionsPallet: string[] = [];
+  colFilterOptionsBatch: string[] = [];
+  colFilterOptionsMaterialCode: string[] = [];
+
   // Time filter for old shipments
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date();
@@ -112,6 +126,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Print dialog
   showPrintDialog: boolean = false;
   printMaterials: FgOutItem[] = [];
+  printDispatchDate: string = '';
+  printQrDataUrl: string = '';
+  currentUserDisplay: string = '';
   
   // Permissions
   hasDeletePermission: boolean = false;
@@ -123,6 +140,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
   private inventoryStockCache = new Map<string, number>();
+
+  /** Số lượng kỳ vọng từ tab Shipment theo (shipmentCode|materialCode) - dùng so sánh khi lọc theo shipment */
+  shipmentExpectedQtyMap = new Map<string, number>();
   
   // Customer Code Mapping (Tên Khách Hàng = description)
   mappingItems: CustomerCodeMappingItem[] = [];
@@ -146,6 +166,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
   shipmentStockStatus: 'unknown' | 'loading' | 'enough' | 'insufficient' = 'unknown';
   
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
+  @ViewChild('pklFileInput') pklFileInput!: ElementRef;
+
+  // PKL Import
+  showPKLImportModal: boolean = false;
+  pklStep: number = 1;
+  pklShipment: string = '';
+  pklFile: File | null = null;
+  pklRawRows: any[][] = [];
+  pklStartRow: number = 0;
+  pklEndRow: number = 99;
+  pklRowOptions: number[] = [];
+  pklPreviewRows: any[][] = [];
+  pklHeaderRow: any[] = [];
+  pklPreviewStartRow: number = 0;
+  pklParsedItems: Partial<FgOutItem>[] = [];
 
   // Drag-and-drop state — bảng chính
   dragMainIndex: number | null = null;
@@ -186,7 +221,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
-    
+    this.afAuth.user.pipe(takeUntil(this.destroy$)).subscribe(u => {
+      const email = u?.email || u?.uid || '';
+      this.currentUserDisplay = email.includes('@') ? email.split('@')[0].toUpperCase() : (email || 'NV');
+    });
+
     // Setup debounced location loading
     this.loadLocationsSubject.pipe(
       debounceTime(500),
@@ -603,49 +642,68 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.filteredMaterials = this.materials.filter(material => {
-      // Search theo Shipment hoặc Mã TP (contains, không phân biệt hoa thường)
+    const baseFiltered = this.materials.filter(material => {
       const term = this.searchTerm.trim().toUpperCase();
-      const ship = (material.shipment || '').toUpperCase();
-      const code = (material.materialCode || '').toUpperCase();
-      if (!ship.includes(term) && !code.includes(term)) {
-        return false;
-      }
-      
-      // Filter by factory
+      const ship = String(material.shipment ?? '').toUpperCase();
+      const code = String(material.materialCode ?? '').toUpperCase();
+      if (!ship.includes(term) && !code.includes(term)) return false;
       if (this.selectedFactory) {
         const materialFactory = material.factory || 'ASM1';
-        if (materialFactory !== this.selectedFactory) {
-          return false;
-        }
+        if (materialFactory !== this.selectedFactory) return false;
       }
-      
-      // Filter by date range
       const exportDate = new Date(material.exportDate);
-      const isInDateRange = exportDate >= this.startDate && exportDate <= this.endDate;
-      
-      return isInDateRange;
+      if (exportDate < this.startDate || exportDate > this.endDate) return false;
+      return true;
+    });
+
+    // Dropdown options từ dữ liệu đã lọc (search+factory+date)
+    const shipSet = new Set<string>();
+    const palletSet = new Set<string>();
+    const batchSet = new Set<string>();
+    const codeSet = new Set<string>();
+    baseFiltered.forEach(m => {
+      const s = String(m.shipment ?? '').trim();
+      const p = String(m.pallet ?? '').trim();
+      const b = String(m.batchNumber ?? '').trim();
+      const c = String(m.materialCode ?? '').trim();
+      if (s) shipSet.add(s);
+      if (p) palletSet.add(p);
+      if (b) batchSet.add(b);
+      if (c) codeSet.add(c);
+    });
+    this.colFilterOptionsShipment = Array.from(shipSet).sort();
+    this.colFilterOptionsPallet = Array.from(palletSet).sort();
+    this.colFilterOptionsBatch = Array.from(batchSet).sort();
+    this.colFilterOptionsMaterialCode = Array.from(codeSet).sort();
+
+    // Áp dụng lọc cột (dropdown chọn chính xác)
+    this.filteredMaterials = baseFiltered.filter(material => {
+      if (this.colFilterShipment && String(material.shipment ?? '').trim() !== this.colFilterShipment) return false;
+      if (this.colFilterPallet && String(material.pallet ?? '').trim() !== this.colFilterPallet) return false;
+      if (this.colFilterBatch && String(material.batchNumber ?? '').trim() !== this.colFilterBatch) return false;
+      if (this.colFilterMaterialCode && String(material.materialCode ?? '').trim() !== this.colFilterMaterialCode) return false;
+      return true;
     });
     
     // Sắp xếp: Pallet → Mã TP → LSX → Shipment → Ngày → Batch
     this.filteredMaterials.sort((a, b) => {
-      const palletA = (a.pallet || '').toUpperCase();
-      const palletB = (b.pallet || '').toUpperCase();
+      const palletA = String(a.pallet ?? '').toUpperCase();
+      const palletB = String(b.pallet ?? '').toUpperCase();
       if (palletA !== palletB) return palletA.localeCompare(palletB);
-      const codeA = (a.materialCode || '').toUpperCase();
-      const codeB = (b.materialCode || '').toUpperCase();
+      const codeA = String(a.materialCode ?? '').toUpperCase();
+      const codeB = String(b.materialCode ?? '').toUpperCase();
       if (codeA !== codeB) return codeA.localeCompare(codeB);
-      const lsxA = (a.lsx || '').toUpperCase();
-      const lsxB = (b.lsx || '').toUpperCase();
+      const lsxA = String(a.lsx ?? '').toUpperCase();
+      const lsxB = String(b.lsx ?? '').toUpperCase();
       if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
-      const shipA = (a.shipment || '').toUpperCase();
-      const shipB = (b.shipment || '').toUpperCase();
+      const shipA = String(a.shipment ?? '').toUpperCase();
+      const shipB = String(b.shipment ?? '').toUpperCase();
       if (shipA !== shipB) return shipA.localeCompare(shipB);
       const dateA = new Date(a.exportDate).getTime();
       const dateB = new Date(b.exportDate).getTime();
       if (dateA !== dateB) return dateB - dateA;
-      const batchA = (a.batchNumber || '').toUpperCase();
-      const batchB = (b.batchNumber || '').toUpperCase();
+      const batchA = String(a.batchNumber ?? '').toUpperCase();
+      const batchB = String(b.batchNumber ?? '').toUpperCase();
       return batchA.localeCompare(batchB);
     });
 
@@ -705,11 +763,84 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
     });
     
+    // Khi lọc theo shipment: load số lượng kỳ vọng từ tab Shipment để so sánh
+    this.loadShipmentExpectedQtys();
+
     console.log('FG Out search results:', {
       searchTerm: this.searchTerm,
       totalMaterials: this.materials.length,
       filteredMaterials: this.filteredMaterials.length
     });
+  }
+
+  /** Load số lượng kỳ vọng từ collection shipments (tab Shipment) theo shipmentCode có trong filteredMaterials */
+  loadShipmentExpectedQtys(): void {
+    const shipments = [...new Set(this.filteredMaterials.map(m => String(m.shipment ?? '').trim().toUpperCase()).filter(Boolean))];
+    this.shipmentExpectedQtyMap.clear();
+    if (shipments.length === 0) return;
+
+    const queries = shipments.map(ship =>
+      this.firestore.collection('shipments', ref => ref.where('shipmentCode', '==', ship)).get()
+    );
+    const selectedFact = (this.selectedFactory || '').trim().toUpperCase();
+    forkJoin(queries).pipe(take(1), takeUntil(this.destroy$)).subscribe((snapshots: any[]) => {
+      snapshots.forEach(snap => {
+        (snap.docs || []).forEach((doc: any) => {
+          const d = doc.data() as any;
+          const docFactory = String(d.factory ?? 'ASM1').trim().toUpperCase();
+          if (selectedFact && docFactory !== selectedFact) return; // Chỉ lấy nhà máy đang chọn
+          const ship = String(d.shipmentCode ?? d.shipment ?? '').trim().toUpperCase();
+          const code = String(d.materialCode ?? '').trim().toUpperCase();
+          const qty = Number(d.quantity) || 0;
+          if (!ship || !code) return;
+          const key = `${ship}|${code}`;
+          const cur = this.shipmentExpectedQtyMap.get(key) || 0;
+          this.shipmentExpectedQtyMap.set(key, cur + qty);
+        });
+      });
+    });
+  }
+
+  /** Kiểm tra Mã TP có sai số lượng xuất không (so FG Out cộng dồn vs Shipment kỳ vọng). Tạm tắt vì logic so khớp cần rà lại. */
+  isMaterialCodeQtyWrong(_material: FgOutItem): boolean {
+    return false; // Tạm tắt: không báo đỏ
+    // const ship = String(material.shipment ?? '').trim().toUpperCase();
+    // const code = String(material.materialCode ?? '').trim().toUpperCase();
+    // if (!ship || !code) return false;
+    // const expected = this.shipmentExpectedQtyMap.get(`${ship}|${code}`);
+    // if (expected === undefined) return false;
+    // const fgOutSum = this.filteredMaterials
+    //   .filter(m => String(m.shipment ?? '').trim().toUpperCase() === ship && String(m.materialCode ?? '').trim().toUpperCase() === code)
+    //   .reduce((s, m) => s + (Number(m.quantity) || 0), 0);
+    // return Math.round(Number(fgOutSum)) !== Math.round(Number(expected));
+  }
+
+  openMorePopup(): void {
+    this.showMorePopup = true;
+  }
+
+  closeMorePopup(): void {
+    this.showMorePopup = false;
+  }
+
+  onColumnFilterChange(): void {
+    this.applyFilters();
+  }
+
+  clearColumnFilters(): void {
+    this.colFilterMaterialCode = '';
+    this.colFilterBatch = '';
+    this.colFilterPallet = '';
+    this.colFilterShipment = '';
+    this.applyFilters();
+  }
+
+  getTotalQty(): number {
+    return this.filteredMaterials.reduce((sum, m) => sum + (m.quantity || 0), 0);
+  }
+
+  getTotalCarton(): number {
+    return this.filteredMaterials.reduce((sum, m) => sum + this.getCartonForMaterial(m), 0);
   }
 
   // Search functionality
@@ -770,20 +901,245 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.updateMaterialInFirebase(material);
   }
 
-  // Import file functionality
+  // PKL Import
+  openPKLImportModal(): void {
+    this.showPKLImportModal = true;
+    this.pklStep = 1;
+    this.pklShipment = '';
+    this.pklFile = null;
+    this.pklRawRows = [];
+    this.pklStartRow = 0;
+    this.pklEndRow = 20;
+    this.pklPreviewRows = [];
+    this.pklParsedItems = [];
+  }
+
+  closePKLImportModal(): void {
+    this.showPKLImportModal = false;
+  }
+
+  selectPKLFile(): void {
+    this.pklFileInput?.nativeElement?.click?.();
+  }
+
+  removePKLFile(): void {
+    this.pklFile = null;
+  }
+
+  async onPKLFileSelected(event: any): Promise<void> {
+    const file = event?.target?.files?.[0];
+    if (file) this.pklFile = file;
+  }
+
+  async pklNextStep(): Promise<void> {
+    if (!this.pklFile || !this.pklShipment.trim()) return;
+    try {
+      this.pklRawRows = await this.readExcelFileAsRows(this.pklFile);
+      const maxRow = Math.min(this.pklRawRows.length - 1, 200);
+      this.pklRowOptions = Array.from({ length: maxRow + 1 }, (_, i) => i);
+
+      const detectedHeader = this.pklDetectHeaderRow();
+      this.pklStartRow = detectedHeader;
+      this.pklEndRow = Math.min(detectedHeader + 100, maxRow);
+      this.pklApplyRowRange();
+      this.pklStep = 2;
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi đọc file: ' + (err as Error).message);
+    }
+  }
+
+  private pklDetectHeaderRow(): number {
+    const headerKeywords = ['part no', 'p/no', 'asp vn pn', 'carton no', 'quantity', 'mã tp', 'customer po'];
+    for (let r = 0; r < Math.min(this.pklRawRows.length, 50); r++) {
+      const row = this.pklRawRows[r] || [];
+      const rowText = row.map((c: any) => String(c ?? '').toLowerCase()).join(' ');
+      if (headerKeywords.some(kw => rowText.includes(kw))) return r;
+    }
+    return 0;
+  }
+
+  pklApplyRowRange(): void {
+    const start = Math.min(this.pklStartRow, this.pklEndRow);
+    const end = Math.max(this.pklStartRow, this.pklEndRow);
+    const sliceRows = this.pklRawRows.slice(start, end + 1);
+    const maxCols = sliceRows.reduce((max, row) => Math.max(max, (row || []).length), 0);
+    this.pklPreviewRows = sliceRows.map(row => {
+      const arr = row || [];
+      return Array.from({ length: maxCols }, (_, i) => arr[i] ?? '');
+    });
+    this.pklPreviewStartRow = start;
+    this.pklHeaderRow = this.pklRawRows[this.pklStartRow] || [];
+  }
+
+  pklParseAndShowPreview(): void {
+    const mapping = this.pklBuildColumnMapping();
+    this.pklParsedItems = this.pklParseDataWithMapping(mapping);
+    this.pklStep = 3;
+  }
+
+  pklConfirmImport(): void {
+    if (this.pklParsedItems.length === 0) return;
+    const materials: FgOutItem[] = this.pklParsedItems
+      .filter(m => (m.materialCode || '').trim())
+      .map(m => this.pklToFgOutItem(m));
+    this.materials = [...this.materials, ...materials];
+    this.applyFilters();
+    this.saveMaterialsToFirebase(materials);
+    alert(`Đã import ${materials.length} dòng từ Packing List`);
+    this.closePKLImportModal();
+  }
+
+  private async readExcelFileAsRows(file: File): Promise<any[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+          const result = rows || [];
+
+          // Mở rộng merged cells - copy giá trị ô đầu xuống tất cả ô trong vùng gộp
+          const merges = (sheet as any)['!merges'] || [];
+          for (const m of merges) {
+            const sr = m.s?.r ?? 0;
+            const sc = m.s?.c ?? 0;
+            const er = m.e?.r ?? sr;
+            if (sr >= result.length) continue;
+            const val = result[sr][sc];
+            for (let r = sr + 1; r <= er && r < result.length; r++) {
+              if (!result[r]) result[r] = [];
+              result[r][sc] = val;
+            }
+          }
+
+          resolve(result);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private pklExtractCellValue(val: any): string {
+    const s = String(val ?? '').trim();
+    if (!s) return '';
+    const lines = s.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const nonAt = lines.filter(l => !l.startsWith('@'));
+    const use = nonAt.length ? nonAt : lines;
+    return use.join(' ').trim();
+  }
+
+  private pklParseNumber(val: any): number {
+    const s = this.pklExtractCellValue(val);
+    const n = parseFloat(String(s).replace(/,/g, ''));
+    return isNaN(n) ? 0 : n;
+  }
+
+  private pklBuildColumnMapping(): Record<string, number> {
+    const header = this.pklRawRows[this.pklStartRow] || [];
+    const map: Record<string, number> = {};
+    const patterns: { key: string; keywords: string[] }[] = [
+      { key: 'materialCode', keywords: ['part no', 'mã tp', 'material', 'mã hàng', 'asp vn pn'] },
+      { key: 'batchNumber', keywords: ['batch', 'lô', 'batch no'] },
+      { key: 'lot', keywords: ['lot', 'số lot'] },
+      { key: 'lsx', keywords: ['lsx', 'work order'] },
+      { key: 'quantity', keywords: ['quantity', 'qty', 'số lượng', 'quantity (pcs)', 'quantity (pc)'] },
+      { key: 'poShip', keywords: ['customer po', 'asp po', 'po', 'po#'] },
+      { key: 'carton', keywords: ['carton', 'no of box', 'standard box'] },
+      { key: 'pallet', keywords: ['p/no', 'p/no.', 'pallet', 'ttl plt'] },
+      { key: 'location', keywords: ['vị trí', 'location'] }
+    ];
+    header.forEach((h, idx) => {
+      const hLower = String(h ?? '').toLowerCase();
+      for (const p of patterns) {
+        if (p.keywords.some(kw => hLower.includes(kw)) && map[p.key] === undefined) {
+          map[p.key] = idx;
+          break;
+        }
+      }
+    });
+    return map;
+  }
+
+  private pklParseDataWithMapping(mapping: Record<string, number>): Partial<FgOutItem>[] {
+    const start = this.pklStartRow + 1;
+    const end = Math.min(this.pklEndRow + 1, this.pklRawRows.length);
+    const result: Partial<FgOutItem>[] = [];
+    let lastPallet = ''; // Fill-down cho P/NO (cột merge) - lấy giá trị từ dòng trước nếu dòng hiện tại trống
+    for (let r = start; r < end; r++) {
+      const row = this.pklRawRows[r] || [];
+      const materialCode = this.pklExtractCellValue(mapping.materialCode !== undefined ? row[mapping.materialCode] : '');
+      const quantity = mapping.quantity !== undefined ? this.pklParseNumber(row[mapping.quantity]) : 0;
+      if (!materialCode && quantity <= 0) continue;
+
+      let pallet = '';
+      if (mapping.pallet !== undefined) {
+        const cellVal = this.pklExtractCellValue(row[mapping.pallet]);
+        if (cellVal) {
+          lastPallet = cellVal;
+          pallet = cellVal;
+        } else {
+          pallet = lastPallet;
+        }
+      }
+
+      result.push({
+        materialCode: materialCode || '',
+        batchNumber: mapping.batchNumber !== undefined ? this.pklExtractCellValue(row[mapping.batchNumber]) : '',
+        lot: mapping.lot !== undefined ? this.pklExtractCellValue(row[mapping.lot]) : '',
+        lsx: mapping.lsx !== undefined ? this.pklExtractCellValue(row[mapping.lsx]) : '',
+        quantity: quantity,
+        poShip: mapping.poShip !== undefined ? this.pklExtractCellValue(row[mapping.poShip]) : '',
+        carton: mapping.carton !== undefined ? this.pklParseNumber(row[mapping.carton]) : 0,
+        pallet: pallet,
+        notes: mapping.notes !== undefined ? this.pklExtractCellValue(row[mapping.notes]) : '',
+        location: mapping.location !== undefined ? this.pklExtractCellValue(row[mapping.location]) : ''
+      });
+    }
+    return result;
+  }
+
+  private pklToFgOutItem(m: Partial<FgOutItem>): FgOutItem {
+    return {
+      factory: this.selectedFactory || 'ASM1',
+      exportDate: new Date(),
+      shipment: String(this.pklShipment || '').trim(),
+      pallet: m.pallet || '',
+      xp: '',
+      materialCode: (m.materialCode || '').trim(),
+      customerCode: '',
+      batchNumber: m.batchNumber || '',
+      lsx: m.lsx || '',
+      lot: m.lot || '',
+      quantity: m.quantity || 0,
+      poShip: m.poShip || '',
+      carton: m.carton || 0,
+      qtyBox: 100,
+      odd: 0,
+      location: m.location || '',
+      productType: m.productType || '',
+      notes: m.notes || '',
+      updateCount: 1,
+      pushNo: '000',
+      approved: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
+
+  // Import file functionality (legacy - giữ để tải template)
   importFile(): void {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls';
     fileInput.style.display = 'none';
-    
     fileInput.onchange = (event: any) => {
       const file = event.target.files[0];
-      if (file) {
-        this.processExcelFile(file);
-      }
+      if (file) this.processExcelFile(file);
     };
-    
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
@@ -1328,6 +1684,54 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Chuẩn bị dữ liệu in: load dispatch date, tạo QR */
+  preparePrintData(): void {
+    this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
+    this.printDispatchDate = '';
+    this.printQrDataUrl = '';
+    const ship = String(this.selectedShipment || '').trim().toUpperCase();
+    if (!ship) {
+      this.showPrintDialog = true;
+      return;
+    }
+    firstValueFrom(this.firestore.collection('shipments', ref => ref.where('shipmentCode', '==', ship).limit(1)).get())
+      .then((snap: any) => {
+        if (snap?.docs?.length) {
+          const d = snap.docs[0].data();
+          const dt = d.actualShipDate;
+          if (dt) {
+            const d2 = dt?.seconds ? new Date(dt.seconds * 1000) : new Date(dt);
+            this.printDispatchDate = d2.toLocaleDateString('vi-VN');
+          }
+        }
+        return QRCode.toDataURL(ship, { width: 100, margin: 1 });
+      })
+      .then(url => {
+        this.printQrDataUrl = url;
+        this.showPrintDialog = true;
+      })
+      .catch(() => {
+        this.showPrintDialog = true;
+      });
+  }
+
+  /** Nhóm printMaterials theo pallet để in */
+  get printRowsByPallet(): { pallet: string; materials: FgOutItem[] }[] {
+    const groups = new Map<string, FgOutItem[]>();
+    this.printMaterials.forEach(m => {
+      const p = (m.pallet || '').toString().trim() || '—';
+      if (!groups.has(p)) groups.set(p, []);
+      groups.get(p)!.push(m);
+    });
+    return Array.from(groups.entries())
+      .sort((a, b) => (a[0] === '—' ? 1 : 0) - (b[0] === '—' ? 1 : 0) || a[0].localeCompare(b[0]))
+      .map(([pallet, materials]) => ({ pallet, materials }));
+  }
+
+  get printFactory(): string {
+    return (this.printMaterials[0]?.factory || 'ASM1').toString();
+  }
+
   // Print selected shipment
   printSelectedShipment(): void {
     if (!this.selectedShipment) {
@@ -1352,8 +1756,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (shipments.length === 1) {
       // Only one shipment, print directly
       this.selectedShipment = shipments[0];
-      this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
-      this.showPrintDialog = true;
+      this.preparePrintData();
     } else {
       // Multiple shipments, ask user to select
       const shipmentList = shipments.join('\n');
@@ -1361,15 +1764,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
       
       if (selected && shipments.includes(selected.trim())) {
         this.selectedShipment = selected.trim();
-        this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
-        this.showPrintDialog = true;
+        this.preparePrintData();
       } else if (selected) {
         alert('Shipment không hợp lệ!');
       }
     }
   }
 
-  // Print document
+  // Print document - A4 ngang, không viền ngoài, không ngày giờ in
   printDocument(): void {
     const printContent = document.getElementById('printContent');
     if (printContent) {
@@ -1380,18 +1782,23 @@ export class FgOutComponent implements OnInit, OnDestroy {
             <head>
               <title>Phiếu xuất hàng - ${this.selectedShipment}</title>
               <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .print-header { text-align: center; margin-bottom: 20px; }
-                .print-header h2 { color: #333; margin-bottom: 10px; }
-                .print-info { text-align: left; margin-bottom: 20px; }
-                .print-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                .print-table th, .print-table td { border: 1px solid #333; padding: 8px; text-align: center; }
-                .print-table th { background-color: #f5f5f5; font-weight: bold; }
-                .print-footer { margin-top: 30px; }
-                .signature-section { display: flex; justify-content: space-around; }
-                .signature-box { text-align: center; }
-                .signature-line { border-bottom: 1px solid #333; width: 150px; height: 40px; margin: 10px auto; }
-                @media print { body { margin: 0; } }
+                @page { size: A4 landscape; margin: 12mm; }
+                * { box-sizing: border-box; }
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                .print-header-boxes { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+                .print-box { border: 1px solid #000; padding: 8px 12px; min-width: 100px; text-align: center; }
+                .print-box-label { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+                .print-box-shipment, .print-box-value { font-size: 13px; font-weight: 600; }
+                .print-qr { display: block; width: 80px; height: 80px; margin: 4px auto 0; }
+                .print-pallet-title { font-weight: bold; margin: 12px 0 4px; font-size: 12px; }
+                .print-table-content { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px; }
+                .print-table-content th, .print-table-content td { border: 1px solid #000; padding: 4px 6px; text-align: center; }
+                .print-table-content th { background: #f0f0f0; font-weight: bold; }
+                @media print {
+                  body { margin: 0; padding: 0; }
+                  .print-header-boxes, .print-box { break-inside: avoid; }
+                  .print-table-content { break-inside: auto; }
+                }
               </style>
             </head>
             <body>
@@ -1400,19 +1807,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
           </html>
         `);
         printWindow.document.close();
+        printWindow.focus();
         printWindow.print();
       }
     }
   }
 
-  // Get current date
-  getCurrentDate(): string {
-    return new Date().toLocaleDateString('vi-VN');
-  }
-
-  // Get current user
+  // Get current user (mã nhân viên soạn)
   getCurrentUser(): string {
-    return 'Người dùng hiện tại'; // TODO: Get from auth service
+    return this.currentUserDisplay || 'NV';
   }
 
   // Format date for input field (YYYY-MM-DD)

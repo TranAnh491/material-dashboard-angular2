@@ -1093,19 +1093,78 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   // Dropdown functionality
   // More popup modal
   showMorePopup: boolean = false;
-  
+
   // Delete by batch modal
   showDeleteByBatchModal: boolean = false;
   batchToDelete: string = '';
-  
+
+  // Note modal - Lưu ý mã nguyên liệu
+  showNoteModal: boolean = false;
+  materialNotes: { id?: string; materialCode: string; checkPercent: number; note: string }[] = [];
+  newNote: { materialCode: string; checkPercent: number; note: string } = { materialCode: '', checkPercent: 100, note: '' };
+
   openMorePopup(): void {
     this.showMorePopup = true;
   }
-  
+
   closeMorePopup(): void {
     this.showMorePopup = false;
   }
-  
+
+  // Note modal methods - Lưu ý mã nguyên liệu
+  openNoteModal(): void {
+    this.showNoteModal = true;
+    this.loadNotes();
+  }
+
+  closeNoteModal(): void {
+    this.showNoteModal = false;
+  }
+
+  loadNotes(): void {
+    this.firestore.collection('inbound-notes', ref => ref.where('factory', '==', this.selectedFactory))
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.materialNotes = actions.map(action => {
+          const data = action.payload.doc.data() as any;
+          return {
+            id: action.payload.doc.id,
+            materialCode: data.materialCode || '',
+            checkPercent: data.checkPercent || 100,
+            note: data.note || ''
+          };
+        }).sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+      });
+  }
+
+  addNote(): void {
+    if (!this.newNote.materialCode.trim()) return;
+    
+    const noteData = {
+      factory: this.selectedFactory,
+      materialCode: this.newNote.materialCode.trim().toUpperCase(),
+      checkPercent: this.newNote.checkPercent || 100,
+      note: this.newNote.note.trim(),
+      createdAt: new Date()
+    };
+
+    this.firestore.collection('inbound-notes').add(noteData)
+      .then(() => {
+        console.log('✅ Đã thêm lưu ý:', noteData.materialCode);
+        this.newNote = { materialCode: '', checkPercent: 100, note: '' };
+      })
+      .catch(err => console.error('❌ Lỗi thêm lưu ý:', err));
+  }
+
+  deleteNote(note: { id?: string; materialCode: string }): void {
+    if (!note.id) return;
+    
+    this.firestore.collection('inbound-notes').doc(note.id).delete()
+      .then(() => console.log('✅ Đã xóa lưu ý:', note.materialCode))
+      .catch(err => console.error('❌ Lỗi xóa lưu ý:', err));
+  }
+
   // Search functionality
   onSearchInput(event: Event): void {
     const target = event.target as HTMLInputElement;

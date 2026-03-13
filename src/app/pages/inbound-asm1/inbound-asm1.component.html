@@ -1028,8 +1028,96 @@
             <i class="material-icons">filter_alt_off</i>
             <span>Clear Filter</span>
           </button>
+          <button class="popup-action-btn note-action" (click)="openNoteModal(); closeMorePopup()">
+            <i class="material-icons">note_add</i>
+            <span>Lưu ý</span>
+          </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Note Modal - Lưu ý mã nguyên liệu -->
+<div class="modal-overlay" *ngIf="showNoteModal" (click)="closeNoteModal()">
+  <div class="modal-content note-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📝 Lưu ý mã nguyên liệu</h3>
+      <button class="close-btn" (click)="closeNoteModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body note-modal-body">
+      <!-- Form thêm mới -->
+      <div class="note-add-form">
+        <h4>Thêm lưu ý mới</h4>
+        <div class="note-form-row">
+          <div class="note-form-group">
+            <label>Mã nguyên liệu</label>
+            <input type="text" 
+                   [(ngModel)]="newNote.materialCode" 
+                   placeholder="Nhập mã nguyên liệu"
+                   class="note-input">
+          </div>
+          <div class="note-form-group">
+            <label>Phần trăm kiểm (%)</label>
+            <input type="number" 
+                   [(ngModel)]="newNote.checkPercent" 
+                   placeholder="VD: 100"
+                   min="0" 
+                   max="100"
+                   class="note-input">
+          </div>
+          <div class="note-form-group note-form-group-wide">
+            <label>Ghi chú</label>
+            <input type="text" 
+                   [(ngModel)]="newNote.note" 
+                   placeholder="Nhập ghi chú"
+                   class="note-input">
+          </div>
+          <button class="note-add-btn" (click)="addNote()" [disabled]="!newNote.materialCode">
+            <i class="material-icons">add</i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Danh sách lưu ý -->
+      <div class="note-list">
+        <h4>Danh sách lưu ý ({{ materialNotes.length }})</h4>
+        <div class="note-table-container" *ngIf="materialNotes.length > 0">
+          <table class="note-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>% Kiểm</th>
+                <th>Ghi chú</th>
+                <th>Xóa</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let note of materialNotes">
+                <td>{{ note.materialCode }}</td>
+                <td>{{ note.checkPercent }}%</td>
+                <td>{{ note.note }}</td>
+                <td>
+                  <button class="note-delete-btn" (click)="deleteNote(note)">
+                    <i class="material-icons">delete</i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note-empty" *ngIf="materialNotes.length === 0">
+          <i class="material-icons">info</i>
+          <span>Chưa có lưu ý nào</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-close" (click)="closeNoteModal()">Đóng</button>
     </div>
   </div>
 </div>
