@@ -344,6 +344,18 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         match = findMatch(toWoList(snapAll));
       }
 
+      // Bước 4: Fallback toàn bộ - bỏ filter factory (để tìm được LSX thuộc factory khác như SAMPLE1)
+      if (!match) {
+        const snapNoFactory = await this.firestore.collection('work-orders', ref =>
+          ref.where('productionOrder', '==', lsxTrim).limit(10)
+        ).get().toPromise();
+        match = findMatch(toWoList(snapNoFactory));
+      }
+      if (!match) {
+        const snapGlobal = await this.firestore.collection('work-orders').get().toPromise();
+        match = findMatch(toWoList(snapGlobal));
+      }
+
       if (!match) {
         alert(`Không tìm thấy Work Order cho LSX "${lsx}". Vui lòng kiểm tra tab Work Order Status.`);
         return false;
