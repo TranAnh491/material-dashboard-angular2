@@ -168,6 +168,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
   @ViewChild('xtpFileInput') xtpFileInput!: ElementRef;
   @ViewChild('pklFileInput') pklFileInput!: ElementRef;
 
+  // History - lịch sử xuất theo Mã TP (chỉ đã duyệt)
+  showHistoryDialog: boolean = false;
+  historyMaterialCode: string = '';
+  historyItems: FgOutItem[] = [];
+  historyLoading: boolean = false;
+  historyMode: boolean = false; // Khi true: bảng chính hiển thị historyItems
+
   // PKL Import
   showPKLImportModal: boolean = false;
   pklStep: number = 1;
@@ -633,8 +640,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Apply search filters - PHẢI có searchTerm (shipment) mới hiển thị
+  // Apply search filters - PHẢI có searchTerm (shipment) mới hiển thị (trừ khi đang xem History)
   applyFilters(): void {
+    if (this.historyMode) return; // Đang xem History: không ghi đè
     // Nếu không có searchTerm → không hiển thị gì
     if (!this.searchTerm || !this.searchTerm.trim()) {
       this.filteredMaterials = [];
@@ -821,6 +829,123 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   closeMorePopup(): void {
     this.showMorePopup = false;
+  }
+
+  openHistoryDialog(): void {
+    this.showHistoryDialog = true;
+    this.historyMaterialCode = '';
+    this.historyItems = [];
+  }
+
+  closeHistoryDialog(): void {
+    this.showHistoryDialog = false;
+  }
+
+  searchHistory(): void {
+    const code = (this.historyMaterialCode || '').trim().toUpperCase();
+    if (!code) {
+      alert('Vui lòng nhập Mã TP');
+      return;
+    }
+    this.historyLoading = true;
+    this.historyItems = [];
+    firstValueFrom(this.firestore.collection('fg-out', ref =>
+      ref.where('materialCode', '==', code).limit(500)
+    ).get()).then((snap: any) => {
+      const items: FgOutItem[] = [];
+      (snap?.docs || []).forEach((doc: any) => {
+        const d = doc.data();
+        if (!(d.approved === true)) return; // Chỉ lấy đã duyệt xuất
+        items.push({
+          id: doc.id,
+          factory: d.factory || 'ASM1',
+          exportDate: d.exportDate?.seconds ? new Date(d.exportDate.seconds * 1000) : new Date(d.exportDate || Date.now()),
+          shipment: d.shipment || '',
+          pallet: d.pallet || '',
+          xp: d.xp || '',
+          materialCode: d.materialCode || '',
+          batchNumber: d.batchNumber || '',
+          lot: d.lot || '',
+          lsx: d.lsx || '',
+          quantity: Number(d.quantity) || 0,
+          carton: Number(d.carton) || 0,
+          odd: Number(d.odd) || 0,
+          location: d.location || '',
+          productType: d.productType || '',
+          notes: d.notes || '',
+          customerCode: d.customerCode || '',
+          poShip: d.poShip || '',
+          qtyBox: d.qtyBox || 100,
+          updateCount: d.updateCount || 1,
+          pushNo: d.pushNo || '000',
+          approved: true
+        } as FgOutItem);
+      });
+      this.historyItems = items.sort((a, b) => new Date(b.exportDate).getTime() - new Date(a.exportDate).getTime());
+      if (this.historyItems.length > 0) {
+        this.historyMode = true;
+        this.closeHistoryDialog();
+        this.buildDisplayFromHistory();
+      }
+    }).catch(err => {
+      console.error('History search error:', err);
+      alert('Lỗi tìm kiếm lịch sử: ' + (err?.message || err));
+    }).finally(() => {
+      this.historyLoading = false;
+    });
+  }
+
+  /** Thoát chế độ History, quay lại xem bình thường */
+  exitHistoryMode(): void {
+    this.historyMode = false;
+    this.historyMaterialCode = '';
+    this.historyItems = [];
+    this.applyFilters();
+  }
+
+  /** Build displayRows từ historyItems (khi historyMode) */
+  private buildDisplayFromHistory(): void {
+    const src = this.historyItems;
+    this.filteredMaterials = src;
+    this.displayRows = src.map((m, i) => ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
+    const withPalletTotals: FgOutDisplayRow[] = [];
+    let prevPallet = '';
+    let cartonAccum = 0;
+    let lastShipment = '';
+    for (const r of this.displayRows) {
+      if (r.type === 'detail') {
+        lastShipment = r.material?.shipment ?? '';
+        const pallet = (r.material?.pallet ?? '').toString().trim();
+        if (pallet) {
+          if (pallet !== prevPallet && prevPallet) {
+            withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+            cartonAccum = 0;
+          }
+          prevPallet = pallet;
+          cartonAccum += this.getCartonForMaterial(r.material);
+        }
+      }
+      withPalletTotals.push(r);
+    }
+    if (prevPallet && cartonAccum > 0) {
+      withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+    }
+    this.displayRows = withPalletTotals;
+    let palletGroup = 0;
+    let currentPallet = '';
+    this.displayRows.forEach(r => {
+      const pallet = r.type === 'detail' ? ((r.material?.pallet ?? '').toString().trim()) : ((r as { pallet?: string }).pallet ?? '').toString().trim();
+      if (!pallet) return;
+      if (pallet !== currentPallet) { palletGroup += 1; currentPallet = pallet; }
+      (r as { palletGroup?: number }).palletGroup = palletGroup;
+    });
+    const seenShipment = new Set<string>();
+    this.displayRows.forEach(r => {
+      const ship = r.type === 'detail' ? (r.material?.shipment ?? '') : ((r as { shipment?: string }).shipment ?? '');
+      if (seenShipment.has(ship || '__empty__')) return;
+      seenShipment.add(ship || '__empty__');
+      if (r.type === 'detail') (r as { renderShipmentCell?: boolean }).renderShipmentCell = true;
+    });
   }
 
   onColumnFilterChange(): void {
@@ -1308,6 +1433,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   viewAllMaterials(): void {
+    if (this.historyMode) this.exitHistoryMode();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
     this.showCompleted = true;

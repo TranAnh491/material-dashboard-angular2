@@ -71,6 +71,16 @@
           Print
         </button>
 
+        <button class="custom-btn" (click)="openHistoryDialog()">
+          <i class="material-icons">history</i>
+          History
+        </button>
+
+        <button class="custom-btn btn-warning" *ngIf="historyMode" (click)="exitHistoryMode()">
+          <i class="material-icons">close</i>
+          Thoát History ({{ historyMaterialCode }})
+        </button>
+
       </div>
     </div>
     
@@ -626,6 +636,47 @@
       <button *ngIf="pklStep === 3" type="button" class="btn btn-apply" (click)="pklConfirmImport()" [disabled]="pklParsedItems.length === 0">
         <i class="material-icons">file_upload</i>
         Import {{ pklParsedItems.length }} dòng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- History Dialog - Nhập Mã TP → lọc bảng chính (chỉ đã duyệt xuất) -->
+<div class="custom-modal" [class.show]="showHistoryDialog" [style.display]="showHistoryDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeHistoryDialog()"></div>
+  <div class="modal-container modal-history" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">history</i>
+        Lịch sử xuất (chỉ đã duyệt)
+      </h5>
+      <button type="button" class="close-btn" (click)="closeHistoryDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="history-search-row">
+        <label class="input-label">Mã TP</label>
+        <input type="text"
+               class="form-input history-search-input"
+               [(ngModel)]="historyMaterialCode"
+               (keyup.enter)="searchHistory()"
+               placeholder="Nhập mã TP cần xem">
+        <button type="button" class="btn btn-apply" (click)="searchHistory()" [disabled]="historyLoading">
+          <i class="material-icons" *ngIf="!historyLoading">search</i>
+          <span *ngIf="historyLoading">Đang tải...</span>
+          <span *ngIf="!historyLoading">Tìm kiếm</span>
+        </button>
+      </div>
+      <p class="history-hint">Bảng FG Out sẽ lọc ra lịch sử xuất của mã TP đó (chỉ những dòng đã tick duyệt xuất).</p>
+      <div class="history-empty" *ngIf="!historyLoading && historyMaterialCode && historyItems.length === 0">
+        <p>Không tìm thấy lịch sử xuất đã duyệt cho Mã TP "{{ historyMaterialCode }}"</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeHistoryDialog()">
+        <i class="material-icons">close</i>
+        Đóng
       </button>
     </div>
   </div>

@@ -373,7 +373,17 @@ export class FgInComponent implements OnInit, OnDestroy {
   applyFilters(): void {
     // Use setTimeout to debounce rapid filter changes
     setTimeout(() => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
       this.filteredMaterials = this.materials.filter(material => {
+        // Phiếu đã khóa: sau mỗi ngày sẽ ẩn đi (chỉ hiển thị phiếu chưa khóa hoặc phiếu đã khóa trong ngày)
+        if (material.isReceived) {
+          const importDate = new Date(material.importDate);
+          importDate.setHours(0, 0, 0, 0);
+          if (importDate < todayStart) return false;
+        }
+
         // Filter by search term
         if (this.searchTerm) {
           const searchableText = [
