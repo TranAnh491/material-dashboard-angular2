@@ -2344,7 +2344,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           location: data.location || '',
           productType: data.productType || '',
           notes: data.notes || '',
-          approved: data.approved || false
+          approved: data.approved || false,
+          exportDate: data.exportDate?.seconds
+            ? new Date(data.exportDate.seconds * 1000)
+            : (data.exportDate ? new Date(data.exportDate) : null)
         });
       });
 
@@ -2393,14 +2396,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.pklShipmentCode = '';
   }
 
-  // Print PKL (Packing List) - A4 format
+  // Print PKL (Packing List) - format giống FG-out: logo + AIRSPEED + 5 box + bảng
   async printPKL(): Promise<void> {
     if (!this.pklShipmentCode || this.pklData.length === 0) {
       alert('❌ Không có dữ liệu PKL để in!');
       return;
     }
 
-    // Generate QR code
     let qrDataUrl = '';
     try {
       qrDataUrl = await QRCode.toDataURL(this.pklShipmentCode, { width: 120, margin: 1 });
@@ -2410,142 +2412,148 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const currentDate = new Date().toLocaleDateString('vi-VN');
     const shipment = this.selectedShipmentForPrint;
-    const dispatchDate = shipment?.actualShipDate 
-      ? new Date(shipment.actualShipDate).toLocaleDateString('vi-VN') 
+    const dispatchDate = shipment?.actualShipDate
+      ? new Date(shipment.actualShipDate).toLocaleDateString('vi-VN')
       : '—';
+    const factory = (shipment as any)?.factory || 'ASM1';
+    const logoSrc = (typeof window !== 'undefined' && window.location?.origin)
+      ? window.location.origin + '/assets/img/logo.png'
+      : '/assets/img/logo.png';
 
     // Build pallet sections HTML
     let palletsHtml = '';
-    this.pklData.forEach((palletGroup, palletIndex) => {
-      const itemsHtml = palletGroup.items.map((item: any, idx: number) => `
-        <tr>
-          <td style="text-align: center;">${idx + 1}</td>
-          <td>${this.escapeHtml(item.materialCode)}</td>
+    this.pklData.forEach((palletGroup: any) => {
+      const itemsHtml = palletGroup.items.map((item: any, idx: number) => {
+        const dateStr = item.exportDate
+          ? new Date(item.exportDate).toLocaleDateString('vi-VN')
+          : '';
+        return `<tr>
+          <td style="text-align:center;">${idx + 1}</td>
+          <td>${this.escapeHtml(item.pallet || '')}</td>
+          <td style="text-align:center;">${dateStr}</td>
           <td>${this.escapeHtml(item.batchNumber)}</td>
+          <td>${this.escapeHtml(item.materialCode)}</td>
           <td>${this.escapeHtml(item.lot)}</td>
           <td>${this.escapeHtml(item.lsx)}</td>
-          <td style="text-align: right;">${item.quantity?.toLocaleString() || 0}</td>
-          <td style="text-align: center;">${item.carton || 0}</td>
-          <td style="text-align: center;">${item.odd || 0}</td>
+          <td style="text-align:right;">${(item.quantity || 0).toLocaleString()}</td>
+          <td style="text-align:center;">${item.carton || 0}</td>
+          <td style="text-align:center;">${item.odd || 0}</td>
           <td>${this.escapeHtml(item.location)}</td>
           <td>${this.escapeHtml(item.productType)}</td>
-        </tr>
-      `).join('');
+          <td>${this.escapeHtml(item.notes)}</td>
+        </tr>`;
+      }).join('');
 
       palletsHtml += `
-        <div class="pallet-section ${palletIndex > 0 ? 'page-break' : ''}">
-          <div class="pallet-header">
-            <span class="pallet-name">📦 ${this.escapeHtml(palletGroup.pallet)}</span>
-            <span class="pallet-summary">Carton: <strong>${palletGroup.totalCarton}</strong> | Số lượng: <strong>${palletGroup.totalQty.toLocaleString()}</strong></span>
-          </div>
+        <div class="pallet-section">
+          <div class="pallet-title">Pallet: ${this.escapeHtml(palletGroup.pallet)}</div>
           <table class="pkl-table">
-            <thead>
-              <tr>
-                <th style="width: 40px;">STT</th>
-                <th>Mã TP</th>
-                <th>Batch</th>
-                <th>LOT</th>
-                <th>LSX</th>
-                <th style="width: 80px;">Số lượng</th>
-                <th style="width: 60px;">Carton</th>
-                <th style="width: 50px;">ODD</th>
-                <th>Vị trí</th>
-                <th style="width: 70px;">Loại hàng</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
+            <thead><tr>
+              <th style="width:36px;">NO</th>
+              <th>PALLET</th>
+              <th style="width:80px;">NGÀY</th>
+              <th>BATCH</th>
+              <th>MÃ TP</th>
+              <th>LOT</th>
+              <th>LSX</th>
+              <th style="width:72px;">QTY XUẤT</th>
+              <th style="width:60px;">CARTON</th>
+              <th style="width:50px;">ODD</th>
+              <th>VỊ TRÍ</th>
+              <th style="width:70px;">LOẠI HÀNG</th>
+              <th>GHI CHÚ</th>
+            </tr></thead>
+            <tbody>${itemsHtml}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     });
 
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PKL - PACKING LIST - ${this.escapeHtml(this.pklShipmentCode)}</title>
+  <title>PKL - ${this.escapeHtml(this.pklShipmentCode)}</title>
   <style>
-    @page { size: A4; margin: 10mm; }
-    @media print { .page-break { page-break-before: always; } }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 10mm; }
-    
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border: 2px solid #000; padding: 15px; margin-bottom: 15px; }
-    .header-left { }
-    .header-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
-    .header-shipment { font-size: 16px; margin-bottom: 5px; }
-    .header-info { font-size: 12px; color: #333; }
-    .header-right { text-align: right; }
-    .header-qr img { width: 100px; height: 100px; }
-    .header-qr-label { font-size: 10px; margin-top: 3px; }
-    
-    .summary-box { display: flex; gap: 20px; margin-bottom: 15px; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; }
-    .summary-item { font-size: 13px; }
-    .summary-item strong { font-size: 15px; }
-    
-    .pallet-section { margin-bottom: 20px; }
-    .pallet-header { background: #e8e8e8; padding: 10px; border: 2px solid #000; border-bottom: none; display: flex; justify-content: space-between; align-items: center; }
-    .pallet-name { font-size: 14px; font-weight: bold; }
-    .pallet-summary { font-size: 12px; }
-    
-    .pkl-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-    .pkl-table th, .pkl-table td { border: 1px solid #000; padding: 6px 8px; }
-    .pkl-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
-    .pkl-table td { vertical-align: middle; }
-    
-    .footer { margin-top: 30px; border-top: 2px solid #000; padding-top: 15px; }
-    .signature-row { display: flex; justify-content: space-between; gap: 30px; }
-    .signature-box { flex: 1; text-align: center; }
-    .signature-label { font-size: 12px; font-weight: bold; margin-bottom: 40px; }
-    .signature-line { border-bottom: 1px solid #000; height: 1px; margin-bottom: 5px; }
-    .signature-hint { font-size: 10px; color: #666; font-style: italic; }
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      html::before,html::after,body::before,body::after{display:none!important}
+      head,header,footer,nav{display:none!important}
+      .pallet-section { break-inside: auto; }
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+    /* Top header table */
+    .top-header{width:100%;border-collapse:collapse;margin-bottom:0}
+    .top-header td{border:1px solid #000;padding:8px;vertical-align:middle}
+    .logo-cell{width:200px;min-width:200px;text-align:center}
+    .logo-cell img{max-width:100%;max-height:70px;object-fit:contain}
+    .title-cell{text-align:center}
+    .title-line1{font-size:17px;font-weight:bold;margin-bottom:10px}
+    .title-line2{font-size:13px;text-transform:uppercase}
+    .doc-meta-cell{width:200px;min-width:200px}
+    .doc-meta-table{width:100%;border-collapse:collapse;font-size:11px}
+    .doc-meta-table td{border:1px solid #000;padding:4px 6px}
+    .meta-label{background:#f5f5f5;width:45%}
+    /* 5 info boxes */
+    .info-boxes{display:flex;gap:0;margin-bottom:12px}
+    .info-box{flex:1;border:1px solid #000;padding:8px;min-width:0}
+    .info-box.center{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .info-box-label{font-size:10px;font-weight:bold;text-transform:uppercase;margin-bottom:4px}
+    .info-box-value{font-size:12px;font-weight:600}
+    .info-box-sign{min-height:55px}
+    .qr-img{display:block;width:55px;height:55px;margin-top:4px}
+    /* Pallet sections */
+    .pallet-section{margin-bottom:16px}
+    .pallet-title{font-weight:bold;font-size:12px;margin:10px 0 4px}
+    .pkl-table{width:100%;border-collapse:collapse;font-size:9.5px}
+    .pkl-table th,.pkl-table td{border:1px solid #000;padding:4px 5px}
+    .pkl-table th{background:#f0f0f0;font-weight:bold;text-align:center}
+    .pkl-table td{vertical-align:middle}
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="header-left">
-      <div class="header-title">PACKING LIST (PKL)</div>
-      <div class="header-shipment">Shipment: <strong>${this.escapeHtml(this.pklShipmentCode)}</strong></div>
-      <div class="header-info">Ngày xuất hàng: ${dispatchDate}</div>
-      <div class="header-info">Ngày in: ${currentDate}</div>
+  <table class="top-header">
+    <tr>
+      <td class="logo-cell"><img src="${logoSrc}" alt="AIRSPEED"></td>
+      <td class="title-cell">
+        <div class="title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
+        <div class="title-line2">PACKING LIST - BẢNG KÊ XUẤT HÀNG</div>
+      </td>
+      <td class="doc-meta-cell">
+        <table class="doc-meta-table">
+          <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr>
+          <tr><td class="meta-label">Phiên bản</td><td>00</td></tr>
+          <tr><td class="meta-label">Ngày ban hành</td><td>05/03/2026</td></tr>
+          <tr><td class="meta-label">Số Trang</td><td>01</td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  <div class="info-boxes">
+    <div class="info-box">
+      <div class="info-box-label">SHIPMENT</div>
+      <div class="info-box-value">${this.escapeHtml(this.pklShipmentCode)}</div>
+      ${qrDataUrl ? `<img class="qr-img" src="${qrDataUrl}" alt="QR">` : ''}
     </div>
-    <div class="header-right">
-      <div class="header-qr">
-        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code">` : ''}
-        <div class="header-qr-label">${this.escapeHtml(this.pklShipmentCode)}</div>
-      </div>
+    <div class="info-box">
+      <div class="info-box-label">MÃ NV SOẠN</div>
+      <div class="info-box-sign"></div>
+    </div>
+    <div class="info-box center">
+      <div class="info-box-label">NHÀ MÁY</div>
+      <div class="info-box-value">${this.escapeHtml(factory)}</div>
+    </div>
+    <div class="info-box center">
+      <div class="info-box-label">NGÀY GIAO</div>
+      <div class="info-box-value">${dispatchDate}</div>
+    </div>
+    <div class="info-box center">
+      <div class="info-box-label">NGÀY IN</div>
+      <div class="info-box-value">${currentDate}</div>
     </div>
   </div>
-  
-  <div class="summary-box">
-    <div class="summary-item">Tổng Pallet: <strong>${this.pklData.length}</strong></div>
-    <div class="summary-item">Tổng Carton: <strong>${this.pklTotalCarton}</strong></div>
-    <div class="summary-item">Tổng số lượng: <strong>${this.pklTotalQty.toLocaleString()}</strong></div>
-  </div>
-  
   ${palletsHtml}
-  
-  <div class="footer">
-    <div class="signature-row">
-      <div class="signature-box">
-        <div class="signature-label">Người soạn hàng</div>
-        <div class="signature-line"></div>
-        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
-      </div>
-      <div class="signature-box">
-        <div class="signature-label">Người kiểm tra</div>
-        <div class="signature-line"></div>
-        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
-      </div>
-      <div class="signature-box">
-        <div class="signature-label">Người xuất kho</div>
-        <div class="signature-line"></div>
-        <div class="signature-hint">(Ký và ghi rõ họ tên)</div>
-      </div>
-    </div>
-  </div>
+  <script>window.onload=function(){window.print()}</script>
 </body>
 </html>`;
 
@@ -2553,12 +2561,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (printWindow) {
       printWindow.document.write(htmlContent);
       printWindow.document.close();
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 300);
-      };
+    } else {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
     }
   }
 
@@ -2657,6 +2661,139 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const importDate = fmtDate(s.importDate);
     const dispatchDate = fmtDate(s.actualShipDate);
+    const currentDate = new Date().toLocaleDateString('vi-VN');
+    const factory = (s as any).factory || 'ASM1';
+
+    const logoUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
+      ? window.location.origin + '/assets/img/logo.png'
+      : '';
+
+    // Load FG Out data for PKL (Part 3)
+    let pklHtml = '<p style="font-style:italic;color:#666">Không có dữ liệu FG Out cho shipment này.</p>';
+    try {
+      const fgSnap = await this.firestore.collection('fg-out', ref =>
+        ref.where('shipment', '==', shipmentCode)
+      ).get().toPromise();
+
+      if (fgSnap && !fgSnap.empty) {
+        let pklQrDataUrl = '';
+        try { pklQrDataUrl = await QRCode.toDataURL(shipmentCode, { width: 100, margin: 1 }); } catch (_) {}
+
+        const fgItems: any[] = fgSnap.docs.map(doc => {
+          const d = doc.data() as any;
+          return {
+            materialCode: d.materialCode || '',
+            batchNumber: d.batchNumber || '',
+            lot: d.lot || '',
+            lsx: d.lsx || '',
+            quantity: d.quantity || 0,
+            carton: d.carton || 0,
+            odd: d.odd || 0,
+            pallet: d.pallet || '',
+            location: d.location || '',
+            productType: d.productType || '',
+            notes: d.notes || '',
+            exportDate: d.exportDate?.seconds
+              ? new Date(d.exportDate.seconds * 1000)
+              : (d.exportDate ? new Date(d.exportDate) : null)
+          };
+        });
+
+        const palletGroups = new Map<string, any[]>();
+        fgItems.forEach(item => {
+          const p = item.pallet || 'Không có Pallet';
+          if (!palletGroups.has(p)) palletGroups.set(p, []);
+          palletGroups.get(p)!.push(item);
+        });
+        const pklGroups = Array.from(palletGroups.entries())
+          .map(([pallet, items]) => ({ pallet, items }))
+          .sort((a, b) => {
+            if (a.pallet === 'Không có Pallet') return 1;
+            if (b.pallet === 'Không có Pallet') return -1;
+            return a.pallet.localeCompare(b.pallet);
+          });
+
+        let palletsBodyHtml = '';
+        pklGroups.forEach(({ pallet, items }) => {
+          const rows = items.map((item: any, idx: number) => {
+            const dateStr = item.exportDate ? new Date(item.exportDate).toLocaleDateString('vi-VN') : '';
+            return `<tr>
+              <td style="text-align:center">${idx + 1}</td>
+              <td>${this.escapeHtml(pallet)}</td>
+              <td style="text-align:center">${dateStr}</td>
+              <td>${this.escapeHtml(item.batchNumber)}</td>
+              <td>${this.escapeHtml(item.materialCode)}</td>
+              <td>${this.escapeHtml(item.lot)}</td>
+              <td>${this.escapeHtml(item.lsx)}</td>
+              <td style="text-align:right">${(item.quantity || 0).toLocaleString()}</td>
+              <td style="text-align:center">${item.carton || 0}</td>
+              <td style="text-align:center">${item.odd || 0}</td>
+              <td>${this.escapeHtml(item.location)}</td>
+              <td>${this.escapeHtml(item.productType)}</td>
+              <td>${this.escapeHtml(item.notes)}</td>
+            </tr>`;
+          }).join('');
+          palletsBodyHtml += `
+            <div class="p3-pallet-title">Pallet: ${this.escapeHtml(pallet)}</div>
+            <table class="p3-table">
+              <thead><tr>
+                <th style="width:30px">NO</th><th>PALLET</th><th style="width:72px">NGÀY</th>
+                <th>BATCH</th><th>MÃ TP</th><th>LOT</th><th>LSX</th>
+                <th style="width:65px">QTY XUẤT</th><th style="width:55px">CARTON</th>
+                <th style="width:45px">ODD</th><th>VỊ TRÍ</th>
+                <th style="width:65px">LOẠI HÀNG</th><th>GHI CHÚ</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>`;
+        });
+
+        pklHtml = `
+          <table class="p3-top-header">
+            <tr>
+              <td class="p3-logo-cell">${logoUrl ? `<img src="${logoUrl}" alt="AIRSPEED">` : ''}</td>
+              <td class="p3-title-cell">
+                <div class="p3-title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
+                <div style="height:8px"></div>
+                <div class="p3-title-line2">PACKING LIST - BẢNG KÊ XUẤT HÀNG</div>
+              </td>
+              <td class="p3-doc-meta-cell">
+                <table class="p3-doc-meta-table">
+                  <tr><td class="p3-meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr>
+                  <tr><td class="p3-meta-label">Phiên bản</td><td>00</td></tr>
+                  <tr><td class="p3-meta-label">Ngày ban hành</td><td>05/03/2026</td></tr>
+                  <tr><td class="p3-meta-label">Số Trang</td><td>01</td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+          <div class="p3-info-boxes">
+            <div class="p3-info-box">
+              <div class="p3-info-box-label">SHIPMENT</div>
+              <div class="p3-info-box-value">${this.escapeHtml(shipmentCode)}</div>
+              ${pklQrDataUrl ? `<img class="p3-qr-img" src="${pklQrDataUrl}" alt="QR">` : ''}
+            </div>
+            <div class="p3-info-box">
+              <div class="p3-info-box-label">MÃ NV SOẠN</div>
+              <div class="p3-sign-area"></div>
+            </div>
+            <div class="p3-info-box center">
+              <div class="p3-info-box-label">NHÀ MÁY</div>
+              <div class="p3-info-box-value">${this.escapeHtml(factory)}</div>
+            </div>
+            <div class="p3-info-box center">
+              <div class="p3-info-box-label">NGÀY GIAO</div>
+              <div class="p3-info-box-value">${dispatchDate}</div>
+            </div>
+            <div class="p3-info-box center">
+              <div class="p3-info-box-label">NGÀY IN</div>
+              <div class="p3-info-box-value">${currentDate}</div>
+            </div>
+          </div>
+          ${palletsBodyHtml}`;
+      }
+    } catch (e) {
+      console.error('PKL load error in buildShipmentOrderHtml:', e);
+    }
 
     const itemBoxes = allItemsInShipment.map(item => `
       <div class="item-box">
@@ -2684,10 +2821,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const customerName = this.getCustomerNameFromMapping(s.customerCode || '') || (s.customerCode || '');
     const factoryNorm = (s.factory || 'ASM1').toString().trim().toUpperCase();
     const warehouse = factoryNorm === 'ASM2' ? 'LH' : 'Main';
-
-    const logoUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
-      ? window.location.origin + '/assets/img/logo.png'
-      : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -2761,6 +2894,31 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     .part-divider { margin: 24px 0 16px 0; border-top: 3px solid #000; padding-top: 16px; }
     .part-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; padding: 8px; background: #e8e8e8; color: #000; text-transform: uppercase; }
+    .page-break-before { page-break-before: always; break-before: always; }
+    /* Part 3 - PKL */
+    .p3-top-header{width:100%;border-collapse:collapse;margin-bottom:0}
+    .p3-top-header td{border:1px solid #000;padding:8px;vertical-align:middle}
+    .p3-logo-cell{width:180px;min-width:180px;text-align:center}
+    .p3-logo-cell img{max-width:100%;max-height:65px;object-fit:contain}
+    .p3-title-cell{text-align:center}
+    .p3-title-line1{font-size:16px;font-weight:bold;margin-bottom:8px}
+    .p3-title-line2{font-size:12px;text-transform:uppercase}
+    .p3-doc-meta-cell{width:180px;min-width:180px}
+    .p3-doc-meta-table{width:100%;border-collapse:collapse;font-size:11px}
+    .p3-doc-meta-table td{border:1px solid #000;padding:3px 5px}
+    .p3-meta-label{background:#f5f5f5;width:45%}
+    .p3-info-boxes{display:flex;gap:0;margin-bottom:10px}
+    .p3-info-box{flex:1;border:1px solid #000;padding:7px;min-width:0}
+    .p3-info-box.center{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .p3-info-box-label{font-size:9px;font-weight:bold;text-transform:uppercase;margin-bottom:3px}
+    .p3-info-box-value{font-size:11px;font-weight:600}
+    .p3-sign-area{min-height:50px}
+    .p3-qr-img{display:block;width:50px;height:50px;margin-top:3px}
+    .p3-pallet-title{font-weight:bold;font-size:11px;margin:8px 0 3px}
+    .p3-table{width:100%;border-collapse:collapse;font-size:9px}
+    .p3-table th,.p3-table td{border:1px solid #000;padding:3px 4px}
+    .p3-table th{background:#f0f0f0;font-weight:bold;text-align:center}
+    .p3-table td{vertical-align:middle}
     
     .inspection-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; }
     .inspection-section h4 { font-size: 14px; margin-bottom: 10px; background: #e8e8e8; color: #000; padding: 6px; text-transform: uppercase; }
@@ -2820,7 +2978,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   <div class="customer-warehouse-row">
     <div class="cw-box">
       <div class="cw-title">Khách hàng / Customer</div>
-      <div class="cw-value">${this.escapeHtml(customerName)}</div>
+      <div class="cw-value">&nbsp;</div>
     </div>
     <div class="cw-box">
       <div class="cw-title">Kho / Warehouse</div>
@@ -2868,8 +3026,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     ${itemBoxes}
   </div>
   
-  <!-- PHẦN 2: CÁC MỤC KIỂM TRA -->
-  <div class="part-divider"></div>
+  <!-- PHẦN 2: CÁC MỤC KIỂM TRA (nhảy trang mới) -->
+  <div class="page-break-before">
   <div class="part-title">PHẦN 2: CÁC MỤC KIỂM TRA / PART 2: INSPECTION ITEMS</div>
   
   <div class="ship-by-section">
@@ -2998,6 +3156,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       </div>
     </div>
   </div>
+  </div>
+  <!-- PHẦN 3: PACKING LIST (nhảy trang mới) -->
+  <div class="page-break-before">
+    <div class="part-title">PHẦN 3: PACKING LIST</div>
+    ${pklHtml}
+  </div>
 </body>
 </html>`;
   }
@@ -3029,6 +3193,202 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         printWindow.print();
       }
     }, 800);
+    this.closePrintLabelDialog();
+  }
+
+  /** In chỉ P1: Thông tin soạn hàng / Picking information */
+  async printP1Only(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const fullHtml = await this.buildShipmentOrderHtml();
+    if (!fullHtml) return;
+
+    // Parse nội dung P1: từ đầu body đến trước div.page-break-before đầu tiên (P2)
+    const bodyStart = fullHtml.indexOf('<body>') + '<body>'.length;
+    const p2Start = fullHtml.indexOf('<div class="page-break-before">');
+    const p1Content = p2Start > -1
+      ? fullHtml.substring(bodyStart, p2Start).trim()
+      : fullHtml.substring(bodyStart, fullHtml.indexOf('</body>')).trim();
+
+    const headPart = fullHtml.substring(0, fullHtml.indexOf('</head>') + '</head>'.length);
+    const p1Html = `${headPart}\n<body>${p1Content}</body>\n</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
+    printWindow.document.write(p1Html);
+    printWindow.document.close();
+    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
+    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
+    this.closePrintLabelDialog();
+  }
+
+  /** In chỉ P2: Các mục kiểm tra / Inspection Items */
+  async printP2Only(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const fullHtml = await this.buildShipmentOrderHtml();
+    if (!fullHtml) return;
+
+    // P2 là div.page-break-before đầu tiên, P3 là cái thứ hai
+    const p2Start = fullHtml.indexOf('<div class="page-break-before">');
+    const p3Start = fullHtml.indexOf('<div class="page-break-before">', p2Start + 1);
+    const p2Content = (p2Start > -1 && p3Start > -1)
+      ? fullHtml.substring(p2Start, p3Start).trim()
+      : (p2Start > -1 ? fullHtml.substring(p2Start, fullHtml.indexOf('</body>')).trim() : '');
+
+    // Bỏ thuộc tính page-break-before khi in riêng
+    const p2ContentClean = p2Content.replace(/class="page-break-before"/, 'class=""');
+
+    const headPart = fullHtml.substring(0, fullHtml.indexOf('</head>') + '</head>'.length);
+    const p2Html = `${headPart}\n<body>${p2ContentClean}</body>\n</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
+    printWindow.document.write(p2Html);
+    printWindow.document.close();
+    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
+    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
+    this.closePrintLabelDialog();
+  }
+
+  /** In Pallet Label (57×32mm): từ danh sách pallet trong FG Out */
+  async printPalletLabelsFromPKL(): Promise<void> {
+    if (!this.selectedShipmentForPrint) {
+      alert('❌ Không có shipment được chọn!');
+      return;
+    }
+    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '').trim().toUpperCase();
+    if (!shipmentCode) { alert('❌ Mã Shipment không hợp lệ!'); return; }
+
+    // Load FG Out data
+    let palletNames: string[] = [];
+    try {
+      const fgSnap = await this.firestore.collection('fg-out', ref =>
+        ref.where('shipment', '==', shipmentCode)
+      ).get().toPromise();
+
+      if (!fgSnap || fgSnap.empty) {
+        alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
+        return;
+      }
+
+      const seen = new Set<string>();
+      fgSnap.docs.forEach(doc => {
+        const p = ((doc.data() as any).pallet || '').trim();
+        if (p && !seen.has(p)) { seen.add(p); palletNames.push(p); }
+      });
+      palletNames.sort((a, b) => {
+        if (a === 'Không có Pallet') return 1;
+        if (b === 'Không có Pallet') return -1;
+        return a.localeCompare(b);
+      });
+    } catch (e) {
+      alert('❌ Lỗi tải dữ liệu: ' + (e as any)?.message);
+      return;
+    }
+
+    if (palletNames.length === 0) {
+      alert('❌ Không có pallet nào trong dữ liệu FG Out!');
+      return;
+    }
+
+    // Tính tuần hiện tại (ISO week)
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
+    const weekStr = String(weekNum).padStart(2, '0');
+
+    // Tạo mã pallet: shipmentCode + W + tuần + số thứ tự
+    const labelCodes = palletNames.map((_, idx) =>
+      `${shipmentCode}W${weekStr}${String(idx + 1).padStart(2, '0')}`
+    );
+
+    // Tạo QR cho từng pallet
+    const labelItems: { code: string; qr: string }[] = [];
+    for (const code of labelCodes) {
+      let qr = '';
+      try { qr = await QRCode.toDataURL(code, { width: 240, margin: 1 }); } catch (_) {}
+      labelItems.push({ code, qr });
+    }
+
+    // Build HTML
+    const labelsHtml = labelItems.map(item => `
+      <div class="label">
+        <div class="qr-side">
+          ${item.qr ? `<img src="${item.qr}" alt="QR">` : ''}
+        </div>
+        <div class="text-side">
+          <div class="pallet-code">${this.escapeHtml(item.code)}</div>
+        </div>
+      </div>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Pallet Labels - ${this.escapeHtml(shipmentCode)}</title>
+  <style>
+    @page { size: 57mm 32mm; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 57mm; background: white; }
+    .label {
+      width: 57mm;
+      height: 32mm;
+      display: flex;
+      flex-direction: row;
+      border: 1px solid #000;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .qr-side {
+      width: 50%;
+      height: 32mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #000;
+    }
+    .qr-side img {
+      width: 28mm;
+      height: 28mm;
+      display: block;
+    }
+    .text-side {
+      width: 50%;
+      height: 32mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2mm;
+    }
+    .pallet-code {
+      font-family: Arial, sans-serif;
+      font-size: 7pt;
+      font-weight: bold;
+      word-break: break-all;
+      text-align: center;
+      line-height: 1.3;
+    }
+    @media print {
+      body { margin: 0; padding: 0; width: 57mm; }
+    }
+  </style>
+</head>
+<body>
+  ${labelsHtml}
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
+    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
     this.closePrintLabelDialog();
   }
 

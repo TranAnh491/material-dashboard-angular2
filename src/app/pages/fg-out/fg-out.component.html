@@ -98,7 +98,7 @@
           <col style="width: 78px">
           <col style="width: 108px">
           <col style="width: 96px">
-          <col style="width: 96px">
+          <col style="width: 125px">
           <col style="width: 76px">
           <col style="width: 66px">
           <col style="width: 50px">
@@ -697,24 +697,62 @@
     </div>
     <div class="modal-body print-body">
       <div class="print-content" id="printContent">
-        <!-- 4 box header -->
-        <div class="print-header-boxes">
-          <div class="print-box">
-            <div class="print-box-label">SHIPMENT</div>
-            <div class="print-box-shipment">{{selectedShipment}}</div>
-            <img *ngIf="printQrDataUrl" [src]="printQrDataUrl" alt="QR" class="print-qr">
+        <!-- Hàng 1: Logo | AIRSPEED | Box 2 dãy: dãy 1 = 4 ô (Mã quản lý, Phiên bản, Ngày ban hành, Số Trang) -->
+        <table class="print-top-header">
+          <tr>
+            <td class="print-logo-cell">
+              <img [src]="getLogoSrc()" alt="AIRSPEED">
+            </td>
+            <td class="print-title-cell">
+              <div class="print-title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
+              <div class="print-title-line2">PACKING LIST - BẢNG KÊ XUẤT HÀNG</div>
+            </td>
+            <td class="print-doc-meta-cell">
+              <table class="print-doc-meta-table">
+                <tr>
+                  <td class="print-meta-label">Mã quản lý</td>
+                  <td>WH-WI0005/F07</td>
+                </tr>
+                <tr>
+                  <td class="print-meta-label">Phiên bản</td>
+                  <td>00</td>
+                </tr>
+                <tr>
+                  <td class="print-meta-label">Ngày ban hành</td>
+                  <td>05/03/2026</td>
+                </tr>
+                <tr>
+                  <td class="print-meta-label">Số Trang</td>
+                  <td>01</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <!-- 5 box đều nhau: Shipment (có QR) | Mã NV soạn | Nhà máy | Ngày giao | Ngày in -->
+        <div class="print-info-boxes">
+          <div class="print-info-box">
+            <div class="print-info-box-label">SHIPMENT</div>
+            <div class="print-info-box-value">{{selectedShipment}}</div>
+            <div class="print-info-box-qr">
+              <img *ngIf="printQrDataUrl" [src]="printQrDataUrl" alt="QR" class="print-qr-inline">
+            </div>
           </div>
-          <div class="print-box">
-            <div class="print-box-label">MÃ NHÂN VIÊN SOẠN</div>
-            <div class="print-box-value">{{getCurrentUser()}}</div>
+          <div class="print-info-box">
+            <div class="print-info-box-label">MÃ NV SOẠN</div>
+            <div class="print-info-box-value print-sign-area">&nbsp;</div>
           </div>
-          <div class="print-box">
-            <div class="print-box-label">NHÀ MÁY</div>
-            <div class="print-box-value">{{printFactory}}</div>
+          <div class="print-info-box print-info-box-center">
+            <div class="print-info-box-label">NHÀ MÁY</div>
+            <div class="print-info-box-value">{{printFactory}}</div>
           </div>
-          <div class="print-box">
-            <div class="print-box-label">NGÀY GIAO</div>
-            <div class="print-box-value">{{printDispatchDate || '—'}}</div>
+          <div class="print-info-box print-info-box-center">
+            <div class="print-info-box-label">NGÀY GIAO</div>
+            <div class="print-info-box-value">{{printDispatchDate || '—'}}</div>
+          </div>
+          <div class="print-info-box print-info-box-center">
+            <div class="print-info-box-label">NGÀY IN</div>
+            <div class="print-info-box-value">{{getPrintDate()}}</div>
           </div>
         </div>
         <!-- Nội dung theo pallet -->
@@ -724,9 +762,7 @@
             <thead>
               <tr>
                 <th>NO</th>
-                <th>SHIPMENT</th>
                 <th>PALLET</th>
-                <th>XP</th>
                 <th>NGÀY</th>
                 <th>BATCH</th>
                 <th>MÃ TP</th>
@@ -744,9 +780,7 @@
             <tbody>
               <tr *ngFor="let material of group.materials; let i = index">
                 <td>{{i + 1}}</td>
-                <td>{{material.shipment}}</td>
                 <td>{{material.pallet || ''}}</td>
-                <td>{{material.xp || ''}}</td>
                 <td>{{material.exportDate | date:'dd/MM/yyyy'}}</td>
                 <td>{{material.batchNumber || ''}}</td>
                 <td>{{material.materialCode}}</td>

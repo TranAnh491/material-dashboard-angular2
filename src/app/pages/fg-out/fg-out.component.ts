@@ -1911,18 +1911,34 @@ export class FgOutComponent implements OnInit, OnDestroy {
                 @page { size: A4 landscape; margin: 12mm; }
                 * { box-sizing: border-box; }
                 body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-                .print-header-boxes { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-                .print-box { border: 1px solid #000; padding: 8px 12px; min-width: 100px; text-align: center; }
-                .print-box-label { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
-                .print-box-shipment, .print-box-value { font-size: 13px; font-weight: 600; }
-                .print-qr { display: block; width: 80px; height: 80px; margin: 4px auto 0; }
+                .print-top-header { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+                .print-top-header td { vertical-align: middle; border: 1px solid #000; padding: 8px; }
+                .print-logo-cell { width: 230px; min-width: 230px; text-align: center; }
+                .print-logo-cell img { max-width: 100%; max-height: 80px; object-fit: contain; }
+                .print-title-cell { text-align: center; padding: 8px; }
+                .print-title-line1 { font-size: 18px; font-weight: bold; }
+                .print-title-line2 { font-size: 14px; text-transform: uppercase; }
+                .print-doc-meta-cell { width: 230px; min-width: 230px; vertical-align: middle; }
+                .print-doc-meta-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                .print-doc-meta-table td { border: 1px solid #000; padding: 4px 6px; }
+                .print-meta-label { width: 45%; background: #f5f5f5; }
+                .print-title-line1 { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+                .print-title-line2 { font-size: 14px; text-transform: uppercase; }
+                .print-info-boxes { display: flex; gap: 0; margin-bottom: 12px; }
+                .print-info-box { flex: 1; border: 1px solid #000; padding: 8px; text-align: left; min-width: 0; }
+                .print-info-box-center { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                .print-info-box-label { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+                .print-info-box-value { font-size: 12px; font-weight: 600; }
+                .print-sign-area { min-height: 60px; }
+                .print-info-box-qr { margin-top: 6px; }
+                .print-qr-inline { display: block; width: 60px; height: 60px; }
                 .print-pallet-title { font-weight: bold; margin: 12px 0 4px; font-size: 12px; }
                 .print-table-content { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px; }
                 .print-table-content th, .print-table-content td { border: 1px solid #000; padding: 4px 6px; text-align: center; }
                 .print-table-content th { background: #f0f0f0; font-weight: bold; }
                 @media print {
                   body { margin: 0; padding: 0; }
-                  .print-header-boxes, .print-box { break-inside: avoid; }
+                  .print-top-header, .print-info-boxes { break-inside: avoid; }
                   .print-table-content { break-inside: auto; }
                 }
               </style>
@@ -1942,6 +1958,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Get current user (mã nhân viên soạn)
   getCurrentUser(): string {
     return this.currentUserDisplay || 'NV';
+  }
+
+  getLogoSrc(): string {
+    return (typeof window !== 'undefined' && window.location?.origin)
+      ? window.location.origin + '/assets/img/logo.png'
+      : '/assets/img/logo.png';
+  }
+
+  getPrintDate(): string {
+    return new Date().toLocaleDateString('vi-VN');
   }
 
   // Format date for input field (YYYY-MM-DD)

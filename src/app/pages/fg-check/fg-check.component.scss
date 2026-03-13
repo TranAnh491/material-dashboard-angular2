@@ -1327,11 +1327,15 @@
     align-items: stretch;
     gap: 12px;
     
-    // Chỉ hiển thị nút Check trên mobile
+    // Chỉ hiển thị nút Check + Shipment Check trên mobile
     .custom-btn {
       display: none;
       
       &.btn-primary {
+        display: flex !important;
+      }
+
+      &.btn-shipment-check {
         display: flex !important;
       }
     }
@@ -1556,5 +1560,147 @@
     max-width: 100%;
     margin: 5px;
   }
+}
+
+// ===== SHIPMENT CHECK =====
+.btn-shipment-check {
+  background: #1565c0;
+  color: #fff;
+  border: none;
+  &:hover { background: #0d47a1; }
+}
+
+.sc-modal {
+  width: 520px;
+  max-width: 96vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sc-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  .sc-shipment-input { flex: 1; font-size: 15px; font-weight: 600; }
+}
+
+.sc-scan-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #f0f4ff;
+  border: 2px solid #1565c0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  i { color: #1565c0; font-size: 22px; }
+  .sc-scan-input { flex: 1; font-size: 15px; border: none; background: transparent; outline: none; }
+}
+
+.sc-last-result {
+  display: flex;
+  justify-content: center;
+}
+
+.sc-result-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  i { font-size: 28px; }
+
+  &.ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 2px solid #2e7d32;
+  }
+  &.error {
+    background: #ffebee;
+    color: #c62828;
+    border: 2px solid #c62828;
+  }
+}
+
+.sc-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #333;
+}
+
+.btn-reset-sc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: #555;
+  &:hover { background: #f0f0f0; }
+  i { font-size: 14px; }
+}
+
+.sc-pallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.sc-pallet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  transition: background 0.2s;
+
+  &.sc-ok {
+    background: #e8f5e9;
+    border-color: #66bb6a;
+    .sc-status-icon { color: #2e7d32; }
+    .sc-pallet-code { color: #1b5e20; font-weight: 600; }
+  }
+  &.sc-pending {
+    .sc-status-icon { color: #bbb; }
+  }
+}
+
+.sc-status-icon { font-size: 20px; }
+
+.sc-pallet-code {
+  font-size: 13px;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.sc-hint {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
 }
 

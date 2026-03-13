@@ -726,7 +726,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">print</i>
-        In Tem Barcode 1D
+        In Thông Tin Soạn Hàng
       </h5>
       <button type="button" class="close-btn" (click)="closePrintLabelDialog()">
         <i class="material-icons">close</i>
@@ -746,43 +746,35 @@
       </div>
       
       <div class="print-label-options">
-        <button class="print-option-btn shipment-btn" (click)="printShipmentLabel()">
-          <i class="material-icons">straighten</i>
-          <div class="btn-content">
-            <span class="btn-title">Shipment Label</span>
-            <small class="btn-desc">In 1 tem barcode 1D với mã shipment</small>
-          </div>
-        </button>
-        
-        <button class="print-option-btn pallet-btn" (click)="printPalletLabels()">
-          <i class="material-icons">straighten</i>
-          <div class="btn-content">
-            <span class="btn-title">Pallet Labels</span>
-            <small class="btn-desc">In nhiều tem barcode 1D theo Qty Pallet</small>
-          </div>
-        </button>
-        
         <button class="print-option-btn shipment-order-btn" (click)="printShipmentOrder()">
           <i class="material-icons">description</i>
           <div class="btn-content">
             <span class="btn-title">SHIPMENT ORDER</span>
-            <small class="btn-desc">In A4: toàn bộ thông tin shipment, mã QR, ký tên soạn</small>
+            <small class="btn-desc">In A4: toàn bộ thông tin (P1 + P2 + P3)</small>
           </div>
         </button>
-        
-        <button class="print-option-btn pkl-btn" (click)="openPKLDialog()">
-          <i class="material-icons">inventory_2</i>
+
+        <button class="print-option-btn" (click)="printP1Only()">
+          <i class="material-icons">fact_check</i>
           <div class="btn-content">
-            <span class="btn-title">PACKING LIST (PKL)</span>
-            <small class="btn-desc">In A4: danh sách FG Out chia theo Pallet, có QR code</small>
+            <span class="btn-title">THÔNG TIN SOẠN HÀNG</span>
+            <small class="btn-desc">In A4: chỉ P1 – thông tin soạn hàng / picking information</small>
           </div>
         </button>
-        
-        <button class="print-option-btn preview-order-btn" (click)="previewShipmentOrder()" type="button">
-          <i class="material-icons">visibility</i>
+
+        <button class="print-option-btn" (click)="printP2Only()">
+          <i class="material-icons">checklist</i>
           <div class="btn-content">
-            <span class="btn-title">Xem mẫu format</span>
-            <small class="btn-desc">Mở template Shipment Order để xem / chỉnh sửa format</small>
+            <span class="btn-title">CÁC MỤC KIỂM TRA</span>
+            <small class="btn-desc">In A4: chỉ P2 – các mục kiểm tra / inspection items</small>
+          </div>
+        </button>
+
+        <button class="print-option-btn" (click)="printPalletLabelsFromPKL()">
+          <i class="material-icons">label</i>
+          <div class="btn-content">
+            <span class="btn-title">PALLET LABEL</span>
+            <small class="btn-desc">In tem 57×32mm: mỗi pallet 1 tem (QR + mã pallet)</small>
           </div>
         </button>
       </div>

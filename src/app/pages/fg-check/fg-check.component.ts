@@ -104,6 +104,20 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   reportMonth: number = new Date().getMonth() + 1;
   reportYear: number = new Date().getFullYear();
 
+  // Shipment Check – scan pallet
+  showShipmentCheckDialog: boolean = false;
+  shipmentCheckCode: string = '';          // Số shipment đang check
+  shipmentCheckScanInput: string = '';     // Ô scan pallet
+  shipmentCheckPallets: string[] = [];     // Danh sách mã pallet kỳ vọng
+  shipmentCheckResults: Array<{
+    palletCode: string;
+    status: 'pending' | 'ok' | 'error';
+  }> = [];
+  shipmentCheckLoading: boolean = false;
+  shipmentCheckLastResult: 'ok' | 'error' | null = null;
+  shipmentCheckLastScanned: string = '';
+  private shipmentCheckScanFirstChar: number = 0;
+
   // Popup xóa: quét mã quản lý (chỉ scan)
   private readonly MANAGER_CODES = ['ASP0106', 'ASP0538', 'ASP0119', 'ASP1761'];
   showDeleteConfirmPopup: boolean = false;
@@ -2496,6 +2510,105 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, fileName);
     this.closeReportMonthDialog();
     alert(`✅ Đã tải báo cáo: ${itemsInMonth.length} dòng (Tháng ${this.reportMonth}/${this.reportYear})`);
+    this.cdr.detectChanges();
+  }
+
+  // ===================== SHIPMENT CHECK =====================
+
+  openShipmentCheckDialog(): void {
+    this.shipmentCheckCode = '';
+    this.shipmentCheckScanInput = '';
+    this.shipmentCheckPallets = [];
+    this.shipmentCheckResults = [];
+    this.shipmentCheckLastResult = null;
+    this.shipmentCheckLastScanned = '';
+    this.showShipmentCheckDialog = true;
+  }
+
+  closeShipmentCheckDialog(): void {
+    this.showShipmentCheckDialog = false;
+  }
+
+  async loadShipmentPallets(): Promise<void> {
+    const code = this.shipmentCheckCode.trim().toUpperCase();
+    if (!code) return;
+    this.shipmentCheckLoading = true;
+    this.shipmentCheckPallets = [];
+    this.shipmentCheckResults = [];
+    this.shipmentCheckLastResult = null;
+    try {
+      const snap = await this.firestore.collection('fg-out', ref =>
+        ref.where('shipment', '==', code)
+      ).get().toPromise();
+
+      if (!snap || snap.empty) {
+        alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
+        this.shipmentCheckLoading = false;
+        return;
+      }
+
+      const seen = new Set<string>();
+      const palletNames: string[] = [];
+      snap.docs.forEach(doc => {
+        const p = ((doc.data() as any).pallet || '').trim();
+        if (p && !seen.has(p)) { seen.add(p); palletNames.push(p); }
+      });
+      palletNames.sort((a, b) => {
+        if (a === 'Không có Pallet') return 1;
+        if (b === 'Không có Pallet') return -1;
+        return a.localeCompare(b);
+      });
+
+      // Tạo mã pallet theo quy tắc: shipment + W + tuần + STT
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
+      const weekStr = String(weekNum).padStart(2, '0');
+
+      this.shipmentCheckPallets = palletNames.map((_, idx) =>
+        `${code}W${weekStr}${String(idx + 1).padStart(2, '0')}`
+      );
+      this.shipmentCheckResults = this.shipmentCheckPallets.map(p => ({
+        palletCode: p,
+        status: 'pending' as const
+      }));
+    } catch (e) {
+      alert('❌ Lỗi: ' + (e as any)?.message);
+    }
+    this.shipmentCheckLoading = false;
+    this.cdr.detectChanges();
+  }
+
+  onShipmentCheckKeyEnter(): void {
+    const scanned = (this.shipmentCheckScanInput || '').trim().toUpperCase();
+    if (!scanned) return;
+    this.shipmentCheckLastScanned = scanned;
+
+    const idx = this.shipmentCheckResults.findIndex(r => r.palletCode === scanned);
+    if (idx > -1) {
+      this.shipmentCheckResults[idx].status = 'ok';
+      this.shipmentCheckLastResult = 'ok';
+    } else {
+      this.shipmentCheckLastResult = 'error';
+    }
+    this.shipmentCheckScanInput = '';
+    this.cdr.detectChanges();
+  }
+
+  onShipmentCheckScanInput(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.onShipmentCheckKeyEnter();
+    }
+  }
+
+  get shipmentCheckDoneCount(): number {
+    return this.shipmentCheckResults.filter(r => r.status === 'ok').length;
+  }
+
+  resetShipmentCheckResults(): void {
+    this.shipmentCheckResults = this.shipmentCheckResults.map(r => ({ ...r, status: 'pending' as const }));
+    this.shipmentCheckLastResult = null;
+    this.shipmentCheckLastScanned = '';
     this.cdr.detectChanges();
   }
 }
