@@ -129,6 +129,7 @@
             <th>TỒN KHO</th>
             <th>VỊ TRÍ</th>
             <th>LOẠI HÀNG</th>
+            <th>GỘP THÙNG</th>
             <th>GHI CHÚ</th>
             <th>KHÁCH</th>
             <th>DUYỆT XUẤT</th>
@@ -281,6 +282,14 @@
                         (change)="updateMaterialInFirebase(row.material)">
                   <option value="">--</option>
                   <option *ngFor="let type of productTypes" [value]="type">{{type}}</option>
+                </select>
+              </td>
+              <td class="merge-carton-cell">
+                <select class="editable-input merge-carton-select"
+                        [(ngModel)]="row.material.mergeCarton"
+                        (change)="onMergeCartonChange(row.material)">
+                  <option value="">--</option>
+                  <option *ngFor="let n of mergeCartonOptions" [value]="n">{{n}}</option>
                 </select>
               </td>
               <td>

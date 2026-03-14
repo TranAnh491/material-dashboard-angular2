@@ -1227,10 +1227,16 @@ mat-checkbox {
   }
 }
 
+.btn-non-stock-active {
+  background: #e65100 !important;
+  color: white !important;
+  &:hover { background: #bf360c !important; }
+}
+
 .btn-today {
   background: #4CAF50 !important;
   color: white !important;
-  
+
   &:hover {
     background: #43A047 !important;
   }

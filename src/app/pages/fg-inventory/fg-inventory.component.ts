@@ -130,6 +130,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   
   // Display options
   showCompleted: boolean = true;
+  showNonStock: boolean = false; // false = ẩn ton=0; true (Non Stock mode) = chỉ hiện ton=0
   
   // Permissions
   hasDeletePermission: boolean = false;
@@ -439,6 +440,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
       // Filter by completed status
       const isCompletedVisible = this.showCompleted || !material.isCompleted;
+
+      // Filter by stock (ton): ẩn ton=0 theo mặc định; Non Stock mode = chỉ hiện ton=0
+      const ton = material.ton ?? 0;
+      if (this.showNonStock) {
+        if (ton > 0) return false; // Non Stock: chỉ hiện ton=0
+      } else {
+        if (ton <= 0) return false; // Mặc định: ẩn ton=0
+      }
 
       return isInDateRange && isCompletedVisible;
     });
@@ -1365,6 +1374,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.startDate = '2020-01-01';
     this.endDate = '2030-12-31';
     this.showCompleted = true;
+    this.showNonStock = false;
     this.selectedFactory = 'TOTAL';
     this.applyFilters();
     this.showTimeRangeDialog = false;
@@ -1373,6 +1383,11 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       totalMaterials: this.materials.length,
       filteredMaterials: this.filteredMaterials.length
     });
+  }
+
+  filterNonStock(): void {
+    this.showNonStock = !this.showNonStock;
+    this.applyFilters();
   }
 
   filterTodayImport(): void {

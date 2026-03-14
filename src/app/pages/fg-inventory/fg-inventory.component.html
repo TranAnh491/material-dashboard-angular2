@@ -42,6 +42,13 @@
           NK hôm nay
         </button>
 
+        <button class="custom-btn"
+                [class.btn-non-stock-active]="showNonStock"
+                (click)="filterNonStock()">
+          <i class="material-icons">inventory</i>
+          {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
+        </button>
+
       </div>
     </div>
     

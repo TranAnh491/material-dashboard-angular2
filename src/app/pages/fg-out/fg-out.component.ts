@@ -27,6 +27,7 @@ export interface FgOutItem {
   odd: number;
   location: string; // Thêm trường vị trí
   productType?: string; // Loại hàng: Mass, ĐL, SAMPLE
+  mergeCarton?: string; // Gộp thùng: 01–99 (nhóm dòng cùng pallet cùng số lại)
   notes: string;
   updateCount: number;
   pushNo: string; // Thêm PushNo
@@ -151,6 +152,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Product types for dropdown
   productTypes: string[] = ['MASS', 'ĐL', 'SAMPLE'];
+
+  // Gộp Thùng options: 01 → 99
+  mergeCartonOptions: string[] = Array.from({ length: 99 }, (_, i) => String(i + 1).padStart(2, '0'));
   
   // Xuất Kho Dialog
   showXuatKhoDialog: boolean = false;
@@ -308,10 +312,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
             updateCount: data.updateCount || 1,
             pushNo: data.pushNo || '000',
             approved: data.approved || false,
+            mergeCarton: data.mergeCarton || '',
             exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
           };
         });
-        
+
         this.materials = firebaseMaterials;
         this.sortMaterials(); // Sắp xếp trước khi apply filters
         this.applyFilters();
@@ -484,6 +489,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
     console.log(`✅ Sorted ${this.materials.length} FG Out materials`);
   }
 
+  /** Đổi Gộp Thùng: lưu Firebase và sắp xếp lại để các dòng cùng pallet+mergeCarton nằm cạnh nhau */
+  onMergeCartonChange(material: FgOutItem): void {
+    this.updateMaterialInFirebase(material);
+    this.sortMaterials();
+    this.applyFilters();
+  }
+
   /** Cập nhật Firebase và sắp xếp lại (dòng nhảy tới vị trí theo Shipment, Pallet, Mã TP) */
   onMaterialFieldChange(material: FgOutItem): void {
     this.updateMaterialInFirebase(material);
@@ -534,28 +546,39 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Load FG Inventory theo Mã TP, lấy danh sách unique Batch / LOT / LSX */
+  /** Load FG Inventory theo Mã TP, lấy danh sách unique Batch / LOT / LSX có tồn > 0 */
   async loadInventoryOptionsForMaterial(
     materialCode: string,
     factory: string,
     field: 'batch' | 'lot' | 'lsx'
   ): Promise<string[]> {
-    const code = (materialCode || '').trim().toUpperCase();
-    const fact = (factory || 'ASM1').trim().toUpperCase();
-    if (!code) return [];
-    const snapshot = await firstValueFrom(
-      this.firestore.collection('fg-inventory', ref =>
-        ref.where('materialCode', '==', code).where('factory', '==', fact)
-      ).get()
+    const codeRaw = (materialCode || '').trim();
+    if (!codeRaw) return [];
+    // Query tất cả variant hoa/thường vì Firestore phân biệt case
+    const variants = [...new Set([codeRaw, codeRaw.toUpperCase(), codeRaw.toLowerCase()])];
+    const snapshots = await Promise.all(
+      variants.map(v => firstValueFrom(
+        this.firestore.collection('fg-inventory', ref => ref.where('materialCode', '==', v)).get()
+      ))
     );
     const set = new Set<string>();
-    snapshot.docs.forEach(doc => {
-      const d = doc.data() as any;
-      const ton = d.ton ?? d.stock ?? (d.quantity ?? 0) - (d.exported ?? 0);
-      if (ton > 0) {
-        const v = field === 'batch' ? (d.batchNumber || '') : field === 'lot' ? (d.lot || d.Lot || '') : (d.lsx || d.LSX || '');
+    const seenIds = new Set<string>();
+    snapshots.forEach(snap => {
+      snap.docs.forEach(doc => {
+        if (seenIds.has(doc.id)) return;
+        seenIds.add(doc.id);
+        const d = doc.data() as any;
+        // Tính ton linh hoạt: nếu ton field != null và != 0 thì dùng, ngược lại fallback
+        const ton = (d.ton != null && d.ton !== 0)
+          ? d.ton
+          : (d.stock != null ? d.stock : (Number(d.quantity ?? 0) - Number(d.exported ?? 0)));
+        // Chỉ hiện LOT/Batch/LSX từ records còn tồn > 0
+        if (ton <= 0) return;
+        const v = field === 'batch' ? (d.batchNumber || d.batch || '')
+                : field === 'lot'   ? (d.lot || d.Lot || '')
+                :                     (d.lsx || d.LSX || '');
         if (String(v).trim()) set.add(String(v).trim());
-      }
+      });
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
@@ -693,11 +716,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return true;
     });
     
-    // Sắp xếp: Pallet → Mã TP → LSX → Shipment → Ngày → Batch
+    // Sắp xếp: Pallet → Gộp Thùng (nhóm cùng pallet+mergeCarton liền nhau) → Mã TP → LSX → Shipment → Ngày → Batch
     this.filteredMaterials.sort((a, b) => {
       const palletA = String(a.pallet ?? '').toUpperCase();
       const palletB = String(b.pallet ?? '').toUpperCase();
       if (palletA !== palletB) return palletA.localeCompare(palletB);
+      // Rows có mergeCarton được nhóm ngay sau nhau (trong cùng pallet)
+      const mcA = String(a.mergeCarton ?? '').padStart(3, '0'); // pad để sort '01' < '09' < '10'
+      const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
+      if (mcA !== mcB) return mcA.localeCompare(mcB);
       const codeA = String(a.materialCode ?? '').toUpperCase();
       const codeB = String(b.materialCode ?? '').toUpperCase();
       if (codeA !== codeB) return codeA.localeCompare(codeB);
@@ -2018,6 +2045,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             updateCount: data.updateCount || 1,
             pushNo: data.pushNo || '000',
             approved: data.approved || false,
+            mergeCarton: data.mergeCarton || '',
             exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
           };
         });

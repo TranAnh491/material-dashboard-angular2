@@ -863,6 +863,32 @@ tr.pallet-even td {
   }
 }
 
+// Gộp Thùng cell
+.merge-carton-cell {
+  background: #fffde7 !important;
+  text-align: center;
+  min-width: 60px;
+  max-width: 70px;
+  padding: 2px !important;
+}
+
+.merge-carton-select {
+  width: 100%;
+  padding: 6px 2px !important;
+  font-size: $fg-font-size-base !important;
+  font-family: $fg-font-family !important;
+  border: 1px solid #f9a825 !important;
+  border-radius: 3px;
+  background: #fffde7;
+  text-align: center;
+  cursor: pointer;
+
+  &:focus {
+    outline: 2px solid #f9a825;
+    border-color: #f9a825 !important;
+  }
+}
+
 // Product type cell styling
 .product-type-cell {
   background: #ffffff !important;
