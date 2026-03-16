@@ -709,9 +709,20 @@
             <span class="label">Vị trí hiện tại:</span>
             <span class="value highlight-current">{{ selectedMaterialForStore.location || 'Chưa có' }}</span>
           </div>
-          <div class="info-row">
-            <span class="label">Tồn kho:</span>
-            <span class="value">{{ selectedMaterialForStore.stock | number:'1.0-2' }}</span>
+          <div class="info-row highlight-po-stock">
+            <span class="label">PO này tồn kho:</span>
+            <span class="value">{{ storeMaterialPOStock | number:'1.0-2' }}</span>
+          </div>
+        </div>
+
+        <!-- Tồn kho theo vị trí (cùng mã hàng) -->
+        <div class="stock-by-location-section" *ngIf="storeMaterialStockByLocation.length > 0">
+          <p class="locations-title">Tồn kho theo vị trí (cùng mã hàng):</p>
+          <div class="stock-by-location-list">
+            <div *ngFor="let item of storeMaterialStockByLocation" class="stock-by-location-row">
+              <span class="location-name">{{ item.location }}</span>
+              <span class="location-stock">{{ item.stock | number:'1.0-2' }}</span>
+            </div>
           </div>
         </div>
         

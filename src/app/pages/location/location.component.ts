@@ -127,6 +127,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedTargetLocation = ''; // Vị trí đích được chọn
   isSearchingMaterial = false;
   storeMaterialStep: 'scan' | 'select' | 'choose-location' | 'confirm' = 'scan';
+  /** Tồn kho của PO được scan (cùng materialCode + poNumber) */
+  storeMaterialPOStock: number = 0;
+  /** Tồn kho theo từng vị trí (cùng materialCode), dùng để hiển thị khi scan */
+  storeMaterialStockByLocation: { location: string; stock: number }[] = [];
   
   // FG Location Modal
   showFGModal = false;
@@ -1551,6 +1555,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
     this.isSearchingMaterial = false;
+    this.storeMaterialPOStock = 0;
+    this.storeMaterialStockByLocation = [];
     
     // Force change detection để đảm bảo modal đã render
     this.cdr.detectChanges();
@@ -1586,6 +1592,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
     this.isSearchingMaterial = false;
+    this.storeMaterialPOStock = 0;
+    this.storeMaterialStockByLocation = [];
   }
 
   async processStoreMaterialQR(): Promise<void> {
@@ -1699,6 +1707,21 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // Chỉ hiển thị material được scan (khớp với QR code)
       this.foundMaterialsForStore = [matchedMaterial];
       this.selectedMaterialForStore = matchedMaterial;
+
+      // Tồn kho của PO được scan
+      this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
+
+      // Tồn kho theo từng vị trí (cùng materialCode): gộp stock theo location
+      const stockByLoc = new Map<string, number>();
+      allMaterials.forEach(m => {
+        const loc = (m.location || '').trim();
+        if (!loc) return;
+        const current = stockByLoc.get(loc) ?? 0;
+        stockByLoc.set(loc, current + (m.stock ?? 0));
+      });
+      this.storeMaterialStockByLocation = Array.from(stockByLoc.entries())
+        .map(([location, stock]) => ({ location, stock }))
+        .sort((a, b) => a.location.localeCompare(b.location));
 
       // Tạo danh sách tất cả các vị trí hiện có của cùng materialCode
       // Bao gồm tất cả các vị trí (không loại bỏ vị trí hiện tại)
