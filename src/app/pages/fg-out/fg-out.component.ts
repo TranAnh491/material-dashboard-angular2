@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { Subject, forkJoin, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -191,6 +191,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   pklPreviewRows: any[][] = [];
   pklHeaderRow: any[] = [];
   pklPreviewStartRow: number = 0;
+  /** Preview Bước 2: từng dòng có Mã TP, Carton No., QTY… để không gộp dòng (phân biệt theo Carton No.) */
+  pklPreviewMappedRows: { rowNum: number; materialCode: string; cartonNo: string; quantity: number; po: string }[] = [];
   pklParsedItems: Partial<FgOutItem>[] = [];
 
   // Drag-and-drop state — bảng chính
@@ -213,7 +215,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
-    private fgInventoryLocationService: FGInventoryLocationService
+    private fgInventoryLocationService: FGInventoryLocationService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -1071,7 +1074,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   selectPKLFile(): void {
-    this.pklFileInput?.nativeElement?.click?.();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.style.display = 'none';
+    input.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        this.pklFile = file;
+        this.cdr.detectChanges();
+      }
+      if (input.parentNode) document.body.removeChild(input);
+    };
+    document.body.appendChild(input);
+    input.click();
   }
 
   removePKLFile(): void {
@@ -1101,14 +1118,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Dòng tiêu đề = dòng có cột đầu tiên chứa ASP VN PN hoặc ASP VN P/N hoặc ASM VN PN hoặc ASM VN P/N. */
   private pklDetectHeaderRow(): number {
-    const headerKeywords = ['part no', 'p/no', 'asp vn pn', 'carton no', 'quantity', 'mã tp', 'customer po'];
-    for (let r = 0; r < Math.min(this.pklRawRows.length, 50); r++) {
-      const row = this.pklRawRows[r] || [];
-      const rowText = row.map((c: any) => String(c ?? '').toLowerCase()).join(' ');
-      if (headerKeywords.some(kw => rowText.includes(kw))) return r;
-    }
-    return 0;
+    return this.pklDetectHeaderRowFromRows(this.pklRawRows);
   }
 
   pklApplyRowRange(): void {
@@ -1122,19 +1134,44 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
     this.pklPreviewStartRow = start;
     this.pklHeaderRow = this.pklRawRows[this.pklStartRow] || [];
+
+    // Build preview có cột Carton No. — dùng cột Mã TP đã map để lọc (không cố định cột 0), lấy Carton No. từ cartonNoDisplay hoặc carton
+    const mapping = this.pklBuildColumnMapping();
+    const headerRow = this.pklRawRows[this.pklStartRow] || [];
+    const headerTexts = new Set(headerRow.map((h: any) => this.pklNormalizeHeader(h)).filter(Boolean));
+    const mapped: { rowNum: number; materialCode: string; cartonNo: string; quantity: number; po: string }[] = [];
+    for (let r = start + 1; r <= end && r < this.pklRawRows.length; r++) {
+      const row = this.pklRawRows[r] || [];
+      if (!row.some((cell: any) => String(cell ?? '').trim() !== '')) continue;
+      const materialColIdx = mapping.materialCode !== undefined ? mapping.materialCode : 0;
+      const codeVal = this.pklExtractCellValue(row[materialColIdx] ?? '');
+      const codeTrim = codeVal.trim();
+      const firstChar = codeTrim.charAt(0).toUpperCase();
+      if (codeTrim.length < 7 || !['A', 'B', 'P', 'N', 'M', 'K', 'L'].includes(firstChar)) continue;
+      const materialCode = this.pklExtractCellValue(mapping.materialCode !== undefined ? row[mapping.materialCode] : row[0]);
+      const cartonNo = (mapping.cartonNoDisplay !== undefined ? this.pklExtractCellValue(row[mapping.cartonNoDisplay]) : '') ||
+        (mapping.carton !== undefined ? this.pklExtractCellValue(row[mapping.carton]) : '');
+      const quantity = mapping.quantity !== undefined ? this.pklParseNumber(row[mapping.quantity]) : 0;
+      const po = mapping.poShip !== undefined ? this.pklExtractCellValue(row[mapping.poShip]) : '';
+      mapped.push({ rowNum: r + 1, materialCode, cartonNo, quantity, po });
+    }
+    this.pklPreviewMappedRows = mapped;
   }
 
   pklParseAndShowPreview(): void {
     const mapping = this.pklBuildColumnMapping();
+    this.pklBuildMappingDisplay(mapping);
     this.pklParsedItems = this.pklParseDataWithMapping(mapping);
+    if (this.pklParsedItems.length === 0) {
+      alert('Không tìm thấy dữ liệu. Hãy kiểm tra lại dòng bắt đầu (header) ở Bước 2.\n\nGợi ý: Chọn đúng dòng chứa tên cột như "PART NO.", "Quantity", "ASP VN PN"...');
+    }
     this.pklStep = 3;
   }
 
   pklConfirmImport(): void {
     if (this.pklParsedItems.length === 0) return;
-    const materials: FgOutItem[] = this.pklParsedItems
-      .filter(m => (m.materialCode || '').trim())
-      .map(m => this.pklToFgOutItem(m));
+    // Giữ đúng số dòng như file — không filter theo materialCode
+    const materials: FgOutItem[] = this.pklParsedItems.map(m => this.pklToFgOutItem(m));
     this.materials = [...this.materials, ...materials];
     this.applyFilters();
     this.saveMaterialsToFirebase(materials);
@@ -1153,13 +1190,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
           const result = rows || [];
 
-          // Mở rộng merged cells - copy giá trị ô đầu xuống tất cả ô trong vùng gộp
+          // Header = dòng có cột đầu chứa ASP/ASM VN P(N); Quantity và Carton No. không expand để mỗi dòng giữ giá trị riêng (không gộp dòng)
+          const headerRowIndex = this.pklDetectHeaderRowFromRows(result);
+          const quantityCol = this.pklDetectColumnIndexInHeaderRow(result, headerRowIndex, ['quantity (pc)', 'quantity (pcs)', 'qty (pc)', 'qty (pcs)', 'quantity', 'qty', 'số lượng']);
+          const cartonNoCol = this.pklDetectColumnIndexInHeaderRow(result, headerRowIndex, ['carton no', 'carton no.', 'carton no ', 'no. of carton', 'carton #', 'no of box', 'no. of box', 'ttl carton', 'carton']);
+
+          // Ô merge: tách ra, nội dung giống nhau — trừ Quantity và Carton No.: không copy để mỗi dòng phân biệt (không gộp)
           const merges = (sheet as any)['!merges'] || [];
           for (const m of merges) {
             const sr = m.s?.r ?? 0;
             const sc = m.s?.c ?? 0;
             const er = m.e?.r ?? sr;
             if (sr >= result.length) continue;
+            if (sc === quantityCol || sc === cartonNoCol) continue;
             const val = result[sr][sc];
             for (let r = sr + 1; r <= er && r < result.length; r++) {
               if (!result[r]) result[r] = [];
@@ -1173,6 +1216,27 @@ export class FgOutComponent implements OnInit, OnDestroy {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  /** Dòng tiêu đề = dòng có cột đầu tiên chứa ASP VN PN hoặc ASP VN P/N hoặc ASM VN PN hoặc ASM VN P/N. */
+  private pklDetectHeaderRowFromRows(rows: any[][]): number {
+    const firstColHeaders = ['asp vn pn', 'asp vn p/n', 'asm vn pn', 'asm vn p/n'];
+    for (let r = 0; r < Math.min(rows.length, 100); r++) {
+      const firstCell = rows[r]?.[0];
+      const norm = this.pklNormalizeHeader(firstCell);
+      if (firstColHeaders.some(kw => norm.includes(kw))) return r;
+    }
+    return 0;
+  }
+
+  /** Chỉ số cột trong đúng hàng header theo danh sách từ khóa (để không expand merge cột đó). */
+  private pklDetectColumnIndexInHeaderRow(rows: any[][], headerRowIndex: number, keywords: string[]): number {
+    const row = rows[headerRowIndex] || [];
+    for (let c = 0; c < row.length; c++) {
+      const h = this.pklNormalizeHeader(row[c]);
+      if (keywords.some(kw => h.includes(kw))) return c;
+    }
+    return -1;
   }
 
   private pklExtractCellValue(val: any): string {
@@ -1190,24 +1254,37 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return isNaN(n) ? 0 : n;
   }
 
+  // Chuẩn hóa text header: xóa newline, tab, khoảng trắng thừa
+  private pklNormalizeHeader(val: any): string {
+    return String(val ?? '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
   private pklBuildColumnMapping(): Record<string, number> {
     const header = this.pklRawRows[this.pklStartRow] || [];
     const map: Record<string, number> = {};
     const patterns: { key: string; keywords: string[] }[] = [
-      { key: 'materialCode', keywords: ['part no', 'mã tp', 'material', 'mã hàng', 'asp vn pn'] },
-      { key: 'batchNumber', keywords: ['batch', 'lô', 'batch no'] },
-      { key: 'lot', keywords: ['lot', 'số lot'] },
-      { key: 'lsx', keywords: ['lsx', 'work order'] },
-      { key: 'quantity', keywords: ['quantity', 'qty', 'số lượng', 'quantity (pcs)', 'quantity (pc)'] },
-      { key: 'poShip', keywords: ['customer po', 'asp po', 'po', 'po#'] },
-      { key: 'carton', keywords: ['carton', 'no of box', 'standard box'] },
-      { key: 'pallet', keywords: ['p/no', 'p/no.', 'pallet', 'ttl plt'] },
-      { key: 'location', keywords: ['vị trí', 'location'] }
+      // materialCode: ưu tiên 'asp vn p/n' và 'asp vn pn' (ASP PKL), rồi 'part no', rồi generic
+      { key: 'materialCode', keywords: ['asp vn p/n', 'asp vn pn', 'part no', 'mã tp', 'mã hàng', 'material code', 'item code'] },
+      { key: 'batchNumber',  keywords: ['batch no', 'batch', 'lô hàng', 'lô', 'dnnk'] },
+      { key: 'lot',          keywords: ['lot no', 'số lot', 'lot'] },
+      { key: 'lsx',          keywords: ['lsx', 'work order', 'wo'] },
+      { key: 'quantity',     keywords: ['quantity (pc)', 'quantity (pcs)', 'qty (pc)', 'qty (pcs)', 'quantity', 'qty', 'số lượng'] },
+      { key: 'poShip',       keywords: ['customer po#', 'customer po #', 'customer po', 'asp po#', 'asp po', 'po number', 'po no', 'po#'] },
+      // Carton No. (chuỗi kiểu "1-15/16") — ưu tiên trước carton số
+      { key: 'cartonNoDisplay', keywords: ['carton no', 'carton no.', 'carton no ', 'no. of carton', 'carton #'] },
+      { key: 'carton',       keywords: ['no of box', 'no. of box', 'ttl carton', 'total carton', 'standard box', 'carton'] },
+      { key: 'pallet',       keywords: ['p/no.', 'p/no', 'ttl plt', 'pallet no', 'pallet'] },
+      { key: 'notes',        keywords: ['ghi chú', 'note', 'remarks', 'description of goods', 'description'] },
+      { key: 'location',     keywords: ['vị trí', 'location'] }
     ];
     header.forEach((h, idx) => {
-      const hLower = String(h ?? '').toLowerCase();
+      const hNorm = this.pklNormalizeHeader(h);
       for (const p of patterns) {
-        if (p.keywords.some(kw => hLower.includes(kw)) && map[p.key] === undefined) {
+        if (p.keywords.some(kw => hNorm.includes(kw)) && map[p.key] === undefined) {
           map[p.key] = idx;
           break;
         }
@@ -1216,16 +1293,66 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return map;
   }
 
+  /** Lấy chuỗi Carton No. từ item (ghi trong notes khi import) để hiển thị Bước 3. */
+  pklCartonNoDisplay(m: Partial<FgOutItem>): string {
+    const n = (m as any).notes ?? m.notes ?? '';
+    const match = String(n).match(/Carton No\.:\s*([^|]+)/);
+    return match ? match[1].trim() : '';
+  }
+
+  // Tên hiển thị cho từng key (dùng ở Step 3 preview)
+  pklMappingDisplay: { key: string; label: string; colName: string }[] = [];
+
+  private pklBuildMappingDisplay(map: Record<string, number>): void {
+    const header = this.pklRawRows[this.pklStartRow] || [];
+    const labels: Record<string, string> = {
+      materialCode: 'Mã TP', batchNumber: 'Batch', lot: 'LOT', lsx: 'LSX',
+      quantity: 'Số lượng', poShip: 'PO', cartonNoDisplay: 'Carton No.', carton: 'Carton', pallet: 'Pallet',
+      notes: 'Ghi chú', location: 'Vị trí'
+    };
+    this.pklMappingDisplay = Object.keys(labels).map(key => ({
+      key,
+      label: labels[key],
+      colName: map[key] !== undefined ? this.pklNormalizeHeader(header[map[key]]) || `Cột ${map[key] + 1}` : '—'
+    }));
+  }
+
   private pklParseDataWithMapping(mapping: Record<string, number>): Partial<FgOutItem>[] {
     const start = this.pklStartRow + 1;
     const end = Math.min(this.pklEndRow + 1, this.pklRawRows.length);
     const result: Partial<FgOutItem>[] = [];
-    let lastPallet = ''; // Fill-down cho P/NO (cột merge) - lấy giá trị từ dòng trước nếu dòng hiện tại trống
+    let lastPallet = ''; // Fill-down cho P/NO (cột merge)
+
+    // Tập tên cột header để phát hiện dòng header bị lặp do merged cell
+    const headerRow = this.pklRawRows[this.pklStartRow] || [];
+    const headerTexts = new Set(
+      headerRow.map((h: any) => this.pklNormalizeHeader(h)).filter(Boolean)
+    );
+
     for (let r = start; r < end; r++) {
       const row = this.pklRawRows[r] || [];
-      const materialCode = this.pklExtractCellValue(mapping.materialCode !== undefined ? row[mapping.materialCode] : '');
+
+      // Bỏ dòng hoàn toàn trống
+      if (!row.some(cell => String(cell ?? '').trim() !== '')) continue;
+
+      // Bỏ dòng lặp header do merged cell (mọi cell đều là tên cột)
+      const cellsWithValue = row.filter(cell => String(cell ?? '').trim() !== '');
+      if (cellsWithValue.length > 0 &&
+          cellsWithValue.every(cell => headerTexts.has(this.pklNormalizeHeader(cell)))) continue;
+
+      // Lọc theo cột Mã TP đã map (không cố định cột 0): chỉ giữ dòng có mã bắt đầu A,B,P,N,M,K,L và >= 7 ký tự
+      const materialColIdx = mapping.materialCode !== undefined ? mapping.materialCode : 0;
+      const codeVal = this.pklExtractCellValue(row[materialColIdx] ?? '');
+      const codeTrim = codeVal.trim();
+      const firstChar = codeTrim.charAt(0).toUpperCase();
+      const allowedFirstChars = ['A', 'B', 'P', 'N', 'M', 'K', 'L'];
+      if (codeTrim.length < 7 || !allowedFirstChars.includes(firstChar)) continue;
+
+      const materialCode = this.pklExtractCellValue(mapping.materialCode !== undefined ? row[mapping.materialCode] : row[0]);
       const quantity = mapping.quantity !== undefined ? this.pklParseNumber(row[mapping.quantity]) : 0;
-      if (!materialCode && quantity <= 0) continue;
+
+      // Bỏ dòng nếu materialCode chính là tên cột header (header bị copy xuống)
+      if (materialCode && headerTexts.has(this.pklNormalizeHeader(materialCode))) continue;
 
       let pallet = '';
       if (mapping.pallet !== undefined) {
@@ -1238,6 +1365,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }
       }
 
+      const cartonNoDisplay = (mapping.cartonNoDisplay !== undefined ? this.pklExtractCellValue(row[mapping.cartonNoDisplay]) : '') ||
+        (mapping.carton !== undefined ? this.pklExtractCellValue(row[mapping.carton]) : '');
+      const cartonNum = mapping.carton !== undefined ? this.pklParseNumber(row[mapping.carton]) : 0;
+      const notesVal = mapping.notes !== undefined ? this.pklExtractCellValue(row[mapping.notes]) : '';
+      const notesWithCartonNo = (notesVal || '') + (cartonNoDisplay ? (notesVal ? ' | ' : '') + 'Carton No.: ' + cartonNoDisplay : '');
+
       result.push({
         materialCode: materialCode || '',
         batchNumber: mapping.batchNumber !== undefined ? this.pklExtractCellValue(row[mapping.batchNumber]) : '',
@@ -1245,9 +1378,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
         lsx: mapping.lsx !== undefined ? this.pklExtractCellValue(row[mapping.lsx]) : '',
         quantity: quantity,
         poShip: mapping.poShip !== undefined ? this.pklExtractCellValue(row[mapping.poShip]) : '',
-        carton: mapping.carton !== undefined ? this.pklParseNumber(row[mapping.carton]) : 0,
+        carton: cartonNum,
         pallet: pallet,
-        notes: mapping.notes !== undefined ? this.pklExtractCellValue(row[mapping.notes]) : '',
+        notes: notesWithCartonNo.trim(),
         location: mapping.location !== undefined ? this.pklExtractCellValue(row[mapping.location]) : ''
       });
     }

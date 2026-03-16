@@ -44,6 +44,24 @@
           In toàn bộ
         </button>
         
+        <!-- Filter Buttons: Hàng Trả / Hàng Nhập -->
+        <div class="batch-type-filters">
+          <label class="filter-checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="filterReturnGoods" 
+                   (change)="onBatchTypeFilterChange()"
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Trả</span>
+          </label>
+          <label class="filter-checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="filterNormalGoods" 
+                   (change)="onBatchTypeFilterChange()"
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Nhập</span>
+          </label>
+        </div>
+
         <!-- Return Goods Counter Box - Compact -->
         <div class="return-goods-counter-box" *ngIf="pendingReturnGoodsCount > 0">
           <i class="material-icons">assignment_return</i>
@@ -64,39 +82,13 @@
         <!-- Search Box -->
         <div class="search-box">
           <input type="text" 
-                 [placeholder]="getSearchPlaceholder()"
+                 placeholder="Tìm kiếm mã hàng..."
                  [(ngModel)]="searchTerm"
                  (input)="onSearchInput($event)"
                  class="search-input">
         </div>
         
-        <!-- Compact Filter Buttons -->
-        <select class="filter-select" 
-                [(ngModel)]="searchType" 
-                (change)="changeSearchType($event.target.value)">
-          <option value="materialCode">Mã Hàng</option>
-          <option value="batchNumber">Lô Hàng</option>
-          <option value="location">Vị Trí</option>
-        </select>
-        
-        <select class="filter-select" 
-                [(ngModel)]="statusFilter" 
-                (change)="changeStatusFilter($event.target.value)">
-          <option value="pending">Chưa</option>
-          <option value="received">Đã Nhận</option>
-          <option value="all">Toàn Bộ</option>
-        </select>
-        
-        <select class="filter-select" 
-                [(ngModel)]="sortBy" 
-                (change)="changeSortBy($event.target.value)">
-          <option value="importDate">Ngày nhập</option>
-          <option value="batchNumber">Lô hàng</option>
-          <option value="materialCode">Mã hàng</option>
-          <option value="createdAt">Thời gian tạo</option>
-        </select>
-        
-        <!-- Date Range Selector - Compact -->
+        <!-- Date Range Selector -->
         <input type="date" 
                [(ngModel)]="startDate" 
                (change)="applyFilters()"
@@ -125,8 +117,87 @@
       {{errorMessage}}
     </div>
     
-    <!-- Excel-like Body -->
-    <div class="excel-body" *ngIf="!isLoading">
+    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô -->
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive">
+      <!-- Lô Hàng Nhập -->
+      <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
+        <div class="batch-section-title">
+          <i class="material-icons">local_shipping</i>
+          Lô Hàng Nhập
+          <span class="batch-section-count">({{ inboundBatchGroups.length }} lô)</span>
+        </div>
+        <div class="batch-grid" *ngIf="inboundBatchGroups.length > 0; else noInboundBatches">
+          <div class="batch-box"
+               *ngFor="let batch of inboundBatchGroups"
+               [class.batch-box-done]="batch.receivedCount === batch.count && batch.count > 0"
+               (click)="selectBatchView(batch.batchNumber)">
+            <div class="batch-box-number">{{ batch.batchNumber }}</div>
+            <div class="batch-box-stats">
+              <span class="batch-box-count-badge">{{ batch.count }} mã</span>
+              <span class="batch-box-received-badge"
+                    [class.fully-received]="batch.receivedCount === batch.count && batch.count > 0">
+                {{ batch.receivedCount }}/{{ batch.count }} đã nhận
+              </span>
+            </div>
+            <div class="batch-box-meta">
+              <span class="batch-box-date">{{ formatDate(batch.importDate) }}</span>
+              <span class="batch-box-supplier" *ngIf="batch.supplier">{{ batch.supplier }}</span>
+            </div>
+          </div>
+        </div>
+        <ng-template #noInboundBatches>
+          <div class="no-batches-msg">Không có lô hàng nhập nào trong khoảng thời gian này</div>
+        </ng-template>
+      </div>
+
+      <!-- Hàng Trả -->
+      <div class="batch-section batch-section-return" *ngIf="returnBatchGroups.length > 0 && !(filterNormalGoods && !filterReturnGoods)">
+        <div class="batch-section-title return-section-title">
+          <i class="material-icons">assignment_return</i>
+          Hàng Trả
+          <span class="batch-section-count">({{ returnBatchGroups.length }} lô)</span>
+        </div>
+        <div class="batch-grid">
+          <div class="batch-box batch-box-return"
+               *ngFor="let batch of returnBatchGroups"
+               [class.batch-box-done]="batch.receivedCount === batch.count && batch.count > 0"
+               (click)="selectBatchView(batch.batchNumber)">
+            <div class="batch-box-number">{{ batch.batchNumber }}</div>
+            <div class="batch-box-stats">
+              <span class="batch-box-count-badge">{{ batch.count }} mã</span>
+              <span class="batch-box-received-badge"
+                    [class.fully-received]="batch.receivedCount === batch.count && batch.count > 0">
+                {{ batch.receivedCount }}/{{ batch.count }} đã nhận
+              </span>
+            </div>
+            <div class="batch-box-meta">
+              <span class="batch-box-date">{{ formatDate(batch.importDate) }}</span>
+              <span class="batch-box-supplier" *ngIf="batch.supplier">{{ batch.supplier }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nút Quay lại + tiêu đề lô hàng đang xem -->
+    <div class="batch-view-header" *ngIf="!isLoading && selectedBatchView && !isBatchActive">
+      <button class="back-to-batches-btn" (click)="backToBatchList()">
+        <i class="material-icons">arrow_back</i>
+        Quay lại
+      </button>
+      <span class="batch-view-title">
+        <i class="material-icons">folder_open</i>
+        Lô hàng: <strong>{{ selectedBatchView }}</strong>
+        <span class="batch-view-count">({{ filteredMaterials.length }} mã)</span>
+      </span>
+      <button class="tbhd-btn" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
+        <i class="material-icons">print</i>
+        TBHD
+      </button>
+    </div>
+
+    <!-- Excel-like Body: chỉ hiển thị khi đã chọn lô hàng hoặc đang kiểm lô -->
+    <div class="excel-body" *ngIf="!isLoading && (selectedBatchView || isBatchActive)">
       <table class="excel-table">
         <thead>
           <tr>

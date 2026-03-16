@@ -88,27 +88,28 @@
     <div class="excel-body">
       <table class="excel-table">
         <colgroup>
-          <col style="width: 32px">
-          <col style="width: 58px">
-          <col style="width: 44px">
-          <col style="width: 78px">
-          <col style="width: 78px">
-          <col style="width: 54px">
-          <col style="width: 96px">
-          <col style="width: 78px">
-          <col style="width: 108px">
-          <col style="width: 96px">
-          <col style="width: 125px">
-          <col style="width: 76px">
-          <col style="width: 66px">
+          <col style="width: 20px">
           <col style="width: 50px">
+          <col style="width: 40px">
+          <col style="width: 70px">
+          <col style="width: 70px">
+          <col style="width: 120px">
+          <col style="width: 100px">
+          <col style="width: 110px">
+          <col style="width: 110px">
+          <col style="width: 110px">
+          <col style="width: 160px">
+          <col style="width: 125px">
           <col style="width: 60px">
-          <col style="width: 76px">
-          <col style="width: 76px">
-          <col style="width: 86px">
-          <col style="width: 76px">
           <col style="width: 60px">
-          <col style="width: 52px">
+          <col style="width: 60px">
+          <col style="width: 60px">
+          <col style="width: 80px">
+          <col style="width: 80px">
+          <col style="width: 120px">
+          <col style="width: 70px">
+          <col style="width: 60px">
+          <col style="width: 30px">
         </colgroup>
         <thead>
           <tr>
@@ -584,28 +585,60 @@
           <button class="custom-btn" (click)="pklApplyRowRange()">Áp dụng</button>
         </div>
         <div class="pkl-preview-raw">
-          <p>Preview (số bên trái = dòng trong file Excel):</p>
+          <p><strong>Preview theo cột (Mã TP + Carton No. — mỗi dòng riêng, không gộp):</strong></p>
           <div class="pkl-table-wrap">
             <table class="pkl-preview-table">
-              <tr *ngFor="let row of pklPreviewRows; let ri = index" [class.pkl-header-row]="ri === 0">
-                <td class="pkl-row-num">{{ pklPreviewStartRow + ri + 1 }}</td>
-                <td *ngFor="let cell of row">{{ cell }}</td>
-              </tr>
+              <thead>
+                <tr>
+                  <th>Dòng (file)</th>
+                  <th>Mã TP</th>
+                  <th>Carton No.</th>
+                  <th>Số lượng</th>
+                  <th>PO</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of pklPreviewMappedRows">
+                  <td class="pkl-row-num">{{ row.rowNum }}</td>
+                  <td>{{ row.materialCode }}</td>
+                  <td>{{ row.cartonNo }}</td>
+                  <td>{{ row.quantity }}</td>
+                  <td>{{ row.po }}</td>
+                </tr>
+              </tbody>
             </table>
           </div>
+          <p class="pkl-step-hint" style="margin-top: 8px;">Các dòng cùng mã nhưng khác Carton No. sẽ import thành nhiều dòng riêng.</p>
         </div>
       </div>
 
       <!-- Step 3: Xem kết quả và Import -->
       <div *ngIf="pklStep === 3" class="pkl-step">
         <h6>Bước 3: Dữ liệu sẽ import vào FG Out</h6>
-        <p class="pkl-mapping-info">Đã map theo cột có sẵn ở FG Out (Mã TP, Batch, LOT, LSX, QTY, PO, Carton, Pallet, Ghi chú, Vị trí...). Cột không có sẽ bỏ qua.</p>
+
+        <!-- Hiển thị column mapping để user kiểm tra -->
+        <div class="pkl-mapping-table-wrap">
+          <p class="pkl-mapping-info"><strong>Hệ thống đọc cột như sau</strong> (kiểm tra trước khi xác nhận):</p>
+          <div class="pkl-mapping-chips">
+            <span *ngFor="let m of pklMappingDisplay"
+                  class="pkl-mapping-chip"
+                  [class.mapped]="m.colName !== '—'"
+                  [class.unmapped]="m.colName === '—'">
+              <strong>{{ m.label }}</strong> ← {{ m.colName }}
+            </span>
+          </div>
+        </div>
+
+        <p *ngIf="pklParsedItems.length === 0" class="pkl-no-data-warn">
+          ⚠️ Không tìm thấy dữ liệu. Quay lại Bước 2 để chọn đúng dòng header.
+        </p>
         <div class="pkl-table-wrap">
           <table class="pkl-preview-table">
             <thead>
               <tr>
                 <th>#</th>
                 <th>Mã TP</th>
+                <th>Carton No.</th>
                 <th>Batch</th>
                 <th>LOT</th>
                 <th>LSX</th>
@@ -619,6 +652,7 @@
               <tr *ngFor="let m of pklParsedItems; let i = index">
                 <td>{{ i + 1 }}</td>
                 <td>{{ m.materialCode }}</td>
+                <td>{{ pklCartonNoDisplay(m) }}</td>
                 <td>{{ m.batchNumber }}</td>
                 <td>{{ m.lot }}</td>
                 <td>{{ m.lsx }}</td>

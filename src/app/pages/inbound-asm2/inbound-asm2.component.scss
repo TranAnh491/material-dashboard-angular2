@@ -3528,3 +3528,302 @@ iframe {
   }
 }
 
+// ============================================================
+// Batch Box View Styles
+// ============================================================
+.batch-box-view {
+  padding: 16px;
+}
+
+.batch-section {
+  margin-bottom: 24px;
+
+  &.batch-section-return {
+    border-top: 2px solid #f97316;
+    padding-top: 16px;
+  }
+}
+
+.batch-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600 !important;
+  color: #1e40af !important;
+  margin-bottom: 12px;
+
+  .material-icons { font-size: 20px; color: #1e40af !important; }
+
+  .batch-section-count {
+    font-size: 13px;
+    font-weight: 400 !important;
+    color: #64748b !important;
+  }
+
+  &.return-section-title {
+    color: #ea580c !important;
+    .material-icons { color: #ea580c !important; }
+  }
+}
+
+.batch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.batch-box {
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 180px;
+  max-width: 220px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+
+  &:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59,130,246,0.2);
+    transform: translateY(-2px);
+  }
+
+  &.batch-box-return {
+    border-color: #fdba74;
+    background: #fff7ed;
+
+    &:hover {
+      border-color: #f97316;
+      box-shadow: 0 4px 12px rgba(249,115,22,0.2);
+    }
+  }
+
+  &.batch-box-done {
+    border-color: #86efac;
+    background: #f0fdf4;
+
+    &:hover {
+      border-color: #22c55e;
+      box-shadow: 0 4px 12px rgba(34,197,94,0.2);
+    }
+  }
+}
+
+.batch-box-number {
+  font-size: 14px;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.batch-box-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.batch-box-count-badge {
+  background: #e2e8f0;
+  color: #475569 !important;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500 !important;
+}
+
+.batch-box-received-badge {
+  background: #fef9c3;
+  color: #854d0e !important;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500 !important;
+
+  &.fully-received {
+    background: #bbf7d0;
+    color: #166534 !important;
+  }
+}
+
+.batch-box-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.batch-box-date {
+  font-size: 11px;
+  color: #64748b !important;
+}
+
+.batch-box-supplier {
+  font-size: 11px;
+  color: #94a3b8 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+.no-batches-msg {
+  font-size: 13px;
+  color: #94a3b8 !important;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+}
+
+// Batch view header (back button + batch title)
+.batch-view-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.back-to-batches-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: #3b82f6;
+  color: #fff !important;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500 !important;
+  transition: background 0.2s;
+
+  .material-icons { font-size: 16px; color: #fff !important; }
+
+  &:hover { background: #2563eb; }
+}
+
+.batch-view-title {
+  font-size: 14px;
+  color: #1e293b !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .material-icons { font-size: 18px; color: #64748b !important; }
+
+  strong { font-weight: 600 !important; color: #1e40af !important; }
+
+  .batch-view-count {
+    font-size: 12px;
+    color: #64748b !important;
+    font-weight: 400 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .batch-grid {
+    gap: 8px;
+  }
+  .batch-box {
+    min-width: calc(50% - 8px);
+    max-width: calc(50% - 8px);
+    padding: 10px 12px;
+  }
+  .batch-view-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+// ============================================================
+// FLAT BUTTON OVERRIDE – chữ đen, nền trắng, viền đen
+// ============================================================
+.tbhd-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: auto;
+
+  .material-icons { font-size: 16px; }
+
+  &:hover { background: #f5f5f5; }
+}
+
+.start-batch-btn,
+.return-goods-btn,
+.print-all-qr-btn,
+.more-btn,
+.back-to-batches-btn {
+  background: #fff !important;
+  color: #000 !important;
+  border: 1px solid #000 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  transition: none !important;
+
+  .material-icons { color: #000 !important; }
+
+  &:hover:not(:disabled) {
+    background: #f5f5f5 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  &:disabled {
+    background: #f5f5f5 !important;
+    color: #999 !important;
+    border-color: #ccc !important;
+    cursor: not-allowed;
+  }
+
+  &.active {
+    background: #f5f5f5 !important;
+    border-color: #000 !important;
+    color: #000 !important;
+  }
+}
+
+.batch-box,
+.batch-box.batch-box-return,
+.batch-box.batch-box-done {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  transition: none !important;
+
+  &:hover {
+    background: #f5f5f5 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border-color: #000 !important;
+  }
+}
+
+.batch-box-count-badge,
+.batch-box-received-badge {
+  background: #f5f5f5 !important;
+  color: #000 !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+
+  &.fully-received {
+    background: #f5f5f5 !important;
+    color: #000 !important;
+  }
+}
+

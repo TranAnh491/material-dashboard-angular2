@@ -174,6 +174,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   availableBatches: any[] = [];
   employeeCode: string = '';
   isBatchScanningMode: boolean = false;
+
+  // Batch box view: null = show batch grid, string = show table for that batch
+  selectedBatchView: string | null = null;
   
   constructor(
     private firestore: AngularFirestore,
@@ -556,6 +559,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`🔍 Status filter (${this.statusFilter || 'pending'}): ${beforeStatusFilter} → ${afterStatusFilter} (ẩn ${beforeStatusFilter - afterStatusFilter} materials)`);
     }
     
+    // Filter by selected batch view (when not in active batch processing mode)
+    if (this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '')) {
+      filtered = filtered.filter(material => material.batchNumber === this.selectedBatchView);
+    }
+
     // Filter by current batch when processing
     if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
       const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
@@ -1273,11 +1281,67 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
   // Getter: Đếm số hàng trả đang chờ nhập (chưa isReceived)
   get pendingReturnGoodsCount(): number {
-    return this.materials.filter(material => 
-      material.batchNumber && 
+    return this.materials.filter(material =>
+      material.batchNumber &&
       material.batchNumber.toUpperCase().startsWith('TRA') &&
       !material.isReceived
     ).length;
+  }
+
+  // Getter: Danh sách lô hàng nhập (non-TRA), nhóm theo batchNumber
+  get inboundBatchGroups(): { batchNumber: string; count: number; receivedCount: number; importDate: Date; supplier: string }[] {
+    const map = new Map<string, { batchNumber: string; count: number; receivedCount: number; importDate: Date; supplier: string }>();
+    let source = this.materials.filter(m =>
+      m.factory === this.selectedFactory &&
+      !(m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA'))
+    );
+    if (this.startDate && this.endDate) {
+      const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
+      const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
+      source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
+    }
+    source.forEach(m => {
+      const key = m.batchNumber || '';
+      if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
+      const g = map.get(key)!;
+      g.count++;
+      if (m.isReceived) g.receivedCount++;
+    });
+    return Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+  }
+
+  // Getter: Danh sách lô hàng trả (TRA), nhóm theo batchNumber
+  get returnBatchGroups(): { batchNumber: string; count: number; receivedCount: number; importDate: Date; supplier: string }[] {
+    const map = new Map<string, { batchNumber: string; count: number; receivedCount: number; importDate: Date; supplier: string }>();
+    let source = this.materials.filter(m =>
+      m.factory === this.selectedFactory &&
+      m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA')
+    );
+    if (this.startDate && this.endDate) {
+      const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
+      const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
+      source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
+    }
+    source.forEach(m => {
+      const key = m.batchNumber || '';
+      if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
+      const g = map.get(key)!;
+      g.count++;
+      if (m.isReceived) g.receivedCount++;
+    });
+    return Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+  }
+
+  // Chọn lô hàng để xem bảng chi tiết
+  selectBatchView(batchNumber: string): void {
+    this.selectedBatchView = batchNumber;
+    this.applyFilters();
+  }
+
+  // Quay lại danh sách lô hàng
+  backToBatchList(): void {
+    this.selectedBatchView = null;
+    this.applyFilters();
   }
   
   changeStatusFilter(status: string): void {
@@ -2338,6 +2402,197 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return this.filteredMaterials.filter(m => 
       m.rollsOrBags && m.rollsOrBags > 0
     ).length;
+  }
+
+  // In TBHD (Thông Báo Hàng Đến) cho lô hàng đang mở
+  async printTBHD(): Promise<void> {
+    if (!this.selectedBatchView) return;
+
+    const items = this.filteredMaterials;
+    if (items.length === 0) {
+      alert('Không có dữ liệu để in');
+      return;
+    }
+
+    const batchNumber = this.selectedBatchView;
+    const firstItem = items[0];
+    const importDate = firstItem.importDate ? this.formatDate(firstItem.importDate) : '';
+    const supplier = firstItem.supplier || '';
+
+    // Tạo QR cho Lô hàng và Nhà cung cấp
+    const batchQR = await QRCode.toDataURL(batchNumber, { width: 150, margin: 1 });
+    const supplierQR = supplier ? await QRCode.toDataURL(supplier, { width: 150, margin: 1 }) : '';
+
+    const tableRows = items.map((m, i) => `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td><strong>${m.materialCode || ''}</strong></td>
+        <td>${m.poNumber || ''}</td>
+        <td style="text-align:right">${m.quantity != null ? m.quantity : ''}</td>
+        <td style="text-align:right">${m.rollsOrBags || ''}</td>
+        <td style="text-align:right">${m.unitWeight != null ? m.unitWeight : ''}</td>
+        <td>${m.remarks || ''}</td>
+      </tr>`).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TBHD - ${batchNumber}</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; color: #000; }
+    body { font-size: 11px; background: #fff; }
+
+    .doc-header {
+      text-align: center;
+      margin-bottom: 14px;
+      border-bottom: 2px solid #000;
+      padding-bottom: 8px;
+    }
+    .doc-title-vi {
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .doc-title-en {
+      font-size: 13px;
+      font-weight: normal;
+      letter-spacing: 0.5px;
+      color: #444;
+    }
+
+    .info-boxes {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .info-box {
+      flex: 1;
+      border: 1px solid #000;
+      padding: 8px 10px;
+      min-height: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .info-box-label {
+      align-self: flex-start;
+      margin-bottom: 4px;
+    }
+    .info-box-label .vi {
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      display: block;
+    }
+    .info-box-label .en {
+      font-size: 9px;
+      color: #666;
+      display: block;
+    }
+    .info-box img { width: 80px; height: 80px; }
+    .info-box-value {
+      font-size: 13px;
+      font-weight: bold;
+      text-align: center;
+      word-break: break-all;
+    }
+    .info-box-date {
+      font-size: 20px;
+      font-weight: bold;
+      margin: auto;
+    }
+    .info-box-sign {
+      width: 100%;
+      flex: 1;
+      border-bottom: 1px solid #ccc;
+      min-height: 40px;
+    }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    th {
+      background: #f0f0f0;
+      border: 1px solid #000;
+      padding: 4px 6px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th .vi { font-size: 10px; font-weight: bold; display: block; }
+    th .en { font-size: 9px; font-weight: normal; color: #555; display: block; }
+    td { border: 1px solid #ccc; padding: 4px 6px; font-size: 10px; vertical-align: middle; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-header">
+    <div class="doc-title-vi">Thông Báo Hàng Đến</div>
+    <div class="doc-title-en">Arrival Notice</div>
+  </div>
+
+  <div class="info-boxes">
+    <div class="info-box">
+      <div class="info-box-label">
+        <span class="vi">Lô Hàng</span>
+        <span class="en">Batch No.</span>
+      </div>
+      <img src="${batchQR}" />
+      <div class="info-box-value">${batchNumber}</div>
+    </div>
+    <div class="info-box">
+      <div class="info-box-label">
+        <span class="vi">Ngày Nhập</span>
+        <span class="en">Import Date</span>
+      </div>
+      <div class="info-box-date">${importDate}</div>
+    </div>
+    <div class="info-box">
+      <div class="info-box-label">
+        <span class="vi">Nhà Cung Cấp</span>
+        <span class="en">Supplier</span>
+      </div>
+      ${supplierQR ? `<img src="${supplierQR}" />` : ''}
+      <div class="info-box-value">${supplier}</div>
+    </div>
+    <div class="info-box">
+      <div class="info-box-label">
+        <span class="vi">Nhân Viên</span>
+        <span class="en">Employee</span>
+      </div>
+      <div class="info-box-sign"></div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30px"><span class="vi">#</span></th>
+        <th><span class="vi">Mã Hàng</span><span class="en">Material Code</span></th>
+        <th><span class="vi">Số PO</span><span class="en">PO Number</span></th>
+        <th style="width:90px"><span class="vi">Lượng Nhập</span><span class="en">Import Qty</span></th>
+        <th style="width:90px"><span class="vi">Lượng Đơn Vị</span><span class="en">Unit Qty</span></th>
+        <th style="width:70px"><span class="vi">U.W (g)</span><span class="en">Unit Weight</span></th>
+        <th><span class="vi">Lưu Ý</span><span class="en">Remarks</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 400);
   }
 
   async printAllQRCodes(): Promise<void> {
