@@ -907,6 +907,149 @@ iframe {
   }
 }
 
+.excel-body-with-history {
+  display: flex;
+  gap: 12px;
+  height: calc(100vh - 220px);
+}
+
+.excel-body-main {
+  flex: 0 0 70%;
+  max-width: 70%;
+  overflow: auto;
+}
+
+.material-history-panel {
+  flex: 0 0 30%;
+  max-width: 30%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.history-top,
+.history-bottom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+}
+
+.history-top {
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 4px;
+}
+
+.history-title {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.history-loading,
+.history-empty {
+  font-size: 12px;
+  color: #666;
+}
+
+.history-meta {
+  font-size: 12px;
+  margin-bottom: 6px;
+
+  div + div {
+    margin-top: 2px;
+  }
+}
+
+.history-table-wrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+
+  th,
+  td {
+    border-bottom: 1px solid #e0e0e0;
+    padding: 2px 4px;
+    text-align: left;
+  }
+
+  th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+}
+
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.note-percent input {
+  width: 80px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.note-list {
+  max-height: 80px;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 4px;
+  background: #ffffff;
+}
+
+.note-item + .note-item {
+  border-top: 1px solid #eee;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.note-text {
+  font-size: 12px;
+}
+
+.note-meta {
+  font-size: 10px;
+  color: #777;
+}
+
+.note-new textarea {
+  width: 100%;
+  min-height: 40px;
+  resize: vertical;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.note-add-btn {
+  margin-top: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: none;
+  background: #1976d2;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.note-add-btn:disabled {
+  background: #b0bec5;
+  cursor: not-allowed;
+}
+
 // Dropdown styling - Same as materials-asm1
 .dropdown {
   position: relative;

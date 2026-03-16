@@ -28,6 +28,7 @@ export interface InboundMaterial {
   rollsOrBags: number;
   supplier: string;
   unitWeight?: number; // Trọng lượng đơn vị (gram) - max 2 decimals
+  gwLdv?: number;      // GW. LDV - trọng lượng (gram) mỗi bịch theo lượng đơn vị
   remarks: string;
   hasQRGenerated?: boolean; // Track if QR code has been generated
   scannedQuantity?: number; // Số lượng đã scan (cộng dồn)
@@ -65,6 +66,38 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.batchCounter++;
     
     return batch;
+  }
+
+  // 🆕 Lưu GW. LDV theo Nhà cung cấp + Mã hàng + PO + Lượng đơn vị
+  private async saveGwLdvToCatalog(material: InboundMaterial): Promise<void> {
+    try {
+      const supplier = (material.supplier || '').trim();
+      const code = (material.materialCode || '').trim();
+      const po = (material.poNumber || '').trim();
+      const ldv = material.rollsOrBags || 0;
+      const gw = material.gwLdv || 0;
+
+      if (!supplier || !code || !po || !ldv || ldv <= 0 || !gw || gw <= 0) {
+        console.log('⚠️ Skipping saveGwLdvToCatalog (ASM2) - invalid data', { supplier, code, po, ldv, gw });
+        return;
+      }
+
+      const docId = `${supplier}|${code}|${po}|${ldv}`;
+      console.log(`💾 [ASM2] Saving GW.LDV catalog: ${docId} = ${gw}g`);
+
+      await this.firestore.collection('material-gw-ldv').doc(docId).set({
+        supplier,
+        materialCode: code,
+        poNumber: po,
+        unitQuantity: ldv,
+        gwLdv: gw,
+        updatedAt: new Date()
+      }, { merge: true });
+
+      console.log('✅ [ASM2] Saved GW.LDV catalog successfully');
+    } catch (error) {
+      console.error('❌ [ASM2] Error saving GW.LDV catalog', error);
+    }
   }
   materials: InboundMaterial[] = [];
   filteredMaterials: InboundMaterial[] = [];
@@ -301,6 +334,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             notes: data.notes || '',
             rollsOrBags: data.rollsOrBags || 0,
             supplier: data.supplier || '',
+            gwLdv: data.gwLdv || 0,
             remarks: data.remarks || '',
             hasQRGenerated: data.hasQRGenerated || false,
             scannedQuantity: data.scannedQuantity || 0,
@@ -1111,6 +1145,14 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   materialNotes: { id?: string; materialCode: string; checkPercent: number; note: string }[] = [];
   newNote: { materialCode: string; checkPercent: number; note: string } = { materialCode: '', checkPercent: 100, note: '' };
 
+  // Panel lịch sử + lưu ý theo mã hàng
+  selectedHistoryMaterial: InboundMaterial | null = null;
+  materialHistory: InboundMaterial[] = [];
+  isLoadingHistory: boolean = false;
+  selectedMaterialNotes: { id?: string; materialCode: string; checkPercent: number; note: string; createdAt?: Date }[] = [];
+  selectedMaterialCheckPercent: number = 100;
+  newMaterialNoteText: string = '';
+
   openMorePopup(): void {
     this.showMorePopup = true;
   }
@@ -1163,6 +1205,110 @@ export class InboundASM2Component implements OnInit, OnDestroy {
         this.newNote = { materialCode: '', checkPercent: 100, note: '' };
       })
       .catch(err => console.error('❌ Lỗi thêm lưu ý:', err));
+  }
+
+  // ====== HISTORY + NOTES PANEL ======
+
+  selectMaterialForHistory(material: InboundMaterial): void {
+    this.selectedHistoryMaterial = material;
+    this.loadMaterialHistory(material);
+    this.loadNotesForMaterial(material);
+  }
+
+  private async loadMaterialHistory(material: InboundMaterial): Promise<void> {
+    this.isLoadingHistory = true;
+    this.materialHistory = [];
+    try {
+      const snapshot = await this.firestore.collection('inbound-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('materialCode', '==', material.materialCode)
+           .limit(50)
+      ).get().toPromise();
+
+      if (snapshot && !snapshot.empty) {
+        this.materialHistory = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            importDate: data.importDate?.toDate() || new Date(),
+            supplier: data.supplier || '',
+            poNumber: data.poNumber || '',
+            rollsOrBags: data.rollsOrBags || 0,
+            gwLdv: data.gwLdv || 0
+          } as InboundMaterial;
+        }).sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+      }
+    } catch (err) {
+      console.error('❌ [ASM2] Error loading material history:', err);
+    } finally {
+      this.isLoadingHistory = false;
+    }
+  }
+
+  private loadNotesForMaterial(material: InboundMaterial): void {
+    if (!material.materialCode) {
+      this.selectedMaterialNotes = [];
+      this.selectedMaterialCheckPercent = 100;
+      return;
+    }
+
+    this.firestore.collection('inbound-notes', ref =>
+      ref.where('factory', '==', this.selectedFactory)
+         .where('materialCode', '==', material.materialCode.toUpperCase())
+    ).snapshotChanges()
+     .pipe(takeUntil(this.destroy$))
+     .subscribe(actions => {
+       const notes = actions.map(a => {
+         const data = a.payload.doc.data() as any;
+         return {
+           id: a.payload.doc.id,
+           materialCode: data.materialCode || '',
+           checkPercent: data.checkPercent || 100,
+           note: data.note || '',
+           createdAt: data.createdAt?.toDate() || new Date()
+         };
+       }).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+
+       this.selectedMaterialNotes = notes;
+       this.selectedMaterialCheckPercent = notes.length > 0 ? notes[0].checkPercent : 100;
+     });
+  }
+
+  saveSelectedMaterialNote(isNewNote: boolean = false): void {
+    if (!this.selectedHistoryMaterial) return;
+
+    const materialCode = this.selectedHistoryMaterial.materialCode.toUpperCase();
+    const baseData: any = {
+      factory: this.selectedFactory,
+      materialCode,
+      checkPercent: this.selectedMaterialCheckPercent || 100,
+      updatedAt: new Date()
+    };
+
+    if (isNewNote) {
+      if (!this.newMaterialNoteText.trim()) return;
+      const noteData = {
+        ...baseData,
+        note: this.newMaterialNoteText.trim(),
+        createdAt: new Date()
+      };
+      this.firestore.collection('inbound-notes').add(noteData)
+        .then(() => {
+          console.log('[ASM2] ✅ Đã thêm lưu ý cho', materialCode);
+          this.newMaterialNoteText = '';
+        })
+        .catch(err => console.error('[ASM2] ❌ Lỗi thêm lưu ý:', err));
+    } else {
+      if (!this.newMaterialNoteText.trim()) {
+        const noteData = {
+          ...baseData,
+          note: 'Cập nhật phần trăm kiểm tra',
+          createdAt: new Date()
+        };
+        this.firestore.collection('inbound-notes').add(noteData)
+          .then(() => console.log('[ASM2] ✅ Đã cập nhật % kiểm cho', materialCode))
+          .catch(err => console.error('[ASM2] ❌ Lỗi cập nhật % kiểm:', err));
+      }
+    }
   }
 
   deleteNote(note: { id?: string; materialCode: string }): void {
@@ -1775,10 +1921,15 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       rollsOrBags: material.rollsOrBags,
       supplier: material.supplier,
       unitWeight: material.unitWeight || null,
+      gwLdv: material.gwLdv || null,
       remarks: material.remarks,
       updatedAt: material.updatedAt
     }).then(() => {
       console.log(`✅ Material ${material.materialCode} updated successfully`);
+
+      // 🆕 Lưu GW.LDV catalog theo Nhà cung cấp + Mã hàng + PO + Lượng đơn vị
+      this.saveGwLdvToCatalog(material);
+
       if (material.isReceived) {
         console.log(`ℹ️ Note: ${material.materialCode} is already in inventory, changes here won't affect inventory data`);
       }

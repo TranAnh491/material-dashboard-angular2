@@ -63,8 +63,19 @@
       </div>
     </div>
 
+    <!-- Mobile chọn nhà máy (ASM1 / ASM2) trước khi hiển thị danh sách phiếu chờ -->
+    <div class="mobile-factory-modal show-on-tablet" *ngIf="!mobileFactorySelected">
+      <div class="mobile-factory-modal-content">
+        <h5>Chọn nhà máy</h5>
+        <div class="mobile-factory-buttons">
+          <button type="button" (click)="setFactoryFilter('ASM1')">ASM1</button>
+          <button type="button" (click)="setFactoryFilter('ASM2')">ASM2</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Mobile/Tablet Card View for Pending Items -->
-    <div class="mobile-card-view show-on-tablet">
+    <div class="mobile-card-view show-on-tablet" *ngIf="mobileFactorySelected">
       <div class="mobile-header">
         <h5>Phiếu chờ xử lý ({{ getPendingCount() }})</h5>
       </div>

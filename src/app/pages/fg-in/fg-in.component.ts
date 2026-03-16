@@ -74,6 +74,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Factory filter - hiển thị ASM1, ASM2 hoặc TOTAL
   selectedFactory: string = 'ASM1';
   availableFactories: string[] = ['ASM1', 'ASM2', 'TOTAL'];
+  // Mobile: đã chọn factory hay chưa (để hiện popup chọn ASM1/ASM2 trước)
+  mobileFactorySelected: boolean = false;
   
   // Time range filter
   showTimeRangeDialog: boolean = false;
@@ -432,6 +434,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   setFactoryFilter(factory: string): void {
     this.selectedFactory = factory;
     this.applyFilters();
+    // Khi user chọn factory trên mobile popup, ghi nhận đã chọn để ẩn popup
+    this.mobileFactorySelected = true;
   }
 
   openNhapKho(): void {
