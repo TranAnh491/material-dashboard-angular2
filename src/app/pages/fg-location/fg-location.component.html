@@ -35,6 +35,13 @@
       Nhà máy: <strong>{{ selectedFactory }}</strong>
     </div>
     
+    <div class="attach-pallet-row" (click)="attachPalletId = !attachPalletId">
+      <div class="checkbox-wrapper">
+        <i class="material-icons">{{ attachPalletId ? 'check_box' : 'check_box_outline_blank' }}</i>
+      </div>
+      <span class="attach-pallet-text">Đính kèm Pallet ID</span>
+    </div>
+    
     <div class="scan-input-container">
       <input 
         #locationInput
@@ -137,7 +144,7 @@
       <div class="move-arrow">➡️</div>
       <div class="to-location">
         <span class="label">Đến vị trí:</span>
-        <span class="location-value new">{{ newLocationScanInput || '?' }}</span>
+        <span class="location-value new">{{ getDisplayNewLocation() }}</span>
       </div>
     </div>
     
@@ -159,11 +166,24 @@
       
       <button 
         class="scan-btn success"
-        [disabled]="isLoading || !newLocationScanInput"
+        [disabled]="isLoading || !isNewLocationValid()"
         (click)="moveToNewLocation()">
         <span *ngIf="!isLoading">✅ Di chuyển</span>
         <span *ngIf="isLoading">⏳ Đang xử lý...</span>
       </button>
+    </div>
+    
+    <div class="pallet-id-row" *ngIf="attachPalletId">
+      <label class="pallet-id-label">Pallet ID (đính kèm phía sau vị trí):</label>
+      <input 
+        #palletIdInput
+        type="text" 
+        class="scan-input pallet-id-input"
+        [(ngModel)]="palletIdScanInput"
+        (ngModelChange)="onPalletIdInputChange()"
+        placeholder="Scan Pallet ID..."
+        autocomplete="off"
+        autocapitalize="characters">
     </div>
     
     <button class="back-btn" (click)="backToItemSelection()">
