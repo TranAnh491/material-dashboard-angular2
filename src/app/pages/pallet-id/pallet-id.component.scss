@@ -349,6 +349,47 @@
   background: #fafafa;
 }
 
+// Scan employee modal (in lần 2 trở đi)
+.scan-employee-modal {
+  max-width: 420px;
+}
+
+.scan-instruction {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.scan-input-wrap {
+  margin-bottom: 8px;
+}
+
+.scan-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: #1976d2;
+  }
+
+  &::placeholder {
+    color: #999;
+  }
+}
+
+.scan-error {
+  margin: 0;
+  font-size: 13px;
+  color: #c62828;
+  min-height: 20px;
+}
+
 // Print preview - 100mm x 130mm ratio (scaled down)
 .label-preview {
   width: 200px;

@@ -68,9 +68,6 @@
             <button class="btn-action btn-print" (click)="openPrintPreview(pallet)" title="In tem">
               <i class="material-icons">print</i>
             </button>
-            <button class="btn-action btn-delete" (click)="deletePallet(pallet)" title="Xóa">
-              <i class="material-icons">delete</i>
-            </button>
           </td>
         </tr>
       </tbody>
@@ -114,6 +111,39 @@
         <button class="btn-print-confirm" (click)="printPalletLabel()">
           <i class="material-icons">print</i>
           In 4 Tem
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan Employee Modal (in lần 2 trở đi) -->
+  <div class="modal-overlay" *ngIf="showScanEmployeeModal" (click)="closeScanEmployeeModal()">
+    <div class="modal-content scan-employee-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Quét mã nhân viên</h3>
+        <button class="btn-close" (click)="closeScanEmployeeModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="scan-instruction">Pallet đã in {{ pendingPrintPallet?.printCount || 0 }} lần. Để in thêm, vui lòng <strong>quét mã nhân viên</strong> bằng máy quét (không nhập tay).</p>
+        <div class="scan-input-wrap">
+          <input #scanEmployeeInput
+                 type="text"
+                 class="scan-input"
+                 [(ngModel)]="scannedEmployeeCode"
+                 (keydown)="onScanKeydown($event)"
+                 (keyup.enter)="confirmScannedEmployee()"
+                 placeholder="Quét mã bằng máy quét..."
+                 autocomplete="off" />
+        </div>
+        <p class="scan-error" *ngIf="scanEmployeeError">{{ scanEmployeeError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeScanEmployeeModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="confirmScannedEmployee()">
+          <i class="material-icons">check</i>
+          Xác nhận
         </button>
       </div>
     </div>

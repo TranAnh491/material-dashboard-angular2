@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -13,12 +13,16 @@ interface PalletItem {
   printCount: number;
 }
 
+const ALLOWED_EMPLOYEE_PREFIXES = ['ASP0106', 'ASP0119', 'ASP1761', 'ASP0538', 'ASP0384'];
+const SCAN_MAX_MS = 150; // Coi là quét nếu nhập xong trong 150ms
+
 @Component({
   selector: 'app-pallet-id',
   templateUrl: './pallet-id.component.html',
   styleUrls: ['./pallet-id.component.scss']
 })
-export class PalletIdComponent implements OnInit, OnDestroy {
+export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
+  @ViewChild('scanEmployeeInput') scanEmployeeInput?: ElementRef<HTMLInputElement>;
   private destroy$ = new Subject<void>();
 
   // Factory selection
@@ -36,6 +40,15 @@ export class PalletIdComponent implements OnInit, OnDestroy {
   selectedPallet: PalletItem | null = null;
   showPrintPreview: boolean = false;
 
+  // Scan employee (in lần 2 trở đi)
+  showScanEmployeeModal: boolean = false;
+  pendingPrintPallet: PalletItem | null = null;
+  scannedEmployeeCode: string = '';
+  scanEmployeeError: string = '';
+  private scanFirstKeyTime: number = 0;
+  private scanLastKeyTime: number = 0;
+  private focusScanInputOnce: boolean = false;
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -45,6 +58,13 @@ export class PalletIdComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.showScanEmployeeModal && this.focusScanInputOnce && this.scanEmployeeInput?.nativeElement) {
+      this.scanEmployeeInput.nativeElement.focus();
+      this.focusScanInputOnce = false;
+    }
   }
 
   // Load pallets from Firestore
@@ -143,23 +163,59 @@ export class PalletIdComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Delete pallet
-  async deletePallet(pallet: PalletItem): Promise<void> {
-    if (!confirm(`Bạn có chắc muốn xóa pallet ${pallet.palletCode}?`)) return;
-    
-    try {
-      await this.firestore.collection('pallets').doc(pallet.id).delete();
-      console.log(`✅ Deleted pallet: ${pallet.palletCode}`);
-    } catch (error) {
-      console.error('Error deleting pallet:', error);
-      alert('Lỗi khi xóa pallet!');
-    }
-  }
-
-  // Open print preview
+  // Open print preview (nếu đã in >= 1 lần thì bắt buộc quét mã NV trước)
   openPrintPreview(pallet: PalletItem): void {
+    const printCount = pallet.printCount || 0;
+    if (printCount >= 1) {
+      this.pendingPrintPallet = pallet;
+      this.scannedEmployeeCode = '';
+      this.scanEmployeeError = '';
+      this.showScanEmployeeModal = true;
+      this.focusScanInputOnce = true;
+      return;
+    }
     this.selectedPallet = pallet;
     this.showPrintPreview = true;
+  }
+
+  onScanKeydown(event: KeyboardEvent): void {
+    const now = Date.now();
+    if (this.scannedEmployeeCode === '') {
+      this.scanFirstKeyTime = now;
+    }
+    this.scanLastKeyTime = now;
+  }
+
+  confirmScannedEmployee(): void {
+    this.scanEmployeeError = '';
+    const code = (this.scannedEmployeeCode || '').trim();
+    if (!code) {
+      this.scanEmployeeError = 'Vui lòng quét mã nhân viên bằng máy quét.';
+      return;
+    }
+    const duration = this.scanLastKeyTime - this.scanFirstKeyTime;
+    if (duration > SCAN_MAX_MS) {
+      this.scanEmployeeError = 'Vui lòng dùng máy quét, không nhập tay.';
+      return;
+    }
+    const allowed = ALLOWED_EMPLOYEE_PREFIXES.some(prefix => code.startsWith(prefix));
+    if (!allowed) {
+      this.scanEmployeeError = 'Mã nhân viên không có quyền in thêm.';
+      return;
+    }
+    if (!this.pendingPrintPallet) return;
+    this.selectedPallet = this.pendingPrintPallet;
+    this.pendingPrintPallet = null;
+    this.scannedEmployeeCode = '';
+    this.showScanEmployeeModal = false;
+    this.showPrintPreview = true;
+  }
+
+  closeScanEmployeeModal(): void {
+    this.showScanEmployeeModal = false;
+    this.pendingPrintPallet = null;
+    this.scannedEmployeeCode = '';
+    this.scanEmployeeError = '';
   }
 
   // Close print preview
