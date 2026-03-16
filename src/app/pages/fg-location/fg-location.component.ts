@@ -34,8 +34,9 @@ export class FgLocationComponent implements OnInit, OnDestroy {
   newLocationScanInput: string = '';
   palletIdScanInput: string = '';
   
-  // Đính kèm Pallet ID vào vị trí mới (mặc định bật)
-  attachPalletId: boolean = true;
+  // Bước 4: tick "Bỏ qua" cho từng mục (không bắt buộc scan mục đó)
+  skipNewLocation: boolean = false;
+  skipPalletId: boolean = false;
   
   // Current location and items
   currentLocation: string = '';
@@ -201,17 +202,18 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Handle Enter key on new location scan
   onNewLocationScanKeyPress(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
-      // Nếu đang yêu cầu đính kèm Pallet ID mà chưa có mã thì nhảy sang ô Pallet ID
-      if (this.attachPalletId && !(this.palletIdScanInput || '').trim()) {
-        event.preventDefault();
-        if (this.palletIdInput) {
-          this.palletIdInput.nativeElement.focus();
-        }
-        return;
+      if (this.isNewLocationValid()) {
+        this.moveToNewLocation();
+      } else if (this.palletIdInput) {
+        this.palletIdInput.nativeElement.focus();
       }
+    }
+  }
+
+  onPalletIdScanKeyPress(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.isNewLocationValid()) {
       this.moveToNewLocation();
     }
   }
@@ -254,6 +256,8 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.currentStep = 'scan-new-location';
     this.newLocationScanInput = '';
     this.palletIdScanInput = '';
+    this.skipNewLocation = false;
+    this.skipPalletId = false;
     this.errorMessage = '';
     
     setTimeout(() => {
@@ -263,31 +267,36 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     }, 100);
   }
 
-  // Vị trí mới hiển thị / dùng khi lưu: có hoặc không kèm Pallet ID
   getDisplayNewLocation(): string {
-    const loc = (this.newLocationScanInput || '').trim().toUpperCase();
-    if (!this.attachPalletId || !(this.palletIdScanInput || '').trim()) {
-      return loc || '?';
-    }
-    const pallet = (this.palletIdScanInput || '').trim().toUpperCase();
-    return loc ? `${loc}-${pallet}` : pallet || '?';
+    const loc = this.skipNewLocation ? '' : (this.newLocationScanInput || '').trim().toUpperCase();
+    const pallet = this.skipPalletId ? '' : (this.palletIdScanInput || '').trim().toUpperCase();
+    if (loc && pallet) return `${loc}-${pallet}`;
+    if (loc) return loc;
+    if (pallet) return pallet;
+    return '?';
   }
 
   getEffectiveNewLocation(): string {
-    const loc = (this.newLocationScanInput || '').trim().toUpperCase();
-    if (!this.attachPalletId || !(this.palletIdScanInput || '').trim()) {
-      return loc;
-    }
-    const pallet = (this.palletIdScanInput || '').trim().toUpperCase();
-    return `${loc}-${pallet}`;
+    const loc = this.skipNewLocation ? '' : (this.newLocationScanInput || '').trim().toUpperCase();
+    const pallet = this.skipPalletId ? '' : (this.palletIdScanInput || '').trim().toUpperCase();
+    if (loc && pallet) return `${loc}-${pallet}`;
+    if (loc) return loc;
+    return pallet;
   }
 
   isNewLocationValid(): boolean {
-    const loc = (this.newLocationScanInput || '').trim();
-    if (!this.attachPalletId) {
-      return loc.length > 0;
+    const loc = this.skipNewLocation ? '' : (this.newLocationScanInput || '').trim();
+    const pallet = this.skipPalletId ? '' : (this.palletIdScanInput || '').trim();
+
+    // Nếu KHÔNG bỏ qua cả 2 → bắt buộc nhập cả 2 ô
+    if (!this.skipNewLocation && !this.skipPalletId) {
+      return loc.length > 0 && pallet.length > 0;
     }
-    return loc.length > 0 && (this.palletIdScanInput || '').trim().length > 0;
+
+    // Ngược lại: chỉ yêu cầu ô không bị bỏ qua có giá trị
+    if (!this.skipNewLocation && loc.length === 0) return false;
+    if (!this.skipPalletId && pallet.length === 0) return false;
+    return true;
   }
 
   // Back to location scan
@@ -316,9 +325,7 @@ export class FgLocationComponent implements OnInit, OnDestroy {
   // Step 4: Move selected items to new location
   async moveToNewLocation(): Promise<void> {
     if (!this.isNewLocationValid()) {
-      this.errorMessage = this.attachPalletId
-        ? 'Vui lòng scan vị trí mới và Pallet ID'
-        : 'Vui lòng scan hoặc nhập vị trí mới';
+      this.errorMessage = 'Vui lòng nhập ít nhất một mục: Vị trí mới hoặc Pallet ID (hoặc bỏ tick Bỏ qua để nhập)';
       return;
     }
 
@@ -331,10 +338,8 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = '';
     
-    const rackLocation = (this.newLocationScanInput || '').trim().toUpperCase();
-    const palletId = (this.attachPalletId && (this.palletIdScanInput || '').trim())
-      ? (this.palletIdScanInput || '').trim().toUpperCase()
-      : '';
+    const rackLocation = this.skipNewLocation ? '' : (this.newLocationScanInput || '').trim().toUpperCase();
+    const palletId = this.skipPalletId ? '' : (this.palletIdScanInput || '').trim().toUpperCase();
 
     this.newLocation = this.getEffectiveNewLocation();
     
@@ -361,14 +366,8 @@ export class FgLocationComponent implements OnInit, OnDestroy {
           modifiedBy: 'fg-location-scanner'
         };
 
-        // Nếu đang dùng Pallet ID thì lưu riêng để lần sau chỉ cần scan Pallet ID là tìm được
-        if (palletId) {
-          updateData.palletId = palletId;
-          updateData.rackLocation = rackLocation;
-        } else {
-          updateData.palletId = '';
-          updateData.rackLocation = rackLocation;
-        }
+        updateData.palletId = palletId || '';
+        updateData.rackLocation = rackLocation || (this.newLocation || '');
 
         batch.update(docRef, updateData);
       });
@@ -393,6 +392,8 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.locationScanInput = '';
     this.newLocationScanInput = '';
     this.palletIdScanInput = '';
+    this.skipNewLocation = false;
+    this.skipPalletId = false;
     this.currentLocation = '';
     this.newLocation = '';
     this.itemsAtLocation = [];
@@ -416,6 +417,8 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.locationScanInput = '';
     this.newLocationScanInput = '';
     this.palletIdScanInput = '';
+    this.skipNewLocation = false;
+    this.skipPalletId = false;
     this.currentLocation = '';
     this.newLocation = '';
     this.itemsAtLocation = [];

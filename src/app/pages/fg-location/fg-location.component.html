@@ -35,12 +35,7 @@
       Nhà máy: <strong>{{ selectedFactory }}</strong>
     </div>
     
-    <div class="attach-pallet-row" (click)="attachPalletId = !attachPalletId">
-      <div class="checkbox-wrapper">
-        <i class="material-icons">{{ attachPalletId ? 'check_box' : 'check_box_outline_blank' }}</i>
-      </div>
-      <span class="attach-pallet-text">Đính kèm Pallet ID</span>
-    </div>
+    <p class="scan-hint">Scan vị trí (VD: B6.2-F1-0025) hoặc chỉ Pallet ID (VD: F1-0025)</p>
     
     <div class="scan-input-container">
       <input 
@@ -152,38 +147,57 @@
       Di chuyển <strong>{{ getSelectedCount() }}</strong> mã hàng
     </div>
     
+    <div class="new-location-fields">
+      <div class="field-row">
+        <label class="field-label">Vị trí mới</label>
+        <div class="field-input-wrap">
+          <input 
+            #newLocationInput
+            type="text" 
+            class="scan-input"
+            [(ngModel)]="newLocationScanInput"
+            (ngModelChange)="onNewLocationInputChange()"
+            (keypress)="onNewLocationScanKeyPress($event)"
+            placeholder="Scan vị trí mới..."
+            autocomplete="off"
+            autocapitalize="characters">
+          <div class="skip-check" (click)="skipNewLocation = !skipNewLocation">
+            <i class="material-icons">{{ skipNewLocation ? 'check_box' : 'check_box_outline_blank' }}</i>
+            <span>Bỏ qua vị trí</span>
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Pallet ID</label>
+        <div class="field-input-wrap">
+          <input 
+            #palletIdInput
+            type="text" 
+            class="scan-input"
+            [(ngModel)]="palletIdScanInput"
+            (ngModelChange)="onPalletIdInputChange()"
+            (keypress)="onPalletIdScanKeyPress($event)"
+            placeholder="Scan Pallet ID..."
+            autocomplete="off"
+            autocapitalize="characters">
+          <div class="skip-check" (click)="skipPalletId = !skipPalletId">
+            <i class="material-icons">{{ skipPalletId ? 'check_box' : 'check_box_outline_blank' }}</i>
+            <span>Bỏ qua Pallet ID</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <p class="step4-hint">Chỉ cần ít nhất một mục (vị trí mới hoặc Pallet ID), sau đó bấm Di chuyển.</p>
+    
     <div class="scan-input-container">
-      <input 
-        #newLocationInput
-        type="text" 
-        class="scan-input location-input"
-        [(ngModel)]="newLocationScanInput"
-        (ngModelChange)="onNewLocationInputChange()"
-        (keypress)="onNewLocationScanKeyPress($event)"
-        placeholder="Scan vị trí mới..."
-        autocomplete="off"
-        autocapitalize="characters">
-      
       <button 
-        class="scan-btn success"
+        class="scan-btn success btn-move"
         [disabled]="isLoading || !isNewLocationValid()"
         (click)="moveToNewLocation()">
         <span *ngIf="!isLoading">✅ Di chuyển</span>
         <span *ngIf="isLoading">⏳ Đang xử lý...</span>
       </button>
-    </div>
-    
-    <div class="pallet-id-row" *ngIf="attachPalletId">
-      <label class="pallet-id-label">Pallet ID (đính kèm phía sau vị trí):</label>
-      <input 
-        #palletIdInput
-        type="text" 
-        class="scan-input pallet-id-input"
-        [(ngModel)]="palletIdScanInput"
-        (ngModelChange)="onPalletIdInputChange()"
-        placeholder="Scan Pallet ID..."
-        autocomplete="off"
-        autocapitalize="characters">
     </div>
     
     <button class="back-btn" (click)="backToItemSelection()">
