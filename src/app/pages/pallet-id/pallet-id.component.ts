@@ -163,17 +163,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  // Open print preview (nếu đã in >= 1 lần thì bắt buộc quét mã NV trước)
+  // Open print preview (hiện tại không khóa in lần 2 trở đi)
   openPrintPreview(pallet: PalletItem): void {
-    const printCount = pallet.printCount || 0;
-    if (printCount >= 1) {
-      this.pendingPrintPallet = pallet;
-      this.scannedEmployeeCode = '';
-      this.scanEmployeeError = '';
-      this.showScanEmployeeModal = true;
-      this.focusScanInputOnce = true;
-      return;
-    }
     this.selectedPallet = pallet;
     this.showPrintPreview = true;
   }
@@ -349,7 +340,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
             object-fit: contain;
           }
           .pallet-code {
-            font-size: 32pt;
+            font-size: 64pt;
             font-weight: bold;
             color: #000;
             letter-spacing: 2px;
