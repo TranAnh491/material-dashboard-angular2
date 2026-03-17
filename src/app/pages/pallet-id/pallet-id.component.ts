@@ -438,23 +438,28 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     return this.selectedFactory === 'ASM1' ? 'T1' : 'T2';
   }
 
-  /** Lấy số thứ tự tiếp theo (001-999), lưu vào localStorage */
-  private getNextTempLabelSeqs(count: number): string[] {
-    const key = `pallet-temp-seq-${this.selectedFactory}`;
-    let lastSeq = 0;
-    try {
-      const stored = localStorage.getItem(key);
-      if (stored) lastSeq = parseInt(stored, 10) || 0;
-    } catch (_) {}
+  /** Lấy số thứ tự tiếp theo (001-999), lưu Firebase (đồng bộ nhiều máy, tránh trùng) */
+  private async getNextTempLabelSeqs(count: number): Promise<string[]> {
     const prefix = this.getTempLabelPrefix();
-    const result: string[] = [];
-    for (let i = 0; i < count; i++) {
-      lastSeq = (lastSeq % 999) + 1;
-      result.push(`${prefix}-${lastSeq.toString().padStart(3, '0')}`);
-    }
-    try {
-      localStorage.setItem(key, String(lastSeq));
-    } catch (_) {}
+    const docRef = this.firestore.collection('pallet-temp-seq').doc(this.selectedFactory).ref;
+    const result = await this.firestore.firestore.runTransaction(async (transaction) => {
+      const snap = await transaction.get(docRef);
+      let lastSeq = 0;
+      if (snap.exists && snap.data()) {
+        const data = snap.data() as { lastSeq?: number };
+        lastSeq = Number(data?.lastSeq) || 0;
+      }
+      const seqs: string[] = [];
+      for (let i = 0; i < count; i++) {
+        lastSeq = (lastSeq % 999) + 1;
+        seqs.push(`${prefix}-${lastSeq.toString().padStart(3, '0')}`);
+      }
+      transaction.set(docRef, {
+        lastSeq,
+        updatedAt: new Date()
+      }, { merge: true });
+      return seqs;
+    });
     return result;
   }
 
@@ -468,7 +473,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.isPrintingTempLabels = true;
 
     try {
-      const labels = this.getNextTempLabelSeqs(qty);
+      const labels = await this.getNextTempLabelSeqs(qty);
       const prefix = this.getTempLabelPrefix();
 
       const qrImages = await Promise.all(
