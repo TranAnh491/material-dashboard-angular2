@@ -20,6 +20,22 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
+        <!-- Quay lại + Lô hàng + TBHD - cùng hàng với các nút -->
+        <ng-container *ngIf="!isLoading && selectedBatchView && !isBatchActive">
+          <button class="back-to-batches-btn" (click)="backToBatchList()">
+            <i class="material-icons">arrow_back</i>
+            Quay lại
+          </button>
+          <span class="batch-view-title">
+            <i class="material-icons">folder_open</i>
+            Lô hàng: <strong>{{ selectedBatchView }}</strong>
+            <span class="batch-view-count">({{ filteredMaterials.length }} mã)</span>
+          </span>
+          <button class="tbhd-btn" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
+            <i class="material-icons">print</i>
+            TBHD
+          </button>
+        </ng-container>
         <!-- Start Batch Processing Button - Dòng 1 -->
         <div class="start-batch-container mobile-row1">
           <button class="start-batch-btn" 
@@ -211,23 +227,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Nút Quay lại + tiêu đề lô hàng đang xem -->
-    <div class="batch-view-header" *ngIf="!isLoading && selectedBatchView && !isBatchActive">
-      <button class="back-to-batches-btn" (click)="backToBatchList()">
-        <i class="material-icons">arrow_back</i>
-        Quay lại
-      </button>
-      <span class="batch-view-title">
-        <i class="material-icons">folder_open</i>
-        Lô hàng: <strong>{{ selectedBatchView }}</strong>
-        <span class="batch-view-count">({{ filteredMaterials.length }} mã)</span>
-      </span>
-      <button class="tbhd-btn" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
-        <i class="material-icons">print</i>
-        TBHD
-      </button>
     </div>
 
     <!-- Excel-like Body + History Panel -->
@@ -438,7 +437,7 @@
       <div class="material-history-panel">
         <div class="history-top">
           <h5 class="history-title">
-            Lịch sử inbound
+            History
             <span *ngIf="selectedHistoryMaterial">
               – {{ selectedHistoryMaterial.materialCode }}
             </span>
@@ -453,12 +452,7 @@
             Chọn một mã hàng trong bảng để xem lịch sử inbound.
           </div>
 
-          <div *ngIf="!isLoadingHistory && selectedHistoryMaterial">
-            <div class="history-meta">
-              <div>Mã hàng: <strong>{{ selectedHistoryMaterial.materialCode }}</strong></div>
-              <div>PO: <strong>{{ selectedHistoryMaterial.poNumber }}</strong></div>
-              <div>NCC: <strong>{{ selectedHistoryMaterial.supplier }}</strong></div>
-            </div>
+          <div *ngIf="!isLoadingHistory && selectedHistoryMaterial" class="history-content">
             <div class="history-table-wrapper" *ngIf="materialHistory.length > 0; else noHistory">
               <table class="history-table">
                 <thead>
@@ -466,6 +460,7 @@
                     <th>Ngày nhập</th>
                     <th>NCC</th>
                     <th>PO</th>
+                    <th>NK</th>
                     <th>LDV</th>
                     <th>GW LDV (g)</th>
                   </tr>
@@ -473,8 +468,9 @@
                 <tbody>
                   <tr *ngFor="let h of materialHistory">
                     <td>{{ formatDate(h.importDate) }}</td>
-                    <td>{{ h.supplier }}</td>
+                    <td>{{ formatHistoryNcc(h.supplier) }}</td>
                     <td>{{ h.poNumber }}</td>
+                    <td>{{ formatNumber(h.quantity) }}</td>
                     <td>{{ h.rollsOrBags }}</td>
                     <td>{{ h.gwLdv }}</td>
                   </tr>
@@ -502,35 +498,39 @@
           </div>
 
           <div *ngIf="selectedHistoryMaterial" class="notes-section">
-            <div class="note-percent">
-              <label>Phần trăm kiểm tra (%)</label>
-              <input type="number"
-                     [(ngModel)]="selectedMaterialCheckPercent"
-                     (change)="saveSelectedMaterialNote()"
-                     min="0" max="100">
+            <div class="notes-chart-box">
+              <span class="notes-box-label">Chart</span>
+              <div class="chart-placeholder"></div>
             </div>
-
-            <div class="note-list" *ngIf="selectedMaterialNotes.length > 0">
-              <div class="note-item" *ngFor="let n of selectedMaterialNotes">
-                <div class="note-text">{{ n.note }}</div>
-                <div class="note-meta">
-                  {{ n.checkPercent }}% – {{ n.createdAt | date:'dd/MM/yyyy HH:mm' }}
+            <div class="notes-percent-box">
+              <span class="notes-box-label">Phần trăm kiểm tra</span>
+              <div class="note-percent">
+                <label>Phần trăm kiểm tra (%)</label>
+                <input type="number"
+                       [(ngModel)]="selectedMaterialCheckPercent"
+                       (change)="saveSelectedMaterialNote()"
+                       min="0" max="100">
+              </div>
+              <div class="note-list" *ngIf="selectedMaterialNotes.length > 0">
+                <div class="note-item" *ngFor="let n of selectedMaterialNotes">
+                  <div class="note-text">{{ n.note }}</div>
+                  <div class="note-meta">
+                    {{ n.checkPercent }}% – {{ n.createdAt | date:'dd/MM/yyyy HH:mm' }}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="note-empty" *ngIf="selectedMaterialNotes.length === 0">
-              Chưa có lưu ý nào cho mã hàng này.
-            </div>
-
-            <div class="note-new">
-              <label>Nhập lưu ý mới</label>
-              <textarea [(ngModel)]="newMaterialNoteText"
-                        (keyup.enter)="saveSelectedMaterialNote(true)"
-                        placeholder="Nhập lưu ý đặc biệt cho mã hàng..."></textarea>
-              <button class="note-add-btn" (click)="saveSelectedMaterialNote(true)" [disabled]="!newMaterialNoteText.trim()">
-                Thêm lưu ý
-              </button>
+              <div class="note-empty" *ngIf="selectedMaterialNotes.length === 0">
+                Chưa có lưu ý nào cho mã hàng này.
+              </div>
+              <div class="note-new">
+                <label>Nhập lưu ý mới</label>
+                <textarea [(ngModel)]="newMaterialNoteText"
+                          (keyup.enter)="saveSelectedMaterialNote(true)"
+                          placeholder="Nhập lưu ý đặc biệt cho mã hàng..."></textarea>
+                <button class="note-add-btn" (click)="saveSelectedMaterialNote(true)" [disabled]="!newMaterialNoteText.trim()">
+                  Thêm lưu ý
+                </button>
+              </div>
             </div>
           </div>
         </div>

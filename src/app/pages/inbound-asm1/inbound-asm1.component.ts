@@ -3713,7 +3713,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     }
     return value.toLocaleString('en-US', { maximumFractionDigits: 10 });
   }
-  
+
+  /** Cột NCC trong History: ẩn NVL_SX, NVL_KS, PD, ENG */
+  formatHistoryNcc(supplier: string | null | undefined): string {
+    if (!supplier) return '';
+    const s = supplier.toString().trim().toUpperCase();
+    if (['NVL_SX', 'NVL_KS', 'PD', 'ENG'].includes(s)) return '';
+    return supplier;
+  }
+
   getStatusBadgeClass(material: InboundMaterial): string {
     if (material.isReceived) {
       if (material.qualityCheck) {

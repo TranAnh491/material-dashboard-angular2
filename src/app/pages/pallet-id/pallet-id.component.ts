@@ -49,6 +49,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   private scanLastKeyTime: number = 0;
   private focusScanInputOnce: boolean = false;
 
+  // Tạo tem tạm
+  showTempLabelModal: boolean = false;
+  tempLabelQuantity: number = 1;
+  tempLabelError: string = '';
+  isPrintingTempLabels: boolean = false;
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -413,5 +419,168 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     const hours = d.getHours().toString().padStart(2, '0');
     const minutes = d.getMinutes().toString().padStart(2, '0');
     return `${day}/${month}/${year} ${hours}:${minutes}`;
+  }
+
+  // ====== Tạo tem tạm ======
+  openTempLabelModal(): void {
+    this.tempLabelQuantity = 1;
+    this.tempLabelError = '';
+    this.showTempLabelModal = true;
+  }
+
+  closeTempLabelModal(): void {
+    this.showTempLabelModal = false;
+    this.tempLabelError = '';
+  }
+
+  /** Tiền tố tem tạm: T1=ASM1, T2=ASM2 */
+  private getTempLabelPrefix(): string {
+    return this.selectedFactory === 'ASM1' ? 'T1' : 'T2';
+  }
+
+  /** Lấy số thứ tự tiếp theo (001-999), lưu vào localStorage */
+  private getNextTempLabelSeqs(count: number): string[] {
+    const key = `pallet-temp-seq-${this.selectedFactory}`;
+    let lastSeq = 0;
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) lastSeq = parseInt(stored, 10) || 0;
+    } catch (_) {}
+    const prefix = this.getTempLabelPrefix();
+    const result: string[] = [];
+    for (let i = 0; i < count; i++) {
+      lastSeq = (lastSeq % 999) + 1;
+      result.push(`${prefix}-${lastSeq.toString().padStart(3, '0')}`);
+    }
+    try {
+      localStorage.setItem(key, String(lastSeq));
+    } catch (_) {}
+    return result;
+  }
+
+  async printTempLabels(): Promise<void> {
+    const qty = Math.floor(Number(this.tempLabelQuantity));
+    if (qty < 1 || qty > 999) {
+      this.tempLabelError = 'Số lượng phải từ 1 đến 999';
+      return;
+    }
+    this.tempLabelError = '';
+    this.isPrintingTempLabels = true;
+
+    try {
+      const labels = this.getNextTempLabelSeqs(qty);
+      const prefix = this.getTempLabelPrefix();
+
+      const qrImages = await Promise.all(
+        labels.map(code => QRCode.toDataURL(code, {
+          width: 200,
+          margin: 1,
+          errorCorrectionLevel: 'M'
+        }))
+      );
+
+      const labelHtml = labels.map((code, i) => {
+        const prefixPart = code.slice(0, -3);
+        const digitsPart = code.slice(-3);
+        return `
+        <div class="temp-label-container">
+          <div class="temp-qr-section">
+            <img src="${qrImages[i]}" class="temp-qr-image" alt="QR">
+          </div>
+          <div class="temp-text-section">
+            <span class="temp-label-text">${prefixPart}<span class="temp-label-digits">${digitsPart}</span></span>
+          </div>
+        </div>
+      `;
+      }).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tem pallet tạm - ${prefix}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; }
+      @page { margin: 0 !important; size: 57mm 32mm !important; }
+      .temp-label-container {
+        width: 57mm !important;
+        height: 32mm !important;
+        page-break-after: always !important;
+      }
+      .temp-label-container:last-child { page-break-after: avoid !important; }
+    }
+    .temp-label-container {
+      display: flex;
+      width: 57mm;
+      height: 32mm;
+      border: 1px solid #000;
+      margin-bottom: 2px;
+      page-break-inside: avoid;
+    }
+    .temp-qr-section {
+      width: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #ccc;
+      padding: 1mm;
+      box-sizing: border-box;
+    }
+    .temp-qr-image {
+      width: 26mm;
+      height: 26mm;
+      display: block;
+      object-fit: contain;
+    }
+    .temp-text-section {
+      width: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2mm;
+      box-sizing: border-box;
+    }
+    .temp-label-text {
+      font-size: 18px;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+    }
+    .temp-label-digits {
+      font-size: 36px;
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.closeTempLabelModal();
+    } catch (err) {
+      console.error('Error printing temp labels:', err);
+      alert('Lỗi khi in tem tạm. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingTempLabels = false;
+    }
   }
 }

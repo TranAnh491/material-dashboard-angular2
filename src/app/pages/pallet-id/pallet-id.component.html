@@ -20,6 +20,43 @@
       <i class="material-icons">add</i>
       <span>{{ isCreating ? 'Đang tạo...' : 'Tạo Pallet Mới' }}</span>
     </button>
+
+    <!-- Tạo tem tạm Button -->
+    <button class="btn-temp-label" (click)="openTempLabelModal()" [disabled]="isPrintingTempLabels">
+      <i class="material-icons">local_offer</i>
+      <span>{{ isPrintingTempLabels ? 'Đang in...' : 'Tạo tem tạm' }}</span>
+    </button>
+  </div>
+
+  <!-- Modal nhập số lượng tem tạm -->
+  <div class="modal-overlay" *ngIf="showTempLabelModal" (click)="closeTempLabelModal()">
+    <div class="modal-content temp-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Tạo tem pallet tạm</h3>
+        <button class="btn-close" (click)="closeTempLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="temp-label-hint">Nhập số lượng tem pallet tạm cần in ({{ selectedFactory === 'ASM1' ? 'T1' : 'T2' }}-001 đến 999):</p>
+        <div class="temp-label-input-wrap">
+          <input type="number"
+                 [(ngModel)]="tempLabelQuantity"
+                 min="1"
+                 max="999"
+                 class="temp-label-input"
+                 placeholder="Số lượng">
+        </div>
+        <p class="temp-label-error" *ngIf="tempLabelError">{{ tempLabelError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeTempLabelModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printTempLabels()" [disabled]="!tempLabelQuantity || tempLabelQuantity < 1 || tempLabelQuantity > 999">
+          <i class="material-icons">print</i>
+          In tem
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Pallet Table -->

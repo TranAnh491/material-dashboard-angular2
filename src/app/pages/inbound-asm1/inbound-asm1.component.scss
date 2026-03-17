@@ -907,22 +907,28 @@ iframe {
 
 .excel-body-with-history {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 0;
   height: calc(100vh - 220px);
+  min-height: 0;
 }
 
 .excel-body-main {
-  flex: 0 0 70%;
-  max-width: 70%;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  width: 100%;
 }
 
 .material-history-panel {
-  flex: 0 0 30%;
-  max-width: 30%;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 200px;
+  max-height: 40vh;
   display: flex;
-  flex-direction: column;
-  border-left: 1px solid #e0e0e0;
+  flex-direction: row;
+  gap: 12px;
+  border-top: 1px solid #e0e0e0;
   background: #fafafa;
   padding: 8px 10px;
   box-sizing: border-box;
@@ -930,15 +936,17 @@ iframe {
 
 .history-top,
 .history-bottom {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding-bottom: 8px;
+  padding: 0 8px;
 }
 
 .history-top {
-  border-bottom: 1px solid #e0e0e0;
-  margin-bottom: 4px;
+  border-right: 1px solid #e0e0e0;
+  padding-right: 12px;
 }
 
 .history-title {
@@ -953,17 +961,16 @@ iframe {
   color: #666;
 }
 
-.history-meta {
-  font-size: 12px;
-  margin-bottom: 6px;
-
-  div + div {
-    margin-top: 2px;
-  }
+.history-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .history-table-wrapper {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -988,10 +995,44 @@ iframe {
 }
 
 .notes-section {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
+}
+
+.notes-chart-box,
+.notes-percent-box {
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.notes-box-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.chart-placeholder {
+  flex: 1;
+  min-height: 40px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 4px;
+}
+
+.notes-percent-box {
+  overflow: auto;
 }
 
 .note-percent input {
