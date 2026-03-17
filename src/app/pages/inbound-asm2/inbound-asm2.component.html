@@ -125,7 +125,7 @@
     </div>
     
     <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô (không áp dụng khi đang search mã hàng) -->
-    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)">
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)" (click)="closeBatchContextMenu()">
       <!-- Lô Hàng Nhập -->
       <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
         <div class="batch-section-title">
@@ -137,7 +137,8 @@
           <div class="batch-box"
                *ngFor="let batch of inboundBatchGroups"
                [class.batch-box-done]="batch.receivedCount === batch.count && batch.count > 0"
-               (click)="selectBatchView(batch.batchNumber)">
+               (click)="selectBatchView(batch.batchNumber)"
+               (contextmenu)="openBatchContextMenu($event, batch.batchNumber)">
             <div class="batch-box-number">{{ batch.batchNumber }}</div>
             <div class="batch-box-stats">
               <span class="batch-box-count-badge">{{ batch.count }} mã</span>
@@ -168,7 +169,8 @@
           <div class="batch-box batch-box-return"
                *ngFor="let batch of returnBatchGroups"
                [class.batch-box-done]="batch.receivedCount === batch.count && batch.count > 0"
-               (click)="selectBatchView(batch.batchNumber)">
+               (click)="selectBatchView(batch.batchNumber)"
+               (contextmenu)="openBatchContextMenu($event, batch.batchNumber)">
             <div class="batch-box-number">{{ batch.batchNumber }}</div>
             <div class="batch-box-stats">
               <span class="batch-box-count-badge">{{ batch.count }} mã</span>
@@ -184,6 +186,20 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Right-click context menu -->
+    <div class="batch-context-menu"
+         *ngIf="batchContextMenuVisible"
+         [style.left.px]="batchContextMenuX"
+         [style.top.px]="batchContextMenuY"
+         (click)="$event.stopPropagation()">
+      <button class="batch-context-menu-item danger"
+              (click)="deleteBatchFromContextMenu()"
+              [disabled]="!canDeleteMaterials">
+        <i class="material-icons">delete</i>
+        Xóa lô
+      </button>
     </div>
 
     <!-- Nút Quay lại + tiêu đề lô hàng đang xem -->

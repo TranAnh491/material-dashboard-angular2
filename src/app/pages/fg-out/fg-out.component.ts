@@ -586,6 +586,116 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
+  private invTon(d: any): number {
+    const ton = (d?.ton != null && d.ton !== 0)
+      ? Number(d.ton)
+      : (d?.stock != null ? Number(d.stock) : (Number(d?.quantity ?? 0) - Number(d?.exported ?? 0)));
+    return isNaN(ton) ? 0 : ton;
+  }
+
+  private invNormLot(d: any): string {
+    return String(d?.lot ?? d?.Lot ?? '').trim();
+  }
+
+  private invNormLsx(d: any): string {
+    return String(d?.lsx ?? d?.LSX ?? '').trim();
+  }
+
+  private invNormBatch(d: any): string {
+    return String(d?.batchNumber ?? d?.batch ?? '').trim();
+  }
+
+  private invNormMaterialCode(d: any): string {
+    return String(d?.materialCode ?? d?.maTP ?? '').trim();
+  }
+
+  private async findBestInventoryByBatch(
+    materialCode: string,
+    batchNumber: string,
+    factory: string,
+    preferredLot?: string,
+    preferredLsx?: string
+  ): Promise<{ lot: string; lsx: string; location: string } | null> {
+    const codeRaw = (materialCode || '').trim();
+    const batchRaw = (batchNumber || '').trim();
+    if (!codeRaw || !batchRaw) return null;
+
+    const variants = [...new Set([codeRaw, codeRaw.toUpperCase(), codeRaw.toLowerCase()])];
+    const snapshots = await Promise.all(
+      variants.map(v => firstValueFrom(
+        this.firestore.collection('fg-inventory', ref =>
+          ref.where('materialCode', '==', v)
+             .where('batchNumber', '==', batchRaw)
+        ).get()
+      ))
+    );
+
+    const seenIds = new Set<string>();
+    const rows: Array<{ lot: string; lsx: string; location: string; ton: number; factory: string }> = [];
+    snapshots.forEach(snap => {
+      snap.docs.forEach(doc => {
+        if (seenIds.has(doc.id)) return;
+        seenIds.add(doc.id);
+        const d = doc.data() as any;
+        const ton = this.invTon(d);
+        if (ton <= 0) return;
+        // Nếu fg-inventory có field factory thì lọc; nếu không có thì vẫn cho qua
+        const invFactory = String(d?.factory ?? '').trim();
+        if (factory && invFactory && invFactory !== factory) return;
+        // Bảo vệ: materialCode/batchNumber phải khớp (phòng trường hợp dữ liệu lẫn field khác)
+        const invCode = this.invNormMaterialCode(d);
+        const invBatch = this.invNormBatch(d);
+        if (invCode && invCode.toUpperCase() !== codeRaw.toUpperCase()) return;
+        if (invBatch && invBatch !== batchRaw) return;
+
+        rows.push({
+          lot: this.invNormLot(d),
+          lsx: this.invNormLsx(d),
+          location: String(d?.location ?? '').trim(),
+          ton,
+          factory: invFactory
+        });
+      });
+    });
+
+    if (rows.length === 0) return null;
+
+    const prefLot = String(preferredLot ?? '').trim();
+    const prefLsx = String(preferredLsx ?? '').trim();
+    const narrowed = rows.filter(r => (!prefLot || r.lot === prefLot) && (!prefLsx || r.lsx === prefLsx));
+    const candidates = narrowed.length ? narrowed : rows;
+
+    // Ưu tiên record có tồn cao hơn (an toàn nhất), nếu bằng nhau thì ưu tiên có đủ lot+lsx
+    candidates.sort((a, b) => {
+      if (b.ton !== a.ton) return b.ton - a.ton;
+      const aFull = (a.lot ? 1 : 0) + (a.lsx ? 1 : 0);
+      const bFull = (b.lot ? 1 : 0) + (b.lsx ? 1 : 0);
+      return bFull - aFull;
+    });
+    const best = candidates[0];
+    return { lot: best.lot, lsx: best.lsx, location: best.location };
+  }
+
+  private async autoFillLotLsxLocationFromBatch(
+    target: { materialCode: string; batchNumber: string; lot: string; lsx: string; location: string },
+    factory: string
+  ): Promise<void> {
+    const mc = String(target.materialCode || '').trim();
+    const batch = String(target.batchNumber || '').trim();
+    if (!mc || !batch) return;
+
+    const inv = await this.findBestInventoryByBatch(mc, batch, factory, target.lot, target.lsx);
+    if (!inv) return;
+
+    if (inv.lot) target.lot = inv.lot;
+    if (inv.lsx) target.lsx = inv.lsx;
+    if (inv.location) target.location = inv.location;
+
+    // Update cache cho getLocation() (giảm gọi lại service)
+    const cacheKey = `${mc}-${batch}-${target.lsx}-${target.lot}`;
+    if (target.location) this.locationCache.set(cacheKey, target.location);
+  }
+
   /** Bấm ô Batch/LOT/LSX (bảng chính) → xổ danh sách tương ứng */
   async onInventoryFieldFocus(event: Event, material: FgOutItem, field: 'batch' | 'lot' | 'lsx'): Promise<void> {
     if (this.inventoryDropdownBlurTimer) clearTimeout(this.inventoryDropdownBlurTimer);
@@ -631,16 +741,28 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.inventoryDropdownOptions = [];
   }
 
-  selectInventoryOption(value: string): void {
+  async selectInventoryOption(value: string): Promise<void> {
     if (this.inventoryDropdownMaterial) {
-      if (this.inventoryDropdownField === 'batch') this.inventoryDropdownMaterial.batchNumber = value;
-      else if (this.inventoryDropdownField === 'lot') this.inventoryDropdownMaterial.lot = value;
-      else this.inventoryDropdownMaterial.lsx = value;
+      if (this.inventoryDropdownField === 'batch') {
+        this.inventoryDropdownMaterial.batchNumber = value;
+        const factory = (this.inventoryDropdownMaterial.factory || this.selectedFactory || 'ASM1').trim();
+        await this.autoFillLotLsxLocationFromBatch(this.inventoryDropdownMaterial, factory);
+      } else if (this.inventoryDropdownField === 'lot') {
+        this.inventoryDropdownMaterial.lot = value;
+      } else {
+        this.inventoryDropdownMaterial.lsx = value;
+      }
       this.updateMaterialInFirebase(this.inventoryDropdownMaterial);
     } else if (this.inventoryDropdownXKItem) {
-      if (this.inventoryDropdownField === 'batch') this.inventoryDropdownXKItem.batchNumber = value;
-      else if (this.inventoryDropdownField === 'lot') this.inventoryDropdownXKItem.lot = value;
-      else this.inventoryDropdownXKItem.lsx = value;
+      if (this.inventoryDropdownField === 'batch') {
+        this.inventoryDropdownXKItem.batchNumber = value;
+        const factory = (this.xuatKhoShipmentFactory || 'ASM1').trim();
+        await this.autoFillLotLsxLocationFromBatch(this.inventoryDropdownXKItem, factory);
+      } else if (this.inventoryDropdownField === 'lot') {
+        this.inventoryDropdownXKItem.lot = value;
+      } else {
+        this.inventoryDropdownXKItem.lsx = value;
+      }
     }
     this.closeInventoryDropdown();
   }
