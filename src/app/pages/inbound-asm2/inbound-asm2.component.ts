@@ -43,6 +43,12 @@ export interface InboundMaterial {
   batchDuration?: number; // Thời gian hoàn thành (phút)
 }
 
+export interface DmvtItem {
+  materialCode: string;
+  materialName: string;
+  unit: string;
+}
+
 @Component({
   selector: 'app-inbound-asm2',
   templateUrl: './inbound-asm2.component.html',
@@ -99,8 +105,39 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       console.error('❌ [ASM2] Error saving GW.LDV catalog', error);
     }
   }
+
+  /** Load danh mục vật tư từ Firebase (dùng chung ASM1: dmvt/ASM1/items) */
+  private loadDmvtCatalog(): void {
+    const colRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
+    colRef.get().toPromise()
+      .then(snap => {
+        this.dmvtCatalog = {};
+        snap?.docs?.forEach(doc => {
+          const it = doc.data() as DmvtItem;
+          const code = (it.materialCode || '').toString().trim().toUpperCase();
+          if (code) {
+            this.dmvtCatalog[code] = {
+              materialName: (it.materialName || '').toString().trim(),
+              unit: (it.unit || '').toString().trim()
+            };
+          }
+        });
+        console.log('📦 [ASM2] DMVT catalog loaded (ASM1):', Object.keys(this.dmvtCatalog).length, 'mã');
+      })
+      .catch(err => console.error('[ASM2] Load DMVT catalog error:', err));
+  }
+
+  getMaterialName(materialCode: string): string {
+    if (!materialCode) return '';
+    const key = materialCode.toString().trim().toUpperCase();
+    return this.dmvtCatalog[key]?.materialName ?? '';
+  }
+
   materials: InboundMaterial[] = [];
   filteredMaterials: InboundMaterial[] = [];
+
+  /** Danh mục vật tư (DMVT) dùng chung với ASM1 - dmvt/ASM1/items */
+  dmvtCatalog: Record<string, { materialName: string; unit: string }> = {};
   
   // Search and filter
   searchTerm: string = '';
@@ -219,7 +256,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   
   ngOnInit(): void {
     this.loadPermissions();
-    
+    this.loadDmvtCatalog();
+
     // Thiết lập khung thời gian mặc định: 30 ngày gần nhất
     this.setupDateDefaults();
     console.log(`📅 Khung thời gian mặc định: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
@@ -2423,10 +2461,11 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       <tr>
         <td style="text-align:center">${i + 1}</td>
         <td><strong>${m.materialCode || ''}</strong></td>
+        <td>${this.getMaterialName(m.materialCode || '')}</td>
         <td>${m.poNumber || ''}</td>
-        <td style="text-align:right">${m.quantity != null ? m.quantity : ''}</td>
-        <td style="text-align:right">${m.rollsOrBags || ''}</td>
-        <td style="text-align:right">${m.unitWeight != null ? m.unitWeight : ''}</td>
+        <td style="text-align:right">${m.quantity != null ? this.formatNumber(m.quantity) : ''}</td>
+        <td style="text-align:right">${m.rollsOrBags != null ? this.formatNumber(Number(m.rollsOrBags)) : ''}</td>
+        <td style="text-align:right">${m.unitWeight != null ? this.formatNumber(m.unitWeight) : ''}</td>
         <td>${m.remarks || ''}</td>
       </tr>`).join('');
 
@@ -2573,6 +2612,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       <tr>
         <th style="width:30px"><span class="vi">#</span></th>
         <th><span class="vi">Mã Hàng</span><span class="en">Material Code</span></th>
+        <th><span class="vi">Tên Hàng</span><span class="en">Material Name</span></th>
         <th><span class="vi">Số PO</span><span class="en">PO Number</span></th>
         <th style="width:90px"><span class="vi">Lượng Nhập</span><span class="en">Import Qty</span></th>
         <th style="width:90px"><span class="vi">Lượng Đơn Vị</span><span class="en">Unit Qty</span></th>

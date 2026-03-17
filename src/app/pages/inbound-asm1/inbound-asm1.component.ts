@@ -43,6 +43,13 @@ export interface InboundMaterial {
   batchDuration?: number; // Thời gian hoàn thành (phút)
 }
 
+/** Danh mục vật tư (DMVT): mã nguyên liệu -> tên + đơn vị */
+export interface DmvtItem {
+  materialCode: string;
+  materialName: string;
+  unit: string;
+}
+
 @Component({
   selector: 'app-inbound-asm1',
   templateUrl: './inbound-asm1.component.html',
@@ -196,6 +203,112 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.statusFilter = 'all';
     
     this.loadMaterials();
+    this.loadDmvtCatalog();
+  }
+
+  /** Load danh mục vật tư từ Firebase (subcollection dmvt/ASM1/items - mỗi mã 1 doc để tránh vượt 1MB/doc) */
+  private loadDmvtCatalog(): void {
+    const colRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
+    colRef.get().toPromise()
+      .then(snap => {
+        this.dmvtCatalog = {};
+        snap?.docs?.forEach(doc => {
+          const it = doc.data() as DmvtItem;
+          const code = (it.materialCode || '').toString().trim().toUpperCase();
+          if (code) {
+            this.dmvtCatalog[code] = {
+              materialName: (it.materialName || '').toString().trim(),
+              unit: (it.unit || '').toString().trim()
+            };
+          }
+        });
+        console.log('📦 DMVT catalog loaded:', Object.keys(this.dmvtCatalog).length, 'mã');
+      })
+      .catch(err => console.error('Load DMVT catalog error:', err));
+  }
+
+  /** Chuẩn hóa mã thành document ID Firestore (chỉ [a-zA-Z0-9_-], tối đa 1500 ký tự) */
+  private sanitizeDocId(code: string): string {
+    return code.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1500) || '_';
+  }
+
+  /** Lấy tên hàng từ danh mục DMVT theo mã */
+  getMaterialName(materialCode: string): string {
+    if (!materialCode) return '';
+    const key = materialCode.toString().trim().toUpperCase();
+    return this.dmvtCatalog[key]?.materialName ?? '';
+  }
+
+  /** Import file DMVT (danh mục vật tư): từ dòng 5, cột A = mã, D = tên, E = đơn vị. Lưu Firebase, ghi đè bản cũ. */
+  importDMVTFromPopup(): void {
+    this.closeMorePopup();
+    setTimeout(() => this.importDMVT(), 100);
+  }
+
+  importDMVT(): void {
+    const el = document.createElement('input');
+    el.type = 'file';
+    el.accept = '.xlsx,.xls,.csv';
+    el.onchange = (ev: any) => {
+      const file = ev.target?.files?.[0];
+      if (file) this.processDMVTFile(file);
+    };
+    el.click();
+  }
+
+  private async processDMVTFile(file: File): Promise<void> {
+    const reader = new FileReader();
+    reader.onload = async (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+        const items: DmvtItem[] = [];
+        for (let i = 4; i < rows.length; i++) {
+          const row = rows[i] || [];
+          const materialCode = row[0] != null ? String(row[0]).trim() : '';
+          if (!materialCode) continue;
+          const materialName = row[3] != null ? String(row[3]).trim() : '';
+          const unit = row[4] != null ? String(row[4]).trim() : '';
+          items.push({ materialCode: materialCode.toUpperCase(), materialName, unit });
+        }
+        if (items.length === 0) {
+          alert('File không có dữ liệu hợp lệ từ dòng 5 (cột A: mã, D: tên, E: đơn vị).');
+          return;
+        }
+        const itemsColRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
+        const nativeItemsRef = this.firestore.collection('dmvt').doc('ASM1').ref.collection('items');
+        const BATCH_SIZE = 500;
+        // Xóa toàn bộ document cũ trong subcollection (ghi đè), mỗi batch tối đa 500
+        let snap = await nativeItemsRef.limit(BATCH_SIZE).get();
+        while (snap && !snap.empty) {
+          const batch = this.firestore.firestore.batch();
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          if (snap.docs.length < BATCH_SIZE) break;
+          snap = await nativeItemsRef.limit(BATCH_SIZE).get();
+        }
+        // Ghi từng batch document mới (mỗi mã 1 doc)
+        for (let i = 0; i < items.length; i += BATCH_SIZE) {
+          const batch = this.firestore.firestore.batch();
+          const chunk = items.slice(i, i + BATCH_SIZE);
+          chunk.forEach(it => {
+            const docId = this.sanitizeDocId(it.materialCode);
+            const docRef = itemsColRef.doc(docId).ref;
+            batch.set(docRef, { materialCode: it.materialCode, materialName: it.materialName, unit: it.unit });
+          });
+          await batch.commit();
+        }
+        await this.firestore.collection('dmvt').doc('ASM1').set({ updatedAt: new Date() }, { merge: true });
+        this.loadDmvtCatalog();
+        alert(`Đã import DMVT: ${items.length} mã nguyên liệu. Danh mục cũ đã được ghi đè.`);
+      } catch (err) {
+        console.error('Lỗi đọc/lưu file DMVT:', err);
+        alert(err?.message || 'Lỗi khi import DMVT. Kiểm tra file (dòng 5+, cột A, D, E).');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
   
   ngOnDestroy(): void {
@@ -1229,6 +1342,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   showNoteModal: boolean = false;
   materialNotes: { id?: string; materialCode: string; checkPercent: number; note: string }[] = [];
   newNote: { materialCode: string; checkPercent: number; note: string } = { materialCode: '', checkPercent: 100, note: '' };
+
+  /** Danh mục vật tư (DMVT): mã -> { materialName, unit } - dùng cho TBHD và hiển thị tên hàng */
+  dmvtCatalog: Record<string, { materialName: string; unit: string }> = {};
 
   // Panel lịch sử + lưu ý theo mã hàng
   selectedHistoryMaterial: InboundMaterial | null = null;
@@ -2578,10 +2694,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       <tr>
         <td style="text-align:center">${i + 1}</td>
         <td><strong>${m.materialCode || ''}</strong></td>
+        <td>${this.getMaterialName(m.materialCode || '')}</td>
         <td>${m.poNumber || ''}</td>
-        <td style="text-align:right">${m.quantity != null ? m.quantity : ''}</td>
-        <td style="text-align:right">${m.rollsOrBags || ''}</td>
-        <td style="text-align:right">${m.unitWeight != null ? m.unitWeight : ''}</td>
+        <td style="text-align:right">${m.quantity != null ? this.formatNumber(m.quantity) : ''}</td>
+        <td style="text-align:right">${m.rollsOrBags != null ? this.formatNumber(Number(m.rollsOrBags)) : ''}</td>
+        <td style="text-align:right">${m.unitWeight != null ? this.formatNumber(m.unitWeight) : ''}</td>
         <td>${m.remarks || ''}</td>
       </tr>`).join('');
 
@@ -2728,6 +2845,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       <tr>
         <th style="width:30px"><span class="vi">#</span></th>
         <th><span class="vi">Mã Hàng</span><span class="en">Material Code</span></th>
+        <th><span class="vi">Tên Hàng</span><span class="en">Material Name</span></th>
         <th><span class="vi">Số PO</span><span class="en">PO Number</span></th>
         <th style="width:90px"><span class="vi">Lượng Nhập</span><span class="en">Import Qty</span></th>
         <th style="width:90px"><span class="vi">Lượng Đơn Vị</span><span class="en">Unit Qty</span></th>
@@ -3588,13 +3706,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return date.toLocaleString('vi-VN');
   }
   
-  // Format number with commas for thousands
+  // Format number with commas for thousands (e.g. 10,000)
   formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined) {
-      return '0';
+      return '';
     }
-    
-    return value.toLocaleString('vi-VN');
+    return value.toLocaleString('en-US', { maximumFractionDigits: 10 });
   }
   
   getStatusBadgeClass(material: InboundMaterial): string {
