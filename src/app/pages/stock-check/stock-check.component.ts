@@ -6,6 +6,14 @@ import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
 
+interface RackStat {
+  location: string;
+  total: number;
+  full: number;     // Đã kiểm đủ lượng
+  partial: number;  // Kiểm chưa đủ lượng
+  unchecked: number;// Chưa kiểm
+}
+
 interface StockCheckMaterial {
   stt: number;
   materialCode: string;
@@ -103,6 +111,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scanHistory: string[] = [];
   currentScanLocation: string = ''; // Vị trí hiện tại đang kiểm kê
   locationMaterials: StockCheckMaterial[] = []; // Danh sách NVL theo vị trí đang scan (hiển thị dạng box)
+  locationMaterialsView: Array<StockCheckMaterial & { _status: 'unchecked' | 'partial' | 'full' }> = []; // Pre-computed view với status
+
+  private searchDebounceTimer: any = null; // Timer debounce search
   
   // Scan success popup
   showScanSuccessPopup = false;
@@ -138,6 +149,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   resetPassword = '';
   isResetting = false;
   
+  // Rack modal
+  showRackModal: boolean = false;
+  rackStats: RackStat[] = [];
+  showRackDetailModal: boolean = false;
+  rackDetailLocation: string = '';
+  rackDetailMaterials: StockCheckMaterial[] = [];
+
   // History modal (for material history column)
   showHistoryModal: boolean = false;
   selectedMaterialForHistory: StockCheckMaterial | null = null;
@@ -283,6 +301,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Search materials by material code
    */
   onSearchInput(): void {
+    // Debounce 250ms để tránh filter chạy từng keystroke
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    this.searchDebounceTimer = setTimeout(() => {
+      this._doSearch();
+    }, 250);
+  }
+
+  private _doSearch(): void {
     if (!this.searchInput.trim()) {
       this.applyFilter();
       return;
@@ -496,11 +524,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const loc = (this.currentScanLocation || '').trim().toUpperCase();
     if (!loc) {
       this.locationMaterials = [];
+      this.locationMaterialsView = [];
       return;
     }
 
-    // Load toàn bộ NVL đang có ở vị trí (dữ liệu inventory)
-    // Sort theo mã + PO + IMD để dễ scan.
     this.locationMaterials = this.allMaterials
       .filter(m => (m.location || '').trim().toUpperCase() === loc)
       .slice()
@@ -511,6 +538,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         if (po !== 0) return po;
         return (a.imd || '').localeCompare(b.imd || '');
       });
+
+    // Pre-compute status một lần để template không gọi hàm nhiều lần
+    this.locationMaterialsView = this.locationMaterials.map(m => ({
+      ...m,
+      _status: this.getMaterialCheckStatus(m)
+    }));
+  }
+
+  // TrackBy functions - tránh Angular re-render toàn bộ list
+  trackByMaterial(index: number, mat: StockCheckMaterial): string {
+    return `${mat.materialCode}_${mat.poNumber}_${mat.imd}`;
+  }
+
+  trackByIndex(index: number): number {
+    return index;
   }
 
   get locationTotalCount(): number {
@@ -947,8 +989,33 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           return;
         }
 
+        // Khi snapshot bị xóa (RESET), valueChanges() sẽ trả về undefined/null
+        // => phải reset UI về chưa check
         if (!snapshotData || !snapshotData.materials) {
-          console.log(`⚠️ [subscribeToSnapshotChanges] No snapshot data, skipping update`);
+          console.log(`🧹 [subscribeToSnapshotChanges] Snapshot missing/cleared, resetting local check state...`);
+          
+          // Clear cache để không dùng dữ liệu cũ
+          if (this.selectedFactory) {
+            this.snapshotCache[this.selectedFactory] = { materials: [], lastUpdated: new Date() };
+          }
+
+          // Reset tất cả materials về chưa check
+          this.allMaterials.forEach(mat => {
+            mat.stockCheck = '';
+            mat.qtyCheck = null;
+            mat.idCheck = '';
+            mat.dateCheck = null;
+            mat.actualLocation = '';
+          });
+
+          // Update location view (box) nếu đang scan theo vị trí
+          this.updateLocationMaterials();
+
+          // Refresh view/stats
+          this.filteredMaterials = [...this.allMaterials];
+          this.loadPageFromFiltered(this.currentPage);
+          this.calculateIdCheckStats();
+          this.cdr.detectChanges();
           return;
         }
 
@@ -1242,11 +1309,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         console.error('❌ Error saving history (async):', error);
       });
       
-      // Recalculate ID stats (nhanh, không cần await)
-      this.calculateIdCheckStats();
-
-      // Refresh list theo vị trí hiện tại (để đổi màu box ngay)
+      // Khi đang scan: chỉ cập nhật location box, skip sort toàn bảng
       this.updateLocationMaterials();
+      if (!this.showScanModal) {
+        this.calculateIdCheckStats();
+      }
       
       console.log(`✅ Stock check saved (cached): ${checkedMaterials.length} materials`);
     } catch (error) {
@@ -1284,8 +1351,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const newHistoryItem = {
         idCheck: historyItem.idCheck,
         qtyCheck: scannedQty, // Số lượng vừa scan
-        dateCheck: firebase.default.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp(),
+        // Không dùng serverTimestamp trong array (Firebase không hỗ trợ trong array values)
+        dateCheck: new Date(),
+        updatedAt: new Date(),
         stock: material.stock, // Lưu stock tại thời điểm check
         location: material.location || '',
         standardPacking: material.standardPacking || ''
@@ -1629,12 +1697,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
           
-          // Refresh view (không block scan - async)
-          setTimeout(() => {
-            this.applyFilter();
-            this.updateLocationMaterials();
-            this.cdr.detectChanges();
-          }, 0);
+          // Chỉ update location box khi đang scan - skip sort toàn bảng
+          this.updateLocationMaterials();
+          this.cdr.detectChanges();
         } else {
           // Không tìm thấy trong bảng - tạo material mới và thêm vào
           console.log('📝 Material not found in table, creating new entry:', { materialCode, poNumber, imd, quantity });
@@ -1690,8 +1755,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             console.log('⚠️ Could not load standardPacking for new material:', error);
           }
           
-          // Refresh view trước để có STT chính xác
-          this.applyFilter();
+          // Refresh view trước để có STT chính xác (chỉ update location box khi đang scan)
           this.updateLocationMaterials();
           
           // Tìm lại material sau khi filter để lấy STT chính xác
@@ -1782,11 +1846,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scanHistory = [];
     this.currentScanLocation = '';
     this.locationMaterials = [];
-    
+    this.locationMaterialsView = [];
+
+    // Sau khi đóng modal mới sync lại bảng + stats (tránh làm chậm khi đang scan)
+    this.applyFilter();
+    this.calculateIdCheckStats();
+    this.cdr.detectChanges();
+
     // Hiển thị thông báo tổng số mã đã scan
     if (this.scannedCount > 0) {
       alert(`Đã scan kiểm kê: ${this.scannedCount} mã`);
-      this.scannedCount = 0; // Reset counter
+      this.scannedCount = 0;
     }
   }
   
@@ -1819,12 +1889,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   openResetModal(): void {
     this.showResetModal = true;
     this.resetPassword = '';
+    this.cdr.detectChanges();
     setTimeout(() => {
       const input = document.getElementById('reset-password-input') as HTMLInputElement;
-      if (input) {
-        input.focus();
-      }
-    }, 300);
+      if (input) input.focus();
+    }, 100);
   }
   
   /**
@@ -1864,6 +1933,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         .delete();
       
       console.log(`🗑️ Deleted stock check snapshot for ${this.selectedFactory} (history preserved)`);
+
+      // Clear snapshot cache để tránh hiển thị dữ liệu cũ
+      this.snapshotCache[this.selectedFactory] = { materials: [], lastUpdated: new Date() };
       
       // Reset local data
       this.allMaterials.forEach(mat => {
@@ -1871,10 +1943,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         mat.qtyCheck = null;
         mat.idCheck = '';
         mat.dateCheck = null;
+        mat.actualLocation = '';
       });
       
       // Refresh view
       this.applyFilter();
+      this.updateLocationMaterials();
+      this.calculateIdCheckStats();
       
       alert(`✅ Đã RESET thành công!\n\nĐã xóa dữ liệu kiểm kê hiện tại. Lịch sử vĩnh viễn vẫn được giữ lại.`);
       this.closeResetModal();
@@ -1989,6 +2064,82 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     target.forEach(m => {
       m.hasKhsx = khsxSet.has((m.materialCode || '').trim().toUpperCase());
     });
+  }
+
+  // ======================== RACK FEATURE ========================
+
+  openRackModal(): void {
+    this.rackStats = this.computeRackStats();
+    this.showRackModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeRackModal(): void {
+    this.showRackModal = false;
+  }
+
+  openRackDetail(location: string): void {
+    const loc = (location || '').trim().toUpperCase();
+    this.rackDetailLocation = loc;
+    this.rackDetailMaterials = this.allMaterials
+      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .slice()
+      .sort((a, b) => {
+        const code = a.materialCode.localeCompare(b.materialCode);
+        if (code !== 0) return code;
+        const po = (a.poNumber || '').localeCompare(b.poNumber || '');
+        if (po !== 0) return po;
+        return (a.imd || '').localeCompare(b.imd || '');
+      });
+    this.showRackDetailModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeRackDetailModal(): void {
+    this.showRackDetailModal = false;
+    this.rackDetailLocation = '';
+    this.rackDetailMaterials = [];
+  }
+
+  private computeRackStats(): RackStat[] {
+    const map = new Map<string, RackStat>();
+
+    for (const mat of this.allMaterials) {
+      const loc = (mat.location || '').trim().toUpperCase();
+      if (!loc) continue;
+
+      if (!map.has(loc)) {
+        map.set(loc, { location: loc, total: 0, full: 0, partial: 0, unchecked: 0 });
+      }
+      const stat = map.get(loc)!;
+      stat.total++;
+
+      const status = this.getMaterialCheckStatus(mat);
+      if (status === 'full') stat.full++;
+      else if (status === 'partial') stat.partial++;
+      else stat.unchecked++;
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => a.location.localeCompare(b.location));
+  }
+
+  exportRackReport(): void {
+    if (this.rackStats.length === 0) return;
+
+    const exportData = this.rackStats.map(r => ({
+      'Vị trí':          r.location,
+      'Tổng mã':         r.total,
+      'Đã kiểm đủ':      r.full,
+      'Kiểm chưa đủ':    r.partial,
+      'Chưa kiểm':       r.unchecked,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Rack');
+    XLSX.writeFile(wb, `Rack_${this.selectedFactory}_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
   /**

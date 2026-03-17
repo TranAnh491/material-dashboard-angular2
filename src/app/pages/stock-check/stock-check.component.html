@@ -63,14 +63,14 @@
           <span>QUAY LẠI</span>
         </button>
         
+        <button type="button" class="reset-btn desktop-only" (click)="openResetModal()" title="Reset stock check">
+          <i class="material-icons">refresh</i>
+          <span>RESET</span>
+        </button>
+
         <button class="logout-btn desktop-only" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
           <i class="material-icons">logout</i>
           <span>ĐĂNG XUẤT</span>
-        </button>
-        
-        <button class="reset-btn desktop-only" (click)="openResetModal()" title="Reset stock check">
-          <i class="material-icons">refresh</i>
-          <span>RESET</span>
         </button>
         
         <button class="history-btn desktop-only" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
@@ -96,6 +96,11 @@
         <button class="report-btn desktop-only" (click)="exportStockCheckReport()">
           <i class="material-icons">download</i>
           REPORT
+        </button>
+
+        <button class="rack-btn desktop-only" (click)="openRackModal()" title="Xem tổng hợp theo vị trí">
+          <i class="material-icons">shelves</i>
+          RACK
         </button>
         
         <div class="search-box desktop-only">
@@ -223,7 +228,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of displayedMaterials">
+          <tr *ngFor="let material of displayedMaterials; trackBy: trackByMaterial">
             <td>{{ material.stt }}</td>
             <td>{{ material.materialCode }}</td>
             <td>{{ material.poNumber }}</td>
@@ -407,146 +412,100 @@
   </div>
 
   <!-- Scan Modal (for material scanning) -->
-  <div class="scan-modal" *ngIf="showScanModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 *ngIf="scanStep !== 'material'">Kiểm Kê - {{ selectedFactory }}</h3>
-        <h3 *ngIf="scanStep === 'material'">
-          Vị trí: {{ currentScanLocation }}
-        </h3>
-        <button class="close-btn" (click)="closeScanModal()">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-      
-      <div class="scan-message" *ngIf="scanStep !== 'material'">
-        {{ scanMessage }}
-      </div>
-      
-      <div class="scan-input-container">
-        <input 
-          id="scan-input"
-          type="text" 
-          class="scan-input"
-          [(ngModel)]="scanInput"
-          (keyup.enter)="onScanInputEnter()"
-          (input)="onScanInputChange()"
-          [placeholder]="scanStep === 'employee' ? 'Nhập hoặc scan mã nhân viên...' : 'Scan mã hàng hóa...'"
-          autocomplete="off"
-          autofocus>
-        <button class="scan-submit-btn" (click)="onScanInputEnter()">
-          <i class="material-icons">send</i>
-        </button>
-      </div>
+  <div class="scan-modal-v2" *ngIf="showScanModal">
+    <div class="scan-modal-inner">
 
-      <!-- Scan History -->
-      <div class="scan-history" *ngIf="scanStep !== 'material' && scanHistory.length > 0">
-        <div class="history-title">Lịch sử scan:</div>
-        <div class="history-item" *ngFor="let item of scanHistory">
-          {{ item }}
-        </div>
-      </div>
+      <!-- ===== FIXED TOP: step indicator + input ===== -->
+      <div class="scan-fixed-top">
 
-      <!-- Materials by scanned location (boxes) -->
-      <div class="location-materials-section"
-           *ngIf="scanStep === 'material' && currentScanLocation">
-        <div class="location-summary">
-          <div class="summary-left">
-            <div class="summary-title">
-              <i class="material-icons">check_circle</i>
-              <span>Đã kiểm</span>
-            </div>
-            <div class="summary-value">{{ locationCheckedCount }}/{{ locationTotalCount }}</div>
+        <!-- Step: scan location -->
+        <div class="scan-step-block" *ngIf="scanStep === 'location'">
+          <div class="step-badge location">
+            <i class="material-icons">place</i>
+            SCAN VỊ TRÍ
           </div>
-          <button type="button" class="done-btn" (click)="closeScanModal()">
-            Done
+          <div class="step-hint">Scan mã vị trí để bắt đầu kiểm kê</div>
+        </div>
+
+        <!-- Step: scan material -->
+        <div class="scan-step-block" *ngIf="scanStep === 'material'">
+          <div class="step-row">
+            <div class="step-badge material">
+              <i class="material-icons">qr_code_scanner</i>
+              SCAN NGUYÊN LIỆU
+            </div>
+            <div class="loc-tag">
+              <i class="material-icons">place</i>
+              {{ currentScanLocation }}
+            </div>
+          </div>
+          <div class="step-counter">Đã kiểm: <strong>{{ locationCheckedCount }}</strong> / {{ locationTotalCount }}</div>
+        </div>
+
+        <!-- Input row -->
+        <div class="scan-input-row">
+          <input
+            id="scan-input"
+            type="text"
+            class="scan-input-field"
+            [(ngModel)]="scanInput"
+            (keyup.enter)="onScanInputEnter()"
+            (input)="onScanInputChange()"
+            [placeholder]="scanStep === 'location' ? 'Scan mã vị trí...' : 'Scan mã nguyên liệu...'"
+            autocomplete="off"
+            autofocus>
+          <button class="scan-send-btn" (click)="onScanInputEnter()">
+            <i class="material-icons">send</i>
+          </button>
+          <button class="scan-close-btn" (click)="closeScanModal()">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+
+      </div><!-- /scan-fixed-top -->
+
+      <!-- ===== SCROLLABLE BODY: material boxes ===== -->
+      <div class="scan-scroll-body" *ngIf="scanStep === 'material'">
+
+        <!-- Done button -->
+        <div class="done-row">
+          <button type="button" class="done-btn-full" (click)="closeScanModal()">
+            <i class="material-icons">check</i>
+            HOÀN THÀNH
           </button>
         </div>
 
         <div class="location-materials-empty" *ngIf="locationMaterials.length === 0">
           <i class="material-icons">inbox</i>
-          <div>Không có NVL nào ở vị trí này (theo dữ liệu tồn kho).</div>
+          <span>Không có NVL nào ở vị trí <strong>{{ currentScanLocation }}</strong></span>
         </div>
 
-        <div class="location-materials-grid" *ngIf="locationMaterials.length > 0">
-          <div class="material-box"
-               *ngFor="let mat of locationMaterials"
+        <div class="mat-grid" *ngIf="locationMaterialsView.length > 0">
+          <div class="mat-box"
+               *ngFor="let mat of locationMaterialsView; trackBy: trackByMaterial"
                [ngClass]="{
-                 'status-unchecked': getMaterialCheckStatus(mat) === 'unchecked',
-                 'status-partial': getMaterialCheckStatus(mat) === 'partial',
-                 'status-full': getMaterialCheckStatus(mat) === 'full'
+                 'status-unchecked': mat._status === 'unchecked',
+                 'status-partial':   mat._status === 'partial',
+                 'status-full':      mat._status === 'full'
                }">
-            <div class="box-top">
-              <div class="mat-code">{{ mat.materialCode }}</div>
-              <div class="status-chip" *ngIf="getMaterialCheckStatus(mat) === 'full'">ĐỦ</div>
-              <div class="status-chip warning" *ngIf="getMaterialCheckStatus(mat) === 'partial'">THIẾU</div>
+            <div class="box-row top">
+              <div class="code">{{ mat.materialCode }}</div>
+              <div class="status-pill unchecked" *ngIf="mat._status === 'unchecked'">CHƯA KIỂM</div>
+              <div class="status-pill partial" *ngIf="mat._status === 'partial'">CHƯA ĐỦ</div>
+              <div class="status-pill full" *ngIf="mat._status === 'full'">ĐỦ</div>
             </div>
-            <div class="box-mid compact">
-              <div class="line"><span class="label">PO</span><span class="value">{{ mat.poNumber }}</span></div>
-              <div class="line"><span class="label">Lượng</span><span class="value">{{ mat.stock | number:'1.0-2' }}</span></div>
-              <div class="line" *ngIf="getMaterialCheckStatus(mat) === 'partial'">
-                <span class="label">Đã scan</span><span class="value">{{ (mat.qtyCheck || 0) | number:'1.0-2' }}</span>
-              </div>
+            <div class="box-row"><span class="label">PO</span><span class="value">{{ mat.poNumber }}</span></div>
+            <div class="box-row"><span class="label">TỒN KHO</span><span class="value">{{ mat.stock | number:'1.0-2' }}</span></div>
+            <div class="box-row"><span class="label">ĐÃ KIỂM</span><span class="value">{{ (mat.qtyCheck || 0) | number:'1.0-2' }}</span></div>
           </div>
         </div>
-      </div>
-      
-      <div class="modal-actions">
-        <button class="cancel-btn" (click)="closeScanModal()">
-          Đóng
-        </button>
-      </div>
+
+      </div><!-- /scan-scroll-body -->
+
     </div>
   </div>
 
-  <!-- Reset Modal -->
-  <div class="reset-modal" *ngIf="showResetModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>
-          <i class="material-icons">refresh</i>
-          RESET STOCK CHECK
-        </h3>
-        <button class="close-btn" (click)="closeResetModal()">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-      
-      <div class="modal-body">
-        <div class="reset-warning">
-          <i class="material-icons">warning</i>
-          <p><strong>⚠️ CẢNH BÁO:</strong></p>
-          <p>Hành động này sẽ xóa TẤT CẢ dữ liệu kiểm kê cho <strong>{{ selectedFactory }}</strong>.</p>
-          <p><strong>✅ Dữ liệu sẽ được lưu vào lịch sử trước khi xóa</strong> để có thể xem lại sau.</p>
-          <p>Bạn có chắc muốn tiếp tục?</p>
-        </div>
-        
-        <div class="password-input-container">
-          <label>Nhập mật khẩu để xác nhận:</label>
-          <input 
-            id="reset-password-input"
-            type="password" 
-            class="password-input"
-            [(ngModel)]="resetPassword"
-            (keyup.enter)="resetStockCheck()"
-            placeholder="Nhập mật khẩu..."
-            autocomplete="off"
-            autofocus>
-        </div>
-      </div>
-      
-      <div class="modal-actions">
-        <button class="cancel-btn" (click)="closeResetModal()" [disabled]="isResetting">
-          Hủy
-        </button>
-        <button class="reset-confirm-btn" (click)="resetStockCheck()" [disabled]="isResetting">
-          <i class="material-icons" *ngIf="!isResetting">refresh</i>
-          <i class="material-icons rotating" *ngIf="isResetting">sync</i>
-          <span>{{ isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET' }}</span>
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- Reset Modal: chuyển ra ngoài stock-check-container để tránh bị ảnh hưởng bởi transform/z-index -->
 
   <!-- Archive History Modal -->
   <div class="archive-history-modal" *ngIf="showArchiveHistoryModal">
@@ -574,7 +533,7 @@
             <p class="hint">Lịch sử sẽ được lưu tự động khi bạn bấm RESET</p>
           </div>
           
-          <div class="archive-item" *ngFor="let archive of archiveHistoryList; let i = index">
+          <div class="archive-item" *ngFor="let archive of archiveHistoryList; let i = index; trackBy: trackByIndex">
             <div class="archive-info">
               <div class="archive-header">
                 <span class="archive-index">#{{ i + 1 }}</span>
@@ -648,7 +607,7 @@
             <p>Đang tải...</p>
           </div>
           <div class="history-list" *ngIf="!isLoadingHistory && materialHistoryList.length > 0">
-            <div class="history-item" *ngFor="let history of materialHistoryList">
+            <div class="history-item" *ngFor="let history of materialHistoryList; trackBy: trackByIndex">
               <div class="history-icon">
                 <i class="material-icons">check_circle</i>
               </div>
@@ -738,7 +697,7 @@
         <div class="check-history-section">
           <h4>Lịch sử check</h4>
           <div class="history-list" *ngIf="materialCheckHistory.length > 0">
-            <div class="history-item" *ngFor="let history of materialCheckHistory" 
+            <div class="history-item" *ngFor="let history of materialCheckHistory; trackBy: trackByIndex" 
                  [class.archive-item]="history.source === 'archive'">
               <div class="history-icon">
                 <i class="material-icons" [class.archive-icon]="history.source === 'archive'">
@@ -785,6 +744,144 @@
   </div>
 </div>
 
+<!-- Rack Modal — đặt ngoài stock-check-container -->
+<div class="rack-modal-global" *ngIf="showRackModal">
+  <div class="rack-modal-content">
+    <div class="rack-modal-header">
+      <div class="header-left">
+        <i class="material-icons">shelves</i>
+        <span>TỔNG HỢP THEO VỊ TRÍ — {{ selectedFactory }}</span>
+      </div>
+      <div class="header-right">
+        <button class="rack-export-btn" (click)="exportRackReport()" title="Xuất Excel">
+          <i class="material-icons">download</i>
+          Excel
+        </button>
+        <button class="rack-close-btn" (click)="closeRackModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+    </div>
+
+    <div class="rack-table-wrap">
+      <div class="rack-empty" *ngIf="rackStats.length === 0">
+        <i class="material-icons">info</i>
+        <div>Không có dữ liệu vị trí để hiển thị.</div>
+        <div class="hint">Kiểm tra cột <strong>VỊ TRÍ (DỮ LIỆU)</strong> có dữ liệu không.</div>
+      </div>
+
+      <table class="rack-table">
+        <thead>
+          <tr>
+            <th>VỊ TRÍ</th>
+            <th class="col-total">TỔNG MÃ</th>
+            <th class="col-full">ĐÃ KIỂM ĐỦ</th>
+            <th class="col-partial">CHƯA ĐỦ</th>
+            <th class="col-unchecked">CHƯA KIỂM</th>
+          </tr>
+        </thead>
+        <tbody *ngIf="rackStats.length > 0">
+          <tr *ngFor="let r of rackStats; trackBy: trackByIndex"
+              [ngClass]="{
+                'row-done':    r.unchecked === 0 && r.partial === 0,
+                'row-partial': r.partial > 0 || (r.unchecked > 0 && r.full > 0),
+                'row-empty':   r.full === 0 && r.partial === 0
+              }">
+            <td class="loc-cell">{{ r.location }}</td>
+            <td class="col-total clickable" (click)="openRackDetail(r.location)" title="Click để xem danh sách mã hàng">
+              {{ r.total }}
+            </td>
+            <td class="col-full">
+              <span class="chip full" *ngIf="r.full > 0">{{ r.full }}</span>
+              <span class="dash" *ngIf="r.full === 0">—</span>
+            </td>
+            <td class="col-partial">
+              <span class="chip partial" *ngIf="r.partial > 0">{{ r.partial }}</span>
+              <span class="dash" *ngIf="r.partial === 0">—</span>
+            </td>
+            <td class="col-unchecked">
+              <span class="chip unchecked" *ngIf="r.unchecked > 0">{{ r.unchecked }}</span>
+              <span class="dash" *ngIf="r.unchecked === 0">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Rack Detail Modal -->
+<div class="rack-detail-modal-global" *ngIf="showRackDetailModal">
+  <div class="rack-detail-content">
+    <div class="rack-detail-header">
+      <div class="left">
+        <i class="material-icons">place</i>
+        <span>VỊ TRÍ: <strong>{{ rackDetailLocation }}</strong> ({{ rackDetailMaterials.length }} mã)</span>
+      </div>
+      <button class="rack-close-btn" (click)="closeRackDetailModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="rack-detail-body">
+      <div class="rack-detail-list">
+        <div class="rack-detail-item"
+             *ngFor="let m of rackDetailMaterials; trackBy: trackByMaterial">
+          <div class="code">{{ m.materialCode }}</div>
+          <div class="meta">PO: {{ m.poNumber }} | IMD: {{ m.imd }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Modal — đặt ngoài stock-check-container để tránh transform/stacking context -->
+<div class="reset-modal-global" *ngIf="showResetModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">refresh</i>
+        RESET STOCK CHECK
+      </h3>
+      <button class="close-btn" (click)="closeResetModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="reset-warning">
+        <i class="material-icons">warning</i>
+        <p><strong>⚠️ CẢNH BÁO:</strong></p>
+        <p>Hành động này sẽ xóa TẤT CẢ dữ liệu kiểm kê cho <strong>{{ selectedFactory }}</strong>.</p>
+        <p><strong>✅ Lịch sử vĩnh viễn sẽ được giữ lại</strong> để có thể xem lại sau.</p>
+        <p>Bạn có chắc muốn tiếp tục?</p>
+      </div>
+      
+      <div class="password-input-container">
+        <label>Nhập mật khẩu để xác nhận:</label>
+        <input 
+          id="reset-password-input"
+          type="password" 
+          class="password-input"
+          [(ngModel)]="resetPassword"
+          (keyup.enter)="resetStockCheck()"
+          placeholder="Nhập mật khẩu..."
+          autocomplete="off">
+      </div>
+    </div>
+    
+    <div class="modal-actions">
+      <button class="cancel-btn" (click)="closeResetModal()" [disabled]="isResetting">
+        Hủy
+      </button>
+      <button class="reset-confirm-btn" (click)="resetStockCheck()" [disabled]="isResetting">
+        <i class="material-icons" *ngIf="!isResetting">refresh</i>
+        <i class="material-icons rotating" *ngIf="isResetting">sync</i>
+        <span>{{ isResetting ? 'Đang reset...' : 'XÁC NHẬN RESET' }}</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- KHSX Dialog — đặt ngoài stock-check-container để tránh transform stacking context -->
 <div class="khsx-modal" *ngIf="showKhsxDialog && selectedFactory">
   <div class="modal-overlay" (click)="closeKhsxDialog()"></div>
@@ -818,7 +915,7 @@
       <div class="khsx-preview" *ngIf="khsxCodes.length > 0">
         <h4>Danh sách mã KHSX hiện tại ({{ khsxCodes.length }} mã):</h4>
         <div class="khsx-code-list">
-          <span class="khsx-code-chip" *ngFor="let code of khsxCodes | slice:0:50">{{ code }}</span>
+          <span class="khsx-code-chip" *ngFor="let code of khsxCodes | slice:0:50; trackBy: trackByIndex">{{ code }}</span>
           <span *ngIf="khsxCodes.length > 50" style="color:#999;font-size:12px;">...và {{ khsxCodes.length - 50 }} mã khác</span>
         </div>
       </div>
