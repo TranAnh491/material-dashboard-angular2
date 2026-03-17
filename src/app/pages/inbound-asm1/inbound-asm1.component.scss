@@ -2136,6 +2136,18 @@ iframe {
 }
 
 @media (max-width: 768px) {
+  .tbhd-btn.mobile-hide {
+    display: none !important;
+  }
+  .material-history-panel {
+    display: none !important;
+  }
+  .excel-body-with-history .excel-body-main {
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+  }
+
   .action-controls-horizontal {
     display: flex !important;
     flex-wrap: wrap;
@@ -3280,6 +3292,36 @@ iframe {
   
   .return-goods-scanner-section {
     margin-bottom: 24px;
+    
+    &.inspection-location-section {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    
+    .location-scan-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+      
+      .return-goods-scan-input {
+        flex: 1;
+        margin-right: 0;
+      }
+    }
+    
+    .current-location-hint {
+      margin: 8px 0 0 0;
+      font-size: 13px;
+      color: #0369a1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      
+      i { font-size: 18px; color: #0ea5e9; }
+    }
     
     label {
       display: flex;

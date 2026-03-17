@@ -31,7 +31,7 @@
             Lô hàng: <strong>{{ selectedBatchView }}</strong>
             <span class="batch-view-count">({{ filteredMaterials.length }} mã)</span>
           </span>
-          <button class="tbhd-btn" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
+          <button class="tbhd-btn mobile-hide" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
             <i class="material-icons">print</i>
             TBHD
           </button>
@@ -84,8 +84,8 @@
           In toàn bộ
         </button>
         
-        <!-- Filter Buttons: Hàng Trả / Hàng Nhập - Dòng 1 -->
-        <div class="batch-type-filters mobile-row1">
+        <!-- Filter Buttons: Hàng Trả / Hàng Nhập - Ẩn trên mobile -->
+        <div class="batch-type-filters mobile-row1 mobile-hide">
           <label class="filter-checkbox-label">
             <input type="checkbox" 
                    [(ngModel)]="filterReturnGoods" 
@@ -103,7 +103,7 @@
         </div>
         
         <!-- Return Goods Counter Box - Dòng 2 -->
-        <div class="return-goods-counter-box mobile-row2">
+        <div class="return-goods-counter-box mobile-row2 mobile-hide">
           <i class="material-icons">assignment_return</i>
           <span class="counter-label">Hàng trả chờ nhập:</span>
           <span class="counter-value">{{ pendingReturnGoodsCount }}</span>
@@ -116,7 +116,7 @@
         </button>
         
         <!-- Total Materials Counter - Dòng 1 -->
-        <div class="total-counter-box mobile-row1">
+        <div class="total-counter-box mobile-row1 mobile-hide">
           <span>Tổng: {{filteredMaterials.length}} materials</span>
         </div>
         
@@ -124,7 +124,7 @@
         <span class="mobile-flex-break"></span>
         
         <!-- Search Box -->
-        <div class="search-box mobile-row2">
+        <div class="search-box mobile-row2 mobile-hide">
           <input type="text" 
                  placeholder="Tìm kiếm mã hàng..."
                  [(ngModel)]="searchTerm"
@@ -1023,6 +1023,32 @@
       <div class="employee-verified-badge" *ngIf="inspectionEmployeeVerified">
         <i class="material-icons">check_circle</i>
         <span>Nhân viên: <strong>{{ inspectionEmployeeId }}</strong></span>
+      </div>
+
+      <!-- Scan Vị trí (Pallet) -->
+      <div class="return-goods-scanner-section inspection-location-section">
+        <label for="inspectionLocationInput">
+          <i class="material-icons">place</i>
+          Scan vị trí
+        </label>
+        <div class="location-scan-row">
+          <input
+            type="text"
+            id="inspectionLocationInput"
+            [(ngModel)]="inspectionLocationInput"
+            placeholder="Quét/nhập vị trí (vd: Pallet 1)..."
+            class="return-goods-scan-input"
+            (keyup.enter)="processInspectionLocationScan()"
+            autocomplete="off">
+          <button class="scan-submit-btn" (click)="processInspectionLocationScan()">
+            <i class="material-icons">place</i>
+            Scan vị trí
+          </button>
+        </div>
+        <p class="current-location-hint" *ngIf="inspectionCurrentLocation">
+          <i class="material-icons">check_circle</i>
+          Vị trí hiện tại: <strong>{{ inspectionCurrentLocation }}</strong> — các mã scan sau thuộc vị trí này
+        </p>
       </div>
 
       <!-- Scan QR Code -->

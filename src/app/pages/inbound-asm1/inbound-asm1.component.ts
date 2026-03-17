@@ -134,6 +134,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   inspectionBatchNumber: string = '';
   inspectionQRInput: string = '';
   inspectionScanResult: { success: boolean, message: string, material?: InboundMaterial, errorDetail?: string } | null = null;
+  inspectionCurrentLocation: string = '';
+  inspectionLocationInput: string = '';
   
   // Danh sách các materials đã scan trong modal
   scannedMaterialsList: Array<{
@@ -4670,7 +4672,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       this.inspectionBatchNumber = this.selectedBatch;
       this.inspectionQRInput = '';
       this.inspectionScanResult = null;
-      this.scannedMaterialsList = []; // Reset danh sách khi bắt đầu kiểm tra
+      this.scannedMaterialsList = [];
+      this.inspectionCurrentLocation = '';
+      this.inspectionLocationInput = '';
       
       // Mở modal scan kiểm hàng
       this.showInspectionScanModal = true;
@@ -4696,7 +4700,27 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.showInspectionScanModal = false;
     this.inspectionQRInput = '';
     this.inspectionScanResult = null;
-    this.scannedMaterialsList = []; // Reset danh sách khi đóng modal
+    this.scannedMaterialsList = [];
+    this.inspectionCurrentLocation = '';
+    this.inspectionLocationInput = '';
+  }
+
+  processInspectionLocationScan(): void {
+    const loc = this.inspectionLocationInput.trim();
+    if (!loc) {
+      alert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
+      return;
+    }
+    this.inspectionCurrentLocation = loc;
+    this.inspectionLocationInput = '';
+    this.inspectionScanResult = {
+      success: true,
+      message: `📍 Vị trí hiện tại: ${this.inspectionCurrentLocation} - Các mã scan tiếp theo sẽ thuộc vị trí này`
+    };
+    setTimeout(() => {
+      const qrInput = document.getElementById('inspectionQRInput') as HTMLInputElement;
+      if (qrInput) qrInput.focus();
+    }, 100);
   }
   
   // Tạo QR data từ material (giống như khi in QR)
@@ -4824,13 +4848,19 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           }
           
           if (isComplete) {
+            // Gán vị trí nếu đã scan vị trí
+            const locationToUse = this.inspectionCurrentLocation || foundMaterial.location;
+            if (this.inspectionCurrentLocation) {
+              foundMaterial.location = this.inspectionCurrentLocation;
+              if (materialIndex !== -1) this.materials[materialIndex].location = this.inspectionCurrentLocation;
+            }
             // 🚀 OPTIMIZE: Update local data trước (UI update ngay)
             if (materialIndex !== -1) {
               this.materials[materialIndex].isReceived = true;
               foundMaterial.isReceived = true;
             }
 
-            console.log('✅ Material marked as received (locally):', foundMaterial.materialCode);
+            console.log('✅ Material marked as received (locally):', foundMaterial.materialCode, 'location:', locationToUse);
             
             // 🚀 OPTIMIZE: Update UI ngay
             this.inspectionScanResult = {
@@ -4843,11 +4873,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             this.applyFilters();
             
             // 🔥 Update Firebase trong background (không block UI)
-            this.firestore.collection('inbound-materials').doc(materialId).update({
+            const firebaseUpdate: any = {
               isReceived: true,
               scannedQuantity: newScannedQty,
               updatedAt: new Date()
-            }).then(() => {
+            };
+            if (locationToUse) firebaseUpdate.location = locationToUse;
+            this.firestore.collection('inbound-materials').doc(materialId).update(firebaseUpdate).then(() => {
               console.log('📤 Firebase updated successfully (background)');
               
               // Thêm vào inventory sau khi update Firebase thành công
@@ -4875,11 +4907,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             // Refresh UI ngay
             this.applyFilters();
             
-            // Update Firebase trong background
-            this.firestore.collection('inbound-materials').doc(materialId).update({
+            // Update Firebase trong background (cập nhật location nếu đã scan vị trí)
+            const partialUpdate: any = {
               scannedQuantity: newScannedQty,
               updatedAt: new Date()
-            }).then(() => {
+            };
+            if (this.inspectionCurrentLocation) {
+              partialUpdate.location = this.inspectionCurrentLocation;
+              foundMaterial.location = this.inspectionCurrentLocation;
+              if (materialIndex !== -1) this.materials[materialIndex].location = this.inspectionCurrentLocation;
+            }
+            this.firestore.collection('inbound-materials').doc(materialId).update(partialUpdate).then(() => {
               console.log('📤 Scanned quantity updated in Firebase (background)');
             }).catch(error => {
               console.error('❌ Firebase update failed:', error);
