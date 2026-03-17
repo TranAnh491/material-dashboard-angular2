@@ -928,6 +928,7 @@ iframe {
   background: #fafafa;
   padding: 8px 10px;
   box-sizing: border-box;
+  min-height: 0;
 }
 
 .history-top,
@@ -936,6 +937,7 @@ iframe {
   display: flex;
   flex-direction: column;
   padding-bottom: 8px;
+  min-height: 0;
 }
 
 .history-top {
@@ -994,6 +996,49 @@ iframe {
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
+  min-height: 0;
+}
+
+.notes-chart-box,
+.notes-percent-box {
+  flex: 1 1 0%;
+  min-height: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 6px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-box-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-wrapper {
+  flex: 1 1 0%;
+  min-height: 0;
+  position: relative;
+}
+
+.chart-placeholder {
+  flex: 1 1 0%;
+  min-height: 0;
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.chart-alert {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 4px 6px;
 }
 
 .note-percent input {
@@ -1428,6 +1473,7 @@ iframe {
     }
     
     &[type=number] {
+      appearance: textfield;
       -moz-appearance: textfield;
     }
   }

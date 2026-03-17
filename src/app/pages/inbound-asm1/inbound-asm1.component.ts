@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as QRCode from 'qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -50,12 +51,15 @@ export interface DmvtItem {
   unit: string;
 }
 
+Chart.register(...registerables);
+
 @Component({
   selector: 'app-inbound-asm1',
   templateUrl: './inbound-asm1.component.html',
   styleUrls: ['./inbound-asm1.component.scss']
 })
 export class InboundASM1Component implements OnInit, OnDestroy {
+  @ViewChild('materialHistoryChart') chartCanvas?: ElementRef<HTMLCanvasElement>;
   private batchCounter = 1; // Counter cho batch
   
   // Tạo batch tự động theo format tuần + số thứ tự
@@ -80,6 +84,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   searchType: string = 'materialCode'; // Default to Mã Hàng
+
+  // When searching by material code, load exact matches from Firestore (avoid limit(1000) truncation)
+  private materialCodeSearchMaterials: InboundMaterial[] | null = null;
+  private lastMaterialCodeSearchTerm: string = '';
+  isLoadingMaterialCodeSearch: boolean = false;
   
   // Factory filter - Fixed to ASM1
   selectedFactory: string = 'ASM1';
@@ -95,6 +104,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Batch type filters - Hàng Trả / Hàng Nhập
   filterReturnGoods: boolean = false; // Lọc hàng trả (batchNumber bắt đầu bằng TRA)
   filterNormalGoods: boolean = false; // Lọc hàng nhập (không phải TRA)
+  filterDaNhap: boolean = false; // Chỉ hiện lô hàng đã nhập xong (receivedCount === count)
   
   // Sort filter
   sortBy: string = 'importDate'; // Default to Ngày nhập
@@ -314,10 +324,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    this.destroyChart();
     this.destroy$.next();
     this.destroy$.complete();
   }
-  
+
   private loadPermissions(): void {
     this.afAuth.authState.pipe(takeUntil(this.destroy$)).subscribe(user => {
       if (user) {
@@ -350,7 +361,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = '';
     
-    console.log('📦 Loading ASM1 inbound materials (pending only)...');
+    console.log('📦 Loading ASM1 inbound materials (all statuses)...');
     this.tryLoadFromCollection('inbound-materials');
   }
   
@@ -358,8 +369,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     console.log(`🔍 Trying collection: ${collectionName}`);
     
     this.firestore.collection(collectionName, ref => 
-      ref.where('isReceived', '==', false)
-         .limit(1000)
+      ref.limit(1000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -510,14 +520,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   applyFilters(): void {
-    let filtered = [...this.materials];
+    const base = (this.isMaterialCodeSearchActive() && this.materialCodeSearchMaterials) ? this.materialCodeSearchMaterials : this.materials;
+    let filtered = [...base];
     
     // Always filter by ASM1 only
     filtered = filtered.filter(material => material.factory === this.selectedFactory);
     
     // Apply search filter based on search type
-    if (this.searchTerm) {
-      const searchTermLower = this.searchTerm.toLowerCase();
+    const effectiveSearchTerm = (this.searchType === 'materialCode' && (this.searchTerm || '').trim().length < 7) ? '' : (this.searchTerm || '');
+    if (effectiveSearchTerm) {
+      const searchTermLower = effectiveSearchTerm.toLowerCase();
       
       switch (this.searchType) {
         case 'materialCode':
@@ -676,22 +688,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       console.log(`🔍 Status filter (${this.statusFilter || 'pending'}): ${beforeStatusFilter} → ${afterStatusFilter} (ẩn ${beforeStatusFilter - afterStatusFilter} materials)`);
     }
     
-    // Filter by selected batch view (when not in active batch processing mode)
-    if (this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '')) {
-      filtered = filtered.filter(material => material.batchNumber === this.selectedBatchView);
-    }
+    // Filter by selected batch view / current batch (skip when searching by material code)
+    if (!this.isMaterialCodeSearchActive()) {
+      // Filter by selected batch view (when not in active batch processing mode)
+      if (this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '')) {
+        filtered = filtered.filter(material => material.batchNumber === this.selectedBatchView);
+      }
 
-    // Filter by current batch when processing
-    if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
-      const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
-      console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
-      
-      // Chỉ hiển thị 1 dòng đại diện cho lô hàng - lấy material đầu tiên
-      if (batchMaterials.length > 0) {
-        filtered = [batchMaterials[0]];
-        console.log(`📦 Showing only 1 representative row for batch: ${this.currentBatchNumber} (Material: ${batchMaterials[0].materialCode})`);
-      } else {
-        filtered = [];
+      // Filter by current batch when processing
+      if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
+        const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
+        console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
+        
+        // Chỉ hiển thị 1 dòng đại diện cho lô hàng - lấy material đầu tiên
+        if (batchMaterials.length > 0) {
+          filtered = [batchMaterials[0]];
+          console.log(`📦 Showing only 1 representative row for batch: ${this.currentBatchNumber} (Material: ${batchMaterials[0].materialCode})`);
+        } else {
+          filtered = [];
+        }
       }
     }
     
@@ -1351,6 +1366,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Panel lịch sử + lưu ý theo mã hàng
   selectedHistoryMaterial: InboundMaterial | null = null;
   materialHistory: InboundMaterial[] = [];
+  chartMaterialHistory: Chart | null = null;
+  chartAlertMessage: string = '';
   isLoadingHistory: boolean = false;
   selectedMaterialNotes: { id?: string; materialCode: string; checkPercent: number; note: string; createdAt?: Date }[] = [];
   selectedMaterialCheckPercent: number = 100;
@@ -1435,16 +1452,83 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             importDate: data.importDate?.toDate() || new Date(),
             supplier: data.supplier || '',
             poNumber: data.poNumber || '',
+            quantity: data.quantity || 0,
             rollsOrBags: data.rollsOrBags || 0,
             gwLdv: data.gwLdv || 0
           } as InboundMaterial;
-        }).sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+        })
+        // ✅ Hide NCC rows completely (NVL_SX/NVL_KS/PD/ENG or empty)
+        .filter(h => this.formatHistoryNcc(h.supplier) !== '')
+        .sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
       }
     } catch (err) {
       console.error('❌ Error loading material history:', err);
     } finally {
       this.isLoadingHistory = false;
+      setTimeout(() => this.renderMaterialHistoryChart(), 50);
     }
+  }
+
+  private destroyChart(): void {
+    if (this.chartMaterialHistory) {
+      this.chartMaterialHistory.destroy();
+      this.chartMaterialHistory = null;
+    }
+  }
+
+  private renderMaterialHistoryChart(): void {
+    this.destroyChart();
+    this.chartAlertMessage = '';
+    if (!this.chartCanvas?.nativeElement || !this.selectedHistoryMaterial || this.materialHistory.length === 0) return;
+
+    const labels = this.materialHistory.map(h => this.formatDate(h.importDate));
+    const ldvValues = this.materialHistory.map(h => h.rollsOrBags || 0);
+    const uwValues = this.materialHistory.map(h => {
+      const ldv = h.rollsOrBags || 0;
+      const gw = h.gwLdv || 0;
+      if (ldv <= 0) return null;
+      const uw = gw / ldv;
+      return (isFinite(uw) && uw > 0) ? Math.round(uw * 100) / 100 : null;
+    });
+
+    const abnormalItems: string[] = [];
+    ldvValues.forEach((v, i) => {
+      if (v <= 0) abnormalItems.push(`LDV tại ${labels[i]}: ${v} (≤0)`);
+    });
+    uwValues.forEach((v, i) => {
+      if (v === null || (typeof v === 'number' && (v <= 0 || !isFinite(v)))) {
+        abnormalItems.push(`UW tại ${labels[i]}: bất thường`);
+      }
+    });
+    if (abnormalItems.length > 0) {
+      this.chartAlertMessage = '⚠️ Cảnh báo: ' + abnormalItems.join('; ');
+    }
+
+    const ldvColors = ldvValues.map(v => v <= 0 ? 'rgba(239,68,68,0.8)' : 'rgba(59,130,246,0.8)');
+    const uwColors = uwValues.map(v => (v === null || (typeof v === 'number' && v <= 0)) ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)');
+
+    const config: ChartConfiguration = {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'LDV', data: ldvValues, backgroundColor: ldvColors },
+          { label: 'UW (g/đv)', data: uwValues.map(v => v ?? 0), backgroundColor: uwColors }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          x: { beginAtZero: true },
+          y: { stacked: false }
+        }
+      }
+    };
+
+    this.chartMaterialHistory = new Chart(this.chartCanvas.nativeElement, config);
   }
 
   private loadNotesForMaterial(material: InboundMaterial): void {
@@ -1524,15 +1608,110 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   // Search functionality
-  onSearchInput(event: Event): void {
+  async onSearchInput(event: Event): Promise<void> {
     const target = event.target as HTMLInputElement;
-    this.searchTerm = target.value;
+    const raw = target.value || '';
+    this.searchTerm = (this.searchType === 'materialCode') ? raw.toUpperCase() : raw;
+
+    // When searching by material code, search across all batches/states
+    if (this.isMaterialCodeSearchActive()) {
+      this.selectedBatchView = null;
+      this.currentBatchNumber = '';
+    }
+
+    if (this.isMaterialCodeSearchActive()) {
+      await this.loadMaterialsForMaterialCode(this.searchTerm.trim().toUpperCase());
+    } else {
+      this.materialCodeSearchMaterials = null;
+      this.lastMaterialCodeSearchTerm = '';
+    }
+
     this.applyFilters();
+    this.syncHistoryPanelWithSearch();
   }
   
   changeSearchType(type: string): void {
     this.searchType = type;
     this.applyFilters();
+    this.syncHistoryPanelWithSearch();
+  }
+
+  private isMaterialCodeSearchActive(): boolean {
+    return this.searchType === 'materialCode' && !!this.searchTerm && this.searchTerm.trim().length >= 7;
+  }
+
+  private syncHistoryPanelWithSearch(): void {
+    if (!this.isMaterialCodeSearchActive()) return;
+
+    const first = this.filteredMaterials && this.filteredMaterials.length > 0 ? this.filteredMaterials[0] : null;
+    if (!first) {
+      this.selectedHistoryMaterial = null;
+      this.materialHistory = [];
+      this.selectedMaterialNotes = [];
+      this.selectedMaterialCheckPercent = 100;
+      this.destroyChart();
+      this.chartAlertMessage = '';
+      return;
+    }
+
+    if (!this.selectedHistoryMaterial || this.selectedHistoryMaterial.materialCode !== first.materialCode) {
+      this.selectMaterialForHistory(first);
+    }
+  }
+
+  private async loadMaterialsForMaterialCode(term: string): Promise<void> {
+    if (!term || term.length < 7) return;
+    if (this.lastMaterialCodeSearchTerm === term && this.materialCodeSearchMaterials) return;
+
+    this.isLoadingMaterialCodeSearch = true;
+    this.lastMaterialCodeSearchTerm = term;
+    try {
+      const snapshot = await this.firestore.collection('inbound-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('materialCode', '==', term)
+           .limit(2000)
+      ).get().toPromise();
+
+      const items: InboundMaterial[] = [];
+      if (snapshot && !snapshot.empty) {
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
+          items.push({
+            id: doc.id,
+            factory: data.factory || this.selectedFactory,
+            importDate: data.importDate?.toDate() || new Date(),
+            internalBatch: data.internalBatch || '',
+            batchNumber: data.batchNumber || '',
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            quantity: data.quantity || 0,
+            unit: data.unit || '',
+            location: data.location || '',
+            type: data.type || '',
+            iqcStatus: data.iqcStatus || 'Chờ kiểm',
+            expiryDate: data.expiryDate?.toDate() || null,
+            qualityCheck: data.qualityCheck || false,
+            isReceived: data.isReceived || false,
+            notes: data.notes || '',
+            rollsOrBags: data.rollsOrBags || 0,
+            supplier: data.supplier || '',
+            gwLdv: data.gwLdv || 0,
+            remarks: data.remarks || '',
+            hasQRGenerated: data.hasQRGenerated || false,
+            scannedQuantity: data.scannedQuantity || 0,
+            createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+          } as InboundMaterial);
+        });
+      }
+
+      this.materialCodeSearchMaterials = items;
+    } catch (err) {
+      console.error('❌ Error loading materials for materialCode search:', err);
+      this.materialCodeSearchMaterials = [];
+    } finally {
+      this.isLoadingMaterialCodeSearch = false;
+    }
   }
 
   // Batch type filter change handler
@@ -1565,6 +1744,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
       source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
     }
+    // When searching by material code, only show batches that contain that material code
+    if (this.isMaterialCodeSearchActive()) {
+      const term = this.searchTerm.trim().toUpperCase();
+      source = source.filter(m => (m.materialCode || '').toUpperCase().includes(term));
+    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1572,7 +1756,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       g.count++;
       if (m.isReceived) g.receivedCount++;
     });
-    return Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    if (this.filterDaNhap) {
+      result = result.filter(b => b.receivedCount === b.count && b.count > 0);
+    } else {
+      result = result.filter(b => b.receivedCount < b.count);
+    }
+    return result;
   }
 
   // Getter: Danh sách lô hàng trả (TRA), nhóm theo batchNumber
@@ -1587,6 +1777,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
       source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
     }
+    // When searching by material code, only show return batches that contain that material code
+    if (this.isMaterialCodeSearchActive()) {
+      const term = this.searchTerm.trim().toUpperCase();
+      source = source.filter(m => (m.materialCode || '').toUpperCase().includes(term));
+    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1594,7 +1789,13 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       g.count++;
       if (m.isReceived) g.receivedCount++;
     });
-    return Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    if (this.filterDaNhap) {
+      result = result.filter(b => b.receivedCount === b.count && b.count > 0);
+    } else {
+      result = result.filter(b => b.receivedCount < b.count);
+    }
+    return result;
   }
 
   // Chọn lô hàng để xem bảng chi tiết
@@ -3719,8 +3920,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   /** Cột NCC trong History: ẩn NVL_SX, NVL_KS, PD, ENG */
   formatHistoryNcc(supplier: string | null | undefined): string {
     if (!supplier) return '';
-    const s = supplier.toString().trim().toUpperCase();
-    if (['NVL_SX', 'NVL_KS', 'PD', 'ENG'].includes(s)) return '';
+    const s = supplier.toString().trim();
+    if (!s) return '';
+    const sUpper = s.toUpperCase();
+    if (['NVL_SX', 'NVL_KS', 'PD', 'ENG'].includes(sUpper)) return '';
     return supplier;
   }
 

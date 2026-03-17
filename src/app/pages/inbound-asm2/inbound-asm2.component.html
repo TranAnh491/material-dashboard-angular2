@@ -60,6 +60,13 @@
                    class="filter-checkbox">
             <span class="filter-checkbox-text">Nhập</span>
           </label>
+          <label class="filter-checkbox-label">
+            <input type="checkbox"
+                   [(ngModel)]="filterDaNhap"
+                   (change)="applyFilters()"
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Đã Nhập</span>
+          </label>
         </div>
 
         <!-- Return Goods Counter Box - Compact -->
@@ -117,8 +124,8 @@
       {{errorMessage}}
     </div>
     
-    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô -->
-    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive">
+    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô (không áp dụng khi đang search mã hàng) -->
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)">
       <!-- Lô Hàng Nhập -->
       <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
         <div class="batch-section-title">
@@ -197,7 +204,7 @@
     </div>
 
     <!-- Excel-like Body + History Panel -->
-    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive)">
+    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive || (searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7))">
       <div class="excel-body-main">
         <table class="excel-table">
         <thead>
@@ -403,7 +410,7 @@
       <div class="material-history-panel">
         <div class="history-top">
           <h5 class="history-title">
-            Lịch sử inbound
+            History
             <span *ngIf="selectedHistoryMaterial">
               – {{ selectedHistoryMaterial.materialCode }}
             </span>
@@ -418,12 +425,7 @@
             Chọn một mã hàng trong bảng để xem lịch sử inbound.
           </div>
 
-          <div *ngIf="!isLoadingHistory && selectedHistoryMaterial">
-            <div class="history-meta">
-              <div>Mã hàng: <strong>{{ selectedHistoryMaterial.materialCode }}</strong></div>
-              <div>PO: <strong>{{ selectedHistoryMaterial.poNumber }}</strong></div>
-              <div>NCC: <strong>{{ selectedHistoryMaterial.supplier }}</strong></div>
-            </div>
+          <div *ngIf="!isLoadingHistory && selectedHistoryMaterial" class="history-content">
             <div class="history-table-wrapper" *ngIf="materialHistory.length > 0; else noHistory2">
               <table class="history-table">
                 <thead>
@@ -431,6 +433,7 @@
                     <th>Ngày nhập</th>
                     <th>NCC</th>
                     <th>PO</th>
+                    <th>NK</th>
                     <th>LDV</th>
                     <th>GW LDV (g)</th>
                   </tr>
@@ -438,8 +441,9 @@
                 <tbody>
                   <tr *ngFor="let h of materialHistory">
                     <td>{{ formatDate(h.importDate) }}</td>
-                    <td>{{ h.supplier }}</td>
+                    <td>{{ formatHistoryNcc(h.supplier) }}</td>
                     <td>{{ h.poNumber }}</td>
+                    <td>{{ formatNumber(h.quantity) }}</td>
                     <td>{{ h.rollsOrBags }}</td>
                     <td>{{ h.gwLdv }}</td>
                   </tr>
@@ -467,13 +471,26 @@
           </div>
 
           <div *ngIf="selectedHistoryMaterial" class="notes-section">
-            <div class="note-percent">
-              <label>Phần trăm kiểm tra (%)</label>
-              <input type="number"
-                     [(ngModel)]="selectedMaterialCheckPercent"
-                     (change)="saveSelectedMaterialNote()"
-                     min="0" max="100">
+            <div class="notes-chart-box">
+              <div class="notes-box-label">Chart</div>
+              <div class="chart-wrapper" *ngIf="materialHistory.length > 0; else noChart">
+                <canvas #materialHistoryChart></canvas>
+              </div>
+              <ng-template #noChart>
+                <div class="chart-placeholder"></div>
+              </ng-template>
+              <div class="chart-alert" *ngIf="chartAlertMessage">{{ chartAlertMessage }}</div>
             </div>
+
+            <div class="notes-percent-box">
+              <div class="notes-box-label">Phần trăm kiểm tra</div>
+              <div class="note-percent">
+                <label>Phần trăm kiểm tra (%)</label>
+                <input type="number"
+                       [(ngModel)]="selectedMaterialCheckPercent"
+                       (change)="saveSelectedMaterialNote()"
+                       min="0" max="100">
+              </div>
 
             <div class="note-list" *ngIf="selectedMaterialNotes.length > 0">
               <div class="note-item" *ngFor="let n of selectedMaterialNotes">
@@ -496,6 +513,7 @@
               <button class="note-add-btn" (click)="saveSelectedMaterialNote(true)" [disabled]="!newMaterialNoteText.trim()">
                 Thêm lưu ý
               </button>
+            </div>
             </div>
           </div>
         </div>

@@ -907,28 +907,26 @@ iframe {
 
 .excel-body-with-history {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  height: calc(100vh - 220px);
+  flex-direction: row;
+  gap: 12px;
+  flex: 1;
   min-height: 0;
 }
 
 .excel-body-main {
-  flex: 1;
+  flex: 0 0 70%;
+  max-width: 70%;
   min-height: 0;
   overflow: auto;
-  width: 100%;
 }
 
 .material-history-panel {
-  flex: 0 0 auto;
-  width: 100%;
-  min-height: 200px;
-  max-height: 40vh;
+  flex: 0 0 30%;
+  max-width: 30%;
+  min-height: 0;
   display: flex;
-  flex-direction: row;
-  gap: 12px;
-  border-top: 1px solid #e0e0e0;
+  flex-direction: column;
+  border-left: 1px solid #e0e0e0;
   background: #fafafa;
   padding: 8px 10px;
   box-sizing: border-box;
@@ -938,15 +936,15 @@ iframe {
 .history-bottom {
   flex: 1 1 0%;
   min-height: 0;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 8px;
+  padding-bottom: 8px;
 }
 
 .history-top {
-  border-right: 1px solid #e0e0e0;
-  padding-right: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 4px;
+  padding-right: 0;
 }
 
 .history-title {
@@ -1029,6 +1027,33 @@ iframe {
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.chart-wrapper {
+  flex: 1;
+  min-height: 80px;
+  max-height: 140px;
+  position: relative;
+  canvas { display: block; }
+}
+
+.chart-alert {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #b91c1c;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  i { font-size: 14px; flex-shrink: 0; }
 }
 
 .notes-percent-box {

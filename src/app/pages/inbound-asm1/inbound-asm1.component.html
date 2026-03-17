@@ -100,6 +100,12 @@
                    class="filter-checkbox">
             <span class="filter-checkbox-text">Nhập</span>
           </label>
+          <label class="filter-checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="filterDaNhap" 
+                   class="filter-checkbox">
+            <span class="filter-checkbox-text">Đã Nhập</span>
+          </label>
         </div>
         
         <!-- Return Goods Counter Box - Dòng 2 -->
@@ -167,8 +173,8 @@
       {{errorMessage}}
     </div>
     
-    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô -->
-    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive">
+    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô (không áp dụng khi đang search mã hàng) -->
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)">
       <!-- Lô Hàng Nhập -->
       <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
         <div class="batch-section-title">
@@ -230,7 +236,7 @@
     </div>
 
     <!-- Excel-like Body + History Panel -->
-    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive)">
+    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive || (searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7))">
       <div class="excel-body-main">
         <table class="excel-table">
         <thead>
@@ -500,7 +506,16 @@
           <div *ngIf="selectedHistoryMaterial" class="notes-section">
             <div class="notes-chart-box">
               <span class="notes-box-label">Chart</span>
-              <div class="chart-placeholder"></div>
+              <div class="chart-placeholder" *ngIf="materialHistory.length === 0">
+                Chưa có dữ liệu. Chọn mã hàng có lịch sử.
+              </div>
+              <div class="chart-wrapper" *ngIf="materialHistory.length > 0">
+                <canvas #materialHistoryChart></canvas>
+              </div>
+              <div class="chart-alert" *ngIf="chartAlertMessage">
+                <i class="material-icons">warning</i>
+                {{ chartAlertMessage }}
+              </div>
             </div>
             <div class="notes-percent-box">
               <span class="notes-box-label">Phần trăm kiểm tra</span>
