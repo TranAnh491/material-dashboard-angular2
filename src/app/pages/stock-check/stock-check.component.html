@@ -41,7 +41,7 @@
   <div class="stock-check-container" *ngIf="selectedFactory">
     <!-- Top Bar - Title on top, buttons below -->
     <div class="top-bar">
-      <h2 class="factory-title">
+      <h2 class="factory-title" *ngIf="!showScanModal">
         <i class="material-icons">factory</i>
         {{ selectedFactory }} - KIỂM KÊ
         <span class="employee-id-display" *ngIf="currentEmployeeId">
@@ -50,7 +50,7 @@
         </span>
       </h2>
       
-      <div class="top-bar-actions">
+      <div class="top-bar-actions" *ngIf="!showScanModal">
         <!-- Mobile: Chỉ hiển thị nút KIỂM KÊ -->
         <button class="inventory-btn mobile-only" (click)="startInventoryCheck()">
           <i class="material-icons">qr_code_scanner</i>
@@ -410,13 +410,16 @@
   <div class="scan-modal" *ngIf="showScanModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Kiểm Kê - {{ selectedFactory }}</h3>
+        <h3 *ngIf="scanStep !== 'material'">Kiểm Kê - {{ selectedFactory }}</h3>
+        <h3 *ngIf="scanStep === 'material'">
+          Vị trí: {{ currentScanLocation }}
+        </h3>
         <button class="close-btn" (click)="closeScanModal()">
           <i class="material-icons">close</i>
         </button>
       </div>
       
-      <div class="scan-message">
+      <div class="scan-message" *ngIf="scanStep !== 'material'">
         {{ scanMessage }}
       </div>
       
@@ -437,10 +440,54 @@
       </div>
 
       <!-- Scan History -->
-      <div class="scan-history" *ngIf="scanHistory.length > 0">
+      <div class="scan-history" *ngIf="scanStep !== 'material' && scanHistory.length > 0">
         <div class="history-title">Lịch sử scan:</div>
         <div class="history-item" *ngFor="let item of scanHistory">
           {{ item }}
+        </div>
+      </div>
+
+      <!-- Materials by scanned location (boxes) -->
+      <div class="location-materials-section"
+           *ngIf="scanStep === 'material' && currentScanLocation">
+        <div class="location-summary">
+          <div class="summary-left">
+            <div class="summary-title">
+              <i class="material-icons">check_circle</i>
+              <span>Đã kiểm</span>
+            </div>
+            <div class="summary-value">{{ locationCheckedCount }}/{{ locationTotalCount }}</div>
+          </div>
+          <button type="button" class="done-btn" (click)="closeScanModal()">
+            Done
+          </button>
+        </div>
+
+        <div class="location-materials-empty" *ngIf="locationMaterials.length === 0">
+          <i class="material-icons">inbox</i>
+          <div>Không có NVL nào ở vị trí này (theo dữ liệu tồn kho).</div>
+        </div>
+
+        <div class="location-materials-grid" *ngIf="locationMaterials.length > 0">
+          <div class="material-box"
+               *ngFor="let mat of locationMaterials"
+               [ngClass]="{
+                 'status-unchecked': getMaterialCheckStatus(mat) === 'unchecked',
+                 'status-partial': getMaterialCheckStatus(mat) === 'partial',
+                 'status-full': getMaterialCheckStatus(mat) === 'full'
+               }">
+            <div class="box-top">
+              <div class="mat-code">{{ mat.materialCode }}</div>
+              <div class="status-chip" *ngIf="getMaterialCheckStatus(mat) === 'full'">ĐỦ</div>
+              <div class="status-chip warning" *ngIf="getMaterialCheckStatus(mat) === 'partial'">THIẾU</div>
+            </div>
+            <div class="box-mid compact">
+              <div class="line"><span class="label">PO</span><span class="value">{{ mat.poNumber }}</span></div>
+              <div class="line"><span class="label">Lượng</span><span class="value">{{ mat.stock | number:'1.0-2' }}</span></div>
+              <div class="line" *ngIf="getMaterialCheckStatus(mat) === 'partial'">
+                <span class="label">Đã scan</span><span class="value">{{ (mat.qtyCheck || 0) | number:'1.0-2' }}</span>
+              </div>
+          </div>
         </div>
       </div>
       

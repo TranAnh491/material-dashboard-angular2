@@ -87,9 +87,7 @@
 }
 
 // Batch Modal - Simplified for Mobile
-.batch-modal-overlay {
-  // Removed backdrop-filter and animation for better mobile performance
-}
+.batch-modal-overlay { position: fixed; }
 
 .batch-modal-content {
   max-width: 600px;
@@ -1492,6 +1490,7 @@ iframe {
     }
     
     &[type=number] {
+      appearance: textfield;
       -moz-appearance: textfield;
     }
   }
@@ -3924,6 +3923,48 @@ iframe {
 // ============================================================
 .batch-box-view {
   padding: 16px;
+  position: relative;
+}
+
+.batch-context-menu {
+  position: fixed;
+  z-index: 20000;
+  min-width: 140px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  padding: 6px;
+}
+
+.batch-context-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #f3f4f6;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.danger {
+    color: #b91c1c !important;
+  }
+
+  .material-icons {
+    font-size: 18px;
+  }
 }
 
 .batch-section {

@@ -369,7 +369,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     console.log(`🔍 Trying collection: ${collectionName}`);
     
     this.firestore.collection(collectionName, ref => 
-      ref.limit(1000)
+      // Always fetch newest docs first; avoid missing new imports when collection > limit
+      ref.orderBy('createdAt', 'desc').limit(5000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -5376,6 +5377,37 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // ===== Right-click context menu (Batch boxes) =====
+  batchContextMenuVisible: boolean = false;
+  batchContextMenuX: number = 0;
+  batchContextMenuY: number = 0;
+  batchContextMenuBatchNumber: string = '';
+
+  openBatchContextMenu(event: MouseEvent, batchNumber: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!batchNumber) return;
+
+    this.batchContextMenuVisible = true;
+    this.batchContextMenuBatchNumber = batchNumber;
+    this.batchContextMenuX = event.clientX;
+    this.batchContextMenuY = event.clientY;
+  }
+
+  closeBatchContextMenu(): void {
+    this.batchContextMenuVisible = false;
+    this.batchContextMenuBatchNumber = '';
+  }
+
+  async deleteBatchFromContextMenu(): Promise<void> {
+    if (!this.batchContextMenuBatchNumber) return;
+    const batchNumber = this.batchContextMenuBatchNumber;
+    this.closeBatchContextMenu();
+    this.batchToDelete = batchNumber;
+    await this.deleteByBatch();
   }
 
   // ==================== IQC FUNCTIONS ====================

@@ -102,6 +102,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scanInput = '';
   scanHistory: string[] = [];
   currentScanLocation: string = ''; // Vị trí hiện tại đang kiểm kê
+  locationMaterials: StockCheckMaterial[] = []; // Danh sách NVL theo vị trí đang scan (hiển thị dạng box)
   
   // Scan success popup
   showScanSuccessPopup = false;
@@ -491,6 +492,48 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef
   ) {}
 
+  private updateLocationMaterials(): void {
+    const loc = (this.currentScanLocation || '').trim().toUpperCase();
+    if (!loc) {
+      this.locationMaterials = [];
+      return;
+    }
+
+    // Load toàn bộ NVL đang có ở vị trí (dữ liệu inventory)
+    // Sort theo mã + PO + IMD để dễ scan.
+    this.locationMaterials = this.allMaterials
+      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .slice()
+      .sort((a, b) => {
+        const code = a.materialCode.localeCompare(b.materialCode);
+        if (code !== 0) return code;
+        const po = (a.poNumber || '').localeCompare(b.poNumber || '');
+        if (po !== 0) return po;
+        return (a.imd || '').localeCompare(b.imd || '');
+      });
+  }
+
+  get locationTotalCount(): number {
+    return this.locationMaterials.length;
+  }
+
+  get locationCheckedCount(): number {
+    const loc = (this.currentScanLocation || '').trim().toUpperCase();
+    if (!loc) return 0;
+    // Đếm số mã tại vị trí này đã được scan (dựa vào actualLocation)
+    return this.locationMaterials.filter(m =>
+      m.stockCheck === '✓' && (m.actualLocation || '').trim().toUpperCase() === loc
+    ).length;
+  }
+
+  getMaterialCheckStatus(material: StockCheckMaterial): 'unchecked' | 'partial' | 'full' {
+    const checkedQty = material.qtyCheck != null ? Number(material.qtyCheck) : 0;
+    const expectedQty = material.stock != null ? Number(material.stock) : 0;
+    if (!material.stockCheck || material.stockCheck !== '✓') return 'unchecked';
+    if (expectedQty > 0 && checkedQty < expectedQty) return 'partial';
+    return 'full';
+  }
+
   ngOnInit(): void {
     // Reset factory selection to show selection screen
     this.selectedFactory = null;
@@ -499,6 +542,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.displayedMaterials = [];
     this.currentPage = 1;
     this.filterMode = 'all';
+    this.currentScanLocation = '';
+    this.locationMaterials = [];
     
     // Load valid locations from Location tab
     this.loadValidLocations();
@@ -620,6 +665,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.filterMode = 'all';
     this.currentEmployeeId = ''; // Reset employee ID
     this.showEmployeeScanModal = false;
+    this.currentScanLocation = '';
+    this.locationMaterials = [];
   }
   
   /**
@@ -826,6 +873,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         await this.loadKhsxData(materialsArray);
 
         this.allMaterials = materialsArray;
+
+        // Nếu đang có vị trí scan, cập nhật danh sách box theo vị trí
+        this.updateLocationMaterials();
         
         // Calculate ID check statistics
         this.calculateIdCheckStats();
@@ -906,6 +956,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         
         // Reload stock check data và apply vào materials hiện tại (truyền snapshotData trực tiếp)
         await this.loadStockCheckData(this.allMaterials, snapshotData);
+
+        // Update location view (box) nếu đang scan theo vị trí
+        this.updateLocationMaterials();
         
         // Update filtered materials
         this.filteredMaterials = [...this.allMaterials];
@@ -1191,6 +1244,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       
       // Recalculate ID stats (nhanh, không cần await)
       this.calculateIdCheckStats();
+
+      // Refresh list theo vị trí hiện tại (để đổi màu box ngay)
+      this.updateLocationMaterials();
       
       console.log(`✅ Stock check saved (cached): ${checkedMaterials.length} materials`);
     } catch (error) {
@@ -1376,6 +1432,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.scanInput = '';
       this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
       this.scanHistory = [];
+      this.locationMaterials = [];
     } else {
       // Đã có vị trí - bỏ qua bước scan vị trí, scan mã hàng luôn
       this.showScanModal = true;
@@ -1384,6 +1441,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.scanInput = '';
       this.scanMessage = `ID: ${this.currentEmployeeId}\nVị trí: ${this.currentScanLocation}\n\nScan MÃ HÀNG kiểm kê tại vị trí này.`;
       this.scanHistory = [];
+      this.updateLocationMaterials();
     }
     
     // Focus input after modal opens
@@ -1430,6 +1488,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       // Location is valid - save and proceed
       this.currentScanLocation = locationUpper;
       this.scanHistory.push(`📍 Vị trí: ${this.currentScanLocation}`);
+      this.updateLocationMaterials();
       
       // Chuyển sang bước scan mã hàng
       this.scanStep = 'material';
@@ -1573,6 +1632,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           // Refresh view (không block scan - async)
           setTimeout(() => {
             this.applyFilter();
+            this.updateLocationMaterials();
             this.cdr.detectChanges();
           }, 0);
         } else {
@@ -1632,6 +1692,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           
           // Refresh view trước để có STT chính xác
           this.applyFilter();
+          this.updateLocationMaterials();
           
           // Tìm lại material sau khi filter để lấy STT chính xác
           const updatedMaterial = this.filteredMaterials.find(m => 
@@ -1720,6 +1781,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scanInput = '';
     this.scanHistory = [];
     this.currentScanLocation = '';
+    this.locationMaterials = [];
     
     // Hiển thị thông báo tổng số mã đã scan
     if (this.scannedCount > 0) {
