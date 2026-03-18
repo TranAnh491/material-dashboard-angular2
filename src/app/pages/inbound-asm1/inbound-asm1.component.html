@@ -103,6 +103,7 @@
           <label class="filter-checkbox-label">
             <input type="checkbox" 
                    [(ngModel)]="filterDaNhap" 
+                   (change)="onFilterDaNhapChange()"
                    class="filter-checkbox">
             <span class="filter-checkbox-text">Đã Nhập</span>
           </label>

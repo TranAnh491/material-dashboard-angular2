@@ -555,26 +555,28 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     }
     
-    // Date range filter
-    if (this.startDate && this.endDate) {
-      const start = new Date(this.startDate);
-      const end = new Date(this.endDate);
-      end.setHours(23, 59, 59, 999);
-      start.setHours(0, 0, 0, 0);
-      const endDate = new Date(end);
-      endDate.setHours(23, 59, 59, 999);
-      filtered = filtered.filter(material => {
-        const materialDate = new Date(material.importDate);
-        materialDate.setHours(0, 0, 0, 0);
-        return materialDate >= start && materialDate <= endDate;
-      });
-    } else if (this.startDate) {
-      const start = new Date(this.startDate);
-      filtered = filtered.filter(material => material.importDate >= start);
-    } else if (this.endDate) {
-      const end = new Date(this.endDate);
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter(material => material.importDate <= end);
+    // Date range filter - bỏ qua khi tìm theo mã hàng để mã mới nhập kho (mọi ngày) vẫn hiện
+    if (!this.isMaterialCodeSearchActive()) {
+      if (this.startDate && this.endDate) {
+        const start = new Date(this.startDate);
+        const end = new Date(this.endDate);
+        end.setHours(23, 59, 59, 999);
+        start.setHours(0, 0, 0, 0);
+        const endDate = new Date(end);
+        endDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(material => {
+          const materialDate = new Date(material.importDate);
+          materialDate.setHours(0, 0, 0, 0);
+          return materialDate >= start && materialDate <= endDate;
+        });
+      } else if (this.startDate) {
+        const start = new Date(this.startDate);
+        filtered = filtered.filter(material => material.importDate >= start);
+      } else if (this.endDate) {
+        const end = new Date(this.endDate);
+        end.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(material => material.importDate <= end);
+      }
     }
 
     // Batch type filter - Hàng Trả / Hàng Nhập
@@ -590,24 +592,18 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       }
     }
     
-    // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
-    if (this.statusFilter) {
+    // Status filter - bỏ qua khi tìm theo mã hàng để hiện cả đã nhận và chưa nhận của mã đó
+    if (!this.isMaterialCodeSearchActive() && this.statusFilter) {
       switch (this.statusFilter) {
         case 'received':
-          // Đã nhận: Chỉ hiển thị các mã hàng đã được tick "đã nhận"
           filtered = filtered.filter(material => material.isReceived);
           break;
         case 'pending':
-          // Chưa: Chỉ hiển thị các mã hàng chưa được tick "đã nhận"
           filtered = filtered.filter(material => !material.isReceived);
           break;
         case 'all':
-          // Toàn bộ: Hiển thị tất cả mã hàng (không lọc theo isReceived)
           break;
       }
-    } else {
-      // Mặc định: Hiển thị tất cả materials (không filter theo isReceived)
-      // Để materials mới import luôn hiển thị
     }
     // Filter by selected batch view / current batch (skip when searching by material code)
     if (!this.isMaterialCodeSearchActive()) {
@@ -1430,24 +1426,37 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
     this.isLoadingMaterialCodeSearch = true;
     this.lastMaterialCodeSearchTerm = term;
+    const termUpper = term.trim().toUpperCase();
     try {
-      const snapshot = await this.firestore.collection('inbound-materials', ref =>
+      let snapshot = await this.firestore.collection('inbound-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
-           .where('materialCode', '==', term)
+           .where('materialCode', '==', termUpper)
            .limit(2000)
       ).get().toPromise();
+
+      // Nếu không có exact match, thử prefix (ví dụ B017237 trùng với dữ liệu lưu khác format)
+      if ((!snapshot || snapshot.empty) && termUpper.length >= 3) {
+        snapshot = await this.firestore.collection('inbound-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+             .where('materialCode', '>=', termUpper)
+             .where('materialCode', '<=', termUpper + '\uf8ff')
+             .limit(2000)
+        ).get().toPromise();
+      }
 
       const items: InboundMaterial[] = [];
       if (snapshot && !snapshot.empty) {
         snapshot.docs.forEach(doc => {
           const data = doc.data() as any;
+          const code = (data.materialCode || '').toString().trim();
+          if (code.toUpperCase().indexOf(termUpper) === -1) return;
           items.push({
             id: doc.id,
             factory: data.factory || this.selectedFactory,
             importDate: data.importDate?.toDate() || new Date(),
             internalBatch: data.internalBatch || '',
             batchNumber: data.batchNumber || '',
-            materialCode: data.materialCode || '',
+            materialCode: code || data.materialCode || '',
             poNumber: data.poNumber || '',
             quantity: data.quantity || 0,
             unit: data.unit || '',
@@ -1522,11 +1531,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       if (m.isReceived) g.receivedCount++;
     });
     let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
-    if (this.filterDaNhap) {
-      result = result.filter(b => b.receivedCount === b.count && b.count > 0);
-    } else {
-      result = result.filter(b => b.receivedCount < b.count);
+    // Khi click "Đã nhận": hiện lô đã nhập đủ (30/30) và lô nhập chưa đủ (15/30) để xem lại
+    if (this.statusFilter === 'received') {
+      result = result.filter(b => b.receivedCount >= 1 && b.count > 0); // Có ít nhất 1 mã đã nhận
+      if (this.filterDaNhap) result = result.filter(b => b.receivedCount === b.count); // Checkbox "Đã Nhập": chỉ lô nhập xong
+    } else if (this.statusFilter === 'pending') {
+      result = result.filter(b => b.receivedCount < b.count); // Còn ít nhất 1 mã chưa nhận
     }
+    // statusFilter === 'all' → giữ nguyên toàn bộ result
     return result;
   }
 
@@ -1555,9 +1567,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       if (m.isReceived) g.receivedCount++;
     });
     let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
-    if (this.filterDaNhap) {
-      result = result.filter(b => b.receivedCount === b.count && b.count > 0);
-    } else {
+    if (this.statusFilter === 'received') {
+      result = result.filter(b => b.receivedCount >= 1 && b.count > 0);
+      if (this.filterDaNhap) result = result.filter(b => b.receivedCount === b.count);
+    } else if (this.statusFilter === 'pending') {
       result = result.filter(b => b.receivedCount < b.count);
     }
     return result;
@@ -1574,9 +1587,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.selectedBatchView = null;
     this.applyFilters();
   }
+
+  /** Khi tick/bỏ tick "Đã Nhập": đồng bộ statusFilter để danh sách lô hiện đúng (lô có ít nhất 1 mã đã nhận) và bảng chi tiết chỉ hiện mã đã nhận */
+  onFilterDaNhapChange(): void {
+    this.statusFilter = this.filterDaNhap ? 'received' : 'pending';
+    this.applyFilters();
+  }
   
   changeStatusFilter(status: string): void {
     this.statusFilter = status;
+    this.filterDaNhap = (status === 'received');
     console.log(`🔄 Thay đổi bộ lọc trạng thái: ${status}`);
     
     // Log thông tin về số lượng materials trước và sau khi lọc

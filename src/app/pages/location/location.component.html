@@ -69,8 +69,8 @@
               <i class="material-icons">inventory</i>
               Cất NVL
             </button>
-            <button class="change-location-btn-desktop" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
-              <i class="material-icons">swap_horiz</i>
+            <button class="bulk-change-location-btn" (click)="openBulkChangeLocationModal()" title="Đổi vị trí hàng loạt (ASM1) - chỉ Scanner">
+              <i class="material-icons">swap_calls</i>
               Đổi Vị Trí
             </button>
             <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
@@ -91,9 +91,9 @@
             <i class="material-icons">inventory</i>
             Cất NVL
           </button>
-          <!-- Change Location Button -->
-          <button class="change-location-btn" (click)="openChangeLocationModal()" title="Thay đổi vị trí">
-            <i class="material-icons">swap_horiz</i>
+          <!-- Bulk Change Location Button -->
+          <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" title="Đổi vị trí hàng loạt (ASM1) - chỉ Scanner">
+            <i class="material-icons">swap_calls</i>
             Đổi Vị Trí
           </button>
           <!-- Move Shelf Button -->
@@ -126,6 +126,36 @@
             <i class="material-icons">info</i>
             Cần ít nhất 2 ký tự
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location Lookup Result: show materials at found location -->
+    <div class="location-lookup" *ngIf="searchTerm && searchTerm.trim().length >= 2 && (isLocationLookupLoading || locationLookupLocation)">
+      <div class="lookup-header">
+        <div class="lookup-title">
+          <i class="material-icons">place</i>
+          <span *ngIf="locationLookupLocation">Vị trí: <strong>{{ locationLookupLocation }}</strong></span>
+          <span *ngIf="!locationLookupLocation">Đang dò vị trí...</span>
+        </div>
+        <div class="lookup-meta" *ngIf="locationLookupLocation && !isLocationLookupLoading">
+          <span>Tổng mã hàng: <strong>{{ locationLookupItems.length }}</strong></span>
+        </div>
+      </div>
+      
+      <div class="lookup-loading" *ngIf="isLocationLookupLoading">
+        <i class="material-icons rotating">sync</i>
+        <span>Đang tải mã hàng theo vị trí...</span>
+      </div>
+
+      <div class="lookup-empty" *ngIf="!isLocationLookupLoading && locationLookupLocation && locationLookupItems.length === 0">
+        <i class="material-icons">inventory_2</i>
+        <span>Không có mã hàng ở vị trí này</span>
+      </div>
+
+      <div class="material-box-grid" *ngIf="!isLocationLookupLoading && locationLookupLocation && locationLookupItems.length > 0">
+        <div class="material-box" *ngFor="let m of locationLookupItems">
+          <div class="material-code">{{ m.materialCode }}</div>
         </div>
       </div>
     </div>
@@ -335,307 +365,189 @@
   </div>
 </div>
 
-<!-- Change Location Modal -->
-<div class="modal-overlay" *ngIf="showChangeLocationModal" (click)="closeChangeLocationModal()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
+<!-- Bulk Change Location (ASM1) Modal -->
+<div class="modal-overlay" *ngIf="showBulkChangeLocationModal" (click)="closeBulkChangeLocationModal()">
+  <div class="modal-content bulk-change-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h3>🔄 Thay Đổi Vị Trí</h3>
-      <button class="close-btn" (click)="closeChangeLocationModal()">
+      <h3>
+        <i class="material-icons">swap_calls</i>
+        Đổi Vị Trí (ASM1)
+      </h3>
+      <button class="close-btn" (click)="closeBulkChangeLocationModal()">
         <i class="material-icons">close</i>
       </button>
     </div>
-    
+
     <div class="modal-body">
-      <!-- Step 1: Choose Scanner Type -->
-      <div class="step-container" *ngIf="changeLocationStep === 1">
-        <h4>Chọn loại quét:</h4>
-        <div class="scanner-options">
-          <button class="scanner-option-btn" (click)="selectScannerType('camera')">
-            <i class="material-icons">camera_alt</i>
-            <span>Camera</span>
+      <!-- Step 1: Scan location (scanner only) -->
+      <div *ngIf="bulkStep === 'scan-location'" class="bulk-step">
+        <div class="step-title">
+          <h4>Bước 1: Scan vị trí (ASM1)</h4>
+          <p class="step-desc">Chỉ dùng scanner. Nhấn Enter sau khi scan.</p>
+        </div>
+
+        <div class="scan-input-container">
+          <input
+            type="text"
+            id="bulkAsm1LocationInput"
+            [(ngModel)]="bulkScanLocationInput"
+            (keyup.enter)="processBulkAsm1Location()"
+            placeholder="Scan vị trí..."
+            class="scan-input"
+            [disabled]="isBulkLoading">
+          <button class="scan-btn" (click)="processBulkAsm1Location()" [disabled]="isBulkLoading || !bulkScanLocationInput.trim()">
+            <i class="material-icons">{{ isBulkLoading ? 'hourglass_empty' : 'search' }}</i>
           </button>
-          <button class="scanner-option-btn" (click)="selectScannerType('scanner')">
-            <i class="material-icons">qr_code_scanner</i>
-            <span>Scanner</span>
-          </button>
+        </div>
+
+        <div *ngIf="isBulkLoading" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Đang tải mã hàng theo vị trí...</span>
         </div>
       </div>
-      
-      <!-- Step 2: Scan Material Code -->
-      <div class="step-container" *ngIf="changeLocationStep === 2">
-        <h4>Bước 1: Quét mã hàng</h4>
-        
-        <!-- QR Scanner View -->
-        <div class="scanner-container" *ngIf="selectedScannerType === 'camera'">
-          <div class="scanner-wrapper">
-            <div id="material-scanner-container" class="scanner-video-container">
-              <!-- QR Scanner will be injected here -->
-            </div>
-            
-            <!-- Scanner Ready Status -->
-            <div class="scanner-ready-overlay" *ngIf="isScannerReady && !isActivelyScanningMaterial && !materialScanCompleted">
-              <div class="ready-content">
-                <i class="material-icons">qr_code_scanner</i>
-                <p>Camera sẵn sàng</p>
-              </div>
-            </div>
-            
-            <!-- Actively Scanning -->
-            <div class="scanner-overlay" *ngIf="isActivelyScanningMaterial">
-              <div class="scan-frame">
-                <div class="scan-corners">
-                  <div class="corner top-left"></div>
-                  <div class="corner top-right"></div>
-                  <div class="corner bottom-left"></div>
-                  <div class="corner bottom-right"></div>
-                </div>
-                <p class="scan-instruction">Đưa mã QR/Barcode vào khung</p>
-              </div>
-            </div>
-            
-            <div class="scanner-loading" *ngIf="scannerState === 'starting'">
-              <i class="material-icons">camera_alt</i>
-              <p>Đang khởi tạo camera...</p>
-            </div>
-            <div class="scanner-error" *ngIf="scannerState === 'error'">
-              <i class="material-icons">error</i>
-              <p>{{ errorMessage }}</p>
-              <button class="retry-btn" (click)="startMaterialScanning()">
-                <i class="material-icons">refresh</i>
-                <span>Thử lại</span>
-              </button>
-            </div>
-          </div>
-          
-          <!-- Scanner Controls -->
-          <div class="scanner-controls" *ngIf="isScannerReady">
-            <button class="scanner-btn scan-btn" (click)="startMaterialScan()" 
-                    *ngIf="!isActivelyScanningMaterial && !materialScanCompleted">
-              <i class="material-icons">qr_code</i>
-              <span>Scan mã hàng</span>
-            </button>
-            <button class="scanner-btn stop-btn" (click)="stopScanning()" *ngIf="isActivelyScanningMaterial">
-              <i class="material-icons">stop</i>
-              <span>Dừng Scan</span>
-            </button>
-            <button class="scanner-btn close-btn" (click)="closeChangeLocationModal()">
-              <i class="material-icons">close</i>
-              <span>Đóng</span>
-            </button>
-          </div>
+
+      <!-- Step 2: Select items -->
+      <div *ngIf="bulkStep === 'select-items'" class="bulk-step">
+        <div class="step-title">
+          <h4>Bước 2: Chọn mã hàng</h4>
+          <p class="step-desc">
+            Vị trí: <strong>{{ bulkCurrentLocation }}</strong> |
+            Đã chọn: <strong>{{ bulkSelectedItems.size }}/{{ bulkItems.length }}</strong>
+          </p>
         </div>
-        
-        <!-- Scanner Input -->
-        <div class="scan-input-container" *ngIf="selectedScannerType === 'scanner'">
-          <input type="text" 
-                 id="materialInput"
-                 [(ngModel)]="scannedMaterialCode" 
-                 (keyup.enter)="processMaterialCode()"
-                 placeholder="Quét hoặc nhập mã hàng"
-                 class="scan-input"
-                 #materialInput>
-          <button class="scan-btn" (click)="processMaterialCode()">
-            <i class="material-icons">check</i>
+
+        <div class="select-all-container">
+          <button class="select-all-btn" (click)="bulkSelectAll()">
+            <i class="material-icons">
+              {{ bulkSelectedItems.size === bulkItems.length ? 'check_box' : 'check_box_outline_blank' }}
+            </i>
+            {{ bulkSelectedItems.size === bulkItems.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}
           </button>
         </div>
-        
-        <!-- Material Scan Results -->
-        <div class="material-scan-results" *ngIf="materialScanCompleted && foundRM1Item">
-          <div class="success-header">
-            <i class="material-icons success-icon">check_circle</i>
-            <h5>Đã quét thành công mã hàng</h5>
-          </div>
-          
-          <div class="scanned-info-card">
-            <h6>📋 Thông tin đã quét:</h6>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Mã hàng:</span>
-                <span class="value">{{ foundRM1Item.parsedData?.materialCode || foundRM1Item.materialCode }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">PO:</span>
-                <span class="value">{{ foundRM1Item.parsedData?.poNumber || foundRM1Item.poNumber || 'N/A' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">IMD:</span>
-                <span class="value">{{ foundRM1Item.parsedData?.imd || 'N/A' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Vị trí hiện tại:</span>
-                <span class="value location-highlight">{{ currentLocation }}</span>
+
+        <div class="items-grid">
+          <div
+            *ngFor="let item of bulkItems"
+            class="item-box"
+            [class.selected]="isBulkItemSelected(item.id)"
+            (click)="toggleBulkItem(item.id)">
+            <div class="item-checkbox">
+              <i class="material-icons">
+                {{ isBulkItemSelected(item.id) ? 'check_box' : 'check_box_outline_blank' }}
+              </i>
+            </div>
+            <div class="item-info">
+              <div class="item-code">{{ item.materialCode }}</div>
+              <div class="item-details">
+                <span class="item-po">{{ item.poNumber }}</span>
+                <span class="item-stock">SL: {{ item.stock | number:'1.0-0' }}</span>
               </div>
             </div>
-          </div>
-          
-          <div class="next-action">
-            <button class="next-step-btn" (click)="proceedToLocationScan()">
-              <i class="material-icons">location_on</i>
-              Scan vị trí mới
-            </button>
           </div>
         </div>
       </div>
-      
-      <!-- Step 3: Scan New Location -->
-      <div class="step-container" *ngIf="changeLocationStep === 3">
-        <h4>Bước 2: Quét vị trí mới</h4>
-        
-        <!-- Location QR Scanner View -->
-        <div class="scanner-container" *ngIf="selectedScannerType === 'camera'">
-          <div class="scanner-wrapper">
-            <div id="location-scanner-container" class="scanner-video-container">
-              <!-- QR Scanner will be injected here -->
-            </div>
-            
-            <!-- Scanner Ready Status -->
-            <div class="scanner-ready-overlay" *ngIf="isScannerReady && !isActivelyScanningLocation && !locationScanCompleted">
-              <div class="ready-content">
-                <i class="material-icons">place</i>
-                <p>Camera sẵn sàng</p>
-              </div>
-            </div>
-            
-            <!-- Actively Scanning Location -->
-            <div class="scanner-overlay" *ngIf="isActivelyScanningLocation">
-              <div class="scan-frame">
-                <div class="scan-corners">
-                  <div class="corner top-left"></div>
-                  <div class="corner top-right"></div>
-                  <div class="corner bottom-left"></div>
-                  <div class="corner bottom-right"></div>
-                </div>
-                <p class="scan-instruction">Đưa mã vị trí vào khung</p>
-              </div>
-            </div>
-            
-            <div class="scanner-loading" *ngIf="scannerState === 'starting'">
-              <i class="material-icons">camera_alt</i>
-              <p>Đang khởi tạo camera...</p>
-            </div>
-            <div class="scanner-error" *ngIf="scannerState === 'error'">
-              <i class="material-icons">error</i>
-              <p>{{ errorMessage }}</p>
-              <button class="retry-btn" (click)="startLocationScanning()">
-                <i class="material-icons">refresh</i>
-                <span>Thử lại</span>
-              </button>
-            </div>
+
+      <!-- Step 3: Scan targets -->
+      <div *ngIf="bulkStep === 'scan-targets'" class="bulk-step">
+        <div class="step-title">
+          <h4>Bước 3: Chọn vị trí mới / pallet mới</h4>
+          <p class="step-desc">Mỗi phần có thể tick bỏ qua.</p>
+        </div>
+
+        <div class="target-section">
+          <div class="target-header">
+            <span class="target-label">Scan vị trí mới</span>
+            <label class="skip-toggle">
+              <input type="checkbox" [(ngModel)]="skipBulkNewLocation" (ngModelChange)="onSkipBulkLocationChange()">
+              <span>Bỏ qua</span>
+            </label>
           </div>
-          
-          <!-- Scanner Controls -->
-          <div class="scanner-controls" *ngIf="isScannerReady">
-            <button class="scanner-btn scan-btn" (click)="startLocationScan()" 
-                    *ngIf="!isActivelyScanningLocation && !locationScanCompleted">
-              <i class="material-icons">qr_code_scanner</i>
-              <span>Scan vị trí</span>
-            </button>
-            <button class="scanner-btn stop-btn" (click)="stopLocationScan()" *ngIf="isActivelyScanningLocation">
-              <i class="material-icons">stop</i>
-              <span>Dừng Scan</span>
-            </button>
-            <button class="scanner-btn back-btn" (click)="goBackToMaterialScan()">
-              <i class="material-icons">arrow_back</i>
-              <span>Quay lại</span>
+          <div class="scan-input-container">
+            <input
+              type="text"
+              id="bulkAsm1NewLocationInput"
+              [(ngModel)]="bulkNewLocationInput"
+              (keyup.enter)="onBulkLocationEnter()"
+              placeholder="Scan vị trí mới..."
+              class="scan-input"
+              [disabled]="isBulkLoading || skipBulkNewLocation">
+            <button class="scan-btn" type="button" (click)="focusBulkPalletInput()" [disabled]="isBulkLoading || skipBulkNewLocation" title="Nhảy sang ô pallet">
+              <i class="material-icons">arrow_forward</i>
             </button>
           </div>
         </div>
-        
-        <!-- Location Scanner Input -->
-        <div class="scan-input-container" *ngIf="selectedScannerType === 'scanner'">
-          <input type="text" 
-                 id="locationInput"
-                 [(ngModel)]="scannedNewLocation" 
-                 (keyup.enter)="processNewLocation()"
-                 placeholder="Quét hoặc nhập vị trí mới"
-                 class="scan-input"
-                 #locationInput>
-          <button class="scan-btn" 
-                  (click)="processNewLocation()"
-                  [disabled]="!canProcessNewLocation"
-                  [class.disabled]="!canProcessNewLocation"
-                  title="Cần có đủ Mã hàng, PO, và IMD để tiếp tục">
-            <i class="material-icons">check</i>
-          </button>
+
+        <div class="target-section">
+          <div class="target-header">
+            <span class="target-label">Scan pallet mới</span>
+            <label class="skip-toggle">
+              <input type="checkbox" [(ngModel)]="skipBulkNewPallet">
+              <span>Bỏ qua</span>
+            </label>
+          </div>
+          <div class="scan-input-container">
+            <input
+              type="text"
+              id="bulkAsm1NewPalletInput"
+              [(ngModel)]="bulkNewPalletInput"
+              (keyup.enter)="confirmBulkChange()"
+              placeholder="Scan pallet mới..."
+              class="scan-input"
+              [disabled]="isBulkLoading || skipBulkNewPallet">
+            <button class="scan-btn" type="button" (click)="confirmBulkChange()" [disabled]="isBulkLoading || !canConfirmBulkTargets()" title="Xác nhận">
+              <i class="material-icons">check</i>
+            </button>
+          </div>
         </div>
-        <div class="scan-info">
-          <div *ngIf="foundRM1Item?.parsedData" class="parsed-info">
-            <p>Mã hàng: <strong>{{ foundRM1Item.parsedData.materialCode }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.poNumber">PO: <strong>{{ foundRM1Item.parsedData.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.imd">IMD: <strong>{{ foundRM1Item.parsedData.imd }}</strong></p>
-            <p *ngIf="foundRM1Item.parsedData.quantity">Số lượng: <strong>{{ foundRM1Item.parsedData.quantity }}</strong></p>
-          </div>
-          <div *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
-            <p>Mã hàng: <strong>{{ foundRM1Item.materialCode }}</strong></p>
-            <p *ngIf="foundRM1Item?.poNumber">PO: <strong>{{ foundRM1Item.poNumber }}</strong></p>
-            <p *ngIf="foundRM1Item?.importDate">IMD: <strong>{{ foundRM1Item.importDate }}</strong></p>
-          </div>
-          <p>Vị trí hiện tại: <strong>{{ currentLocation }}</strong></p>
-          <p>Vị trí mới: <strong>{{ scannedNewLocation }}</strong></p>
+
+        <div *ngIf="isBulkLoading" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Đang cập nhật...</span>
         </div>
       </div>
-      
-      <!-- Step 4: Confirmation -->
-      <div class="step-container" *ngIf="changeLocationStep === 4">
-        <h4>Xác nhận thay đổi</h4>
-        <div class="confirmation-info">
-          <div class="info-item" *ngIf="foundRM1Item?.parsedData">
-            <span class="label">Mã hàng:</span>
-            <span class="value">{{ foundRM1Item.parsedData.materialCode }}</span>
-          </div>
-          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item">
-            <span class="label">Mã hàng:</span>
-            <span class="value">{{ foundRM1Item.materialCode }}</span>
-          </div>
-          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.poNumber">
-            <span class="label">PO:</span>
-            <span class="value">{{ foundRM1Item.parsedData.poNumber }}</span>
-          </div>
-          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.poNumber">
-            <span class="label">PO:</span>
-            <span class="value">{{ foundRM1Item.poNumber }}</span>
-          </div>
-          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.imd">
-            <span class="label">IMD:</span>
-            <span class="value">{{ foundRM1Item.parsedData.imd }}</span>
-          </div>
-          <div class="info-item" *ngIf="!foundRM1Item?.parsedData && foundRM1Item?.importDate">
-            <span class="label">IMD:</span>
-            <span class="value">{{ foundRM1Item.importDate }}</span>
-          </div>
-          <div class="info-item" *ngIf="foundRM1Item?.parsedData?.quantity">
-            <span class="label">Số lượng:</span>
-            <span class="value">{{ foundRM1Item.parsedData.quantity }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Vị trí cũ:</span>
-            <span class="value">{{ currentLocation }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Vị trí mới:</span>
-            <span class="value">{{ scannedNewLocation }}</span>
-          </div>
-        </div>
-        <div class="confirmation-actions">
-          <button class="confirm-btn" (click)="confirmLocationChange()">
-            <i class="material-icons">check</i>
-            Xác nhận
-          </button>
-          <button class="cancel-btn" (click)="resetChangeLocation()">
-            <i class="material-icons">cancel</i>
-            Hủy
-          </button>
+
+      <!-- Step 4: Complete -->
+      <div *ngIf="bulkStep === 'complete'" class="bulk-step">
+        <div class="complete-message">
+          <i class="material-icons success-icon">check_circle</i>
+          <h4>Hoàn thành!</h4>
+          <p>Đã cập nhật {{ bulkSelectedItems.size }} mã hàng.</p>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- Success Notification -->
-<div class="success-notification" *ngIf="showSuccessNotification" [@slideIn]>
-  <div class="notification-content">
-    <i class="material-icons">check_circle</i>
-    <span>{{ successMessage }}</span>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" (click)="closeBulkChangeLocationModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+
+      <button
+        *ngIf="bulkStep === 'scan-targets'"
+        class="btn btn-confirm"
+        (click)="confirmBulkChange()"
+        [disabled]="isBulkLoading || !canConfirmBulkTargets()">
+        <i class="material-icons">check_circle</i>
+        Done
+      </button>
+
+      <button
+        *ngIf="bulkStep === 'select-items'"
+        class="btn btn-back"
+        (click)="bulkStep = 'scan-location'; bulkScanLocationInput = ''; bulkCurrentLocation = ''; bulkItems = []; bulkSelectedItems.clear();">
+        <i class="material-icons">arrow_back</i>
+        Quay lại
+      </button>
+
+      <button
+        *ngIf="bulkStep === 'select-items'"
+        class="btn btn-confirm"
+        (click)="proceedToBulkTargets()"
+        [disabled]="bulkSelectedItems.size === 0">
+        <i class="material-icons">arrow_forward</i>
+        Tiếp tục ({{ bulkSelectedItems.size }})
+      </button>
+    </div>
   </div>
 </div>
 

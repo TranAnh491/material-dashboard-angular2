@@ -75,6 +75,7 @@
 
 // Buttons
 .store-material-btn,
+.bulk-change-location-btn,
 .change-location-btn,
 .change-location-btn-desktop,
 .move-shelf-btn,
@@ -97,6 +98,12 @@
   &:active {
     background: #f5f5f5;
   }
+}
+
+.bulk-change-location-btn {
+  background: #1976d2;
+  color: #fff;
+  border-color: #1976d2;
 }
 
 .store-material-btn {
@@ -315,6 +322,93 @@
     cursor: pointer;
     
     i { font-size: 18px; }
+  }
+}
+
+// Location lookup boxes (materials at a location)
+.location-lookup {
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+
+  .lookup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+
+    .lookup-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #333;
+
+      i {
+        font-size: 18px;
+        color: #f44336;
+      }
+    }
+
+    .lookup-meta {
+      font-size: 12px;
+      color: #666;
+    }
+  }
+
+  .lookup-loading,
+  .lookup-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    font-size: 13px;
+    color: #666;
+
+    i {
+      font-size: 18px;
+      color: #666;
+    }
+  }
+
+  .material-box-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+
+    @media (max-width: 1024px) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    @media (max-width: 768px) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    @media (max-width: 480px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .material-box {
+    border: 1px solid #e0e0e0;
+    background: #fafafa;
+    padding: 10px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+
+    .material-code {
+      font-size: 12px;
+      font-weight: 700;
+      color: #333;
+      word-break: break-all;
+      text-align: center;
+    }
   }
 }
 
@@ -1075,6 +1169,62 @@
 // Move Shelf Modal
 .move-shelf-modal {
   max-width: 450px;
+}
+
+// Bulk change modal
+.bulk-change-modal {
+  max-width: 520px;
+}
+
+.bulk-step {
+  .step-title {
+    margin-bottom: 16px;
+
+    h4 {
+      margin: 0 0 4px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .step-desc {
+      margin: 0;
+      font-size: 12px;
+      color: #666;
+    }
+  }
+}
+
+.target-section {
+  margin-bottom: 14px;
+  padding: 10px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+
+  .target-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+
+    .target-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .skip-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #666;
+
+      input {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
 }
 
 .move-shelf-step {

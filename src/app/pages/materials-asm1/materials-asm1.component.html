@@ -126,38 +126,10 @@
         
         <!-- Mobile Search Section - Always visible on mobile -->
         <div class="mobile-search-section">
-          <!-- Search Type Selector -->
-          <div class="search-type-selector">
-            <div class="dropdown">
-              <button class="search-type-dropdown" 
-                      type="button" 
-                      data-toggle="dropdown" 
-                      aria-haspopup="true" 
-                      aria-expanded="false">
-                <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-                {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
-              </button>
-              <div class="dropdown-menu">
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
-                  <i class="material-icons">inventory</i>
-                  Mã
-                </a>
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
-                  <i class="material-icons">receipt</i>
-                  PO
-                </a>
-                <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
-                  <i class="material-icons">place</i>
-                  Vị trí
-                </a>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Search Box -->
+          <!-- Search Box - chỉ tìm theo mã hàng -->
           <div class="search-box">
             <input type="text"
-                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Tìm theo mã hàng'"
                    [(ngModel)]="searchTerm"
                    (input)="onSearchInput($event)"
                    (keyup)="onSearchKeyUp($event)"
@@ -207,40 +179,11 @@
           </div>
         </div>
         
-        <!-- Desktop Search Section -->
+        <!-- Desktop Search Section - chỉ tìm theo mã hàng -->
         <div class="desktop-search-section">
-        <!-- Search Type Selector -->
-        <div class="search-type-selector">
-          <div class="dropdown">
-            <button class="search-type-dropdown" 
-                    type="button" 
-                    data-toggle="dropdown" 
-                    aria-haspopup="true" 
-                    aria-expanded="false">
-              <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-              {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
-            </button>
-            <div class="dropdown-menu">
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('material')">
-                <i class="material-icons">inventory</i>
-                Mã
-              </a>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('po')">
-                <i class="material-icons">receipt</i>
-                PO
-              </a>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="changeSearchType('location')">
-                <i class="material-icons">place</i>
-                Vị trí
-              </a>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Search Box -->
         <div class="search-box">
           <input type="text"
-                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Nhập để tìm kiếm'"
+                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Tìm theo mã hàng'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchInput($event)"
                  (keyup)="onSearchKeyUp($event)"
@@ -630,15 +573,14 @@
         <div class="empty-state-content">
           <i class="material-icons">search</i>
           <h3>🔍 Tìm kiếm ASM1 Inventory</h3>
-          <p>Nhập từ khóa để tìm kiếm materials trong ASM1 inventory</p>
+          <p>Nhập mã hàng để tìm kiếm materials trong ASM1 inventory</p>
           
-          <!-- Search Suggestions -->
+          <!-- Search Suggestions - chỉ mã hàng -->
           <div class="search-suggestions">
-            <h5>💡 Gợi ý tìm kiếm:</h5>
+            <h5>💡 Gợi ý: nhập mã hàng (ví dụ B018694)</h5>
             <div class="suggestion-tags">
               <span class="suggestion-tag" (click)="searchTerm = 'B018694'; onSearchInput({target: {value: 'B018694'}})">B018694</span>
-              <span class="suggestion-tag" (click)="searchTerm = 'PO123'; onSearchInput({target: {value: 'PO123'}})">PO123</span>
-              <span class="suggestion-tag" (click)="searchTerm = 'Location A'; onSearchInput({target: {value: 'Location A'}})">Location A</span>
+              <span class="suggestion-tag" (click)="searchTerm = 'A'; onSearchInput({target: {value: 'A'}})">A</span>
             </div>
           </div>
           
@@ -667,14 +609,13 @@
           <h4>🔍 Không tìm thấy kết quả</h4>
           <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong ASM1</p>
           
-          <!-- Search Tips -->
+          <!-- Search Tips - chỉ tìm theo mã hàng -->
           <div class="search-tips">
             <h6>💡 Mẹo tìm kiếm:</h6>
             <ul>
-              <li>Kiểm tra chính tả</li>
-              <li>Thử tìm kiếm với ít ký tự hơn</li>
+              <li>Chỉ tìm theo mã hàng (ví dụ B018694)</li>
+              <li>Kiểm tra chính tả hoặc thử ít ký tự hơn</li>
               <li>Kiểm tra factory filter (ASM1)</li>
-              <li>Thử tìm kiếm theo PO number</li>
             </ul>
           </div>
         </div>

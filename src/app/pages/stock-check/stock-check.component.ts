@@ -170,6 +170,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Mobile (≤768px): ẩn bảng/counters, chỉ hiện nút KIỂM KÊ + modal scan — skip filter/stats để chạy nhanh hơn */
   isMobile = false;
 
+  /** Khi chọn 1 vị trí (box) thì hiển thị bảng chi tiết theo vị trí đó; null = đang xem grid box */
+  selectedLocationForDetail: string | null = null;
+
   // Counters
   get totalMaterials(): number {
     return this.allMaterials.length;
@@ -199,6 +202,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return this.allMaterials.filter(m => 
       m.locationChangeInfo?.hasChanged === true
     ).length;
+  }
+
+  /** Danh sách vị trí (mỗi vị trí 1 box) — dùng cho giao diện grid 6 cột */
+  get locationBoxStats(): RackStat[] {
+    return this.computeRackStats();
   }
 
   get outsideStockMaterials(): number {
@@ -577,6 +585,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   trackByIndex(index: number): number {
     return index;
+  }
+
+  trackByLocationBox(index: number, r: RackStat): string {
+    return r.location;
   }
 
   get locationTotalCount(): number {
@@ -2109,6 +2121,37 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     target.forEach(m => {
       m.hasKhsx = khsxSet.has((m.materialCode || '').trim().toUpperCase());
     });
+  }
+
+  // ======================== LOCATION BOX VIEW (grid) ========================
+
+  /** Mở chi tiết bảng theo vị trí khi bấm vào 1 box */
+  openLocationDetail(location: string): void {
+    const loc = (location || '').trim().toUpperCase();
+    if (!loc) return;
+    this.selectedLocationForDetail = loc;
+    this.filteredMaterials = this.allMaterials
+      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .slice()
+      .sort((a, b) => {
+        const code = a.materialCode.localeCompare(b.materialCode);
+        if (code !== 0) return code;
+        const po = (a.poNumber || '').localeCompare(b.poNumber || '');
+        if (po !== 0) return po;
+        return (a.imd || '').localeCompare(b.imd || '');
+      });
+    this.filteredMaterials.forEach((mat, index) => { mat.stt = index + 1; });
+    this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
+    this.currentPage = 1;
+    this.loadPageFromFiltered(1);
+    this.cdr.detectChanges();
+  }
+
+  /** Quay lại giao diện grid box (ẩn bảng chi tiết) */
+  backToLocationBoxes(): void {
+    this.selectedLocationForDetail = null;
+    this.applyFilter();
+    this.cdr.detectChanges();
   }
 
   // ======================== RACK FEATURE ========================

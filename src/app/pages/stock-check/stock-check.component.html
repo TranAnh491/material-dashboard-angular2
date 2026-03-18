@@ -204,8 +204,45 @@
       <span>Loading data...</span>
     </div>
 
-    <!-- Table - Desktop only -->
-    <div class="table-container desktop-only" *ngIf="!isLoading">
+    <!-- Giao diện box: mỗi vị trí 1 box, 6 box / hàng — chỉ hiện khi chưa chọn vị trí -->
+    <div class="location-boxes-wrapper" *ngIf="!isLoading && !selectedLocationForDetail">
+      <div class="location-boxes-empty" *ngIf="locationBoxStats.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Chưa có dữ liệu vị trí</p>
+      </div>
+      <div class="location-boxes-grid" *ngIf="locationBoxStats.length > 0">
+        <div class="location-box clickable"
+             *ngFor="let r of locationBoxStats; trackBy: trackByLocationBox"
+             (click)="openLocationDetail(r.location)"
+             [class.all-checked]="r.unchecked === 0 && r.total > 0"
+             title="Click xem chi tiết">
+          <div class="location-box-title">
+            <i class="material-icons">place</i>
+            {{ r.location }}
+          </div>
+          <div class="location-box-stats">
+            <span class="stat total">Tổng: {{ r.total }}</span>
+            <span class="stat full">Đủ: {{ r.full }}</span>
+            <span class="stat partial">Chưa đủ: {{ r.partial }}</span>
+            <span class="stat unchecked">Chưa KT: {{ r.unchecked }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chi tiết theo vị trí: header + bảng (chỉ hiện khi bấm vào 1 box) -->
+    <div class="location-detail-section" *ngIf="!isLoading && selectedLocationForDetail">
+      <div class="location-detail-header">
+        <button type="button" class="back-to-boxes-btn" (click)="backToLocationBoxes()">
+          <i class="material-icons">arrow_back</i>
+          Quay lại danh sách vị trí
+        </button>
+        <h3 class="location-detail-title">
+          <i class="material-icons">place</i>
+          Chi tiết vị trí: {{ selectedLocationForDetail }}
+        </h3>
+      </div>
+      <div class="table-container desktop-only">
       <table class="stock-table">
         <thead>
           <tr>
@@ -304,8 +341,8 @@
       </table>
     </div>
 
-    <!-- Pagination - Desktop only -->
-    <div class="pagination desktop-only" *ngIf="!isLoading && displayedMaterials.length > 0">
+    <!-- Pagination - khi xem chi tiết vị trí -->
+    <div class="pagination desktop-only" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length > 0">
       <button 
         class="page-btn" 
         (click)="previousPage()" 
@@ -325,13 +362,12 @@
       </button>
     </div>
 
-    <!-- No Data - Desktop only -->
-    <div class="no-data desktop-only" *ngIf="!isLoading && displayedMaterials.length === 0">
+    <!-- No Data - khi xem chi tiết vị trí -->
+    <div class="no-data desktop-only" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length === 0">
       <i class="material-icons">inbox</i>
-      <p *ngIf="filterMode === 'all'">No data available</p>
-      <p *ngIf="filterMode === 'checked'">Chưa có mã nào được kiểm tra</p>
-      <p *ngIf="filterMode === 'unchecked'">Tất cả mã đã được kiểm tra</p>
+      <p>Không có dữ liệu tại vị trí này</p>
     </div>
+    </div><!-- /location-detail-section -->
   </div>
 
   <!-- Scan Success Popup -->

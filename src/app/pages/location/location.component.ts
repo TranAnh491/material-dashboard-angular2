@@ -7,7 +7,6 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
-import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 
 export interface LocationItem {
@@ -55,6 +54,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Data properties
   locationItems: LocationItem[] = [];
   filteredItems: LocationItem[] = [];
+  /** Lookup inventory items by scanned/typed location */
+  locationLookupLocation = '';
+  locationLookupItems: { id: string; materialCode: string; poNumber?: string; stock?: number }[] = [];
+  isLocationLookupLoading = false;
+  private locationLookupSeq = 0;
   
   // Loading state
   isLoading = false;
@@ -85,37 +89,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Edit mode
   editingItem: LocationItem | null = null;
-  
-  // Change Location Modal
-  showChangeLocationModal = false;
-  changeLocationStep = 1; // 1: Choose scanner, 2: Scan material, 3: Scan location, 4: Confirm
-  selectedScannerType: 'camera' | 'scanner' | null = null;
-  selectedScannerTypes = {
-    step1: 'camera' as 'camera' | 'scanner',
-    step2: 'camera' as 'camera' | 'scanner',
-    step3: 'camera' as 'camera' | 'scanner'
-  };
-  scannedMaterialCode = '';
-  scannedNewLocation = '';
-  newLocation = '';
-  currentLocation = '';
-  foundRM1Item: any = null;
-  
-  // QR Scanner properties
-  isScanning = false;
-  isScannerReady = false;
-  scannerState: 'idle' | 'starting' | 'scanning' | 'error' = 'idle';
-  errorMessage = '';
-  
-  // Scan flow control
-  isActivelyScanningMaterial = false;
-  isActivelyScanningLocation = false;
-  materialScanCompleted = false;
-  locationScanCompleted = false;
-  
-  // Success notification
-  showSuccessNotification = false;
-  successMessage = '';
   
   // Store Material Modal (Cất NVL)
   showStoreMaterialModal = false;
@@ -153,6 +126,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   moveShelfSelectedItems: Set<string> = new Set();
   isMoveShelfLoading = false;
   
+  // ==================== BULK CHANGE LOCATION (ASM1) ====================
+  showBulkChangeLocationModal = false;
+  bulkStep: 'scan-location' | 'select-items' | 'scan-targets' | 'complete' = 'scan-location';
+  bulkScanLocationInput = '';
+  bulkCurrentLocation = '';
+  bulkItems: any[] = [];
+  bulkSelectedItems: Set<string> = new Set();
+  isBulkLoading = false;
+  bulkNewLocationInput = '';
+  bulkNewPalletInput = '';
+  skipBulkNewLocation = false;
+  skipBulkNewPallet = false;
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -160,8 +146,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private auth: AngularFireAuth,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
-    private cdr: ChangeDetectorRef,
-    private qrScannerService: QRScannerService
+    private cdr: ChangeDetectorRef
   ) {
     // Setup search debouncing
     this.searchSubject.pipe(
@@ -192,275 +177,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.destroy$.next();
     this.destroy$.complete();
     
-    // Stop scanner if active
-    this.stopScanning();
-    
     // Remove event listeners
     document.removeEventListener('click', () => {
       this.isDropdownOpen = false;
     });
-  }
-
-  stopScanning(): void {
-    this.isScanning = false;
-    this.isScannerReady = false;
-    this.scannerState = 'idle';
-    
-    // Stop QRScannerService
-    try {
-      this.qrScannerService.stopScanning();
-      console.log('📹 QRScannerService stopped');
-    } catch (error) {
-      console.error('❌ Error stopping QRScannerService:', error);
-    }
-    
-    // Clear containers
-    this.clearScannerContainer('material-scanner-container');
-    this.clearScannerContainer('location-scanner-container');
-  }
-
-  private clearScannerContainer(containerId: string): void {
-    try {
-      const container = document.getElementById(containerId);
-      if (container) {
-        container.innerHTML = '';
-        console.log(`🧹 Cleared container: ${containerId}`);
-      }
-    } catch (error) {
-      console.error(`❌ Error clearing container ${containerId}:`, error);
-    }
-  }
-
-
-  startMaterialScanning(): void {
-    this.isScanning = true;
-    this.scannerState = 'starting';
-    this.isScannerReady = false;
-    this.errorMessage = '';
-    
-    // Reset scan states
-    this.isActivelyScanningMaterial = true; // 🔧 FIX: Set true ngay để sẵn sàng scan
-    this.materialScanCompleted = false;
-    
-    console.log('📱 Starting material scanning...');
-    
-    // 🔧 FIX: Tăng timeout cho mobile chậm và force change detection
-    this.cdr.detectChanges();
-    setTimeout(() => {
-      const container = document.getElementById('material-scanner-container');
-      if (container) {
-        console.log('✅ Container found, initializing scanner...');
-        this.initializeCameraScanner('material-scanner-container');
-      } else {
-        console.error('❌ Container not found!');
-        this.handleScannerError('Không tìm thấy container scanner');
-      }
-    }, 500); // Tăng từ 200ms lên 500ms
-  }
-
-  startMaterialScan(): void {
-    console.log('🔍 Starting material scan...');
-    this.isActivelyScanningMaterial = true;
-    this.materialScanCompleted = false;
-    // ZXing scanner is already running, just enable scanning mode
-  }
-
-  proceedToLocationScan(): void {
-    console.log('📍 Proceeding to location scan...');
-    this.changeLocationStep = 3;
-    
-    // Initialize location scanner
-    setTimeout(() => {
-      this.initializeCameraScanner('location-scanner-container');
-    }, 200);
-  }
-
-  startLocationScan(): void {
-    console.log('🔍 Starting location scan...');
-    this.isActivelyScanningLocation = true;
-    this.locationScanCompleted = false;
-    // ZXing scanner is already running, just enable scanning mode
-  }
-
-  stopLocationScan(): void {
-    console.log('⏹️ Stopping location scan...');
-    this.isActivelyScanningLocation = false;
-  }
-
-  goBackToMaterialScan(): void {
-    console.log('🔙 Going back to material scan...');
-    this.changeLocationStep = 2;
-    this.materialScanCompleted = false;
-    this.isActivelyScanningMaterial = false;
-    
-    // Restart material scanner
-    setTimeout(() => {
-      this.startMaterialScanning();
-    }, 200);
-  }
-
-  startQRScannerForStep(step: number): void {
-    console.log(`📱 Starting QR scanner for step ${step}`);
-    this.isScanning = true;
-    this.scannerState = 'starting';
-    this.isScannerReady = false;
-    
-    // Initialize camera for location scanning (step 3)
-    if (step === 3) {
-      console.log('📱 Starting location scanning...');
-      
-      // 🔧 FIX: Tăng timeout cho mobile chậm và force change detection
-      this.cdr.detectChanges();
-      setTimeout(() => {
-        const container = document.getElementById('location-scanner-container');
-        if (container) {
-          console.log('✅ Location container found, initializing scanner...');
-          this.initializeCameraScanner('location-scanner-container');
-        } else {
-          console.error('❌ Location container not found!');
-          this.handleScannerError('Không tìm thấy container scanner');
-        }
-      }, 500); // Tăng từ 200ms lên 500ms
-    }
-  }
-
-  async initializeCameraScanner(containerId: string): Promise<void> {
-    try {
-      console.log(`🔧 Initializing optimized camera scanner for container: ${containerId}`);
-      
-      // Check if container exists
-      const container = document.getElementById(containerId);
-      if (!container) {
-        throw new Error(`Container ${containerId} not found`);
-      }
-
-      // Set scanning state
-      this.scannerState = 'starting';
-      this.isScannerReady = false;
-      this.cdr.detectChanges();
-
-      // Use QRScannerService for better performance
-      const scanResult$ = await this.qrScannerService.startScanning({
-        facingMode: 'environment',
-        width: 640,
-        height: 480
-      }, container);
-
-      // Subscribe to scan results
-      scanResult$.subscribe({
-        next: (result: QRScanResult) => {
-          console.log('📖 QR Code detected via service:', result.text);
-          this.handleScannedCode(result.text, containerId);
-        },
-        error: (error) => {
-          console.error('❌ Scanner service error:', error);
-          this.handleScannerError(error.message || 'Lỗi scanner');
-        }
-      });
-
-      // Monitor scanner state
-      this.qrScannerService.scannerState$.subscribe(state => {
-        console.log(`📱 Scanner state: ${state}`);
-        if (state === 'scanning') {
-          this.scannerState = 'scanning';
-          this.isScannerReady = true;
-          this.errorMessage = '';
-          this.cdr.detectChanges();
-        } else if (state === 'error') {
-          this.handleScannerError('Lỗi khởi tạo scanner');
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Camera scanner initialization error:', error);
-      let errorMessage = 'Không thể truy cập camera';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Camera không được hỗ trợ')) {
-          errorMessage = 'Camera không được hỗ trợ trên thiết bị này';
-        } else if (error.message.includes('Không thể truy cập camera')) {
-          errorMessage = 'Vui lòng cho phép truy cập camera';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      this.handleScannerError(errorMessage);
-    }
-  }
-
-  private handleScannerError(message: string): void {
-    this.scannerState = 'error';
-    this.errorMessage = message;
-    this.isScannerReady = false;
-    this.isScanning = false;
-    this.cdr.detectChanges();
-  }
-
-  private handleScannedCode(scannedCode: string, containerId: string): void {
-    console.log(`📱 Code scanned from ${containerId}:`, scannedCode);
-    
-    if (containerId === 'material-scanner-container' && this.isActivelyScanningMaterial) {
-      // Handle material code scanning (step 2)
-      this.isActivelyScanningMaterial = false;
-      this.materialScanCompleted = true;
-      this.scannedMaterialCode = scannedCode;
-      
-      // Process material code
-      this.processMaterialCode();
-      
-    } else if (containerId === 'location-scanner-container' && this.isActivelyScanningLocation) {
-      // Handle location scanning (step 3)
-      this.isActivelyScanningLocation = false;
-      this.locationScanCompleted = true;
-      this.newLocation = scannedCode.trim();
-      
-      console.log(`✅ Location scanned: ${scannedCode.trim()}`);
-      
-      // Stop scanner
-      this.stopScanning();
-      
-      // 🔧 FIX: Tự động cập nhật ngay, không cần confirm
-      this.autoConfirmLocationChange();
-    }
-  }
-
-  private async autoConfirmLocationChange(): Promise<void> {
-    console.log('🔄 Auto-confirming location change...');
-    
-    // 🔧 FIX: Lưu thông tin trước khi cập nhật (vì confirmLocationChange sẽ reset foundRM1Item)
-    const materialCode = this.foundRM1Item?.parsedData?.materialCode || this.foundRM1Item?.materialCode || 'N/A';
-    const newLocationValue = this.newLocation;
-    
-    // Hiển thị loading
-    this.isLoading = true;
-    this.cdr.detectChanges();
-    
-    try {
-      // Cập nhật location
-      await this.confirmLocationChange();
-      
-      // Hiển thị thông báo thành công (dùng dữ liệu đã lưu)
-      console.log('✅ Location updated successfully!');
-      alert(`✅ Đã cập nhật vị trí thành công!\n\nMã hàng: ${materialCode}\nVị trí mới: ${newLocationValue}`);
-      
-      // Đóng modal
-      this.closeChangeLocationModal();
-      
-    } catch (error) {
-      console.error('❌ Error updating location:', error);
-      alert('❌ Lỗi cập nhật vị trí: ' + error.message);
-    } finally {
-      this.isLoading = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  private startLocationScanning(): void {
-    // Restart location scanner
-    setTimeout(() => {
-      this.initializeCameraScanner('location-scanner-container');
-    }, 200);
   }
 
   private async checkPermissions() {
@@ -538,15 +258,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private performSearch(term: string) {
     if (!term || term.trim().length < 2) {
       this.filteredItems = [...this.locationItems];
+      this.clearLocationLookup();
     } else {
+      const formattedTerm = this.formatViTriInput(term.trim());
       this.filteredItems = this.locationItems.filter(item => {
-        const searchLower = term.toLowerCase();
-        return (
-          item.stt.toString().includes(searchLower) ||
-          item.viTri.toLowerCase().includes(searchLower) ||
-          item.qrCode.toLowerCase().includes(searchLower)
-        );
+        // Yêu cầu: khi scan/tìm luôn dò ở cột Vị Trí
+        const searchLower = formattedTerm.toLowerCase();
+        return item.viTri.toLowerCase().includes(searchLower);
       });
+      this.lookupInventoryByLocation(formattedTerm);
     }
     this.updateTotalCount();
   }
@@ -554,7 +274,71 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   clearSearch() {
     this.searchTerm = '';
     this.filteredItems = [...this.locationItems];
+    this.clearLocationLookup();
     this.updateTotalCount();
+  }
+
+  private clearLocationLookup(): void {
+    this.locationLookupLocation = '';
+    this.locationLookupItems = [];
+    this.isLocationLookupLoading = false;
+  }
+
+  private async lookupInventoryByLocation(locationTerm: string): Promise<void> {
+    // Only lookup when the location exists (avoid unnecessary queries on partial typing)
+    const normalized = this.normalizeLocationCode(locationTerm);
+    const matchedLocation = this.locationItems.find(
+      l => this.normalizeLocationCode(l.viTri) === normalized
+    )?.viTri;
+
+    if (!matchedLocation) {
+      this.clearLocationLookup();
+      return;
+    }
+
+    const seq = ++this.locationLookupSeq;
+    this.isLocationLookupLoading = true;
+    this.locationLookupLocation = matchedLocation;
+    this.locationLookupItems = [];
+
+    try {
+      const snapshot = await this.firestore
+        .collection('inventory-materials', ref => ref.where('location', '==', matchedLocation))
+        .get()
+        .toPromise();
+
+      // If a newer lookup started, ignore this result
+      if (seq !== this.locationLookupSeq) return;
+
+      const items: { id: string; materialCode: string; poNumber?: string; stock?: number }[] = [];
+      snapshot?.forEach(doc => {
+        const data = doc.data() as any;
+        const openingStock = Number(data.openingStock) || 0;
+        const quantity = Number(data.quantity) || 0;
+        const exported = Number(data.exported) || 0;
+        const xt = Number(data.xt) || 0;
+        const stock = openingStock + quantity - exported - xt;
+
+        items.push({
+          id: doc.id,
+          materialCode: data.materialCode || '',
+          poNumber: data.poNumber || '',
+          stock
+        });
+      });
+
+      items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+      this.locationLookupItems = items.filter(i => !!i.materialCode);
+    } catch (error) {
+      // Keep silent UI; do not alert on every keystroke
+      console.error('❌ Error lookup inventory by location:', error);
+      if (seq !== this.locationLookupSeq) return;
+      this.locationLookupItems = [];
+    } finally {
+      if (seq === this.locationLookupSeq) {
+        this.isLocationLookupLoading = false;
+      }
+    }
   }
 
   refreshData() {
@@ -1104,444 +888,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   trackByFG(index: number, item: FGLocation): string {
     return item.id || index.toString();
-  }
-
-  // Change Location Modal Methods
-  openChangeLocationModal(): void {
-    this.showChangeLocationModal = true;
-    this.resetChangeLocation();
-  }
-
-  closeChangeLocationModal(): void {
-    // Stop camera before closing
-    this.stopScanning();
-    
-    this.showChangeLocationModal = false;
-    this.resetChangeLocation();
-  }
-
-  resetChangeLocation(): void {
-    this.changeLocationStep = 1;
-    this.selectedScannerType = null;
-    this.scannedMaterialCode = '';
-    this.scannedNewLocation = '';
-    this.newLocation = '';
-    this.currentLocation = '';
-    this.foundRM1Item = null;
-    
-    // Reset scanner states
-    this.isScanning = false;
-    this.isScannerReady = false;
-    this.scannerState = 'idle';
-    this.errorMessage = '';
-    
-    // Reset scan flow states
-    this.isActivelyScanningMaterial = false;
-    this.isActivelyScanningLocation = false;
-    this.materialScanCompleted = false;
-    this.locationScanCompleted = false;
-    
-    // Stop scanner if active
-    this.stopScanning();
-  }
-
-  selectScannerType(type: 'camera' | 'scanner'): void {
-    this.selectedScannerType = type;
-    this.changeLocationStep = 2;
-    
-    if (type === 'camera') {
-      // Start QR scanner for material code
-      this.startMaterialScanning();
-    } else {
-      // Focus on material input for scanner
-    setTimeout(() => {
-      const materialInput = document.querySelector('#materialInput') as HTMLInputElement;
-      if (materialInput) {
-        materialInput.focus();
-      }
-    }, 100);
-    }
-  }
-
-  processMaterialCode(): void {
-    if (!this.scannedMaterialCode.trim()) {
-      alert('Vui lòng nhập mã hàng');
-      return;
-    }
-
-    // Validate and parse the scanned code
-    const parsedData = this.parseScannedCode(this.scannedMaterialCode.trim());
-    
-    // Check if parsing was successful
-    if (!parsedData.materialCode) {
-      alert('🏷️ TEM LỖI - Format mã QR không đúng');
-      this.scannedMaterialCode = '';
-      return;
-    }
-
-    // Search for material in RM1 inventory
-    this.searchRM1Material(parsedData);
-  }
-
-  // Parse scanned code: B001639|KZPO0425/0114|150|13082025
-  // Rules: 
-  // - First 7 chars (0-6): Material Code
-  // - Chars 9-21: PO Number  
-  // - Last 8 chars: IMD (Import Date)
-  private parseScannedCode(scannedCode: string): any {
-    const cleanCode = scannedCode.replace(/\s/g, ''); // Remove spaces
-    
-    // Validate basic format
-    if (cleanCode.length < 7) {
-      console.log(`❌ Code too short: ${cleanCode}`);
-      return {
-        materialCode: null,
-        poNumber: null,
-        batch: null,
-        quantity: null,
-        originalCode: scannedCode,
-        error: 'Code too short'
-      };
-    }
-    
-    if (cleanCode.includes('|') && cleanCode.length >= 25) {
-      // Full format QR code validation
-      const parts = cleanCode.split('|');
-      if (parts.length < 4) {
-        console.log(`❌ Invalid format - not enough parts: ${parts.length}`);
-        return {
-          materialCode: null,
-          poNumber: null,
-          batch: null,
-          quantity: null,
-          originalCode: scannedCode,
-          error: 'Invalid format'
-        };
-      }
-      
-      // Parse by splitting and position
-      const materialCode = parts[0]; // First part: B001639 (but take only 7 chars)
-      const poNumber = parts[1]; // Second part: KZPO0425/0114
-      const quantity = parts[2]; // Third part: 150
-      const imd = parts[3]; // Fourth part: 13082025 or 08092025 (Import Date)
-      
-      // Ensure material code is exactly 7 characters
-      const finalMaterialCode = materialCode.substring(0, 7);
-      
-      // Validate material code format (should be letters and numbers)
-      if (!/^[A-Za-z0-9]{7}$/.test(finalMaterialCode)) {
-        console.log(`❌ Invalid material code format: ${finalMaterialCode}`);
-        return {
-          materialCode: null,
-          poNumber: null,
-          batch: null,
-          quantity: null,
-          originalCode: scannedCode,
-          error: 'Invalid material code format'
-        };
-      }
-      
-      // Validate IMD format (should be 8 digits)
-      if (!/^\d{8}$/.test(imd)) {
-        console.log(`❌ Invalid IMD format: ${imd}`);
-        return {
-          materialCode: null,
-          poNumber: null,
-          imd: null,
-          quantity: null,
-          originalCode: scannedCode,
-          error: 'Invalid IMD format'
-        };
-      }
-      
-      console.log(`✅ Valid QR Code parsed:`, {
-        originalCode: scannedCode,
-        cleanCode: cleanCode,
-        parts: parts,
-        finalMaterialCode: finalMaterialCode,
-        poNumber: poNumber,
-        imd: imd,
-        quantity: quantity,
-        codeLength: cleanCode.length
-      });
-      
-      return {
-        materialCode: finalMaterialCode.toUpperCase(),
-        poNumber: poNumber,
-        imd: imd,
-        quantity: quantity,
-        originalCode: scannedCode
-      };
-    } else {
-      // Fallback: treat as plain material code if length is reasonable
-      if (cleanCode.length >= 7) {
-        const materialCode = cleanCode.substring(0, 7);
-        console.log(`📋 Fallback parsing - using as material code: ${materialCode}`);
-        return {
-          materialCode: materialCode.toUpperCase(),
-          poNumber: null,
-          imd: null,
-          quantity: null,
-          originalCode: scannedCode
-        };
-      } else {
-        console.log(`❌ Code too short for fallback: ${cleanCode}`);
-        return {
-          materialCode: null,
-          poNumber: null,
-          imd: null,
-          quantity: null,
-          originalCode: scannedCode,
-          error: 'Code too short'
-        };
-      }
-    }
-  }
-
-  private async searchRM1Material(parsedData: any): Promise<void> {
-    try {
-      console.log(`🔍 Searching for material:`, parsedData);
-      
-      // Check multiple collections for the IMD (Import Date)
-      console.log(`🔍 Checking multiple collections for IMD ${parsedData.imd}...`);
-      
-      // Skip inbound and outbound collections for IMD-based search
-      // Focus only on inventory-materials since it has the actual Import Date field
-      console.log(`🔍 Focusing on INVENTORY-MATERIALS for IMD-based search...`);
-      
-      // Check INVENTORY-MATERIALS with Import Date matching
-      console.log(`🔍 Checking INVENTORY-MATERIALS with Import Date matching...`);
-      
-      // Convert IMD (DDMMYYYY) to Date for comparison
-      const imdStr = parsedData.imd; // e.g., "13082024"
-      const day = parseInt(imdStr.substring(0, 2));
-      const month = parseInt(imdStr.substring(2, 4)) - 1; // Month is 0-indexed
-      const year = parseInt(imdStr.substring(4, 8));
-      const searchDate = new Date(year, month, day);
-      
-      console.log(`🔍 Searching for Import Date: ${searchDate.toLocaleDateString('vi-VN')} (from IMD: ${imdStr})`);
-      
-      // Query inventory-materials by materialCode, poNumber, and importDate
-        const inventoryQuery = this.firestore.collection('inventory-materials', ref => 
-          ref.where('materialCode', '==', parsedData.materialCode)
-             .where('factory', '==', 'ASM1')
-             .where('poNumber', '==', parsedData.poNumber)
-        );
-        
-        const inventorySnapshot = await inventoryQuery.get().toPromise();
-      console.log(`📋 INVENTORY-MATERIALS - Found ${inventorySnapshot?.docs.length || 0} records with Material + PO match`);
-      
-      // Filter by Import Date manually (since Firestore date queries can be tricky)
-      const matchingInventoryDocs = inventorySnapshot?.docs.filter(doc => {
-        const data = doc.data() as any;
-        if (data.importDate) {
-          const docDate = data.importDate.toDate();
-          const docDateStr = docDate.toLocaleDateString('en-GB').split('/').join(''); // Convert to DDMMYYYY
-          console.log(`📅 Comparing: IMD ${imdStr} vs Doc Date ${docDateStr}`);
-          return docDateStr === imdStr;
-        }
-        return false;
-      }) || [];
-      
-      console.log(`📋 INVENTORY-MATERIALS (with matching Import Date) - Found ${matchingInventoryDocs.length} records`);
-      
-      // Check if found in inventory-materials with matching IMD
-      if (matchingInventoryDocs && matchingInventoryDocs.length > 0) {
-        const foundDoc = matchingInventoryDocs[0];
-        const foundRecord = foundDoc.data() as any;
-        
-        this.foundRM1Item = {
-          id: foundDoc.id,
-          ...foundRecord,
-            parsedData: parsedData
-          };
-        
-          this.currentLocation = this.foundRM1Item.location || 'N/A';
-          
-        console.log(`✅ Found in INVENTORY-MATERIALS with matching Import Date:`, this.foundRM1Item);
-          
-          // Move to next step
-          this.changeLocationStep = 3;
-          
-          // Initialize location scanner if camera was selected
-          setTimeout(() => {
-            this.initializeLocationScannerForStep3();
-            
-            const locationInput = document.querySelector('#locationInput') as HTMLInputElement;
-            if (locationInput) {
-              locationInput.focus();
-            }
-          }, 100);
-          
-        return;
-      }
-      // If not found, show error
-      console.log(`❌ Material not found in RM1 Inventory`);
-      alert(`❌ Không tìm thấy mã hàng trong RM1 Inventory!\n\nMã hàng: ${parsedData.materialCode}\nPO: ${parsedData.poNumber}\nIMD: ${parsedData.imd}\n\nVui lòng kiểm tra lại thông tin.`);
-            this.scannedMaterialCode = '';
-            return;
-    } catch (error) {
-      console.error('❌ Error searching for material:', error);
-      alert('❌ Lỗi khi tìm kiếm mã hàng. Vui lòng thử lại.');
-      this.scannedMaterialCode = '';
-    }
-  }
-
-  initializeLocationScannerForStep3(): void {
-    console.log(`🔧 Initializing location scanner for step 3...`);
-    
-    // 🔧 FIX: Set scanning state trước khi khởi tạo scanner
-    this.isActivelyScanningLocation = true;
-    this.locationScanCompleted = false;
-    
-    if (this.selectedScannerTypes.step3 === 'camera') {
-      // Start QR scanner for step 3
-      setTimeout(() => {
-        console.log(`📸 Starting QR scanner for location (step 3)...`);
-        this.startQRScannerForStep(3);
-      }, 200);
-    }
-  }
-
-  processNewLocation(): void {
-    if (!this.scannedNewLocation || !this.scannedNewLocation.trim()) {
-      alert('⚠️ Vui lòng nhập vị trí mới!');
-      return;
-    }
-    
-    console.log(`📍 Processing new location: ${this.scannedNewLocation}`);
-    
-    // Set new location và tự động confirm
-    this.newLocation = this.scannedNewLocation.trim();
-    this.autoConfirmLocationChange();
-  }
-
-  confirmLocationChange(): void {
-    if (!this.foundRM1Item || !this.newLocation) {
-      alert('❌ Thiếu thông tin. Vui lòng scan lại.');
-      return;
-    }
-
-    // Validate new location format
-    if (!this.validateViTriInput(this.newLocation)) {
-      alert('❌ Vị trí không hợp lệ. Chỉ cho phép chữ cái, số, dấu chấm (.), gạch ngang (-), và ngoặc đơn (()).');
-      return;
-    }
-
-    const formattedLocation = this.formatViTriInput(this.newLocation);
-    
-    // Check if new location exists in location list
-    const locationExists = this.locationItems.some(item => 
-      this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(formattedLocation)
-    );
-
-    if (!locationExists) {
-      alert(`❌ Vị trí "${formattedLocation}" không tồn tại trong danh sách vị trí.\n\nVui lòng chọn vị trí hợp lệ hoặc thêm vị trí mới trước.`);
-      return;
-    }
-
-    // 🔧 FIX: Kiểm tra thông tin đầy đủ và lưu vào biến local
-    if (!this.foundRM1Item.id) {
-      alert('❌ Lỗi: Không tìm thấy ID của mã hàng. Vui lòng scan lại.');
-      return;
-    }
-
-    // 🔧 FIX: Lưu thông tin vào biến local để tránh mất dữ liệu
-    const materialCode = this.foundRM1Item.materialCode || this.foundRM1Item.parsedData?.materialCode || 'N/A';
-    const poNumber = this.foundRM1Item.poNumber || this.foundRM1Item.parsedData?.poNumber || 'N/A';
-    const imd = this.foundRM1Item.parsedData?.imd || this.foundRM1Item.imd || 'N/A';
-
-    // Show confirmation dialog
-    const confirmMessage = `🔄 Xác nhận thay đổi vị trí:\n\n` +
-      `Mã hàng: ${materialCode}\n` +
-      `PO: ${poNumber}\n` +
-      `IMD: ${imd}\n\n` +
-      `Từ: ${this.currentLocation}\n` +
-      `Đến: ${formattedLocation}\n\n` +
-      `Bạn có chắc chắn muốn thay đổi?`;
-
-    if (confirm(confirmMessage)) {
-      this.updateRM1LocationInFirebase(formattedLocation);
-    }
-  }
-
-  async updateRM1LocationInFirebase(newLocation: string): Promise<void> {
-    try {
-      console.log(`🔄 Updating location in Firebase...`);
-      
-      // 🔧 FIX: Kiểm tra foundRM1Item trước khi sử dụng
-      if (!this.foundRM1Item) {
-        console.error('❌ foundRM1Item is null or undefined');
-        alert('❌ Lỗi: Không tìm thấy thông tin mã hàng. Vui lòng scan lại.');
-        return;
-      }
-
-      // 🔧 FIX: Lưu thông tin vào biến local để tránh mất dữ liệu
-      const materialId = this.foundRM1Item.id;
-      const materialCode = this.foundRM1Item.materialCode || this.foundRM1Item.parsedData?.materialCode || 'N/A';
-      const poNumber = this.foundRM1Item.poNumber || this.foundRM1Item.parsedData?.poNumber || 'N/A';
-      const imd = this.foundRM1Item.parsedData?.imd || this.foundRM1Item.imd || 'N/A';
-
-      if (!materialId) {
-        console.error('❌ Material ID is missing');
-        alert('❌ Lỗi: Không tìm thấy ID của mã hàng. Vui lòng scan lại.');
-        return;
-      }
-      
-      const docRef = this.firestore.collection('inventory-materials').doc(materialId);
-      
-      await docRef.update({
-        location: newLocation,
-        lastModified: new Date(),
-        modifiedBy: 'location-change-scanner'
-      });
-
-      console.log(`✅ Location updated successfully!`);
-      
-      alert(`✅ Đã cập nhật vị trí thành công!\n\n` +
-        `Mã hàng: ${materialCode}\n` +
-        `PO: ${poNumber}\n` +
-        `IMD: ${imd}\n` +
-        `Vị trí mới: ${newLocation}`);
-
-      // Reset and close modal
-      this.resetChangeLocation();
-      this.closeChangeLocationModal();
-      
-    } catch (error) {
-      console.error('❌ Error updating location:', error);
-      alert(`❌ Lỗi khi cập nhật vị trí: ${error}`);
-    }
-  }
-
-  // Helper function to wait for element
-  private waitForElement(selector: string): Promise<Element> {
-    return new Promise((resolve, reject) => {
-      const element = document.querySelector(selector);
-      if (element) {
-        resolve(element);
-        return;
-      }
-
-      const observer = new MutationObserver(() => {
-        const element = document.querySelector(selector);
-        if (element) {
-          observer.disconnect();
-          resolve(element);
-        }
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(`Element ${selector} not found`));
-      }, 5000);
-    });
   }
 
   // Store Material (Cất NVL) Functions
@@ -2113,6 +1459,219 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.moveShelfItems = [];
     this.moveShelfSelectedItems = new Set();
     this.isMoveShelfLoading = false;
+  }
+
+  // ==================== BULK CHANGE LOCATION (ASM1) METHODS ====================
+  openBulkChangeLocationModal(): void {
+    this.showBulkChangeLocationModal = true;
+    this.bulkStep = 'scan-location';
+    this.bulkScanLocationInput = '';
+    this.bulkCurrentLocation = '';
+    this.bulkItems = [];
+    this.bulkSelectedItems = new Set();
+    this.isBulkLoading = false;
+    this.bulkNewLocationInput = '';
+    this.bulkNewPalletInput = '';
+    this.skipBulkNewLocation = false;
+    this.skipBulkNewPallet = false;
+
+    setTimeout(() => {
+      const input = document.getElementById('bulkAsm1LocationInput') as HTMLInputElement;
+      if (input) input.focus();
+    }, 150);
+  }
+
+  closeBulkChangeLocationModal(): void {
+    this.showBulkChangeLocationModal = false;
+    this.bulkStep = 'scan-location';
+    this.bulkScanLocationInput = '';
+    this.bulkCurrentLocation = '';
+    this.bulkItems = [];
+    this.bulkSelectedItems = new Set();
+    this.isBulkLoading = false;
+    this.bulkNewLocationInput = '';
+    this.bulkNewPalletInput = '';
+    this.skipBulkNewLocation = false;
+    this.skipBulkNewPallet = false;
+  }
+
+  async processBulkAsm1Location(): Promise<void> {
+    const loc = this.formatViTriInput((this.bulkScanLocationInput || '').trim().toUpperCase());
+    if (!loc) {
+      alert('⚠️ Vui lòng scan vị trí (ASM1)');
+      return;
+    }
+
+    this.isBulkLoading = true;
+    this.bulkCurrentLocation = loc;
+    this.bulkItems = [];
+    this.bulkSelectedItems.clear();
+
+    try {
+      const snapshot = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1').where('location', '==', loc)
+        )
+        .get()
+        .toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${loc}`);
+        this.isBulkLoading = false;
+        return;
+      }
+
+      const items: any[] = [];
+      snapshot.forEach(doc => {
+        const data = doc.data() as any;
+        const openingStock = Number(data.openingStock) || 0;
+        const quantity = Number(data.quantity) || 0;
+        const exported = Number(data.exported) || 0;
+        const xt = Number(data.xt) || 0;
+        const stock = openingStock + quantity - exported - xt;
+        items.push({
+          id: doc.id,
+          materialCode: data.materialCode || '',
+          poNumber: data.poNumber || '',
+          stock,
+          location: data.location || '',
+          palletId: (data.palletId || '').toString().toUpperCase()
+        });
+      });
+
+      items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+      this.bulkItems = items;
+      this.bulkStep = 'select-items';
+    } catch (error) {
+      console.error('❌ Error loading ASM1 items by location:', error);
+      alert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');
+    } finally {
+      this.isBulkLoading = false;
+    }
+  }
+
+  toggleBulkItem(itemId: string): void {
+    if (this.bulkSelectedItems.has(itemId)) this.bulkSelectedItems.delete(itemId);
+    else this.bulkSelectedItems.add(itemId);
+  }
+
+  bulkSelectAll(): void {
+    if (this.bulkSelectedItems.size === this.bulkItems.length) {
+      this.bulkSelectedItems.clear();
+      return;
+    }
+    this.bulkItems.forEach(i => this.bulkSelectedItems.add(i.id));
+  }
+
+  isBulkItemSelected(itemId: string): boolean {
+    return this.bulkSelectedItems.has(itemId);
+  }
+
+  proceedToBulkTargets(): void {
+    if (this.bulkSelectedItems.size === 0) {
+      alert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
+      return;
+    }
+    this.bulkStep = 'scan-targets';
+    this.bulkNewLocationInput = '';
+    this.bulkNewPalletInput = '';
+    this.skipBulkNewLocation = false;
+    this.skipBulkNewPallet = false;
+
+    setTimeout(() => {
+      const input = document.getElementById('bulkAsm1NewLocationInput') as HTMLInputElement;
+      if (input) input.focus();
+    }, 150);
+  }
+
+  canConfirmBulkTargets(): boolean {
+    const locOk = this.skipBulkNewLocation || (this.bulkNewLocationInput || '').trim().length > 0;
+    const palletOk = this.skipBulkNewPallet || (this.bulkNewPalletInput || '').trim().length > 0;
+    const bothSkipped = this.skipBulkNewLocation && this.skipBulkNewPallet;
+    return locOk && palletOk && !bothSkipped; // Ít nhất phải có vị trí hoặc pallet (không bỏ qua cả hai)
+  }
+
+  /** Focus vào ô scan pallet mới (sau khi scan xong vị trí hoặc bỏ qua vị trí). */
+  focusBulkPalletInput(): void {
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const el = document.getElementById('bulkAsm1NewPalletInput') as HTMLInputElement;
+      if (el) el.focus();
+    }, 50);
+  }
+
+  /** Enter ở ô vị trí mới: nhảy sang ô scan pallet mới (không confirm ngay). */
+  onBulkLocationEnter(): void {
+    if (this.skipBulkNewPallet) {
+      this.confirmBulkChange();
+      return;
+    }
+    this.focusBulkPalletInput();
+  }
+
+  /** Bỏ qua vị trí mới được tick: nhảy focus sang ô pallet. */
+  onSkipBulkLocationChange(): void {
+    if (this.skipBulkNewLocation) this.focusBulkPalletInput();
+  }
+
+  async confirmBulkChange(): Promise<void> {
+    if (!this.canConfirmBulkTargets()) {
+      alert('⚠️ Vui lòng scan đủ thông tin hoặc tick bỏ qua.');
+      return;
+    }
+
+    const newLocationRaw = this.skipBulkNewLocation
+      ? ''
+      : this.formatViTriInput((this.bulkNewLocationInput || '').trim().toUpperCase());
+    const newPalletId = this.skipBulkNewPallet ? '' : (this.bulkNewPalletInput || '').trim().toUpperCase();
+
+    if (!this.skipBulkNewLocation) {
+      if (!this.validateViTriInput(newLocationRaw)) {
+        alert('❌ Vị trí mới không hợp lệ');
+        return;
+      }
+      const locationExists = this.locationItems.some(item =>
+        this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
+      );
+      if (!locationExists) {
+        alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
+        return;
+      }
+    }
+
+    // Khi scan cả vị trí và pallet: lưu location = "vị trí + pallet"
+    const locationToSave = !this.skipBulkNewLocation && !this.skipBulkNewPallet && newLocationRaw && newPalletId
+      ? `${newLocationRaw}-${newPalletId}`
+      : !this.skipBulkNewLocation
+        ? newLocationRaw
+        : newPalletId;
+
+    this.isBulkLoading = true;
+    try {
+      const batch = this.firestore.firestore.batch();
+      const selectedIds = Array.from(this.bulkSelectedItems);
+
+      for (const id of selectedIds) {
+        const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
+        const updateData: any = {
+          lastModified: new Date(),
+          modifiedBy: 'bulk-change-location-asm1'
+        };
+        if (!this.skipBulkNewLocation || !this.skipBulkNewPallet) {
+          updateData.location = locationToSave;
+          if (!this.skipBulkNewPallet) updateData.palletId = newPalletId;
+        }
+        batch.update(docRef, updateData);
+      }
+
+      await batch.commit();
+      this.bulkStep = 'complete';
+    } catch (error) {
+      console.error('❌ Error bulk updating items:', error);
+      alert('❌ Lỗi cập nhật vị trí/pallet. Vui lòng thử lại.');
+    } finally {
+      this.isBulkLoading = false;
+    }
   }
 
   async processMoveShelfLocation(): Promise<void> {

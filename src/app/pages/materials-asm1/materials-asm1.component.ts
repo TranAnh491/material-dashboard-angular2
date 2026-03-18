@@ -91,9 +91,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private catalogCache = new Map<string, any>();
   public catalogLoaded = false;
   
-  // Search and filter
+  // Search and filter - chỉ tìm theo mã hàng
   searchTerm = '';
-  searchType: 'material' | 'po' | 'location' = 'material';
+  searchType: 'material' = 'material';
   private searchSubject = new Subject<string>();
   
   // 🚀 OPTIMIZATION: Add loading states
@@ -1037,32 +1037,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return false;
       }
 
-      // Apply search filter based on search type
+      // Chỉ tìm theo mã hàng
       if (this.searchTerm) {
-        const searchTermLower = this.searchTerm.toLowerCase();
-        
-        switch (this.searchType) {
-          case 'material':
-            // Search by material code or name
-            if (!material.materialCode?.toLowerCase().includes(searchTermLower) &&
-                !material.materialName?.toLowerCase().includes(searchTermLower)) {
-              return false;
-            }
-            break;
-            
-          case 'po':
-            // Search by PO number
-            if (!material.poNumber?.toLowerCase().includes(searchTermLower)) {
-              return false;
-            }
-            break;
-            
-                      case 'location':
-              // Search by location
-              if (!material.location?.toLowerCase().includes(searchTermLower)) {
-                return false;
-              }
-              break;
+        const term = this.searchTerm.trim().toUpperCase();
+        if (!material.materialCode?.toUpperCase().includes(term)) {
+          return false;
         }
       }
       
@@ -1170,132 +1149,72 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
   }
 
-  // Change search type
-  changeSearchType(type: 'material' | 'po' | 'location'): void {
-    this.searchType = type;
-    this.searchTerm = ''; // Clear search when changing type
-    this.applyFilters(); // Reapply filters
-  }
-
-  // Perform search with Search-First approach for ASM1 - IMPROVED VERSION
+  // Perform search - chỉ tìm theo mã hàng (materialCode), tham khảo materials-asm2
   private async performSearch(searchTerm: string): Promise<void> {
     if (searchTerm.length === 0) {
       this.filteredInventory = [];
       this.searchTerm = '';
-      this.inventoryMaterials = []; // Clear loaded data
+      this.inventoryMaterials = [];
       return;
     }
-    
-    // Chỉ search khi có ít nhất 3 ký tự để tránh mất thời gian (trừ location search)
-    if (this.searchType !== 'location' && searchTerm.length < 3) {
+
+    // Giống ASM2: chỉ search khi có ít nhất 3 ký tự (tìm theo mã hàng)
+    if (searchTerm.length < 3) {
       this.filteredInventory = [];
       console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
       return;
     }
-    
-    // Location search: cho phép từ 1 ký tự trở lên
-    if (this.searchType === 'location' && searchTerm.length < 1) {
-      this.filteredInventory = [];
-      return;
-    }
-    
+
     this.searchTerm = searchTerm;
     this.isLoading = true;
     this.isSearching = true;
     this.searchProgress = 0;
-    
+
     try {
-      console.log(`🔍 ASM1 Searching for: "${searchTerm}" (type: ${this.searchType}) - Loading from Firebase...`);
-      
-      // IMPROVED: Query Firebase với nhiều điều kiện hơn để tìm kiếm toàn diện
-      let querySnapshot;
-      
-      // Tìm kiếm theo searchType
-      if (this.searchType === 'location') {
-        // Tìm kiếm theo location
+      console.log(`🔍 ASM1 Searching for materialCode: "${searchTerm}" - Loading from Firebase...`);
+      const normalizedCode = searchTerm.trim().toUpperCase();
+      let querySnapshot: { docs: any[]; empty: boolean } | undefined;
+
+      try {
+        // Giống ASM2: exact match trước (chính xác nhất)
         this.searchProgress = 25;
-        const normalizedLocation = searchTerm.trim().toUpperCase();
-        console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}"...`);
-        
-        // Thử exact match trước (chính xác nhất)
-        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+        querySnapshot = await this.firestore.collection('inventory-materials', ref =>
           ref.where('factory', '==', this.FACTORY)
-             .where('location', '==', normalizedLocation)
-             .limit(200)
-        ).get().toPromise();
-        
-        // Nếu không tìm thấy với exact match, thử pattern matching
-        if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No exact match for location "${normalizedLocation}", trying pattern search...`);
-          this.searchProgress = 50;
-          
-          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-            ref.where('factory', '==', this.FACTORY)
-               .where('location', '>=', normalizedLocation)
-               .where('location', '<=', normalizedLocation + '\uf8ff')
-               .limit(200)
-          ).get().toPromise();
-        }
-      } else if (this.searchType === 'po') {
-        // Tìm kiếm theo PO number
-        this.searchProgress = 25;
-        console.log(`🔍 ASM1 Searching by PO: "${searchTerm}"...`);
-        
-        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-          ref.where('factory', '==', this.FACTORY)
-             .where('poNumber', '>=', searchTerm)
-             .where('poNumber', '<=', searchTerm + '\uf8ff')
-             .limit(100)
-        ).get().toPromise();
-        
-        // Nếu không tìm thấy, thử exact match
-        if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No pattern match for PO "${searchTerm}", trying exact match...`);
-          this.searchProgress = 50;
-          
-          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-            ref.where('factory', '==', this.FACTORY)
-               .where('poNumber', '==', searchTerm)
-               .limit(100)
-          ).get().toPromise();
-        }
-      } else {
-        // Tìm kiếm theo materialCode (default)
-        // Thử tìm kiếm theo materialCode trước (chính xác nhất) - ASM1 only
-        this.searchProgress = 25;
-        querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-          ref.where('factory', '==', this.FACTORY)
-             .where('materialCode', '==', searchTerm)
+             .where('materialCode', '==', normalizedCode)
              .limit(50)
         ).get().toPromise();
-        
-        // Nếu không tìm thấy, tìm kiếm theo pattern matching
+
+        // Nếu không tìm thấy, thử pattern/prefix (giống ASM2)
         if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No exact match for "${searchTerm}", trying pattern search...`);
+          console.log(`🔍 ASM1 No exact match for "${normalizedCode}", trying pattern search...`);
           this.searchProgress = 50;
-          
-          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
+          querySnapshot = await this.firestore.collection('inventory-materials', ref =>
             ref.where('factory', '==', this.FACTORY)
-               .where('materialCode', '>=', searchTerm)
-               .where('materialCode', '<=', searchTerm + '\uf8ff')
+               .where('materialCode', '>=', normalizedCode)
+               .where('materialCode', '<=', normalizedCode + '\uf8ff')
                .limit(100)
           ).get().toPromise();
         }
-        
-        // Nếu vẫn không tìm thấy, tìm kiếm theo PO number (fallback)
-        if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No pattern match for "${searchTerm}", trying PO search...`);
-          this.searchProgress = 75;
-          
-          querySnapshot = await this.firestore.collection('inventory-materials', ref => 
-            ref.where('factory', '==', this.FACTORY)
-               .where('poNumber', '>=', searchTerm)
-               .where('poNumber', '<=', searchTerm + '\uf8ff')
-               .limit(100)
+      } catch (indexError: any) {
+        // Firestore chưa có index → fallback: load theo factory rồi lọc theo mã hàng trên client
+        const msg = indexError?.message || '';
+        if (msg.includes('index') || msg.includes('Index')) {
+          this.searchProgress = 50;
+          const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.FACTORY).limit(3000)
           ).get().toPromise();
+          if (allSnapshot && !allSnapshot.empty) {
+            const filtered = allSnapshot.docs.filter(doc => {
+              const code = (doc.data() as any).materialCode;
+              return code && String(code).toUpperCase().includes(normalizedCode);
+            });
+            querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+          }
+        } else {
+          throw indexError;
         }
       }
-      
+
       if (querySnapshot && !querySnapshot.empty) {
         console.log(`✅ ASM1 Found ${querySnapshot.docs.length} documents from Firebase`);
         
