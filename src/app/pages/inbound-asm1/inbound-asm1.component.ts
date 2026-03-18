@@ -366,11 +366,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     
     // PERF: dùng get() thay vì snapshotChanges() để tránh listener realtime + re-render liên tục
     // Và giới hạn số lượng doc tải về (30 ngày gần nhất thường không cần tới 5000).
-    // NOTE: Tránh composite index (factory + createdAt) bằng cách KHÔNG orderBy ở query.
-    // Dữ liệu vẫn được sort client-side sau khi load.
+    // PERF + Correctness: luôn lấy dữ liệu mới nhất theo createdAt để không "mất lô" sau import.
+    // Tránh composite index bằng cách KHÔNG where(factory) trong query (chỉ orderBy 1 field).
+    // Sau đó lọc ASM1 ở client-side như trước.
     this.firestore.collection(collectionName, ref =>
-      ref.where('factory', '==', 'ASM1')
-        .limit(2000)
+      ref.orderBy('createdAt', 'desc').limit(5000)
     ).get().toPromise()
       .then(snapshot => {
         const docs = snapshot?.docs || [];
