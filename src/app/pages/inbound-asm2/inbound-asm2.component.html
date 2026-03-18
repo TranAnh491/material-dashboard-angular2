@@ -86,15 +86,6 @@
           <span>Tổng: {{filteredMaterials.length}} materials</span>
         </div>
         
-        <!-- Search Box -->
-        <div class="search-box">
-          <input type="text" 
-                 placeholder="Tìm kiếm mã hàng..."
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchInput($event)"
-                 class="search-input">
-        </div>
-        
         <!-- Date Range Selector -->
         <input type="date" 
                [(ngModel)]="startDate" 
@@ -124,8 +115,8 @@
       {{errorMessage}}
     </div>
     
-    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô (không áp dụng khi đang search mã hàng) -->
-    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)" (click)="closeBatchContextMenu()">
+    <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô -->
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive" (click)="closeBatchContextMenu()">
       <!-- Lô Hàng Nhập -->
       <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
         <div class="batch-section-title">
@@ -220,7 +211,7 @@
     </div>
 
     <!-- Excel-like Body + History Panel -->
-    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive || (searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7))">
+    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive)">
       <div class="excel-body-main">
         <table class="excel-table">
         <thead>
@@ -253,7 +244,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; let i = index" 
+          <tr *ngFor="let material of filteredMaterials; let i = index; trackBy: trackByMaterial" 
               [class.received-row]="material.isReceived"
                               >
             <td class="factory-cell factory-asm2">
@@ -266,6 +257,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.batchNumber" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lô hàng'">
@@ -276,6 +268,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.materialCode" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      (click)="selectMaterialForHistory(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
@@ -285,6 +278,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.poNumber" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa số PO'">
@@ -299,6 +293,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.location" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa vị trí'"
@@ -308,6 +303,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.type" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (blur)="validateType(material)"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
@@ -345,6 +341,7 @@
               <input type="number" 
                      class="editable-input" 
                      [(ngModel)]="material.rollsOrBags" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      step="0.0001"
                      min="0"
@@ -355,6 +352,7 @@
               <input type="number"
                      class="editable-input"
                      [(ngModel)]="material.gwLdv"
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      step="0.01"
                      min="0"
@@ -365,6 +363,7 @@
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.supplier" 
+                     [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa nhà cung cấp'"
@@ -504,7 +503,7 @@
                 <label>Phần trăm kiểm tra (%)</label>
                 <input type="number"
                        [(ngModel)]="selectedMaterialCheckPercent"
-                       (change)="saveSelectedMaterialNote()"
+                       (blur)="saveSelectedMaterialNote()"
                        min="0" max="100">
               </div>
 

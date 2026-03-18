@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -140,10 +140,10 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
   /** Danh mục vật tư (DMVT) dùng chung với ASM1 - dmvt/ASM1/items */
   dmvtCatalog: Record<string, { materialName: string; unit: string }> = {};
-  
-  // Search and filter
+
+  // Search (đã bỏ UI/logic) - giữ biến để không lỗi các log/debug cũ
   searchTerm: string = '';
-  searchType: string = 'materialCode'; // Default to Mã Hàng
+  searchType: string = '';
   
   // Factory filter - Fixed to ASM2
   selectedFactory: string = 'ASM2';
@@ -253,11 +253,6 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   // Batch box view: null = show batch grid, string = show table for that batch
   selectedBatchView: string | null = null;
 
-  // When searching by material code, load exact matches from Firestore (avoid limit truncation)
-  private materialCodeSearchMaterials: InboundMaterial[] | null = null;
-  private lastMaterialCodeSearchTerm: string = '';
-  isLoadingMaterialCodeSearch: boolean = false;
-
   // Chart state
   chartMaterialHistory: Chart | null = null;
   chartAlertMessage: string = '';
@@ -265,7 +260,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private factoryAccessService: FactoryAccessService
+    private factoryAccessService: FactoryAccessService,
+    private ngZone: NgZone
   ) {}
   
   ngOnInit(): void {
@@ -281,6 +277,10 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.statusFilter = 'all';
     
     this.loadMaterials();
+  }
+
+  trackByMaterial(index: number, material: InboundMaterial): any {
+    return material?.id || `${material?.batchNumber || ''}|${material?.materialCode || ''}|${material?.poNumber || ''}|${index}`;
   }
   
   ngOnDestroy(): void {
@@ -327,53 +327,27 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   private tryLoadFromCollection(collectionName: string): void {
     console.log(`🔍 Trying collection: ${collectionName} for factory: ${this.selectedFactory}`);
     
-    this.firestore.collection(collectionName, ref => 
-      ref.where('factory', '==', this.selectedFactory)
-         // Always fetch newest docs first; avoid missing new imports when collection > limit
-         .orderBy('createdAt', 'desc')
-         .limit(5000)
-    ).snapshotChanges()
-    .pipe(
-      takeUntil(this.destroy$),
-      debounceTime(300), // 🔧 FIX: Debounce để tránh trigger liên tục
-      distinctUntilChanged((prev, curr) => {
-        // So sánh số lượng documents để tránh reload khi không cần
-        return prev.length === curr.length;
-      })
-    )
-    .subscribe({
-      next: (snapshot) => {
-        console.log(`🔍 Raw snapshot from ${collectionName} contains ${snapshot.length} documents`);
-        
-        if (snapshot.length === 0) {
+    // PERF: dùng get() thay vì snapshotChanges() realtime để tránh re-render liên tục và lag khi nhập.
+    // Tránh composite index bằng cách chỉ orderBy 1 field (createdAt) và lọc factory ở client-side.
+    this.firestore.collection(collectionName, ref =>
+      ref.orderBy('createdAt', 'desc').limit(5000)
+    ).get().toPromise()
+      .then(snapshot => {
+        const docs = snapshot?.docs || [];
+        console.log(`🔍 Raw snapshot from ${collectionName} contains ${docs.length} documents`);
+        if (docs.length === 0) {
           console.log(`❌ No data in ${collectionName}, trying other collections...`);
           this.tryAlternativeCollections();
           return;
         }
-        
-        // Log first few documents to see structure
-        if (snapshot.length > 0) {
-          console.log('📄 Sample document:', snapshot[0].payload.doc.data());
-        }
-        
-        // 🔧 FIX: Check duplicate trước khi process
-        const existingIds = new Set(this.materials.map(m => m.id));
-        
-        // Filter and sort client-side
-        const allMaterials = snapshot.map(doc => {
-          const data = doc.payload.doc.data() as any;
-          const docId = doc.payload.doc.id;
-          
-          // 🔧 FIX: Chỉ log materials mới
-          if (!existingIds.has(docId)) {
-            console.log(`📦 NEW doc ${docId}, factory: ${data.factory}, batch: ${data.batchNumber}, material: ${data.materialCode}`);
-          }
-          
+
+        const allMaterials = docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: docId,
+            id: doc.id,
             factory: data.factory || this.selectedFactory,
-            importDate: data.importDate?.toDate() || new Date(),
-            internalBatch: data.internalBatch || '', // Load internalBatch từ database
+            importDate: data.importDate?.toDate?.() || new Date(),
+            internalBatch: data.internalBatch || '',
             batchNumber: data.batchNumber || '',
             materialCode: data.materialCode || '',
             poNumber: data.poNumber || '',
@@ -381,8 +355,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             unit: data.unit || '',
             location: data.location || '',
             type: data.type || '',
-            iqcStatus: data.iqcStatus || 'Chờ kiểm', // Default IQC status
-            expiryDate: data.expiryDate?.toDate() || null,
+            iqcStatus: data.iqcStatus || 'Chờ kiểm',
+            expiryDate: data.expiryDate?.toDate?.() || null,
             qualityCheck: data.qualityCheck || false,
             isReceived: data.isReceived || false,
             notes: data.notes || '',
@@ -392,31 +366,14 @@ export class InboundASM2Component implements OnInit, OnDestroy {
             remarks: data.remarks || '',
             hasQRGenerated: data.hasQRGenerated || false,
             scannedQuantity: data.scannedQuantity || 0,
-            createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+            createdAt: data.createdAt?.toDate?.() || data.createdDate?.toDate?.() || new Date(),
+            updatedAt: data.updatedAt?.toDate?.() || data.lastUpdated?.toDate?.() || new Date()
           } as InboundMaterial;
         });
         
-        console.log(`🏭 All materials from snapshot: ${allMaterials.length}`);
-        
-        // Filter by factory
         const factoryMaterials = allMaterials.filter(material => material.factory === this.selectedFactory);
-        console.log(`🏭 ${this.selectedFactory} materials after factory filter: ${factoryMaterials.length}`);
         
-        // 🔧 FIX: Remove duplicates by ID
-        const uniqueMaterials = factoryMaterials.reduce((acc, material) => {
-          const existing = acc.find(m => m.id === material.id);
-          if (!existing) {
-            acc.push(material);
-          } else {
-            console.log(`⚠️ Skipped duplicate material: ${material.id} (${material.materialCode})`);
-          }
-          return acc;
-        }, [] as InboundMaterial[]);
-        
-        console.log(`🔧 After removing duplicates: ${uniqueMaterials.length} materials (removed ${factoryMaterials.length - uniqueMaterials.length} duplicates)`);
-        
-        this.materials = uniqueMaterials.sort((a, b) => {
+        this.materials = factoryMaterials.sort((a, b) => {
             // Sort by import date first (oldest first)
             const dateCompare = a.importDate.getTime() - b.importDate.getTime();
             if (dateCompare !== 0) return dateCompare;
@@ -431,15 +388,15 @@ export class InboundASM2Component implements OnInit, OnDestroy {
         this.loadUnitWeightsFromCatalog();
         
         this.applyFilters();
-        this.isLoading = false;
-        
         console.log(`✅ Final filtered materials: ${this.filteredMaterials.length}`);
-      },
-      error: (error) => {
+      })
+      .catch((error) => {
         console.error(`❌ Error loading from ${collectionName}:`, error);
         this.tryAlternativeCollections();
-      }
-    });
+      })
+      .finally(() => {
+        this.isLoading = false;
+      });
   }
   
   private tryAlternativeCollections(): void {
@@ -467,51 +424,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   }
   
   applyFilters(): void {
-    const base = (this.isMaterialCodeSearchActive() && this.materialCodeSearchMaterials) ? this.materialCodeSearchMaterials : this.materials;
-    let filtered = [...base];
-    
-    // Always filter by selected factory only
+    let filtered = [...this.materials];
     filtered = filtered.filter(material => material.factory === this.selectedFactory);
-    
-    // Apply search filter based on search type
-    const effectiveSearchTerm = (this.searchType === 'materialCode' && (this.searchTerm || '').trim().length < 7) ? '' : (this.searchTerm || '');
-    if (effectiveSearchTerm) {
-      const searchTermLower = effectiveSearchTerm.toLowerCase();
-      
-      switch (this.searchType) {
-        case 'materialCode':
-          // Search by material code
-          filtered = filtered.filter(material => 
-            material.materialCode.toLowerCase().includes(searchTermLower)
-          );
-          break;
-        case 'batchNumber':
-          filtered = filtered.filter(material => 
-            material.batchNumber.toLowerCase().includes(searchTermLower)
-          );
-          break;
-        case 'location':
-          // Search by location
-          filtered = filtered.filter(material => 
-            material.location && material.location.toLowerCase().includes(searchTermLower)
-          );
-          break;
-        case 'poNumber':
-          filtered = filtered.filter(material => 
-            material.poNumber.toLowerCase().includes(searchTermLower)
-          );
-          break;
-        default: // 'all'
-          filtered = filtered.filter(material => 
-            material.materialCode.toLowerCase().includes(searchTermLower) ||
-            material.poNumber.toLowerCase().includes(searchTermLower) ||
-            material.batchNumber.toLowerCase().includes(searchTermLower) ||
-            material.supplier.toLowerCase().includes(searchTermLower) ||
-            material.location.toLowerCase().includes(searchTermLower)
-          );
-          break;
-      }
-    }
     
     // Date range filter
     if (this.startDate && this.endDate) {
@@ -635,27 +549,13 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       console.log(`🔍 Status filter (${this.statusFilter || 'pending'}): ${beforeStatusFilter} → ${afterStatusFilter} (ẩn ${beforeStatusFilter - afterStatusFilter} materials)`);
     }
     
-    // Filter by selected batch view (when not in active batch processing mode) - skip when searching by material code
-    if (!this.isMaterialCodeSearchActive()) {
-      if (this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '')) {
-        filtered = filtered.filter(material => material.batchNumber === this.selectedBatchView);
-      }
+    // Filter by selected batch view / current batch
+    if (this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '')) {
+      filtered = filtered.filter(material => material.batchNumber === this.selectedBatchView);
     }
-
-    // Filter by current batch when processing - skip when searching by material code
-    if (!this.isMaterialCodeSearchActive()) {
-      if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
-        const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
-        console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
-
-        // Hiển thị TẤT CẢ materials trong lô hàng (không chỉ 1 dòng đại diện)
-        if (batchMaterials.length > 0) {
-          filtered = batchMaterials;
-          console.log(`📦 Showing all ${batchMaterials.length} materials for batch: ${this.currentBatchNumber}`);
-        } else {
-          filtered = [];
-        }
-      }
+    if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
+      const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
+      filtered = batchMaterials.length > 0 ? batchMaterials : [];
     }
     
     // Sort based on selected sort option
@@ -1133,29 +1033,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.applyFilters();
   }
   
-  onSearchTypeChange(): void {
-    // this.currentPage = 1; // Removed pagination
-    this.applyFilters();
-  }
-  
-  getSearchPlaceholder(): string {
-    switch (this.searchType) {
-      case 'materialCode':
-        return 'Tìm kiếm theo mã hàng...';
-      case 'batchNumber':
-        return 'Tìm kiếm theo lô hàng...';
-      case 'location':
-        return 'Tìm kiếm theo vị trí...';
-      case 'poNumber':
-        return 'Tìm kiếm theo PO...';
-      default:
-        return `Tìm kiếm ${this.selectedFactory}...`;
-    }
-  }
-  
   clearFilters(): void {
-    this.searchTerm = '';
-    this.searchType = 'materialCode';
     this.startDate = '';
     this.endDate = '';
     this.statusFilter = 'all'; // Mặc định về "Tất cả"
@@ -1166,8 +1044,6 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     console.log(`🔄 Đã reset bộ lọc về mặc định:`);
     console.log(`  - Khung thời gian: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
     console.log(`  - Trạng thái: ${this.statusFilter}`);
-    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
-    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
     
     this.applyFilters();
   }
@@ -1233,19 +1109,21 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
   loadNotes(): void {
     this.firestore.collection('inbound-notes', ref => ref.where('factory', '==', this.selectedFactory))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.materialNotes = actions.map(action => {
-          const data = action.payload.doc.data() as any;
+      .get()
+      .toPromise()
+      .then(snapshot => {
+        if (!snapshot) return;
+        this.materialNotes = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: action.payload.doc.id,
+            id: doc.id,
             materialCode: data.materialCode || '',
             checkPercent: data.checkPercent || 100,
             note: data.note || ''
           };
         }).sort((a, b) => a.materialCode.localeCompare(b.materialCode));
-      });
+      })
+      .catch(err => console.error('❌ [ASM2] Lỗi load notes:', err));
   }
 
   addNote(): void {
@@ -1261,8 +1139,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
     this.firestore.collection('inbound-notes').add(noteData)
       .then(() => {
-        console.log('✅ Đã thêm lưu ý:', noteData.materialCode);
         this.newNote = { materialCode: '', checkPercent: 100, note: '' };
+        this.loadNotes();
       })
       .catch(err => console.error('❌ Lỗi thêm lưu ý:', err));
   }
@@ -1270,43 +1148,54 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   // ====== HISTORY + NOTES PANEL ======
 
   selectMaterialForHistory(material: InboundMaterial): void {
+    if (!material?.materialCode) return;
+    if (this.isLoadingHistory) return;
+    if (this.selectedHistoryMaterial?.materialCode === material.materialCode) return;
     this.selectedHistoryMaterial = material;
+    this.materialHistory = [];
+    this.selectedMaterialNotes = [];
     this.loadMaterialHistory(material);
     this.loadNotesForMaterial(material);
   }
 
-  private async loadMaterialHistory(material: InboundMaterial): Promise<void> {
+  private loadMaterialHistory(material: InboundMaterial): void {
     this.isLoadingHistory = true;
-    this.materialHistory = [];
-    try {
-      const snapshot = await this.firestore.collection('inbound-materials', ref =>
+    this.ngZone.runOutsideAngular(() => {
+      this.firestore.collection('inbound-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
            .where('materialCode', '==', material.materialCode)
            .limit(50)
-      ).get().toPromise();
-
-      if (snapshot && !snapshot.empty) {
-        this.materialHistory = snapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            importDate: data.importDate?.toDate() || new Date(),
-            supplier: data.supplier || '',
-            poNumber: data.poNumber || '',
-            quantity: data.quantity || 0,
-            rollsOrBags: data.rollsOrBags || 0,
-            gwLdv: data.gwLdv || 0
-          } as InboundMaterial;
+      ).get().toPromise()
+        .then(snapshot => {
+          let list: InboundMaterial[] = [];
+          if (snapshot && !snapshot.empty) {
+            list = snapshot.docs.map(doc => {
+              const data = doc.data() as any;
+              return {
+                importDate: data.importDate?.toDate?.() || new Date(),
+                supplier: data.supplier || '',
+                poNumber: data.poNumber || '',
+                quantity: data.quantity || 0,
+                rollsOrBags: data.rollsOrBags || 0,
+                gwLdv: data.gwLdv || 0
+              } as InboundMaterial;
+            })
+              .filter(h => this.formatHistoryNcc(h.supplier) !== '')
+              .sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+          }
+          this.ngZone.run(() => {
+            this.materialHistory = list;
+            this.isLoadingHistory = false;
+          });
+          if (list.length > 0) {
+            setTimeout(() => this.ngZone.runOutsideAngular(() => this.renderMaterialHistoryChart()), 80);
+          }
         })
-        // ✅ Hide NCC rows completely (NVL_SX/NVL_KS/PD/ENG or empty)
-        .filter(h => this.formatHistoryNcc(h.supplier) !== '')
-        .sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
-      }
-    } catch (err) {
-      console.error('❌ [ASM2] Error loading material history:', err);
-    } finally {
-      this.isLoadingHistory = false;
-      setTimeout(() => this.renderMaterialHistoryChart(), 50);
-    }
+        .catch(err => {
+          console.error('❌ [ASM2] Error loading material history:', err);
+          this.ngZone.run(() => { this.isLoadingHistory = false; });
+        });
+    });
   }
 
   private destroyChart(): void {
@@ -1377,27 +1266,34 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       this.selectedMaterialCheckPercent = 100;
       return;
     }
-
-    this.firestore.collection('inbound-notes', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-         .where('materialCode', '==', material.materialCode.toUpperCase())
-    ).snapshotChanges()
-     .pipe(takeUntil(this.destroy$))
-     .subscribe(actions => {
-       const notes = actions.map(a => {
-         const data = a.payload.doc.data() as any;
-         return {
-           id: a.payload.doc.id,
-           materialCode: data.materialCode || '',
-           checkPercent: data.checkPercent || 100,
-           note: data.note || '',
-           createdAt: data.createdAt?.toDate() || new Date()
-         };
-       }).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
-
-       this.selectedMaterialNotes = notes;
-       this.selectedMaterialCheckPercent = notes.length > 0 ? notes[0].checkPercent : 100;
-     });
+    const code = material.materialCode.toUpperCase();
+    this.ngZone.runOutsideAngular(() => {
+      this.firestore.collection('inbound-notes', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('materialCode', '==', code)
+      )
+        .get()
+        .toPromise()
+        .then(snapshot => {
+          if (!snapshot) return;
+          const notes = snapshot.docs.map(doc => {
+            const data = doc.data() as any;
+            return {
+              id: doc.id,
+              materialCode: data.materialCode || '',
+              checkPercent: data.checkPercent || 100,
+              note: data.note || '',
+              createdAt: data.createdAt?.toDate?.() || new Date()
+            };
+          }).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+          const percent = notes.length > 0 ? notes[0].checkPercent : 100;
+          this.ngZone.run(() => {
+            this.selectedMaterialNotes = notes;
+            this.selectedMaterialCheckPercent = percent;
+          });
+        })
+        .catch(err => console.error('❌ [ASM2] Lỗi load notes theo mã:', err));
+    });
   }
 
   saveSelectedMaterialNote(isNewNote: boolean = false): void {
@@ -1420,8 +1316,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       };
       this.firestore.collection('inbound-notes').add(noteData)
         .then(() => {
-          console.log('[ASM2] ✅ Đã thêm lưu ý cho', materialCode);
           this.newMaterialNoteText = '';
+          if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial);
         })
         .catch(err => console.error('[ASM2] ❌ Lỗi thêm lưu ý:', err));
     } else {
@@ -1432,7 +1328,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
           createdAt: new Date()
         };
         this.firestore.collection('inbound-notes').add(noteData)
-          .then(() => console.log('[ASM2] ✅ Đã cập nhật % kiểm cho', materialCode))
+          .then(() => { if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial); })
           .catch(err => console.error('[ASM2] ❌ Lỗi cập nhật % kiểm:', err));
       }
     }
@@ -1442,117 +1338,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     if (!note.id) return;
     
     this.firestore.collection('inbound-notes').doc(note.id).delete()
-      .then(() => console.log('✅ Đã xóa lưu ý:', note.materialCode))
+      .then(() => { if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial); })
       .catch(err => console.error('❌ Lỗi xóa lưu ý:', err));
-  }
-
-  // Search functionality
-  async onSearchInput(event: Event): Promise<void> {
-    const target = event.target as HTMLInputElement;
-    const raw = target.value || '';
-    this.searchTerm = (this.searchType === 'materialCode') ? raw.toUpperCase() : raw;
-
-    // When searching by material code, search across all batches/states
-    if (this.isMaterialCodeSearchActive()) {
-      this.selectedBatchView = null;
-      this.currentBatchNumber = '';
-    }
-
-    if (this.isMaterialCodeSearchActive()) {
-      await this.loadMaterialsForMaterialCode(this.searchTerm.trim().toUpperCase());
-    } else {
-      this.materialCodeSearchMaterials = null;
-      this.lastMaterialCodeSearchTerm = '';
-      this.destroyChart();
-      this.chartAlertMessage = '';
-    }
-
-    this.applyFilters();
-    this.syncHistoryPanelWithSearch();
-  }
-  
-  changeSearchType(type: string): void {
-    this.searchType = type;
-    this.applyFilters();
-    this.syncHistoryPanelWithSearch();
-  }
-
-  private isMaterialCodeSearchActive(): boolean {
-    return this.searchType === 'materialCode' && !!this.searchTerm && this.searchTerm.trim().length >= 7;
-  }
-
-  private syncHistoryPanelWithSearch(): void {
-    if (!this.isMaterialCodeSearchActive()) return;
-
-    const first = this.filteredMaterials && this.filteredMaterials.length > 0 ? this.filteredMaterials[0] : null;
-    if (!first) {
-      this.selectedHistoryMaterial = null;
-      this.materialHistory = [];
-      this.selectedMaterialNotes = [];
-      this.selectedMaterialCheckPercent = 100;
-      this.destroyChart();
-      this.chartAlertMessage = '';
-      return;
-    }
-
-    if (!this.selectedHistoryMaterial || this.selectedHistoryMaterial.materialCode !== first.materialCode) {
-      this.selectMaterialForHistory(first);
-    }
-  }
-
-  private async loadMaterialsForMaterialCode(term: string): Promise<void> {
-    if (!term || term.length < 7) return;
-    if (this.lastMaterialCodeSearchTerm === term && this.materialCodeSearchMaterials) return;
-
-    this.isLoadingMaterialCodeSearch = true;
-    this.lastMaterialCodeSearchTerm = term;
-    try {
-      const snapshot = await this.firestore.collection('inbound-materials', ref =>
-        ref.where('factory', '==', this.selectedFactory)
-           .where('materialCode', '==', term)
-           .limit(2000)
-      ).get().toPromise();
-
-      const items: InboundMaterial[] = [];
-      if (snapshot && !snapshot.empty) {
-        snapshot.docs.forEach(doc => {
-          const data = doc.data() as any;
-          items.push({
-            id: doc.id,
-            factory: data.factory || this.selectedFactory,
-            importDate: data.importDate?.toDate() || new Date(),
-            internalBatch: data.internalBatch || '',
-            batchNumber: data.batchNumber || '',
-            materialCode: data.materialCode || '',
-            poNumber: data.poNumber || '',
-            quantity: data.quantity || 0,
-            unit: data.unit || '',
-            location: data.location || '',
-            type: data.type || '',
-            iqcStatus: data.iqcStatus || 'Chờ kiểm',
-            expiryDate: data.expiryDate?.toDate() || null,
-            qualityCheck: data.qualityCheck || false,
-            isReceived: data.isReceived || false,
-            notes: data.notes || '',
-            rollsOrBags: data.rollsOrBags || 0,
-            supplier: data.supplier || '',
-            gwLdv: data.gwLdv || 0,
-            remarks: data.remarks || '',
-            hasQRGenerated: data.hasQRGenerated || false,
-            scannedQuantity: data.scannedQuantity || 0,
-            createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
-          } as InboundMaterial);
-        });
-      }
-
-      this.materialCodeSearchMaterials = items;
-    } catch (err) {
-      console.error('❌ [ASM2] Error loading materials for materialCode search:', err);
-      this.materialCodeSearchMaterials = [];
-    } finally {
-      this.isLoadingMaterialCodeSearch = false;
-    }
   }
 
   formatHistoryNcc(supplier: string | null | undefined): string {
@@ -1594,11 +1381,6 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
       source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
     }
-    // When searching by material code, only show batches that contain that material code
-    if (this.isMaterialCodeSearchActive()) {
-      const term = this.searchTerm.trim().toUpperCase();
-      source = source.filter(m => (m.materialCode || '').toUpperCase().includes(term));
-    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1626,11 +1408,6 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
       const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
       source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
-    }
-    // When searching by material code, only show return batches that contain that material code
-    if (this.isMaterialCodeSearchActive()) {
-      const term = this.searchTerm.trim().toUpperCase();
-      source = source.filter(m => (m.materialCode || '').toUpperCase().includes(term));
     }
     source.forEach(m => {
       const key = m.batchNumber || '';
