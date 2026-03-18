@@ -531,7 +531,7 @@
                 <label>Phần trăm kiểm tra (%)</label>
                 <input type="number"
                        [(ngModel)]="selectedMaterialCheckPercent"
-                       (change)="saveSelectedMaterialNote()"
+                       (blur)="saveSelectedMaterialNote()"
                        min="0" max="100">
               </div>
               <div class="note-list" *ngIf="selectedMaterialNotes.length > 0">

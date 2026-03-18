@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -192,7 +192,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private factoryAccessService: FactoryAccessService
+    private factoryAccessService: FactoryAccessService,
+    private ngZone: NgZone
   ) {}
   
   ngOnInit(): void {
@@ -1064,21 +1065,24 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.showNoteModal = false;
   }
 
+  /** Load danh sách lưu ý một lần khi mở modal (không dùng realtime listener để tránh chậm) */
   loadNotes(): void {
     this.firestore.collection('inbound-notes', ref => ref.where('factory', '==', this.selectedFactory))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.materialNotes = actions.map(action => {
-          const data = action.payload.doc.data() as any;
+      .get()
+      .toPromise()
+      .then(snapshot => {
+        if (!snapshot) return;
+        this.materialNotes = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: action.payload.doc.id,
+            id: doc.id,
             materialCode: data.materialCode || '',
             checkPercent: data.checkPercent || 100,
             note: data.note || ''
           };
         }).sort((a, b) => a.materialCode.localeCompare(b.materialCode));
-      });
+      })
+      .catch(err => console.error('❌ Lỗi load notes:', err));
   }
 
   addNote(): void {
@@ -1094,8 +1098,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
     this.firestore.collection('inbound-notes').add(noteData)
       .then(() => {
-        console.log('✅ Đã thêm lưu ý:', noteData.materialCode);
         this.newNote = { materialCode: '', checkPercent: 100, note: '' };
+        this.loadNotes();
       })
       .catch(err => console.error('❌ Lỗi thêm lưu ý:', err));
   }
@@ -1103,43 +1107,54 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // ====== HISTORY + NOTES PANEL ======
 
   selectMaterialForHistory(material: InboundMaterial): void {
+    if (!material?.materialCode) return;
+    if (this.isLoadingHistory) return;
+    if (this.selectedHistoryMaterial?.materialCode === material.materialCode) return;
     this.selectedHistoryMaterial = material;
+    this.materialHistory = [];
+    this.selectedMaterialNotes = [];
     this.loadMaterialHistory(material);
     this.loadNotesForMaterial(material);
   }
 
-  private async loadMaterialHistory(material: InboundMaterial): Promise<void> {
+  private loadMaterialHistory(material: InboundMaterial): void {
     this.isLoadingHistory = true;
-    this.materialHistory = [];
-    try {
-      const snapshot = await this.firestore.collection('inbound-materials', ref =>
+    this.ngZone.runOutsideAngular(() => {
+      this.firestore.collection('inbound-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
            .where('materialCode', '==', material.materialCode)
            .limit(50)
-      ).get().toPromise();
-
-      if (snapshot && !snapshot.empty) {
-        this.materialHistory = snapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            importDate: data.importDate?.toDate() || new Date(),
-            supplier: data.supplier || '',
-            poNumber: data.poNumber || '',
-            quantity: data.quantity || 0,
-            rollsOrBags: data.rollsOrBags || 0,
-            gwLdv: data.gwLdv || 0
-          } as InboundMaterial;
+      ).get().toPromise()
+        .then(snapshot => {
+          let list: InboundMaterial[] = [];
+          if (snapshot && !snapshot.empty) {
+            list = snapshot.docs.map(doc => {
+              const data = doc.data() as any;
+              return {
+                importDate: data.importDate?.toDate() || new Date(),
+                supplier: data.supplier || '',
+                poNumber: data.poNumber || '',
+                quantity: data.quantity || 0,
+                rollsOrBags: data.rollsOrBags || 0,
+                gwLdv: data.gwLdv || 0
+              } as InboundMaterial;
+            })
+              .filter(h => this.formatHistoryNcc(h.supplier) !== '')
+              .sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+          }
+          this.ngZone.run(() => {
+            this.materialHistory = list;
+            this.isLoadingHistory = false;
+          });
+          if (list.length > 0) {
+            setTimeout(() => this.ngZone.runOutsideAngular(() => this.renderMaterialHistoryChart()), 80);
+          }
         })
-        // ✅ Hide NCC rows completely (NVL_SX/NVL_KS/PD/ENG or empty)
-        .filter(h => this.formatHistoryNcc(h.supplier) !== '')
-        .sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
-      }
-    } catch (err) {
-      console.error('❌ Error loading material history:', err);
-    } finally {
-      this.isLoadingHistory = false;
-      setTimeout(() => this.renderMaterialHistoryChart(), 50);
-    }
+        .catch(err => {
+          console.error('❌ Error loading material history:', err);
+          this.ngZone.run(() => { this.isLoadingHistory = false; });
+        });
+    });
   }
 
   private destroyChart(): void {
@@ -1204,33 +1219,41 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.chartMaterialHistory = new Chart(this.chartCanvas.nativeElement, config);
   }
 
+  /** Load lưu ý theo mã hàng một lần, chạy ngoài zone để không block UI */
   private loadNotesForMaterial(material: InboundMaterial): void {
     if (!material.materialCode) {
       this.selectedMaterialNotes = [];
       this.selectedMaterialCheckPercent = 100;
       return;
     }
-
-    this.firestore.collection('inbound-notes', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-         .where('materialCode', '==', material.materialCode.toUpperCase())
-    ).snapshotChanges()
-     .pipe(takeUntil(this.destroy$))
-     .subscribe(actions => {
-       const notes = actions.map(a => {
-         const data = a.payload.doc.data() as any;
-         return {
-           id: a.payload.doc.id,
-           materialCode: data.materialCode || '',
-           checkPercent: data.checkPercent || 100,
-           note: data.note || '',
-           createdAt: data.createdAt?.toDate() || new Date()
-         };
-       }).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
-
-       this.selectedMaterialNotes = notes;
-       this.selectedMaterialCheckPercent = notes.length > 0 ? notes[0].checkPercent : 100;
-     });
+    const code = material.materialCode.toUpperCase();
+    this.ngZone.runOutsideAngular(() => {
+      this.firestore.collection('inbound-notes', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('materialCode', '==', code)
+      )
+        .get()
+        .toPromise()
+        .then(snapshot => {
+          if (!snapshot) return;
+          const notes = snapshot.docs.map(doc => {
+            const data = doc.data() as any;
+            return {
+              id: doc.id,
+              materialCode: data.materialCode || '',
+              checkPercent: data.checkPercent || 100,
+              note: data.note || '',
+              createdAt: data.createdAt?.toDate() || new Date()
+            };
+          }).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+          const percent = notes.length > 0 ? notes[0].checkPercent : 100;
+          this.ngZone.run(() => {
+            this.selectedMaterialNotes = notes;
+            this.selectedMaterialCheckPercent = percent;
+          });
+        })
+        .catch(err => console.error('❌ Lỗi load notes theo mã:', err));
+    });
   }
 
   saveSelectedMaterialNote(isNewNote: boolean = false): void {
@@ -1253,8 +1276,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       };
       this.firestore.collection('inbound-notes').add(noteData)
         .then(() => {
-          console.log('✅ Đã thêm lưu ý cho', materialCode);
           this.newMaterialNoteText = '';
+          if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial);
         })
         .catch(err => console.error('❌ Lỗi thêm lưu ý:', err));
     } else {
@@ -1266,7 +1289,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           createdAt: new Date()
         };
         this.firestore.collection('inbound-notes').add(noteData)
-          .then(() => console.log('✅ Đã cập nhật % kiểm cho', materialCode))
+          .then(() => { if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial); })
           .catch(err => console.error('❌ Lỗi cập nhật % kiểm:', err));
       }
     }
@@ -1274,9 +1297,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
   deleteNote(note: { id?: string; materialCode: string }): void {
     if (!note.id) return;
-    
     this.firestore.collection('inbound-notes').doc(note.id).delete()
-      .then(() => console.log('✅ Đã xóa lưu ý:', note.materialCode))
+      .then(() => { if (this.selectedHistoryMaterial) this.loadNotesForMaterial(this.selectedHistoryMaterial); })
       .catch(err => console.error('❌ Lỗi xóa lưu ý:', err));
   }
 
