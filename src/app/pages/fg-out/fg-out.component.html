@@ -814,6 +814,7 @@
                 <th>QTY XUẤT</th>
                 <th>CARTON</th>
                 <th>ODD</th>
+                <th>GỘP THÙNG</th>
                 <th>TỒN KHO</th>
                 <th>VỊ TRÍ</th>
                 <th>LOẠI HÀNG</th>
@@ -832,6 +833,7 @@
                 <td>{{material.quantity | number}}</td>
                 <td>{{getCartonOdd(material).carton | number}}</td>
                 <td>{{getCartonOdd(material).odd | number}}</td>
+                <td>{{material.mergeCarton || ''}}</td>
                 <td>{{getInventoryStock(material) | number}}</td>
                 <td>{{material.location || ''}}</td>
                 <td>{{material.productType || ''}}</td>

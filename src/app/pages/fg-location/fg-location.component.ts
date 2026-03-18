@@ -167,6 +167,16 @@ export class FgLocationComponent implements OnInit, OnDestroy {
           };
         });
 
+        // Ẩn mã thành phẩm có tồn = 0 khi scan đổi vị trí
+        this.itemsAtLocation = this.itemsAtLocation.filter(item => item.ton > 0);
+
+        if (this.itemsAtLocation.length === 0) {
+          this.errorMessage = `Không có mã hàng nào có tồn > 0 tại vị trí "${rawInput}" trong nhà máy ${this.selectedFactory}`;
+          console.log('❌ No items with ton > 0 at location');
+          this.isLoading = false;
+          return;
+        }
+
         // currentLocation:
         // - nếu khớp theo vị trí: dùng đúng input
         // - nếu khớp theo Pallet: lấy location thực tế từ dòng đầu tiên (kệ + Pallet ID)
