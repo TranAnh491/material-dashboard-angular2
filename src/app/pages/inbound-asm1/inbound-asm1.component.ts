@@ -210,6 +210,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.loadDmvtCatalog();
   }
 
+  trackByMaterial(index: number, material: InboundMaterial): any {
+    return material?.id || `${material?.batchNumber || ''}|${material?.materialCode || ''}|${material?.poNumber || ''}|${index}`;
+  }
+
   /** Load danh mục vật tư từ Firebase (subcollection dmvt/ASM1/items - mỗi mã 1 doc để tránh vượt 1MB/doc) */
   private loadDmvtCatalog(): void {
     const colRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
@@ -360,34 +364,30 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   private tryLoadFromCollection(collectionName: string): void {
     console.log(`🔍 Trying collection: ${collectionName}`);
     
-    this.firestore.collection(collectionName, ref => 
-      // Always fetch newest docs first; avoid missing new imports when collection > limit
-      ref.orderBy('createdAt', 'desc').limit(5000)
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        console.log(`🔍 Raw snapshot from ${collectionName} contains ${snapshot.length} documents`);
-        
-        if (snapshot.length === 0) {
+    // PERF: dùng get() thay vì snapshotChanges() để tránh listener realtime + re-render liên tục
+    // Và giới hạn số lượng doc tải về (30 ngày gần nhất thường không cần tới 5000).
+    // NOTE: Tránh composite index (factory + createdAt) bằng cách KHÔNG orderBy ở query.
+    // Dữ liệu vẫn được sort client-side sau khi load.
+    this.firestore.collection(collectionName, ref =>
+      ref.where('factory', '==', 'ASM1')
+        .limit(2000)
+    ).get().toPromise()
+      .then(snapshot => {
+        const docs = snapshot?.docs || [];
+        console.log(`🔍 Raw snapshot from ${collectionName} contains ${docs.length} documents`);
+        if (docs.length === 0) {
           console.log(`❌ No data in ${collectionName}, trying other collections...`);
           this.tryAlternativeCollections();
           return;
         }
-        
-        // Log first few documents to see structure
-        if (snapshot.length > 0) {
-          console.log('📄 Sample document:', snapshot[0].payload.doc.data());
-        }
-        
-        // Filter for ASM1 factory and sort client-side
-        const allMaterials = snapshot.map(doc => {
-          const data = doc.payload.doc.data() as any;
+
+        const allMaterials = docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: doc.payload.doc.id,
+            id: doc.id,
             factory: data.factory || 'ASM1',
-            importDate: data.importDate?.toDate() || new Date(),
-            internalBatch: data.internalBatch || '', // Load internalBatch từ database
+            importDate: data.importDate?.toDate?.() || new Date(),
+            internalBatch: data.internalBatch || '',
             batchNumber: data.batchNumber || '',
             materialCode: data.materialCode || '',
             poNumber: data.poNumber || '',
@@ -395,8 +395,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             unit: data.unit || '',
             location: data.location || '',
             type: data.type || '',
-            iqcStatus: data.iqcStatus || 'Chờ kiểm', // Default IQC status
-            expiryDate: data.expiryDate?.toDate() || null,
+            iqcStatus: data.iqcStatus || 'Chờ kiểm',
+            expiryDate: data.expiryDate?.toDate?.() || null,
             qualityCheck: data.qualityCheck || false,
             isReceived: data.isReceived || false,
             notes: data.notes || '',
@@ -406,8 +406,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             remarks: data.remarks || '',
             hasQRGenerated: data.hasQRGenerated || false,
             scannedQuantity: data.scannedQuantity || 0,
-            createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+            createdAt: data.createdAt?.toDate?.() || data.createdDate?.toDate?.() || new Date(),
+            updatedAt: data.updatedAt?.toDate?.() || data.lastUpdated?.toDate?.() || new Date()
           } as InboundMaterial;
         });
         
@@ -441,10 +441,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         
         console.log(`✅ ASM1 materials after filter: ${this.materials.length}`);
         
-        // Load unitWeight từ danh mục materials nếu chưa có
+        // PERF: Chỉ nạp catalog 1 lần, tránh nặng khi load list lớn
         this.loadUnitWeightsFromCatalog();
-        
-        // Load rollsOrBags từ danh mục Firebase nếu chưa có
         this.loadRollsOrBagsFromCatalog();
         
         // Log materials by batch for debugging
@@ -468,12 +466,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         this.isLoading = false;
         
         console.log(`✅ Final filtered materials: ${this.filteredMaterials.length}`);
-      },
-      error: (error) => {
+      })
+      .catch((error) => {
         console.error(`❌ Error loading from ${collectionName}:`, error);
         this.tryAlternativeCollections();
-      }
-    });
+      })
+      .finally(() => {
+        this.isLoading = false;
+      });
   }
   
   private tryAlternativeCollections(): void {
@@ -843,31 +843,28 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Load unit weights từ danh mục materials collection
   private async loadUnitWeightsFromCatalog(): Promise<void> {
     try {
+      if (this.unitWeightCatalogLoaded) return;
       console.log('⚖️ Loading unit weights from materials catalog...');
-      
-      // Lấy unique material codes
-      const materialCodes = [...new Set(this.materials.map(m => m.materialCode))];
-      
-      if (materialCodes.length === 0) return;
       
       // Load từ materials collection (danh mục chính)
       const snapshot = await this.firestore.collection('materials').get().toPromise();
       
-      const catalogMap = new Map<string, number>();
+      this.unitWeightCatalogMap.clear();
       snapshot.forEach(doc => {
         const data = doc.data();
         if (data && data['unitWeight']) {
-          catalogMap.set(doc.id, data['unitWeight']);
+          this.unitWeightCatalogMap.set(doc.id, data['unitWeight']);
         }
       });
       
-      console.log(`📚 Loaded ${catalogMap.size} unit weights from catalog`);
+      this.unitWeightCatalogLoaded = true;
+      console.log(`📚 Loaded ${this.unitWeightCatalogMap.size} unit weights from catalog`);
       
       // Fill unitWeight vào materials nếu chưa có
       let filledCount = 0;
       this.materials.forEach(material => {
-        if (!material.unitWeight && catalogMap.has(material.materialCode)) {
-          material.unitWeight = catalogMap.get(material.materialCode);
+        if (!material.unitWeight && this.unitWeightCatalogMap.has(material.materialCode)) {
+          material.unitWeight = this.unitWeightCatalogMap.get(material.materialCode);
           filledCount++;
         }
       });
@@ -942,6 +939,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // 🆕 Load rollsOrBags từ danh mục Firebase và áp dụng vào materials
   private async loadRollsOrBagsFromCatalog(): Promise<void> {
     try {
+      if (this.rollsOrBagsCatalogLoaded) return;
       console.log('📦 Loading rollsOrBags from catalog...');
       
       // Load từ collection 'material-rolls-bags'
@@ -952,26 +950,26 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         return;
       }
       
-      const catalogMap = new Map<string, number>();
+      this.rollsOrBagsCatalogMap.clear();
       snapshot.forEach(doc => {
         const data = doc.data();
         if (data && data['rollsOrBags'] && data['rollsOrBags'] > 0) {
-          catalogMap.set(doc.id, data['rollsOrBags']);
+          this.rollsOrBagsCatalogMap.set(doc.id, data['rollsOrBags']);
         }
       });
       
-      console.log(`📚 Loaded ${catalogMap.size} rollsOrBags from catalog`);
+      this.rollsOrBagsCatalogLoaded = true;
+      console.log(`📚 Loaded ${this.rollsOrBagsCatalogMap.size} rollsOrBags from catalog`);
       
       // Fill rollsOrBags vào materials nếu chưa có
       let filledCount = 0;
       this.materials.forEach(material => {
-        if (catalogMap.has(material.materialCode)) {
-          const catalogValue = catalogMap.get(material.materialCode)!;
+        if (this.rollsOrBagsCatalogMap.has(material.materialCode)) {
+          const catalogValue = this.rollsOrBagsCatalogMap.get(material.materialCode)!;
           // Chỉ fill nếu material chưa có rollsOrBags hoặc rollsOrBags = 0
           if (!material.rollsOrBags || material.rollsOrBags === 0) {
             material.rollsOrBags = catalogValue;
             filledCount++;
-            console.log(`✅ Loaded rollsOrBags from catalog: ${material.materialCode} = ${catalogValue}`);
           }
         }
       });
@@ -1046,6 +1044,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   selectedMaterialNotes: { id?: string; materialCode: string; checkPercent: number; note: string; createdAt?: Date }[] = [];
   selectedMaterialCheckPercent: number = 100;
   newMaterialNoteText: string = '';
+
+  // ====== CATALOG CACHE (performance) ======
+  private unitWeightCatalogLoaded = false;
+  private rollsOrBagsCatalogLoaded = false;
+  private unitWeightCatalogMap = new Map<string, number>();
+  private rollsOrBagsCatalogMap = new Map<string, number>();
 
   openMorePopup(): void {
     this.showMorePopup = true;
