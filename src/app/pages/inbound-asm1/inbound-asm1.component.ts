@@ -4472,7 +4472,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   processInspectionLocationScan(): void {
-    const loc = this.inspectionLocationInput.trim();
+    const rawLoc = this.inspectionLocationInput.trim();
+    const isReturnBatch = (this.inspectionBatchNumber || '').toUpperCase().startsWith('TRA');
+    const normalizeIqcLocation = (input: string): string => {
+      if (!input) return '';
+      // Remove spaces, keep a single IQC+ prefix
+      const compact = input.trim().replace(/\s+/g, '');
+      let rest = compact.toUpperCase().replace(/^(IQC\+|IQC)+/g, '');
+      rest = rest.replace(/^\++/g, '');
+      return rest ? `IQC+${rest}` : 'IQC';
+    };
+    const loc = isReturnBatch ? rawLoc : normalizeIqcLocation(rawLoc);
     if (!loc) {
       alert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
       return;
