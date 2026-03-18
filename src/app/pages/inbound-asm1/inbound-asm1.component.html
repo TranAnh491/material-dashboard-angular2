@@ -130,15 +130,6 @@
         <!-- Ngắt dòng trên mobile (dòng 2) -->
         <span class="mobile-flex-break"></span>
         
-        <!-- Search Box -->
-        <div class="search-box mobile-row2 mobile-hide">
-          <input type="text" 
-                 placeholder="Tìm kiếm mã hàng..."
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchInput($event)"
-                 class="search-input">
-        </div>
-        
         <!-- Date Range Selector -->
         <div class="date-range-selector mobile-row4">
           <input type="date" 
@@ -175,7 +166,7 @@
     </div>
     
     <!-- Batch Box View: hiển thị khi chưa chọn lô hàng và không ở chế độ kiểm lô (không áp dụng khi đang search mã hàng) -->
-    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive && !(searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7)" (click)="closeBatchContextMenu()">
+    <div class="batch-box-view" *ngIf="!isLoading && !selectedBatchView && !isBatchActive" (click)="closeBatchContextMenu()">
       <!-- Lô Hàng Nhập -->
       <div class="batch-section" *ngIf="!(filterReturnGoods && !filterNormalGoods)">
         <div class="batch-section-title">
@@ -253,7 +244,7 @@
     </div>
 
     <!-- Excel-like Body + History Panel -->
-    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive || (searchType === 'materialCode' && searchTerm && searchTerm.trim().length >= 7))">
+    <div class="excel-body-with-history" *ngIf="!isLoading && (selectedBatchView || isBatchActive)">
       <div class="excel-body-main">
         <table class="excel-table">
         <thead>
