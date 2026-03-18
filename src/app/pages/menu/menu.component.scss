@@ -129,6 +129,11 @@
   }
 }
 
+/* Explicit category marker for Quality section (avoid nth-of-type coupling) */
+.menu-section-quality .menu-category-title::before {
+  background: #455A64;
+}
+
 // Category title colors
 .menu-section:nth-of-type(1) .menu-category-title::before {
   background: #1976D2; // Main - Blue
@@ -139,18 +144,22 @@
 }
 
 .menu-section:nth-of-type(3) .menu-category-title::before {
-  background: #00ACC1; // ASM2 RM - Cyan
+  background: #455A64; // Quality - Blue Grey
 }
 
 .menu-section:nth-of-type(4) .menu-category-title::before {
-  background: #F57C00; // ASM FG - Orange
+  background: #00ACC1; // ASM2 RM - Cyan
 }
 
 .menu-section:nth-of-type(5) .menu-category-title::before {
-  background: #7B1FA2; // Tools - Purple
+  background: #F57C00; // ASM FG - Orange
 }
 
 .menu-section:nth-of-type(6) .menu-category-title::before {
+  background: #7B1FA2; // Tools - Purple
+}
+
+.menu-section:nth-of-type(7) .menu-category-title::before {
   background: #D32F2F; // Admin - Red
 }
 
@@ -289,6 +298,24 @@
   &:hover {
     background: #F3E5F5;
     border-color: #6A1B9A;
+  }
+}
+
+// Quality Category - Blue Grey
+.menu-item-quality {
+  border-color: #455A64;
+
+  .material-icons {
+    color: #455A64 !important;
+  }
+
+  span {
+    color: #455A64 !important;
+  }
+
+  &:hover {
+    background: #ECEFF1;
+    border-color: #37474F;
   }
 }
 

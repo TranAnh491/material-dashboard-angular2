@@ -505,7 +505,7 @@
 
         <!-- Done button -->
         <div class="done-row">
-          <button type="button" class="done-btn-full" (click)="closeScanModal()">
+          <button type="button" class="done-btn-full" (click)="onDoneScan()">
             <i class="material-icons">check</i>
             HOÀN THÀNH
           </button>
@@ -533,6 +533,59 @@
             <div class="box-row"><span class="label">PO</span><span class="value">{{ mat.poNumber }}</span></div>
             <div class="box-row"><span class="label">TỒN KHO</span><span class="value">{{ mat.stock | number:'1.0-2' }}</span></div>
             <div class="box-row"><span class="label">ĐÃ KIỂM</span><span class="value">{{ (mat.qtyCheck || 0) | number:'1.0-2' }}</span></div>
+          </div>
+        </div>
+
+        <!-- Mã scan SAI VỊ TRÍ: tìm thấy ở vị trí khác -->
+        <div class="wrong-location-section" *ngIf="wrongLocationItems.length > 0">
+          <div class="wrong-location-title">
+            <i class="material-icons">error</i>
+            MÃ SAI VỊ TRÍ ({{ wrongLocationItems.length }})
+          </div>
+          <div class="wrong-location-grid">
+            <div class="wrong-location-box"
+                 *ngFor="let w of wrongLocationItems; trackBy: trackByIndex">
+              <div class="box-row top">
+                <div class="code">{{ w.material.materialCode }}</div>
+                <div class="status-pills">
+                  <div class="status-pill wrong">SAI VỊ TRÍ</div>
+                  <div class="status-pill full" *ngIf="w.status === 'full'">ĐỦ</div>
+                  <div class="status-pill partial" *ngIf="w.status === 'partial'">CHƯA ĐỦ</div>
+                  <div class="status-pill unchecked" *ngIf="w.status === 'unchecked'">CHƯA KIỂM</div>
+                </div>
+              </div>
+              <div class="box-row mid">
+                <div class="meta"><strong>PO:</strong> {{ w.material.poNumber }}</div>
+                <div class="meta"><strong>IMD:</strong> {{ w.material.imd }}</div>
+              </div>
+              <div class="box-row bot">
+                <div class="kv">
+                  <div class="k">Vị trí dữ liệu</div>
+                  <div class="v">{{ w.fromLocation }}</div>
+                </div>
+                <div class="kv">
+                  <div class="k">Vị trí scan</div>
+                  <div class="v">{{ w.toLocation }}</div>
+                </div>
+              </div>
+              <div class="box-row bot" style="margin-top:8px;">
+                <div class="kv">
+                  <div class="k">Đã ghi nhận</div>
+                  <div class="v">{{ w.scannedQtyTotal }}</div>
+                </div>
+                <div class="kv" *ngIf="w.remaining > 0">
+                  <div class="k">Còn thiếu</div>
+                  <div class="v">{{ w.remaining }}</div>
+                </div>
+                <div class="kv" *ngIf="w.ignoredExcessTotal > 0">
+                  <div class="k">Dư (bỏ qua)</div>
+                  <div class="v">{{ w.ignoredExcessTotal }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wrong-location-hint">
+            Bấm <strong>HOÀN THÀNH</strong> để chọn có chuyển các mã sai vị trí về đúng vị trí đang scan hay không.
           </div>
         </div>
 

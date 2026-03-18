@@ -47,6 +47,28 @@ export class QCComponent implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   statusFilter: string = 'all'; // all, PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
+
+  // Search material + IQC status history
+  iqcSearchCode: string = '';
+  iqcSearchFromDate: string = ''; // YYYY-MM-DD
+  iqcSearchToDate: string = '';   // YYYY-MM-DD
+  showIqcDateRangeModal: boolean = false;
+  showIqcSearchResults: boolean = false;
+  isSearchingIqcHistory: boolean = false;
+  iqcHistoryError: string = '';
+  iqcHistoryResults: Array<{
+    id?: string;
+    materialCode: string;
+    materialName?: string;
+    poNumber?: string;
+    batchNumber?: string;
+    iqcStatus?: string;
+    location?: string;
+    qcCheckedBy?: string;
+    qcCheckedAt?: Date | null;
+    updatedAt?: Date | null;
+    eventTime?: Date | null;
+  }> = [];
   
   // IQC Modal properties
   showIQCModal: boolean = false;
@@ -1099,6 +1121,139 @@ export class QCComponent implements OnInit, OnDestroy {
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+
+  openIqcDateRangeModal(): void {
+    this.showIqcDateRangeModal = true;
+  }
+
+  closeIqcDateRangeModal(): void {
+    this.showIqcDateRangeModal = false;
+  }
+
+  clearIqcSearch(): void {
+    this.iqcSearchCode = '';
+    this.iqcHistoryResults = [];
+    this.iqcHistoryError = '';
+    this.showIqcSearchResults = false;
+  }
+
+  private parseFirestoreDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (value?.toDate) return value.toDate();
+    if (value?.seconds) return new Date(value.seconds * 1000);
+    if (typeof value === 'number') return new Date(value);
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    return null;
+  }
+
+  private getIqcEventTime(data: any): Date | null {
+    // Prefer explicit QC check time, then updatedAt, then import/receive date
+    return (
+      this.parseFirestoreDate(data?.qcCheckedAt) ||
+      this.parseFirestoreDate(data?.updatedAt) ||
+      this.parseFirestoreDate(data?.importDate) ||
+      this.parseFirestoreDate(data?.receivedDate) ||
+      null
+    );
+  }
+
+  async searchIqcHistory(): Promise<void> {
+    const code = (this.iqcSearchCode || '').trim();
+    if (!code) {
+      this.iqcHistoryError = 'Vui lòng nhập mã nguyên liệu để tìm kiếm';
+      this.showIqcSearchResults = true;
+      return;
+    }
+
+    this.isSearchingIqcHistory = true;
+    this.iqcHistoryError = '';
+    this.showIqcSearchResults = true;
+    this.iqcHistoryResults = [];
+
+    const fromDate = this.iqcSearchFromDate ? new Date(this.iqcSearchFromDate) : null;
+    const toDate = this.iqcSearchToDate ? new Date(this.iqcSearchToDate) : null;
+    if (fromDate) fromDate.setHours(0, 0, 0, 0);
+    if (toDate) toDate.setHours(0, 0, 0, 0);
+    const toExclusive = toDate ? new Date(toDate.getTime() + 24 * 60 * 60 * 1000) : null;
+
+    try {
+      // Try efficient query first
+      let snapshot: any = null;
+      try {
+        snapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1')
+             .where('materialCode', '==', code)
+             .limit(200)
+        ).get().toPromise();
+      } catch (e) {
+        // Fallback: query by factory only, filter in memory (avoid index issues)
+        snapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1')
+             .limit(2000)
+        ).get().toPromise();
+      }
+
+      if (!snapshot || snapshot.empty) {
+        this.iqcHistoryError = `Không tìm thấy dữ liệu cho mã nguyên liệu: ${code}`;
+        this.isSearchingIqcHistory = false;
+        return;
+      }
+
+      const results = snapshot.docs
+        .map(doc => {
+          const data = doc.data() as any;
+          if ((data?.materialCode || '') !== code) return null;
+
+          const qcCheckedAt = this.parseFirestoreDate(data?.qcCheckedAt);
+          const updatedAt = this.parseFirestoreDate(data?.updatedAt);
+          const eventTime = this.getIqcEventTime(data);
+
+          return {
+            id: doc.id,
+            materialCode: data?.materialCode || '',
+            materialName: data?.materialName || '',
+            poNumber: data?.poNumber || '',
+            batchNumber: data?.batchNumber || '',
+            iqcStatus: data?.iqcStatus || '',
+            location: data?.location || '',
+            qcCheckedBy: (data?.qcCheckedBy || '').toString(),
+            qcCheckedAt,
+            updatedAt,
+            eventTime
+          };
+        })
+        .filter(item => item !== null)
+        .filter((item: any) => {
+          if (!item.eventTime) return false;
+          if (fromDate && item.eventTime < fromDate) return false;
+          if (toExclusive && item.eventTime >= toExclusive) return false;
+          return true;
+        })
+        .sort((a: any, b: any) => {
+          const ta = a.eventTime ? a.eventTime.getTime() : 0;
+          const tb = b.eventTime ? b.eventTime.getTime() : 0;
+          return tb - ta;
+        });
+
+      this.iqcHistoryResults = results as any[];
+
+      if (this.iqcHistoryResults.length === 0) {
+        const rangeText = (fromDate || toDate)
+          ? ` trong khoảng ${this.iqcSearchFromDate || '...'} đến ${this.iqcSearchToDate || '...'}`
+          : '';
+        this.iqcHistoryError = `Không có lịch sử tình trạng cho mã ${code}${rangeText}`;
+      }
+    } catch (error: any) {
+      console.error('❌ Error searching IQC history:', error);
+      this.iqcHistoryError = `Lỗi khi tìm kiếm: ${error?.message || error}`;
+    } finally {
+      this.isSearchingIqcHistory = false;
+    }
   }
   
   toggleRecentChecked(): void {

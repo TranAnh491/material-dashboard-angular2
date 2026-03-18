@@ -46,8 +46,10 @@ export class MenuComponent implements OnInit {
     { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'upload', category: 'ASM1 RM' },
     { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'warehouse', category: 'ASM1 RM' },
     { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'bar_chart', category: 'ASM1 RM' },
-    { path: '/qc', title: 'Quality', icon: 'verified', category: 'ASM1 RM' },
     { path: '/label', title: 'Label', icon: 'local_offer', category: 'ASM1 RM' },
+
+    // Quality
+    { path: '/qc', title: 'QUALITY', icon: 'verified', category: 'Quality' },
     // ASM2 RM
     { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'download', category: 'ASM2 RM' },
     { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'upload', category: 'ASM2 RM' },

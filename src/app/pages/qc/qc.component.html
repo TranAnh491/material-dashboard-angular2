@@ -55,6 +55,37 @@
         <i class="material-icons">check_circle</i>
         IQC
       </button>
+
+      <!-- Search material + IQC status history -->
+      <div class="iqc-search-wrapper">
+        <div class="iqc-search-input-group">
+          <i class="material-icons search-icon">search</i>
+          <input
+            type="text"
+            class="iqc-search-input"
+            [(ngModel)]="iqcSearchCode"
+            (ngModelChange)="iqcSearchCode = ($event || '').toUpperCase()"
+            (keyup.enter)="searchIqcHistory()"
+            placeholder="Nhập mã nguyên liệu (MaterialCode) để tìm lịch sử..."
+            autocomplete="off"
+          />
+          <button class="iqc-search-btn" (click)="searchIqcHistory()" [disabled]="isSearchingIqcHistory">
+            <i class="material-icons">search</i>
+            <span>{{ isSearchingIqcHistory ? 'Đang tìm...' : 'Search' }}</span>
+          </button>
+          <button class="iqc-date-btn" (click)="openIqcDateRangeModal()" title="Chọn thời gian Từ/Đến">
+            <i class="material-icons">calendar_month</i>
+          </button>
+          <button class="iqc-clear-btn" (click)="clearIqcSearch()" title="Xóa tìm kiếm" *ngIf="iqcSearchCode || showIqcSearchResults">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+
+        <div class="iqc-search-range-hint" *ngIf="iqcSearchFromDate || iqcSearchToDate">
+          <i class="material-icons">event</i>
+          <span>Từ: <strong>{{ iqcSearchFromDate || '...' }}</strong> — Đến: <strong>{{ iqcSearchToDate || '...' }}</strong></span>
+        </div>
+      </div>
       
       <div class="right-buttons-wrapper">
         <button class="home-btn" (click)="goToMenu()" title="Về Menu">
@@ -105,6 +136,62 @@
             <div class="pending-confirm-label">Chờ Xác Nhận</div>
             <div class="pending-confirm-count">{{ pendingConfirmCount }}</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IQC search results -->
+    <div class="iqc-search-results-section" *ngIf="showIqcSearchResults">
+      <h4 class="section-header">
+        <i class="material-icons">manage_search</i>
+        Lịch sử tình trạng theo mã nguyên liệu
+      </h4>
+
+      <div class="loading-report" *ngIf="isSearchingIqcHistory">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tìm kiếm...</p>
+      </div>
+
+      <div class="error-message" *ngIf="!isSearchingIqcHistory && iqcHistoryError">
+        <i class="material-icons">error_outline</i>
+        <span>{{ iqcHistoryError }}</span>
+      </div>
+
+      <div class="report-content" *ngIf="!isSearchingIqcHistory && !iqcHistoryError">
+        <table class="report-table" *ngIf="iqcHistoryResults.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã hàng</th>
+              <th>Tên hàng</th>
+              <th>Số P.O</th>
+              <th>Lô hàng</th>
+              <th>Trạng thái</th>
+              <th>Người kiểm</th>
+              <th>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of iqcHistoryResults; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ item.materialCode }}</td>
+              <td>{{ item.materialName }}</td>
+              <td>{{ item.poNumber }}</td>
+              <td>{{ item.batchNumber }}</td>
+              <td>
+                <span class="status-badge" [ngClass]="getIQCStatusClass(item.iqcStatus)">
+                  {{ item.iqcStatus || 'N/A' }}
+                </span>
+              </td>
+              <td>{{ item.qcCheckedBy || '—' }}</td>
+              <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm:ss') : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="empty-report" *ngIf="iqcHistoryResults.length === 0">
+          <i class="material-icons">info</i>
+          <p>Không có dữ liệu</p>
         </div>
       </div>
     </div>
@@ -294,6 +381,60 @@
       <button class="close-modal-btn" (click)="closeIQCModal()">
         <i class="material-icons">close</i>
         Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- IQC Date Range Modal -->
+<div class="modal-overlay" *ngIf="showIqcDateRangeModal" (click)="closeIqcDateRangeModal()">
+  <div class="modal-content report-modal-content date-range-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">calendar_month</i>
+        Chọn thời gian Từ/Đến
+      </h3>
+      <button class="close-btn" (click)="closeIqcDateRangeModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="date-range-subtitle">
+        Chọn thời gian để lọc lịch sử theo mã nguyên liệu
+      </div>
+
+      <div class="date-range-fields">
+        <div class="date-field">
+          <div class="date-field-label">Từ ngày</div>
+          <div class="date-field-input">
+            <i class="material-icons">event</i>
+            <input type="date" [(ngModel)]="iqcSearchFromDate" />
+          </div>
+        </div>
+
+        <div class="date-field-separator">
+          <i class="material-icons">arrow_forward</i>
+        </div>
+
+        <div class="date-field">
+          <div class="date-field-label">Đến ngày</div>
+          <div class="date-field-input">
+            <i class="material-icons">event</i>
+            <input type="date" [(ngModel)]="iqcSearchToDate" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer date-range-footer">
+      <button class="date-range-btn date-range-btn-secondary" (click)="iqcSearchFromDate=''; iqcSearchToDate='';" type="button">
+        <i class="material-icons">delete_sweep</i>
+        Xóa thời gian
+      </button>
+      <button class="date-range-btn date-range-btn-primary" (click)="closeIqcDateRangeModal()" type="button">
+        <i class="material-icons">check</i>
+        Áp dụng
       </button>
     </div>
   </div>
@@ -508,6 +649,10 @@
         <button class="menu-option-btn" (click)="openDownloadModal(); closeMoreMenu()">
           <i class="material-icons">download</i>
           <span>Tải về</span>
+        </button>
+        <button class="menu-option-btn" (click)="loadQCReport(); closeMoreMenu()">
+          <i class="material-icons">description</i>
+          <span>IQC report</span>
         </button>
       </div>
     </div>

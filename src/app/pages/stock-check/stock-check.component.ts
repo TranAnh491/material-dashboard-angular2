@@ -21,6 +21,8 @@ interface StockCheckMaterial {
   imd: string;
   stock: number;
   location: string;
+  /** Document id của `inventory-materials` để update đổi vị trí */
+  inventoryId?: string;
   actualLocation?: string; // Vị trí thực tế (scan)
   standardPacking?: string;
   stockCheck: string;
@@ -48,6 +50,17 @@ interface StockCheckMaterial {
   };
   // KHSX: có trong danh sách KHSX hay không
   hasKhsx?: boolean;
+}
+
+interface WrongLocationItem {
+  key: string; // materialCode_po_imd
+  material: StockCheckMaterial;
+  fromLocation: string;
+  toLocation: string;
+  scannedQtyTotal: number;
+  ignoredExcessTotal: number;
+  status: 'unchecked' | 'partial' | 'full';
+  remaining: number; // còn thiếu để đủ
 }
 
 interface StockCheckData {
@@ -114,6 +127,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   locationMaterialsView: Array<StockCheckMaterial & { _status: 'unchecked' | 'partial' | 'full' }> = []; // Pre-computed view với status
   /** Key (materialCode_po_imd) của mã vừa scan — box đó sẽ được đưa lên đầu danh sách */
   lastScannedLocationKey: string = '';
+  /** Danh sách mã scan sai vị trí: tìm thấy ở vị trí khác nhưng đang scan tại currentScanLocation */
+  wrongLocationItems: WrongLocationItem[] = [];
 
   private searchDebounceTimer: any = null; // Timer debounce search
   
@@ -946,6 +961,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             imd: this.getDisplayIMD(mat),
             stock: stock,
             location: mat.location,
+            inventoryId: mat.id,
             standardPacking: standardPacking,
             stockCheck: '',
             qtyCheck: null,
@@ -1557,6 +1573,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
       this.scanHistory = [];
       this.locationMaterials = [];
+      this.wrongLocationItems = [];
     } else {
       // Đã có vị trí - bỏ qua bước scan vị trí, scan mã hàng luôn
       this.showScanModal = true;
@@ -1565,6 +1582,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.scanInput = '';
       this.scanMessage = `ID: ${this.currentEmployeeId}\nVị trí: ${this.currentScanLocation}\n\nScan MÃ HÀNG kiểm kê tại vị trí này.`;
       this.scanHistory = [];
+      this.wrongLocationItems = [];
       this.updateLocationMaterials();
     }
     
@@ -1613,6 +1631,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.currentScanLocation = locationUpper;
       this.scanHistory.push(`📍 Vị trí: ${this.currentScanLocation}`);
       this.updateLocationMaterials();
+      this.wrongLocationItems = [];
       
       // Chuyển sang bước scan mã hàng
       this.scanStep = 'material';
@@ -1734,21 +1753,90 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           }
           
           // Lấy số lượng mới scan
-          const newQty = parseFloat(quantity) || 0;
+          const scannedQty = parseFloat(quantity) || 0;
+
+          // Kiểm tra đúng vị trí hay sai vị trí
+          const dataLoc = (matchingMaterial.location || '').trim().toUpperCase();
+          const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
+          const isWrongLocation = !!scanLoc && !!dataLoc && dataLoc !== scanLoc;
+
+          // Nếu scan dư: báo dư và KHÔNG ghi nhận lượng dư
+          // Quy tắc: chỉ ghi nhận tối đa đến khi qtyCheck đạt stock.
+          const existingQty = matchingMaterial.qtyCheck || 0;
+          const stockVal = matchingMaterial.stock || 0;
+          const remaining = stockVal - existingQty;
+          let qtyToSave = scannedQty;
+          let ignoredExcess = 0;
+          if (remaining <= 0) {
+            ignoredExcess = scannedQty;
+            qtyToSave = 0;
+          } else if (scannedQty > remaining) {
+            ignoredExcess = scannedQty - remaining;
+            qtyToSave = remaining;
+          }
+
+          if (ignoredExcess > 0) {
+            // Báo dư nhưng cho qua (không ghi nhận phần dư)
+            this.scanHistory.unshift(`⚠️ DƯ ${materialCode} | PO: ${poNumber} | Dư: ${ignoredExcess}`);
+            if (this.scanHistory.length > 5) this.scanHistory.pop();
+          }
+
+          if (qtyToSave <= 0) {
+            this.scanMessage =
+              `⚠️ DƯ - Không ghi nhận thêm\n` +
+              `Mã: ${materialCode} | PO: ${poNumber}\n` +
+              `Đã đủ/đang vượt tồn kho.`;
+            this.scanInput = '';
+            this.cdr.detectChanges();
+            setTimeout(() => {
+              const input = document.getElementById('scan-input') as HTMLInputElement;
+              if (input) input.focus();
+            }, 100);
+            return;
+          }
           
           // Save to Firebase - hàm này sẽ lấy giá trị từ Firebase và cộng dồn
-          await this.saveStockCheckToFirebase(matchingMaterial, newQty);
+          await this.saveStockCheckToFirebase(matchingMaterial, qtyToSave);
           
           // Sau khi save, cập nhật lại qtyCheck từ Firebase (đã được cộng dồn)
           // qtyCheck sẽ được cập nhật trong saveStockCheckToFirebase
           
           // Add to history
-          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${quantity}`);
+          const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
+          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
           if (this.scanHistory.length > 5) {
             this.scanHistory.pop();
           }
           
-          this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\nVị trí: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
+          this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\nVị trí scan: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
+
+          // Nếu sai vị trí: lưu vào danh sách để hỏi chuyển vị trí khi DONE + hiển thị box sai vị trí
+          if (isWrongLocation) {
+            const key = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
+            const existingWrong = this.wrongLocationItems.find(w => w.key === key);
+            const statusNow = this.getMaterialCheckStatus(matchingMaterial);
+            const remainingNow = Math.max((matchingMaterial.stock || 0) - (matchingMaterial.qtyCheck || 0), 0);
+            if (existingWrong) {
+              existingWrong.scannedQtyTotal += qtyToSave;
+              existingWrong.ignoredExcessTotal += ignoredExcess;
+              existingWrong.toLocation = scanLoc;
+              existingWrong.status = statusNow;
+              existingWrong.remaining = remainingNow;
+            } else {
+              this.wrongLocationItems.unshift({
+                key,
+                material: matchingMaterial,
+                fromLocation: dataLoc,
+                toLocation: scanLoc,
+                scannedQtyTotal: qtyToSave,
+                ignoredExcessTotal: ignoredExcess
+                ,
+                status: statusNow,
+                remaining: remainingNow
+              });
+            }
+            if (this.wrongLocationItems.length > 50) this.wrongLocationItems.pop();
+          }
           
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
@@ -1904,6 +1992,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.locationMaterials = [];
     this.locationMaterialsView = [];
     this.lastScannedLocationKey = '';
+    this.wrongLocationItems = [];
 
     // Sau khi đóng modal mới sync lại bảng + stats (tránh làm chậm khi đang scan)
     this.applyFilter();
@@ -1914,6 +2003,74 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (this.scannedCount > 0) {
       alert(`Đã scan kiểm kê: ${this.scannedCount} mã`);
       this.scannedCount = 0;
+    }
+  }
+
+  /** Done: nếu có mã sai vị trí thì hỏi có chuyển vị trí về currentScanLocation không */
+  async onDoneScan(): Promise<void> {
+    if (this.scanStep !== 'material') {
+      this.closeScanModal();
+      return;
+    }
+
+    const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
+    const hasWrong = this.wrongLocationItems.length > 0 && !!scanLoc;
+
+    if (hasWrong) {
+      const count = this.wrongLocationItems.length;
+      const ok = confirm(
+        `Có ${count} mã đang bị SAI VỊ TRÍ.\n\n` +
+        `Bạn có muốn CHUYỂN các mã này về vị trí đang scan: ${scanLoc} không?\n\n` +
+        `- YES: chuyển vị trí\n- NO: giữ nguyên (chỉ ghi nhận check, không đổi vị trí)`
+      );
+      if (ok) {
+        await this.moveWrongLocationsToScanLocation(scanLoc);
+      }
+    }
+
+    this.closeScanModal();
+  }
+
+  private async moveWrongLocationsToScanLocation(scanLoc: string): Promise<void> {
+    const updates = this.wrongLocationItems.slice();
+    if (updates.length === 0) return;
+
+    try {
+      // Update Firestore theo inventoryId (doc id của inventory-materials)
+      for (const w of updates) {
+        const invId = w.material.inventoryId;
+        if (!invId) continue;
+
+        await this.firestore
+          .collection('inventory-materials')
+          .doc(invId)
+          .set(
+            {
+              location: scanLoc,
+              modifiedBy: 'location-change-scanner',
+              lastModified: firebase.default.firestore.FieldValue.serverTimestamp()
+            },
+            { merge: true }
+          );
+
+        // Update local state
+        w.material.location = scanLoc;
+        w.material.locationChangeInfo = {
+          hasChanged: true,
+          newLocation: scanLoc,
+          changeDate: new Date(),
+          changedBy: 'location-change-scanner'
+        };
+      }
+
+      // Refresh views
+      this.updateLocationMaterials();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error moving wrong locations:', error);
+      alert('Có lỗi khi chuyển vị trí. Vui lòng thử lại.');
+    } finally {
+      this.wrongLocationItems = [];
     }
   }
   

@@ -39,6 +39,21 @@
       </ng-container>
     </div>
   </div>
+
+  <!-- Quality Group -->
+  <div class="menu-section menu-section-quality">
+    <h5 class="menu-category-title">QUALITY</h5>
+    <div class="menu-grid">
+      <ng-container *ngFor="let tab of menuTabs">
+        <div *ngIf="tab.category === 'Quality' && (!isMobile || !isDesktopOnly(tab.path))"
+             class="menu-item menu-item-quality"
+             (click)="navigateToTab(tab.path)">
+          <i class="material-icons">{{tab.icon}}</i>
+          <span>{{tab.title}}</span>
+        </div>
+      </ng-container>
+    </div>
+  </div>
   
   <!-- ASM2 RM Group -->
   <div class="menu-section">
