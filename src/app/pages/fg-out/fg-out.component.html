@@ -26,8 +26,16 @@
           <span class="shipment-box-value">{{ displayedShipmentsText }}</span>
         </div>
         <div class="total-summary-box" *ngIf="filteredMaterials.length">
-          <span class="total-summary-item">Tổng QTY: <strong>{{ getTotalQty() | number }}</strong></span>
-          <span class="total-summary-item">Tổng Carton: <strong>{{ getTotalCarton() | number }}</strong></span>
+          <ng-container *ngIf="!isSingleShipmentView">
+            <span class="total-summary-item">Tổng QTY: <strong>{{ getTotalQty() | number }}</strong></span>
+            <span class="total-summary-item">Tổng Carton: <strong>{{ getTotalCarton() | number }}</strong></span>
+          </ng-container>
+          <ng-container *ngIf="isSingleShipmentView">
+            <span class="total-summary-item" style="font-weight: 600;">Tổng theo Mã TP:</span>
+            <span class="total-summary-item" *ngFor="let t of totalsByMaterialCodeInShipment">
+              <strong>{{ t.materialCode }}</strong>: {{ t.totalQty | number }} (CTN {{ t.totalCarton | number }})
+            </span>
+          </ng-container>
         </div>
         
         <div class="factory-filter">
@@ -269,7 +277,7 @@
                 <ng-container *ngIf="!(row.material.materialCode || '').trim()">{{ 0 }}</ng-container>
                 <ng-container *ngIf="(row.material.materialCode || '').trim()">{{ getCartonOdd(row.material).odd }}</ng-container>
               </td>
-              <td class="number-cell stock-cell">{{ getInventoryStock(row.material) | number }}</td>
+              <td class="number-cell stock-cell">{{ getInventoryStockByBatch(row.material) | number }}</td>
               <td class="location-cell">
                 <input type="text"
                        class="editable-input"
@@ -834,7 +842,7 @@
                 <td>{{getCartonOdd(material).carton | number}}</td>
                 <td>{{getCartonOdd(material).odd | number}}</td>
                 <td>{{material.mergeCarton || ''}}</td>
-                <td>{{getInventoryStock(material) | number}}</td>
+                <td>{{getInventoryStockByBatch(material) | number}}</td>
                 <td>{{material.location || ''}}</td>
                 <td>{{material.productType || ''}}</td>
                 <td>{{material.notes || ''}}</td>

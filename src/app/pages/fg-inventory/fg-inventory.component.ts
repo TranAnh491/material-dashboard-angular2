@@ -148,6 +148,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef
   ) {}
 
+  /** Chỉ cho sửa "Tồn đầu" với dòng import tồn đầu (batch TDAU1-/TDAU2-) */
+  isTonDauEditable(material: FGInventoryItem): boolean {
+    const batch = (material?.batchNumber || '').toString().trim().toUpperCase();
+    return batch.startsWith('TDAU1-') || batch.startsWith('TDAU2-');
+  }
+
   ngOnInit(): void {
     this.setupDebouncedSearch();
     this.loadCatalogFromFirebase(); // Load catalog first

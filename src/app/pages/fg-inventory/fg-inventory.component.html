@@ -111,7 +111,7 @@
                      class="editable-input" 
                      [(ngModel)]="material.tonDau" 
                      (change)="updateTon(material)"
-                     [disabled]="!canEditMaterial(material)">
+                     [disabled]="!canEditMaterial(material) || !isTonDauEditable(material)">
             </td>
             <td class="number-cell">
               <input type="number" 

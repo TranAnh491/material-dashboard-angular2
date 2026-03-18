@@ -141,6 +141,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
   private inventoryStockCache = new Map<string, number>();
+  /** Cache tồn kho theo batch (key = FACTORY|MATERIAL|BATCH, value = tổng ton của batch đó) */
+  private inventoryStockByBatchCache = new Map<string, number>();
 
   /** Số lượng kỳ vọng từ tab Shipment theo (shipmentCode|materialCode) - dùng so sánh khi lọc theo shipment */
   shipmentExpectedQtyMap = new Map<string, number>();
@@ -255,6 +257,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadLocationsSubject.complete();
     this.locationCache.clear();
     this.inventoryStockCache.clear();
+    this.inventoryStockByBatchCache.clear();
   }
 
   // Load tồn kho từ fg-inventory vào cache - cộng dồn theo mã TP
@@ -264,14 +267,24 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(actions => {
         this.inventoryStockCache.clear();
+        this.inventoryStockByBatchCache.clear();
         actions.forEach(action => {
           const data = action.payload.doc.data() as any;
           const materialCode = (data.materialCode || '').toString().trim().toUpperCase();
-          const ton = data.ton || 0;
+          const ton = Number(data.ton ?? 0) || 0;
+          const factory = (data.factory || 'ASM1').toString().trim().toUpperCase();
+          const batchNumber = (data.batchNumber || '').toString().trim().toUpperCase();
           if (materialCode) {
             // Cộng dồn tồn kho theo mã TP
             const currentStock = this.inventoryStockCache.get(materialCode) || 0;
             this.inventoryStockCache.set(materialCode, currentStock + ton);
+
+            // Cộng dồn tồn kho theo batch
+            if (batchNumber) {
+              const key = `${factory}|${materialCode}|${batchNumber}`;
+              const cur = this.inventoryStockByBatchCache.get(key) || 0;
+              this.inventoryStockByBatchCache.set(key, cur + ton);
+            }
           }
         });
         console.log(`📦 Loaded inventory stock for ${this.inventoryStockCache.size} material codes`);
@@ -283,6 +296,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (!material.materialCode) return 0;
     const materialKey = (material.materialCode || '').toString().trim().toUpperCase();
     return this.inventoryStockCache.get(materialKey) || 0;
+  }
+
+  /** Lấy tồn kho theo đúng batch (không cộng dồn các batch khác). */
+  getInventoryStockByBatch(material: FgOutItem): number {
+    const mc = (material.materialCode || '').toString().trim().toUpperCase();
+    const batch = (material.batchNumber || '').toString().trim().toUpperCase();
+    const factory = (material.factory || this.selectedFactory || 'ASM1').toString().trim().toUpperCase();
+    if (!mc || !batch) return 0;
+    const key = `${factory}|${mc}|${batch}`;
+    return this.inventoryStockByBatchCache.get(key) || 0;
   }
 
   // Load materials from Firebase - Only last 10 days
@@ -413,6 +436,38 @@ export class FgOutComponent implements OnInit, OnDestroy {
       if (s) set.add(s);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b)).join(', ') || '—';
+  }
+
+  /** Danh sách shipment unique đang hiển thị. */
+  private getDisplayedShipments(): string[] {
+    const set = new Set<string>();
+    this.filteredMaterials.forEach(m => {
+      const s = String(m.shipment ?? '').trim();
+      if (s) set.add(s);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Đang lọc theo 1 shipment (chỉ còn 1 shipment trong danh sách hiển thị). */
+  get isSingleShipmentView(): boolean {
+    return this.getDisplayedShipments().length === 1;
+  }
+
+  /** Tổng theo từng Mã TP trong shipment đang lọc (chỉ dùng khi isSingleShipmentView = true). */
+  get totalsByMaterialCodeInShipment(): Array<{ materialCode: string; totalQty: number; totalCarton: number }> {
+    if (!this.isSingleShipmentView) return [];
+    const map = new Map<string, { qty: number; carton: number }>();
+    this.filteredMaterials.forEach(m => {
+      const code = String(m.materialCode ?? '').trim().toUpperCase();
+      if (!code) return;
+      const cur = map.get(code) || { qty: 0, carton: 0 };
+      cur.qty += Number(m.quantity) || 0;
+      cur.carton += this.getCartonForMaterial(m);
+      map.set(code, cur);
+    });
+    return Array.from(map.entries())
+      .map(([materialCode, v]) => ({ materialCode, totalQty: v.qty, totalCarton: v.carton }))
+      .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
   }
 
   /** Shipment mặc định khi thêm dòng mới (giống shipment đang hiển thị). */
