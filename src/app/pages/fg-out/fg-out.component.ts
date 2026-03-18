@@ -1958,11 +1958,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const quantityToSubtract = Math.min(remainingQuantity, availableQuantity);
       if (quantityToSubtract > 0) {
         const newQuantity = availableQuantity - quantityToSubtract;
+        const currentExported = Number(d.xuat ?? d.exported ?? 0) || 0;
+        const newExported = currentExported + quantityToSubtract;
         doc.ref.update({
           ton: newQuantity,
+          xuat: newExported,
           updatedAt: new Date()
         }).then(() => {
-          console.log(`✅ Updated inventory ${doc.id}: ton=${newQuantity} (subtracted ${quantityToSubtract})`);
+          console.log(`✅ Updated inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (subtracted ${quantityToSubtract})`);
         }).catch(error => {
           console.error('❌ Error updating inventory:', error);
         });
@@ -2058,12 +2061,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
         
         if (quantityToAddBack > 0) {
           const newQuantity = currentQuantity + quantityToAddBack;
+          const currentExported = Number(inventoryData.xuat ?? inventoryData.exported ?? 0) || 0;
+          const newExported = Math.max(0, currentExported - quantityToAddBack);
           
           doc.ref.update({
             ton: newQuantity,
+            xuat: newExported,
             updatedAt: new Date()
           }).then(() => {
-            console.log(`✅ Added back to inventory ${doc.id}: ton=${newQuantity} (added ${quantityToAddBack})`);
+            console.log(`✅ Added back to inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (added ${quantityToAddBack})`);
           }).catch(error => {
             console.error('❌ Error updating inventory:', error);
           });
