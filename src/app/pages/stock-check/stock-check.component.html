@@ -39,8 +39,8 @@
 
   <!-- Stock Check Interface - Show when factory selected -->
   <div class="stock-check-container" *ngIf="selectedFactory">
-    <!-- Top Bar - Title on top, buttons below -->
-    <div class="top-bar">
+    <!-- Top Bar - ẩn hẳn khi đang mở modal scan để không còn box trắng phía trên -->
+    <div class="top-bar" *ngIf="!showScanModal">
       <h2 class="factory-title" *ngIf="!showScanModal">
         <i class="material-icons">factory</i>
         {{ selectedFactory }} - KIỂM KÊ
@@ -124,8 +124,8 @@
       </div>
     </div>
 
-  <!-- Data Table -->
-  <div class="data-section">
+  <!-- Data Table - không render trên mobile để giao diện mobile chạy nhanh hơn -->
+  <div class="data-section" *ngIf="!isMobile">
     <!-- Counter Boxes -->
     <div class="counter-boxes">
       <!-- Unified (Desktop + Mobile): 3 counter boxes -->

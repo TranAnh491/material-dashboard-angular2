@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil, first, filter, skip } from 'rxjs/operators';
@@ -112,6 +112,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   currentScanLocation: string = ''; // Vị trí hiện tại đang kiểm kê
   locationMaterials: StockCheckMaterial[] = []; // Danh sách NVL theo vị trí đang scan (hiển thị dạng box)
   locationMaterialsView: Array<StockCheckMaterial & { _status: 'unchecked' | 'partial' | 'full' }> = []; // Pre-computed view với status
+  /** Key (materialCode_po_imd) của mã vừa scan — box đó sẽ được đưa lên đầu danh sách */
+  lastScannedLocationKey: string = '';
 
   private searchDebounceTimer: any = null; // Timer debounce search
   
@@ -164,6 +166,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   // Locations from Location tab (for validation)
   validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
+
+  /** Mobile (≤768px): ẩn bảng/counters, chỉ hiện nút KIỂM KÊ + modal scan — skip filter/stats để chạy nhanh hơn */
+  isMobile = false;
 
   // Counters
   get totalMaterials(): number {
@@ -281,8 +286,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   /**
    * Calculate ID check statistics
+   * Trên mobile không hiển thị bảng → skip để giao diện mobile chạy nhanh hơn.
    */
   calculateIdCheckStats(): void {
+    if (this.isMobile) return;
     const idMap = new Map<string, number>();
     
     this.allMaterials.forEach(mat => {
@@ -311,6 +318,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   private _doSearch(): void {
+    if (this.isMobile) return;
     if (!this.searchInput.trim()) {
       this.applyFilter();
       return;
@@ -458,8 +466,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   /**
    * Apply filter to displayed materials
+   * Trên mobile không hiển thị bảng → skip để giao diện mobile chạy nhanh hơn.
    */
   applyFilter(): void {
+    if (this.isMobile) return;
     let filtered = [...this.allMaterials];
 
     if (this.filterMode === 'checked') {
@@ -544,6 +554,20 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       ...m,
       _status: this.getMaterialCheckStatus(m)
     }));
+
+    // Mã vừa scan: đưa lên đầu danh sách (mobile + web)
+    if (this.lastScannedLocationKey) {
+      const key = this.lastScannedLocationKey;
+      const idx = this.locationMaterials.findIndex(m =>
+        `${m.materialCode}_${m.poNumber}_${m.imd}` === key
+      );
+      if (idx > 0) {
+        const [mat] = this.locationMaterials.splice(idx, 1);
+        this.locationMaterials.unshift(mat);
+        const [viewItem] = this.locationMaterialsView.splice(idx, 1);
+        this.locationMaterialsView.unshift(viewItem);
+      }
+    }
   }
 
   // TrackBy functions - tránh Angular re-render toàn bộ list
@@ -577,6 +601,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.checkMobile();
     // Reset factory selection to show selection screen
     this.selectedFactory = null;
     this.allMaterials = [];
@@ -586,9 +611,28 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.filterMode = 'all';
     this.currentScanLocation = '';
     this.locationMaterials = [];
-    
+
     // Load valid locations from Location tab
     this.loadValidLocations();
+  }
+
+  @HostListener('window:resize')
+  onResize(): void {
+    this.checkMobile();
+  }
+
+  /** Cập nhật isMobile (≤768px) để tối ưu: không render bảng + skip filter/stats trên mobile */
+  private checkMobile(): void {
+    if (typeof window === 'undefined') return;
+    const next = window.innerWidth <= 768;
+    if (next !== this.isMobile) {
+      this.isMobile = next;
+      if (!this.isMobile) {
+        this.applyFilter();
+        this.calculateIdCheckStats();
+      }
+      this.cdr.detectChanges();
+    }
   }
 
   /**
@@ -1696,8 +1740,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           
           // Clear input ngay lập tức để có thể scan tiếp
           this.scanInput = '';
-          
-          // Chỉ update location box khi đang scan - skip sort toàn bảng
+          // Mã vừa scan đưa lên đầu danh sách
+          this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
           this.updateLocationMaterials();
           this.cdr.detectChanges();
         } else {
@@ -1712,7 +1756,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             poNumber: poNumber,
             imd: imd,
             stock: 0, // Không có thông tin stock từ scan
-            location: '', // Vị trí trong tồn kho (không có từ scan)
+            location: this.currentScanLocation || '', // Hiển thị trong danh sách theo vị trí đang scan
             actualLocation: this.currentScanLocation || '', // Vị trí thực tế từ scan
             standardPacking: '', // Sẽ tải sau nếu cần
             stockCheck: '✓',
@@ -1754,8 +1798,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           } catch (error) {
             console.log('⚠️ Could not load standardPacking for new material:', error);
           }
-          
-          // Refresh view trước để có STT chính xác (chỉ update location box khi đang scan)
+          // Mã mới vừa scan đưa lên đầu danh sách
+          this.lastScannedLocationKey = `${newMaterial.materialCode}_${newMaterial.poNumber}_${newMaterial.imd}`;
           this.updateLocationMaterials();
           
           // Tìm lại material sau khi filter để lấy STT chính xác
@@ -1847,6 +1891,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.currentScanLocation = '';
     this.locationMaterials = [];
     this.locationMaterialsView = [];
+    this.lastScannedLocationKey = '';
 
     // Sau khi đóng modal mới sync lại bảng + stats (tránh làm chậm khi đang scan)
     this.applyFilter();

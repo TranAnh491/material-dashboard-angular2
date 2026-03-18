@@ -99,7 +99,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   endDate: string = '';
   
   // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
-  statusFilter: string = 'all'; // Default to Tất cả
+  statusFilter: string = 'pending'; // Default: Chưa nhận (ẩn mã đã tick đã nhận)
   
   // Batch type filters - Hàng Trả / Hàng Nhập
   filterReturnGoods: boolean = false; // Lọc hàng trả (batchNumber bắt đầu bằng TRA)
@@ -211,8 +211,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.setupDateDefaults();
     console.log(`📅 Khung thời gian mặc định: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
     
-    // Mặc định hiển thị tất cả materials (không filter)
-    this.statusFilter = 'all';
+    // Mặc định ẩn mã đã nhận (chỉ hiện chưa nhận)
+    this.statusFilter = 'pending';
     
     this.loadMaterials();
     this.loadDmvtCatalog();
@@ -391,7 +391,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // Filter for ASM1 factory and sort client-side
         const allMaterials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
-          console.log(`📦 Processing doc ${doc.payload.doc.id}, factory: ${data.factory}, isReceived: ${data.isReceived}, batch: ${data.batchNumber}, material: ${data.materialCode}`);
           return {
             id: doc.payload.doc.id,
             factory: data.factory || 'ASM1',
@@ -420,20 +419,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           } as InboundMaterial;
         });
         
-        console.log(`🏭 All materials before filter: ${allMaterials.length}`);
-        console.log(`🏭 Factory values found:`, allMaterials.map(m => m.factory));
-        console.log(`🏭 Received status found:`, allMaterials.map(m => ({ materialCode: m.materialCode, isReceived: m.isReceived })));
-        
         // Filter ASM1 materials
         const asm1Materials = allMaterials.filter(material => material.factory === 'ASM1');
-        console.log(`🏭 ASM1 materials after factory filter: ${asm1Materials.length}`);
-        console.log(`🏭 ASM1 materials:`, asm1Materials.map(m => ({ 
-          materialCode: m.materialCode, 
-          batchNumber: m.batchNumber, 
-          internalBatch: m.internalBatch,
-          isReceived: m.isReceived,
-          importDate: m.importDate
-        })));
+        console.log(`📦 ASM1 materials loaded: ${asm1Materials.length}`);
         
         // 🔧 Sắp xếp theo nguyên tắc cố định:
         // 1. Ngày nhập (ngày cũ nhất lên đầu) - ưu tiên cao nhất
@@ -571,100 +559,38 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     if (this.startDate && this.endDate) {
       const start = new Date(this.startDate);
       const end = new Date(this.endDate);
-      end.setHours(23, 59, 59, 999); // End of day
-      
-      const beforeCount = filtered.length;
-      const filteredOut = [];
+      end.setHours(23, 59, 59, 999);
+      start.setHours(0, 0, 0, 0);
+      const endDate = new Date(end);
+      endDate.setHours(23, 59, 59, 999);
       filtered = filtered.filter(material => {
         const materialDate = new Date(material.importDate);
-        // Reset time to start of day for accurate comparison
         materialDate.setHours(0, 0, 0, 0);
-        const startDate = new Date(start);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(end);
-        endDate.setHours(23, 59, 59, 999);
-        
-        const isInRange = materialDate >= startDate && materialDate <= endDate;
-        if (!isInRange) {
-          console.log(`❌ Material ${material.materialCode} bị ẩn do date filter:`, {
-            materialDate: materialDate.toLocaleDateString('vi-VN'),
-            startDate: startDate.toLocaleDateString('vi-VN'),
-            endDate: endDate.toLocaleDateString('vi-VN'),
-            isInRange: isInRange
-          });
-          filteredOut.push({
-            materialCode: material.materialCode,
-            importDate: material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('vi-VN')) : 'N/A',
-            internalBatch: material.internalBatch
-          });
-        } else {
-          console.log(`✅ Material ${material.materialCode} pass date filter:`, {
-            materialDate: materialDate.toLocaleDateString('vi-VN'),
-            startDate: startDate.toLocaleDateString('vi-VN'),
-            endDate: endDate.toLocaleDateString('vi-VN')
-          });
-        }
-        return isInRange;
+        return materialDate >= start && materialDate <= endDate;
       });
-      const afterCount = filtered.length;
-      
-      console.log(`📅 Lọc theo khung thời gian: ${this.startDate} đến ${this.endDate}`);
-      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
-      console.log(`  - Sau khi lọc: ${afterCount} materials`);
-      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
-      if (filteredOut.length > 0) {
-        console.log(`  - Materials bị ẩn do date filter:`, filteredOut);
-      }
-      console.log(`  - Khung thời gian: ${this.startDate} đến ${this.endDate} (${Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))} ngày)`);
-      console.log(`  - Ngày bắt đầu: ${start.toLocaleDateString('vi-VN')}`);
-      console.log(`  - Ngày kết thúc: ${end.toLocaleDateString('vi-VN')}`);
     } else if (this.startDate) {
       const start = new Date(this.startDate);
-      const beforeCount = filtered.length;
       filtered = filtered.filter(material => material.importDate >= start);
-      const afterCount = filtered.length;
-      
-      console.log(`📅 Lọc từ ngày: ${this.startDate}`);
-      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
-      console.log(`  - Sau khi lọc: ${afterCount} materials`);
-      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
-      console.log(`  - Ngày bắt đầu: ${start.toLocaleDateString('vi-VN')}`);
     } else if (this.endDate) {
       const end = new Date(this.endDate);
       end.setHours(23, 59, 59, 999);
-      const beforeCount = filtered.length;
       filtered = filtered.filter(material => material.importDate <= end);
-      const afterCount = filtered.length;
-      
-      console.log(`📅 Lọc đến ngày: ${this.endDate}`);
-      console.log(`  - Trước khi lọc: ${beforeCount} materials`);
-      console.log(`  - Sau khi lọc: ${afterCount} materials`);
-      console.log(`  - Bị lọc ra: ${beforeCount - afterCount} materials`);
-      console.log(`  - Ngày kết thúc: ${end.toLocaleDateString('vi-VN')}`);
-    } else {
-      console.log(`⚠️ Không có khung thời gian lọc, hiển thị tất cả materials`);
     }
-    
+
     // Batch type filter - Hàng Trả / Hàng Nhập
     if (this.filterReturnGoods || this.filterNormalGoods) {
-      const beforeBatchTypeFilter = filtered.length;
       if (this.filterReturnGoods && !this.filterNormalGoods) {
-        // Chỉ lọc hàng trả (batchNumber bắt đầu bằng TRA)
-        filtered = filtered.filter(material => 
+        filtered = filtered.filter(material =>
           material.batchNumber && material.batchNumber.toUpperCase().startsWith('TRA')
         );
       } else if (this.filterNormalGoods && !this.filterReturnGoods) {
-        // Chỉ lọc hàng nhập (không phải TRA)
-        filtered = filtered.filter(material => 
+        filtered = filtered.filter(material =>
           !material.batchNumber || !material.batchNumber.toUpperCase().startsWith('TRA')
         );
       }
-      // Nếu cả 2 đều được tick, hiển thị tất cả (không lọc)
-      console.log(`📦 Batch type filter: Return=${this.filterReturnGoods}, Normal=${this.filterNormalGoods}, Before=${beforeBatchTypeFilter}, After=${filtered.length}`);
     }
     
     // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
-    const beforeStatusFilter = filtered.length;
     if (this.statusFilter) {
       switch (this.statusFilter) {
         case 'received':
@@ -683,12 +609,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       // Mặc định: Hiển thị tất cả materials (không filter theo isReceived)
       // Để materials mới import luôn hiển thị
     }
-    const afterStatusFilter = filtered.length;
-    
-    if (beforeStatusFilter !== afterStatusFilter) {
-      console.log(`🔍 Status filter (${this.statusFilter || 'pending'}): ${beforeStatusFilter} → ${afterStatusFilter} (ẩn ${beforeStatusFilter - afterStatusFilter} materials)`);
-    }
-    
     // Filter by selected batch view / current batch (skip when searching by material code)
     if (!this.isMaterialCodeSearchActive()) {
       // Filter by selected batch view (when not in active batch processing mode)
@@ -699,12 +619,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       // Filter by current batch when processing
       if (this.currentBatchNumber && this.currentBatchNumber.trim() !== '') {
         const batchMaterials = filtered.filter(material => material.batchNumber === this.currentBatchNumber);
-        console.log(`📦 Filtering by current batch: ${this.currentBatchNumber}, found ${batchMaterials.length} materials`);
-        
         // Chỉ hiển thị 1 dòng đại diện cho lô hàng - lấy material đầu tiên
         if (batchMaterials.length > 0) {
           filtered = [batchMaterials[0]];
-          console.log(`📦 Showing only 1 representative row for batch: ${this.currentBatchNumber} (Material: ${batchMaterials[0].materialCode})`);
         } else {
           filtered = [];
         }
@@ -736,67 +653,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     });
     
     this.filteredMaterials = filtered;
-    // this.updatePagination(); // Removed pagination update
-    
-    // Log thông tin về bộ lọc
-    let filterDescription = '';
-    switch (this.statusFilter) {
-      case 'received':
-        filterDescription = 'Chỉ hiển thị các mã hàng đã được tick "đã nhận"';
-        break;
-      case 'pending':
-        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
-        break;
-      case 'all':
-        filterDescription = 'Hiển thị tất cả mã hàng (đã nhận và chưa nhận)';
-        break;
-      default:
-        filterDescription = 'Chỉ hiển thị các mã hàng chưa được tick "đã nhận"';
-    }
-    
-    console.log(`🔍 ASM1 filtered: ${filtered.length}/${this.materials.length} materials`);
-    console.log('🔍 Final filtering result:');
-    console.log('  - Total materials:', this.materials.length);
-    console.log('  - Filtered materials:', this.filteredMaterials.length);
-    console.log('  - Bộ lọc trạng thái:', this.statusFilter);
-    console.log('  - Mô tả bộ lọc:', filterDescription);
-    console.log('  - Materials đã nhận:', this.materials.filter(m => m.isReceived).length);
-    console.log('  - Materials chưa nhận:', this.materials.filter(m => !m.isReceived).length);
-    console.log('  - Khung thời gian:', this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có');
-    console.log('  - Tìm kiếm:', this.searchTerm || 'Không có');
-    console.log('  - Loại tìm kiếm:', this.searchType);
-    
-    // Log thông tin chi tiết về bộ lọc
-    console.log(`📊 Chi tiết bộ lọc:`);
-    console.log(`  - Bộ lọc trạng thái: ${this.statusFilter}`);
-    console.log(`  - Mô tả bộ lọc: ${filterDescription}`);
-    console.log(`  - Khung thời gian: ${this.startDate && this.endDate ? `${this.startDate} đến ${this.endDate}` : 'Không có'}`);
-    console.log(`  - Tìm kiếm: ${this.searchTerm || 'Không có'}`);
-    console.log(`  - Loại tìm kiếm: ${this.searchType}`);
-    console.log(`  - Số materials sẽ hiển thị: ${filtered.length}`);
-    console.log(`  - Số materials bị ẩn: ${this.materials.length - filtered.length}`);
-    
-    // Log thông tin về từng loại materials
-    const receivedMaterials = this.materials.filter(m => m.isReceived);
-    const pendingMaterials = this.materials.filter(m => !m.isReceived);
-    
-    console.log(`📊 Chi tiết từng loại materials:`);
-    console.log(`  - Materials đã nhận: ${receivedMaterials.length}`);
-    console.log(`  - Materials chưa nhận: ${pendingMaterials.length}`);
-    console.log(`  - Materials sẽ hiển thị: ${filtered.length}`);
-    console.log(`  - Materials bị ẩn: ${this.materials.length - filtered.length}`);
-    
-    // Log thông tin về khung thời gian
-    if (this.startDate && this.endDate) {
-      const start = new Date(this.startDate);
-      const end = new Date(this.endDate);
-      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      console.log(`📅 Thông tin khung thời gian:`);
-      console.log(`  - Từ ngày: ${this.startDate} (${start.toLocaleDateString('vi-VN')})`);
-      console.log(`  - Đến ngày: ${this.endDate} (${end.toLocaleDateString('vi-VN')})`);
-      console.log(`  - Tổng cộng: ${daysDiff} ngày`);
-    }
-
   }
   
   // updatePagination(): void { // Removed pagination update
@@ -838,42 +694,21 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   // Add material to Inventory when received
   private addToInventory(material: InboundMaterial): void {
-    console.log(`Adding ${material.materialCode} to Inventory ASM1...`);
-    console.log(`📊 Material data:`, {
-      materialCode: material.materialCode,
-      poNumber: material.poNumber,
-      quantity: material.quantity,
-      importDate: material.importDate,
-      location: material.location,
-      batchNumber: material.batchNumber
-    });
-    
-    // 🔧 SỬA LỖI: batchNumber trong inventory chỉ là ngày nhập, không có số lô hàng
-    // Chuyển ngày thành batch number: 26/08/2025 -> 26082025
+    // batchNumber trong inventory chỉ là ngày nhập: 26/08/2025 -> 26082025
     const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
     
-    console.log(`📋 Inventory batch number: ${inventoryBatchNumber}`);
-    
-    // 🔧 SỬA LỖI: Kiểm tra duplicate trước khi add và lấy batchNumber với sequence
+    // Kiểm tra duplicate trước khi add và lấy batchNumber với sequence
     // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
     // Nếu duplicate, thêm số thứ tự vào cuối batchNumber (01, 02, 03...)
     this.checkForDuplicateInInventory(material, inventoryBatchNumber)
       .then(result => {
         const finalBatchNumber = result.sequenceNumber;
-        
-        if (result.isDuplicate) {
-          console.log(`⚠️ Duplicate detected for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
-          console.log(`  - Using new batch number with sequence: ${finalBatchNumber}`);
-        } else {
-          console.log(`✅ No duplicate found, using original batch number: ${finalBatchNumber}`);
-        }
       
         // Xử lý location đặc biệt cho hàng trả (TRA)
         // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành F62 khi thêm vào inventory
         let inventoryLocation = material.location;
         if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
           inventoryLocation = 'F62';
-          console.log(`🔄 Đổi location từ TRA sang F62 cho material ${material.materialCode} (lô hàng: ${material.batchNumber})`);
         }
         
         const inventoryMaterial = {
@@ -902,16 +737,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           updatedAt: new Date()
         };
         
-        console.log(`📦 Inventory material object created:`, inventoryMaterial);
-        console.log(`🔥 Adding to Firestore collection 'inventory-materials'...`);
-        
         // Add to inventory-materials collection (no notification)
         return this.firestore.collection('inventory-materials').add(inventoryMaterial);
       })
-      .then((docRef) => {
-        console.log(`✅ ${material.materialCode} added to Inventory ASM1 successfully! Doc ID: ${docRef?.id}`);
-        
-        // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound
+      .then(() => {
+        // Cập nhật Standard Packing và Unit Weight (chạy nền, không chặn UI)
         this.updateStandardPackingFromInbound(material);
         
         // 🆕 Cập nhật Unit Weight vào danh mục materials
@@ -946,21 +776,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Trả về số thứ tự cần thêm vào cuối batchNumber (01, 02, 03...)
   private async checkForDuplicateInInventory(material: InboundMaterial, inventoryBatchNumber: string): Promise<{ isDuplicate: boolean, sequenceNumber: string }> {
     try {
-      console.log(`🔍 Checking for duplicate in inventory: ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
-      console.log(`  - Inbound batchNumber: ${material.batchNumber} (có số lô hàng)`);
-      console.log(`  - Inventory batchNumber: ${inventoryBatchNumber} (chỉ ngày nhập)`);
-      
+      // Giới hạn 500 doc để tránh query chậm khi collection lớn
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
            .where('materialCode', '==', material.materialCode)
            .where('poNumber', '==', material.poNumber)
            .where('source', '==', 'inbound')
+           .limit(500)
       ).get().toPromise();
       
       if (snapshot && !snapshot.empty) {
-        console.log(`🔍 Found ${snapshot.size} existing records for ${material.materialCode} - ${material.poNumber}`);
-        
-        // Tìm các batchNumber có cùng prefix (cùng ngày)
         const existingBatchNumbers: string[] = [];
         snapshot.forEach(doc => {
           const data = doc.data();
@@ -970,50 +795,33 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           }
         });
         
-        console.log(`📊 Existing batch numbers with same prefix:`, existingBatchNumbers);
-        
         if (existingBatchNumbers.length > 0) {
-          // Tìm số thứ tự tiếp theo
           const sequenceNumbers: number[] = [];
-          
           existingBatchNumbers.forEach(batchNum => {
             if (batchNum === inventoryBatchNumber) {
-              sequenceNumbers.push(0); // Dòng gốc không có suffix
+              sequenceNumbers.push(0);
             } else {
               const suffix = batchNum.substring(inventoryBatchNumber.length);
-              const sequenceNum = parseInt(suffix);
+              const sequenceNum = parseInt(suffix, 10);
               if (!isNaN(sequenceNum)) {
                 sequenceNumbers.push(sequenceNum);
               }
             }
           });
           
-          // Tìm số thứ tự tiếp theo (bắt đầu từ 01)
           let nextSequence = 1;
           sequenceNumbers.sort((a, b) => a - b);
-          
-          // Tìm số đầu tiên chưa được sử dụng (bắt đầu từ 1)
           for (let i = 1; i <= 99; i++) {
             if (!sequenceNumbers.includes(i)) {
               nextSequence = i;
               break;
             }
           }
-          
           const sequenceString = nextSequence.toString().padStart(2, '0');
-          const newBatchNumber = inventoryBatchNumber + sequenceString;
-          
-          console.log(`⚠️ Duplicate detected for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
-          console.log(`  - Existing sequences: ${sequenceNumbers.join(', ')}`);
-          console.log(`  - Next sequence: ${nextSequence} -> ${sequenceString}`);
-          console.log(`  - New batch number: ${newBatchNumber}`);
-          
-          return { isDuplicate: true, sequenceNumber: newBatchNumber };
+          return { isDuplicate: true, sequenceNumber: inventoryBatchNumber + sequenceString };
         }
       }
       
-      console.log(`✅ No duplicate found for ${material.materialCode} - ${material.poNumber} - ${inventoryBatchNumber}`);
-      console.log(`  - Safe to add to inventory with original batch number`);
       return { isDuplicate: false, sequenceNumber: inventoryBatchNumber };
       
     } catch (error) {
@@ -1025,34 +833,12 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound ASM1
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
-      console.log(`📦 Updating Standard Packing for ${material.materialCode} from Inbound data...`);
-      
-      // Kiểm tra có rollsOrBags hợp lệ không
-      if (!material.rollsOrBags || material.rollsOrBags <= 0) {
-        console.log(`⚠️ Skipping Standard Packing update - invalid rollsOrBags: ${material.rollsOrBags}`);
-        return;
-      }
-      
+      if (!material.rollsOrBags || material.rollsOrBags <= 0) return;
       const standardPackingValue = material.rollsOrBags;
-      console.log(`📊 Standard Packing value: ${standardPackingValue} for ${material.materialCode}`);
-      
-      // Cập nhật vào collection 'materials' (chính)
       const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
-      await materialsDocRef.update({
-        standardPacking: standardPackingValue,
-        updatedAt: new Date()
-      });
-      console.log(`✅ Updated materials collection: ${material.materialCode} = ${standardPackingValue}`);
-      
-      // Cập nhật vào collection 'catalog' (đồng bộ)
+      await materialsDocRef.update({ standardPacking: standardPackingValue, updatedAt: new Date() });
       const catalogDocRef = this.firestore.collection('catalog').doc(material.materialCode).ref;
-      await catalogDocRef.update({
-        standardPacking: standardPackingValue,
-        updatedAt: new Date()
-      });
-      console.log(`✅ Updated catalog collection: ${material.materialCode} = ${standardPackingValue}`);
-      
-      console.log(`🎯 Standard Packing updated successfully for ${material.materialCode}: ${standardPackingValue}`);
+      await catalogDocRef.update({ standardPacking: standardPackingValue, updatedAt: new Date() });
       
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
@@ -1062,42 +848,20 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   private async updateUnitWeightFromInbound(material: InboundMaterial): Promise<void> {
     try {
-      // Kiểm tra có unitWeight hợp lệ không
-      if (!material.unitWeight || material.unitWeight <= 0) {
-        console.log(`⚠️ Skipping Unit Weight update - no valid value: ${material.unitWeight}`);
-        return;
-      }
-      
-      // Làm tròn 2 chữ số thập phân
+      if (!material.unitWeight || material.unitWeight <= 0) return;
       const unitWeightValue = Math.round(material.unitWeight * 100) / 100;
-      console.log(`⚖️ Updating Unit Weight for ${material.materialCode}: ${unitWeightValue}g`);
-      
-      // Cập nhật vào collection 'materials' (danh mục chính - dùng cho utilization)
       const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
-      
-      // Kiểm tra document có tồn tại không
       const docSnapshot = await materialsDocRef.get();
-      
       if (docSnapshot.exists) {
-        // Update nếu đã tồn tại
-        await materialsDocRef.update({
-          unitWeight: unitWeightValue,
-          updatedAt: new Date()
-        });
-        console.log(`✅ Updated materials collection: ${material.materialCode} = ${unitWeightValue}g`);
+        await materialsDocRef.update({ unitWeight: unitWeightValue, updatedAt: new Date() });
       } else {
-        // Tạo mới nếu chưa tồn tại
         await materialsDocRef.set({
           materialCode: material.materialCode,
           unitWeight: unitWeightValue,
           createdAt: new Date(),
           updatedAt: new Date()
         }, { merge: true });
-        console.log(`✅ Created materials document: ${material.materialCode} = ${unitWeightValue}g`);
       }
-      
-      console.log(`🎯 Unit Weight updated successfully for ${material.materialCode}: ${unitWeightValue}g`);
-      
     } catch (error) {
       console.error(`❌ Error updating Unit Weight for ${material.materialCode}:`, error);
       // Không throw error để không ảnh hưởng đến việc add vào inventory
@@ -1314,7 +1078,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.searchType = 'materialCode';
     this.startDate = '';
     this.endDate = '';
-    this.statusFilter = 'all'; // Mặc định về "Tất cả"
+    this.statusFilter = 'pending'; // Mặc định ẩn mã đã nhận
     
     // Reset về khung thời gian 30 ngày gần nhất
     this.setupDateDefaults();
@@ -5704,7 +5468,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
   async processReturnGoodsScan(): Promise<void> {
     const scannedCode = this.returnGoodsQRInput.trim();
-    console.log('📦 Processing Return Goods scan:', scannedCode);
 
     if (!scannedCode) {
       alert('⚠️ Vui lòng nhập mã QR');
@@ -5714,7 +5477,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     // Parse QR code format: MaterialCode|PO|Quantity|BatchDate
     // Example: B017431|KZPO1025/0194|100|19112025
     const parts = scannedCode.split('|');
-    console.log('🔍 QR code parts:', parts);
 
     if (parts.length < 3) {
       this.returnGoodsScanResult = {
@@ -5729,26 +5491,21 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     const poNumber = parts[1].trim();
     const quantity = parseFloat(parts[2].trim()) || 0;
 
-    console.log('🔍 Searching for TRA material:', { materialCode, poNumber, quantity });
-
     // Tìm materials có batchNumber bắt đầu bằng "TRA"
     const traMaterials = this.materials.filter(m => 
       m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA')
     );
 
-    console.log(`📊 Found ${traMaterials.length} TRA materials`);
-
-    // Tìm material khớp với mã, PO, và lượng
-    const foundMaterial = traMaterials.find(m => 
+    // Tìm material khớp với mã, PO, và lượng — ưu tiên dòng chưa nhận để tránh báo "đã nhận" nhầm
+    const matchPredicate = (m: InboundMaterial) =>
       m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() &&
       m.poNumber.trim() === poNumber.trim() &&
-      Math.abs(m.quantity - quantity) < 0.01 // So sánh số lượng (cho phép sai số nhỏ)
-    );
+      Math.abs(m.quantity - quantity) < 0.01;
+    const foundMaterial = traMaterials.find(m => matchPredicate(m) && !m.isReceived)
+      || traMaterials.find(m => matchPredicate(m));
 
     if (foundMaterial) {
-      console.log('✅ Found matching TRA material:', foundMaterial);
-
-      // Kiểm tra xem đã nhận chưa
+      // Kiểm tra xem đã nhận chưa (chỉ báo "đã nhận" khi thực sự là bản ghi đã received)
       if (foundMaterial.isReceived) {
         this.returnGoodsScanResult = {
           success: false,
@@ -5775,10 +5532,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             this.materials[materialIndex].isReceived = true;
           }
 
-          console.log('✅ Material marked as received:', foundMaterial.materialCode);
-          
           // Thêm vào inventory-materials collection (giống như onReceivedChange)
-          console.log('📦 Adding return goods material to inventory:', foundMaterial.materialCode);
           this.addToInventory(foundMaterial);
           
           this.returnGoodsScanResult = {
@@ -5787,9 +5541,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             material: foundMaterial
           };
 
-          // Refresh filtered materials
-          this.applyFilters();
-
+          // Refresh danh sách chạy sau để không chặn UI (scan nhận phản hồi nhanh)
+          setTimeout(() => this.applyFilters(), 0);
         } catch (error) {
           console.error('❌ Error updating material:', error);
           this.returnGoodsScanResult = {
@@ -5800,13 +5553,6 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         }
       }
     } else {
-      console.log('❌ TRA material not found for:', { materialCode, poNumber, quantity });
-      console.log('📊 Available TRA materials:', traMaterials.map(m => ({
-        materialCode: m.materialCode,
-        poNumber: m.poNumber,
-        quantity: m.quantity,
-        batchNumber: m.batchNumber
-      })));
       
       this.returnGoodsScanResult = {
         success: false,
