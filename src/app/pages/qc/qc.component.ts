@@ -73,6 +73,9 @@ export class QCComponent implements OnInit, OnDestroy {
   iqcResultsTitle: string = 'Lịch sử tình trạng theo mã nguyên liệu';
 
   iqcHistoryContext: 'search' | 'pendingQC' | 'todayChecked' | 'pendingConfirm' | null = null;
+
+  // Priority: show one item at top (for pending confirm list)
+  priorityMaterialId: string | null = null;
   
   // IQC Modal properties
   showIQCModal: boolean = false;
@@ -630,6 +633,11 @@ export class QCComponent implements OnInit, OnDestroy {
     const statusToUpdate = this.selectedIQCStatus;
     const materialToUpdate = { ...this.scannedMaterial };
     const employeeIdToSave = this.currentEmployeeId.trim();
+
+    // Priority disappears once the material status changes away from "pending confirm"
+    if (statusToUpdate !== 'CHỜ XÁC NHẬN' && this.priorityMaterialId === materialId) {
+      this.priorityMaterialId = null;
+    }
     
     // Update local data ngay lập tức để UI responsive
     const index = this.materials.findIndex(m => m.id === materialId);
@@ -1359,6 +1367,44 @@ export class QCComponent implements OnInit, OnDestroy {
     this.pendingNoteText = '';
   }
 
+  toggleIqcPriority(item: any): void {
+    if (this.iqcHistoryContext !== 'pendingConfirm') return;
+    if (!item?.id) return;
+
+    const id = item.id as string;
+    if (this.priorityMaterialId === id) {
+      this.priorityMaterialId = null;
+      this.reorderIqcHistoryResults();
+      return;
+    }
+
+    this.priorityMaterialId = id;
+    this.reorderIqcHistoryResults();
+  }
+
+  private reorderIqcHistoryResults(): void {
+    if (!this.iqcHistoryResults) return;
+
+    const pid = this.priorityMaterialId;
+    const list = [...this.iqcHistoryResults];
+
+    if (!pid) {
+      // default sort by eventTime desc (matches current "history" behavior)
+      this.iqcHistoryResults = list.sort((a: any, b: any) => {
+        const ta = a?.eventTime ? a.eventTime.getTime?.() ?? 0 : 0;
+        const tb = b?.eventTime ? b.eventTime.getTime?.() ?? 0 : 0;
+        return tb - ta;
+      });
+      return;
+    }
+
+    this.iqcHistoryResults = list.sort((a: any, b: any) => {
+      const aTop = a?.id === pid ? 1 : 0;
+      const bTop = b?.id === pid ? 1 : 0;
+      return bTop - aTop;
+    });
+  }
+
   toggleRecentChecked(): void {
     this.showRecentChecked = !this.showRecentChecked;
     // Load data when showing for the first time
@@ -1812,6 +1858,12 @@ export class QCComponent implements OnInit, OnDestroy {
         }));
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = '';
+
+        // If current priority is not in the list anymore, drop it
+        if (this.priorityMaterialId && !this.iqcHistoryResults.some(r => r.id === this.priorityMaterialId)) {
+          this.priorityMaterialId = null;
+        }
+        this.reorderIqcHistoryResults();
       }
     } catch (error) {
       console.error('❌ Error loading pending confirm materials:', error);

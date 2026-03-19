@@ -273,6 +273,48 @@
   }
 }
 
+.iqc-priority-col {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.iqc-priority-th {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.iqc-priority-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 24px;
+}
+
+.iqc-priority-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iqc-priority-btn .material-icons {
+  font-size: 20px;
+  color: #8ba1be;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.iqc-priority-flame {
+  color: #666;
+  font-size: 17.5px;
+  display: block;
+  text-align: center;
+  cursor: pointer;
+}
+
 .stats-container {
   display: flex;
   gap: 16px;

@@ -166,6 +166,9 @@
               <th>Số P.O</th>
               <th>Lô hàng</th>
               <th>Trạng thái</th>
+              <th class="iqc-priority-th">
+                <div class="iqc-priority-center">Ưu tiên</div>
+              </th>
               <th>Người kiểm</th>
               <th>Thời gian</th>
             </tr>
@@ -182,6 +185,24 @@
                 <span class="status-badge" [ngClass]="getIQCStatusClass(item.iqcStatus)">
                   {{ item.iqcStatus || 'N/A' }}
                 </span>
+              </td>
+              <td class="iqc-priority-col">
+                <div class="iqc-priority-center">
+                <button
+                  *ngIf="!(item.id && item.id === priorityMaterialId)"
+                  class="iqc-priority-btn"
+                  (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                  title="Ưu tiên"
+                >
+                  <i class="material-icons">priority_high</i>
+                </button>
+                <span
+                  *ngIf="item.id && item.id === priorityMaterialId"
+                  class="iqc-priority-flame"
+                  (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                  title="Bỏ ưu tiên"
+                >🔥</span>
+                </div>
               </td>
               <td>{{ item.qcCheckedBy || '—' }}</td>
               <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
