@@ -1496,7 +1496,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async processBulkAsm1Location(): Promise<void> {
-    const loc = this.formatViTriInput((this.bulkScanLocationInput || '').trim().toUpperCase());
+    // Bulk ASM1: location có thể chứa prefix "IQC+" nên không dùng formatViTriInput (vì hàm đó loại bỏ dấu '+')
+    const raw = (this.bulkScanLocationInput || '').trim();
+    const loc = raw
+      .replace(/\s+/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\-()+]/g, '');
     if (!loc) {
       alert('⚠️ Vui lòng scan vị trí (ASM1)');
       return;
@@ -1508,18 +1513,40 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkSelectedItems.clear();
 
     try {
-      const snapshot = await this.firestore
-        .collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1').where('location', '==', loc)
-        )
-        .get()
-        .toPromise();
+      const queryByLocation = async (location: string) => {
+        return await this.firestore
+          .collection('inventory-materials', ref =>
+            ref.where('factory', '==', 'ASM1').where('location', '==', location)
+          )
+          .get()
+          .toPromise();
+      };
+
+      let snapshot = await queryByLocation(loc);
+      let usedLoc = loc;
+
+      // Nếu scan dạng F1-0001..F1-9999 mà không có -> tự thử với IQC+F1-xxxx
+      const f1Match = loc.match(/^F1-(\d{4})$/);
+      if ((!snapshot || snapshot.empty) && f1Match) {
+        const num = parseInt(f1Match[1], 10);
+        if (num >= 1 && num <= 9999) {
+          const iqcLoc = `IQC+${loc}`;
+          const s2 = await queryByLocation(iqcLoc);
+          if (s2 && !s2.empty) {
+            snapshot = s2;
+            usedLoc = iqcLoc;
+          }
+        }
+      }
 
       if (!snapshot || snapshot.empty) {
         alert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${loc}`);
         this.isBulkLoading = false;
         return;
       }
+
+      // Nếu tìm thấy theo IQC+ thì hiển thị đúng vị trí đang dùng
+      this.bulkCurrentLocation = usedLoc;
 
       const items: any[] = [];
       snapshot.forEach(doc => {
