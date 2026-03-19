@@ -4531,9 +4531,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // Scan QR for location change
+  // Scan QR for location change — ĐÃ KHÓA: không còn sử dụng
   scanLocationQR(material: InventoryMaterial): void {
-    console.log('📷 Opening QR scanner for location change:', material.materialCode);
+    return; // Chức năng cột Change đã khóa
     
     const dialogData: QRScannerData = {
       title: 'Quét Barcode Vị Trí',

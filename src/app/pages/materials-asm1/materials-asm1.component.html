@@ -314,11 +314,7 @@
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="value">{{ material.location || '-' }}</span>
-              <button class="scan-btn" 
-                      (click)="scanLocationQR(material)"
-                      title="Scan QR để thay đổi vị trí">
-                <i class="material-icons">qr_code_scanner</i>
-              </button>
+              <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
             </div>
           </div>
           
@@ -508,12 +504,8 @@
             <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
               <span class="location-text">{{ material.location || '-' }}</span>
             </td>
-            <td class="change-cell">
-              <button class="scan-change-btn" 
-                      (click)="scanLocationQR(material)"
-                      title="Scan QR để thay đổi vị trí">
-                Scan
-              </button>
+            <td class="change-cell change-cell-locked">
+              <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
             </td>
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
