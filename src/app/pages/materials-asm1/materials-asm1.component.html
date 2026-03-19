@@ -313,12 +313,7 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <input type="text" 
-                     class="mobile-input location-input" 
-                     [(ngModel)]="material.location" 
-                     (change)="updateLocation(material)"
-                     (blur)="onLocationChange(material)"
-                     placeholder="Nhập vị trí">
+              <span class="value">{{ material.location || '-' }}</span>
               <button class="scan-btn" 
                       (click)="scanLocationQR(material)"
                       title="Scan QR để thay đổi vị trí">
@@ -511,11 +506,7 @@
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
             <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
-              <input type="text" 
-                     class="editable-cell location-input" 
-                     [(ngModel)]="material.location" 
-                     (change)="updateLocation(material)"
-                     (blur)="onLocationChange(material)">
+              <span class="location-text">{{ material.location || '-' }}</span>
             </td>
             <td class="change-cell">
               <button class="scan-change-btn" 

@@ -14,6 +14,12 @@ interface RackStat {
   unchecked: number;// Chưa kiểm
 }
 
+/** Nhóm box con theo Z1, Z2, ... (ví dụ Z1.1 Z1.2 chung nhóm Z1) */
+interface ChildBoxGroup {
+  groupLabel: string;
+  boxes: RackStat[];
+}
+
 interface StockCheckMaterial {
   stt: number;
   materialCode: string;
@@ -188,6 +194,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Khi chọn 1 vị trí (box) thì hiển thị bảng chi tiết theo vị trí đó; null = đang xem grid box */
   selectedLocationForDetail: string | null = null;
 
+  /** Box mẹ (A, B, C, D...) đang được chọn; null = đang xem danh sách box mẹ */
+  selectedParentGroup: string | null = null;
+
   // Counters
   get totalMaterials(): number {
     return this.allMaterials.length;
@@ -222,6 +231,67 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Danh sách vị trí (mỗi vị trí 1 box) — dùng cho giao diện grid 6 cột */
   get locationBoxStats(): RackStat[] {
     return this.computeRackStats();
+  }
+
+  /** Box mẹ: gom theo ký tự đầu (A/B/C/...) */
+  get parentBoxStats(): RackStat[] {
+    const map = new Map<string, RackStat>();
+    for (const r of this.locationBoxStats) {
+      const g = (r.location || '').trim().toUpperCase().charAt(0);
+      if (!g) continue;
+      if (!map.has(g)) map.set(g, { location: g, total: 0, full: 0, partial: 0, unchecked: 0 });
+      const agg = map.get(g)!;
+      agg.total += r.total;
+      agg.full += r.full;
+      agg.partial += r.partial;
+      agg.unchecked += r.unchecked;
+    }
+    return Array.from(map.values()).sort((a, b) => a.location.localeCompare(b.location));
+  }
+
+  /** Box con: danh sách vị trí thuộc group mẹ đang chọn (phẳng, giữ cho tương thích) */
+  get childBoxStats(): RackStat[] {
+    const g = (this.selectedParentGroup || '').trim().toUpperCase();
+    if (!g) return [];
+    return this.locationBoxStats.filter(r => (r.location || '').trim().toUpperCase().startsWith(g));
+  }
+
+  /** Trích prefix nhóm con từ location: Z1.1 -> Z1, Z2.6(L) -> Z2 */
+  private getSubGroupPrefix(loc: string): string {
+    const s = (loc || '').trim().toUpperCase();
+    const match = s.match(/^([A-Z]\d+)/);
+    return match ? match[1] : s.charAt(0) || '';
+  }
+
+  /** Sắp xếp chuỗi theo số (Z1, Z2, Z10 thay vì Z1, Z10, Z2) */
+  private naturalSortLocations(a: string, b: string): number {
+    const na = (a.match(/(\d+)/g) || []).map(Number);
+    const nb = (b.match(/(\d+)/g) || []).map(Number);
+    for (let i = 0; i < Math.max(na.length, nb.length); i++) {
+      const va = na[i] ?? 0;
+      const vb = nb[i] ?? 0;
+      if (va !== vb) return va - vb;
+    }
+    return (a || '').localeCompare(b || '');
+  }
+
+  /** Box con theo nhóm Z1, Z2, ... để dễ nhìn (Z1.1 Z1.2 chung nhóm Z1) */
+  get childBoxGroups(): ChildBoxGroup[] {
+    const children = this.childBoxStats;
+    if (children.length === 0) return [];
+    const map = new Map<string, RackStat[]>();
+    for (const r of children) {
+      const sub = this.getSubGroupPrefix(r.location);
+      if (!map.has(sub)) map.set(sub, []);
+      map.get(sub)!.push(r);
+    }
+    const groups: ChildBoxGroup[] = [];
+    map.forEach((boxes, groupLabel) => {
+      boxes.sort((a, b) => this.naturalSortLocations(a.location, b.location));
+      groups.push({ groupLabel, boxes });
+    });
+    groups.sort((a, b) => this.naturalSortLocations(a.groupLabel, b.groupLabel));
+    return groups;
   }
 
   get outsideStockMaterials(): number {
@@ -562,7 +632,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
 
     this.locationMaterials = this.allMaterials
-      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .filter(m => this.getDisplayLocation(m) === loc)
       .slice()
       .sort((a, b) => {
         const code = a.materialCode.localeCompare(b.materialCode);
@@ -604,6 +674,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   trackByLocationBox(index: number, r: RackStat): string {
     return r.location;
+  }
+
+  trackByParentGroup(index: number, r: RackStat): string {
+    return r.location; // A/B/C/...
+  }
+
+  trackByChildBoxGroup(index: number, grp: ChildBoxGroup): string {
+    return grp.groupLabel;
   }
 
   get locationTotalCount(): number {
@@ -907,38 +985,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           });
         });
 
-        // Load standardPacking from materials collection
+        // Convert map to array và tính stock ngay (không chờ standardPacking để load nhanh hơn)
         const materialCodes = Array.from(groupedMap.keys()).map(key => key.split('_')[0]);
         const uniqueMaterialCodes = [...new Set(materialCodes)];
-        const standardPackingMap = new Map<string, string>();
-        
-        try {
-          const materialsSnapshot = await Promise.all(
-            uniqueMaterialCodes.map(code => 
-              this.firestore.collection('materials').doc(code).get().toPromise()
-            )
-          );
-          
-          materialsSnapshot.forEach((doc, index) => {
-            if (doc && doc.exists) {
-              const data = doc.data();
-              const standardPacking = data?.['standardPacking'];
-              if (standardPacking) {
-                standardPackingMap.set(uniqueMaterialCodes[index], standardPacking.toString());
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error loading standardPacking:', error);
-        }
-
-        // Convert map to array and calculate stock (giống hệt materials-asm1)
-        // KHÔNG group - mỗi dòng trong inventory-materials là 1 item riêng biệt
         const materialsArray = Array.from(groupedMap.values()).map((mat, index) => {
-          // Tính stock giống hệt materials-asm1: openingStock (có thể null) + quantity - exported - xt
           const openingStockValue = mat.openingStock !== null ? mat.openingStock : 0;
           const stock = openingStockValue + (mat.quantity || 0) - (mat.exported || 0) - (mat.xt || 0);
-          const standardPacking = standardPackingMap.get(mat.materialCode) || '';
+          const standardPacking = ''; // Sẽ tải ở background
           
           // Kiểm tra xem material có đổi vị trí không
           const hasLocationChange = mat.modifiedBy === 'location-change-scanner' && mat.lastModified;
@@ -987,6 +1040,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         await this.loadKhsxData(materialsArray);
 
         this.allMaterials = materialsArray;
+        this.invalidateRackStatsCache();
 
         // Nếu đang có vị trí scan, cập nhật danh sách box theo vị trí
         this.updateLocationMaterials();
@@ -1025,7 +1079,41 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         
         // Đánh dấu đã load initial data xong
         this.isInitialDataLoaded = true;
+
+        // Tải standardPacking ở background để không chặn giao diện
+        this.loadStandardPackingInBackground(uniqueMaterialCodes).catch(err =>
+          console.error('Error loading standardPacking in background:', err)
+        );
       });
+  }
+
+  /** Tải standardPacking cho các mã và cập nhật vào allMaterials (chạy sau khi đã hiển thị danh sách) */
+  private async loadStandardPackingInBackground(codes: string[]): Promise<void> {
+    if (!codes.length) return;
+    const standardPackingMap = new Map<string, string>();
+    try {
+      const batchSize = 100;
+      for (let i = 0; i < codes.length; i += batchSize) {
+        const chunk = codes.slice(i, i + batchSize);
+        const snaps = await Promise.all(
+          chunk.map(code => this.firestore.collection('materials').doc(code).get().toPromise())
+        );
+        snaps.forEach((doc, idx) => {
+          if (doc && doc.exists) {
+            const data = doc.data();
+            const sp = data?.['standardPacking'];
+            if (sp != null) standardPackingMap.set(chunk[idx], sp.toString());
+          }
+        });
+      }
+      this.allMaterials.forEach(m => {
+        const sp = standardPackingMap.get(m.materialCode);
+        if (sp) m.standardPacking = sp;
+      });
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('loadStandardPackingInBackground:', e);
+    }
   }
 
   /**
@@ -1079,6 +1167,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             mat.dateCheck = null;
             mat.actualLocation = '';
           });
+          this.invalidateRackStatsCache();
 
           // Update location view (box) nếu đang scan theo vị trí
           this.updateLocationMaterials();
@@ -1095,6 +1184,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         
         // Reload stock check data và apply vào materials hiện tại (truyền snapshotData trực tiếp)
         await this.loadStockCheckData(this.allMaterials, snapshotData);
+        this.invalidateRackStatsCache();
 
         // Update location view (box) nếu đang scan theo vị trí
         this.updateLocationMaterials();
@@ -1277,6 +1367,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    */
   // Cache snapshot trong memory để tránh đọc Firebase mỗi lần scan
   private snapshotCache: { [factory: string]: { materials: any[], lastUpdated: Date } } = {};
+  /** Cache rack stats để giảm tính toán khi render box vị trí */
+  private _rackStatsCache: RackStat[] | null = null;
 
   async saveStockCheckToFirebase(material: StockCheckMaterial, scannedQty?: number): Promise<void> {
     try {
@@ -1380,6 +1472,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.saveToPermanentHistory(material, newQty, historyItem).catch(error => {
         console.error('❌ Error saving history (async):', error);
       });
+
+      // Đồng bộ vị trí thực tế sang inventory-materials (tab materials-asm1) — mỗi lần scan có vị trí đều cập nhật
+      const loc = (material.actualLocation || '').trim().toUpperCase();
+      const invId = material.inventoryId;
+      if (loc && invId) {
+        this.firestore
+          .collection('inventory-materials')
+          .doc(invId)
+          .set(
+            {
+              location: loc,
+              lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+              modifiedBy: 'stock-check-actual-location'
+            },
+            { merge: true }
+          )
+          .catch(err => console.error('❌ Error syncing location to inventory-materials:', err));
+      }
       
       // Khi đang scan: chỉ cập nhật location box, skip sort toàn bảng
       this.updateLocationMaterials();
@@ -1695,36 +1805,39 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         }));
         console.log('📋 Sample materials in database:', sampleMaterials);
         
-        // Find matching material in all materials (not just displayed)
-        // Try different matching strategies
-        let matchingMaterial = this.allMaterials.find(m => 
-          m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() && 
-          m.poNumber.trim() === poNumber.trim() && 
-          m.imd.trim() === imd.trim()
+        // So sánh chính xác: Mã + PO + IMD phải khớp mới chấp nhận (phát hiện đúng mã)
+        const codeUpper = materialCode.toUpperCase().trim();
+        const poTrim = poNumber.trim();
+        const imdTrim = imd.trim();
+        let matchingMaterial = this.allMaterials.find(m =>
+          (m.materialCode || '').toUpperCase().trim() === codeUpper &&
+          (m.poNumber || '').trim() === poTrim &&
+          (m.imd || '').trim() === imdTrim
         );
-        
-        // If not found, try without IMD (just material code + PO)
+
+        // Nếu không khớp đủ 3 (Mã+PO+IMD): kiểm tra có phải sai IMD không để báo rõ
         if (!matchingMaterial) {
-          console.log('⚠️ Not found with IMD, trying without IMD...');
-          const candidates = this.allMaterials.filter(m => 
-            m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() && 
-            m.poNumber.trim() === poNumber.trim()
+          const candidatesSameCodePo = this.allMaterials.filter(m =>
+            (m.materialCode || '').toUpperCase().trim() === codeUpper &&
+            (m.poNumber || '').trim() === poTrim
           );
-          
-          if (candidates.length > 0) {
-            console.log(`📌 Found ${candidates.length} candidates with matching code+PO:`, 
-              candidates.map(c => ({ code: c.materialCode, po: c.poNumber, imd: c.imd }))
-            );
-            
-            // Use the first match if IMD is close
-            matchingMaterial = candidates.find(c => c.imd === imd) || candidates[0];
-            
-            if (matchingMaterial && matchingMaterial.imd !== imd) {
-              console.log(`⚠️ IMD mismatch but using closest match. Expected: ${imd}, Got: ${matchingMaterial.imd}`);
-            }
+          if (candidatesSameCodePo.length > 0) {
+            const imdList = candidatesSameCodePo.map(c => (c.imd || '').trim()).filter(Boolean);
+            this.scanMessage =
+              `❌ IMD KHÔNG ĐÚNG — Không ghi nhận.\n` +
+              `Mã: ${materialCode} | PO: ${poNumber}\n` +
+              `IMD scan: ${imdTrim}\n` +
+              `IMD trong dữ liệu: ${imdList.join(', ') || '-'}\n\nVui lòng scan đúng mã (đúng IMD).`;
+            this.scanInput = '';
+            this.cdr.detectChanges();
+            setTimeout(() => {
+              const input = document.getElementById('scan-input') as HTMLInputElement;
+              if (input) input.focus();
+            }, 100);
+            return;
           }
         }
-        
+
         if (matchingMaterial) {
           console.log('✅ Found matching material:', {
             code: matchingMaterial.materialCode,
@@ -1775,42 +1888,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             qtyToSave = remaining;
           }
 
-          if (ignoredExcess > 0) {
-            // Báo dư nhưng cho qua (không ghi nhận phần dư)
-            this.scanHistory.unshift(`⚠️ DƯ ${materialCode} | PO: ${poNumber} | Dư: ${ignoredExcess}`);
-            if (this.scanHistory.length > 5) this.scanHistory.pop();
-          }
-
-          if (qtyToSave <= 0) {
-            this.scanMessage =
-              `⚠️ DƯ - Không ghi nhận thêm\n` +
-              `Mã: ${materialCode} | PO: ${poNumber}\n` +
-              `Đã đủ/đang vượt tồn kho.`;
-            this.scanInput = '';
-            this.cdr.detectChanges();
-            setTimeout(() => {
-              const input = document.getElementById('scan-input') as HTMLInputElement;
-              if (input) input.focus();
-            }, 100);
-            return;
-          }
-          
-          // Save to Firebase - hàm này sẽ lấy giá trị từ Firebase và cộng dồn
-          await this.saveStockCheckToFirebase(matchingMaterial, qtyToSave);
-          
-          // Sau khi save, cập nhật lại qtyCheck từ Firebase (đã được cộng dồn)
-          // qtyCheck sẽ được cập nhật trong saveStockCheckToFirebase
-          
-          // Add to history
-          const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
-          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
-          if (this.scanHistory.length > 5) {
-            this.scanHistory.pop();
-          }
-          
-          this.scanMessage = `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\nVị trí scan: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
-
-          // Nếu sai vị trí: lưu vào danh sách để hỏi chuyển vị trí khi DONE + hiển thị box sai vị trí
+          // Nếu sai vị trí: luôn ghi nhận sai vị trí (kể cả khi đã đủ qty)
           if (isWrongLocation) {
             const key = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
             const existingWrong = this.wrongLocationItems.find(w => w.key === key);
@@ -1829,13 +1907,94 @@ export class StockCheckComponent implements OnInit, OnDestroy {
                 fromLocation: dataLoc,
                 toLocation: scanLoc,
                 scannedQtyTotal: qtyToSave,
-                ignoredExcessTotal: ignoredExcess
-                ,
+                ignoredExcessTotal: ignoredExcess,
                 status: statusNow,
                 remaining: remainingNow
               });
             }
             if (this.wrongLocationItems.length > 50) this.wrongLocationItems.pop();
+
+            // Sync location ngay lập tức sang inventory-materials để materials-asm1 phản ánh đúng vị trí thực tế
+            const invId = matchingMaterial.inventoryId;
+            if (invId) {
+              this.firestore
+                .collection('inventory-materials')
+                .doc(invId)
+                .set(
+                  {
+                    location: scanLoc,
+                    lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+                    modifiedBy: 'stock-check-wrong-location-scan'
+                  },
+                  { merge: true }
+                )
+                .catch(err => console.error('❌ Error syncing wrong location to inventory-materials:', err));
+            }
+          }
+
+          // Báo dư rõ ràng (nhưng ưu tiên báo sai vị trí)
+          if (ignoredExcess > 0 && !isWrongLocation) {
+            this.scanHistory.unshift(`⚠️ DƯ ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim} | Dư: ${ignoredExcess}`);
+            if (this.scanHistory.length > 5) this.scanHistory.pop();
+            const dưMsg = qtyToSave <= 0
+              ? `⚠️ DƯ — Không ghi nhận.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã đủ/ vượt tồn kho. Dư: ${ignoredExcess}`
+              : `⚠️ DƯ một phần.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã ghi nhận: ${qtyToSave} | Dư (bỏ qua): ${ignoredExcess}`;
+            this.scanMessage = dưMsg;
+            alert(dưMsg);
+          }
+
+          // Nếu không ghi nhận qty nữa, vẫn cho phép tiếp tục (đặc biệt khi sai vị trí)
+          if (qtyToSave <= 0) {
+            if (isWrongLocation) {
+              const msg =
+                `⚠️ SAI VỊ TRÍ (đã ghi nhận vị trí)\n` +
+                `Mã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\n` +
+                `Vị trí dữ liệu (ASM1): ${dataLoc}\n` +
+                `Vị trí scan: ${scanLoc}\n\n` +
+                `Ghi chú: Số lượng đã đủ, không cộng thêm.`;
+              this.scanMessage = msg;
+              alert(msg);
+            } else {
+              this.scanMessage =
+                `⚠️ DƯ - Không ghi nhận thêm\n` +
+                `Mã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\n` +
+                `Đã đủ/đang vượt tồn kho.`;
+            }
+            this.scanInput = '';
+            this.cdr.detectChanges();
+            setTimeout(() => {
+              const input = document.getElementById('scan-input') as HTMLInputElement;
+              if (input) input.focus();
+            }, 100);
+            // vẫn update list box để mã nhảy lên đầu + phản ánh vị trí
+            this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
+            this.updateLocationMaterials();
+            return;
+          }
+          
+          // Save to Firebase - hàm này sẽ lấy giá trị từ Firebase và cộng dồn
+          await this.saveStockCheckToFirebase(matchingMaterial, qtyToSave);
+          
+          // Sau khi save, cập nhật lại qtyCheck từ Firebase (đã được cộng dồn)
+          // qtyCheck sẽ được cập nhật trong saveStockCheckToFirebase
+          
+          // Add to history
+          const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
+          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
+          if (this.scanHistory.length > 5) {
+            this.scanHistory.pop();
+          }
+          
+          if (isWrongLocation) {
+            this.scanMessage =
+              `⚠️ SAI VỊ TRÍ (đã ghi nhận)\n` +
+              `Mã: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\n` +
+              `Vị trí dữ liệu (ASM1): ${dataLoc}\n` +
+              `Vị trí scan: ${scanLoc}\n\n` +
+              `Scan mã tiếp theo (cùng vị trí)`;
+          } else {
+            this.scanMessage =
+              `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\nVị trí scan: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
           }
           
           // Clear input ngay lập tức để có thể scan tiếp
@@ -1981,7 +2140,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /**
    * Close scan modal
    */
-  closeScanModal(): void {
+  closeScanModal(showSummaryAlert: boolean = true): void {
     this.showScanModal = false;
     this.scanStep = 'idle';
     this.scannedEmployeeId = '';
@@ -2000,7 +2159,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     // Hiển thị thông báo tổng số mã đã scan
-    if (this.scannedCount > 0) {
+    if (showSummaryAlert && this.scannedCount > 0) {
       alert(`Đã scan kiểm kê: ${this.scannedCount} mã`);
       this.scannedCount = 0;
     }
@@ -2009,12 +2168,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Done: nếu có mã sai vị trí thì hỏi có chuyển vị trí về currentScanLocation không */
   async onDoneScan(): Promise<void> {
     if (this.scanStep !== 'material') {
-      this.closeScanModal();
+      this.closeScanModal(false);
       return;
     }
 
     const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
     const hasWrong = this.wrongLocationItems.length > 0 && !!scanLoc;
+    const scannedTotal = this.scannedCount;
 
     if (hasWrong) {
       const count = this.wrongLocationItems.length;
@@ -2028,7 +2188,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.closeScanModal();
+    // Đóng modal trước (auto close popup), sau đó báo hoàn thành
+    this.closeScanModal(false);
+    this.scannedCount = 0;
+    setTimeout(() => {
+      const msg =
+        `✅ Đã hoàn thành kiểm kê` +
+        (scanLoc ? ` vị trí ${scanLoc}` : '') +
+        (scannedTotal > 0 ? `.\n\nTổng mã đã scan: ${scannedTotal}` : '.');
+      alert(msg);
+    }, 0);
   }
 
   private async moveWrongLocationsToScanLocation(scanLoc: string): Promise<void> {
@@ -2288,7 +2457,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (!loc) return;
     this.selectedLocationForDetail = loc;
     this.filteredMaterials = this.allMaterials
-      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .filter(m => this.getDisplayLocation(m) === loc)
       .slice()
       .sort((a, b) => {
         const code = a.materialCode.localeCompare(b.materialCode);
@@ -2316,9 +2485,25 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }, 0);
   }
 
+  /** Click box mẹ → show box con */
+  openParentGroup(group: string): void {
+    const g = (group || '').trim().toUpperCase().charAt(0);
+    if (!g) return;
+    this.selectedParentGroup = g;
+    this.cdr.detectChanges();
+  }
+
+  /** Quay lại danh sách box mẹ */
+  backToParentGroups(): void {
+    this.selectedParentGroup = null;
+    this.cdr.detectChanges();
+  }
+
   /** Quay lại giao diện grid box (ẩn bảng chi tiết) */
   backToLocationBoxes(): void {
     this.selectedLocationForDetail = null;
+    // Khi quay lại danh sách box, mặc định về box mẹ
+    this.selectedParentGroup = null;
     this.applyFilter();
     console.log('[StockCheck] backToLocationBoxes');
     this.cdr.detectChanges();
@@ -2345,7 +2530,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const loc = (location || '').trim().toUpperCase();
     this.rackDetailLocation = loc;
     this.rackDetailMaterials = this.allMaterials
-      .filter(m => (m.location || '').trim().toUpperCase() === loc)
+      .filter(m => this.getDisplayLocation(m) === loc)
       .slice()
       .sort((a, b) => {
         const code = a.materialCode.localeCompare(b.materialCode);
@@ -2364,11 +2549,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.rackDetailMaterials = [];
   }
 
+  /** Vị trí dùng cho box + Chi tiết vị trí + đồng bộ cột Vị trí materials-asm1: ưu tiên actualLocation */
+  private getDisplayLocation(mat: StockCheckMaterial): string {
+    return (mat.actualLocation || mat.location || '').trim().toUpperCase();
+  }
+
   private computeRackStats(): RackStat[] {
+    if (this._rackStatsCache) return this._rackStatsCache;
     const map = new Map<string, RackStat>();
 
     for (const mat of this.allMaterials) {
-      const loc = (mat.location || '').trim().toUpperCase();
+      const loc = this.getDisplayLocation(mat);
       if (!loc) continue;
 
       if (!map.has(loc)) {
@@ -2383,8 +2574,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       else stat.unchecked++;
     }
 
-    return Array.from(map.values())
+    this._rackStatsCache = Array.from(map.values())
       .sort((a, b) => a.location.localeCompare(b.location));
+    return this._rackStatsCache;
+  }
+
+  private invalidateRackStatsCache(): void {
+    this._rackStatsCache = null;
   }
 
   exportRackReport(): void {

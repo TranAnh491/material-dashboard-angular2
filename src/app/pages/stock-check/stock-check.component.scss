@@ -1040,6 +1040,21 @@
         box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.45);
         border-color: #2196F3;
       }
+
+      &.parent {
+        border-color: #1565c0;
+        background: #e3f2fd;
+        .location-box-title {
+          font-size: 18px;
+          i.material-icons { color: #1565c0; }
+        }
+      }
+
+      &.child {
+        .location-box-title {
+          i.material-icons { color: #111; }
+        }
+      }
       .location-box-title {
         display: flex;
         align-items: center;
@@ -1062,6 +1077,65 @@
           &.unchecked { color: #c62828; }
         }
       }
+    }
+
+    .child-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0 12px;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    .back-to-parent-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #333;
+      color: #fff;
+      font-size: 13px;
+      i.material-icons { font-size: 18px; }
+      &:hover { background: #111; }
+    }
+
+    .child-group-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #111;
+      i.material-icons { font-size: 20px; color: #1565c0; }
+    }
+
+    .child-box-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .child-box-group {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fafafa;
+    }
+    .child-box-group-label {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1565c0;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .child-box-groups .location-boxes-grid {
+      margin-top: 0;
     }
 
     /* Header chi tiết vị trí + nút quay lại */

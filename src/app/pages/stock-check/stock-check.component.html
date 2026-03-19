@@ -204,28 +204,64 @@
       <span>Loading data...</span>
     </div>
 
-    <!-- Giao diện box: mỗi vị trí 1 box, 6 box / hàng — chỉ hiện khi chưa chọn vị trí -->
+    <!-- Giao diện box: chỉ hiện box mẹ (A,B,C,...) → click mới show box con -->
     <div class="location-boxes-wrapper" *ngIf="!isLoading && !selectedLocationForDetail">
       <div class="location-boxes-empty" *ngIf="locationBoxStats.length === 0">
         <i class="material-icons">inbox</i>
         <p>Chưa có dữ liệu vị trí</p>
       </div>
-      <div class="location-boxes-grid" *ngIf="locationBoxStats.length > 0">
-        <div class="location-box clickable"
-             *ngFor="let r of locationBoxStats; trackBy: trackByLocationBox"
-             (click)="openLocationDetail(r.location)"
-             [class.all-checked]="r.unchecked === 0 && r.total > 0"
-             [class.active-box]="selectedLocationForDetail === r.location"
-             title="Click xem chi tiết">
+
+      <!-- Box mẹ -->
+      <div class="location-boxes-grid" *ngIf="locationBoxStats.length > 0 && !selectedParentGroup">
+        <div class="location-box parent clickable"
+             *ngFor="let p of parentBoxStats; trackBy: trackByParentGroup"
+             (click)="openParentGroup(p.location)"
+             [class.all-checked]="p.unchecked === 0 && p.total > 0"
+             title="Click để xem vị trí con">
           <div class="location-box-title">
-            <i class="material-icons">place</i>
-            {{ r.location }}
+            <i class="material-icons">folder</i>
+            {{ p.location }}
           </div>
           <div class="location-box-stats">
-            <span class="stat total">Tổng: {{ r.total }}</span>
-            <span class="stat full">Đủ: {{ r.full }}</span>
-            <span class="stat partial">Chưa đủ: {{ r.partial }}</span>
-            <span class="stat unchecked">Chưa KT: {{ r.unchecked }}</span>
+            <span class="stat total">Tổng: {{ p.total }}</span>
+            <span class="stat full">Đủ: {{ p.full }}</span>
+            <span class="stat partial">Chưa đủ: {{ p.partial }}</span>
+            <span class="stat unchecked">Chưa KT: {{ p.unchecked }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Box con theo box mẹ, sắp xếp theo nhóm Z1, Z2, ... (Z1.1 Z1.2 chung nhóm) -->
+      <div class="child-group-header" *ngIf="locationBoxStats.length > 0 && selectedParentGroup">
+        <button type="button" class="back-to-parent-btn" (click)="backToParentGroups()">
+          <i class="material-icons">arrow_back</i>
+          Quay lại nhóm
+        </button>
+        <div class="child-group-title">
+          <i class="material-icons">folder_open</i>
+          Nhóm: <strong>{{ selectedParentGroup }}</strong>
+        </div>
+      </div>
+      <div class="child-box-groups" *ngIf="locationBoxStats.length > 0 && selectedParentGroup">
+        <div class="child-box-group" *ngFor="let grp of childBoxGroups; trackBy: trackByChildBoxGroup">
+          <div class="child-box-group-label">{{ grp.groupLabel }}</div>
+          <div class="location-boxes-grid">
+            <div class="location-box child clickable"
+                 *ngFor="let r of grp.boxes; trackBy: trackByLocationBox"
+                 (click)="openLocationDetail(r.location)"
+                 [class.all-checked]="r.unchecked === 0 && r.total > 0"
+                 title="Click xem chi tiết">
+              <div class="location-box-title">
+                <i class="material-icons">place</i>
+                {{ r.location }}
+              </div>
+              <div class="location-box-stats">
+                <span class="stat total">Tổng: {{ r.total }}</span>
+                <span class="stat full">Đủ: {{ r.full }}</span>
+                <span class="stat partial">Chưa đủ: {{ r.partial }}</span>
+                <span class="stat unchecked">Chưa KT: {{ r.unchecked }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -253,8 +289,8 @@
             <th>IMD</th>
             <th>TỒN KHO</th>
             <th>KHSX</th>
-            <th>VỊ TRÍ (DỮ LIỆU)</th>
-            <th>VỊ TRÍ THỰC TẾ</th>
+            <th>VỊ TRÍ (ASM1)</th>
+            <th>VỊ TRÍ THỰC TẾ (SCAN)</th>
             <th>ĐỔI VỊ TRÍ</th>
             <th>STANDARD PACKING</th>
             <th>STOCK CHECK</th>
@@ -276,7 +312,7 @@
               <span *ngIf="material.hasKhsx" class="khsx-tick" title="Có KHSX">✔</span>
               <span *ngIf="!material.hasKhsx" style="color:#ccc;">-</span>
             </td>
-            <td>{{ material.location }}</td>
+            <td>{{ material.actualLocation || material.location || '-' }}</td>
             <td [ngClass]="{'mismatch-location': material.actualLocation && material.actualLocation !== material.location}">
               <span *ngIf="material.actualLocation; else noActualLoc">
                 {{ material.actualLocation }}

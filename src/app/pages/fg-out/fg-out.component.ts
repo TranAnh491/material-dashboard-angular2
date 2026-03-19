@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Subject, forkJoin, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, take } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -231,6 +231,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
   showInventoryDropdown: boolean = false;
   inventoryDropdownPos: { top: number; left: number } = { top: 0, left: 0 };
   private inventoryDropdownBlurTimer: any;
+  private readonly INVENTORY_DROPDOWN_MAX_HEIGHT = 200;
+  private readonly INVENTORY_DROPDOWN_MIN_WIDTH = 160;
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (!this.showInventoryDropdown) return;
+    if (event.key === 'Escape' || event.key === 'Esc') {
+      event.preventDefault();
+      this.closeInventoryDropdown();
+    }
+  }
 
   constructor(
     private firestore: AngularFirestore,
@@ -917,7 +928,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.showInventoryDropdown = true;
     const el = event.target as HTMLElement;
     const rect = el.getBoundingClientRect();
-    this.inventoryDropdownPos = { top: rect.bottom + 2, left: rect.left };
+    this.inventoryDropdownPos = this.computeInventoryDropdownPos(rect);
   }
 
   /** Bấm ô Batch/LOT/LSX (dialog Xuất Kho) → xổ danh sách tương ứng */
@@ -934,7 +945,31 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.showInventoryDropdown = true;
     const el = event.target as HTMLElement;
     const rect = el.getBoundingClientRect();
-    this.inventoryDropdownPos = { top: rect.bottom + 2, left: rect.left };
+    this.inventoryDropdownPos = this.computeInventoryDropdownPos(rect);
+  }
+
+  private computeInventoryDropdownPos(rect: DOMRect): { top: number; left: number } {
+    const margin = 2;
+    const maxH = this.INVENTORY_DROPDOWN_MAX_HEIGHT;
+    const minW = this.INVENTORY_DROPDOWN_MIN_WIDTH;
+
+    // Default: mở xuống dưới input
+    let top = rect.bottom + margin;
+    // Nếu bị tràn đáy viewport thì mở lên trên
+    if (top + maxH > window.innerHeight) {
+      top = rect.top - maxH - margin;
+    }
+    // Kẹp trong viewport (ít nhất không âm)
+    top = Math.max(margin, Math.min(top, window.innerHeight - margin - maxH));
+
+    // Kẹp ngang trong viewport để không bị tràn phải
+    let left = rect.left;
+    if (left + minW > window.innerWidth) {
+      left = Math.max(margin, window.innerWidth - margin - minW);
+    }
+    left = Math.max(margin, left);
+
+    return { top, left };
   }
 
   onInventoryFieldBlur(): void {

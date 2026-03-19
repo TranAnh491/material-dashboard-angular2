@@ -13,6 +13,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import * as firebase from 'firebase/compat/app';
 
 export interface InventoryMaterial {
   id?: string;
@@ -61,7 +62,10 @@ export interface InventoryMaterial {
 export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit {
   // Fixed factory for ASM1
   readonly FACTORY = 'ASM1';
-  
+  private readonly STOCKCHECK_SYNC_ONCE_KEY = 'materials-asm1:sync-stockcheck-location:2026-03-16_to_2026-03-18:done';
+  private readonly LOCATION_REMAP_ONCE_KEY = 'materials-asm1:remap-location:ZR22_ZR15_ZL26:done';
+  private readonly LOCATION_REMAP_ONCE_KEY_2 = 'materials-asm1:remap-location:ZL14_ZL16_ZL17:done';
+
   // 🔧 LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
   // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN Material + PO
   // - Outbound RM1 scan/nhập: Material + PO (không còn vị trí)
@@ -170,9 +174,305 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     // 🔍 DEBUG: Check outbound data on init
     this.debugOutboundDataOnInit();
+
+    // ✅ ONE-TIME JOB: Đồng bộ vị trí từ Stock Check (16-18/03/2026) theo Mã + PO + IMD
+    // Chạy đúng 1 lần, có flag trong localStorage để tránh chạy lại khi refresh.
+    setTimeout(() => {
+      this.syncLocationFromStockCheckSnapshot_20260316_18_once().catch(err =>
+        console.error('❌ [ASM1 one-time sync 2026-03-16..18] Error:', err)
+      );
+    }, 0);
+
+    // ✅ ONE-TIME JOB: Remap một số vị trí sai format (theo yêu cầu)
+    // ZR22 -> Z2.2(R), ZR15 -> Z1.5(R), ZL26 -> Z2.6(L)
+    setTimeout(() => {
+      this.remapLocationsOnce().catch(err =>
+        console.error('❌ [ASM1 one-time remap locations] Error:', err)
+      );
+    }, 0);
+    setTimeout(() => {
+      this.remapLocationsOnce2().catch(err =>
+        console.error('❌ [ASM1 one-time remap locations 2] Error:', err)
+      );
+    }, 0);
     
     console.log('✅ ASM1 Materials component initialized - Search setup will happen after data loads');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed');
+  }
+
+  private normalizeKeyPart(v: any): string {
+    return (v ?? '').toString().trim().toUpperCase();
+  }
+
+  private parseSnapshotDate(v: any): Date | null {
+    try {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === 'string' || typeof v === 'number') {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (typeof v === 'object' && typeof v.toDate === 'function') {
+        const d = v.toDate();
+        return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private inInclusiveDateRange(d: Date, start: Date, end: Date): boolean {
+    const t = d.getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }
+
+  /**
+   * ONE-TIME: dựa vào actualLocation trong stock-check-snapshot (ASM1),
+   * map theo (materialCode + poNumber + imd) và cập nhật inventory-materials.location.
+   * Áp dụng cho dateCheck 16-18/03/2026.
+   */
+  private async syncLocationFromStockCheckSnapshot_20260316_18_once(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(this.STOCKCHECK_SYNC_ONCE_KEY) === '1') return;
+
+    const start = new Date('2026-03-16T00:00:00');
+    const end = new Date('2026-03-18T23:59:59');
+
+    console.log('🔄 [ASM1 one-time sync] Loading stock-check-snapshot materials...');
+    const snapshotDocId = `${this.FACTORY}_stock_check_current`;
+    const snapDoc = await this.firestore
+      .collection('stock-check-snapshot')
+      .doc(snapshotDocId)
+      .get()
+      .toPromise();
+
+    const snapData = snapDoc?.data() as any;
+    const snapMaterials: any[] = Array.isArray(snapData?.materials) ? snapData.materials : [];
+
+    if (!snapMaterials.length) {
+      console.log('ℹ️ [ASM1 one-time sync] No snapshot materials found, skipping.');
+      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
+      return;
+    }
+
+    // Map key -> { location, at } (newest wins)
+    const latestByKey = new Map<string, { location: string; at: number }>();
+    let considered = 0;
+
+    for (const m of snapMaterials) {
+      const dateCheck = this.parseSnapshotDate(m?.dateCheck);
+      if (!dateCheck) continue;
+      if (!this.inInclusiveDateRange(dateCheck, start, end)) continue;
+
+      const loc = this.normalizeKeyPart(m?.actualLocation);
+      if (!loc) continue;
+
+      const code = this.normalizeKeyPart(m?.materialCode);
+      const po = this.normalizeKeyPart(m?.poNumber);
+      const imd = this.normalizeKeyPart(m?.imd);
+      if (!code || !po || !imd) continue;
+
+      const key = `${code}__${po}__${imd}`;
+      const at = dateCheck.getTime();
+      considered++;
+
+      const prev = latestByKey.get(key);
+      if (!prev || at >= prev.at) {
+        latestByKey.set(key, { location: loc, at });
+      }
+    }
+
+    if (!latestByKey.size) {
+      console.log('ℹ️ [ASM1 one-time sync] No matching items in 16-18/03/2026 with actualLocation, skipping.');
+      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
+      return;
+    }
+
+    console.log(`🔍 [ASM1 one-time sync] Snapshot considered=${considered}, uniqueKeys=${latestByKey.size}. Loading inventory...`);
+    const invSnap = await this.firestore
+      .collection('inventory-materials', ref => ref.where('factory', '==', this.FACTORY))
+      .get()
+      .toPromise();
+
+    if (!invSnap || invSnap.empty) {
+      console.log('ℹ️ [ASM1 one-time sync] No inventory-materials found, skipping.');
+      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
+      return;
+    }
+
+    const db = this.firestore.firestore;
+    let batch = db.batch();
+    let batchCount = 0;
+    let updated = 0;
+
+    const commitBatchIfNeeded = async (force = false) => {
+      if (batchCount === 0) return;
+      if (!force && batchCount < 450) return;
+      await batch.commit();
+      batch = db.batch();
+      batchCount = 0;
+    };
+
+    for (const doc of invSnap.docs) {
+      const data = doc.data() as any;
+      const code = this.normalizeKeyPart(data?.materialCode);
+      const po = this.normalizeKeyPart(data?.poNumber);
+      const imd = this.normalizeKeyPart(data?.imd);
+      if (!code || !po || !imd) continue;
+
+      const key = `${code}__${po}__${imd}`;
+      const target = latestByKey.get(key);
+      if (!target?.location) continue;
+
+      const currentLoc = this.normalizeKeyPart(data?.location);
+      if (currentLoc === target.location) continue;
+
+      const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+      batch.set(
+        docRef,
+        {
+          location: target.location,
+          lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+          modifiedBy: 'stock-check-sync-2026-03-16_to_18'
+        },
+        { merge: true }
+      );
+      batchCount++;
+      updated++;
+      // Commit theo batch để tránh vượt giới hạn 500 ops
+      if (batchCount >= 450) {
+        await commitBatchIfNeeded(true);
+      }
+    }
+
+    // Commit any remaining
+    await commitBatchIfNeeded(true);
+
+    console.log(`✅ [ASM1 one-time sync] Updated inventory-materials location for ${updated} docs.`);
+    localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
+  }
+
+  private async remapLocationsOnce(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(this.LOCATION_REMAP_ONCE_KEY) === '1') return;
+
+    const mappings: Array<{ from: string; to: string }> = [
+      { from: 'ZR22', to: 'Z2.2(R)' },
+      { from: 'ZR15', to: 'Z1.5(R)' },
+      { from: 'ZL26', to: 'Z2.6(L)' }
+    ];
+
+    console.log('🔄 [ASM1 one-time remap locations] Starting remap...', mappings);
+    let totalUpdated = 0;
+
+    for (const m of mappings) {
+      const from = this.normalizeKeyPart(m.from);
+      const to = this.normalizeKeyPart(m.to);
+      if (!from || !to) continue;
+
+      const snap = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.FACTORY).where('location', '==', from)
+        )
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) continue;
+
+      const db = this.firestore.firestore;
+      let batch = db.batch();
+      let batchCount = 0;
+
+      for (const doc of snap.docs) {
+        const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+        batch.set(
+          docRef,
+          {
+            location: to,
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy: 'materials-asm1-location-remap'
+          },
+          { merge: true }
+        );
+        batchCount++;
+        totalUpdated++;
+
+        if (batchCount >= 450) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+    }
+
+    console.log(`✅ [ASM1 one-time remap locations] Updated ${totalUpdated} docs.`);
+    localStorage.setItem(this.LOCATION_REMAP_ONCE_KEY, '1');
+  }
+
+  private async remapLocationsOnce2(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(this.LOCATION_REMAP_ONCE_KEY_2) === '1') return;
+
+    const mappings: Array<{ from: string; to: string }> = [
+      { from: 'ZL14', to: 'Z1.4(L)' },
+      { from: 'ZL16', to: 'Z1.6(L)' },
+      { from: 'ZL17', to: 'Z1.7(L)' }
+    ];
+
+    console.log('🔄 [ASM1 one-time remap locations 2] Starting remap...', mappings);
+    let totalUpdated = 0;
+
+    for (const m of mappings) {
+      const from = this.normalizeKeyPart(m.from);
+      const to = this.normalizeKeyPart(m.to);
+      if (!from || !to) continue;
+
+      const snap = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.FACTORY).where('location', '==', from)
+        )
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) continue;
+
+      const db = this.firestore.firestore;
+      let batch = db.batch();
+      let batchCount = 0;
+
+      for (const doc of snap.docs) {
+        const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+        batch.set(
+          docRef,
+          {
+            location: to,
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy: 'materials-asm1-location-remap'
+          },
+          { merge: true }
+        );
+        batchCount++;
+        totalUpdated++;
+
+        if (batchCount >= 450) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+    }
+
+    console.log(`✅ [ASM1 one-time remap locations 2] Updated ${totalUpdated} docs.`);
+    localStorage.setItem(this.LOCATION_REMAP_ONCE_KEY_2, '1');
   }
 
   ngAfterViewInit(): void {
