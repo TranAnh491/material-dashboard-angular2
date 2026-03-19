@@ -643,72 +643,27 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Load FG Inventory cache - one-time load (tối ưu performance)
   async loadFGInventoryCacheOnce(): Promise<void> {
     try {
-      // Load all three collections at once
-      const [fgInventorySnapshot, fgInSnapshot, fgExportSnapshot] = await Promise.all([
-        this.firestore.collection('fg-inventory').get().toPromise(),
-        this.firestore.collection('fg-in').get().toPromise(),
-        this.firestore.collection('fg-export').get().toPromise()
-      ]);
+      // Chỉ cần fg-inventory vì cột "Tồn kho" đã được tính sẵn: ton = tonDau + nhap - xuat
+      const fgInventorySnapshot = await this.firestore.collection('fg-inventory').get().toPromise();
       
       // Clear cache
       this.fgInventoryCache.clear();
-      
-      // Group by materialCode and get tonDau from fg-inventory
-      const materialData: {[key: string]: {tonDau: number, nhap: number, xuat: number}} = {};
-      
-      // Process fg-inventory data
-      if (fgInventorySnapshot) {
-        fgInventorySnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const tonDau = data.tonDau || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].tonDau += tonDau;
-          }
-        });
-      }
-      
-      // Process fg-in data
-      if (fgInSnapshot) {
-        fgInSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const quantity = data.quantity || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].nhap += quantity;
-          }
-        });
-      }
-      
-      // Process fg-export data
-      if (fgExportSnapshot) {
-        fgExportSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const quantity = data.quantity || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].xuat += quantity;
-          }
-        });
-      }
-      
-      // Calculate final ton for each material
-      Object.keys(materialData).forEach(materialCode => {
-        const data = materialData[materialCode];
-        const calculatedTon = data.tonDau + data.nhap - data.xuat;
-        this.fgInventoryCache.set(materialCode, calculatedTon);
+
+      // Sum ton theo materialCode (đúng với "Tồn kho" trên fg-inventory)
+      (fgInventorySnapshot?.docs || []).forEach(doc => {
+        const data = doc.data() as any;
+        const materialCodeRaw = (data.materialCode || data.maTP || '').toString();
+        const materialCode = materialCodeRaw.trim().toUpperCase();
+        if (!materialCode) return;
+
+        const ton = Number(
+          data.ton ??
+          data.stock ??
+          ((Number(data.tonDau) || 0) + (Number(data.nhap) || 0) - (Number(data.xuat) || 0))
+        ) || 0;
+
+        const cur = this.fgInventoryCache.get(materialCode) || 0;
+        this.fgInventoryCache.set(materialCode, cur + ton);
       });
     } catch (error) {
       console.error('Error loading FG Inventory cache:', error);
@@ -717,74 +672,42 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   
   // Load FG Inventory cache - realtime (deprecated, giữ lại để tương thích)
   loadFGInventoryCache(): void {
-    // Use combineLatest to load data from all three collections
     const fgInventory$ = this.firestore.collection('fg-inventory').snapshotChanges();
-    const fgIn$ = this.firestore.collection('fg-in').snapshotChanges();
-    const fgExport$ = this.firestore.collection('fg-export').snapshotChanges();
-    
-    combineLatest([fgInventory$, fgIn$, fgExport$])
+    fgInventory$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(([fgInventoryActions, fgInActions, fgExportActions]) => {
-        // Clear cache
+      .subscribe(fgInventoryActions => {
         this.fgInventoryCache.clear();
-        
-        // Group by materialCode and get tonDau from fg-inventory
-        const materialData: {[key: string]: {tonDau: number, nhap: number, xuat: number}} = {};
-        
-        // Process fg-inventory data
+
         fgInventoryActions.forEach(action => {
           const data = action.payload.doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const tonDau = data.tonDau || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].tonDau += tonDau;
-          }
-        });
-        
-        // Process fg-in data
-        fgInActions.forEach(action => {
-          const data = action.payload.doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const quantity = data.quantity || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].nhap += quantity;
-          }
-        });
-        
-        // Process fg-export data
-        fgExportActions.forEach(action => {
-          const data = action.payload.doc.data() as any;
-          const materialCode = data.materialCode || '';
-          const quantity = data.quantity || 0;
-          
-          if (materialCode) {
-            if (!materialData[materialCode]) {
-              materialData[materialCode] = {tonDau: 0, nhap: 0, xuat: 0};
-            }
-            materialData[materialCode].xuat += quantity;
-          }
-        });
-        
-        // Calculate final ton for each material
-        Object.keys(materialData).forEach(materialCode => {
-          const data = materialData[materialCode];
-          const calculatedTon = data.tonDau + data.nhap - data.xuat;
-          this.fgInventoryCache.set(materialCode, calculatedTon);
+          const materialCodeRaw = (data.materialCode || data.maTP || '').toString();
+          const materialCode = materialCodeRaw.trim().toUpperCase();
+          if (!materialCode) return;
+
+          const ton = Number(
+            data.ton ??
+            data.stock ??
+            ((Number(data.tonDau) || 0) + (Number(data.nhap) || 0) - (Number(data.xuat) || 0))
+          ) || 0;
+
+          const cur = this.fgInventoryCache.get(materialCode) || 0;
+          this.fgInventoryCache.set(materialCode, cur + ton);
         });
       });
   }
 
   // Get inventory for material code from FG Inventory cache
   getInventory(materialCode: string): number {
-    return this.fgInventoryCache.get(materialCode) || 0;
+    const key = (materialCode || '').toString().trim().toUpperCase();
+    return this.fgInventoryCache.get(key) || 0;
+  }
+
+  get isShipmentSearchActive(): boolean {
+    return !!this.searchTerm && this.searchTerm.trim().length > 0;
+  }
+
+  getTotalCartonFilteredShipments(): number {
+    return (this.filteredShipments || []).reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
   }
 
   // Force refresh FG Inventory cache và FG Check status

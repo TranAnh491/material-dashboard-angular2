@@ -31,6 +31,8 @@
             <span class="total-summary-item">Tổng Carton: <strong>{{ getTotalCarton() | number }}</strong></span>
           </ng-container>
           <ng-container *ngIf="isSingleShipmentView">
+            <span class="total-summary-item">Tổng QTY Shipment: <strong>{{ getTotalQty() | number }}</strong></span>
+            <span class="total-summary-item">Tổng thùng Shipment (CTN): <strong>{{ getTotalCarton() | number }}</strong></span>
             <span class="total-summary-item" style="font-weight: 600;">Tổng theo Mã TP:</span>
             <span class="total-summary-item" *ngFor="let t of totalsByMaterialCodeInShipment">
               <strong>{{ t.materialCode }}</strong>: {{ t.totalQty | number }} (CTN {{ t.totalCarton | number }})
@@ -268,9 +270,21 @@
               </td>
               <td class="number-cell carton-cell">
                 <ng-container *ngIf="!(row.material.materialCode || '').trim()">{{ 0 }}</ng-container>
-                <ng-container *ngIf="(row.material.materialCode || '').trim() && getCartonOdd(row.material).hasStandard">{{ getCartonOdd(row.material).carton }}</ng-container>
-                <ng-container *ngIf="(row.material.materialCode || '').trim() && !getCartonOdd(row.material).hasStandard">
-                  <span class="carton-warning" title="Vào danh mục FG IN nhập Standard cho Mã TP này">Nhập standard</span>
+
+                <ng-container *ngIf="(row.material.materialCode || '').trim()">
+                  <!-- Nguyên tắc gộp thùng: mergeCarton có số thì chỉ dòng đầu hiển thị carton = 1 -->
+                  <ng-container *ngIf="hasMergeCartonValue(row.material); else normalCarton">
+                    <ng-container *ngIf="isFirstMergeCartonRowByMatIdx(row.material, row.matIdx); else mergedEmpty">1</ng-container>
+                    <ng-template #mergedEmpty></ng-template>
+                  </ng-container>
+
+                  <!-- Không gộp thùng thì carton tính theo Standard/Qty như cũ -->
+                  <ng-template #normalCarton>
+                    <ng-container *ngIf="getCartonOdd(row.material).hasStandard">{{ getCartonOdd(row.material).carton }}</ng-container>
+                    <ng-container *ngIf="!getCartonOdd(row.material).hasStandard">
+                      <span class="carton-warning" title="Vào danh mục FG IN nhập Standard cho Mã TP này">Nhập standard</span>
+                    </ng-container>
+                  </ng-template>
                 </ng-container>
               </td>
               <td class="number-cell">
@@ -839,7 +853,15 @@
                 <td>{{material.lot || ''}}</td>
                 <td>{{material.lsx || ''}}</td>
                 <td>{{material.quantity | number}}</td>
-                <td>{{getCartonOdd(material).carton | number}}</td>
+                <td>
+                  <ng-container *ngIf="hasMergeCartonValue(material); else normalPrintCarton">
+                    <ng-container *ngIf="isFirstPrintMergeCartonRow(group.pallet, material, i); else mergedEmpty">1</ng-container>
+                    <ng-template #mergedEmpty></ng-template>
+                  </ng-container>
+                  <ng-template #normalPrintCarton>
+                    {{getCartonOdd(material).carton | number}}
+                  </ng-template>
+                </td>
                 <td>{{getCartonOdd(material).odd | number}}</td>
                 <td>{{material.mergeCarton || ''}}</td>
                 <td>{{getInventoryStockByBatch(material) | number}}</td>

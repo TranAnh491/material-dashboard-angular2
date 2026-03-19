@@ -188,6 +188,12 @@
                          (input)="applyFilters()">
                   <i class="material-icons search-icon">search</i>
                 </div>
+
+                <!-- Tổng carton theo shipment sau khi search -->
+                <div class="search-total-carton-box"
+                     *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
+                  Tổng thùng (Carton): <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
+                </div>
                 
                 <!-- Show Hidden Button -->
                 <button class="btn" 

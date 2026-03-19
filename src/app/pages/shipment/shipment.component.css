@@ -341,6 +341,20 @@
   pointer-events: none;
 }
 
+/* Box hiển thị tổng carton khi search shipment */
+.search-total-carton-box {
+  margin-top: 8px;
+  margin-left: 6px;
+  padding: 6px 10px;
+  background: #f5f7fa;
+  border: 1px solid #e6e6e6;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #000;
+  display: inline-block;
+  white-space: nowrap;
+}
+
 /* Action Section */
 .action-section {
   background: #f8f9fa;

@@ -130,6 +130,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   printDispatchDate: string = '';
   printQrDataUrl: string = '';
   currentUserDisplay: string = '';
+
+  /**
+   * Map để áp dụng nguyên tắc "chỉ dòng đầu tiên theo mergeCarton hiển thị carton=1" cho phần Print.
+   * Key: `${pallet}|${mergeCarton}`
+   */
+  private printMergeCartonFirstRowMap = new Map<string, { id?: string; index: number }>();
   
   // Permissions
   hasDeletePermission: boolean = false;
@@ -143,6 +149,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private inventoryStockCache = new Map<string, number>();
   /** Cache tồn kho theo batch (key = FACTORY|MATERIAL|BATCH, value = tổng ton của batch đó) */
   private inventoryStockByBatchCache = new Map<string, number>();
+
+  /**
+   * Nguyên tắc "gộp thùng":
+   * Nếu `mergeCarton` có số thì chỉ dòng đầu tiên của cùng một số trong cột `mergeCarton`
+   * mới được hiển thị carton = 1; các dòng còn lại để trống.
+   *
+   * Map: mergeCartonValue -> matIdx của dòng detail đầu tiên.
+   */
+  private mergeCartonFirstMatIdx = new Map<string, number>();
 
   /** Số lượng kỳ vọng từ tab Shipment theo (shipmentCode|materialCode) - dùng so sánh khi lọc theo shipment */
   shipmentExpectedQtyMap = new Map<string, number>();
@@ -258,6 +273,49 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.locationCache.clear();
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
+    this.mergeCartonFirstMatIdx.clear();
+  }
+
+  private normalizeMergeCarton(value: any): string {
+    const v = String(value ?? '').trim();
+    if (!v) return '';
+    if (/^\d+$/.test(v)) {
+      // Chuẩn hoá '1' -> '01' để nhóm đúng theo cùng số
+      return v.padStart(2, '0');
+    }
+    return v;
+  }
+
+  hasMergeCartonValue(material: FgOutItem): boolean {
+    return this.normalizeMergeCarton(material?.mergeCarton) !== '';
+  }
+
+  isFirstMergeCartonRowByMatIdx(material: FgOutItem, matIdx: number): boolean {
+    const mc = this.normalizeMergeCarton(material?.mergeCarton);
+    if (!mc) return false;
+    return this.mergeCartonFirstMatIdx.get(mc) === matIdx;
+  }
+
+  getCartonCountForDetailRow(material: FgOutItem, matIdx: number): number {
+    if (!material?.materialCode || !(material.materialCode || '').toString().trim()) return 0;
+    if (this.hasMergeCartonValue(material)) {
+      return this.isFirstMergeCartonRowByMatIdx(material, matIdx) ? 1 : 0;
+    }
+    return this.getCartonForMaterial(material);
+  }
+
+  private rebuildMergeCartonFirstRowMap(): void {
+    this.mergeCartonFirstMatIdx.clear();
+    // Duyệt theo thứ tự hiển thị hiện tại của bảng (displayRows).
+    // Chỉ xét các dòng detail.
+    this.displayRows.forEach(r => {
+      if (r.type !== 'detail') return;
+      const mc = this.normalizeMergeCarton(r.material?.mergeCarton);
+      if (!mc) return;
+      if (!this.mergeCartonFirstMatIdx.has(mc)) {
+        this.mergeCartonFirstMatIdx.set(mc, r.matIdx);
+      }
+    });
   }
 
   // Load tồn kho từ fg-inventory vào cache - cộng dồn theo mã TP
@@ -457,12 +515,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
   get totalsByMaterialCodeInShipment(): Array<{ materialCode: string; totalQty: number; totalCarton: number }> {
     if (!this.isSingleShipmentView) return [];
     const map = new Map<string, { qty: number; carton: number }>();
-    this.filteredMaterials.forEach(m => {
+    this.displayRows.forEach(r => {
+      if (r.type !== 'detail') return;
+      const m = r.material;
       const code = String(m.materialCode ?? '').trim().toUpperCase();
       if (!code) return;
       const cur = map.get(code) || { qty: 0, carton: 0 };
       cur.qty += Number(m.quantity) || 0;
-      cur.carton += this.getCartonForMaterial(m);
+      cur.carton += this.getCartonCountForDetailRow(m, r.matIdx);
       map.set(code, cur);
     });
     return Array.from(map.entries())
@@ -521,25 +581,34 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return mapping ? (mapping.description || '') : '';
   }
 
-  // Sort materials: Pallet → Mã TP → LSX (thứ tự ưu tiên), sau đó Shipment, Date, Batch
+  // Sort materials: Shipment → Pallet → mergeCarton → Mã TP
   sortMaterials(): void {
-    console.log('🔄 Sorting FG Out materials by: Pallet → Mã TP → LSX');
+    console.log('🔄 Sorting FG Out materials by: Shipment → Pallet → mergeCarton → Mã TP');
     this.materials.sort((a, b) => {
+      const shipA = (a.shipment || '').toString().toUpperCase();
+      const shipB = (b.shipment || '').toString().toUpperCase();
+      if (shipA !== shipB) return shipA.localeCompare(shipB);
+
       const palletA = (a.pallet || '').toString().toUpperCase();
       const palletB = (b.pallet || '').toString().toUpperCase();
       if (palletA !== palletB) return palletA.localeCompare(palletB);
+
+      const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
+      const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
+      if (mcA !== mcB) return mcA.localeCompare(mcB);
+
       const materialA = (a.materialCode || '').toString().toUpperCase();
       const materialB = (b.materialCode || '').toString().toUpperCase();
       if (materialA !== materialB) return materialA.localeCompare(materialB);
+
       const lsxA = (a.lsx || '').toString().toUpperCase();
       const lsxB = (b.lsx || '').toString().toUpperCase();
       if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
-      const shipmentA = (a.shipment || '').toString().toUpperCase();
-      const shipmentB = (b.shipment || '').toString().toUpperCase();
-      if (shipmentA !== shipmentB) return shipmentA.localeCompare(shipmentB);
+
       const dateA = new Date(a.exportDate).getTime();
       const dateB = new Date(b.exportDate).getTime();
       if (dateA !== dateB) return dateB - dateA;
+
       const batchA = (a.batchNumber || '').toString().toUpperCase();
       const batchB = (b.batchNumber || '').toString().toUpperCase();
       return batchA.localeCompare(batchB);
@@ -896,8 +965,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return true;
     });
     
-    // Sắp xếp: Pallet → Gộp Thùng (nhóm cùng pallet+mergeCarton liền nhau) → Mã TP → LSX → Shipment → Ngày → Batch
+    // Sắp xếp: Shipment → Pallet → Gộp Thùng (mergeCarton) → Mã TP
     this.filteredMaterials.sort((a, b) => {
+      const shipA = String(a.shipment ?? '').toUpperCase();
+      const shipB = String(b.shipment ?? '').toUpperCase();
+      if (shipA !== shipB) return shipA.localeCompare(shipB);
+
       const palletA = String(a.pallet ?? '').toUpperCase();
       const palletB = String(b.pallet ?? '').toUpperCase();
       if (palletA !== palletB) return palletA.localeCompare(palletB);
@@ -911,9 +984,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const lsxA = String(a.lsx ?? '').toUpperCase();
       const lsxB = String(b.lsx ?? '').toUpperCase();
       if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
-      const shipA = String(a.shipment ?? '').toUpperCase();
-      const shipB = String(b.shipment ?? '').toUpperCase();
-      if (shipA !== shipB) return shipA.localeCompare(shipB);
       const dateA = new Date(a.exportDate).getTime();
       const dateB = new Date(b.exportDate).getTime();
       if (dateA !== dateB) return dateB - dateA;
@@ -926,14 +996,30 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.displayRows = this.filteredMaterials.map((m, i) =>
       ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
 
+    // Dựng map "dòng đầu tiên theo mergeCarton" trước khi cộng carton cho các palletTotal
+    this.rebuildMergeCartonFirstRowMap();
+
     // Chèn dòng tổng carton theo pallet (chỉ khi có pallet)
     const withPalletTotals: FgOutDisplayRow[] = [];
     let prevPallet = '';
+    let prevShipment = '';
     let cartonAccum = 0;
     let lastShipment = '';
     for (const r of this.displayRows) {
       if (r.type === 'detail') {
-        lastShipment = r.material?.shipment ?? '';
+        const currentShipment = r.material?.shipment ?? '';
+        lastShipment = currentShipment;
+
+        // Khi đổi shipment thì phải tách phần tổng pallet tương ứng, tránh cộng dồn nhầm
+        if (currentShipment !== prevShipment) {
+          if (prevPallet && cartonAccum > 0) {
+            withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: prevShipment });
+          }
+          prevPallet = '';
+          cartonAccum = 0;
+          prevShipment = currentShipment;
+        }
+
         const pallet = (r.material?.pallet ?? '').toString().trim();
         if (pallet) {
           if (pallet !== prevPallet && prevPallet) {
@@ -941,7 +1027,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             cartonAccum = 0;
           }
           prevPallet = pallet;
-          cartonAccum += this.getCartonForMaterial(r.material);
+          cartonAccum += this.getCartonCountForDetailRow(r.material, r.matIdx);
         }
       }
       withPalletTotals.push(r);
@@ -951,14 +1037,29 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
     this.displayRows = withPalletTotals;
 
+    // Rebuild "first row per mergeCarton" map for đúng nguyên tắc hiển thị carton
+    this.rebuildMergeCartonFirstRowMap();
+
     // Tô màu theo nhóm pallet (cùng pallet = cùng màu; pallet tiếp theo đổi màu)
     let palletGroup = 0;
     let currentPallet = '';
+    let currentShipment = '';
     this.displayRows.forEach(r => {
+      const ship =
+        r.type === 'detail'
+          ? (r.material?.shipment ?? '')
+          : ((r as any).shipment ?? '');
       const pallet =
         r.type === 'detail' ? ((r.material?.pallet ?? '').toString().trim())
         : ((r as { pallet?: string }).pallet ?? '').toString().trim();
       if (!pallet) return;
+
+      if (ship !== currentShipment) {
+        currentShipment = ship;
+        currentPallet = '';
+        palletGroup = 0;
+      }
+
       if (pallet !== currentPallet) {
         palletGroup += 1;
         currentPallet = pallet;
@@ -1115,6 +1216,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const src = this.historyItems;
     this.filteredMaterials = src;
     this.displayRows = src.map((m, i) => ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
+    // Dựng map "dòng đầu tiên theo mergeCarton" trước khi tính palletTotal
+    this.rebuildMergeCartonFirstRowMap();
     const withPalletTotals: FgOutDisplayRow[] = [];
     let prevPallet = '';
     let cartonAccum = 0;
@@ -1129,7 +1232,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
             cartonAccum = 0;
           }
           prevPallet = pallet;
-          cartonAccum += this.getCartonForMaterial(r.material);
+          cartonAccum += this.getCartonCountForDetailRow(r.material, r.matIdx);
         }
       }
       withPalletTotals.push(r);
@@ -1138,6 +1241,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
       withPalletTotals.push({ type: 'palletTotal', pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
     }
     this.displayRows = withPalletTotals;
+
+    // Rebuild "first row per mergeCarton" cho đúng nguyên tắc hiển thị carton
+    this.rebuildMergeCartonFirstRowMap();
     let palletGroup = 0;
     let currentPallet = '';
     this.displayRows.forEach(r => {
@@ -1172,7 +1278,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   getTotalCarton(): number {
-    return this.filteredMaterials.reduce((sum, m) => sum + this.getCartonForMaterial(m), 0);
+    let sum = 0;
+    this.displayRows.forEach(r => {
+      if (r.type !== 'detail') return;
+      sum += this.getCartonCountForDetailRow(r.material, r.matIdx);
+    });
+    return sum;
   }
 
   // Search functionality
@@ -2135,9 +2246,45 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
+  private rebuildPrintMergeCartonFirstRowMap(): void {
+    this.printMergeCartonFirstRowMap.clear();
+    const localIndexByPallet = new Map<string, number>();
+
+    // Dựa trên đúng thứ tự printMaterials được filter từ filteredMaterials
+    this.printMaterials.forEach(material => {
+      const pallet = (material.pallet || '').toString().trim() || '—';
+      const mc = this.normalizeMergeCarton(material.mergeCarton);
+
+      const localIndex = localIndexByPallet.get(pallet) ?? 0;
+      localIndexByPallet.set(pallet, localIndex + 1);
+
+      if (!mc) return;
+      const key = `${pallet}|${mc}`;
+      if (!this.printMergeCartonFirstRowMap.has(key)) {
+        this.printMergeCartonFirstRowMap.set(key, { id: material.id, index: localIndex });
+      }
+    });
+  }
+
+  isFirstPrintMergeCartonRow(pallet: string, material: FgOutItem, rowIndexInGroup: number): boolean {
+    const p = (pallet || '').toString().trim() || '—';
+    const mc = this.normalizeMergeCarton(material?.mergeCarton);
+    if (!mc) return false;
+
+    const key = `${p}|${mc}`;
+    const first = this.printMergeCartonFirstRowMap.get(key);
+    if (!first) return false;
+
+    if (material?.id && first.id) {
+      return material.id === first.id;
+    }
+    return rowIndexInGroup === first.index;
+  }
+
   /** Chuẩn bị dữ liệu in: load dispatch date, tạo QR */
   preparePrintData(): void {
     this.printMaterials = this.filteredMaterials.filter(m => m.shipment === this.selectedShipment);
+    this.rebuildPrintMergeCartonFirstRowMap();
     this.printDispatchDate = '';
     this.printQrDataUrl = '';
     const ship = String(this.selectedShipment || '').trim().toUpperCase();
@@ -2191,6 +2338,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
     
     this.printMaterials = this.materials.filter(m => m.shipment === this.selectedShipment);
+    this.rebuildPrintMergeCartonFirstRowMap();
     this.showPrintDialog = true;
   }
 
