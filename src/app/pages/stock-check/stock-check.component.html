@@ -215,6 +215,7 @@
              *ngFor="let r of locationBoxStats; trackBy: trackByLocationBox"
              (click)="openLocationDetail(r.location)"
              [class.all-checked]="r.unchecked === 0 && r.total > 0"
+             [class.active-box]="selectedLocationForDetail === r.location"
              title="Click xem chi tiết">
           <div class="location-box-title">
             <i class="material-icons">place</i>
@@ -231,7 +232,7 @@
     </div>
 
     <!-- Chi tiết theo vị trí: header + bảng (chỉ hiện khi bấm vào 1 box) -->
-    <div class="location-detail-section" *ngIf="!isLoading && selectedLocationForDetail">
+    <div class="location-detail-section" *ngIf="selectedLocationForDetail">
       <div class="location-detail-header">
         <button type="button" class="back-to-boxes-btn" (click)="backToLocationBoxes()">
           <i class="material-icons">arrow_back</i>
@@ -242,7 +243,7 @@
           Chi tiết vị trí: {{ selectedLocationForDetail }}
         </h3>
       </div>
-      <div class="table-container desktop-only">
+      <div class="table-container">
       <table class="stock-table">
         <thead>
           <tr>
@@ -342,7 +343,7 @@
     </div>
 
     <!-- Pagination - khi xem chi tiết vị trí -->
-    <div class="pagination desktop-only" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length > 0">
+    <div class="pagination" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length > 0">
       <button 
         class="page-btn" 
         (click)="previousPage()" 
@@ -363,7 +364,7 @@
     </div>
 
     <!-- No Data - khi xem chi tiết vị trí -->
-    <div class="no-data desktop-only" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length === 0">
+    <div class="no-data" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length === 0">
       <i class="material-icons">inbox</i>
       <p>Không có dữ liệu tại vị trí này</p>
     </div>

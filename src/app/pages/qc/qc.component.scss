@@ -263,6 +263,16 @@
   }
 }
 
+.iqc-history-code {
+  cursor: pointer;
+  color: #000000;
+  text-decoration: underline;
+
+  &:hover {
+    background: #fff3e0;
+  }
+}
+
 .stats-container {
   display: flex;
   gap: 16px;
@@ -756,6 +766,11 @@
     background: #dc3545;
     border-color: #dc3545;
   }
+
+  &.status-lock.selected {
+    background: #343a40;
+    border-color: #343a40;
+  }
   
   &.status-special.selected {
     background: #ffc107;
@@ -770,6 +785,33 @@
   
   .material-icons {
     font-size: 20px;
+  }
+}
+
+.iqc-extra-input {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.extra-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.extra-textarea {
+  width: 100%;
+  border: 1px solid #ced4da;
+  padding: 10px 12px;
+  font-size: 14px;
+  resize: vertical;
+
+  &:focus {
+    outline: none;
+    border-color: #2563eb;
   }
 }
 
@@ -1456,16 +1498,7 @@
   }
 }
 
-.iqc-search-results-section {
-  margin: 0 20px 20px 20px;
-  padding: 16px;
-  border: 2px solid #ff9800;
-  background: #ffffff;
-}
-
-.iqc-search-results-section .section-header {
-  margin: 0 0 12px 0;
-}
+// (no riêng) IQC search results reuses .recent-checked-section styles
 
 // Mobile responsive - Cho phép hiển thị trên mobile/tablet
 @media (max-width: 991px) {

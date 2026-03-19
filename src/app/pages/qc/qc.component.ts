@@ -69,12 +69,21 @@ export class QCComponent implements OnInit, OnDestroy {
     updatedAt?: Date | null;
     eventTime?: Date | null;
   }> = [];
+
+  iqcResultsTitle: string = 'Lịch sử tình trạng theo mã nguyên liệu';
+
+  iqcHistoryContext: 'search' | 'pendingQC' | 'todayChecked' | 'pendingConfirm' | null = null;
   
   // IQC Modal properties
   showIQCModal: boolean = false;
   iqcScanInput: string = '';
   scannedMaterial: InventoryMaterial | null = null;
   selectedIQCStatus: string = 'CHỜ XÁC NHẬN'; // PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
+
+  // IQC extra fields by status
+  ngErrorText: string = '';
+  lockReasonText: string = '';
+  pendingNoteText: string = '';
   
   // Pending QC count
   pendingQCCount: number = 0;
@@ -407,6 +416,11 @@ export class QCComponent implements OnInit, OnDestroy {
     this.iqcScanInput = '';
     this.scannedMaterial = null;
     this.selectedIQCStatus = 'CHỜ XÁC NHẬN'; // 🔧 FIX: Set default status
+
+    // Reset extra fields
+    this.ngErrorText = '';
+    this.lockReasonText = '';
+    this.pendingNoteText = '';
     
     // Auto-focus scan input after modal opens
     setTimeout(() => {
@@ -422,6 +436,10 @@ export class QCComponent implements OnInit, OnDestroy {
     this.iqcScanInput = '';
     this.scannedMaterial = null;
     this.selectedIQCStatus = 'CHỜ KIỂM';
+
+    this.ngErrorText = '';
+    this.lockReasonText = '';
+    this.pendingNoteText = '';
   }
   
   async processIQCScan(): Promise<void> {
@@ -634,12 +652,26 @@ export class QCComponent implements OnInit, OnDestroy {
     console.log(`💾 Updating IQC status: Material=${materialId}, Status=${statusToUpdate}, Employee=${employeeIdToSave}, Time=${now.toISOString()}`);
     
     // Fire and forget - không chờ kết quả để UI responsive
-    this.firestore.collection('inventory-materials').doc(materialId).update({
+    const updatePayload: any = {
       iqcStatus: statusToUpdate,
       updatedAt: now,
       qcCheckedBy: employeeIdToSave,
       qcCheckedAt: now
-    }).then(() => {
+    };
+
+    // Save extra fields by selected status
+    if (statusToUpdate === 'NG') {
+      updatePayload.iqcNgError = (this.ngErrorText || '').trim();
+    } else if (statusToUpdate === 'LOCK') {
+      updatePayload.iqcLockReason = (this.lockReasonText || '').trim();
+    } else if (statusToUpdate === 'ĐẶC CÁCH') {
+      // Use NG error as special-case note
+      updatePayload.iqcNgError = (this.ngErrorText || '').trim();
+    } else if (statusToUpdate === 'CHỜ KIỂM') {
+      updatePayload.iqcPendingNote = (this.pendingNoteText || '').trim();
+    }
+
+    this.firestore.collection('inventory-materials').doc(materialId).update(updatePayload).then(() => {
       console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
       
       // Refresh counts và recent materials sau khi update thành công (chạy background)
@@ -647,7 +679,17 @@ export class QCComponent implements OnInit, OnDestroy {
         this.loadPendingQCCount();
         this.loadTodayCheckedCount();
         this.loadPendingConfirmCount();
-        this.loadRecentCheckedMaterials();
+
+        // Reload inline list if user is viewing it
+        if (this.iqcHistoryContext === 'pendingConfirm' && this.showIqcSearchResults) {
+          this.showPendingConfirmMaterials(false);
+        } else if (this.iqcHistoryContext === 'todayChecked' && this.showIqcSearchResults) {
+          this.showTodayCheckedMaterials(false);
+        } else if (this.iqcHistoryContext === 'pendingQC' && this.showIqcSearchResults) {
+          this.showPendingQCMaterials(false);
+        } else {
+          this.loadRecentCheckedMaterials();
+        }
       }, 500); // Delay lâu hơn để tránh query quá nhiều
     }).catch((error) => {
       console.error('❌ Error updating IQC status:', error);
@@ -1017,9 +1059,23 @@ export class QCComponent implements OnInit, OnDestroy {
   }
   
   // Show today checked materials modal - chỉ hiển thị materials được user kiểm (có qcCheckedBy)
-  async showTodayCheckedMaterials(): Promise<void> {
-    this.showTodayCheckedModal = true;
-    this.isLoadingReport = true;
+  async showTodayCheckedMaterials(showPopup: boolean = true): Promise<void> {
+    if (showPopup) {
+      this.showTodayCheckedModal = true;
+      this.isLoadingReport = true;
+    } else {
+      // Inline display (no popup)
+      this.showTodayCheckedModal = false;
+      this.showPendingQCModal = false;
+      this.showPendingConfirmModal = false;
+
+      this.iqcResultsTitle = 'Đã kiểm hôm nay';
+      this.showIqcSearchResults = true;
+      this.isSearchingIqcHistory = true;
+      this.iqcHistoryError = '';
+      this.iqcHistoryResults = [];
+      this.iqcHistoryContext = 'todayChecked';
+    }
     
     try {
       const today = new Date();
@@ -1034,7 +1090,12 @@ export class QCComponent implements OnInit, OnDestroy {
       
       if (!snapshot || snapshot.empty) {
         this.todayCheckedMaterials = [];
-        this.isLoadingReport = false;
+        if (showPopup) {
+          this.isLoadingReport = false;
+        } else {
+          this.isSearchingIqcHistory = false;
+          this.iqcHistoryError = '';
+        }
         return;
       }
       
@@ -1080,10 +1141,28 @@ export class QCComponent implements OnInit, OnDestroy {
         });
       
       console.log(`✅ Loaded ${this.todayCheckedMaterials.length} materials checked today by users`);
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.iqcHistoryResults = (this.todayCheckedMaterials || []).map(m => ({
+          materialCode: m.materialCode,
+          poNumber: m.poNumber,
+          batchNumber: m.batchNumber,
+          iqcStatus: m.iqcStatus,
+          qcCheckedBy: m.checkedBy,
+          eventTime: m.checkedAt
+        }));
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = '';
+      }
     } catch (error) {
       console.error('❌ Error loading today checked materials:', error);
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = 'Lỗi khi tải danh sách đã kiểm hôm nay';
+      }
     }
   }
   
@@ -1174,6 +1253,8 @@ export class QCComponent implements OnInit, OnDestroy {
     this.iqcHistoryError = '';
     this.showIqcSearchResults = true;
     this.iqcHistoryResults = [];
+    this.iqcResultsTitle = 'Lịch sử tình trạng theo mã nguyên liệu';
+    this.iqcHistoryContext = 'search';
 
     const fromDate = this.iqcSearchFromDate ? new Date(this.iqcSearchFromDate) : null;
     const toDate = this.iqcSearchToDate ? new Date(this.iqcSearchToDate) : null;
@@ -1256,6 +1337,28 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
   
+  // When user clicks a row in inline list of "Chờ xác nhận", open IQC popup to update that material
+  openIQCFromHistory(item: any): void {
+    if (this.iqcHistoryContext !== 'pendingConfirm') return;
+    if (!item?.id) return;
+
+    const found = this.pendingConfirmMaterials.find(m => m.id === item.id);
+    if (!found) {
+      alert('Không tìm thấy mã để cập nhật trạng thái.');
+      return;
+    }
+
+    // Open IQC modal, then bind scannedMaterial and status
+    this.openIQCModal();
+    this.scannedMaterial = found as any;
+    this.selectedIQCStatus = found.iqcStatus || 'CHỜ XÁC NHẬN';
+
+    // Start with empty extra fields (user will fill if needed)
+    this.ngErrorText = '';
+    this.lockReasonText = '';
+    this.pendingNoteText = '';
+  }
+
   toggleRecentChecked(): void {
     this.showRecentChecked = !this.showRecentChecked;
     // Load data when showing for the first time
@@ -1521,9 +1624,23 @@ export class QCComponent implements OnInit, OnDestroy {
   }
 
   // Show pending QC materials modal
-  async showPendingQCMaterials(): Promise<void> {
-    this.showPendingQCModal = true;
-    this.isLoadingReport = true;
+  async showPendingQCMaterials(showPopup: boolean = true): Promise<void> {
+    if (showPopup) {
+      this.showPendingQCModal = true;
+      this.isLoadingReport = true;
+    } else {
+      // Inline display (no popup)
+      this.showPendingQCModal = false;
+      this.showTodayCheckedModal = false;
+      this.showPendingConfirmModal = false;
+
+      this.iqcResultsTitle = 'Mã hàng chờ kiểm';
+      this.showIqcSearchResults = true;
+      this.isSearchingIqcHistory = true;
+      this.iqcHistoryError = '';
+      this.iqcHistoryResults = [];
+      this.iqcHistoryContext = 'pendingQC';
+    }
     
     try {
       console.log('📊 Loading pending QC materials...');
@@ -1534,7 +1651,12 @@ export class QCComponent implements OnInit, OnDestroy {
       
       if (!snapshot || snapshot.empty) {
         this.pendingQCMaterials = [];
-        this.isLoadingReport = false;
+        if (showPopup) {
+          this.isLoadingReport = false;
+        } else {
+          this.isSearchingIqcHistory = false;
+          this.iqcHistoryError = '';
+        }
         return;
       }
       
@@ -1571,11 +1693,29 @@ export class QCComponent implements OnInit, OnDestroy {
         });
       
       console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC materials`);
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.iqcHistoryResults = (this.pendingQCMaterials || []).map(m => ({
+          materialCode: m.materialCode,
+          poNumber: m.poNumber,
+          batchNumber: m.batchNumber,
+          iqcStatus: m.iqcStatus,
+          qcCheckedBy: '—',
+          eventTime: m.importDate || m.receivedDate || null
+        }));
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = '';
+      }
     } catch (error) {
       console.error('❌ Error loading pending QC materials:', error);
       alert('❌ Lỗi khi tải danh sách mã hàng chờ kiểm');
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = 'Lỗi khi tải mã hàng chờ kiểm';
+      }
     }
   }
 
@@ -1585,9 +1725,23 @@ export class QCComponent implements OnInit, OnDestroy {
   }
 
   // Show pending confirm materials modal
-  async showPendingConfirmMaterials(): Promise<void> {
-    this.showPendingConfirmModal = true;
-    this.isLoadingReport = true;
+  async showPendingConfirmMaterials(showPopup: boolean = true): Promise<void> {
+    if (showPopup) {
+      this.showPendingConfirmModal = true;
+      this.isLoadingReport = true;
+    } else {
+      // Inline display (no popup)
+      this.showPendingConfirmModal = false;
+      this.showTodayCheckedModal = false;
+      this.showPendingQCModal = false;
+
+      this.iqcResultsTitle = 'Mã hàng chờ xác nhận';
+      this.showIqcSearchResults = true;
+      this.isSearchingIqcHistory = true;
+      this.iqcHistoryError = '';
+      this.iqcHistoryResults = [];
+      this.iqcHistoryContext = 'pendingConfirm';
+    }
     
     try {
       console.log('📊 Loading pending confirm materials...');
@@ -1599,7 +1753,12 @@ export class QCComponent implements OnInit, OnDestroy {
       
       if (!snapshot || snapshot.empty) {
         this.pendingConfirmMaterials = [];
-        this.isLoadingReport = false;
+        if (showPopup) {
+          this.isLoadingReport = false;
+        } else {
+          this.isSearchingIqcHistory = false;
+          this.iqcHistoryError = '';
+        }
         return;
       }
       
@@ -1639,11 +1798,30 @@ export class QCComponent implements OnInit, OnDestroy {
         });
       
       console.log(`✅ Loaded ${this.pendingConfirmMaterials.length} pending confirm materials`);
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.iqcHistoryResults = (this.pendingConfirmMaterials || []).map(m => ({
+          id: m.id,
+          materialCode: m.materialCode,
+          poNumber: m.poNumber,
+          batchNumber: m.batchNumber,
+          iqcStatus: m.iqcStatus,
+          qcCheckedBy: m.qcCheckedBy,
+          eventTime: m.qcCheckedAt || m.updatedAt || null
+        }));
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = '';
+      }
     } catch (error) {
       console.error('❌ Error loading pending confirm materials:', error);
       alert('❌ Lỗi khi tải danh sách mã hàng chờ xác nhận');
-      this.isLoadingReport = false;
+      if (showPopup) {
+        this.isLoadingReport = false;
+      } else {
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = 'Lỗi khi tải mã hàng chờ xác nhận';
+      }
     }
   }
 

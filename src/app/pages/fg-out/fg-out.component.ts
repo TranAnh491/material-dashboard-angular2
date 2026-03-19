@@ -147,8 +147,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
   private inventoryStockCache = new Map<string, number>();
-  /** Cache tồn kho theo batch (key = FACTORY|MATERIAL|BATCH, value = tổng ton của batch đó) */
+  /** Cache tồn kho theo batch (key = FACTORY|BATCH, value = tồn tính lại theo tonDau+nhap-xuat, có thể = 0 hoặc âm) */
   private inventoryStockByBatchCache = new Map<string, number>();
+  /** Thành phần tính tồn theo batch */
+  private invTonDauByBatch = new Map<string, number>();
+  private invNhapByBatch = new Map<string, number>();
+  private invXuatByBatch = new Map<string, number>();
 
   /**
    * Nguyên tắc "gộp thùng":
@@ -241,6 +245,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
     this.loadInventoryStockCache(); // Load tồn kho từ fg-inventory
+    this.subscribeBatchStockComponents(); // Tính tồn theo batch (kể cả 0/âm)
     // Mặc định lọc 1 tuần gần đây
     const today = new Date();
     const oneWeekAgo = new Date();
@@ -273,7 +278,87 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.locationCache.clear();
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
+    this.invTonDauByBatch.clear();
+    this.invNhapByBatch.clear();
+    this.invXuatByBatch.clear();
     this.mergeCartonFirstMatIdx.clear();
+  }
+
+  private batchKey(factory: any, batchNumber: any): string {
+    const f = (factory || 'ASM1').toString().trim().toUpperCase();
+    const b = (batchNumber || '').toString().trim().toUpperCase();
+    return b ? `${f}|${b}` : '';
+  }
+
+  private rebuildInventoryStockByBatch(): void {
+    const keys = new Set<string>();
+    this.invTonDauByBatch.forEach((_, k) => keys.add(k));
+    this.invNhapByBatch.forEach((_, k) => keys.add(k));
+    this.invXuatByBatch.forEach((_, k) => keys.add(k));
+
+    this.inventoryStockByBatchCache.clear();
+    keys.forEach(k => {
+      const tonDau = this.invTonDauByBatch.get(k) || 0;
+      const nhap = this.invNhapByBatch.get(k) || 0;
+      const xuat = this.invXuatByBatch.get(k) || 0;
+      this.inventoryStockByBatchCache.set(k, tonDau + nhap - xuat);
+    });
+  }
+
+  /**
+   * Đồng bộ thành phần tồn theo batch:
+   * - tonDau: từ fg-inventory
+   * - nhap: từ fg-in
+   * - xuat: từ fg-out (cộng theo batch, không clamp 0)
+   */
+  private subscribeBatchStockComponents(): void {
+    // tonDau theo batch từ fg-inventory
+    this.firestore.collection('fg-inventory')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.invTonDauByBatch.clear();
+        actions.forEach(a => {
+          const d = a.payload.doc.data() as any;
+          const key = this.batchKey(d.factory, d.batchNumber);
+          if (!key) return;
+          const tonDau = Number(d.tonDau ?? 0) || 0;
+          this.invTonDauByBatch.set(key, (this.invTonDauByBatch.get(key) || 0) + tonDau);
+        });
+        this.rebuildInventoryStockByBatch();
+      });
+
+    // nhap theo batch từ fg-in
+    this.firestore.collection('fg-in')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.invNhapByBatch.clear();
+        actions.forEach(a => {
+          const d = a.payload.doc.data() as any;
+          const key = this.batchKey(d.factory, d.batchNumber);
+          if (!key) return;
+          const q = Number(d.quantity ?? 0) || 0;
+          this.invNhapByBatch.set(key, (this.invNhapByBatch.get(key) || 0) + q);
+        });
+        this.rebuildInventoryStockByBatch();
+      });
+
+    // xuat theo batch từ fg-out
+    this.firestore.collection('fg-out')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.invXuatByBatch.clear();
+        actions.forEach(a => {
+          const d = a.payload.doc.data() as any;
+          const key = this.batchKey(d.factory, d.batchNumber);
+          if (!key) return;
+          const q = Number(d.quantity ?? 0) || 0;
+          this.invXuatByBatch.set(key, (this.invXuatByBatch.get(key) || 0) + q);
+        });
+        this.rebuildInventoryStockByBatch();
+      });
   }
 
   private normalizeMergeCarton(value: any): string {
@@ -325,24 +410,23 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(actions => {
         this.inventoryStockCache.clear();
-        this.inventoryStockByBatchCache.clear();
         actions.forEach(action => {
           const data = action.payload.doc.data() as any;
-          const materialCode = (data.materialCode || '').toString().trim().toUpperCase();
-          const ton = Number(data.ton ?? 0) || 0;
+          const materialCode = (data.materialCode || data.maTP || '').toString().trim().toUpperCase();
+
+          // Tính tồn linh hoạt: ưu tiên field `ton`, fallback sang `stock`, rồi `tonDau + nhap - xuat`.
+          const tonDau = Number(data.tonDau ?? 0) || 0;
+          const nhap = Number(data.nhap ?? data.quantity ?? 0) || 0;
+          const xuat = Number(data.xuat ?? data.exported ?? 0) || 0;
+          const ton = (data.ton != null)
+            ? Number(data.ton)
+            : (data.stock != null ? Number(data.stock) : (tonDau + nhap - xuat));
           const factory = (data.factory || 'ASM1').toString().trim().toUpperCase();
           const batchNumber = (data.batchNumber || '').toString().trim().toUpperCase();
           if (materialCode) {
             // Cộng dồn tồn kho theo mã TP
             const currentStock = this.inventoryStockCache.get(materialCode) || 0;
             this.inventoryStockCache.set(materialCode, currentStock + ton);
-
-            // Cộng dồn tồn kho theo batch
-            if (batchNumber) {
-              const key = `${factory}|${materialCode}|${batchNumber}`;
-              const cur = this.inventoryStockByBatchCache.get(key) || 0;
-              this.inventoryStockByBatchCache.set(key, cur + ton);
-            }
           }
         });
         console.log(`📦 Loaded inventory stock for ${this.inventoryStockCache.size} material codes`);
@@ -358,11 +442,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   /** Lấy tồn kho theo đúng batch (không cộng dồn các batch khác). */
   getInventoryStockByBatch(material: FgOutItem): number {
-    const mc = (material.materialCode || '').toString().trim().toUpperCase();
     const batch = (material.batchNumber || '').toString().trim().toUpperCase();
     const factory = (material.factory || this.selectedFactory || 'ASM1').toString().trim().toUpperCase();
-    if (!mc || !batch) return 0;
-    const key = `${factory}|${mc}|${batch}`;
+    if (!batch) return 0;
+    const key = `${factory}|${batch}`;
     return this.inventoryStockByBatchCache.get(key) || 0;
   }
 
@@ -697,8 +780,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         const d = doc.data() as any;
         // Tính ton linh hoạt: nếu ton field != null và != 0 thì dùng, ngược lại fallback
         const ton = (d.ton != null && d.ton !== 0)
-          ? d.ton
-          : (d.stock != null ? d.stock : (Number(d.quantity ?? 0) - Number(d.exported ?? 0)));
+          ? Number(d.ton)
+          : (d.stock != null ? Number(d.stock) : (Number(d.quantity ?? 0) - Number(d.exported ?? d.xuat ?? 0)));
         // Chỉ hiện LOT/Batch/LSX từ records còn tồn > 0
         if (ton <= 0) return;
         const v = field === 'batch' ? (d.batchNumber || d.batch || '')
@@ -713,7 +796,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private invTon(d: any): number {
     const ton = (d?.ton != null && d.ton !== 0)
       ? Number(d.ton)
-      : (d?.stock != null ? Number(d.stock) : (Number(d?.quantity ?? 0) - Number(d?.exported ?? 0)));
+      : (d?.stock != null ? Number(d.stock) : (Number(d?.quantity ?? 0) - Number(d?.exported ?? d?.xuat ?? 0)));
     return isNaN(ton) ? 0 : ton;
   }
 
@@ -2074,23 +2157,20 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Subtract quantity from FG Inventory (theo Mã TP, nhà máy, batch) và cập nhật fg-export
   private subtractFromFGInventory(material: FgOutItem): void {
     console.log(`📉 Processing export for ${material.quantity} units of ${material.materialCode}`);
-    const factory = (material.factory || 'ASM1').toString().trim();
+    const factory = (material.factory || 'ASM1').toString().trim().toUpperCase();
     const materialCodeNorm = (material.materialCode || '').toString().trim().toUpperCase();
     const batchNorm = (material.batchNumber || '').toString().trim();
 
-    // Tìm tồn theo nhà máy + batch, rồi lọc theo mã TP (FG Inventory có thể lưu materialCode hoặc maTP)
-    this.firestore.collection('fg-inventory', ref =>
-      ref.where('factory', '==', factory)
-         .where('batchNumber', '==', batchNorm)
-    ).get().subscribe(snapshot => {
-      const matchingDocs = snapshot.docs.filter(doc => {
+    const matchDocs = (docs: any[]) =>
+      docs.filter(doc => {
         const d = doc.data() as any;
         const invCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
         return invCode === materialCodeNorm;
       });
 
+    const processDocs = (matchingDocs: any[]) => {
       if (matchingDocs.length === 0) {
-        console.log('⚠️ No matching FG Inventory found (factory, materialCode, batch)');
+        console.log('⚠️ No matching FG Inventory found (materialCode, batch)');
         alert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
         return;
       }
@@ -2111,6 +2191,25 @@ export class FgOutComponent implements OnInit, OnDestroy {
       // Trừ tồn theo thứ tự (FIFO)
       this.subtractFromInventoryDocs(matchingDocs, material.quantity);
       this.addToExportCollection(material);
+    };
+
+    // Ưu tiên tìm theo factory + batch (đúng thiết kế)
+    this.firestore.collection('fg-inventory', ref =>
+      ref.where('factory', '==', factory).where('batchNumber', '==', batchNorm)
+    ).get().subscribe(snapshot => {
+      const matchingDocs = matchDocs(snapshot.docs);
+      if (matchingDocs.length > 0) {
+        processDocs(matchingDocs);
+        return;
+      }
+
+      // Fallback: nếu dữ liệu cũ lưu factory không đồng nhất (hoa/thường/thiếu field),
+      // vẫn cho phép tìm theo batch rồi lọc mã TP.
+      this.firestore.collection('fg-inventory', ref =>
+        ref.where('batchNumber', '==', batchNorm)
+      ).get().subscribe(s2 => {
+        processDocs(matchDocs(s2.docs));
+      });
     });
   }
 
@@ -2129,6 +2228,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         doc.ref.update({
           ton: newQuantity,
           xuat: newExported,
+          exported: newExported, // backward-compat cho dữ liệu cũ đọc field exported
           updatedAt: new Date()
         }).then(() => {
           console.log(`✅ Updated inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (subtracted ${quantityToSubtract})`);
@@ -2233,6 +2333,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
           doc.ref.update({
             ton: newQuantity,
             xuat: newExported,
+            exported: newExported, // backward-compat
             updatedAt: new Date()
           }).then(() => {
             console.log(`✅ Added back to inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (added ${quantityToAddBack})`);
@@ -3019,7 +3120,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
           const tonDau = Number(d.tonDau ?? 0) || 0;
           const k = key(d.materialCode || d.maTP, d.batchNumber, d.lsx, d.lot);
           const nhap = nhapByKey.get(k) ?? 0;
-          const xuat = xuatByKey.get(k) ?? 0;
+          // Ưu tiên cột "xuat" (FG Inventory) nếu có, để manual edit ở FG Inventory được ghi nhận.
+          const xuatFromInv = Number(d.xuat ?? d.exported ?? 0) || 0;
+          const xuatFromExport = xuatByKey.get(k) ?? 0;
+          const xuat = xuatFromInv !== 0 ? xuatFromInv : xuatFromExport;
           const ton = tonDau + nhap - xuat;
           if (ton > 0) {
             inventoryRows.push({

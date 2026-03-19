@@ -1233,6 +1233,18 @@ mat-checkbox {
   &:hover { background: #bf360c !important; }
 }
 
+.btn-negative-active {
+  background: #c62828 !important;
+  color: white !important;
+  &:hover { background: #b71c1c !important; }
+}
+
+// Có tồn âm nhưng chưa bật filter: nút nhấp nháy màu đỏ nhạt để cảnh báo
+.btn-negative-alert {
+  border: 2px solid #c62828 !important;
+  color: #c62828 !important;
+}
+
 .btn-today {
   background: #4CAF50 !important;
   color: white !important;

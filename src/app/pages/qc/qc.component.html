@@ -107,7 +107,7 @@
     <!-- Stats Boxes -->
     <div class="stats-container">
       <!-- Pending QC Count Box -->
-      <div class="pending-qc-box" (click)="showPendingQCMaterials()">
+      <div class="pending-qc-box" (click)="showPendingQCMaterials(false)">
         <div class="pending-qc-content">
           <i class="material-icons">pending_actions</i>
           <div class="pending-qc-info">
@@ -118,7 +118,7 @@
       </div>
       
       <!-- Today Checked Count Box -->
-      <div class="today-checked-box" (click)="showTodayCheckedMaterials()">
+      <div class="today-checked-box" (click)="showTodayCheckedMaterials(false)">
         <div class="today-checked-content">
           <i class="material-icons">check_circle</i>
           <div class="today-checked-info">
@@ -129,7 +129,7 @@
       </div>
       
       <!-- Pending Confirm Count Box -->
-      <div class="pending-confirm-box" (click)="showPendingConfirmMaterials()">
+      <div class="pending-confirm-box" (click)="showPendingConfirmMaterials(false)">
         <div class="pending-confirm-content">
           <i class="material-icons">schedule</i>
           <div class="pending-confirm-info">
@@ -140,30 +140,29 @@
       </div>
     </div>
 
-    <!-- IQC search results -->
-    <div class="iqc-search-results-section" *ngIf="showIqcSearchResults">
+    <!-- IQC search results (reuse recent-history UI classes) -->
+    <div class="recent-checked-section" *ngIf="showIqcSearchResults">
       <h4 class="section-header">
         <i class="material-icons">manage_search</i>
-        Lịch sử tình trạng theo mã nguyên liệu
+        {{ iqcResultsTitle }}
       </h4>
 
-      <div class="loading-report" *ngIf="isSearchingIqcHistory">
+      <div class="loading-recent" *ngIf="isSearchingIqcHistory">
         <i class="material-icons rotating">sync</i>
         <p>Đang tìm kiếm...</p>
       </div>
 
-      <div class="error-message" *ngIf="!isSearchingIqcHistory && iqcHistoryError">
+      <div class="empty-recent" *ngIf="!isSearchingIqcHistory && iqcHistoryError">
         <i class="material-icons">error_outline</i>
-        <span>{{ iqcHistoryError }}</span>
+        <p>{{ iqcHistoryError }}</p>
       </div>
 
-      <div class="report-content" *ngIf="!isSearchingIqcHistory && !iqcHistoryError">
-        <table class="report-table" *ngIf="iqcHistoryResults.length > 0">
+      <div class="recent-materials-container" *ngIf="!isSearchingIqcHistory && !iqcHistoryError">
+        <table class="recent-materials-table" *ngIf="iqcHistoryResults.length > 0">
           <thead>
             <tr>
               <th>STT</th>
               <th>Mã hàng</th>
-              <th>Tên hàng</th>
               <th>Số P.O</th>
               <th>Lô hàng</th>
               <th>Trạng thái</th>
@@ -174,8 +173,9 @@
           <tbody>
             <tr *ngFor="let item of iqcHistoryResults; let i = index">
               <td>{{ i + 1 }}</td>
-              <td>{{ item.materialCode }}</td>
-              <td>{{ item.materialName }}</td>
+              <td class="iqc-history-code" (click)="openIQCFromHistory(item)">
+                {{ item.materialCode }}
+              </td>
               <td>{{ item.poNumber }}</td>
               <td>{{ item.batchNumber }}</td>
               <td>
@@ -184,73 +184,19 @@
                 </span>
               </td>
               <td>{{ item.qcCheckedBy || '—' }}</td>
-              <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm:ss') : '—' }}</td>
+              <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
             </tr>
           </tbody>
         </table>
 
-        <div class="empty-report" *ngIf="iqcHistoryResults.length === 0">
+        <div class="empty-recent" *ngIf="iqcHistoryResults.length === 0">
           <i class="material-icons">info</i>
           <p>Không có dữ liệu</p>
         </div>
       </div>
     </div>
     
-    <!-- Recent Checked Materials Toggle Button -->
-    <div class="recent-checked-toggle-section">
-      <button class="toggle-recent-btn" (click)="toggleRecentChecked()">
-        <i class="material-icons">{{ showRecentChecked ? 'expand_less' : 'expand_more' }}</i>
-        <span>{{ showRecentChecked ? 'Ẩn' : 'Hiển thị' }} 20 mã được kiểm gần nhất</span>
-      </button>
-    </div>
-    
-    <!-- Recent Checked Materials List -->
-    <div class="recent-checked-section" *ngIf="showRecentChecked">
-      <h4 class="section-header">
-        <i class="material-icons">history</i>
-        20 mã vừa được kiểm tra gần đây nhất
-      </h4>
-      
-      <div class="recent-materials-container" *ngIf="!isLoadingRecent">
-        <table class="recent-materials-table" *ngIf="recentCheckedMaterials.length > 0">
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Mã hàng</th>
-              <th>Số P.O</th>
-              <th>Lô hàng</th>
-              <th>Trạng thái</th>
-              <th>Người kiểm</th>
-              <th>Thời gian</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let material of recentCheckedMaterials; let i = index">
-              <td>{{ i + 1 }}</td>
-              <td>{{ material.materialCode }}</td>
-              <td>{{ material.poNumber }}</td>
-              <td>{{ material.batchNumber }}</td>
-              <td>
-                <span class="status-badge" [ngClass]="getIQCStatusClass(material.iqcStatus)">
-                  {{ material.iqcStatus }}
-                </span>
-              </td>
-              <td>{{ material.checkedBy }}</td>
-              <td>{{ material.checkedAt | date:'dd/MM/yyyy HH:mm' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="empty-recent" *ngIf="recentCheckedMaterials.length === 0">
-          <i class="material-icons">info</i>
-          <p>Chưa có mã hàng nào được kiểm tra</p>
-        </div>
-      </div>
-      
-      <div class="loading-recent" *ngIf="isLoadingRecent">
-        <i class="material-icons rotating">sync</i>
-        <p>Đang tải dữ liệu...</p>
-      </div>
-    </div>
+    <!-- Removed: Recent Checked Materials (20 mã gần nhất) -->
   </div>
 </div>
 
@@ -347,6 +293,13 @@
               NG
             </button>
             <button 
+              class="status-btn status-lock" 
+              [class.selected]="selectedIQCStatus === 'LOCK'"
+              (click)="selectedIQCStatus = 'LOCK'">
+              <i class="material-icons">lock</i>
+              LOCK
+            </button>
+            <button 
               class="status-btn status-special" 
               [class.selected]="selectedIQCStatus === 'ĐẶC CÁCH'"
               (click)="selectedIQCStatus = 'ĐẶC CÁCH'">
@@ -367,6 +320,27 @@
               <i class="material-icons">schedule</i>
               CHỜ XÁC NHẬN
             </button>
+          </div>
+
+          <!-- Extra input based on selected status -->
+          <div class="iqc-extra-input" *ngIf="selectedIQCStatus === 'NG'">
+            <label class="extra-label">Lỗi:</label>
+            <textarea class="extra-textarea" [(ngModel)]="ngErrorText" rows="2" placeholder="Nhập lỗi để lưu..."></textarea>
+          </div>
+
+          <div class="iqc-extra-input" *ngIf="selectedIQCStatus === 'LOCK'">
+            <label class="extra-label">Lý Do:</label>
+            <textarea class="extra-textarea" [(ngModel)]="lockReasonText" rows="2" placeholder="Nhập lý do để lưu..."></textarea>
+          </div>
+
+          <div class="iqc-extra-input" *ngIf="selectedIQCStatus === 'ĐẶC CÁCH'">
+            <label class="extra-label">Lỗi:</label>
+            <textarea class="extra-textarea" [(ngModel)]="ngErrorText" rows="2" placeholder="Lấy lỗi của NG để lưu..."></textarea>
+          </div>
+
+          <div class="iqc-extra-input" *ngIf="selectedIQCStatus === 'CHỜ KIỂM'">
+            <label class="extra-label">Ghi chú:</label>
+            <textarea class="extra-textarea" [(ngModel)]="pendingNoteText" rows="2" placeholder="Nhập ghi chú để lưu..."></textarea>
           </div>
           
           <button class="update-btn" (click)="updateIQCStatus()">

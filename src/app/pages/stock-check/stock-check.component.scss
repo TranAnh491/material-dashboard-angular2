@@ -1035,6 +1035,11 @@
         border-color: #2e7d32;
         background: #e8f5e9;
       }
+
+      &.active-box {
+        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.45);
+        border-color: #2196F3;
+      }
       .location-box-title {
         display: flex;
         align-items: center;

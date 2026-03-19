@@ -49,6 +49,14 @@
           {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
         </button>
 
+        <button class="custom-btn"
+                [class.btn-negative-active]="showNegativeStock"
+                [class.btn-negative-alert]="hasNegativeStockBatches()"
+                (click)="filterNegativeStock()">
+          <i class="material-icons">report</i>
+          {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
+        </button>
+
       </div>
     </div>
     

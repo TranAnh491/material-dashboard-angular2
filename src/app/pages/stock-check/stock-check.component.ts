@@ -2301,14 +2301,32 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
     this.currentPage = 1;
     this.loadPageFromFiltered(1);
+    console.log('[StockCheck] openLocationDetail', {
+      loc,
+      filtered: this.filteredMaterials.length,
+      displayed: this.displayedMaterials.length,
+      totalPages: this.totalPages
+    });
     this.cdr.detectChanges();
+
+    // Đảm bảo người dùng nhìn thấy phần chi tiết ngay sau khi bấm box
+    setTimeout(() => {
+      const el = document.querySelector('.location-detail-section') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
   }
 
   /** Quay lại giao diện grid box (ẩn bảng chi tiết) */
   backToLocationBoxes(): void {
     this.selectedLocationForDetail = null;
     this.applyFilter();
+    console.log('[StockCheck] backToLocationBoxes');
     this.cdr.detectChanges();
+
+    setTimeout(() => {
+      const el = document.querySelector('.location-boxes-wrapper') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
   }
 
   // ======================== RACK FEATURE ========================

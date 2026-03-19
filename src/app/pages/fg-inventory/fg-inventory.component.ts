@@ -80,6 +80,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Search optimization
   private searchSubject = new Subject<string>();
+
+  /** Cache tổng Nhập/Xuất theo key Mã TP|Batch|LSX|LOT để đồng bộ từ FG In / FG Export */
+  private fgInQtyByKey = new Map<string, number>();
+  /** Cache theo Batch (chỉ dựa vào số batch) */
+  private fgInQtyByBatchKey = new Map<string, number>();
+  private fgOutQtyByBatchKey = new Map<string, number>();
   
   // Loading state
   isLoading: boolean = false;
@@ -131,6 +137,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Display options
   showCompleted: boolean = true;
   showNonStock: boolean = false; // false = ẩn ton=0; true (Non Stock mode) = chỉ hiện ton=0
+  showNegativeStock: boolean = false; // true = chỉ hiện ton < 0 (tồn âm)
   
   // Permissions
   hasDeletePermission: boolean = false;
@@ -158,6 +165,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.setupDebouncedSearch();
     this.loadCatalogFromFirebase(); // Load catalog first
     this.loadMappingFromFirebase(); // Load mapping for customer names
+    this.subscribeFGInOutCaches();  // Đồng bộ Nhập/Xuất từ fg-in và fg-export
     this.loadMaterialsFromFirebase();
     this.startDate = '2020-01-01';
     this.endDate = '2030-12-31';
@@ -238,11 +246,101 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
         this.materials = firebaseMaterials;
 
+        // Đồng bộ lại cột Nhập/Xuất/Tồn theo cache từ fg-in và fg-export
+        this.applyFGInOutCachesToMaterials();
+
         this.sortMaterials();
         this.applyFilters();
         this.isLoading = false;
         this.cdr.detectChanges();
       });
+  }
+
+  /** Key chuẩn hoá để map Nhập/Xuất theo đúng dòng (Mã TP|Batch|LSX|LOT). */
+  private fgKey(materialCode: any, batchNumber: any, lsx: any, lot: any): string {
+    return [
+      String(materialCode || '').trim().toUpperCase(),
+      String(batchNumber || '').trim().toUpperCase(),
+      String(lsx || '').trim().toUpperCase(),
+      String(lot || '').trim().toUpperCase()
+    ].join('|');
+  }
+
+  /** Key theo Batch (chỉ dựa vào số batch). */
+  private fgBatchKey(batchNumber: any): string {
+    return String(batchNumber || '').trim().toUpperCase();
+  }
+
+  /** Subscribe 1 lần để lấy tổng Nhập/Xuất từ fg-in và fg-out (đúng theo tab FG Out). */
+  private subscribeFGInOutCaches(): void {
+    // FG In: tổng nhập theo key
+    this.firestore.collection('fg-in')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.fgInQtyByKey.clear();
+        this.fgInQtyByBatchKey.clear();
+        actions.forEach(a => {
+          const d = a.payload.doc.data() as any;
+          const k = this.fgKey(d.materialCode, d.batchNumber, d.lsx, d.lot);
+          const bk = this.fgBatchKey(d.batchNumber);
+          const q = Number(d.quantity) || 0;
+          if (k && k !== '|||') {
+            this.fgInQtyByKey.set(k, (this.fgInQtyByKey.get(k) || 0) + q);
+          }
+          if (bk) {
+            this.fgInQtyByBatchKey.set(bk, (this.fgInQtyByBatchKey.get(bk) || 0) + q);
+          }
+        });
+        this.applyFGInOutCachesToMaterials();
+        this.applyFilters();
+        this.cdr.detectChanges();
+      });
+
+    // FG Out: tổng xuất theo batch (đúng theo dữ liệu đang thấy ở tab FG Out)
+    this.firestore.collection('fg-out')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(actions => {
+        this.fgOutQtyByBatchKey.clear();
+        actions.forEach(a => {
+          const d = a.payload.doc.data() as any;
+          const bk = this.fgBatchKey(d.batchNumber);
+          const q = Number(d.quantity) || 0;
+          if (bk) {
+            this.fgOutQtyByBatchKey.set(bk, (this.fgOutQtyByBatchKey.get(bk) || 0) + q);
+          }
+        });
+        this.applyFGInOutCachesToMaterials();
+        this.applyFilters();
+        this.cdr.detectChanges();
+      });
+  }
+
+  /**
+   * Ghi đè số Nhập/Xuất hiển thị theo cache:
+   * - Ưu tiên cache (fg-in/fg-export) nếu có key khớp.
+   * - Tự tính lại `ton = tonDau + nhap - xuat` để cột Tồn kho đồng bộ.
+   */
+  private applyFGInOutCachesToMaterials(): void {
+    if (!this.materials || this.materials.length === 0) return;
+    this.materials.forEach(m => {
+      // Theo yêu cầu: chỉ cộng theo số batch.
+      // LOT/LSX/Mã TP chỉ là thông tin đi kèm của dòng batch trong fg-inventory.
+      const bk = this.fgBatchKey(m.batchNumber);
+      if (!bk) return;
+
+      const nhapCache = this.fgInQtyByBatchKey.get(bk);
+      const xuatCache = this.fgOutQtyByBatchKey.get(bk);
+
+      if (nhapCache != null) m.nhap = nhapCache;
+      if (xuatCache != null) m.xuat = xuatCache;
+
+      const tonDau = Number(m.tonDau) || 0;
+      const nhap = Number(m.nhap) || 0;
+      const xuat = Number(m.xuat) || 0;
+      m.ton = tonDau + nhap - xuat;
+    });
   }
 
   // Load export and import data for all materials
@@ -449,10 +547,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
       // Filter by stock (ton): ẩn ton=0 theo mặc định; Non Stock mode = chỉ hiện ton=0
       const ton = material.ton ?? 0;
-      if (this.showNonStock) {
+      if (this.showNegativeStock) {
+        if (ton >= 0) return false; // Tồn Âm: chỉ hiện ton < 0
+      } else if (this.showNonStock) {
         if (ton > 0) return false; // Non Stock: chỉ hiện ton=0
       } else {
-        if (ton <= 0) return false; // Mặc định: ẩn ton=0
+        if (ton <= 0) return false; // Mặc định: ẩn ton=0 và tồn âm
       }
 
       return isInDateRange && isCompletedVisible;
@@ -1381,6 +1481,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.endDate = '2030-12-31';
     this.showCompleted = true;
     this.showNonStock = false;
+    this.showNegativeStock = false;
     this.selectedFactory = 'TOTAL';
     this.applyFilters();
     this.showTimeRangeDialog = false;
@@ -1393,7 +1494,37 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   filterNonStock(): void {
     this.showNonStock = !this.showNonStock;
+    if (this.showNonStock) this.showNegativeStock = false; // chỉ chọn 1 chế độ
     this.applyFilters();
+  }
+
+  filterNegativeStock(): void {
+    this.showNegativeStock = !this.showNegativeStock;
+    if (this.showNegativeStock) this.showNonStock = false; // chỉ chọn 1 chế độ
+    this.applyFilters();
+  }
+
+  /** Có tồn âm theo factory + date range hiện tại (không phụ thuộc search / mode). */
+  hasNegativeStockBatches(): boolean {
+    return this.materials.some(m => {
+      // Filter by factory (TOTAL = xem tất cả)
+      if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+        const f = (m.factory || 'ASM1').toString().trim();
+        if (f !== this.selectedFactory) return false;
+      }
+
+      // Filter by date range
+      if (this.startDate && this.endDate) {
+        const importDate = new Date(m.importDate);
+        const start = new Date(this.startDate + 'T00:00:00');
+        const end   = new Date(this.endDate   + 'T23:59:59');
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          if (!(importDate >= start && importDate <= end)) return false;
+        }
+      }
+
+      return (Number(m.ton ?? 0) < 0);
+    });
   }
 
   filterTodayImport(): void {
