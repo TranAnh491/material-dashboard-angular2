@@ -4146,6 +4146,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           unitNumber: rollsOrBags,
           qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${imdForQR}`
         });
+
+        // 🆕 In thêm tem "TỒN" nếu còn dư tồn kho
+        // Phần dư = Tồn kho - QTY BAG đang in (lấy theo đúng dòng hiện tại)
+        const remainingFromStock = totalQuantity - rollsOrBags;
+        if (remainingFromStock > 0) {
+          qrCodes.push({
+            materialCode: material.materialCode,
+            poNumber: material.poNumber,
+            unitNumber: remainingFromStock,
+            displayPrefix: 'TỒN',
+            // QR vẫn encode đúng template hiện có (không gắn thêm chữ "TỒN")
+            qrData: `${material.materialCode}|${material.poNumber}|${remainingFromStock}|${imdForQR}`
+          });
+        }
       } else {
         // 🔄 LOGIC CŨ: Tính toán bình thường dựa trên tổng tồn kho
         const fullUnits = Math.floor(totalQuantity / rollsOrBags);
@@ -4201,6 +4215,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             materialCode: qrCode.materialCode,
             poNumber: qrCode.poNumber,
             unitNumber: qrCode.unitNumber,
+            displayPrefix: qrCode.displayPrefix,
             qrData: qrCode.qrData,
             index: index + 1
           };
@@ -4542,7 +4557,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
                 <div class="info-section">
                   <div class="info-row material-code">${qr.materialCode}</div>
                   <div class="info-row">${qr.poNumber}</div>
-                  <div class="info-row">${qr.unitNumber}</div>
+                  <div class="info-row">${qr.displayPrefix ? `${qr.displayPrefix} ${qr.unitNumber}` : qr.unitNumber}</div>
                   <div class="info-row small">ASM1</div>
                   <div class="info-row small">${currentDate}</div>
                 </div>
