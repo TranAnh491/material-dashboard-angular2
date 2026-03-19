@@ -521,7 +521,62 @@
           <i class="material-icons">content_copy</i>
           <span>Trùng Batch</span>
         </button>
+        <button class="more-menu-item" (click)="openRecalcXuatDialog(); showMoreMenu = false">
+          <i class="material-icons">undo</i>
+          <span>Hoàn lượng xuất</span>
+        </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hoàn lượng xuất Dialog -->
+<div class="custom-modal" [class.show]="showRecalcXuatDialog" [style.display]="showRecalcXuatDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeRecalcXuatDialog()"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">undo</i>
+        Hoàn lượng xuất theo Batch
+      </h5>
+      <button type="button" class="close-btn" (click)="closeRecalcXuatDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="recalc-desc">
+        Nhập số Batch để tính lại lượng Xuất từ FG Out.<br>
+        Hệ thống sẽ cộng lại toàn bộ <strong>QTY Xuất</strong> trong FG Out cho batch này và cập nhật cột Xuất.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Số Batch *</label>
+        <input type="text"
+               class="form-input recalc-batch-input"
+               [(ngModel)]="recalcBatchInput"
+               placeholder="Nhập số batch (VD: A16030020)"
+               (keyup.enter)="recalcXuatForBatch()"
+               autocomplete="off"
+               autocapitalize="characters"
+               style="text-transform:uppercase">
+      </div>
+      <div class="recalc-result" *ngIf="recalcXuatResult">
+        <span [class.recalc-success]="recalcXuatResult.success" [class.recalc-error]="!recalcXuatResult.success">
+          {{ recalcXuatResult.message }}
+        </span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeRecalcXuatDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="btn btn-apply"
+              (click)="recalcXuatForBatch()"
+              [disabled]="isRecalcXuatLoading || !recalcBatchInput.trim()">
+        <i class="material-icons" *ngIf="!isRecalcXuatLoading">refresh</i>
+        <i class="material-icons" *ngIf="isRecalcXuatLoading">sync</i>
+        {{ isRecalcXuatLoading ? 'Đang xử lý...' : 'Cập nhật' }}
+      </button>
     </div>
   </div>
 </div>

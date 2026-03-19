@@ -412,6 +412,43 @@
   }
 }
 
+// Tất cả vị trí hiển thị dạng Box (A,B,C...)
+.location-box-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 8px;
+
+  @media (max-width: 1400px) { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  @media (max-width: 1100px) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  @media (max-width: 900px) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 600px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.location-box {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 10px 8px;
+  cursor: default;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.location-box-code {
+  font-weight: 800;
+  font-size: 13px;
+  color: #212121;
+  letter-spacing: 0.2px;
+  word-break: break-word;
+}
+
+.location-box-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #757575;
+}
+
 // Loading
 .loading-container {
   padding: 40px;

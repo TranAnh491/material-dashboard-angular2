@@ -356,6 +356,14 @@
           <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Location</p>
         </div>
       </div>
+
+      <!-- Box view: tất cả vị trí (A,B,C...) -->
+      <div class="location-box-grid" *ngIf="!isLoading && filteredItems.length > 0">
+        <div class="location-box" *ngFor="let item of filteredItems; trackBy: trackByFn" [title]="item.viTri">
+          <div class="location-box-code">{{ item.viTri }}</div>
+          <div class="location-box-meta">STT: {{ item.stt }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

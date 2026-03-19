@@ -1527,6 +1527,95 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ====================== HOÀN LƯỢNG XUẤT ======================
+  showRecalcXuatDialog: boolean = false;
+  recalcBatchInput: string = '';
+  isRecalcXuatLoading: boolean = false;
+  recalcXuatResult: { success: boolean; message: string } | null = null;
+
+  openRecalcXuatDialog(): void {
+    this.showRecalcXuatDialog = true;
+    this.recalcBatchInput = '';
+    this.recalcXuatResult = null;
+    this.isRecalcXuatLoading = false;
+  }
+
+  closeRecalcXuatDialog(): void {
+    this.showRecalcXuatDialog = false;
+    this.recalcBatchInput = '';
+    this.recalcXuatResult = null;
+    this.isRecalcXuatLoading = false;
+  }
+
+  /**
+   * Tính lại lượng Xuất cho batch từ fg-out:
+   * 1. Cộng tổng QTY từ tất cả dòng trong fg-out có batchNumber = input.
+   * 2. Cập nhật field `xuat` và tính lại `ton` cho tất cả dòng fg-inventory cùng batch.
+   */
+  async recalcXuatForBatch(): Promise<void> {
+    const batch = (this.recalcBatchInput || '').trim().toUpperCase();
+    if (!batch) return;
+
+    this.isRecalcXuatLoading = true;
+    this.recalcXuatResult = null;
+
+    try {
+      // Bước 1: Tổng QTY xuất trong fg-out theo batch
+      const fgOutSnap = await this.firestore
+        .collection('fg-out', ref => ref.where('batchNumber', '==', batch))
+        .get().toPromise();
+
+      let totalXuat = 0;
+      if (fgOutSnap && !fgOutSnap.empty) {
+        fgOutSnap.docs.forEach(doc => {
+          const d = doc.data() as any;
+          totalXuat += Number(d.quantity ?? 0) || 0;
+        });
+      }
+
+      // Bước 2: Cập nhật fg-inventory theo batch
+      const invSnap = await this.firestore
+        .collection('fg-inventory', ref => ref.where('batchNumber', '==', batch))
+        .get().toPromise();
+
+      if (!invSnap || invSnap.empty) {
+        this.recalcXuatResult = {
+          success: false,
+          message: `⚠️ Không tìm thấy dòng nào trong FG Inventory cho batch "${batch}".`
+        };
+        this.isRecalcXuatLoading = false;
+        return;
+      }
+
+      const firestoreBatch = this.firestore.firestore.batch();
+      invSnap.docs.forEach(doc => {
+        const d = doc.data() as any;
+        const tonDau = Number(d.tonDau ?? 0) || 0;
+        const nhap = Number(d.nhap ?? d.quantity ?? 0) || 0;
+        const newTon = tonDau + nhap - totalXuat;
+        firestoreBatch.update(doc.ref, {
+          xuat: totalXuat,
+          exported: totalXuat,
+          ton: newTon,
+          updatedAt: new Date()
+        });
+      });
+      await firestoreBatch.commit();
+
+      this.recalcXuatResult = {
+        success: true,
+        message: `✅ Đã cập nhật batch "${batch}": Xuất = ${totalXuat.toLocaleString()}, cập nhật ${invSnap.size} dòng FG Inventory.`
+      };
+    } catch (error: any) {
+      this.recalcXuatResult = {
+        success: false,
+        message: `❌ Lỗi: ${error?.message || error}`
+      };
+    } finally {
+      this.isRecalcXuatLoading = false;
+    }
+  }
+
   filterTodayImport(): void {
     const today = new Date();
     const yyyy = today.getFullYear();
