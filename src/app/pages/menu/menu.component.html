@@ -32,14 +32,11 @@
     <div class="menu-grid">
       <ng-container *ngFor="let tab of menuTabs">
         <div *ngIf="tab.category === 'ASM1 RM' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item-cell">
-          <div class="menu-item menu-item-asm1-rm" 
-               (click)="navigateToTab(tab.path)">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons">{{tab.icon}}</i>
-            <span *ngIf="tab.path !== '/inbound-asm1'">{{tab.title}}</span>
-          </div>
-          <span *ngIf="tab.path === '/inbound-asm1'" class="menu-item-label-outside">{{tab.title}}</span>
+             class="menu-item menu-item-asm1-rm" 
+             (click)="navigateToTab(tab.path)">
+          <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+          <i *ngIf="!tab.iconImage" class="material-icons">{{tab.icon}}</i>
+          <span>{{tab.title}}</span>
         </div>
       </ng-container>
     </div>

@@ -957,12 +957,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const parts = qrCode.split('|');
       let materialCode = '';
       let poNumber = '';
+      let imd = '';
 
       if (parts.length >= 2) {
         materialCode = parts[0].trim().substring(0, 7); // Lấy 7 ký tự đầu
         poNumber = parts[1].trim(); // PO number
+        if (parts.length >= 4) {
+          imd = parts[3].trim(); // IMD (DDMMYYYY)
+        }
       } else if (parts.length >= 1) {
         materialCode = parts[0].trim().substring(0, 7);
+        if (parts.length >= 4) {
+          imd = parts[3].trim();
+        }
       } else {
         materialCode = qrCode.trim().substring(0, 7);
       }
@@ -973,7 +980,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      console.log(`🔍 Searching for material: ${materialCode}, PO: ${poNumber || 'N/A'}`);
+      console.log(`🔍 Searching for material: ${materialCode}, PO: ${poNumber || 'N/A'}, IMD: ${imd || 'N/A'}`);
+
+      const toDDMMYYYY = (dateValue: any): string => {
+        if (!dateValue) return '';
+        try {
+          const d: Date =
+            typeof dateValue?.toDate === 'function' ? dateValue.toDate() : new Date(dateValue);
+          if (Number.isNaN(d.getTime())) return '';
+          return d.toLocaleDateString('en-GB').split('/').join('');
+        } catch {
+          return '';
+        }
+      };
 
       // Tìm tất cả materials có materialCode này trong inventory-materials (để lấy các vị trí khác)
       const allMaterialsSnapshot = await this.firestore
@@ -990,8 +1009,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      // Lấy tất cả materials để tìm các vị trí khác
-      const allMaterials: any[] = [];
+      // Lấy tất cả materials để tìm các vị trí khác (nhưng chỉ gom "đúng bản ghi" theo Mã + PO + IMD khi có)
+      const relevantMaterials: any[] = [];
       const locationSet = new Set<string>();
       let matchedMaterial: any = null;
 
@@ -1005,6 +1024,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const xt = Number(data.xt) || 0;
         const calculatedStock = openingStockValue + quantity - exported - xt;
         
+        const importDateStr = toDDMMYYYY(data.importDate);
         const material = {
           id: doc.id,
           materialCode: data.materialCode || '',
@@ -1016,36 +1036,37 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           exported: exported,
           xt: xt,
           batchNumber: data.batchNumber || '',
-          importDate: data.importDate
+          importDate: data.importDate,
+          importDateStr
         };
 
-        allMaterials.push(material);
-        
-        // Thu thập tất cả các vị trí
-        if (material.location && material.location.trim() !== '') {
-          locationSet.add(material.location);
-        }
+        const matchesMaterialCode = material.materialCode === materialCode;
+        const matchesPO = !poNumber || material.poNumber === poNumber;
 
-        // Tìm material khớp với QR code (materialCode + PO)
-        if (material.materialCode === materialCode) {
-          if (poNumber && material.poNumber === poNumber) {
-            // Khớp cả materialCode và PO
-            matchedMaterial = material;
-          } else if (!poNumber && !matchedMaterial) {
-            // Nếu không có PO trong QR code, lấy material đầu tiên
+        // Yêu cầu: chỉ cần gom theo Mã nguyên liệu + PO để ra đúng vị trí.
+        // IMD là duy nhất nên không cần lọc thêm khi hiển thị danh sách vị trí.
+        if (matchesMaterialCode && matchesPO) {
+          relevantMaterials.push(material);
+
+          if (material.location && material.location.trim() !== '') {
+            locationSet.add(material.location);
+          }
+
+          // Lấy bản ghi đầu tiên khớp để làm "material được scan"
+          if (!matchedMaterial) {
             matchedMaterial = material;
           }
         }
       });
 
       // Nếu không tìm thấy material khớp chính xác, lấy material đầu tiên
-      if (!matchedMaterial && allMaterials.length > 0) {
-        matchedMaterial = allMaterials[0];
-        console.log(`⚠️ Không tìm thấy material khớp chính xác, sử dụng material đầu tiên`);
-      }
-
       if (!matchedMaterial) {
-        alert(`❌ Không tìm thấy material khớp với QR code`);
+        // Theo yêu cầu: tìm theo Mã + PO
+        if (!poNumber) {
+          alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
+        } else {
+          alert(`❌ Không tìm thấy material đúng theo Mã + PO.\n\nMã: ${materialCode}\nPO: ${poNumber}`);
+        }
         this.isSearchingMaterial = false;
         return;
       }
@@ -1057,9 +1078,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // Tồn kho của PO được scan
       this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
 
-      // Tồn kho theo từng vị trí (cùng materialCode): gộp stock theo location
+      // Tồn kho theo từng vị trí (theo đúng Mã + PO + IMD):
       const stockByLoc = new Map<string, number>();
-      allMaterials.forEach(m => {
+      relevantMaterials.forEach(m => {
         const loc = (m.location || '').trim();
         if (!loc) return;
         const current = stockByLoc.get(loc) ?? 0;
@@ -1069,15 +1090,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .map(([location, stock]) => ({ location, stock }))
         .sort((a, b) => a.location.localeCompare(b.location));
 
-      // Tạo danh sách tất cả các vị trí hiện có của cùng materialCode
-      // Bao gồm tất cả các vị trí (không loại bỏ vị trí hiện tại)
-      // Sắp xếp và loại bỏ trùng lặp
-      const allLocations = Array.from(locationSet).filter(loc => loc && loc.trim() !== '').sort();
-      this.suggestedLocations = allLocations;
+      // Danh sách vị trí hiện có của đúng bản ghi (Mã + PO + IMD)
+      this.suggestedLocations = Array.from(locationSet).filter(loc => loc && loc.trim() !== '').sort();
 
-      console.log(`✅ Found material: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber})`);
+      console.log(`✅ Found material: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber}, IMD: ${matchedMaterial.importDateStr || 'N/A'})`);
       console.log(`📍 Material hiện tại ở vị trí: ${matchedMaterial.location || 'Chưa có'}`);
-      console.log(`📍 Tất cả các vị trí hiện có của mã hàng này: ${allLocations.join(', ') || 'Không có'}`);
+      console.log(`📍 Tất cả các vị trí hiện có của đúng bản ghi: ${this.suggestedLocations.join(', ') || 'Không có'}`);
 
       // Chuyển sang bước chọn vị trí
       this.storeMaterialStep = 'choose-location';

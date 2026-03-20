@@ -36,6 +36,14 @@
           <i class="material-icons">visibility</i>
           Xem tất cả
         </button>
+
+        <!-- Refresh hoan tac (undo) từ FG Out -->
+        <button class="custom-btn"
+                (click)="refreshUndoExports()"
+                [disabled]="isLoading">
+          <i class="material-icons">refresh</i>
+          Refresh hoan tac
+        </button>
         
         <button class="custom-btn btn-today" (click)="filterTodayImport()">
           <i class="material-icons">today</i>
@@ -82,6 +90,7 @@
             <th>Mã TP</th>
             <th>LOT</th>
             <th>LSX</th>
+            <th>PO</th>
             <th>Tồn đầu</th>
             <th>Nhập</th>
             <th>Xuất</th>
@@ -99,7 +108,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="18" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="19" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -114,6 +123,7 @@
             <td class="code-cell">{{material.materialCode}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
+            <td class="po-cell">{{material.poNumber || ''}}</td>
             <td class="number-cell">
               <input type="number" 
                      class="editable-input" 

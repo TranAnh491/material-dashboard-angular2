@@ -393,6 +393,13 @@ tr.drag-over {
   text-align: center;
   color: #2196F3;
   font-weight: 500;
+
+  &.stock-empty {
+    color: #c62828;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+  }
 }
 .carton-warning {
   color: #d32f2f;
@@ -1452,6 +1459,94 @@ mat-checkbox {
       }
     }
   }
+}
+
+// ================= Batch Inventory Popup (to, rõ ràng) =================
+.custom-modal .modal-container.batch-inv-modal,
+.batch-inv-modal {
+  transform: scale(1) !important;
+  width: 870px !important;
+  min-width: 870px !important;
+  max-width: 870px !important;
+  max-height: 85vh !important;
+}
+
+.batch-inv-search {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.batch-inv-search-input {
+  min-width: 260px;
+}
+
+.batch-inv-results {
+  overflow: auto;
+  max-height: 60vh;
+  overflow-x: auto;
+}
+
+.batch-inv-inner-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 800px;
+}
+
+.batch-inv-inner-table th,
+.batch-inv-inner-table td {
+  border: 1px solid #e0e0e0;
+  padding: 10px 10px;
+  font-size: 13.5px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+// Mỗi cột trong popup phải rộng đúng 150px
+.batch-inv-inner-table th:nth-child(1),
+.batch-inv-inner-table td:nth-child(1),
+.batch-inv-inner-table th:nth-child(2),
+.batch-inv-inner-table td:nth-child(2),
+.batch-inv-inner-table th:nth-child(3),
+.batch-inv-inner-table td:nth-child(3),
+.batch-inv-inner-table th:nth-child(4),
+.batch-inv-inner-table td:nth-child(4),
+.batch-inv-inner-table th:nth-child(5),
+.batch-inv-inner-table td:nth-child(5) {
+  width: 150px;
+  min-width: 150px;
+}
+
+.batch-inv-inner-table th {
+  background: #f5f5f5;
+  font-weight: 700;
+  color: #111;
+  text-align: left;
+}
+
+.batch-inv-row {
+  &:hover {
+    background: #e3f2fd;
+  }
+}
+
+.batch-inv-inner-table td:nth-child(5) {
+  text-align: right;
+  font-family: $fg-font-family;
+  font-weight: 600;
+}
+
+// ================= Material Code Popup (cũng to hơn) =================
+.material-code-modal {
+  max-width: 520px !important;
+  width: min(95vw, 520px) !important;
+}
+
+.material-code-modal .batch-inv-inner-table td {
+  cursor: pointer;
 }
 
     .modal-footer {

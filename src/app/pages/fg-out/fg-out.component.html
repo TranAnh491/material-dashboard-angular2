@@ -223,24 +223,25 @@
               <td class="date-cell">
                 <input type="date"
                        class="editable-input"
-                       [value]="formatDateForInput(row.material.exportDate)"
+                       [value]="formatDateForInput(row.material.approvedAt || row.material.exportDate)"
+                       [disabled]="row.material.approved"
                        (change)="onDateChange($event, row.material)">
               </td>
               <td class="code-cell td-dropdown">
                 <input type="text"
                        class="editable-input"
                        [(ngModel)]="row.material.batchNumber"
-                       (focus)="onInventoryFieldFocus($event, row.material, 'batch')"
-                       (blur)="onInventoryFieldBlur()"
-                       (change)="updateMaterialInFirebase(row.material)"
+                       (click)="openBatchInventoryPopup(row.material)"
+                       (change)="onMainBatchChange(row.material)"
                        placeholder="Batch">
               </td>
               <td class="code-cell" [class.material-code-wrong]="row.type === 'detail' && isMaterialCodeQtyWrong(row.material)">
                 <input type="text"
-                       class="editable-input readonly-auto"
-                       [value]="row.material.materialCode"
-                       readonly
-                       placeholder="Mã TP (tự điền từ Batch)">
+                       class="editable-input"
+                       [(ngModel)]="row.material.materialCode"
+                       (input)="onMaterialCodeTyping(row.material)"
+                       (click)="openMaterialCodePopup(row.material)"
+                       placeholder="Mã TP (nhập 7 ký tự đầu)">
               </td>
               <td class="code-cell">
                 <input type="text"
@@ -287,7 +288,13 @@
                 <ng-container *ngIf="!(row.material.materialCode || '').trim()">{{ 0 }}</ng-container>
                 <ng-container *ngIf="(row.material.materialCode || '').trim()">{{ getCartonOdd(row.material).odd }}</ng-container>
               </td>
-              <td class="number-cell stock-cell">{{ getInventoryStockByBatch(row.material) | number }}</td>
+              <td class="number-cell stock-cell"
+                  [class.stock-empty]="getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim()">
+                <ng-container *ngIf="getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim(); else stockNumber">
+                  Hết stock
+                </ng-container>
+                <ng-template #stockNumber>{{ getInventoryStockByBatch(row.material) | number }}</ng-template>
+              </td>
               <td class="location-cell">
                 <input type="text"
                        class="editable-input"
@@ -348,6 +355,70 @@
   </div>
 </div>
 
+<!-- Material Code Popup -->
+<div class="custom-modal" [class.show]="showMaterialCodePopup" [style.display]="showMaterialCodePopup ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeMaterialCodePopup()"></div>
+  <div class="modal-container material-code-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">list_alt</i>
+        Chọn Mã TP theo Shipment
+      </h5>
+      <button type="button" class="close-btn" (click)="closeMaterialCodePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="batch-inv-search">
+        <label class="form-label">Lọc theo mã TP</label>
+        <input type="text"
+               class="form-input batch-inv-search-input"
+               [(ngModel)]="materialCodePopupInput"
+               placeholder="Nhập 7 ký tự đầu (tuỳ chọn)"
+               autocomplete="off"
+               autocapitalize="characters"
+               style="text-transform:uppercase"
+               (keyup.enter)="loadMaterialCodePopupOptions()"
+        />
+        <button type="button" class="btn btn-apply"
+                (click)="loadMaterialCodePopupOptions()"
+                [disabled]="materialCodePopupLoading">
+          <i class="material-icons">search</i>
+          Tìm
+        </button>
+      </div>
+
+      <div *ngIf="!materialCodePopupLoading" class="batch-inv-results">
+        <div *ngIf="materialCodePopupOptions.length === 0" class="text-center" style="padding: 12px; color: #666;">
+          Không có mã TP nào trong shipment này
+        </div>
+
+        <table *ngIf="materialCodePopupOptions.length > 0" class="batch-inv-inner-table">
+          <thead>
+            <tr>
+              <th>Mã TP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let code of materialCodePopupOptions"
+                class="batch-inv-row"
+                (click)="selectMaterialCodePopupOption(code)"
+                [style.cursor]="'pointer'">
+              <td>{{ code }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeMaterialCodePopup()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Dropdown chọn Batch / LOT / LSX từ FG Inventory -->
 <div *ngIf="showInventoryDropdown" class="inventory-dropdown"
      [style.top.px]="inventoryDropdownPos.top"
@@ -360,6 +431,81 @@
        class="inventory-dropdown-item"
        (mousedown)="selectInventoryOption(opt)">
     {{opt}}
+  </div>
+</div>
+
+<!-- Batch Inventory Popup -->
+<div class="custom-modal" [class.show]="showBatchInventoryPopup" [style.display]="showBatchInventoryPopup ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeBatchInventoryPopup()"></div>
+  <div class="modal-container batch-inv-modal" style="width:870px;min-width:870px;max-width:870px;transform:scale(1);">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">inventory</i>
+        Chi tiết batch trong FG Inventory
+      </h5>
+      <button type="button" class="close-btn" (click)="closeBatchInventoryPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="batch-inv-search">
+        <label class="form-label">Nhập Batch</label>
+        <input type="text"
+               class="form-input batch-inv-search-input"
+               [(ngModel)]="batchInventoryPopupBatchInput"
+               placeholder="VD: A16030020"
+               autocomplete="off"
+               autocapitalize="characters"
+               style="text-transform:uppercase"
+               (keyup.enter)="loadBatchInventoryPopupRows()"
+        />
+        <button type="button" class="btn btn-apply"
+                (click)="loadBatchInventoryPopupRows()"
+                [disabled]="batchInventoryPopupLoading || !batchInventoryPopupBatchInput.trim()">
+          <i class="material-icons" *ngIf="!batchInventoryPopupLoading">search</i>
+          <i class="material-icons" *ngIf="batchInventoryPopupLoading">sync</i>
+          {{ batchInventoryPopupLoading ? 'Đang tìm...' : 'Tìm' }}
+        </button>
+      </div>
+
+      <div *ngIf="!batchInventoryPopupLoading" class="batch-inv-results">
+        <div *ngIf="batchInventoryPopupRows.length === 0" class="text-center" style="padding: 12px; color: #666;">
+          Không có dữ liệu tồn kho
+        </div>
+
+        <table *ngIf="batchInventoryPopupRows.length > 0" class="batch-inv-inner-table">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Mã TP</th>
+              <th>LSX</th>
+              <th>LOT</th>
+              <th>Tồn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of batchInventoryPopupRows"
+                class="batch-inv-row"
+                [style.cursor]="'pointer'"
+                (click)="selectBatchInventoryPopupRow(r)">
+              <td>{{ r.batchNumber }}</td>
+              <td>{{ r.materialCode }}</td>
+              <td>{{ r.lsx }}</td>
+              <td>{{ r.lot }}</td>
+              <td [style.color]="r.stock <= 0 ? '#c62828' : '#2196F3'">
+                {{ r.stock <= 0 ? 'Hết stock' : (r.stock | number) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeBatchInventoryPopup()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
   </div>
 </div>
 
@@ -860,7 +1006,9 @@
                 </td>
                 <td>{{getCartonOdd(material).odd | number}}</td>
                 <td>{{material.mergeCarton || ''}}</td>
-                <td>{{getInventoryStockByBatch(material) | number}}</td>
+                <td [style.color]="getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? '#c62828' : ''">
+                  {{ getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? 'Hết stock' : (getInventoryStockByBatch(material) | number) }}
+                </td>
                 <td>{{material.location || ''}}</td>
                 <td>{{material.productType || ''}}</td>
                 <td>{{material.notes || ''}}</td>

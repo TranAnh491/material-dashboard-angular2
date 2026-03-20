@@ -30,6 +30,7 @@ export interface FGInventoryItem {
   location: string;
   notes: string;
   customer: string;
+  poNumber?: string; // Số PO từ FG In
   isReceived: boolean;
   isCompleted: boolean;
   isDuplicate: boolean;
@@ -83,9 +84,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   /** Cache tổng Nhập/Xuất theo key Mã TP|Batch|LSX|LOT để đồng bộ từ FG In / FG Export */
   private fgInQtyByKey = new Map<string, number>();
+  private fgInPoByBatchKey = new Map<string, Set<string>>(); // batch → tập hợp PO từ fg-in
   /** Cache theo Batch (chỉ dựa vào số batch) */
   private fgInQtyByBatchKey = new Map<string, number>();
-  private fgOutQtyByBatchKey = new Map<string, number>();
   
   // Loading state
   isLoading: boolean = false;
@@ -273,13 +274,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   /** Subscribe 1 lần để lấy tổng Nhập/Xuất từ fg-in và fg-out (đúng theo tab FG Out). */
   private subscribeFGInOutCaches(): void {
-    // FG In: tổng nhập theo key
+    // FG In: tổng nhập theo key + PO theo batch
     this.firestore.collection('fg-in')
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(actions => {
         this.fgInQtyByKey.clear();
         this.fgInQtyByBatchKey.clear();
+        this.fgInPoByBatchKey.clear();
         actions.forEach(a => {
           const d = a.payload.doc.data() as any;
           const k = this.fgKey(d.materialCode, d.batchNumber, d.lsx, d.lot);
@@ -290,25 +292,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           }
           if (bk) {
             this.fgInQtyByBatchKey.set(bk, (this.fgInQtyByBatchKey.get(bk) || 0) + q);
-          }
-        });
-        this.applyFGInOutCachesToMaterials();
-        this.applyFilters();
-        this.cdr.detectChanges();
-      });
-
-    // FG Out: tổng xuất theo batch (đúng theo dữ liệu đang thấy ở tab FG Out)
-    this.firestore.collection('fg-out')
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.fgOutQtyByBatchKey.clear();
-        actions.forEach(a => {
-          const d = a.payload.doc.data() as any;
-          const bk = this.fgBatchKey(d.batchNumber);
-          const q = Number(d.quantity) || 0;
-          if (bk) {
-            this.fgOutQtyByBatchKey.set(bk, (this.fgOutQtyByBatchKey.get(bk) || 0) + q);
+            // Gộp tất cả số PO unique theo batch (1 batch có thể nhiều phiếu nhập / nhiều PO)
+            const po = String(d.poNumber || d.soPO || '').trim();
+            if (po) {
+              if (!this.fgInPoByBatchKey.has(bk)) {
+                this.fgInPoByBatchKey.set(bk, new Set<string>());
+              }
+              this.fgInPoByBatchKey.get(bk)!.add(po);
+            }
           }
         });
         this.applyFGInOutCachesToMaterials();
@@ -331,10 +322,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       if (!bk) return;
 
       const nhapCache = this.fgInQtyByBatchKey.get(bk);
-      const xuatCache = this.fgOutQtyByBatchKey.get(bk);
 
       if (nhapCache != null) m.nhap = nhapCache;
-      if (xuatCache != null) m.xuat = xuatCache;
+
+      // Gán PO number từ fg-in: gộp tất cả PO unique của batch bằng dấu ", "
+      const poSet = this.fgInPoByBatchKey.get(bk);
+      if (poSet && poSet.size > 0) m.poNumber = Array.from(poSet).join(', ');
 
       const tonDau = Number(m.tonDau) || 0;
       const nhap = Number(m.nhap) || 0;
@@ -1562,7 +1555,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     try {
       // Bước 1: Tổng QTY xuất trong fg-out theo batch
       const fgOutSnap = await this.firestore
-        .collection('fg-out', ref => ref.where('batchNumber', '==', batch))
+        .collection('fg-out', ref =>
+          ref.where('batchNumber', '==', batch)
+             .where('approved', '==', true)
+        )
         .get().toPromise();
 
       let totalXuat = 0;
@@ -1613,6 +1609,112 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       };
     } finally {
       this.isRecalcXuatLoading = false;
+    }
+  }
+
+  /**
+   * Refresh hoan tác (undo) từ FG Out:
+   * - Load các bản ghi fg-out-undo chưa xử lý
+   * - Tìm dòng FG Inventory tương ứng (materialCode + batchNumber + lsx + lot)
+   * - Giảm `xuat` tương ứng và cập nhật `ton`
+   * - Đánh dấu undo đã xử lý
+   */
+  async refreshUndoExports(): Promise<void> {
+    this.isLoading = true;
+    try {
+      const undoSnap = await this.firestore
+        .collection('fg-out-undo', ref => ref.where('processed', '==', false))
+        .get()
+        .toPromise();
+
+      if (!undoSnap || undoSnap.empty) {
+        alert('Không có dữ liệu hoan tác để refresh.');
+        return;
+      }
+
+      const processedAt = new Date();
+
+      for (const undoDoc of undoSnap.docs) {
+        const u = undoDoc.data() as any;
+        const factory = String(u.factory || 'ASM1').trim().toUpperCase();
+        const materialCodeRaw = String(u.materialCode || '').trim();
+        const batchNumberRaw = String(u.batchNumber || '').trim();
+        const lsxRaw = String(u.lsx || '').trim();
+        const lotRaw = String(u.lot || '').trim();
+
+        const materialCodeNorm = materialCodeRaw.toUpperCase();
+        const batchNumberNorm = batchNumberRaw.toUpperCase();
+        const lsxNorm = lsxRaw.toUpperCase();
+        const lotNorm = lotRaw.toUpperCase();
+
+        const quantity = Number(u.quantity ?? 0) || 0;
+
+        if (!materialCodeRaw || !batchNumberRaw || quantity <= 0) continue;
+
+        // Query theo (factory + batchNumber) rồi lọc tiếp trong JS
+        // để tránh lỗi case-sensitive string khi query.
+        const invSnap = await this.firestore
+          .collection('fg-inventory', ref =>
+            ref.where('factory', '==', factory)
+               .where('batchNumber', '==', batchNumberRaw)
+          )
+          .get()
+          .toPromise();
+
+        let remaining = quantity;
+
+        if (invSnap && !invSnap.empty) {
+          for (const invDoc of invSnap.docs) {
+            if (remaining <= 0) break;
+
+            const d = invDoc.data() as any;
+            const invFactory = String(d.factory || 'ASM1').trim().toUpperCase();
+            if (invFactory !== factory) continue;
+
+            const invCode = String(d.materialCode || d.maTP || '').trim().toUpperCase();
+            if (invCode && invCode !== materialCodeNorm) continue;
+
+            const invLsx = String(d.lsx || d.LSX || '').trim().toUpperCase();
+            if (lsxNorm && invLsx !== lsxNorm) continue;
+
+            const invLot = String(d.lot || d.Lot || '').trim().toUpperCase();
+            if (lotNorm && invLot !== lotNorm) continue;
+
+            const currentTon = Number(d.ton ?? d.stock ?? 0) || 0;
+            const currentExported = Number(d.xuat ?? d.exported ?? 0) || 0;
+
+            // Chỉ hoàn tác tối đa phần đã xuất
+            const qtyToAddBack = Math.min(remaining, currentExported);
+            if (qtyToAddBack <= 0) continue;
+
+            const newTon = currentTon + qtyToAddBack;
+            const newExported = Math.max(0, currentExported - qtyToAddBack);
+
+            await invDoc.ref.update({
+              ton: newTon,
+              xuat: newExported,
+              exported: newExported,
+              updatedAt: processedAt
+            });
+
+            remaining -= qtyToAddBack;
+          }
+        }
+
+        // Mark undo đã xử lý để tránh trừ lặp
+        await undoDoc.ref.update({
+          processed: true,
+          processedAt
+        });
+      }
+
+      this.applyFilters();
+      this.cdr.detectChanges();
+    } catch (error: any) {
+      console.error('refreshUndoExports error:', error);
+      alert(`❌ Lỗi refresh hoan tác: ${error?.message || error}`);
+    } finally {
+      this.isLoading = false;
     }
   }
 

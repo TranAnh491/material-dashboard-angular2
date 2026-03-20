@@ -31,7 +31,7 @@ export class MenuComponent implements OnInit {
   
   menuTabs = [
     // Dashboard - First
-    { path: '/dashboard', title: 'Dashboard', icon: 'speed', category: 'Main' },
+    { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
     
     // Main - Additional tools
     { path: '/work-order-status', title: 'Work Order', icon: 'description', category: 'Main' },

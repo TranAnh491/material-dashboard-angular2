@@ -32,6 +32,8 @@ export interface FgOutItem {
   updateCount: number;
   pushNo: string; // Thêm PushNo
   approved: boolean; // Thêm trường duyệt xuất
+  approvedBy?: string;
+  approvedAt?: Date; // Ngày tick duyệt
   transferredFrom?: string;
   transferredAt?: Date;
   createdAt?: Date;
@@ -236,12 +238,43 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private readonly INVENTORY_DROPDOWN_MAX_HEIGHT = 200;
   private readonly INVENTORY_DROPDOWN_MIN_WIDTH = 160;
 
+  // Popup chi tiết Batch → hiện batch + Mã TP + LSX + LOT + tồn (từ fg-inventory)
+  showBatchInventoryPopup: boolean = false;
+  batchInventoryPopupTarget: FgOutItem | null = null;
+  batchInventoryPopupBatchInput: string = '';
+  batchInventoryPopupLoading: boolean = false;
+  batchInventoryPopupRows: Array<{
+    batchNumber: string;
+    materialCode: string;
+    lsx: string;
+    lot: string;
+    stock: number;
+    location: string;
+  }> = [];
+  private batchInventoryPopupLastMaterialPrefixLoaded: string = '';
+
+  // Popup chọn Mã TP theo shipment đang fill
+  showMaterialCodePopup: boolean = false;
+  materialCodePopupTarget: FgOutItem | null = null;
+  materialCodePopupInput: string = '';
+  materialCodePopupLoading: boolean = false;
+  materialCodePopupOptions: string[] = [];
+
   @HostListener('document:keydown', ['$event'])
   onDocumentKeydown(event: KeyboardEvent): void {
-    if (!this.showInventoryDropdown) return;
     if (event.key === 'Escape' || event.key === 'Esc') {
       event.preventDefault();
-      this.closeInventoryDropdown();
+      if (this.showMaterialCodePopup) {
+        this.closeMaterialCodePopup();
+        return;
+      }
+      if (this.showBatchInventoryPopup) {
+        this.closeBatchInventoryPopup();
+        return;
+      }
+      if (this.showInventoryDropdown) {
+        this.closeInventoryDropdown();
+      }
     }
   }
 
@@ -496,6 +529,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
           updateCount: data.updateCount || 1,
           pushNo: data.pushNo || '000',
           approved: data.approved || false,
+          approvedBy: data.approvedBy || '',
+          approvedAt: data.approvedAt
+            ? (typeof data.approvedAt?.toDate === 'function'
+                ? data.approvedAt.toDate()
+                : data.approvedAt?.seconds != null
+                  ? new Date(data.approvedAt.seconds * 1000)
+                  : (data.approvedAt instanceof Date ? data.approvedAt : new Date(data.approvedAt)))
+            : undefined,
           mergeCarton: data.mergeCarton || '',
           exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
         }));
@@ -778,16 +819,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
   ): Promise<string[]> {
     const codeRaw = (materialCode || '').trim();
 
-    // Nếu field là 'batch': load tất cả batch từ fg-inventory (không cần materialCode)
+    // Nếu field là 'batch': load batch từ fg-inventory theo factory hiện tại
     if (field === 'batch') {
+      const factoryFilter = (factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
       const snap = await firstValueFrom(
-        this.firestore.collection('fg-inventory').get()
+        this.firestore.collection('fg-inventory', ref =>
+          ref.where('factory', '==', factoryFilter)
+        ).get()
       );
       const set = new Set<string>();
       snap.docs.forEach(doc => {
         const d = doc.data() as any;
-        const ton = this.invTon(d);
-        if (ton <= 0) return;
         const b = String(d.batchNumber ?? d.batch ?? '').trim();
         if (b) set.add(b);
       });
@@ -853,12 +895,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const batchRaw = (batchNumber || '').trim();
     if (!batchRaw) return null;
 
-    // Query theo batchNumber (không cần materialCode — tự điền từ inventory)
+    // Query theo batchNumber + factory để lấy đúng nhà máy
+    const factoryFilter = (factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
     const snap = await firstValueFrom(
       this.firestore.collection('fg-inventory', ref =>
         ref.where('batchNumber', '==', batchRaw)
+           .where('factory', '==', factoryFilter)
       ).get()
     );
+
+    const codeNorm = String(materialCode || '').trim().toUpperCase();
+    const codePrefix = codeNorm ? codeNorm.slice(0, 7) : '';
 
     const seenIds = new Set<string>();
     const rows: Array<{ materialCode: string; lot: string; lsx: string; location: string; ton: number; factory: string }> = [];
@@ -867,9 +914,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
       seenIds.add(doc.id);
       const d = doc.data() as any;
       const ton = this.invTon(d);
-      if (ton <= 0) return;
+      // KHÔNG filter theo ton <= 0 — chỉ cần lấy info (Mã TP, LOT, LSX, Location)
+      // dù batch đã xuất hết vẫn phải điền được thông tin
       const invFactory = String(d?.factory ?? '').trim();
-      if (factory && invFactory && invFactory !== factory) return;
+
+      // Nếu user đã có mã TP (hoặc ít nhất 7 ký tự đầu) thì lọc thêm theo prefix.
+      if (codePrefix) {
+        const invCode = this.invNormMaterialCode(d).toUpperCase();
+        if (!invCode.startsWith(codePrefix)) return;
+      }
 
       rows.push({
         materialCode: this.invNormMaterialCode(d),
@@ -906,11 +959,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const batch = String(target.batchNumber || '').trim();
     if (!batch) return;
 
-    const inv = await this.findBestInventoryByBatch('', batch, factory, target.lot, target.lsx);
+    const inv = await this.findBestInventoryByBatch(target.materialCode || '', batch, factory, target.lot, target.lsx);
     if (!inv) return;
 
     // Tự điền Mã TP, LOT, LSX, Location từ fg-inventory
-    if (inv.materialCode) target.materialCode = inv.materialCode;
+    // Theo yêu cầu: chỉ LOT/LSX tự nhảy khi chọn batch; mã TP chỉ set khi đang trống
+    if (inv.materialCode && !String(target.materialCode || '').trim()) target.materialCode = inv.materialCode;
     if (inv.lot) target.lot = inv.lot;
     if (inv.lsx) target.lsx = inv.lsx;
     if (inv.location) target.location = inv.location;
@@ -989,6 +1043,257 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.inventoryDropdownMaterial = null;
     this.inventoryDropdownXKItem = null;
     this.inventoryDropdownOptions = [];
+  }
+
+  // ====================== Material Code Popup ======================
+  openMaterialCodePopup(material: FgOutItem): void {
+    if (material.approved) return;
+    const shipment = String(material.shipment || '').trim();
+    if (!shipment) {
+      alert('Vui lòng nhập/ chọn Shipment trước khi chọn Mã TP.');
+      return;
+    }
+
+    this.materialCodePopupTarget = material;
+    this.materialCodePopupInput = String(material.materialCode || '').trim().toUpperCase();
+    this.materialCodePopupOptions = [];
+    this.materialCodePopupLoading = true;
+    this.showMaterialCodePopup = true;
+
+    this.loadMaterialCodePopupOptions().finally(() => {
+      this.materialCodePopupLoading = false;
+      this.cdr.detectChanges();
+    });
+  }
+
+  closeMaterialCodePopup(): void {
+    this.showMaterialCodePopup = false;
+    this.materialCodePopupTarget = null;
+    this.materialCodePopupInput = '';
+    this.materialCodePopupLoading = false;
+    this.materialCodePopupOptions = [];
+  }
+
+  async loadMaterialCodePopupOptions(): Promise<void> {
+    if (!this.materialCodePopupTarget) return;
+    const target = this.materialCodePopupTarget;
+
+    const shipment = String(target.shipment || '').trim().toUpperCase();
+    const factory = String(target.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
+    const filterPrefix = String(this.materialCodePopupInput || '').trim().toUpperCase();
+
+    // Lấy từ chính dữ liệu FG Out đang có theo shipment đang fill
+    const set = new Set<string>();
+    this.materials.forEach(m => {
+      const mShipment = String(m.shipment || '').trim().toUpperCase();
+      if (mShipment !== shipment) return;
+
+      const mFactory = String(m.factory || 'ASM1').trim().toUpperCase();
+      if (factory && mFactory && mFactory !== factory) return;
+
+      const code = String(m.materialCode || '').trim().toUpperCase();
+      if (!code) return;
+      if (filterPrefix && !code.startsWith(filterPrefix)) return;
+      set.add(code);
+    });
+
+    this.materialCodePopupOptions = Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  selectMaterialCodePopupOption(code: string): void {
+    if (!this.materialCodePopupTarget) return;
+    const target = this.materialCodePopupTarget;
+    if (target.approved) return;
+
+    target.materialCode = String(code || '').trim().toUpperCase();
+    // reset các trường phụ thuộc để buộc chọn lại batch/lot/lsx
+    target.batchNumber = '';
+    target.lot = '';
+    target.lsx = '';
+    target.location = '';
+
+    this.updateMaterialInFirebase(target);
+    this.closeMaterialCodePopup();
+    this.openBatchInventoryPopup(target);
+  }
+
+  // ====================== Batch Inventory Popup ======================
+  openBatchInventoryPopup(material: FgOutItem): void {
+    // Allow xem chi tiết kể cả khi chưa duyệt, nhưng nếu đã duyệt thì không cho đổi
+    if (material.approved) return;
+    this.batchInventoryPopupTarget = material;
+    const mc = String(material.materialCode || '').trim().toUpperCase();
+    const mcPrefix = mc ? mc.slice(0, 7) : '';
+    // Nếu đã có mã TP (ít nhất 7 ký tự đầu) thì popup ưu tiên hiển thị danh sách batch theo mã TP,
+    // do đó reset ô batch filter để không bị khóa vào 1 batch đang có.
+    this.batchInventoryPopupBatchInput = mcPrefix.length === 7
+      ? ''
+      : String(material.batchNumber || '').trim().toUpperCase();
+    this.batchInventoryPopupRows = [];
+    this.showBatchInventoryPopup = true;
+    this.loadBatchInventoryPopupRows();
+  }
+
+  closeBatchInventoryPopup(): void {
+    this.showBatchInventoryPopup = false;
+    this.batchInventoryPopupTarget = null;
+    this.batchInventoryPopupRows = [];
+    this.batchInventoryPopupBatchInput = '';
+    this.batchInventoryPopupLoading = false;
+  }
+
+  // Normalize khi user nhập mã TP (popup mở khi user click ô này)
+  async onMaterialCodeTyping(material: FgOutItem): Promise<void> {
+    if (material.approved) return;
+    material.materialCode = String(material.materialCode || '').toUpperCase();
+  }
+
+  async loadBatchInventoryPopupRows(): Promise<void> {
+    if (!this.batchInventoryPopupTarget) return;
+    this.batchInventoryPopupLoading = true;
+    try {
+      const factory = String(
+        this.batchInventoryPopupTarget.factory || this.selectedFactory || 'ASM1'
+      ).trim().toUpperCase();
+      const targetMaterial = String(this.batchInventoryPopupTarget.materialCode || '').trim().toUpperCase();
+      const materialPrefix = targetMaterial ? targetMaterial.slice(0, 7) : '';
+
+      const batchFilter = String(this.batchInventoryPopupBatchInput || '').trim().toUpperCase();
+
+      // Case A: Có mã TP (>=7 ký tự đầu) → lấy danh sách theo prefix mã TP
+      let snap: any = null;
+      if (materialPrefix.length === 7) {
+        // Lấy theo factory rồi lọc prefix trong JS (để popup luôn có danh sách để chọn)
+        snap = await firstValueFrom(
+          this.firestore.collection('fg-inventory', ref =>
+            ref.where('factory', '==', factory)
+          ).get()
+        );
+      } else if (batchFilter) {
+        // Case B: Không có mã TP đủ → lọc theo batch nhập
+        snap = await firstValueFrom(
+          this.firestore.collection('fg-inventory', ref =>
+            ref.where('factory', '==', factory).where('batchNumber', '==', batchFilter)
+          ).get()
+        );
+      } else {
+        this.batchInventoryPopupRows = [];
+        return;
+      }
+
+      const acc = new Map<string, {
+        batchNumber: string;
+        materialCode: string;
+        lsx: string;
+        lot: string;
+        stock: number;
+        location: string;
+        stockMax: number;
+      }>();
+
+      snap?.docs?.forEach((doc: any) => {
+        const d = doc.data() as any;
+        const invFactory = String(d?.factory || '').trim().toUpperCase();
+        if (invFactory && invFactory !== factory) return;
+
+        const invBatch = this.invNormBatch(d).toUpperCase();
+        const invCode = this.invNormMaterialCode(d).toUpperCase();
+        const invLsx = this.invNormLsx(d);
+        const invLot = this.invNormLot(d);
+        const stock = this.invTon(d);
+        const location = String(d?.location ?? d?.viTri ?? '').trim();
+
+        // Lọc mã TP nếu đang có (ưu tiên match chính xác nếu user chọn full mã > 7 ký tự)
+        const targetExact = targetMaterial && targetMaterial.length > 7 ? targetMaterial : '';
+        if (targetExact) {
+          if (invCode !== targetExact) return;
+        } else if (materialPrefix.length === 7) {
+          if (!invCode.startsWith(materialPrefix)) return;
+        }
+
+        // Lọc batch nếu user nhập
+        if (batchFilter) {
+          if (invBatch !== batchFilter) return;
+        }
+
+        // Group theo: batch + mã TP + LSX + LOT
+        const key = `${invBatch}|${invCode}|${invLsx}|${invLot}`;
+        const existing = acc.get(key);
+        if (!existing) {
+          acc.set(key, {
+            batchNumber: invBatch,
+            materialCode: invCode,
+            lsx: invLsx,
+            lot: invLot,
+            stock,
+            location,
+            stockMax: stock
+          });
+        } else {
+          existing.stock += stock;
+          if (stock > existing.stockMax) {
+            existing.stockMax = stock;
+            existing.location = location;
+          }
+        }
+      });
+
+      this.batchInventoryPopupRows = Array.from(acc.values())
+        .map(v => ({
+          batchNumber: v.batchNumber,
+          materialCode: v.materialCode,
+          lsx: v.lsx,
+          lot: v.lot,
+          stock: v.stock,
+          location: v.location
+        }))
+        .sort((a, b) => {
+          const batchCmp = String(a.batchNumber || '').localeCompare(String(b.batchNumber || ''));
+          if (batchCmp !== 0) return batchCmp;
+          const codeCmp = String(a.materialCode || '').localeCompare(String(b.materialCode || ''));
+          if (codeCmp !== 0) return codeCmp;
+          return (b.stock || 0) - (a.stock || 0);
+        });
+    } finally {
+      this.batchInventoryPopupLoading = false;
+    }
+  }
+
+  selectBatchInventoryPopupRow(r: {
+    batchNumber: string;
+    materialCode: string;
+    lsx: string;
+    lot: string;
+    stock: number;
+    location: string;
+  }): void {
+    if (!this.batchInventoryPopupTarget) return;
+    const target = this.batchInventoryPopupTarget;
+
+    target.batchNumber = String(r.batchNumber || this.batchInventoryPopupBatchInput).trim().toUpperCase();
+    // Theo yêu cầu: mã TP giữ theo lựa chọn trước đó; chỉ set lại khi đang trống
+    if (!String(target.materialCode || '').trim()) {
+      target.materialCode = r.materialCode;
+    }
+    target.lsx = r.lsx;
+    target.lot = r.lot;
+    target.location = r.location;
+
+    // Update cache getLocation() để giảm gọi lại service
+    const cacheKey = `${target.materialCode}-${target.batchNumber}-${target.lsx}-${target.lot}`;
+    if (target.location) this.locationCache.set(cacheKey, target.location);
+
+    this.updateMaterialInFirebase(target);
+    this.closeBatchInventoryPopup();
+  }
+
+  // Khi user nhập batch trực tiếp trên cột Batch → tự điền lại Mã TP/LOT/LSX từ fg-inventory
+  async onMainBatchChange(material: FgOutItem): Promise<void> {
+    if (material.approved) return;
+    material.batchNumber = String(material.batchNumber || '').trim().toUpperCase();
+    const factory = String(material.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
+    await this.autoFillLotLsxLocationFromBatch(material, factory);
+    this.updateMaterialInFirebase(material);
   }
 
   async selectInventoryOption(value: string): Promise<void> {
@@ -2194,11 +2499,66 @@ export class FgOutComponent implements OnInit, OnDestroy {
     console.log('Approval changed for material:', material.id, 'approved:', material.approved);
     
     if (material.approved) {
-      // Tick duyệt xuất: ghi nhận xuất kho ở FG Inventory (theo Mã TP, batch)
+      // Tick duyệt xuất: lưu ngày duyệt + ghi nhận xuất kho ở FG Inventory
+      material.approvedAt = new Date();
+      material.approvedBy = material.approvedBy || this.currentUserDisplay || 'Current User';
+
+      // Nếu trước đó đã có record hoàn tác cho chính dòng này thì xóa để tránh hoàn tác lại
+      if (material.id) {
+        this.firestore.collection('fg-out-undo').doc(material.id).delete().catch(() => {});
+      }
+
       this.subtractFromFGInventory(material);
+    } else {
+      // Bỏ tick duyệt xuất:
+      // - Ghi vào danh mục hoàn tác trong FG Out
+      // - Xóa khỏi fg-export để history không tính dòng này
+      const originalApprovedAt = material.approvedAt ?? new Date();
+      if (material.id) {
+        this.saveToUndoCategory(material, originalApprovedAt);
+      } else {
+        // fallback: nếu thiếu id thì vẫn lưu bằng add()
+        this.saveToUndoCategory(material, originalApprovedAt, true);
+      }
+
+      this.removeFromExportCollection(material);
+
+      // Reset approvedAt để UI hiển thị đúng “ngày tick duyệt”
+      material.approvedAt = undefined;
+      material.approvedBy = undefined;
     }
-    // Bỏ tick duyệt xuất: không thay đổi FG Inventory, chỉ lưu trạng thái FG Out
+
     this.updateMaterialInFirebase(material);
+  }
+
+  /**
+   * Lưu dòng fg-out đã bỏ duyệt vào danh mục hoàn tác.
+   * Danh mục này sẽ được FG Inventory "Refresh" để trừ vào cột xuat.
+   */
+  private saveToUndoCategory(material: FgOutItem, approvedAt: Date, forceAdd: boolean = false): void {
+    const factory = (material.factory || 'ASM1').toString().trim().toUpperCase();
+    const undoRecord: any = {
+      fgOutId: material.id || null,
+      factory,
+      shipment: material.shipment || '',
+      pallet: material.pallet || '',
+      xp: material.xp || '',
+      materialCode: material.materialCode,
+      batchNumber: material.batchNumber,
+      lsx: material.lsx || '',
+      lot: material.lot || '',
+      quantity: material.quantity || 0,
+      pushNo: material.pushNo || '000',
+      approvedAt,
+      createdAt: new Date(),
+      processed: false
+    };
+
+    if (!forceAdd && material.id) {
+      this.firestore.collection('fg-out-undo').doc(material.id).set(undoRecord).catch(() => {});
+    } else {
+      this.firestore.collection('fg-out-undo').add(undoRecord).catch(() => {});
+    }
   }
 
   // Subtract quantity from FG Inventory (theo Mã TP, nhà máy, batch) và cập nhật fg-export
@@ -2297,8 +2657,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
       quantity: material.quantity,
       shipment: material.shipment,
       pushNo: material.pushNo,
-      approvedBy: 'Current User', // TODO: Get from auth service
-      approvedAt: new Date(),
+      approvedBy: material.approvedBy || 'Current User', // TODO: Get from auth service
+      approvedAt: material.approvedAt || new Date(),
       createdAt: new Date(),
       updatedAt: new Date()
     };
