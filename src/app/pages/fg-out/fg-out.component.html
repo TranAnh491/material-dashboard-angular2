@@ -237,28 +237,24 @@
               </td>
               <td class="code-cell" [class.material-code-wrong]="row.type === 'detail' && isMaterialCodeQtyWrong(row.material)">
                 <input type="text"
-                       class="editable-input"
-                       [(ngModel)]="row.material.materialCode"
-                       (change)="onMaterialFieldChange(row.material)"
-                       placeholder="Mã TP">
+                       class="editable-input readonly-auto"
+                       [value]="row.material.materialCode"
+                       readonly
+                       placeholder="Mã TP (tự điền từ Batch)">
               </td>
-              <td class="code-cell td-dropdown">
+              <td class="code-cell">
                 <input type="text"
-                       class="editable-input"
-                       [(ngModel)]="row.material.lot"
-                       (focus)="onInventoryFieldFocus($event, row.material, 'lot')"
-                       (blur)="onInventoryFieldBlur()"
-                       (change)="updateMaterialInFirebase(row.material)"
-                       placeholder="LOT">
+                       class="editable-input readonly-auto"
+                       [value]="row.material.lot"
+                       readonly
+                       placeholder="LOT (tự điền từ Batch)">
               </td>
-              <td class="code-cell td-dropdown">
+              <td class="code-cell">
                 <input type="text"
-                       class="editable-input"
-                       [(ngModel)]="row.material.lsx"
-                       (focus)="onInventoryFieldFocus($event, row.material, 'lsx')"
-                       (blur)="onInventoryFieldBlur()"
-                       (change)="updateMaterialInFirebase(row.material)"
-                       placeholder="LSX">
+                       class="editable-input readonly-auto"
+                       [value]="row.material.lsx"
+                       readonly
+                       placeholder="LSX (tự điền từ Batch)">
               </td>
               <td class="number-cell qty-cell">
                 <input type="text"

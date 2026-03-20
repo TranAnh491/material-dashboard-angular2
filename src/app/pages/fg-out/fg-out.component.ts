@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Subject, forkJoin, firstValueFrom } from 'rxjs';
-import { takeUntil, debounceTime, take } from 'rxjs/operators';
+import { takeUntil, debounceTime, take, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -144,7 +144,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private locationCache = new Map<string, string>(); // Cache for locations
   private loadLocationsSubject = new Subject<void>(); // Subject for debouncing location loading
-  
+  /** Debounce batching 3 stock-subscriptions → chỉ rebuild 1 lần khi tất cả fire cùng lúc */
+  private rebuildStockSubject = new Subject<void>();
+
   // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
   private inventoryStockCache = new Map<string, number>();
   /** Cache tồn kho theo batch (key = FACTORY|BATCH, value = tồn tính lại theo tonDau+nhap-xuat, có thể = 0 hoặc âm) */
@@ -280,12 +282,22 @@ export class FgOutComponent implements OnInit, OnDestroy {
     ).subscribe(() => {
       this.loadLocationsForMaterials();
     });
+
+    // Setup debounced stock rebuild — tránh rebuild 3 lần liên tiếp khi init
+    this.rebuildStockSubject.pipe(
+      debounceTime(150),
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      this.rebuildInventoryStockByBatch();
+      this.cdr.markForCheck();
+    });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
     this.loadLocationsSubject.complete();
+    this.rebuildStockSubject.complete();
     this.locationCache.clear();
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
@@ -321,54 +333,52 @@ export class FgOutComponent implements OnInit, OnDestroy {
    * - tonDau: từ fg-inventory
    * - nhap: từ fg-in
    * - xuat: từ fg-out (cộng theo batch, không clamp 0)
+   * Dùng valueChanges() (nhẹ hơn snapshotChanges) + debounce rebuild để tránh tính lại 3 lần liên tiếp khi init.
    */
   private subscribeBatchStockComponents(): void {
     // tonDau theo batch từ fg-inventory
     this.firestore.collection('fg-inventory')
-      .snapshotChanges()
+      .valueChanges()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
+      .subscribe((docs: any[]) => {
         this.invTonDauByBatch.clear();
-        actions.forEach(a => {
-          const d = a.payload.doc.data() as any;
+        docs.forEach(d => {
           const key = this.batchKey(d.factory, d.batchNumber);
           if (!key) return;
           const tonDau = Number(d.tonDau ?? 0) || 0;
           this.invTonDauByBatch.set(key, (this.invTonDauByBatch.get(key) || 0) + tonDau);
         });
-        this.rebuildInventoryStockByBatch();
+        this.rebuildStockSubject.next();
       });
 
     // nhap theo batch từ fg-in
     this.firestore.collection('fg-in')
-      .snapshotChanges()
+      .valueChanges()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
+      .subscribe((docs: any[]) => {
         this.invNhapByBatch.clear();
-        actions.forEach(a => {
-          const d = a.payload.doc.data() as any;
+        docs.forEach(d => {
           const key = this.batchKey(d.factory, d.batchNumber);
           if (!key) return;
           const q = Number(d.quantity ?? 0) || 0;
           this.invNhapByBatch.set(key, (this.invNhapByBatch.get(key) || 0) + q);
         });
-        this.rebuildInventoryStockByBatch();
+        this.rebuildStockSubject.next();
       });
 
     // xuat theo batch từ fg-out
     this.firestore.collection('fg-out')
-      .snapshotChanges()
+      .valueChanges()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
+      .subscribe((docs: any[]) => {
         this.invXuatByBatch.clear();
-        actions.forEach(a => {
-          const d = a.payload.doc.data() as any;
+        docs.forEach(d => {
           const key = this.batchKey(d.factory, d.batchNumber);
           if (!key) return;
           const q = Number(d.quantity ?? 0) || 0;
           this.invXuatByBatch.set(key, (this.invXuatByBatch.get(key) || 0) + q);
         });
-        this.rebuildInventoryStockByBatch();
+        this.rebuildStockSubject.next();
       });
   }
 
@@ -465,42 +475,35 @@ export class FgOutComponent implements OnInit, OnDestroy {
     // Calculate date 10 days ago
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-    
-    this.firestore.collection('fg-out', ref => 
+
+    this.firestore.collection<any>('fg-out', ref =>
       ref.where('exportDate', '>=', tenDaysAgo)
          .orderBy('exportDate', 'desc')
     )
-      .snapshotChanges()
+      .valueChanges({ idField: 'id' })
       .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        const firebaseMaterials = actions.map(action => {
-          const data = action.payload.doc.data() as any;
-          const id = action.payload.doc.id;
-          return {
-            id: id,
-            ...data,
-            factory: data.factory || 'ASM1',
-            shipment: data.shipment || '',
-            pallet: data.pallet || '',
-            xp: data.xp || '',
-            batchNumber: data.batchNumber || '',
-            lsx: data.lsx || '',
-            lot: data.lot || '',
-            location: data.location || '',
-            updateCount: data.updateCount || 1,
-            pushNo: data.pushNo || '000',
-            approved: data.approved || false,
-            mergeCarton: data.mergeCarton || '',
-            exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
-          };
-        });
+      .subscribe((docs) => {
+        this.materials = docs.map(data => ({
+          ...data,
+          factory: data.factory || 'ASM1',
+          shipment: data.shipment || '',
+          pallet: data.pallet || '',
+          xp: data.xp || '',
+          batchNumber: data.batchNumber || '',
+          lsx: data.lsx || '',
+          lot: data.lot || '',
+          location: data.location || '',
+          updateCount: data.updateCount || 1,
+          pushNo: data.pushNo || '000',
+          approved: data.approved || false,
+          mergeCarton: data.mergeCarton || '',
+          exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
+        }));
 
-        this.materials = firebaseMaterials;
-        this.sortMaterials(); // Sắp xếp trước khi apply filters
+        this.sortMaterials();
         this.applyFilters();
-        this.loadAvailableShipments(); // Load available shipments
-        this.loadLocationsSubject.next(); // Trigger debounced location loading
-        console.log('Loaded FG Out materials from Firebase:', this.materials.length);
+        this.loadAvailableShipments();
+        this.loadLocationsSubject.next();
       });
   }
 
@@ -774,6 +777,23 @@ export class FgOutComponent implements OnInit, OnDestroy {
     field: 'batch' | 'lot' | 'lsx'
   ): Promise<string[]> {
     const codeRaw = (materialCode || '').trim();
+
+    // Nếu field là 'batch': load tất cả batch từ fg-inventory (không cần materialCode)
+    if (field === 'batch') {
+      const snap = await firstValueFrom(
+        this.firestore.collection('fg-inventory').get()
+      );
+      const set = new Set<string>();
+      snap.docs.forEach(doc => {
+        const d = doc.data() as any;
+        const ton = this.invTon(d);
+        if (ton <= 0) return;
+        const b = String(d.batchNumber ?? d.batch ?? '').trim();
+        if (b) set.add(b);
+      });
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }
+
     if (!codeRaw) return [];
     // Query tất cả variant hoa/thường vì Firestore phân biệt case
     const variants = [...new Set([codeRaw, codeRaw.toUpperCase(), codeRaw.toLowerCase()])];
@@ -789,15 +809,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
         if (seenIds.has(doc.id)) return;
         seenIds.add(doc.id);
         const d = doc.data() as any;
-        // Tính ton linh hoạt: nếu ton field != null và != 0 thì dùng, ngược lại fallback
-        const ton = (d.ton != null && d.ton !== 0)
-          ? Number(d.ton)
-          : (d.stock != null ? Number(d.stock) : (Number(d.quantity ?? 0) - Number(d.exported ?? d.xuat ?? 0)));
-        // Chỉ hiện LOT/Batch/LSX từ records còn tồn > 0
+        const ton = this.invTon(d);
+        // Chỉ hiện LOT/LSX từ records còn tồn > 0
         if (ton <= 0) return;
-        const v = field === 'batch' ? (d.batchNumber || d.batch || '')
-                : field === 'lot'   ? (d.lot || d.Lot || '')
-                :                     (d.lsx || d.LSX || '');
+        const v = field === 'lot' ? (d.lot || d.Lot || '')
+                :                   (d.lsx || d.LSX || '');
         if (String(v).trim()) set.add(String(v).trim());
       });
     });
@@ -833,46 +849,35 @@ export class FgOutComponent implements OnInit, OnDestroy {
     factory: string,
     preferredLot?: string,
     preferredLsx?: string
-  ): Promise<{ lot: string; lsx: string; location: string } | null> {
-    const codeRaw = (materialCode || '').trim();
+  ): Promise<{ materialCode: string; lot: string; lsx: string; location: string } | null> {
     const batchRaw = (batchNumber || '').trim();
-    if (!codeRaw || !batchRaw) return null;
+    if (!batchRaw) return null;
 
-    const variants = [...new Set([codeRaw, codeRaw.toUpperCase(), codeRaw.toLowerCase()])];
-    const snapshots = await Promise.all(
-      variants.map(v => firstValueFrom(
-        this.firestore.collection('fg-inventory', ref =>
-          ref.where('materialCode', '==', v)
-             .where('batchNumber', '==', batchRaw)
-        ).get()
-      ))
+    // Query theo batchNumber (không cần materialCode — tự điền từ inventory)
+    const snap = await firstValueFrom(
+      this.firestore.collection('fg-inventory', ref =>
+        ref.where('batchNumber', '==', batchRaw)
+      ).get()
     );
 
     const seenIds = new Set<string>();
-    const rows: Array<{ lot: string; lsx: string; location: string; ton: number; factory: string }> = [];
-    snapshots.forEach(snap => {
-      snap.docs.forEach(doc => {
-        if (seenIds.has(doc.id)) return;
-        seenIds.add(doc.id);
-        const d = doc.data() as any;
-        const ton = this.invTon(d);
-        if (ton <= 0) return;
-        // Nếu fg-inventory có field factory thì lọc; nếu không có thì vẫn cho qua
-        const invFactory = String(d?.factory ?? '').trim();
-        if (factory && invFactory && invFactory !== factory) return;
-        // Bảo vệ: materialCode/batchNumber phải khớp (phòng trường hợp dữ liệu lẫn field khác)
-        const invCode = this.invNormMaterialCode(d);
-        const invBatch = this.invNormBatch(d);
-        if (invCode && invCode.toUpperCase() !== codeRaw.toUpperCase()) return;
-        if (invBatch && invBatch !== batchRaw) return;
+    const rows: Array<{ materialCode: string; lot: string; lsx: string; location: string; ton: number; factory: string }> = [];
+    snap.docs.forEach(doc => {
+      if (seenIds.has(doc.id)) return;
+      seenIds.add(doc.id);
+      const d = doc.data() as any;
+      const ton = this.invTon(d);
+      if (ton <= 0) return;
+      const invFactory = String(d?.factory ?? '').trim();
+      if (factory && invFactory && invFactory !== factory) return;
 
-        rows.push({
-          lot: this.invNormLot(d),
-          lsx: this.invNormLsx(d),
-          location: String(d?.location ?? '').trim(),
-          ton,
-          factory: invFactory
-        });
+      rows.push({
+        materialCode: this.invNormMaterialCode(d),
+        lot: this.invNormLot(d),
+        lsx: this.invNormLsx(d),
+        location: String(d?.location ?? '').trim(),
+        ton,
+        factory: invFactory
       });
     });
 
@@ -883,7 +888,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const narrowed = rows.filter(r => (!prefLot || r.lot === prefLot) && (!prefLsx || r.lsx === prefLsx));
     const candidates = narrowed.length ? narrowed : rows;
 
-    // Ưu tiên record có tồn cao hơn (an toàn nhất), nếu bằng nhau thì ưu tiên có đủ lot+lsx
+    // Ưu tiên record có tồn cao hơn, nếu bằng nhau thì ưu tiên có đủ lot+lsx
     candidates.sort((a, b) => {
       if (b.ton !== a.ton) return b.ton - a.ton;
       const aFull = (a.lot ? 1 : 0) + (a.lsx ? 1 : 0);
@@ -891,34 +896,37 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return bFull - aFull;
     });
     const best = candidates[0];
-    return { lot: best.lot, lsx: best.lsx, location: best.location };
+    return { materialCode: best.materialCode, lot: best.lot, lsx: best.lsx, location: best.location };
   }
 
   private async autoFillLotLsxLocationFromBatch(
     target: { materialCode: string; batchNumber: string; lot: string; lsx: string; location: string },
     factory: string
   ): Promise<void> {
-    const mc = String(target.materialCode || '').trim();
     const batch = String(target.batchNumber || '').trim();
-    if (!mc || !batch) return;
+    if (!batch) return;
 
-    const inv = await this.findBestInventoryByBatch(mc, batch, factory, target.lot, target.lsx);
+    const inv = await this.findBestInventoryByBatch('', batch, factory, target.lot, target.lsx);
     if (!inv) return;
 
+    // Tự điền Mã TP, LOT, LSX, Location từ fg-inventory
+    if (inv.materialCode) target.materialCode = inv.materialCode;
     if (inv.lot) target.lot = inv.lot;
     if (inv.lsx) target.lsx = inv.lsx;
     if (inv.location) target.location = inv.location;
 
+    const mc = target.materialCode;
     // Update cache cho getLocation() (giảm gọi lại service)
     const cacheKey = `${mc}-${batch}-${target.lsx}-${target.lot}`;
     if (target.location) this.locationCache.set(cacheKey, target.location);
   }
 
-  /** Bấm ô Batch/LOT/LSX (bảng chính) → xổ danh sách tương ứng */
+  /** Bấm ô Batch (bảng chính) → xổ danh sách batch từ fg-inventory (không cần Mã TP) */
   async onInventoryFieldFocus(event: Event, material: FgOutItem, field: 'batch' | 'lot' | 'lsx'): Promise<void> {
     if (this.inventoryDropdownBlurTimer) clearTimeout(this.inventoryDropdownBlurTimer);
     const mc = (material.materialCode || '').trim();
-    if (!mc) return;
+    // Batch field không cần materialCode; lot/lsx vẫn cần
+    if (field !== 'batch' && !mc) return;
     const factory = (material.factory || this.selectedFactory || 'ASM1').trim();
     const opts = await this.loadInventoryOptionsForMaterial(mc, factory, field);
     this.inventoryDropdownMaterial = material;
@@ -1030,11 +1038,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Apply search filters - PHẢI có searchTerm (shipment) mới hiển thị (trừ khi đang xem History)
+  // Apply search filters - PHẢI có searchTerm >= 4 ký tự mới hiển thị (trừ khi đang xem History)
   applyFilters(): void {
     if (this.historyMode) return; // Đang xem History: không ghi đè
-    // Nếu không có searchTerm → không hiển thị gì
-    if (!this.searchTerm || !this.searchTerm.trim()) {
+    // Nếu không có searchTerm hoặc < 4 ký tự → không hiển thị gì
+    const trimmed = (this.searchTerm || '').trim();
+    if (trimmed.length < 4) {
       this.filteredMaterials = [];
       this.displayRows = [];
       return;
@@ -1404,11 +1413,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return sum;
   }
 
-  // Search functionality
+  // Search functionality — chỉ tìm khi nhập đủ 4 ký tự hoặc xóa hết
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value.toUpperCase();
     event.target.value = this.searchTerm;
-    this.applyFilters();
+    const trimmed = this.searchTerm.trim();
+    if (trimmed.length === 0 || trimmed.length >= 4) {
+      this.applyFilters();
+    }
   }
 
   // Load user permissions

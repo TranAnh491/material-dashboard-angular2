@@ -322,9 +322,16 @@
   flex-wrap: wrap;
 }
 
+.monthly-stats-container {
+  margin-top: 0;
+}
+
 .pending-qc-box,
 .today-checked-box,
-.pending-confirm-box {
+.pending-confirm-box,
+.monthly-pass-box,
+.monthly-ng-box,
+.monthly-lock-box {
   flex: 1;
   min-width: 200px;
   background: #ffffff;
@@ -335,6 +342,15 @@
   &.pending-qc-box {
     cursor: pointer;
     
+    &:hover {
+      background: #fff3e0;
+    }
+  }
+
+  &.monthly-pass-box,
+  &.monthly-ng-box,
+  &.monthly-lock-box {
+    cursor: pointer;
     &:hover {
       background: #fff3e0;
     }
@@ -553,6 +569,11 @@
   &.status-ng {
     background: #f8d7da;
     color: #721c24;
+  }
+
+  &.status-lock {
+    background: #343a40;
+    color: #ffffff;
   }
   
   &.status-special {

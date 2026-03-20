@@ -72,10 +72,23 @@ export class QCComponent implements OnInit, OnDestroy {
 
   iqcResultsTitle: string = 'Lịch sử tình trạng theo mã nguyên liệu';
 
-  iqcHistoryContext: 'search' | 'pendingQC' | 'todayChecked' | 'pendingConfirm' | null = null;
+  iqcHistoryContext:
+    | 'search'
+    | 'pendingQC'
+    | 'todayChecked'
+    | 'pendingConfirm'
+    | 'monthlyPass'
+    | 'monthlyNg'
+    | 'monthlyLock'
+    | null = null;
 
   // Priority: show one item at top (for pending confirm list)
   priorityMaterialId: string | null = null;
+
+  // Monthly counts (current month)
+  monthlyPassCount: number = 0;
+  monthlyNgCount: number = 0;
+  monthlyLockCount: number = 0;
   
   // IQC Modal properties
   showIQCModal: boolean = false;
@@ -154,6 +167,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadPendingQCCount();
       this.loadTodayCheckedCount();
       this.loadPendingConfirmCount();
+      this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
     } else {
       // Block access until employee is verified
@@ -687,6 +701,7 @@ export class QCComponent implements OnInit, OnDestroy {
         this.loadPendingQCCount();
         this.loadTodayCheckedCount();
         this.loadPendingConfirmCount();
+        this.loadMonthlyStatusCounts();
 
         // Reload inline list if user is viewing it
         if (this.iqcHistoryContext === 'pendingConfirm' && this.showIqcSearchResults) {
@@ -695,6 +710,12 @@ export class QCComponent implements OnInit, OnDestroy {
           this.showTodayCheckedMaterials(false);
         } else if (this.iqcHistoryContext === 'pendingQC' && this.showIqcSearchResults) {
           this.showPendingQCMaterials(false);
+        } else if (this.iqcHistoryContext === 'monthlyPass' && this.showIqcSearchResults) {
+          this.showMonthlyStatusMaterials('PASS');
+        } else if (this.iqcHistoryContext === 'monthlyNg' && this.showIqcSearchResults) {
+          this.showMonthlyStatusMaterials('NG');
+        } else if (this.iqcHistoryContext === 'monthlyLock' && this.showIqcSearchResults) {
+          this.showMonthlyStatusMaterials('LOCK');
         } else {
           this.loadRecentCheckedMaterials();
         }
@@ -778,6 +799,8 @@ export class QCComponent implements OnInit, OnDestroy {
         return 'status-pass';
       case 'NG':
         return 'status-ng';
+      case 'LOCK':
+        return 'status-lock';
       case 'ĐẶC CÁCH':
         return 'status-special';
       case 'CHỜ XÁC NHẬN':
@@ -852,6 +875,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadPendingQCCount();
       this.loadTodayCheckedCount();
       this.loadPendingConfirmCount();
+      this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
     } else {
       alert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nChỉ nhân viên QA mới được phép.`);
@@ -1043,6 +1067,172 @@ export class QCComponent implements OnInit, OnDestroy {
         ).length;
       }
     });
+  }
+
+  private getCurrentMonthRange(): { start: Date; end: Date } {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { start, end };
+  }
+
+  // Load monthly counts for PASS / NG / LOCK (current month)
+  loadMonthlyStatusCounts(): void {
+    const { start, end } = this.getCurrentMonthRange();
+
+    this.firestore.collection('inventory-materials', ref =>
+      ref.where('factory', '==', 'ASM1')
+    ).get()
+    .pipe(takeUntil(this.destroy$))
+    .subscribe({
+      next: (snapshot) => {
+        let pass = 0;
+        let ng = 0;
+        let lock = 0;
+
+        snapshot.docs.forEach((doc: any) => {
+          const data = doc.data() as any;
+
+          const eventTime =
+            this.parseFirestoreDate(data?.qcCheckedAt) ||
+            this.parseFirestoreDate(data?.updatedAt) ||
+            null;
+          if (!eventTime || eventTime < start || eventTime >= end) return;
+
+          const statusNorm = (data?.iqcStatus || '').toString().trim().toUpperCase();
+          const qcCheckedBy = (data?.qcCheckedBy || '').toString();
+          const location = (data?.location || '').toString().trim().toUpperCase();
+
+          // Exclude auto-pass like the "today checked" logic
+          const isAutoPass =
+            (location === 'F62' || location === 'F62TRA') &&
+            statusNorm === 'PASS' &&
+            (!qcCheckedBy || qcCheckedBy.trim() === '');
+
+          if (isAutoPass) return;
+
+          if (statusNorm === 'PASS') pass++;
+          else if (statusNorm === 'NG') ng++;
+          else if (statusNorm === 'LOCK') lock++;
+        });
+
+        this.monthlyPassCount = pass;
+        this.monthlyNgCount = ng;
+        this.monthlyLockCount = lock;
+      },
+      error: (error) => {
+        console.error('❌ Error loading monthly PASS/NG/LOCK counts:', error);
+        // Fallback: best-effort from local materials using updatedAt
+        const now = new Date();
+        const startF = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endF = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+        const countBy = (status: string) => {
+          const s = status.toUpperCase();
+          return this.materials.filter(m => {
+            const checkDate = (m as any)?.qcCheckedAt || m.updatedAt || new Date();
+            const eventTime = checkDate instanceof Date ? checkDate : new Date(checkDate);
+            if (!eventTime || eventTime < startF || eventTime >= endF) return false;
+            const statusNorm = (m?.iqcStatus || '').toString().trim().toUpperCase();
+            return statusNorm === s;
+          }).length;
+        };
+
+        this.monthlyPassCount = countBy('PASS');
+        this.monthlyNgCount = countBy('NG');
+        this.monthlyLockCount = countBy('LOCK');
+      }
+    });
+  }
+
+  // Show inline monthly list (no popup)
+  async showMonthlyStatusMaterials(status: 'PASS' | 'NG' | 'LOCK'): Promise<void> {
+    this.showTodayCheckedModal = false;
+    this.showPendingQCModal = false;
+    this.showPendingConfirmModal = false;
+    this.priorityMaterialId = null; // avoid stale priority from another list
+
+    this.iqcResultsTitle = `${status} (tháng hiện tại)`;
+    this.showIqcSearchResults = true;
+    this.isSearchingIqcHistory = true;
+    this.iqcHistoryError = '';
+    this.iqcHistoryResults = [];
+
+    this.iqcHistoryContext =
+      status === 'PASS' ? 'monthlyPass' :
+      status === 'NG' ? 'monthlyNg' :
+      'monthlyLock';
+
+    const { start, end } = this.getCurrentMonthRange();
+
+    try {
+      // Try more selective query first
+      let snapshot: any = null;
+      try {
+        snapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1')
+             .where('iqcStatus', '==', status)
+             .limit(2000)
+        ).get().toPromise();
+      } catch (e) {
+        // Fallback: filter in memory (avoid index issues)
+        snapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', 'ASM1')
+             .limit(5000)
+        ).get().toPromise();
+      }
+
+      if (!snapshot || snapshot.empty) {
+        this.iqcHistoryResults = [];
+        this.isSearchingIqcHistory = false;
+        this.iqcHistoryError = '';
+        return;
+      }
+
+      const results = snapshot.docs
+        .map((doc: any) => {
+          const data = doc.data() as any;
+          const eventTime =
+            this.parseFirestoreDate(data?.qcCheckedAt) ||
+            this.parseFirestoreDate(data?.updatedAt);
+          if (!eventTime || eventTime < start || eventTime >= end) return null;
+
+          const statusNorm = (data?.iqcStatus || '').toString().trim().toUpperCase();
+          const qcCheckedBy = (data?.qcCheckedBy || '').toString();
+          const location = (data?.location || '').toString().trim().toUpperCase();
+
+          // Exclude auto-pass like today logic
+          const isAutoPass =
+            (location === 'F62' || location === 'F62TRA') &&
+            statusNorm === 'PASS' &&
+            (!qcCheckedBy || qcCheckedBy.trim() === '');
+
+          if (isAutoPass) return null;
+
+          if (statusNorm !== status) return null;
+
+          return {
+            id: doc?.id,
+            materialCode: data.materialCode || '',
+            poNumber: data.poNumber || '',
+            batchNumber: data.batchNumber || '',
+            iqcStatus: statusNorm,
+            qcCheckedBy,
+            eventTime
+          };
+        })
+        .filter((x: any) => x !== null)
+        .sort((a: any, b: any) => (b.eventTime?.getTime?.() || 0) - (a.eventTime?.getTime?.() || 0));
+
+      this.iqcHistoryResults = results;
+      this.isSearchingIqcHistory = false;
+      this.iqcHistoryError = results.length === 0 ? `Không có dữ liệu ${status} trong tháng hiện tại` : '';
+    } catch (error) {
+      console.error(`❌ Error loading monthly ${status} list:`, error);
+      this.isSearchingIqcHistory = false;
+      this.iqcHistoryError = `Lỗi khi tải danh sách ${status} theo tháng`;
+      this.iqcHistoryResults = [];
+    }
   }
   
   // Fallback: count manually

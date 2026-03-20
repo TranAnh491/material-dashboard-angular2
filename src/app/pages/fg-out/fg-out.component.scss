@@ -1244,6 +1244,15 @@ mat-checkbox {
     color: #666666;
     font-style: italic;
   }
+
+  &.readonly-auto {
+    cursor: default;
+    color: #333;
+    background: #fafafa;
+    user-select: text;
+    &:focus { background: #fafafa; }
+    &::placeholder { color: #aaa; font-size: 11px; }
+  }
 }
 
 // Status Select

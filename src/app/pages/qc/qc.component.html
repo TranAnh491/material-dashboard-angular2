@@ -140,6 +140,39 @@
       </div>
     </div>
 
+    <!-- Monthly PASS / NG / LOCK Boxes -->
+    <div class="stats-container monthly-stats-container">
+      <div class="monthly-pass-box" (click)="showMonthlyStatusMaterials('PASS')">
+        <div class="pending-qc-content">
+          <i class="material-icons">check_circle</i>
+          <div class="pending-qc-info">
+            <div class="pending-qc-label">PASS</div>
+            <div class="pending-qc-count">{{ monthlyPassCount }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="monthly-ng-box" (click)="showMonthlyStatusMaterials('NG')">
+        <div class="pending-qc-content">
+          <i class="material-icons">error</i>
+          <div class="pending-qc-info">
+            <div class="pending-qc-label">NG</div>
+            <div class="pending-qc-count">{{ monthlyNgCount }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="monthly-lock-box" (click)="showMonthlyStatusMaterials('LOCK')">
+        <div class="pending-qc-content">
+          <i class="material-icons">lock</i>
+          <div class="pending-qc-info">
+            <div class="pending-qc-label">LOCK</div>
+            <div class="pending-qc-count">{{ monthlyLockCount }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- IQC search results (reuse recent-history UI classes) -->
     <div class="recent-checked-section" *ngIf="showIqcSearchResults">
       <h4 class="section-header">
@@ -176,7 +209,7 @@
           <tbody>
             <tr *ngFor="let item of iqcHistoryResults; let i = index">
               <td>{{ i + 1 }}</td>
-              <td class="iqc-history-code" (click)="openIQCFromHistory(item)">
+              <td class="iqc-history-code" (click)="iqcHistoryContext === 'pendingConfirm' ? openIQCFromHistory(item) : null">
                 {{ item.materialCode }}
               </td>
               <td>{{ item.poNumber }}</td>
@@ -187,22 +220,25 @@
                 </span>
               </td>
               <td class="iqc-priority-col">
-                <div class="iqc-priority-center">
-                <button
-                  *ngIf="!(item.id && item.id === priorityMaterialId)"
-                  class="iqc-priority-btn"
-                  (click)="$event.stopPropagation(); toggleIqcPriority(item)"
-                  title="Ưu tiên"
-                >
-                  <i class="material-icons">priority_high</i>
-                </button>
-                <span
-                  *ngIf="item.id && item.id === priorityMaterialId"
-                  class="iqc-priority-flame"
-                  (click)="$event.stopPropagation(); toggleIqcPriority(item)"
-                  title="Bỏ ưu tiên"
-                >🔥</span>
-                </div>
+                <ng-container *ngIf="iqcHistoryContext === 'pendingConfirm'; else noPriority">
+                  <div class="iqc-priority-center">
+                  <button
+                    *ngIf="!(item.id && item.id === priorityMaterialId)"
+                    class="iqc-priority-btn"
+                    (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                    title="Ưu tiên"
+                  >
+                    <i class="material-icons">priority_high</i>
+                  </button>
+                  <span
+                    *ngIf="item.id && item.id === priorityMaterialId"
+                    class="iqc-priority-flame"
+                    (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                    title="Bỏ ưu tiên"
+                  >🔥</span>
+                  </div>
+                </ng-container>
+                <ng-template #noPriority>—</ng-template>
               </td>
               <td>{{ item.qcCheckedBy || '—' }}</td>
               <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
