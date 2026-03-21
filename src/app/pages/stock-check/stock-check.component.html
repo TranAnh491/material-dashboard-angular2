@@ -1,49 +1,12 @@
 <div class="stock-check-wrapper">
-  <!-- Factory Selection Screen - Show when no factory selected -->
-  <div class="factory-selection-screen" *ngIf="!selectedFactory">
-    <div class="selection-header">
-      <h1><i class="material-icons">inventory</i> STOCK CHECK</h1>
-      <p class="subtitle">Chọn nhà máy để bắt đầu kiểm kê</p>
-    </div>
-    
-    <div class="factory-cards">
-      <button 
-        type="button"
-        class="factory-card asm1-card"
-        (click)="selectFactory('ASM1')">
-        <div class="card-icon">
-          <i class="material-icons">factory</i>
-        </div>
-        <div class="card-title">ASM1</div>
-        <div class="card-subtitle">Nhà máy 1</div>
-        <div class="card-arrow">
-          <i class="material-icons">arrow_forward</i>
-        </div>
-      </button>
-      
-      <button 
-        type="button"
-        class="factory-card asm2-card"
-        (click)="selectFactory('ASM2')">
-        <div class="card-icon">
-          <i class="material-icons">factory</i>
-        </div>
-        <div class="card-title">ASM2</div>
-        <div class="card-subtitle">Nhà máy 2</div>
-        <div class="card-arrow">
-          <i class="material-icons">arrow_forward</i>
-        </div>
-      </button>
-    </div>
-  </div>
-
-  <!-- Stock Check Interface - Show when factory selected -->
-  <div class="stock-check-container" *ngIf="selectedFactory">
+  <!-- Stock Check Interface -->
+  <div class="stock-check-container" *ngIf="showEmployeeScanModal || currentEmployeeId || selectedFactory">
     <!-- Top Bar - ẩn hẳn khi đang mở modal scan để không còn box trắng phía trên -->
     <div class="top-bar" *ngIf="!showScanModal">
       <h2 class="factory-title" *ngIf="!showScanModal">
         <i class="material-icons">factory</i>
-        {{ selectedFactory }} - KIỂM KÊ
+        <span *ngIf="selectedFactory">{{ selectedFactory }} - KIỂM KÊ</span>
+        <span *ngIf="!selectedFactory">KIỂM KÊ</span>
         <span class="employee-id-display" *ngIf="currentEmployeeId">
           <i class="material-icons">badge</i>
           ID: {{ currentEmployeeId }}
@@ -51,19 +14,34 @@
       </h2>
       
       <div class="top-bar-actions" *ngIf="!showScanModal">
+        <!-- ASM selection (after employee login) -->
+        <button
+          type="button"
+          class="asm-select-btn desktop-only"
+          (click)="selectFactory('ASM1')"
+          [disabled]="!currentEmployeeId"
+          title="Chọn ASM1">
+          <i class="material-icons">factory</i>
+          ASM1
+        </button>
+        <button
+          type="button"
+          class="asm-select-btn desktop-only"
+          (click)="selectFactory('ASM2')"
+          [disabled]="!currentEmployeeId"
+          title="Chọn ASM2">
+          <i class="material-icons">factory</i>
+          ASM2
+        </button>
+
         <!-- Mobile: Chỉ hiển thị nút KIỂM KÊ -->
-        <button class="inventory-btn mobile-only" (click)="startInventoryCheck()">
+        <button class="inventory-btn mobile-only" (click)="startInventoryCheck()" *ngIf="selectedFactory">
           <i class="material-icons">qr_code_scanner</i>
           <span>KIỂM KÊ</span>
         </button>
         
-        <!-- Desktop: Hiển thị tất cả -->
-        <button class="back-btn desktop-only" (click)="backToSelection()" title="Quay lại chọn nhà máy">
-          <i class="material-icons">arrow_back</i>
-          <span>QUAY LẠI</span>
-        </button>
-        
-        <button type="button" class="reset-btn desktop-only" (click)="openResetModal()" title="Reset stock check">
+        <!-- Desktop actions only when selectedFactory -->
+        <button type="button" class="reset-btn desktop-only" *ngIf="selectedFactory" (click)="openResetModal()" title="Reset stock check">
           <i class="material-icons">refresh</i>
           <span>RESET</span>
         </button>
@@ -73,34 +51,29 @@
           <span>ĐĂNG XUẤT</span>
         </button>
         
-        <button class="history-btn desktop-only" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
+        <button class="history-btn desktop-only" *ngIf="selectedFactory" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
           <i class="material-icons">history</i>
           <span>LỊCH SỬ</span>
         </button>
         
-        <button class="inventory-btn desktop-only" (click)="startInventoryCheck()">
+        <button class="inventory-btn desktop-only" *ngIf="selectedFactory" (click)="startInventoryCheck()">
           <i class="material-icons">qr_code_scanner</i>
           KIỂM KÊ
         </button>
         
-        <button class="sort-btn desktop-only" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
+        <button class="sort-btn desktop-only" *ngIf="selectedFactory" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
           <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
           <span>SẮP XẾP</span>
         </button>
         
-        <button class="khsx-btn desktop-only" (click)="openKhsxDialog()" title="Quản lý danh sách KHSX">
+        <button class="khsx-btn desktop-only" *ngIf="selectedFactory" (click)="openKhsxDialog()" title="Quản lý danh sách KHSX">
           <i class="material-icons">playlist_add_check</i>
           KHSX
         </button>
 
-        <button class="report-btn desktop-only" (click)="exportStockCheckReport()">
+        <button class="report-btn desktop-only" [disabled]="!selectedFactory" (click)="openReportByDateModal()">
           <i class="material-icons">download</i>
           REPORT
-        </button>
-
-        <button class="rack-btn desktop-only" (click)="openRackModal()" title="Xem tổng hợp theo vị trí">
-          <i class="material-icons">shelves</i>
-          RACK
         </button>
         
         <div class="search-box desktop-only">
@@ -476,7 +449,7 @@
       </div>
       
       <div class="modal-actions">
-        <button class="cancel-btn" (click)="backToSelection()">
+        <button class="cancel-btn" (click)="cancelEmployeeScan()">
           <i class="material-icons">close</i>
           Hủy
         </button>
@@ -689,6 +662,64 @@
       
       <div class="modal-actions">
         <button class="cancel-btn" (click)="closeArchiveHistoryModal()">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report By Date Modal -->
+  <div class="archive-history-modal" *ngIf="showReportByDateModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">download</i>
+          TẢI REPORT KIỂM KÊ THEO NGÀY
+        </h3>
+        <button class="close-btn" (click)="closeReportByDateModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="loading-spinner" *ngIf="isLoadingReportDates">
+          <i class="material-icons">hourglass_empty</i>
+          <p>Đang tải các ngày đã có...</p>
+        </div>
+
+        <div class="archive-list" *ngIf="!isLoadingReportDates">
+          <div class="archive-empty" *ngIf="reportDateOptions.length === 0">
+            <i class="material-icons">inbox</i>
+            <p>Chưa có dữ liệu scan kiểm kê</p>
+            <p class="hint">Dữ liệu sẽ xuất hiện sau khi bạn scan và RESET</p>
+          </div>
+
+          <div class="archive-item" *ngFor="let d of reportDateOptions; let i = index; trackBy: trackByIndex">
+            <div class="archive-info">
+              <div class="archive-header">
+                <span class="archive-index">#{{ i + 1 }}</span>
+                <span class="archive-date">
+                  <i class="material-icons">schedule</i>
+                  {{ d.dateLabel }}
+                </span>
+              </div>
+              <div class="archive-details">
+                <div class="detail-item">
+                  <i class="material-icons">inventory</i>
+                  <span>{{ d.totalMaterials }} mã</span>
+                </div>
+              </div>
+            </div>
+            <button class="download-btn" (click)="exportStockCheckReportByDate(d.dateKey)" title="Tải về Excel">
+              <i class="material-icons">download</i>
+              Tải về
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="cancel-btn" (click)="closeReportByDateModal()">
           Đóng
         </button>
       </div>

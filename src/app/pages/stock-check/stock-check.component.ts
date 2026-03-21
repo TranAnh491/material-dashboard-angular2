@@ -89,6 +89,19 @@ interface CheckHistoryItem {
   updatedAt: any;
 }
 
+interface ReportDayAggRow {
+  materialCode: string;
+  poNumber: string;
+  imd: string;
+  stock: number;
+  qtyCheckTotal: number;
+  location: string;
+  standardPacking: string;
+  idCheck: string;
+  lastDateCheck: Date;
+  hasKhsx: boolean;
+}
+
 @Component({
   selector: 'app-stock-check',
   templateUrl: './stock-check.component.html',
@@ -184,6 +197,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   selectedMaterialForHistory: StockCheckMaterial | null = null;
   materialHistoryList: any[] = [];
   isLoadingHistory = false;
+
+  // Report by date modal
+  showReportByDateModal: boolean = false;
+  isLoadingReportDates: boolean = false;
+  reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
+  private reportDataByDateKey: Map<string, ReportDayAggRow[]> = new Map();
+  private reportDatesLoadedFactory: string | null = null;
 
   // Locations from Location tab (for validation)
   validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
@@ -709,6 +729,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.checkMobile();
     // Reset factory selection to show selection screen
     this.selectedFactory = null;
+    this.showEmployeeScanModal = true; // Scan mã nhân viên trước
+    this.employeeScanInput = '';
     this.allMaterials = [];
     this.filteredMaterials = [];
     this.displayedMaterials = [];
@@ -823,25 +845,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   selectFactory(factory: 'ASM1' | 'ASM2'): void {
     this.selectedFactory = factory;
     this.currentPage = 1;
-    this.currentEmployeeId = ''; // Reset employee ID
     this.isInitialDataLoaded = false; // Reset flag
     
     // Subscribe ngay từ đầu để catch mọi thay đổi (trước khi load data)
     this.subscribeToSnapshotChanges();
     
     this.loadData();
-    
-    // Show employee scan modal after selecting factory
-    setTimeout(() => {
+
+    // Nếu chưa login thì yêu cầu scan lại (edge case). Còn đã scan rồi thì không bắt scan lần nữa.
+    if (!this.currentEmployeeId) {
       this.showEmployeeScanModal = true;
       this.employeeScanInput = '';
       setTimeout(() => {
         const input = document.getElementById('employee-scan-input') as HTMLInputElement;
-        if (input) {
-          input.focus();
-        }
+        if (input) input.focus();
       }, 300);
-    }, 100);
+    } else {
+      this.showEmployeeScanModal = false;
+    }
   }
 
   /**
@@ -854,7 +875,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.displayedMaterials = [];
     this.currentPage = 1;
     this.filterMode = 'all';
-    this.currentEmployeeId = ''; // Reset employee ID
     this.showEmployeeScanModal = false;
     this.currentScanLocation = '';
     this.locationMaterials = [];
@@ -896,6 +916,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         }
       }, 100);
     }
+  }
+
+  cancelEmployeeScan(): void {
+    this.employeeScanInput = '';
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.getElementById('employee-scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 50);
   }
   
   /**
@@ -2676,5 +2705,228 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, fileName);
 
     console.log(`✅ Exported stock check report: ${fileName}`);
+  }
+
+  // ======================== REPORT BY DATE ========================
+
+  openReportByDateModal(): void {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+
+    this.showReportByDateModal = true;
+
+    // Load một lần theo factory
+    if (this.reportDatesLoadedFactory !== this.selectedFactory) {
+      this.loadReportDatesAndCache().catch(err =>
+        console.error('❌ [ReportByDate] Error loading report dates:', err)
+      );
+    }
+  }
+
+  closeReportByDateModal(): void {
+    this.showReportByDateModal = false;
+  }
+
+  private toLocalDateKey(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private dateKeyToLabel(dateKey: string): string {
+    // YYYY-MM-DD -> dd/MM/yyyy
+    const [y, m, d] = dateKey.split('-');
+    if (!y || !m || !d) return dateKey;
+    return `${d}/${m}/${y}`;
+  }
+
+  private parseFirestoreDate(v: any): Date | null {
+    try {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      if (typeof v?.toDate === 'function') {
+        const d = v.toDate();
+        return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+      }
+      const d = new Date(v);
+      return !isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadReportDatesAndCache(): Promise<void> {
+    if (!this.selectedFactory) return;
+
+    this.isLoadingReportDates = true;
+    this.reportDateOptions = [];
+    this.reportDataByDateKey.clear();
+
+    try {
+      const khsxSet = new Set((this.khsxCodes || []).map(c => String(c).trim().toUpperCase()));
+      const snap = await this.firestore
+        .collection('stock-check-history', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+        )
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) {
+        this.reportDatesLoadedFactory = this.selectedFactory;
+        return;
+      }
+
+      // dateKey -> materialKey -> aggregated row
+      const tempByDateKey: Map<string, Map<string, ReportDayAggRow>> = new Map();
+
+      snap.forEach(doc => {
+        const data = doc.data() as any;
+        const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+        const poNumber = String(data?.poNumber || '').trim();
+        const imd = String(data?.imd || '').trim();
+        const history: any[] = Array.isArray(data?.history) ? data.history : [];
+        if (!materialCode || !poNumber || !imd || history.length === 0) return;
+
+        const materialKey = `${materialCode}__${poNumber}__${imd}`;
+
+        for (const item of history) {
+          const d = this.parseFirestoreDate(item?.dateCheck);
+          if (!d) continue;
+          const dateKey = this.toLocalDateKey(d);
+
+          const qty = item?.qtyCheck !== undefined && item?.qtyCheck !== null ? Number(item.qtyCheck) : 0;
+          if (!qty || qty === 0) {
+            // vẫn có thể cần location/stock, nhưng report qty=0 thường không cần
+            continue;
+          }
+
+          const stockVal = item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : 0;
+          const location = String(item?.location || '').trim();
+          const standardPacking = String(item?.standardPacking || '').trim();
+          const idCheck = String(item?.idCheck || '').trim() || '-';
+
+          if (!tempByDateKey.has(dateKey)) tempByDateKey.set(dateKey, new Map());
+          const byMat = tempByDateKey.get(dateKey)!;
+
+          const existing = byMat.get(materialKey);
+          if (!existing) {
+            byMat.set(materialKey, {
+              materialCode,
+              poNumber,
+              imd,
+              stock: stockVal,
+              qtyCheckTotal: qty,
+              location: location,
+              standardPacking: standardPacking,
+              idCheck: idCheck,
+              lastDateCheck: d,
+              hasKhsx: khsxSet.has(materialCode)
+            });
+          } else {
+            existing.qtyCheckTotal += qty;
+            if (d.getTime() >= existing.lastDateCheck.getTime()) {
+              existing.stock = stockVal;
+              existing.location = location;
+              existing.standardPacking = standardPacking;
+              existing.idCheck = idCheck;
+              existing.lastDateCheck = d;
+            }
+          }
+        }
+      });
+
+      const dateKeys = Array.from(tempByDateKey.keys());
+      dateKeys.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+      for (const dk of dateKeys) {
+        const rows = Array.from(tempByDateKey.get(dk)!.values()).sort((a, b) =>
+          a.materialCode.localeCompare(b.materialCode)
+        );
+        this.reportDataByDateKey.set(dk, rows);
+        this.reportDateOptions.push({
+          dateKey: dk,
+          dateLabel: this.dateKeyToLabel(dk),
+          totalMaterials: rows.length
+        });
+      }
+
+      this.reportDatesLoadedFactory = this.selectedFactory;
+    } finally {
+      this.isLoadingReportDates = false;
+    }
+  }
+
+  async exportStockCheckReportByDate(dateKey: string): Promise<void> {
+    if (!this.selectedFactory) return;
+
+    if (!this.reportDataByDateKey.has(dateKey)) {
+      await this.loadReportDatesAndCache();
+    }
+
+    const rows = this.reportDataByDateKey.get(dateKey) || [];
+    if (rows.length === 0) {
+      alert('Không có dữ liệu để xuất cho ngày này.');
+      return;
+    }
+
+    const exportData = rows.map((r, idx) => {
+      const stockVal = Number(r.stock || 0);
+      const qtyCheckVal = Number(r.qtyCheckTotal || 0);
+      const soSanh = parseFloat((stockVal - qtyCheckVal).toFixed(2));
+      return {
+        'STT': idx + 1,
+        'Mã hàng': r.materialCode,
+        'PO': r.poNumber,
+        'IMD': r.imd,
+        'Tồn Kho': stockVal,
+        'KHSX': r.hasKhsx ? '✔' : '',
+        'Vị trí': r.location || '-',
+        'Standard Packing': r.standardPacking || '',
+        'Stock Check': '✓',
+        'Qty Check': qtyCheckVal,
+        'So Sánh Stock': soSanh,
+        'ID Check': r.idCheck || '',
+        'Date Check': r.lastDateCheck ? r.lastDateCheck.toLocaleString('vi-VN') : ''
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    ws['!cols'] = [
+      { wch: 6 },  // STT
+      { wch: 15 }, // Mã hàng
+      { wch: 12 }, // PO
+      { wch: 10 }, // IMD
+      { wch: 10 }, // Tồn Kho
+      { wch: 8 },  // KHSX
+      { wch: 12 }, // Vị trí
+      { wch: 18 }, // Standard Packing
+      { wch: 12 }, // Stock Check
+      { wch: 10 }, // Qty Check
+      { wch: 15 }, // So Sánh Stock
+      { wch: 15 }, // ID Check
+      { wch: 20 }  // Date Check
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Check');
+
+    const summary = [
+      { 'Thông tin': 'Factory', 'Giá trị': this.selectedFactory },
+      { 'Thông tin': 'Ngày', 'Giá trị': this.dateKeyToLabel(dateKey) },
+      { 'Thông tin': 'Tổng mã', 'Giá trị': rows.length }
+    ];
+
+    const wsSummary = XLSX.utils.json_to_sheet(summary);
+    wsSummary['!cols'] = [{ wch: 20 }, { wch: 25 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Tóm tắt');
+
+    const fileName = `Stock_Check_${this.selectedFactory}_${dateKey}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    this.closeReportByDateModal();
   }
 }
