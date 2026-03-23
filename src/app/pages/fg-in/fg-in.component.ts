@@ -161,6 +161,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Confirm Receipt Dialog (Xác nhận phiếu nhập kho)
   showConfirmReceiptDialog: boolean = false;
   selectedReceiptMaterial: FgInItem | null = null;
+  // Nếu phiếu đã tick khóa nhưng location = 'Temporary'/rỗng => chỉ cập nhật vị trí
+  locationUpdateOnlyMode: boolean = false;
   confirmReceiptData = {
     materialCodeConfirmed: false,
     poConfirmed: false,
@@ -234,7 +236,8 @@ export class FgInComponent implements OnInit, OnDestroy {
             quantity: data.quantity || data.qty || 0,
             carton: data.carton || 0,
             odd: data.odd || 0,
-            location: data.location || data.viTri || '',
+            // Nếu phiếu đã khóa mà chưa có vị trí thì vẫn hiển thị placeholder để cột "Vị trí" không bị trống.
+            location: data.location || data.viTri || (data.isReceived ? 'Temporary' : ''),
             notes: data.notes || data.ghiChu || '',
             customer: data.customer || data.khach || '',
             isReceived: data.isReceived || false,
@@ -256,6 +259,10 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Lock / Unlock (cột Lock): Tick = khóa (chuyển Inventory), Bỏ tick = mở khóa để sửa
   updateLockStatus(material: FgInItem, checked: boolean): void {
     material.isReceived = checked;
+    // Khi tick khóa trực tiếp (không scan vị trí), đảm bảo UI mobile không bị trống cột location.
+    if (checked && (!material.location || String(material.location).trim() === '')) {
+      material.location = 'Temporary';
+    }
     material.updatedAt = new Date();
     this.updateMaterialInFirebase(material);
     if (checked) {
@@ -2138,11 +2145,17 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Open confirm receipt dialog when clicking on a pending receipt
   openConfirmReceiptDialog(material: FgInItem): void {
-    if (material.isReceived) {
-      return; // Already locked, don't open
+    const needsLocationUpdate =
+      material.isReceived === true && this.isTemporaryLocation(material.location);
+
+    // Đã khóa nhưng đã có vị trí thật thì không mở dialog
+    if (material.isReceived && !needsLocationUpdate) {
+      return;
     }
 
     this.selectedReceiptMaterial = material;
+    this.locationUpdateOnlyMode = needsLocationUpdate;
+
     this.confirmReceiptData = {
       materialCodeConfirmed: false,
       poConfirmed: false,
@@ -2168,6 +2181,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   closeConfirmReceiptDialog(): void {
     this.showConfirmReceiptDialog = false;
     this.selectedReceiptMaterial = null;
+    this.locationUpdateOnlyMode = false;
     this.confirmReceiptData = {
       materialCodeConfirmed: false,
       poConfirmed: false,
@@ -2191,6 +2205,8 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Check if all fields are confirmed
   isAllFieldsConfirmed(): boolean {
+    // Update-only mode: chỉ cần location được scan/nhập
+    if (this.locationUpdateOnlyMode) return true;
     return this.confirmReceiptData.materialCodeConfirmed &&
            this.confirmReceiptData.poConfirmed &&
            this.confirmReceiptData.lsxConfirmed &&
@@ -2219,10 +2235,29 @@ export class FgInComponent implements OnInit, OnDestroy {
     return this.filteredMaterials.filter(m => !m.isReceived).length;
   }
 
+  private isTemporaryLocation(location: string): boolean {
+    const s = String(location ?? '').trim();
+    if (!s) return true;
+    return s.toUpperCase() === 'TEMPORARY';
+  }
+
+  // Mobile: đã tick khóa nhưng vẫn ở trạng thái Temporary (chưa có vị trí thật)
+  getLockedWithoutLocationMaterials(): FgInItem[] {
+    return this.filteredMaterials.filter(m => m.isReceived && this.isTemporaryLocation(m.location));
+  }
+
+  getLockedWithoutLocationCount(): number {
+    return this.getLockedWithoutLocationMaterials().length;
+  }
+
   // Handle scanner input - auto uppercase
   onLocationScannerInput(): void {
     if (this.locationScannerValue) {
       this.locationScannerValue = this.locationScannerValue.toUpperCase();
+      // Keep confirmation state in sync so the button can be enabled
+      this.confirmReceiptData.location = this.locationScannerValue.trim().toUpperCase();
+    } else {
+      this.confirmReceiptData.location = '';
     }
   }
 
@@ -2332,6 +2367,29 @@ export class FgInComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // ===== Chỉ cập nhật vị trí (phiếu đã tick khóa nhưng đang Temporary) =====
+    if (this.locationUpdateOnlyMode) {
+      const newLocation = this.confirmReceiptData.location.trim().toUpperCase();
+
+      // Update fg-in (phiếu) location
+      this.selectedReceiptMaterial.location = newLocation;
+      this.selectedReceiptMaterial.updatedAt = new Date();
+      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+
+      // Update fg-inventory location (chỉ update trường location)
+      this.updateInventoryLocationOnly(this.selectedReceiptMaterial, newLocation)
+        .then(() => {
+          this.closeConfirmReceiptDialog();
+          this.refreshData();
+          alert(`✅ Đã cập nhật vị trí cho batch: ${newLocation}`);
+        })
+        .catch(err => {
+          console.error('Location update error:', err);
+          alert(`❌ Lỗi cập nhật vị trí: ${err?.message || err}`);
+        });
+      return;
+    }
+
     // Validate confirm quantity for multiple pallet
     if (this.isMultiplePallet) {
       if (this.confirmQuantity <= 0) {
@@ -2427,6 +2485,55 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     // Refresh data
     this.refreshData();
+  }
+
+  /**
+   * Cập nhật CHỈ `location` trong FG Inventory cho batch tương ứng.
+   * Không cộng/trừ tồn, không tạo doc mới.
+   */
+  private async updateInventoryLocationOnly(material: FgInItem, newLocation: string): Promise<void> {
+    const factory = String(material.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
+    const materialCodeNorm = String(material.materialCode || '').trim().toUpperCase();
+    const batchNorm = String(material.batchNumber || '').trim().toUpperCase();
+    const lsxNorm = String(material.lsx || '').trim().toUpperCase();
+    const lotNorm = String(material.lot || '').trim().toUpperCase();
+
+    if (!materialCodeNorm || !batchNorm) {
+      throw new Error('Thiếu materialCode hoặc batchNumber để cập nhật vị trí.');
+    }
+
+    const invSnap = await this.firestore
+      .collection('fg-inventory', ref => ref.where('factory', '==', factory))
+      .get()
+      .toPromise();
+
+    const docs = invSnap?.docs || [];
+
+    const matched = docs.filter(doc => {
+      const d = doc.data() as any;
+      const invCode = String(d.materialCode || d.maTP || '').trim().toUpperCase();
+      const invBatch = String(d.batchNumber || d.batch || '').trim().toUpperCase();
+      const invLsx = String(d.lsx || d.LSX || '').trim().toUpperCase();
+      const invLot = String(d.lot || d.Lot || '').trim().toUpperCase();
+
+      return invCode === materialCodeNorm &&
+        invBatch === batchNorm &&
+        (!lsxNorm || invLsx === lsxNorm) &&
+        (!lotNorm || invLot === lotNorm);
+    });
+
+    if (!matched.length) {
+      throw new Error(`Không tìm thấy FG Inventory tương ứng để cập nhật vị trí (batch: ${material.batchNumber}).`);
+    }
+
+    const firestoreBatch = this.firestore.firestore.batch();
+    matched.forEach(doc => {
+      firestoreBatch.update(doc.ref, {
+        location: newLocation.toUpperCase(),
+        updatedAt: new Date()
+      });
+    });
+    await firestoreBatch.commit();
   }
 
 }

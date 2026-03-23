@@ -2268,7 +2268,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       alert('Vui lòng nhập số Shipment!');
       return;
     }
-    this.unhiddenShipments.add(shipment);
+
+    // Focus: chỉ hiển thị đúng Shipment người dùng nhập (các Shipment khác ẩn đi).
+    // Đồng thời UNHIDE shipment này để các dòng đang Lock cũng được hiện ra.
+    this.filterByShipment = shipment;
+    this.searchTerm = '';
+    this.unhiddenShipments = new Set([shipment]);
+
     this.applyFilters();
     this.closeUnhideDialog();
     this.cdr.detectChanges();
@@ -2281,11 +2287,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       alert('Vui lòng nhập số Shipment!');
       return;
     }
+
+    // Focus ngay lập tức để bảng chỉ còn dữ liệu của Shipment này.
+    // Tạm thời UNHIDE shipment để dữ liệu Lock cũng hiển thị cho tới khi cập nhật xong.
+    this.filterByShipment = shipment;
+    this.searchTerm = '';
+    this.unhiddenShipments = new Set([shipment]);
+    this.applyFilters();
+
     const itemsOfShipment = this.items.filter(item => {
       const s = String(item.shipment || '').trim().toUpperCase();
       return s === shipment && item.isLocked;
     });
     if (itemsOfShipment.length === 0) {
+      this.unhiddenShipments.delete(shipment);
+      this.applyFilters();
+      this.closeUnhideDialog();
+      this.cdr.detectChanges();
       alert(`Shipment ${shipment} không có dòng nào đang Lock.`);
       return;
     }

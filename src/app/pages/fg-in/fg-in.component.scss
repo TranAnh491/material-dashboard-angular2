@@ -1636,6 +1636,44 @@ mat-checkbox {
   height: calc(100vh - 56px); // Adjusted for header height
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+
+    .mobile-section {
+      margin-bottom: 12px;
+      background: transparent;
+    }
+
+    .mobile-section-bottom {
+      padding-top: 10px;
+      border-top: 1px solid #d0d0d0;
+    }
+
+    .mobile-header {
+      margin-bottom: 10px;
+    }
+
+    .mobile-header-bottom {
+      margin-bottom: 10px;
+    }
+
+    .locked-cards-container {
+      padding-bottom: 6px;
+    }
+
+    .locked-temp-card {
+      background: #fff5f5;
+      border: 1px solid #c62828;
+    }
+
+    .card-location {
+      margin-top: 6px;
+      font-size: 9px;
+      color: #000;
+    }
+
+    .temp-location-text {
+      color: #c62828;
+      font-weight: 600;
+    }
   
   .mobile-header {
     margin-bottom: 12px;

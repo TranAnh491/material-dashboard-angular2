@@ -158,8 +158,8 @@
     <!-- Add New Item Form -->
     <div class="add-item-form">
       <h5><i class="material-icons">add</i> Thêm Vị Trí Mới</h5>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="form-row form-row-equal">
+        <div class="form-group form-group-vitri">
           <label for="newViTri">Vị Trí:</label>
           <input type="text" 
                  id="newViTri"
@@ -184,10 +184,16 @@
           </div>
         </div>
         
-        <div class="form-group">
+        <div class="form-group form-group-btn">
           <button class="add-btn" (click)="addLocationItem()" title="Thêm vị trí mới">
             <i class="material-icons">add</i>
             Thêm
+          </button>
+        </div>
+        <div class="form-group form-group-btn">
+          <button class="add-btn add-box-btn" (click)="addBoxItem()" title="Thêm BOX (BOX-0001, BOX-0002, ...)">
+            <i class="material-icons">inventory_2</i>
+            Thêm BOX
           </button>
         </div>
       </div>
@@ -203,19 +209,75 @@
 
     <!-- Table Container -->
     <div class="table-container desktop-only" *ngIf="!isLoading">
+      <!-- Batch actions -->
+      <div class="table-toolbar" *ngIf="filteredItems.length > 0 || filterByStt || filterByViTri || filterByPrintCount">
+        <div class="batch-actions" *ngIf="selectedLocationIds.size > 0">
+          <span class="selected-count">Đã chọn: {{ selectedLocationIds.size }}</span>
+          <button class="delete-selected-btn" (click)="deleteSelectedItems()" title="Xóa các dòng đã chọn">
+            <i class="material-icons">delete_sweep</i>
+            Xóa đã chọn
+          </button>
+        </div>
+        <button class="clear-filters-btn" *ngIf="filterByStt || filterByViTri || filterByPrintCount" (click)="clearColumnFilters()" title="Xóa bộ lọc cột">
+          <i class="material-icons">filter_alt_off</i>
+          Xóa lọc cột
+        </button>
+      </div>
       <!-- Table -->
       <table class="excel-table">
         <thead>
           <tr>
+            <th class="checkbox-col">
+              <input type="checkbox" 
+                     [checked]="isAllSelected()" 
+                     (change)="toggleSelectAll()"
+                     title="Chọn / Bỏ chọn tất cả">
+            </th>
             <th>STT</th>
             <th>Vị Trí</th>
+            <th>Lần in</th>
             <th>QR Code</th>
             <th>Thao Tác</th>
             <th>Xóa</th>
           </tr>
+          <!-- Hàng lọc theo cột -->
+          <tr class="filter-row">
+            <th class="checkbox-col"></th>
+            <th class="filter-cell">
+              <input type="text" 
+                     [(ngModel)]="filterByStt" 
+                     (input)="onColumnFilterChange()"
+                     class="column-filter-input"
+                     placeholder="Lọc STT">
+            </th>
+            <th class="filter-cell">
+              <input type="text" 
+                     [(ngModel)]="filterByViTri" 
+                     (input)="onColumnFilterChange()"
+                     class="column-filter-input"
+                     placeholder="Lọc Vị Trí">
+            </th>
+            <th class="filter-cell">
+              <input type="text" 
+                     [(ngModel)]="filterByPrintCount" 
+                     (input)="onColumnFilterChange()"
+                     class="column-filter-input"
+                     placeholder="Lọc Lần in (0, >0)">
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let item of filteredItems; trackBy: trackByFn; let i = index">
+          <tr *ngFor="let item of filteredItems; trackBy: trackByFn; let i = index" [class.row-selected]="isItemSelected(item)">
+            <!-- Checkbox Column -->
+            <td class="checkbox-col">
+              <input type="checkbox" 
+                     [checked]="isItemSelected(item)" 
+                     (change)="toggleSelectItem(item)"
+                     [id]="'sel-' + item.id">
+            </td>
             <!-- STT Column -->
             <td class="stt-cell">
               <ng-container *ngIf="editingItem?.id !== item.id; else editStt">
@@ -258,7 +320,10 @@
               </ng-template>
             </td>
             
-                         <!-- QR Code Column -->
+            <!-- Lần in Column -->
+            <td class="print-count-cell">{{ item.printCount ?? 0 }}</td>
+            
+            <!-- QR Code Column -->
              <td class="qr-cell">
                <button class="qr-btn" 
                        (click)="printQRCode(item)"

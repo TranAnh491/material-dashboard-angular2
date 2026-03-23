@@ -14,6 +14,7 @@ export interface LocationItem {
   stt: number;
   viTri: string;
   qrCode: string;
+  printCount?: number; // Số lần in (Lần in)
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -65,6 +66,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Search and filter
   searchTerm = '';
+  /** Lọc theo từng cột */
+  filterByStt = '';
+  filterByViTri = '';
+  filterByPrintCount = '';
   private searchSubject = new Subject<string>();
   
   // Total counter
@@ -89,6 +94,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Edit mode
   editingItem: LocationItem | null = null;
+
+  // Multi-select for batch delete
+  selectedLocationIds = new Set<string>();
   
   // Store Material Modal (Cất NVL)
   showStoreMaterialModal = false;
@@ -218,8 +226,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             item.stt = index + 1;
           });
           
-          this.filteredItems = [...this.locationItems];
-          this.updateTotalCount();
+          this.applyFilters();
           this.calculateNextStt();
           this.isLoading = false;
         });
@@ -255,27 +262,59 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private performSearch(term: string) {
-    if (!term || term.trim().length < 2) {
-      this.filteredItems = [...this.locationItems];
-      this.clearLocationLookup();
-    } else {
-      const formattedTerm = this.formatViTriInput(term.trim());
-      this.filteredItems = this.locationItems.filter(item => {
-        // Yêu cầu: khi scan/tìm luôn dò ở cột Vị Trí
-        const searchLower = formattedTerm.toLowerCase();
-        return item.viTri.toLowerCase().includes(searchLower);
-      });
+  private applyFilters() {
+    let items = [...this.locationItems];
+    // Search filter (ô tìm kiếm chung - Vị Trí)
+    if (this.searchTerm && this.searchTerm.trim().length >= 2) {
+      const formattedTerm = this.formatViTriInput(this.searchTerm.trim());
+      const searchLower = formattedTerm.toLowerCase();
+      items = items.filter(item => item.viTri.toLowerCase().includes(searchLower));
       this.lookupInventoryByLocation(formattedTerm);
+    } else {
+      this.clearLocationLookup();
     }
+    // Lọc theo cột STT
+    if (this.filterByStt.trim()) {
+      const term = this.filterByStt.trim().toLowerCase();
+      items = items.filter(item => String(item.stt).toLowerCase().includes(term));
+    }
+    // Lọc theo cột Vị Trí
+    if (this.filterByViTri.trim()) {
+      const term = this.filterByViTri.trim().toLowerCase();
+      items = items.filter(item => item.viTri.toLowerCase().includes(term));
+    }
+    // Lọc theo cột Lần in
+    if (this.filterByPrintCount.trim()) {
+      const term = this.filterByPrintCount.trim();
+      if (term === '>0' || term === '> 0') {
+        items = items.filter(item => (item.printCount ?? 0) > 0);
+      } else {
+        const numStr = String(term);
+        items = items.filter(item => String(item.printCount ?? 0).includes(numStr));
+      }
+    }
+    this.filteredItems = items;
     this.updateTotalCount();
+  }
+
+  private performSearch(term: string) {
+    this.applyFilters();
+  }
+
+  onColumnFilterChange() {
+    this.applyFilters();
+  }
+
+  clearColumnFilters() {
+    this.filterByStt = '';
+    this.filterByViTri = '';
+    this.filterByPrintCount = '';
+    this.applyFilters();
   }
 
   clearSearch() {
     this.searchTerm = '';
-    this.filteredItems = [...this.locationItems];
-    this.clearLocationLookup();
-    this.updateTotalCount();
+    this.applyFilters();
   }
 
   private clearLocationLookup(): void {
@@ -433,6 +472,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       stt: this.nextStt, // Use auto-generated STT
       viTri: this.newItem.viTri!,
       qrCode: this.generateQRCode(this.newItem.viTri!),
+      printCount: 0,
       createdAt: new Date()
     };
 
@@ -515,6 +555,46 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     };
   }
 
+  /** Lấy số box tiếp theo: BOX-0001 .. BOX-9999 */
+  private getNextBoxNumber(): string {
+    const boxRegex = /^BOX-(\d{1,4})$/i;
+    let maxNum = 0;
+    this.locationItems.forEach(item => {
+      const m = item.viTri.match(boxRegex);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= 1 && n <= 9999) maxNum = Math.max(maxNum, n);
+      }
+    });
+    const next = Math.min(maxNum + 1, 9999);
+    return `BOX-${String(next).padStart(4, '0')}`;
+  }
+
+  /** Thêm BOX: tự tạo BOX-0001, BOX-0002, ... */
+  addBoxItem() {
+    const boxCode = this.getNextBoxNumber();
+
+    if (this.locationItems.find(item => item.viTri === boxCode)) {
+      alert(`Box ${boxCode} đã tồn tại. Vui lòng thử lại.`);
+      return;
+    }
+
+    const newItem: Omit<LocationItem, 'id'> = {
+      stt: this.nextStt,
+      viTri: boxCode,
+      qrCode: this.generateQRCode(boxCode),
+      printCount: 0,
+      createdAt: new Date()
+    };
+
+    this.firestore.collection('locations').add(newItem).then(() => {
+      console.log('Added new box:', boxCode);
+      this.refreshData();
+    }).catch(error => {
+      console.error('Error adding box:', error);
+    });
+  }
+
   // Delete location item
   deleteLocationItem(item: LocationItem) {
     if (confirm(`Bạn có chắc muốn xóa vị trí ${item.viTri}?`)) {
@@ -525,6 +605,58 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         console.error('Error deleting location item:', error);
       });
     }
+  }
+
+  // Multi-select for batch delete
+  isItemSelected(item: LocationItem): boolean {
+    return item.id ? this.selectedLocationIds.has(item.id) : false;
+  }
+
+  isAllSelected(): boolean {
+    if (this.filteredItems.length === 0) return false;
+    return this.filteredItems.every(item => item.id && this.selectedLocationIds.has(item.id));
+  }
+
+  toggleSelectItem(item: LocationItem) {
+    if (!item.id) return;
+    if (this.selectedLocationIds.has(item.id)) {
+      this.selectedLocationIds.delete(item.id);
+    } else {
+      this.selectedLocationIds.add(item.id);
+    }
+    this.selectedLocationIds = new Set(this.selectedLocationIds);
+  }
+
+  toggleSelectAll() {
+    if (this.isAllSelected()) {
+      this.filteredItems.forEach(item => {
+        if (item.id) this.selectedLocationIds.delete(item.id);
+      });
+    } else {
+      this.filteredItems.forEach(item => {
+        if (item.id) this.selectedLocationIds.add(item.id);
+      });
+    }
+    this.selectedLocationIds = new Set(this.selectedLocationIds);
+  }
+
+  deleteSelectedItems() {
+    const ids = Array.from(this.selectedLocationIds);
+    if (ids.length === 0) {
+      alert('Chưa chọn dòng nào để xóa');
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn xóa ${ids.length} vị trí đã chọn?`)) return;
+    const batch = this.firestore.firestore.batch();
+    ids.forEach(id => {
+      batch.delete(this.firestore.collection('locations').doc(id).ref);
+    });
+    batch.commit().then(() => {
+      this.selectedLocationIds = new Set();
+      this.refreshData();
+    }).catch(error => {
+      console.error('Error deleting selected items:', error);
+    });
   }
 
   // Export to Excel
@@ -549,11 +681,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Initialize sample data
   initializeSampleData() {
     const sampleData: Omit<LocationItem, 'id'>[] = [
-      { stt: 0, viTri: 'A1-01', qrCode: this.generateQRCode('A1-01'), createdAt: new Date() },
-      { stt: 0, viTri: 'A1-02', qrCode: this.generateQRCode('A1-02'), createdAt: new Date() },
-      { stt: 0, viTri: 'A2-01', qrCode: this.generateQRCode('A2-01'), createdAt: new Date() },
-      { stt: 0, viTri: 'A2-02', qrCode: this.generateQRCode('A2-02'), createdAt: new Date() },
-      { stt: 0, viTri: 'B1-01', qrCode: this.generateQRCode('B1-01'), createdAt: new Date() }
+      { stt: 0, viTri: 'A1-01', qrCode: this.generateQRCode('A1-01'), printCount: 0, createdAt: new Date() },
+      { stt: 0, viTri: 'A1-02', qrCode: this.generateQRCode('A1-02'), printCount: 0, createdAt: new Date() },
+      { stt: 0, viTri: 'A2-01', qrCode: this.generateQRCode('A2-01'), printCount: 0, createdAt: new Date() },
+      { stt: 0, viTri: 'A2-02', qrCode: this.generateQRCode('A2-02'), printCount: 0, createdAt: new Date() },
+      { stt: 0, viTri: 'B1-01', qrCode: this.generateQRCode('B1-01'), printCount: 0, createdAt: new Date() }
     ];
 
     // Clear existing data first
@@ -643,6 +775,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
                 stt: 0, // Will be auto-assigned
                 viTri: viTri,
                 qrCode: this.generateQRCode(viTri),
+                printCount: 0,
                 createdAt: new Date()
               });
               console.log(`✅ Valid location added: ${viTri} (normalized: ${normalizedCode})`);
@@ -747,6 +880,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     // Print QR Code - Tem 50mm x 30mm
   async printQRCode(item: LocationItem) {
     try {
+      // Tăng lần in và lưu vào Firestore
+      const newPrintCount = (item.printCount ?? 0) + 1;
+      if (item.id) {
+        this.firestore.collection('locations').doc(item.id).update({ printCount: newPrintCount }).catch(err => console.error('Error updating printCount:', err));
+      }
+      item.printCount = newPrintCount;
+
       // Tạo mã QR thực sự từ vị trí
       const qrImage = await QRCode.toDataURL(item.viTri, {
         width: 200, // 200px để đảm bảo chất lượng khi in

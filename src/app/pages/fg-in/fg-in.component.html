@@ -76,27 +76,60 @@
 
     <!-- Mobile/Tablet Card View for Pending Items -->
     <div class="mobile-card-view show-on-tablet" *ngIf="mobileFactorySelected">
-      <div class="mobile-header">
-        <h5>Phiếu chờ xử lý ({{ getPendingCount() }})</h5>
-      </div>
-      <div class="pending-cards-container">
-        <div class="pending-card" 
-             *ngFor="let material of getPendingMaterials()"
-             (click)="openConfirmReceiptDialog(material)">
-          <div class="card-material-code">{{ material.materialCode }}</div>
-          <div class="card-details">
-            <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
-            <span class="card-batch">{{ material.batchNumber }}</span>
+      <!-- Top: chưa tick khóa -->
+      <div class="mobile-section">
+        <div class="mobile-header">
+          <h5>Phiếu chờ xử lý ({{ getPendingCount() }})</h5>
+        </div>
+        <div class="pending-cards-container">
+          <div class="pending-card"
+               *ngFor="let material of getPendingMaterials()"
+               (click)="openConfirmReceiptDialog(material)">
+            <div class="card-material-code">{{ material.materialCode }}</div>
+            <div class="card-details">
+              <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
+              <span class="card-batch">{{ material.batchNumber }}</span>
+            </div>
+            <div class="card-lsx">{{ material.lsx }}</div>
+            <div class="card-status">
+              <i class="material-icons">touch_app</i>
+              Bấm để xác nhận
+            </div>
           </div>
-          <div class="card-lsx">{{ material.lsx }}</div>
-          <div class="card-status">
-            <i class="material-icons">touch_app</i>
-            Bấm để xác nhận
+          <div class="no-pending-message" *ngIf="getPendingCount() === 0">
+            <i class="material-icons">check_circle</i>
+            <span>Không có phiếu chờ xử lý</span>
           </div>
         </div>
-        <div class="no-pending-message" *ngIf="getPendingCount() === 0">
-          <i class="material-icons">check_circle</i>
-          <span>Không có phiếu chờ xử lý</span>
+      </div>
+
+      <!-- Bottom: đã tick khóa nhưng vẫn ở trạng thái Temporary (chưa có vị trí) -->
+      <div class="mobile-section mobile-section-bottom">
+        <div class="mobile-header mobile-header-bottom">
+          <h5>Đã khóa nhưng chưa có vị trí ({{ getLockedWithoutLocationCount() }})</h5>
+        </div>
+        <div class="pending-cards-container locked-cards-container">
+          <div class="pending-card locked-temp-card"
+               *ngFor="let material of getLockedWithoutLocationMaterials()"
+               (click)="openConfirmReceiptDialog(material)">
+            <div class="card-material-code">{{ material.materialCode }}</div>
+            <div class="card-details">
+              <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
+              <span class="card-batch">{{ material.batchNumber }}</span>
+            </div>
+            <div class="card-lsx">{{ material.lsx }}</div>
+            <div class="card-location">
+              Vị trí: <strong class="temp-location-text">{{ material.location || 'Temporary' }}</strong>
+            </div>
+            <div class="card-status">
+              <i class="material-icons">qr_code_scanner</i>
+              Bấm để scan vị trí mới
+            </div>
+          </div>
+          <div class="no-pending-message" *ngIf="getLockedWithoutLocationCount() === 0">
+            <i class="material-icons">location_on</i>
+            <span>Không có phiếu Temporary</span>
+          </div>
         </div>
       </div>
     </div>
@@ -715,7 +748,9 @@
         <i class="material-icons">{{ isAllFieldsConfirmed() && confirmReceiptData.location ? 'verified' : 'pending' }}</i>
         <span *ngIf="!isAllFieldsConfirmed()">Còn {{ getRemainingConfirmCount() }} thông tin chưa xác nhận</span>
         <span *ngIf="isAllFieldsConfirmed() && !confirmReceiptData.location">Cần scan hoặc nhập vị trí</span>
-        <span *ngIf="isAllFieldsConfirmed() && confirmReceiptData.location">Sẵn sàng khóa phiếu!</span>
+        <span *ngIf="isAllFieldsConfirmed() && confirmReceiptData.location">
+          {{ locationUpdateOnlyMode ? 'Sẵn sàng cập nhật vị trí!' : 'Sẵn sàng khóa phiếu!' }}
+        </span>
       </div>
     </div>
     <div class="modal-footer">
@@ -723,8 +758,17 @@
         <i class="material-icons">close</i>
         Hủy
       </button>
-      <button type="button" 
-              class="btn btn-done" 
+      <button type="button"
+              class="btn btn-done"
+              *ngIf="locationUpdateOnlyMode"
+              (click)="confirmAndLockReceipt()"
+              [disabled]="!isAllFieldsConfirmed() || !confirmReceiptData.location">
+        <i class="material-icons">update</i>
+        Update vị trí
+      </button>
+      <button type="button"
+              class="btn btn-done"
+              *ngIf="!locationUpdateOnlyMode"
               (click)="confirmAndLockReceipt()"
               [disabled]="!isAllFieldsConfirmed() || !confirmReceiptData.location">
         <i class="material-icons">lock</i>

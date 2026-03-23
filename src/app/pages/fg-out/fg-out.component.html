@@ -329,6 +329,8 @@
               <td class="checkbox-cell">
                 <input type="checkbox"
                        class="approval-checkbox"
+                       [attr.name]="'approved_' + (row.material.id || row.matIdx)"
+                       [ngModelOptions]="{ standalone: true }"
                        [(ngModel)]="row.material.approved"
                        (change)="onApprovalChange(row.material)"
                        [title]="row.material.approved ? 'Đã duyệt' : 'Chưa duyệt'">
