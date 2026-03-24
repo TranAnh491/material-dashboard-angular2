@@ -153,6 +153,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private inventoryStockCache = new Map<string, number>();
   /** Cache tồn kho theo batch (key = FACTORY|BATCH, value = tồn tính lại theo tonDau+nhap-xuat, có thể = 0 hoặc âm) */
   private inventoryStockByBatchCache = new Map<string, number>();
+  /** Cache tồn theo đúng dòng hiển thị FG Inventory (key = FACTORY|BATCH|MATERIAL). */
+  private inventoryStockByBatchMaterialCache = new Map<string, number>();
   /** Thành phần tính tồn theo batch */
   private invTonDauByBatch = new Map<string, number>();
   private invNhapByBatch = new Map<string, number>();
@@ -251,6 +253,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     stock: number;
     location: string;
   }> = [];
+  batchInventoryPopupPos: { top: number; left: number } = { top: 80, left: 80 };
   /** Cache realtime từ fg-inventory để popup Batch luôn cập nhật liên tục. */
   private fgInventoryRealtimeDocs: any[] = [];
   private batchInventoryPopupLastMaterialPrefixLoaded: string = '';
@@ -337,6 +340,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.locationCache.clear();
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
+    this.inventoryStockByBatchMaterialCache.clear();
     this.invTonDauByBatch.clear();
     this.invNhapByBatch.clear();
     this.invXuatByBatch.clear();
@@ -347,6 +351,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const f = (factory || 'ASM1').toString().trim().toUpperCase();
     const b = (batchNumber || '').toString().trim().toUpperCase();
     return b ? `${f}|${b}` : '';
+  }
+
+  private batchMaterialKey(factory: any, batchNumber: any, materialCode: any): string {
+    const f = (factory || 'ASM1').toString().trim().toUpperCase();
+    const b = (batchNumber || '').toString().trim().toUpperCase();
+    const m = (materialCode || '').toString().trim().toUpperCase();
+    return (b && m) ? `${f}|${b}|${m}` : '';
   }
 
   private rebuildInventoryStockByBatch(): void {
@@ -374,19 +385,29 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((docs: any[]) => {
         this.inventoryStockByBatchCache.clear();
+        this.inventoryStockByBatchMaterialCache.clear();
         docs.forEach(d => {
           const key = this.batchKey(d.factory, d.batchNumber);
           if (!key) return;
+          const materialCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
+          const rowKey = this.batchMaterialKey(d.factory, d.batchNumber, materialCode);
           const tonDau = Number(d.tonDau ?? 0) || 0;
           const nhap = Number(d.nhap ?? d.quantity ?? 0) || 0;
           const xuat = Number(d.xuat ?? d.exported ?? 0) || 0;
           const ton = (d.ton != null)
             ? Number(d.ton)
             : (d.stock != null ? Number(d.stock) : (tonDau + nhap - xuat));
+          const safeTon = isNaN(ton) ? 0 : ton;
           this.inventoryStockByBatchCache.set(
             key,
-            (this.inventoryStockByBatchCache.get(key) || 0) + (isNaN(ton) ? 0 : ton)
+            (this.inventoryStockByBatchCache.get(key) || 0) + safeTon
           );
+          if (rowKey) {
+            this.inventoryStockByBatchMaterialCache.set(
+              rowKey,
+              (this.inventoryStockByBatchMaterialCache.get(rowKey) || 0) + safeTon
+            );
+          }
         });
         this.cdr.markForCheck();
       });
@@ -474,10 +495,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
   /** Lấy tồn kho theo đúng batch (không cộng dồn các batch khác). */
   getInventoryStockByBatch(material: FgOutItem): number {
     const batch = (material.batchNumber || '').toString().trim().toUpperCase();
+    const materialCode = (material.materialCode || '').toString().trim().toUpperCase();
     const factory = (material.factory || this.selectedFactory || 'ASM1').toString().trim().toUpperCase();
     if (!batch) return 0;
-    const key = `${factory}|${batch}`;
-    return this.inventoryStockByBatchCache.get(key) || 0;
+    const rowKey = `${factory}|${batch}|${materialCode}`;
+    if (materialCode && this.inventoryStockByBatchMaterialCache.has(rowKey)) {
+      return this.inventoryStockByBatchMaterialCache.get(rowKey) || 0;
+    }
+    const batchKey = `${factory}|${batch}`;
+    return this.inventoryStockByBatchCache.get(batchKey) || 0;
   }
 
   // Load materials from Firebase - Only last 10 days
@@ -1100,7 +1126,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // ====================== Batch Inventory Popup ======================
-  openBatchInventoryPopup(material: FgOutItem): void {
+  openBatchInventoryPopup(material: FgOutItem, event?: MouseEvent): void {
     // Cho phép mở popup để xem cả khi đã duyệt.
     // Việc chỉnh sửa dữ liệu sẽ chặn ở bước chọn dòng.
     this.batchInventoryPopupTarget = material;
@@ -1111,6 +1137,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.batchInventoryPopupBatchInput = mcPrefix.length === 7
       ? ''
       : String(material.batchNumber || '').trim().toUpperCase();
+    this.updateBatchPopupPosition(event);
     this.batchInventoryPopupRows = [];
     this.showBatchInventoryPopup = true;
     this.loadBatchInventoryPopupRows();
@@ -1238,6 +1265,44 @@ export class FgOutComponent implements OnInit, OnDestroy {
           this.loadBatchInventoryPopupRows();
         }
       });
+  }
+
+  private updateBatchPopupPosition(event?: MouseEvent): void {
+    const popupWidth = 870;
+    const popupHeight = 560;
+    const margin = 8;
+    const viewportW = window.innerWidth || 1280;
+    const viewportH = window.innerHeight || 720;
+
+    if (!event || !(event.target instanceof HTMLElement)) {
+      this.batchInventoryPopupPos = {
+        top: Math.max(margin, Math.round((viewportH - popupHeight) / 2)),
+        left: Math.max(margin, Math.round((viewportW - popupWidth) / 2))
+      };
+      return;
+    }
+
+    const rect = event.target.getBoundingClientRect();
+
+    // Ưu tiên đặt dưới dòng đang bấm; nếu không đủ chỗ thì đặt trên.
+    let top = rect.bottom + margin;
+    if (top + popupHeight > viewportH - margin) {
+      top = rect.top - popupHeight - margin;
+    }
+    // Nếu vẫn không đủ (màn nhỏ), đặt sát mép trên.
+    if (top < margin) top = margin;
+
+    // Ưu tiên căn theo cạnh trái ô bấm.
+    let left = rect.left;
+    if (left + popupWidth > viewportW - margin) {
+      left = viewportW - popupWidth - margin;
+    }
+    if (left < margin) left = margin;
+
+    this.batchInventoryPopupPos = {
+      top: Math.round(top),
+      left: Math.round(left)
+    };
   }
 
   selectBatchInventoryPopupRow(r: {
@@ -2504,6 +2569,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
 
       this.removeFromExportCollection(material);
+      alert('Cần refresh tồn kho ở FG Inventory');
 
       // Reset approvedAt để UI hiển thị đúng “ngày tick duyệt”
       material.approvedAt = undefined;

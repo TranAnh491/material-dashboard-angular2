@@ -848,6 +848,14 @@ tr.pallet-even td {
   }
 }
 
+/* Tăng riêng cột Batch thêm ~20% (mốc hiện tại) */
+.excel-table th.batch-col,
+.excel-table td.batch-col {
+  width: 158px !important;
+  min-width: 158px !important;
+  max-width: 158px !important;
+}
+
 // Location cell styling
 .location-cell {
   background: #ffffff !important;
@@ -877,6 +885,17 @@ tr.pallet-even td {
   min-width: 60px;
   max-width: 70px;
   padding: 2px !important;
+}
+
+/* Dòng có gộp thùng: nhấn mạnh viền đủ 4 cạnh */
+.merge-carton-cell.merge-carton-active {
+  border: 2px solid #000000 !important;
+}
+
+.merge-carton-cell.merge-carton-active .merge-carton-select {
+  border: 1px solid #000000 !important;
+  font-weight: 700;
+  background: #fff8c6;
 }
 
 .merge-carton-select {
@@ -1302,8 +1321,24 @@ mat-checkbox {
 
 // Date Input overrides (for table cells)
 .excel-table .date-input {
-  font-size: $fg-font-size-base;
+  font-size: calc(#{$fg-font-size-base} * 0.72);
   padding: 4px 6px;
+}
+
+.excel-table td.date-cell {
+  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
+}
+
+.excel-table td.date-cell input.editable-input[type="date"] {
+  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
+}
+
+.excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit,
+.excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-text,
+.excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-month-field,
+.excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-day-field,
+.excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-year-field {
+  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
 }
 
 .date-input::-webkit-calendar-picker-indicator {

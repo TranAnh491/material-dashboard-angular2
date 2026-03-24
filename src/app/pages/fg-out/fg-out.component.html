@@ -130,7 +130,7 @@
             <th>PALLET</th>
             <th>XP</th>
             <th class="date-header">NGÀY</th>
-            <th>BATCH</th>
+            <th class="batch-col">BATCH</th>
             <th>MÃ TP</th>
             <th>LOT</th>
             <th>LSX</th>
@@ -164,7 +164,7 @@
             </th>
             <th></th>
             <th></th>
-            <th>
+            <th class="batch-col">
               <select class="col-filter-select" [(ngModel)]="colFilterBatch" (ngModelChange)="onColumnFilterChange()">
                 <option value="">-- TẤT CẢ --</option>
                 <option *ngFor="let v of colFilterOptionsBatch" [value]="v">{{ v }}</option>
@@ -227,11 +227,11 @@
                        [disabled]="row.material.approved"
                        (change)="onDateChange($event, row.material)">
               </td>
-              <td class="code-cell td-dropdown">
+              <td class="code-cell td-dropdown batch-col">
                 <input type="text"
                        class="editable-input"
                        [(ngModel)]="row.material.batchNumber"
-                       (click)="openBatchInventoryPopup(row.material)"
+                       (click)="openBatchInventoryPopup(row.material, $event)"
                        (change)="onMainBatchChange(row.material)"
                        placeholder="Batch">
               </td>
@@ -310,7 +310,8 @@
                   <option *ngFor="let type of productTypes" [value]="type">{{type}}</option>
                 </select>
               </td>
-              <td class="merge-carton-cell">
+              <td class="merge-carton-cell"
+                  [class.merge-carton-active]="hasMergeCartonValue(row.material)">
                 <select class="editable-input merge-carton-select"
                         [(ngModel)]="row.material.mergeCarton"
                         (change)="onMergeCartonChange(row.material)">
@@ -438,8 +439,11 @@
 
 <!-- Batch Inventory Popup -->
 <div class="custom-modal" [class.show]="showBatchInventoryPopup" [style.display]="showBatchInventoryPopup ? 'flex' : 'none'">
-  <div class="modal-overlay" (click)="closeBatchInventoryPopup()"></div>
-  <div class="modal-container batch-inv-modal" style="width:870px;min-width:870px;max-width:870px;transform:scale(1);">
+  <div class="modal-container batch-inv-modal"
+       [style.position]="'fixed'"
+       [style.top.px]="batchInventoryPopupPos.top"
+       [style.left.px]="batchInventoryPopupPos.left"
+       style="width:870px;min-width:870px;max-width:870px;transform:scale(1);">
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">inventory</i>
