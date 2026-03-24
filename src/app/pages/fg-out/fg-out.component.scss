@@ -1527,10 +1527,38 @@ mat-checkbox {
   text-align: left;
 }
 
+/* Giữ cột Batch + Mã TP luôn hiển thị khi kéo ngang trong popup */
+.batch-inv-inner-table th:nth-child(1),
+.batch-inv-inner-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fff;
+}
+
+.batch-inv-inner-table th:nth-child(2),
+.batch-inv-inner-table td:nth-child(2) {
+  position: sticky;
+  left: 150px;
+  z-index: 3;
+  background: #fff;
+}
+
+.batch-inv-inner-table th:nth-child(1),
+.batch-inv-inner-table th:nth-child(2) {
+  z-index: 4;
+  background: #f5f5f5;
+}
+
 .batch-inv-row {
   &:hover {
     background: #e3f2fd;
   }
+}
+
+.batch-cell-select {
+  cursor: pointer;
+  user-select: none;
 }
 
 .batch-inv-inner-table td:nth-child(5) {

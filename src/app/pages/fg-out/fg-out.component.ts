@@ -251,6 +251,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     stock: number;
     location: string;
   }> = [];
+  /** Cache realtime từ fg-inventory để popup Batch luôn cập nhật liên tục. */
+  private fgInventoryRealtimeDocs: any[] = [];
   private batchInventoryPopupLastMaterialPrefixLoaded: string = '';
 
   // Popup chọn Mã TP theo shipment đang fill
@@ -290,6 +292,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
+    this.startFgInventoryRealtimeFeed();
     this.loadInventoryStockCache(); // Load tồn kho từ fg-inventory
     this.subscribeBatchStockComponents(); // Tính tồn theo batch (kể cả 0/âm)
     // Mặc định lọc 1 tuần gần đây
@@ -837,9 +840,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   private invTon(d: any): number {
-    const ton = (d?.ton != null && d.ton !== 0)
+    // Đồng bộ công thức với FG Inventory:
+    // ton = ton (nếu có) -> stock -> tonDau + nhap - xuat
+    const tonDau = Number(d?.tonDau ?? 0) || 0;
+    const nhap = Number(d?.nhap ?? d?.quantity ?? 0) || 0;
+    const xuat = Number(d?.xuat ?? d?.exported ?? 0) || 0;
+    const ton = (d?.ton != null)
       ? Number(d.ton)
-      : (d?.stock != null ? Number(d.stock) : (Number(d?.quantity ?? 0) - Number(d?.exported ?? d?.xuat ?? 0)));
+      : (d?.stock != null ? Number(d.stock) : (tonDau + nhap - xuat));
     return isNaN(ton) ? 0 : ton;
   }
 
@@ -1093,8 +1101,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // ====================== Batch Inventory Popup ======================
   openBatchInventoryPopup(material: FgOutItem): void {
-    // Allow xem chi tiết kể cả khi chưa duyệt, nhưng nếu đã duyệt thì không cho đổi
-    if (material.approved) return;
+    // Cho phép mở popup để xem cả khi đã duyệt.
+    // Việc chỉnh sửa dữ liệu sẽ chặn ở bước chọn dòng.
     this.batchInventoryPopupTarget = material;
     const mc = String(material.materialCode || '').trim().toUpperCase();
     const mcPrefix = mc ? mc.slice(0, 7) : '';
@@ -1133,24 +1141,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const materialPrefix = targetMaterial ? targetMaterial.slice(0, 7) : '';
 
       const batchFilter = String(this.batchInventoryPopupBatchInput || '').trim().toUpperCase();
-
-      // Case A: Có mã TP (>=7 ký tự đầu) → lấy danh sách theo prefix mã TP
-      let snap: any = null;
-      if (materialPrefix.length === 7) {
-        // Lấy theo factory rồi lọc prefix trong JS (để popup luôn có danh sách để chọn)
-        snap = await firstValueFrom(
-          this.firestore.collection('fg-inventory', ref =>
-            ref.where('factory', '==', factory)
-          ).get()
-        );
-      } else if (batchFilter) {
-        // Case B: Không có mã TP đủ → lọc theo batch nhập
-        snap = await firstValueFrom(
-          this.firestore.collection('fg-inventory', ref =>
-            ref.where('factory', '==', factory).where('batchNumber', '==', batchFilter)
-          ).get()
-        );
-      } else {
+      // Không có mã TP đủ 7 ký tự và cũng không nhập batch thì không hiển thị.
+      if (materialPrefix.length < 7 && !batchFilter) {
         this.batchInventoryPopupRows = [];
         return;
       }
@@ -1165,10 +1157,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
         stockMax: number;
       }>();
 
-      snap?.docs?.forEach((doc: any) => {
-        const d = doc.data() as any;
-        const invFactory = String(d?.factory || '').trim().toUpperCase();
-        if (invFactory && invFactory !== factory) return;
+      this.fgInventoryRealtimeDocs.forEach((d: any) => {
+        // Đồng bộ mặc định factory với FG Inventory (thiếu factory -> ASM1).
+        const invFactory = String(d?.factory || 'ASM1').trim().toUpperCase();
+        if (invFactory !== factory) return;
 
         const invBatch = this.invNormBatch(d).toUpperCase();
         const invCode = this.invNormMaterialCode(d).toUpperCase();
@@ -1176,6 +1168,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         const invLot = this.invNormLot(d);
         const stock = this.invTon(d);
         const location = String(d?.location ?? d?.viTri ?? '').trim();
+        // Chỉ hiển thị các mã TP đang tồn kho.
+        if (stock <= 0) return;
 
         // Lọc mã TP nếu đang có (ưu tiên match chính xác nếu user chọn full mã > 7 ký tự)
         const targetExact = targetMaterial && targetMaterial.length > 7 ? targetMaterial : '';
@@ -1233,6 +1227,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Đồng bộ realtime fg-inventory để popup Batch luôn bám dữ liệu hiện tại. */
+  private startFgInventoryRealtimeFeed(): void {
+    this.firestore.collection('fg-inventory')
+      .valueChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((docs: any[]) => {
+        this.fgInventoryRealtimeDocs = Array.isArray(docs) ? docs : [];
+        if (this.showBatchInventoryPopup) {
+          this.loadBatchInventoryPopupRows();
+        }
+      });
+  }
+
   selectBatchInventoryPopupRow(r: {
     batchNumber: string;
     materialCode: string;
@@ -1243,6 +1250,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }): void {
     if (!this.batchInventoryPopupTarget) return;
     const target = this.batchInventoryPopupTarget;
+    if (target.approved) return;
 
     target.batchNumber = String(r.batchNumber || this.batchInventoryPopupBatchInput).trim().toUpperCase();
     // Theo yêu cầu: mã TP giữ theo lựa chọn trước đó; chỉ set lại khi đang trống

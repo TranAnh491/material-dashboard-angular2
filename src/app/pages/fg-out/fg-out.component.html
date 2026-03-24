@@ -487,10 +487,10 @@
           </thead>
           <tbody>
             <tr *ngFor="let r of batchInventoryPopupRows"
-                class="batch-inv-row"
-                [style.cursor]="'pointer'"
-                (click)="selectBatchInventoryPopupRow(r)">
-              <td>{{ r.batchNumber }}</td>
+                class="batch-inv-row">
+              <td class="batch-cell-select"
+                  title="Nhấp đúp để chọn batch"
+                  (dblclick)="selectBatchInventoryPopupRow(r)">{{ r.batchNumber }}</td>
               <td>{{ r.materialCode }}</td>
               <td>{{ r.lsx }}</td>
               <td>{{ r.lot }}</td>
