@@ -11,6 +11,135 @@
   min-height: 100vh;
 }
 
+// Mobile: popup chọn ASM1/ASM2 sau khi scan mã nhân viên
+.mobile-factory-picker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100100;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  box-sizing: border-box;
+
+  .mobile-factory-picker-card {
+    width: 100%;
+    max-width: 400px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    border: 3px solid #000000;
+  }
+
+  .mobile-factory-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 12px;
+
+    h3 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    i.material-icons {
+      font-size: 32px;
+      color: #1976d2;
+    }
+  }
+
+  .mobile-factory-picker-hint {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333333;
+    text-align: center;
+    margin: 0 0 12px;
+  }
+
+  .mobile-factory-picker-id {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    background: #e8f5e9;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+
+    i.material-icons {
+      font-size: 20px;
+      color: #2e7d32;
+    }
+  }
+
+  .mobile-factory-picker-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .mobile-factory-btn {
+    flex: 1;
+    min-height: 56px;
+    border: 2px solid #000000;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: 800;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    color: #ffffff;
+    text-transform: uppercase;
+
+    i.material-icons {
+      font-size: 28px;
+    }
+
+    &.asm1 {
+      background: linear-gradient(145deg, #42a5f5, #1976d2);
+    }
+
+    &.asm2 {
+      background: linear-gradient(145deg, #66bb6a, #2e7d32);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .mobile-factory-back-btn {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #666666;
+    border-radius: 8px;
+    background: #f5f5f5;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
 // Factory Selection Screen
 .factory-selection-screen {
   display: flex;
@@ -534,6 +663,14 @@
         color: #666;
         flex-shrink: 0;
         pointer-events: none;
+      }
+
+      i.material-icons.search-trigger {
+        pointer-events: auto !important;
+        cursor: pointer;
+        &:hover {
+          color: #2196f3;
+        }
       }
 
       .search-input {
@@ -1221,7 +1358,36 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
       i.material-icons { font-size: 24px; }
+    }
+
+    .search-result-header {
+      flex: 1;
+      min-width: 0;
+      .search-result-count {
+        font-weight: 600;
+        color: #555;
+        margin-left: 6px;
+        font-size: 15px;
+      }
+    }
+
+    .search-location-summary {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: #333;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      flex-wrap: wrap;
+      line-height: 1.45;
+      i.material-icons {
+        font-size: 20px;
+        color: #1976d2;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
     }
 
     .loading {
@@ -2510,6 +2676,14 @@
               }
             }
 
+            .archive-item-actions {
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              justify-content: flex-end;
+              gap: 10px;
+            }
+
             .download-btn {
               display: flex;
               align-items: center;
@@ -2524,9 +2698,43 @@
               text-transform: uppercase;
               cursor: pointer;
 
-              &:hover {
+              &:hover:not(:disabled) {
                 background: linear-gradient(135deg, #45A049, #3d8b40);
                 box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+              }
+
+              &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+              }
+
+              i {
+                font-size: 20px;
+              }
+            }
+
+            .delete-report-date-btn {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 12px 16px;
+              background: linear-gradient(135deg, #e53935, #c62828);
+              color: #ffffff;
+              border: 2px solid #000000;
+              border-radius: 8px;
+              font-size: 13px;
+              font-weight: 700;
+              text-transform: uppercase;
+              cursor: pointer;
+
+              &:hover:not(:disabled) {
+                background: linear-gradient(135deg, #c62828, #b71c1c);
+                box-shadow: 0 4px 8px rgba(198, 40, 40, 0.35);
+              }
+
+              &:disabled {
+                opacity: 0.55;
+                cursor: wait;
               }
 
               i {
@@ -2858,7 +3066,74 @@
       }
     }
   }
-  
+
+  // Popup tự tắt khi scan dư (trên cùng modal scan)
+  .scan-notice-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 100050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+
+    .scan-notice-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
+
+    .scan-notice-card {
+      position: relative;
+      pointer-events: auto;
+      max-width: 92vw;
+      width: 420px;
+      background: #fff8e1;
+      border: 3px solid #ff9800;
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      padding: 22px 24px 18px;
+      text-align: center;
+    }
+
+    .scan-notice-icon {
+      color: #f57c00;
+      margin-bottom: 8px;
+      i.material-icons {
+        font-size: 52px;
+      }
+    }
+
+    .scan-notice-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #e65100;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      letter-spacing: 0.03em;
+    }
+
+    .scan-notice-body {
+      font-size: 15px;
+      font-weight: 600;
+      color: #333;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      text-align: left;
+      padding: 10px 8px;
+      background: rgba(255, 255, 255, 0.75);
+      border-radius: 8px;
+      border: 1px solid #ffe0b2;
+    }
+
+    .scan-notice-hint {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #795548;
+      font-weight: 600;
+    }
+  }
 
   .scan-modal {
     position: fixed;
@@ -3448,22 +3723,54 @@
       
       .top-bar-actions {
         display: flex;
+        flex-direction: column;
         justify-content: center;
+        align-items: stretch;
         width: 100%;
-        
-        .mobile-only {
+
+        .mobile-action-row.mobile-only {
           display: flex !important;
+          flex-direction: row;
           width: 100%;
+          gap: 10px;
           margin-top: 50px;
-          padding: 16px 24px;
-          font-size: 18px;
-          font-weight: 700;
-          justify-content: center;
-          
-          i.material-icons {
-            font-size: 28px;
-            margin-right: 12px;
+          padding: 0 8px;
+          box-sizing: border-box;
+          align-items: stretch;
+
+          .mobile-inv-btn {
+            flex: 1;
+            min-width: 0;
+            margin-top: 0 !important;
+            padding: 12px 8px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            justify-content: center;
+            display: inline-flex !important;
+            align-items: center;
+            gap: 6px;
+            min-height: 52px;
+            width: auto !important;
+
+            i.material-icons {
+              font-size: 22px !important;
+              margin-right: 0 !important;
+            }
+
+            span {
+              font-size: 13px;
+            }
           }
+        }
+
+        .mobile-loading-hint.mobile-only {
+          display: block !important;
+          width: 100%;
+          text-align: center;
+          font-size: 13px;
+          color: #555555;
+          margin: 8px 0 0;
+          padding: 0 12px;
         }
         
         .desktop-only {
@@ -3493,7 +3800,7 @@
         }
       }
 
-      // Nút KIỂM KÊ (scanner) - nổi bật nhất
+      // Nút KIỂM KÊ (scanner) - nổi bật nhất (trên mobile thường nằm trong .mobile-action-row)
       .inventory-btn {
         width: 100%;
         justify-content: center;
@@ -3505,6 +3812,12 @@
         border: 2px solid #1976D2;
         min-height: 50px;
         box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+
+        &:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
         
         span {
           font-size: 16px;
@@ -3515,6 +3828,11 @@
           font-size: 24px;
           margin-right: 8px;
         }
+      }
+
+      .logout-btn.mobile-inv-btn {
+        min-height: 52px;
+        box-shadow: 0 2px 8px rgba(229, 115, 115, 0.35);
       }
     }
 

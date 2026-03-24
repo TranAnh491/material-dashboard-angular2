@@ -1,8 +1,8 @@
 <div class="stock-check-wrapper">
   <!-- Stock Check Interface -->
-  <div class="stock-check-container" *ngIf="showEmployeeScanModal || currentEmployeeId || selectedFactory">
+  <div class="stock-check-container" *ngIf="showEmployeeScanModal || currentEmployeeId || selectedFactory || showMobileFactoryModal">
     <!-- Top Bar - ẩn hẳn khi đang mở modal scan để không còn box trắng phía trên -->
-    <div class="top-bar" *ngIf="!showScanModal">
+    <div class="top-bar" *ngIf="!showScanModal && !showMobileFactoryModal">
       <h2 class="factory-title" *ngIf="!showScanModal">
         <i class="material-icons">factory</i>
         <span *ngIf="selectedFactory">{{ selectedFactory }} - KIỂM KÊ</span>
@@ -34,11 +34,18 @@
           ASM2
         </button>
 
-        <!-- Mobile: Chỉ hiển thị nút KIỂM KÊ -->
-        <button class="inventory-btn mobile-only" (click)="startInventoryCheck()" *ngIf="selectedFactory">
-          <i class="material-icons">qr_code_scanner</i>
-          <span>KIỂM KÊ</span>
-        </button>
+        <!-- Mobile: KIỂM KÊ + Đăng xuất (sau khi đã chọn nhà máy) -->
+        <div class="mobile-action-row mobile-only" *ngIf="selectedFactory && currentEmployeeId">
+          <button type="button" class="inventory-btn mobile-inv-btn" (click)="startInventoryCheck()" [disabled]="isLoading">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>KIỂM KÊ</span>
+          </button>
+          <button type="button" class="logout-btn mobile-inv-btn" (click)="logoutEmployee()" title="Đăng xuất">
+            <i class="material-icons">logout</i>
+            <span>THOÁT</span>
+          </button>
+        </div>
+        <p class="mobile-loading-hint mobile-only" *ngIf="selectedFactory && currentEmployeeId && isLoading">Đang tải dữ liệu nhà máy...</p>
         
         <!-- Desktop actions only when selectedFactory -->
         <button type="button" class="reset-btn desktop-only" *ngIf="selectedFactory" (click)="openResetModal()" title="Reset stock check">
@@ -77,16 +84,17 @@
         </button>
         
         <div class="search-box desktop-only">
-          <i class="material-icons">search</i>
+          <i class="material-icons search-trigger" title="Tìm kiếm" (click)="runSearchNow()">search</i>
           <input 
             type="text" 
             class="search-input"
             [(ngModel)]="searchInput"
             (input)="onSearchInput()"
-            (keyup.enter)="onSearchInput()"
+            (keyup.enter)="runSearchNow()"
             (keyup)="searchInput = searchInput.toUpperCase()"
-            placeholder="Tìm kiếm mã hàng, PO, IMD...">
+            placeholder="Tìm kiếm mã hàng">
           <button 
+            type="button"
             class="clear-search-btn" 
             *ngIf="searchInput"
             (click)="clearSearch()"
@@ -240,17 +248,28 @@
       </div>
     </div>
 
-    <!-- Chi tiết theo vị trí: header + bảng (chỉ hiện khi bấm vào 1 box) -->
-    <div class="location-detail-section" *ngIf="selectedLocationForDetail">
+    <!-- Chi tiết theo vị trí HOẶC kết quả tìm mã (snapshot cố định) -->
+    <div class="location-detail-section" *ngIf="selectedLocationForDetail || searchResultsMode">
       <div class="location-detail-header">
         <button type="button" class="back-to-boxes-btn" (click)="backToLocationBoxes()">
           <i class="material-icons">arrow_back</i>
-          Quay lại danh sách vị trí
+          {{ searchResultsMode ? 'Đóng kết quả tìm' : 'Quay lại danh sách vị trí' }}
         </button>
-        <h3 class="location-detail-title">
+        <h3 class="location-detail-title" *ngIf="!searchResultsMode">
           <i class="material-icons">place</i>
           Chi tiết vị trí: {{ selectedLocationForDetail }}
         </h3>
+        <div class="search-result-header" *ngIf="searchResultsMode">
+          <h3 class="location-detail-title">
+            <i class="material-icons">manage_search</i>
+            Kết quả tìm mã hàng: <strong>{{ searchInput }}</strong>
+            <span class="search-result-count">({{ frozenSearchMaterials.length }} dòng)</span>
+          </h3>
+          <p class="search-location-summary" *ngIf="searchResultLocationSummary">
+            <i class="material-icons">location_on</i>
+            Vị trí: {{ searchResultLocationSummary }}
+          </p>
+        </div>
       </div>
       <div class="table-container">
       <table class="stock-table">
@@ -265,7 +284,6 @@
             <th>VỊ TRÍ (ASM1)</th>
             <th>VỊ TRÍ THỰC TẾ (SCAN)</th>
             <th>ĐỔI VỊ TRÍ</th>
-            <th>STANDARD PACKING</th>
             <th>STOCK CHECK</th>
             <th>QTY CHECK</th>
             <th>SO SÁNH STOCK</th>
@@ -311,7 +329,6 @@
                 <span style="color: #999;">-</span>
               </ng-template>
             </td>
-            <td>{{ material.standardPacking || '-' }}</td>
             <td class="check-cell clickable" 
                 (click)="showMaterialDetail(material)"
                 [title]="material.stockCheck ? 'Click để xem chi tiết' : 'Chưa được check'">
@@ -351,8 +368,8 @@
       </table>
     </div>
 
-    <!-- Pagination - khi xem chi tiết vị trí -->
-    <div class="pagination" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length > 0">
+    <!-- Pagination - chi tiết vị trí hoặc kết quả tìm -->
+    <div class="pagination" *ngIf="!isLoading && (selectedLocationForDetail || searchResultsMode) && displayedMaterials.length > 0">
       <button 
         class="page-btn" 
         (click)="previousPage()" 
@@ -372,10 +389,10 @@
       </button>
     </div>
 
-    <!-- No Data - khi xem chi tiết vị trí -->
-    <div class="no-data" *ngIf="!isLoading && selectedLocationForDetail && displayedMaterials.length === 0">
+    <!-- No Data -->
+    <div class="no-data" *ngIf="!isLoading && (selectedLocationForDetail || searchResultsMode) && displayedMaterials.length === 0">
       <i class="material-icons">inbox</i>
-      <p>Không có dữ liệu tại vị trí này</p>
+      <p>{{ searchResultsMode ? 'Không tìm thấy mã hàng phù hợp' : 'Không có dữ liệu tại vị trí này' }}</p>
     </div>
     </div><!-- /location-detail-section -->
   </div>
@@ -418,6 +435,19 @@
     </div>
   </div>
 
+  <!-- Thông báo scan dư / cảnh báo — tự tắt, không dùng alert -->
+  <div class="scan-notice-popup" *ngIf="showScanNoticePopup">
+    <div class="scan-notice-backdrop"></div>
+    <div class="scan-notice-card">
+      <div class="scan-notice-icon">
+        <i class="material-icons">warning_amber</i>
+      </div>
+      <div class="scan-notice-title">{{ scanNoticeTitle }}</div>
+      <div class="scan-notice-body">{{ scanNoticeBody }}</div>
+      <div class="scan-notice-hint">Tự đóng sau giây lát — tiếp tục scan</div>
+    </div>
+  </div>
+
   <!-- Employee Scan Modal (after factory selection) -->
   <div class="scan-modal" *ngIf="showEmployeeScanModal">
     <div class="modal-content">
@@ -454,6 +484,35 @@
           Hủy
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Mobile: chọn ASM1 / ASM2 sau khi scan nhân viên -->
+  <div class="mobile-factory-picker-modal" *ngIf="showMobileFactoryModal && isMobile">
+    <div class="mobile-factory-picker-card">
+      <div class="mobile-factory-picker-header">
+        <i class="material-icons">factory</i>
+        <h3>Chọn nhà máy</h3>
+      </div>
+      <p class="mobile-factory-picker-hint">Chọn <strong>ASM1</strong> hoặc <strong>ASM2</strong> để tải dữ liệu kiểm kê. Sau đó bấm <strong>KIỂM KÊ</strong> để scan vị trí và mã hàng.</p>
+      <p class="mobile-factory-picker-id" *ngIf="currentEmployeeId">
+        <i class="material-icons">badge</i>
+        ID: {{ currentEmployeeId }}
+      </p>
+      <div class="mobile-factory-picker-actions">
+        <button type="button" class="mobile-factory-btn asm1" (click)="selectFactory('ASM1')" [disabled]="isLoading">
+          <i class="material-icons">precision_manufacturing</i>
+          ASM1
+        </button>
+        <button type="button" class="mobile-factory-btn asm2" (click)="selectFactory('ASM2')" [disabled]="isLoading">
+          <i class="material-icons">precision_manufacturing</i>
+          ASM2
+        </button>
+      </div>
+      <button type="button" class="mobile-factory-back-btn" (click)="mobileFactoryGoBackToEmployee()" [disabled]="isLoading">
+        <i class="material-icons">arrow_back</i>
+        Quay lại scan nhân viên
+      </button>
     </div>
   </div>
 
@@ -541,6 +600,7 @@
               <div class="status-pill full" *ngIf="mat._status === 'full'">ĐỦ</div>
             </div>
             <div class="box-row"><span class="label">PO</span><span class="value">{{ mat.poNumber }}</span></div>
+            <div class="box-row"><span class="label">IMD</span><span class="value">{{ mat.imd }}</span></div>
             <div class="box-row"><span class="label">TỒN KHO</span><span class="value">{{ mat.stock | number:'1.0-2' }}</span></div>
             <div class="box-row"><span class="label">ĐÃ KIỂM</span><span class="value">{{ (mat.qtyCheck || 0) | number:'1.0-2' }}</span></div>
           </div>
@@ -710,10 +770,19 @@
                 </div>
               </div>
             </div>
-            <button class="download-btn" (click)="exportStockCheckReportByDate(d.dateKey)" title="Tải về Excel">
-              <i class="material-icons">download</i>
-              Tải về
-            </button>
+            <div class="archive-item-actions">
+              <button class="download-btn" (click)="exportStockCheckReportByDate(d.dateKey)" title="Tải về Excel"
+                      [disabled]="!!isDeletingReportDateKey">
+                <i class="material-icons">download</i>
+                Tải về
+              </button>
+              <button type="button" class="delete-report-date-btn" (click)="deleteReportByDate(d.dateKey)"
+                      [disabled]="isDeletingReportDateKey === d.dateKey"
+                      title="Xóa toàn bộ dữ liệu report của ngày này trên Firestore">
+                <i class="material-icons">delete_forever</i>
+                Xóa ngày
+              </button>
+            </div>
           </div>
         </div>
       </div>

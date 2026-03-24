@@ -133,6 +133,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   currentEmployeeId: string = ''; // Mã nhân viên đang đăng nhập
   showEmployeeScanModal = false; // Modal scan mã nhân viên
   employeeScanInput = ''; // Input scan mã nhân viên
+  /** Mobile: sau khi đăng nhập nhân viên — chọn ASM1/ASM2 trước khi kiểm kê */
+  showMobileFactoryModal = false;
   
   // Scanner
   scanStep: 'idle' | 'employee' | 'location' | 'material' = 'idle';
@@ -159,6 +161,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   scannedPO = '';
   scannedCount = 0; // Đếm số mã đã scan trong session
 
+  /** Popup tự tắt (scan dư / thông báo không chặn) — không dùng alert() */
+  showScanNoticePopup = false;
+  scanNoticeTitle = '';
+  scanNoticeBody = '';
+  private scanNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Filter state
   filterMode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' | 'khsx-unchecked' = 'all';
 
@@ -166,8 +174,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   showKhsxDialog: boolean = false;
   khsxCodes: string[] = []; // Danh sách mã có KHSX (loaded từ Firebase)
   
-  // Search
+  // Search (chỉ mã hàng; kết quả snapshot — không tự cập nhật khi Firestore reload)
   searchInput: string = '';
+  /** Đang xem bảng kết quả tìm (toàn nhà máy), không gắn với một box vị trí */
+  searchResultsMode = false;
+  /** Bản sao cố định các dòng tìm được (tách khỏi allMaterials realtime) */
+  frozenSearchMaterials: StockCheckMaterial[] = [];
   
   // Sort mode
   sortMode: 'alphabetical' | 'byDateCheck' = 'alphabetical';
@@ -201,6 +213,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   // Report by date modal
   showReportByDateModal: boolean = false;
   isLoadingReportDates: boolean = false;
+  /** Đang xóa report: giữ `dateKey` để disable nút tương ứng */
+  isDeletingReportDateKey: string | null = null;
   reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
   private reportDataByDateKey: Map<string, ReportDayAggRow[]> = new Map();
   private reportDatesLoadedFactory: string | null = null;
@@ -339,6 +353,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Set filter mode
    */
   setFilterMode(mode: 'all' | 'checked' | 'unchecked' | 'outside' | 'location-change' | 'khsx-unchecked'): void {
+    this.exitSearchResultsMode();
+    this.searchInput = '';
     this.filterMode = mode;
     this.applyFilter();
   }
@@ -352,49 +368,114 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } else {
       this.sortMode = 'alphabetical';
     }
-    
+
+    if (this.searchResultsMode && this.frozenSearchMaterials.length > 0) {
+      this.sortMaterialListInPlace(this.frozenSearchMaterials);
+      this.frozenSearchMaterials.forEach((mat, index) => {
+        mat.stt = index + 1;
+      });
+      this.filteredMaterials = this.frozenSearchMaterials;
+      this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage) || 1;
+      if (this.currentPage > this.totalPages) {
+        this.currentPage = Math.max(1, this.totalPages);
+      }
+      this.loadPageFromFiltered(this.currentPage);
+      this.cdr.detectChanges();
+      return;
+    }
+
     // Sort materials
     this.sortMaterials();
-    
+
     // Update STT after sorting
     this.allMaterials.forEach((mat, index) => {
       mat.stt = index + 1;
     });
-    
+
     // Reapply filter to update displayed materials
     this.applyFilter();
-    
+
     // Reload current page
     this.loadPageFromFiltered(this.currentPage);
-    
+
     this.cdr.detectChanges();
   }
 
   /**
    * Sort materials based on current sort mode
    */
-  private sortMaterials(): void {
+  private sortMaterialListInPlace(list: StockCheckMaterial[]): void {
     if (this.sortMode === 'alphabetical') {
-      // Sort alphabetically by material code
-      this.allMaterials.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+      list.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
     } else {
-      // Sort by dateCheck (newest first), then by material code for items without dateCheck
-      this.allMaterials.sort((a, b) => {
-        // Items with dateCheck come first
+      list.sort((a, b) => {
         if (a.dateCheck && !b.dateCheck) return -1;
         if (!a.dateCheck && b.dateCheck) return 1;
-        
-        // Both have dateCheck - sort by newest first
         if (a.dateCheck && b.dateCheck) {
           const dateA = a.dateCheck instanceof Date ? a.dateCheck.getTime() : new Date(a.dateCheck).getTime();
           const dateB = b.dateCheck instanceof Date ? b.dateCheck.getTime() : new Date(b.dateCheck).getTime();
-          return dateB - dateA; // Newest first
+          return dateB - dateA;
         }
-        
-        // Both don't have dateCheck - sort alphabetically
         return a.materialCode.localeCompare(b.materialCode);
       });
     }
+  }
+
+  private sortMaterials(): void {
+    this.sortMaterialListInPlace(this.allMaterials);
+  }
+
+  /** Bản sao một dòng để snapshot kết quả tìm (không dùng chung reference với allMaterials) */
+  private cloneStockCheckRow(m: StockCheckMaterial): StockCheckMaterial {
+    const cloneDate = (d: any): Date | null => {
+      if (d == null) return null;
+      if (d instanceof Date) return new Date(d.getTime());
+      const t = new Date(d);
+      return isNaN(t.getTime()) ? null : t;
+    };
+    const lci = m.locationChangeInfo;
+    return {
+      ...m,
+      dateCheck: cloneDate(m.dateCheck),
+      importDate: m.importDate != null ? cloneDate(m.importDate) || undefined : undefined,
+      locationChangeInfo: lci
+        ? {
+            hasChanged: lci.hasChanged,
+            newLocation: lci.newLocation,
+            changeDate: lci.changeDate ? cloneDate(lci.changeDate) || undefined : undefined,
+            changedBy: lci.changedBy
+          }
+        : undefined
+    };
+  }
+
+  private exitSearchResultsMode(): void {
+    this.searchResultsMode = false;
+    this.frozenSearchMaterials = [];
+  }
+
+  /** Tóm tắt vị trí (ASM1 / scan) của các dòng đang xem trong kết quả tìm */
+  get searchResultLocationSummary(): string {
+    if (!this.searchResultsMode || !this.frozenSearchMaterials.length) {
+      return '';
+    }
+    const set = new Set<string>();
+    this.frozenSearchMaterials.forEach(mat => {
+      const asm1 = (mat.location || '').trim();
+      const scan = (mat.actualLocation || '').trim();
+      if (asm1) set.add(`ASM1: ${asm1}`);
+      if (scan) set.add(`Scan: ${scan}`);
+    });
+    return Array.from(set).sort().join(' · ') || '-';
+  }
+
+  /** Bấm nút search / Enter: chạy tìm ngay (không chờ debounce) */
+  runSearchNow(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+    this._doSearch();
   }
 
   /**
@@ -433,13 +514,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private _doSearch(): void {
     if (this.isMobile) return;
     if (!this.searchInput.trim()) {
+      this.exitSearchResultsMode();
+      this.selectedLocationForDetail = null;
       this.applyFilter();
       return;
     }
-    
+
     const searchTerm = this.searchInput.trim().toUpperCase();
     let filtered = [...this.allMaterials];
-    
+
     // Apply filter mode first
     if (this.filterMode === 'checked') {
       filtered = filtered.filter(m => m.stockCheck === '✓');
@@ -457,23 +540,30 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } else if (this.filterMode === 'khsx-unchecked') {
       filtered = filtered.filter(m => m.hasKhsx && m.stockCheck !== '✓');
     }
-    
-    // Then apply search
-    filtered = filtered.filter(m => 
-      m.materialCode.toUpperCase().includes(searchTerm) ||
-      m.poNumber.toUpperCase().includes(searchTerm) ||
-      m.imd.toUpperCase().includes(searchTerm)
-    );
-    
-    // Update STT
-    filtered.forEach((mat, index) => {
+
+    // Chỉ tìm theo mã hàng
+    filtered = filtered.filter(m => m.materialCode.toUpperCase().includes(searchTerm));
+
+    // Snapshot cố định — không cập nhật theo realtime allMaterials
+    const frozen = filtered.map(m => this.cloneStockCheckRow(m));
+    frozen.forEach((mat, index) => {
       mat.stt = index + 1;
     });
-    
-    this.filteredMaterials = filtered;
-    this.totalPages = Math.ceil(filtered.length / this.itemsPerPage);
+
+    this.frozenSearchMaterials = frozen;
+    this.filteredMaterials = frozen;
+    this.searchResultsMode = true;
+    this.selectedLocationForDetail = null;
+
+    this.totalPages = Math.ceil(frozen.length / this.itemsPerPage) || 1;
     this.currentPage = 1;
     this.loadPageFromFiltered(1);
+    this.cdr.detectChanges();
+
+    setTimeout(() => {
+      const el = document.querySelector('.location-detail-section') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
   }
 
   /**
@@ -481,6 +571,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    */
   clearSearch(): void {
     this.searchInput = '';
+    this.exitSearchResultsMode();
+    this.selectedLocationForDetail = null;
     this.applyFilter();
   }
 
@@ -583,6 +675,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    */
   applyFilter(): void {
     if (this.isMobile) return;
+    if (this.searchResultsMode) {
+      return;
+    }
     let filtered = [...this.allMaterials];
 
     if (this.filterMode === 'checked') {
@@ -755,6 +850,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (next !== this.isMobile) {
       this.isMobile = next;
       if (!this.isMobile) {
+        this.showMobileFactoryModal = false;
         this.applyFilter();
         this.calculateIdCheckStats();
       }
@@ -825,6 +921,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.scanNoticeTimer) {
+      clearTimeout(this.scanNoticeTimer);
+      this.scanNoticeTimer = null;
+    }
     // Unsubscribe data subscription nếu có
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
@@ -839,10 +939,32 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  /** Thông báo ngắn tự đóng — thay cho alert khi scan dư (không cần bấm OK) */
+  private showAutoDismissScanNotice(title: string, body: string, durationMs = 1600): void {
+    if (this.scanNoticeTimer) {
+      clearTimeout(this.scanNoticeTimer);
+      this.scanNoticeTimer = null;
+    }
+    this.scanNoticeTitle = title;
+    this.scanNoticeBody = body;
+    this.showScanNoticePopup = true;
+    this.cdr.detectChanges();
+    this.scanNoticeTimer = setTimeout(() => {
+      this.showScanNoticePopup = false;
+      this.scanNoticeTimer = null;
+      this.cdr.detectChanges();
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+      }
+    }, durationMs);
+  }
+
   /**
    * Select factory and load data
    */
   selectFactory(factory: 'ASM1' | 'ASM2'): void {
+    this.showMobileFactoryModal = false;
     this.selectedFactory = factory;
     this.currentPage = 1;
     this.isInitialDataLoaded = false; // Reset flag
@@ -870,6 +992,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    */
   backToSelection(): void {
     this.selectedFactory = null;
+    this.exitSearchResultsMode();
+    this.searchInput = '';
     this.allMaterials = [];
     this.filteredMaterials = [];
     this.displayedMaterials = [];
@@ -897,14 +1021,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.showEmployeeScanModal = false;
       this.employeeScanInput = '';
       this.cdr.detectChanges();
-      
-      // Focus vào input search hoặc button Kiểm Kê
-      setTimeout(() => {
-        const searchInput = document.querySelector('.search-input') as HTMLInputElement;
-        if (searchInput) {
-          searchInput.focus();
-        }
-      }, 100);
+
+      if (this.isMobile) {
+        this.showMobileFactoryModal = true;
+      } else {
+        setTimeout(() => {
+          const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+          if (searchInput) {
+            searchInput.focus();
+          }
+        }, 100);
+      }
     } else {
       // Invalid format
       alert('❌ Mã nhân viên không hợp lệ!\n\nVui lòng nhập mã ASP + 4 số (ví dụ: ASP1234)');
@@ -926,12 +1053,27 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       if (input) input.focus();
     }, 50);
   }
+
+  /** Mobile: quay lại scan nhân viên từ popup chọn nhà máy */
+  mobileFactoryGoBackToEmployee(): void {
+    this.showMobileFactoryModal = false;
+    this.selectedFactory = null;
+    this.currentEmployeeId = '';
+    this.showEmployeeScanModal = true;
+    this.employeeScanInput = '';
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.getElementById('employee-scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
   
   /**
    * Logout employee (kết thúc phiên làm việc)
    */
   logoutEmployee(): void {
     if (confirm('Bạn có chắc muốn đăng xuất?')) {
+      this.showMobileFactoryModal = false;
       this.currentEmployeeId = '';
       this.showScanModal = false;
       this.scanStep = 'idle';
@@ -939,6 +1081,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.scanInput = '';
       this.scanMessage = '';
       this.scanHistory = [];
+
+      if (this.isMobile) {
+        this.selectedFactory = null;
+        this.currentScanLocation = '';
+        this.locationMaterials = [];
+        this.locationMaterialsView = [];
+      }
       
       // Show employee scan modal again
       this.showEmployeeScanModal = true;
@@ -1085,14 +1234,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           mat.stt = index + 1;
         });
 
-        // Initialize filtered materials
-        this.filteredMaterials = [...this.allMaterials];
-        
-        // Calculate total pages
-        this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
+        // Kết quả tìm kiếm (snapshot) giữ nguyên — không ghi đè khi Firestore cập nhật
+        if (this.searchResultsMode) {
+          this.filteredMaterials = this.frozenSearchMaterials;
+          this.totalPages = Math.ceil(this.frozenSearchMaterials.length / this.itemsPerPage) || 1;
+          if (this.currentPage > this.totalPages) {
+            this.currentPage = Math.max(1, this.totalPages);
+          }
+          this.loadPageFromFiltered(this.currentPage);
+        } else {
+          // Initialize filtered materials
+          this.filteredMaterials = [...this.allMaterials];
 
-        // Load first page
-        this.loadPageFromFiltered(1);
+          // Calculate total pages
+          this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
+
+          // Load first page
+          this.loadPageFromFiltered(1);
+        }
         
         // Calculate ID check statistics
         this.calculateIdCheckStats();
@@ -1202,8 +1361,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           this.updateLocationMaterials();
 
           // Refresh view/stats
-          this.filteredMaterials = [...this.allMaterials];
-          this.loadPageFromFiltered(this.currentPage);
+          if (!this.searchResultsMode) {
+            this.filteredMaterials = [...this.allMaterials];
+            this.loadPageFromFiltered(this.currentPage);
+          }
           this.calculateIdCheckStats();
           this.cdr.detectChanges();
           return;
@@ -1218,18 +1379,18 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         // Update location view (box) nếu đang scan theo vị trí
         this.updateLocationMaterials();
         
-        // Update filtered materials
-        this.filteredMaterials = [...this.allMaterials];
-        
-        // Reload current page
-        this.loadPageFromFiltered(this.currentPage);
-        
+        // Update filtered materials (không ghi đè khi đang xem snapshot tìm kiếm)
+        if (!this.searchResultsMode) {
+          this.filteredMaterials = [...this.allMaterials];
+          this.loadPageFromFiltered(this.currentPage);
+        }
+
         // Recalculate stats
         this.calculateIdCheckStats();
-        
+
         // Force change detection
         this.cdr.detectChanges();
-        
+
         const checkedCount = this.allMaterials.filter(m => m.stockCheck === '✓').length;
         console.log(`✅ [subscribeToSnapshotChanges] Updated: ${checkedCount} materials marked as checked`);
       });
@@ -1686,6 +1847,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Start inventory checking (Kiểm Kê)
    */
   startInventoryCheck(): void {
+    if (this.isLoading) {
+      return;
+    }
+    if (!this.selectedFactory) {
+      if (this.isMobile) {
+        this.showMobileFactoryModal = true;
+      } else {
+        alert('Vui lòng chọn nhà máy (ASM1 hoặc ASM2) trước!');
+      }
+      return;
+    }
     // Kiểm tra xem đã đăng nhập mã nhân viên chưa
     if (!this.currentEmployeeId) {
       alert('Vui lòng scan mã nhân viên trước!');
@@ -1969,7 +2141,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               ? `⚠️ DƯ — Không ghi nhận.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã đủ/ vượt tồn kho. Dư: ${ignoredExcess}`
               : `⚠️ DƯ một phần.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã ghi nhận: ${qtyToSave} | Dư (bỏ qua): ${ignoredExcess}`;
             this.scanMessage = dưMsg;
-            alert(dưMsg);
+            this.showAutoDismissScanNotice('SCAN DƯ', dưMsg);
           }
 
           // Nếu không ghi nhận qty nữa, vẫn cho phép tiếp tục (đặc biệt khi sai vị trí)
@@ -1982,7 +2154,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
                 `Vị trí scan: ${scanLoc}\n\n` +
                 `Ghi chú: Số lượng đã đủ, không cộng thêm.`;
               this.scanMessage = msg;
-              alert(msg);
+              this.showAutoDismissScanNotice('SAI VỊ TRÍ', msg, 1800);
             } else {
               this.scanMessage =
                 `⚠️ DƯ - Không ghi nhận thêm\n` +
@@ -2484,6 +2656,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   openLocationDetail(location: string): void {
     const loc = (location || '').trim().toUpperCase();
     if (!loc) return;
+    this.exitSearchResultsMode();
+    this.searchInput = '';
     this.selectedLocationForDetail = loc;
     this.filteredMaterials = this.allMaterials
       .filter(m => this.getDisplayLocation(m) === loc)
@@ -2530,6 +2704,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   /** Quay lại giao diện grid box (ẩn bảng chi tiết) */
   backToLocationBoxes(): void {
+    if (this.searchResultsMode) {
+      this.clearSearch();
+      this.cdr.detectChanges();
+      setTimeout(() => {
+        const el = document.querySelector('.location-boxes-wrapper') as HTMLElement | null;
+        el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }, 0);
+      return;
+    }
     this.selectedLocationForDetail = null;
     // Khi quay lại danh sách box, mặc định về box mẹ
     this.selectedParentGroup = null;
@@ -2928,5 +3111,104 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, fileName);
 
     this.closeReportByDateModal();
+  }
+
+  /**
+   * Xóa toàn bộ mục lịch sử (history) có dateCheck thuộc ngày đã chọn — khớp cách gom ngày khi export report.
+   */
+  async deleteReportByDate(dateKey: string): Promise<void> {
+    if (!this.selectedFactory || !dateKey) return;
+
+    const label = this.dateKeyToLabel(dateKey);
+    if (
+      !confirm(
+        `Xóa report kiểm kê ngày ${label}?\n\n` +
+          `Sẽ gỡ mọi bản ghi scan trong lịch sử (stock-check-history) có ngày này.\n` +
+          `Không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+
+    this.isDeletingReportDateKey = dateKey;
+    this.cdr.detectChanges();
+
+    try {
+      const snap = await this.firestore
+        .collection('stock-check-history', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+        )
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) {
+        alert('Không có dữ liệu để xóa.');
+        return;
+      }
+
+      const db = this.firestore.firestore;
+      let batch = db.batch();
+      let opCount = 0;
+      const MAX_BATCH = 400;
+
+      const flushBatch = async (): Promise<void> => {
+        if (opCount === 0) return;
+        await batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      };
+
+      let updatedDocs = 0;
+      let deletedDocs = 0;
+
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data() as any;
+        const history: any[] = Array.isArray(data?.history) ? data.history : [];
+        if (history.length === 0) continue;
+
+        const newHistory = history.filter(item => {
+          const d = this.parseFirestoreDate(item?.dateCheck);
+          if (!d) return true;
+          return this.toLocalDateKey(d) !== dateKey;
+        });
+
+        if (newHistory.length === history.length) continue;
+
+        const ref = docSnap.ref;
+        if (newHistory.length === 0) {
+          batch.delete(ref);
+          deletedDocs++;
+        } else {
+          batch.update(ref, { history: newHistory });
+          updatedDocs++;
+        }
+        opCount++;
+        if (opCount >= MAX_BATCH) {
+          await flushBatch();
+        }
+      }
+
+      await flushBatch();
+
+      if (updatedDocs === 0 && deletedDocs === 0) {
+        alert(`Không có bản ghi lịch sử nào thuộc ngày ${label} để xóa.`);
+        return;
+      }
+
+      this.reportDatesLoadedFactory = null;
+      this.reportDataByDateKey.clear();
+      await this.loadReportDatesAndCache();
+
+      alert(
+        `Đã xóa report ngày ${label}.\n` +
+          `Cập nhật ${updatedDocs} tài liệu, xóa ${deletedDocs} tài liệu (hết lịch sử).`
+      );
+    } catch (e) {
+      console.error('❌ deleteReportByDate:', e);
+      alert('Lỗi khi xóa report. Xem console.');
+    } finally {
+      this.isDeletingReportDateKey = null;
+      this.cdr.detectChanges();
+    }
   }
 }
