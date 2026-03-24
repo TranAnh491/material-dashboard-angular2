@@ -504,7 +504,7 @@
 </div>
 
 <!-- SHIPMENT CHECK Dialog -->
-<div class="modal-overlay"
+<div class="modal-overlay sc-modal-overlay"
      *ngIf="showShipmentCheckDialog"
      (click)="closeShipmentCheckDialog()"
      [style.position]="'fixed'"
@@ -519,87 +519,106 @@
      [style.z-index]="10000">
   <div class="modal-container sc-modal" (click)="$event.stopPropagation()">
 
-    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 class="modal-title" style="margin:0">
+    <div class="sc-modal-header">
+      <div class="sc-modal-title">
         <i class="material-icons">local_shipping</i>
-        Shipment Check – Kiểm tra Pallet
-      </h3>
-      <button class="close-btn" (click)="closeShipmentCheckDialog()">
+        <span>Shipment Check</span>
+      </div>
+      <button type="button" class="sc-modal-close" (click)="closeShipmentCheckDialog()" aria-label="Đóng">
         <i class="material-icons">close</i>
       </button>
     </div>
 
-    <div class="modal-body sc-body">
+    <div class="sc-modal-body">
 
-      <!-- Nhập số shipment -->
-      <div class="sc-input-row">
-        <input type="text"
-               class="form-input sc-shipment-input"
-               [(ngModel)]="shipmentCheckCode"
-               placeholder="Nhập số Shipment..."
-               (keyup.enter)="loadShipmentPallets()"
-               style="text-transform:uppercase">
-        <button class="btn btn-apply" (click)="loadShipmentPallets()" [disabled]="shipmentCheckLoading || !shipmentCheckCode.trim()">
-          <i class="material-icons">search</i>
-          {{ shipmentCheckLoading ? 'Đang tải...' : 'Load' }}
-        </button>
-      </div>
+      <!-- Bước 1: Chọn shipment -->
+      <section class="sc-section sc-section-shipments" *ngIf="!shipmentCheckCode">
+        <div class="sc-section-header">
+          <h4 class="sc-section-title">Chọn Shipment cần check</h4>
+          <button type="button" class="sc-btn-refresh"
+                  (click)="loadShipmentCheckBoxes()"
+                  [disabled]="shipmentCheckLoading">
+            <i class="material-icons">{{ shipmentCheckLoading ? 'hourglass_empty' : 'refresh' }}</i>
+            {{ shipmentCheckLoading ? 'Đang tải...' : 'Làm mới' }}
+          </button>
+        </div>
+        <div class="sc-shipment-grid" *ngIf="shipmentCheckBoxes.length > 0">
+          <button type="button"
+                  class="sc-shipment-card"
+                  *ngFor="let s of shipmentCheckBoxes"
+                  (click)="selectShipmentForCheck(s.shipmentCode)">
+            <span class="sc-shipment-card-code">{{ s.shipmentCode }}</span>
+            <span class="sc-shipment-card-meta">{{ s.status }} · {{ s.palletCount }} pallet</span>
+          </button>
+        </div>
+        <p class="sc-empty-hint" *ngIf="shipmentCheckBoxes.length === 0 && !shipmentCheckLoading">
+          Không có shipment nào có pallet với trạng thái Đã xong hoặc Đã check.
+        </p>
+      </section>
 
-      <!-- Khu vực scan + kết quả -->
-      <ng-container *ngIf="shipmentCheckResults.length > 0">
-
-        <!-- Ô scan pallet -->
-        <div class="sc-scan-row">
-          <i class="material-icons">qr_code_scanner</i>
-          <input type="text"
-                 class="form-input sc-scan-input"
-                 [(ngModel)]="shipmentCheckScanInput"
-                 placeholder="Scan mã pallet..."
-                 (keyup)="onShipmentCheckScanInput($event)"
-                 style="text-transform:uppercase">
-          <button class="btn btn-apply" (click)="onShipmentCheckKeyEnter()" [disabled]="!shipmentCheckScanInput.trim()">
-            <i class="material-icons">check</i>
+      <!-- Bước 2: Scan pallet -->
+      <section class="sc-section sc-section-scan" *ngIf="shipmentCheckCode">
+        <div class="sc-selected-bar">
+          <span class="sc-selected-label">Shipment:</span>
+          <strong class="sc-selected-code">{{ shipmentCheckCode }}</strong>
+          <button type="button" class="sc-btn-change" (click)="shipmentCheckCode=''; shipmentCheckPallets=[]; shipmentCheckResults=[]; shipmentCheckLastResult=null; shipmentCheckLastScanned=''; shipmentCheckScanInput='';">
+            <i class="material-icons">swap_horiz</i>
+            Đổi
           </button>
         </div>
 
-        <!-- Kết quả scan gần nhất -->
-        <div class="sc-last-result" *ngIf="shipmentCheckLastResult">
-          <div class="sc-result-badge" [class.ok]="shipmentCheckLastResult === 'ok'" [class.error]="shipmentCheckLastResult === 'error'">
-            <i class="material-icons">{{ shipmentCheckLastResult === 'ok' ? 'check_circle' : 'cancel' }}</i>
-            <span>{{ shipmentCheckLastResult === 'ok' ? 'ĐÚNG' : 'SAI' }} – {{ shipmentCheckLastScanned }}</span>
+        <ng-container *ngIf="shipmentCheckResults.length > 0">
+          <div class="sc-scan-area">
+            <div class="sc-scan-input-wrap">
+              <i class="material-icons sc-scan-icon">qr_code_scanner</i>
+              <input type="text"
+                     class="sc-scan-input"
+                     [(ngModel)]="shipmentCheckScanInput"
+                     placeholder="Scan mã pallet..."
+                     (keyup)="onShipmentCheckScanInput($event)"
+                     autocomplete="off"
+                     style="text-transform:uppercase">
+              <button type="button" class="sc-btn-scan" (click)="onShipmentCheckKeyEnter()" [disabled]="!shipmentCheckScanInput.trim()">
+                <i class="material-icons">check</i>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <!-- Tiến độ -->
-        <div class="sc-progress-label">
-          Đã xác nhận: <strong>{{ shipmentCheckDoneCount }} / {{ shipmentCheckResults.length }}</strong> pallet
-          <button class="btn-reset-sc" (click)="resetShipmentCheckResults()">
-            <i class="material-icons">refresh</i> Reset
-          </button>
-        </div>
-
-        <!-- Danh sách pallet -->
-        <div class="sc-pallet-list">
-          <div class="sc-pallet-item" *ngFor="let r of shipmentCheckResults"
-               [class.sc-ok]="r.status === 'ok'"
-               [class.sc-pending]="r.status === 'pending'">
-            <i class="material-icons sc-status-icon">
-              {{ r.status === 'ok' ? 'check_circle' : 'radio_button_unchecked' }}
-            </i>
-            <span class="sc-pallet-code">{{ r.palletCode }}</span>
+          <div class="sc-result-feedback" *ngIf="shipmentCheckLastResult">
+            <div class="sc-result-badge" [class.ok]="shipmentCheckLastResult === 'ok'" [class.err]="shipmentCheckLastResult === 'error'">
+              <i class="material-icons">{{ shipmentCheckLastResult === 'ok' ? 'check_circle' : 'cancel' }}</i>
+              <span>{{ shipmentCheckLastResult === 'ok' ? 'ĐÚNG' : 'SAI' }} — {{ shipmentCheckLastScanned }}</span>
+            </div>
           </div>
-        </div>
 
-      </ng-container>
+          <div class="sc-progress-bar">
+            <span class="sc-progress-text">Đã xác nhận: <strong>{{ shipmentCheckDoneCount }} / {{ shipmentCheckResults.length }}</strong></span>
+            <button type="button" class="sc-btn-reset" (click)="resetShipmentCheckResults()">
+              <i class="material-icons">refresh</i> Reset
+            </button>
+          </div>
 
-      <p class="sc-hint" *ngIf="shipmentCheckResults.length === 0 && !shipmentCheckLoading">
-        Nhập số Shipment rồi bấm Load để tải danh sách pallet cần kiểm tra.
-      </p>
+          <div class="sc-pallet-list">
+            <div class="sc-pallet-item" *ngFor="let r of shipmentCheckResults"
+                 [class.done]="r.status === 'ok'"
+                 [class.pending]="r.status === 'pending'">
+              <i class="material-icons sc-pallet-icon">
+                {{ r.status === 'ok' ? 'check_circle' : 'radio_button_unchecked' }}
+              </i>
+              <span class="sc-pallet-label">{{ r.palletCode }}</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <p class="sc-empty-hint" *ngIf="shipmentCheckResults.length === 0 && !shipmentCheckLoading && shipmentCheckCode">
+          Shipment chưa có pallet hợp lệ để check.
+        </p>
+      </section>
 
     </div>
 
-    <div class="modal-footer" style="display:flex;justify-content:flex-end;margin-top:16px">
-      <button type="button" class="btn btn-cancel" (click)="closeShipmentCheckDialog()">
+    <div class="sc-modal-footer">
+      <button type="button" class="sc-btn-close" (click)="closeShipmentCheckDialog()">
         <i class="material-icons">close</i>
         Đóng
       </button>

@@ -44,6 +44,12 @@ export interface ShipmentDisplayItem {
   customerCode?: string; // Mã khách hàng (nếu có mapping)
 }
 
+export interface ShipmentCheckBoxItem {
+  shipmentCode: string;
+  status: string;
+  palletCount: number;
+}
+
 @Component({
   selector: 'app-fg-check',
   templateUrl: './fg-check.component.html',
@@ -109,6 +115,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   shipmentCheckCode: string = '';          // Số shipment đang check
   shipmentCheckScanInput: string = '';     // Ô scan pallet
   shipmentCheckPallets: string[] = [];     // Danh sách mã pallet kỳ vọng
+  shipmentCheckBoxes: ShipmentCheckBoxItem[] = [];
   shipmentCheckResults: Array<{
     palletCode: string;
     status: 'pending' | 'ok' | 'error';
@@ -2537,14 +2544,73 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.shipmentCheckCode = '';
     this.shipmentCheckScanInput = '';
     this.shipmentCheckPallets = [];
+    this.shipmentCheckBoxes = [];
     this.shipmentCheckResults = [];
     this.shipmentCheckLastResult = null;
     this.shipmentCheckLastScanned = '';
     this.showShipmentCheckDialog = true;
+    this.loadShipmentCheckBoxes();
   }
 
   closeShipmentCheckDialog(): void {
     this.showShipmentCheckDialog = false;
+  }
+
+  private isShipmentStatusAllowed(status: any): boolean {
+    const s = String(status || '').trim().toUpperCase();
+    return s === 'ĐÃ XONG' || s === 'ĐÃ CHECK' || s === 'ĐÃ CHECK';
+  }
+
+  async loadShipmentCheckBoxes(): Promise<void> {
+    this.shipmentCheckLoading = true;
+    this.shipmentCheckBoxes = [];
+    try {
+      const shipmentSnap = await this.firestore.collection('shipments').get().toPromise();
+      const statusByShipment = new Map<string, string>();
+      shipmentSnap?.docs?.forEach(doc => {
+        const d = doc.data() as any;
+        const shipmentCode = String(d?.shipmentCode || '').trim().toUpperCase();
+        const status = String(d?.status || '').trim();
+        if (!shipmentCode) return;
+        if (!this.isShipmentStatusAllowed(status)) return;
+        statusByShipment.set(shipmentCode, status);
+      });
+
+      if (statusByShipment.size === 0) {
+        this.shipmentCheckLoading = false;
+        return;
+      }
+
+      const fgOutSnap = await this.firestore.collection('fg-out').get().toPromise();
+      const palletsByShipment = new Map<string, Set<string>>();
+      fgOutSnap?.docs?.forEach(doc => {
+        const d = doc.data() as any;
+        const shipmentCode = String(d?.shipment || '').trim().toUpperCase();
+        const pallet = String(d?.pallet || '').trim().toUpperCase();
+        if (!shipmentCode || !pallet) return;
+        if (!statusByShipment.has(shipmentCode)) return;
+        if (!palletsByShipment.has(shipmentCode)) palletsByShipment.set(shipmentCode, new Set<string>());
+        palletsByShipment.get(shipmentCode)!.add(pallet);
+      });
+
+      this.shipmentCheckBoxes = Array.from(statusByShipment.entries())
+        .map(([shipmentCode, status]) => ({
+          shipmentCode,
+          status,
+          palletCount: palletsByShipment.get(shipmentCode)?.size || 0
+        }))
+        .filter(x => x.palletCount > 0)
+        .sort((a, b) => a.shipmentCode.localeCompare(b.shipmentCode));
+    } catch (e) {
+      alert('❌ Lỗi tải danh sách shipment check: ' + (e as any)?.message);
+    }
+    this.shipmentCheckLoading = false;
+    this.cdr.detectChanges();
+  }
+
+  async selectShipmentForCheck(shipmentCode: string): Promise<void> {
+    this.shipmentCheckCode = String(shipmentCode || '').trim().toUpperCase();
+    await this.loadShipmentPallets();
   }
 
   async loadShipmentPallets(): Promise<void> {
@@ -2576,16 +2642,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         if (b === 'Không có Pallet') return -1;
         return a.localeCompare(b);
       });
-
-      // Tạo mã pallet theo quy tắc: shipment + W + tuần + STT
-      const now = new Date();
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
-      const weekStr = String(weekNum).padStart(2, '0');
-
-      this.shipmentCheckPallets = palletNames.map((_, idx) =>
-        `${code}W${weekStr}${String(idx + 1).padStart(2, '0')}`
-      );
+      this.shipmentCheckPallets = palletNames;
       this.shipmentCheckResults = this.shipmentCheckPallets.map(p => ({
         palletCode: p,
         status: 'pending' as const
