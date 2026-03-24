@@ -629,10 +629,50 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return String(material.batchNumber || '').trim().toUpperCase();
   }
 
+  /**
+   * Nguồn dữ liệu để kiểm tra trùng batch:
+   * - Giữ theo factory + date range + trạng thái hiển thị tồn/non-stock/âm
+   * - BỎ qua filter search để cảnh báo vẫn hiện ngay cả khi chưa lọc mã TP.
+   */
+  private getDuplicateCheckSourceMaterials(): FGInventoryItem[] {
+    return this.materials.filter(material => {
+      // Filter by factory (TOTAL = xem tất cả)
+      if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+        const materialFactory = material.factory || 'ASM1';
+        if (materialFactory !== this.selectedFactory) return false;
+      }
+
+      // Filter by date range
+      if (this.startDate && this.endDate) {
+        const importDate = new Date(material.importDate);
+        const start = new Date(this.startDate + 'T00:00:00');
+        const end = new Date(this.endDate + 'T23:59:59');
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          if (!(importDate >= start && importDate <= end)) return false;
+        }
+      }
+
+      // Filter by completed status
+      if (!(this.showCompleted || !material.isCompleted)) return false;
+
+      // Filter by stock mode
+      const ton = material.ton ?? 0;
+      if (this.showNegativeStock) {
+        if (ton >= 0) return false;
+      } else if (this.showNonStock) {
+        if (ton > 0) return false;
+      } else {
+        if (ton <= 0) return false;
+      }
+
+      return true;
+    });
+  }
+
   /** Danh sách số Batch đang trùng (cùng số batch xuất hiện > 1 lần trong filteredMaterials) */
   getDuplicateBatchKeys(): string[] {
     const countByBatch = new Map<string, number>();
-    this.filteredMaterials.forEach(m => {
+    this.getDuplicateCheckSourceMaterials().forEach(m => {
       const batch = this.getBatchNormalized(m);
       if (batch) countByBatch.set(batch, (countByBatch.get(batch) || 0) + 1);
     });
@@ -663,9 +703,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   /** Danh sách nhóm trùng batch: mỗi nhóm có batchKey và materials */
   getDuplicateBatchGroups(): { batchKey: string; materials: FGInventoryItem[] }[] {
     const keys = this.getDuplicateBatchKeys();
+    const source = this.getDuplicateCheckSourceMaterials();
     return keys.map(batchKey => ({
       batchKey,
-      materials: this.filteredMaterials.filter(m => this.getBatchNormalized(m) === batchKey)
+      materials: source.filter(m => this.getBatchNormalized(m) === batchKey)
     }));
   }
 

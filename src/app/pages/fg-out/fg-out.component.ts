@@ -362,56 +362,30 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Đồng bộ thành phần tồn theo batch:
-   * - tonDau: từ fg-inventory
-   * - nhap: từ fg-in
-   * - xuat: từ fg-out (cộng theo batch, không clamp 0)
-   * Dùng valueChanges() (nhẹ hơn snapshotChanges) + debounce rebuild để tránh tính lại 3 lần liên tiếp khi init.
+   * Đồng bộ tồn theo batch từ chính tab FG Inventory (field `ton`) để khớp đúng
+   * cột "Tồn FG Inventory" trên giao diện fg-inventory.
    */
   private subscribeBatchStockComponents(): void {
-    // tonDau theo batch từ fg-inventory
     this.firestore.collection('fg-inventory')
       .valueChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((docs: any[]) => {
-        this.invTonDauByBatch.clear();
+        this.inventoryStockByBatchCache.clear();
         docs.forEach(d => {
           const key = this.batchKey(d.factory, d.batchNumber);
           if (!key) return;
           const tonDau = Number(d.tonDau ?? 0) || 0;
-          this.invTonDauByBatch.set(key, (this.invTonDauByBatch.get(key) || 0) + tonDau);
+          const nhap = Number(d.nhap ?? d.quantity ?? 0) || 0;
+          const xuat = Number(d.xuat ?? d.exported ?? 0) || 0;
+          const ton = (d.ton != null)
+            ? Number(d.ton)
+            : (d.stock != null ? Number(d.stock) : (tonDau + nhap - xuat));
+          this.inventoryStockByBatchCache.set(
+            key,
+            (this.inventoryStockByBatchCache.get(key) || 0) + (isNaN(ton) ? 0 : ton)
+          );
         });
-        this.rebuildStockSubject.next();
-      });
-
-    // nhap theo batch từ fg-in
-    this.firestore.collection('fg-in')
-      .valueChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((docs: any[]) => {
-        this.invNhapByBatch.clear();
-        docs.forEach(d => {
-          const key = this.batchKey(d.factory, d.batchNumber);
-          if (!key) return;
-          const q = Number(d.quantity ?? 0) || 0;
-          this.invNhapByBatch.set(key, (this.invNhapByBatch.get(key) || 0) + q);
-        });
-        this.rebuildStockSubject.next();
-      });
-
-    // xuat theo batch từ fg-out
-    this.firestore.collection('fg-out')
-      .valueChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((docs: any[]) => {
-        this.invXuatByBatch.clear();
-        docs.forEach(d => {
-          const key = this.batchKey(d.factory, d.batchNumber);
-          if (!key) return;
-          const q = Number(d.quantity ?? 0) || 0;
-          this.invXuatByBatch.set(key, (this.invXuatByBatch.get(key) || 0) + q);
-        });
-        this.rebuildStockSubject.next();
+        this.cdr.markForCheck();
       });
   }
 
