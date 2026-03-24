@@ -1,0 +1,87 @@
+<div class="fg-overview">
+  <div class="toolbar">
+    <h2 class="title">FG Overview</h2>
+    <div class="toolbar-actions">
+      <div class="factory-toggle">
+        <button
+          type="button"
+          class="toggle-btn"
+          [class.active]="selectedFactory === 'ASM1'"
+          (click)="setFactory('ASM1')"
+        >
+          ASM1
+        </button>
+        <button
+          type="button"
+          class="toggle-btn"
+          [class.active]="selectedFactory === 'ASM2'"
+          (click)="setFactory('ASM2')"
+        >
+          ASM2
+        </button>
+      </div>
+      <input
+        #fileInp
+        type="file"
+        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        (change)="onImportFile($event)"
+        hidden
+      />
+      <button type="button" class="btn-import" (click)="fileInp.click()">Import tồn kho</button>
+      <button
+        *ngIf="importFileName"
+        type="button"
+        class="btn-clear"
+        (click)="clearImport()"
+      >
+        Xóa file import
+      </button>
+    </div>
+  </div>
+
+  <p class="hint" *ngIf="importFileName">
+    File: <strong>{{ importFileName }}</strong> — {{ importRowCount }} mã TP (unique)
+  </p>
+  <p class="hint muted" *ngIf="!importFileName">
+    Chưa có file import — chỉ hiển thị mã có trong FG Inventory (cột so sánh: Thiếu ở file import).
+  </p>
+
+  <div class="filter-bar" *ngIf="rows.length">
+    <span class="filter-label">Lọc:</span>
+    <button type="button" class="filter-chip" [class.on]="filterCompare === 'all'" (click)="setFilter('all')">Tất cả</button>
+    <button type="button" class="filter-chip" [class.on]="filterCompare === 'mismatch'" (click)="setFilter('mismatch')">Chỉ lệch</button>
+    <button type="button" class="filter-chip" [class.on]="filterCompare === 'missing_in_import'" (click)="setFilter('missing_in_import')">Thiếu ở import</button>
+    <button type="button" class="filter-chip" [class.on]="filterCompare === 'extra_in_import'" (click)="setFilter('extra_in_import')">Dư ở import</button>
+  </div>
+
+  <div class="loading" *ngIf="isLoadingFg">Đang tải FG Inventory…</div>
+  <div class="error" *ngIf="fgError">{{ fgError }}</div>
+
+  <div class="grid-wrap" *ngIf="!isLoadingFg">
+    <table class="excel-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th>Mã TP</th>
+          <th class="col-num">Tồn FG Inventory</th>
+          <th class="col-flag">Có trong file import</th>
+          <th class="col-compare">So sánh</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of filteredRows; let i = index" [class.row-mismatch]="r.compare !== 'Khớp'">
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td>{{ r.materialCode }}</td>
+          <td class="col-num">{{ r.tonFg | number : '1.0-3' }}</td>
+          <td class="col-flag">{{ r.inImport ? 'Có' : 'Không' }}</td>
+          <td class="col-compare" [ngClass]="{
+            'cell-ok': r.compare === 'Khớp',
+            'cell-miss': r.compare === 'Thiếu ở file import',
+            'cell-extra': r.compare === 'Dư so với FG Inventory'
+          }">{{ r.compare }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredRows.length && !fgError">Không có dòng nào.</p>
+  </div>
+</div>

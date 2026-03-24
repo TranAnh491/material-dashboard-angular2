@@ -63,6 +63,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'fg-out', name: 'FG Out' },
     { key: 'fg-check', name: 'FG Check' },
     { key: 'fg-inventory', name: 'FG Inventory' },
+    { key: 'fg-overview', name: 'FG Overview' },
     { key: 'fg-location', name: 'FG Location' },
     { key: 'pallet-id', name: 'Pallet ID' },
     

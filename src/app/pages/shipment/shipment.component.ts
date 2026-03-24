@@ -319,24 +319,45 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return isInDateRange && matchesSearch;
     });
     
-    // Sắp xếp: 1) Dispatch Date, 2) Shipment Code, 3) Mã TP (A,B,C)
+    // Sắp xếp: 1) Dispatch theo NGÀY (local), 2) FWD (AIR & SEA xuống cuối), 3) Shipment Code
+    const dispatchDaySortKey = (d: Date | null | undefined): number => {
+      if (!d) return Number.MAX_SAFE_INTEGER;
+      const x = new Date(d);
+      const t = x.getTime();
+      if (Number.isNaN(t)) return Number.MAX_SAFE_INTEGER;
+      // Cùng ngày lịch → cùng key (tránh lệch giờ/phút làm AIR nổi trên DHL)
+      return x.getFullYear() * 10000 + (x.getMonth() + 1) * 100 + x.getDate();
+    };
+    const fwdAirSeaLastRank = (shipMethod: string | undefined | null): number => {
+      const u = String(shipMethod ?? '').trim().toUpperCase();
+      return u === 'AIR' || u === 'SEA' ? 1 : 0;
+    };
     this.filteredShipments.sort((a, b) => {
-      // Bước 1: So sánh Dispatch Date (actualShipDate) - ngày sớm nhất lên đầu
-      const dispatchA = a.actualShipDate ? new Date(a.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const dispatchB = b.actualShipDate ? new Date(b.actualShipDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dispatchA = dispatchDaySortKey(a.actualShipDate);
+      const dispatchB = dispatchDaySortKey(b.actualShipDate);
       if (dispatchA !== dispatchB) {
         return dispatchA - dispatchB;
       }
-      
-      // Bước 2: Nếu Dispatch Date giống nhau, so sánh Shipment Code - sắp theo A, B, C
+
+      const fwdRankDiff = fwdAirSeaLastRank(a.shipMethod) - fwdAirSeaLastRank(b.shipMethod);
+      if (fwdRankDiff !== 0) {
+        return fwdRankDiff;
+      }
+
       const shipmentA = String(a.shipmentCode || '').toUpperCase();
       const shipmentB = String(b.shipmentCode || '').toUpperCase();
-      const shipmentCompare = shipmentA.localeCompare(shipmentB);
+      const shipmentCompare = shipmentA.localeCompare(shipmentB, undefined, { numeric: true, sensitivity: 'base' });
       if (shipmentCompare !== 0) {
         return shipmentCompare;
       }
-      
-      // Bước 3: Nếu Shipment giống nhau, so sánh Mã TP (materialCode) - sắp theo A, B, C
+
+      const fwdA = String(a.shipMethod ?? '').trim().toUpperCase();
+      const fwdB = String(b.shipMethod ?? '').trim().toUpperCase();
+      const fwdCompare = fwdA.localeCompare(fwdB);
+      if (fwdCompare !== 0) {
+        return fwdCompare;
+      }
+
       const materialA = String(a.materialCode || '').toUpperCase();
       const materialB = String(b.materialCode || '').toUpperCase();
       return materialA.localeCompare(materialB);

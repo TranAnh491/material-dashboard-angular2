@@ -45,6 +45,7 @@ export const ROUTES: RouteInfo[] = [
       { path: '/fg-out', title: 'FG Out', icon: 'outbox', class: 'material-child-icon' },
       { path: '/fg-check', title: 'FG Check', icon: 'fact_check', class: 'material-child-icon' },
       { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory', class: 'material-child-icon' },
+      { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', class: 'material-child-icon' },
       { path: '/fg-location', title: 'FG Location', icon: 'location_on', class: 'material-child-icon' },
       { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', class: 'material-child-icon' }
     ]
