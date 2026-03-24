@@ -138,6 +138,7 @@ export class TabPermissionGuard implements CanActivate {
       '/fg-out': 'fg-out',
       '/fg-check': 'fg-check',
       '/fg-inventory': 'fg-inventory',
+      '/fg-overview': 'fg-overview',
       '/fg-location': 'fg-location',
       '/pallet-id': 'pallet-id',
       

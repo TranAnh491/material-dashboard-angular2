@@ -102,6 +102,15 @@ interface ReportDayAggRow {
   hasKhsx: boolean;
 }
 
+interface ReportCompareRow {
+  materialCode: string;
+  checkedQty: number;
+  inventoryStock: number;
+  difference: number;
+  status: 'MATCH' | 'CHECK_ONLY' | 'INVENTORY_ONLY' | 'DIFF';
+  imdList?: string;
+}
+
 @Component({
   selector: 'app-stock-check',
   templateUrl: './stock-check.component.html',
@@ -3097,6 +3106,29 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
     XLSX.utils.book_append_sheet(wb, ws, 'Stock Check');
 
+    // Sheet so sánh với tồn kho import từ inventory-overview (nguồn inventory-materials theo factory)
+    const compareRows = await this.buildCheckedVsInventoryComparison(rows);
+    const compareExport = compareRows.map((r, idx) => ({
+      'STT': idx + 1,
+      'Mã hàng': r.materialCode,
+      'IMD (đã kiểm)': r.imdList || '',
+      'Qty đã kiểm': r.checkedQty,
+      'Tồn kho import': r.inventoryStock,
+      'Chênh lệch (Tồn - Check)': r.difference,
+      'Trạng thái': r.status
+    }));
+    const wsCompare = XLSX.utils.json_to_sheet(compareExport);
+    wsCompare['!cols'] = [
+      { wch: 6 },   // STT
+      { wch: 15 },  // Mã hàng
+      { wch: 20 },  // IMD
+      { wch: 12 },  // Qty đã kiểm
+      { wch: 12 },  // Tồn kho import
+      { wch: 20 },  // Chênh lệch
+      { wch: 16 }   // Trạng thái
+    ];
+    XLSX.utils.book_append_sheet(wb, wsCompare, 'So sánh tồn kho');
+
     const summary = [
       { 'Thông tin': 'Factory', 'Giá trị': this.selectedFactory },
       { 'Thông tin': 'Ngày', 'Giá trị': this.dateKeyToLabel(dateKey) },
@@ -3111,6 +3143,83 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, fileName);
 
     this.closeReportByDateModal();
+  }
+
+  /** So sánh danh sách đã kiểm kê với tồn kho import (ASM1/ASM2) theo Mã hàng (cộng dồn nhiều PO). */
+  private async buildCheckedVsInventoryComparison(rows: ReportDayAggRow[]): Promise<ReportCompareRow[]> {
+    if (!this.selectedFactory) return [];
+
+    const checkedMap = new Map<string, { materialCode: string; checkedQty: number; imdSet: Set<string> }>();
+    rows.forEach(r => {
+      const materialCode = String(r.materialCode || '').trim().toUpperCase();
+      if (!materialCode) return;
+      const key = materialCode;
+      const existing = checkedMap.get(key);
+      if (!existing) {
+        checkedMap.set(key, {
+          materialCode,
+          checkedQty: Number(r.qtyCheckTotal || 0),
+          imdSet: new Set<string>([String(r.imd || '').trim()].filter(Boolean))
+        });
+      } else {
+        existing.checkedQty += Number(r.qtyCheckTotal || 0);
+        const imd = String(r.imd || '').trim();
+        if (imd) existing.imdSet.add(imd);
+      }
+    });
+
+    const inventoryMap = new Map<string, { materialCode: string; inventoryStock: number }>();
+    const invSnap = await this.firestore
+      .collection('inventory-materials', ref => ref.where('factory', '==', this.selectedFactory))
+      .get()
+      .toPromise();
+
+    if (invSnap && !invSnap.empty) {
+      invSnap.forEach(doc => {
+        const data = doc.data() as any;
+        const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+        if (!materialCode) return;
+        const openingStock = Number(data?.openingStock ?? 0);
+        const quantity = Number(data?.quantity ?? 0);
+        const exported = Number(data?.exported ?? 0);
+        const xt = Number(data?.xt ?? 0);
+        const stock = openingStock + quantity - exported - xt;
+        const key = materialCode;
+        const existing = inventoryMap.get(key);
+        if (!existing) {
+          inventoryMap.set(key, { materialCode, inventoryStock: stock });
+        } else {
+          existing.inventoryStock += stock;
+        }
+      });
+    }
+
+    const allKeys = new Set<string>([...checkedMap.keys(), ...inventoryMap.keys()]);
+    const result: ReportCompareRow[] = [];
+    allKeys.forEach(key => {
+      const c = checkedMap.get(key);
+      const i = inventoryMap.get(key);
+      const checkedQty = Number(c?.checkedQty ?? 0);
+      const inventoryStock = Number(i?.inventoryStock ?? 0);
+      const difference = Number((inventoryStock - checkedQty).toFixed(2));
+      let status: ReportCompareRow['status'] = 'MATCH';
+      if (c && !i) status = 'CHECK_ONLY';
+      else if (!c && i) status = 'INVENTORY_ONLY';
+      else if (Math.abs(difference) > 0.0001) status = 'DIFF';
+      result.push({
+        materialCode: c?.materialCode || i?.materialCode || '',
+        checkedQty,
+        inventoryStock: Number(inventoryStock.toFixed(2)),
+        difference,
+        status,
+        imdList: c ? Array.from(c.imdSet).join(', ') : ''
+      });
+    });
+
+    result.sort((a, b) =>
+      a.materialCode.localeCompare(b.materialCode)
+    );
+    return result;
   }
 
   /**

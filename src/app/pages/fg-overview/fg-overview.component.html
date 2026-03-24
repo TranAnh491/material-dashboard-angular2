@@ -1,7 +1,18 @@
-<div class="fg-overview">
-  <div class="toolbar">
-    <h2 class="title">FG Overview</h2>
-    <div class="toolbar-actions">
+<div class="inventory-overview-container fg-overview-page">
+  <div class="top-fixed-area">
+    <div class="header">
+      <h4 class="page-title">FG Overview</h4>
+    </div>
+
+    <div class="status-line">{{ statusLineText }}</div>
+
+    <!-- Control bar: MENU + nhà máy + import + lọc -->
+    <div class="control-bar">
+      <div class="factory-section">
+      <button type="button" class="io-btn menu-btn" (click)="goToMenu()">
+        <i class="material-icons">home</i>
+        Menu
+      </button>
       <div class="factory-toggle">
         <button
           type="button"
@@ -20,68 +31,206 @@
           ASM2
         </button>
       </div>
+      <div class="action-buttons">
+        <button type="button" class="io-btn io-btn-primary" (click)="openImportDialog()">
+          <i class="material-icons">file_upload</i>
+          Import tồn kho
+        </button>
+        <button
+          *ngIf="importFileName"
+          type="button"
+          class="io-btn"
+          (click)="clearImport()"
+        >
+          <i class="material-icons">clear</i>
+          Xóa file import
+        </button>
+        <button type="button" class="io-btn" (click)="toggleMoreMenu()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
+      </div>
+      <div class="integrated-filters" *ngIf="rows.length">
+        <button type="button" class="filter-btn" [class.active]="filterCompare === 'all'" (click)="setFilter('all')">
+          Tất cả
+        </button>
+        <button type="button" class="filter-btn" [class.active]="filterCompare === 'mismatch'" (click)="setFilter('mismatch')">
+          Chỉ lệch
+        </button>
+        <button type="button" class="filter-btn" [class.active]="filterCompare === 'missing_in_import'" (click)="setFilter('missing_in_import')">
+          Thiếu ở import
+        </button>
+        <button type="button" class="filter-btn" [class.active]="filterCompare === 'extra_in_import'" (click)="setFilter('extra_in_import')">
+          Dư ở import
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading-state-text" *ngIf="isLoadingFg">Đang tải FG Inventory…</div>
+  <div class="error-banner" *ngIf="fgError">{{ fgError }}</div>
+
+  <div class="table-container" *ngIf="!isLoadingFg">
+    <table class="inventory-table fg-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th>Mã TP</th>
+          <th class="num-cell">Tồn FG Inventory</th>
+          <th class="num-cell">Tồn file import</th>
+          <th class="num-cell comparison-cell">So sánh lượng</th>
+          <th class="center-cell">Có trong file import</th>
+          <th>So sánh mã</th>
+          <th>Vị trí</th>
+        </tr>
+        <tr class="table-header-fill-row">
+          <th class="col-stt table-header-fill-cell"></th>
+          <th class="table-header-fill-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.maTp"
+              (ngModelChange)="onMaTpFillChange($event)"
+              name="tcfMaTp"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell num-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.tonFg"
+              name="tcfTonFg"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell num-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.tonFile"
+              name="tcfTonFile"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell num-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.qtyDelta"
+              name="tcfQtyDelta"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell center-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.inImport"
+              name="tcfInImport"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.compare"
+              name="tcfCompare"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+          <th class="table-header-fill-cell">
+            <input
+              type="text"
+              class="table-header-fill-input"
+              [(ngModel)]="tableColumnFill.location"
+              name="tcfLocation"
+              (blur)="persistImportCacheToFirebase()"
+              autocomplete="off"
+            />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let r of filteredRows; let i = index"
+          [class.negative-row]="r.compare !== 'Khớp' || r.normQtyMismatch"
+        >
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td class="material-code-cell">{{ r.materialCode }}</td>
+          <td class="num-cell stock-cell">{{ r.tonFg | number : '1.0-3' }}</td>
+          <td class="num-cell stock-cell">{{ r.inImport ? (r.tonImport | number : '1.0-3') : '' }}</td>
+          <td
+            class="num-cell comparison-cell stock-cell"
+            [class.has-difference]="isQtyDeltaSignificant(r.qtyDelta)"
+          >
+            <ng-container *ngIf="r.qtyDelta !== null">{{ r.qtyDelta | number : '1.0-3' }}</ng-container>
+          </td>
+          <td class="center-cell">{{ r.inImport ? 'Có' : 'Không' }}</td>
+          <td>{{ r.compare }}</td>
+          <td>{{ r.location }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredRows.length && !fgError">Không có dòng nào.</p>
+  </div>
+
+  <!-- Popup More -->
+  <div class="more-overlay" *ngIf="showMoreMenu" (click)="closeMoreMenu()">
+    <div class="more-popup" (click)="$event.stopPropagation()">
+      <button type="button" class="more-item-btn" (click)="downloadComparisonReport()">
+        <i class="material-icons">file_download</i>
+        Tải về Báo Cáo
+      </button>
+    </div>
+  </div>
+
+  <!-- Popup import -->
+  <div
+    class="import-overlay"
+    *ngIf="showImportDialog"
+    (click)="closeImportDialog()"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="import-dialog-title"
+  >
+    <div class="import-dialog" (click)="$event.stopPropagation()">
+      <h3 id="import-dialog-title" class="import-dialog-title">Import tồn kho</h3>
+      <div class="import-notes">
+        <p class="import-notes-lead">Quy tắc đọc file (sheet đầu tiên):</p>
+        <ul>
+          <li><strong>Cột A</strong> — mã TP. Chỉ nhận dòng có <strong>7 ký tự đầu</strong> đúng mẫu: <strong>P, T, M hoặc L</strong> + <strong>6 chữ số</strong> (ví dụ <code>P102030</code>, <code>m123456</code>). Phần sau ký tự thứ 7 có thể tùy ý. Các dòng khác bị bỏ qua.</li>
+          <li><strong>Cột F</strong> — số lượng tồn kho</li>
+          <li>Dữ liệu bắt đầu từ <strong>dòng 7</strong> (các dòng 1–6 bỏ qua).</li>
+          <li>Mỗi dòng Excel (cột A có mã) = <strong>một dòng trên lưới</strong>. Cùng mã nhiều dòng: cột <strong>Tồn file</strong> là SL từng dòng; cột <strong>So sánh lượng</strong> (tổng file − tồn FG) chỉ hiện ở <strong>dòng cuối</strong> của nhóm mã đó.</li>
+          <li>So với FG Inventory: khớp theo mã (không phân biệt hoa thường). Cột <strong>Mã TP</strong> hiển thị <strong>chữ gốc cột A</strong> khi mã có trong import.</li>
+          <li><strong>Tồn FG Inventory</strong> chỉ cộng bản ghi <strong>ASM1</strong> hoặc <strong>ASM2</strong> đang chọn.</li>
+          <li><strong>So sánh lượng</strong> = tổng tồn file theo mã − tồn FG; âm = file ít hơn kho. Hiển thị một lần ở dòng cuối cùng của mã trong file.</li>
+          <li>Dữ liệu import được <strong>lưu trên Firebase theo từng nhà máy</strong> (ASM1/ASM2 tách riêng). Chọn ASM nào sẽ mở bản import của ASM đó; import mới ghi đè bản của đúng ASM đang chọn.</li>
+        </ul>
+      </div>
       <input
-        #fileInp
+        #fileInpModal
         type="file"
         accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
         (change)="onImportFile($event)"
         hidden
       />
-      <button type="button" class="btn-import" (click)="fileInp.click()">Import tồn kho</button>
-      <button
-        *ngIf="importFileName"
-        type="button"
-        class="btn-clear"
-        (click)="clearImport()"
-      >
-        Xóa file import
-      </button>
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-primary" (click)="fileInpModal.click()">
+          Chọn file và import
+        </button>
+        <button type="button" class="btn-import-dialog-secondary" (click)="closeImportDialog()">
+          Đóng
+        </button>
+      </div>
     </div>
-  </div>
-
-  <p class="hint" *ngIf="importFileName">
-    File: <strong>{{ importFileName }}</strong> — {{ importRowCount }} mã TP (unique)
-  </p>
-  <p class="hint muted" *ngIf="!importFileName">
-    Chưa có file import — chỉ hiển thị mã có trong FG Inventory (cột so sánh: Thiếu ở file import).
-  </p>
-
-  <div class="filter-bar" *ngIf="rows.length">
-    <span class="filter-label">Lọc:</span>
-    <button type="button" class="filter-chip" [class.on]="filterCompare === 'all'" (click)="setFilter('all')">Tất cả</button>
-    <button type="button" class="filter-chip" [class.on]="filterCompare === 'mismatch'" (click)="setFilter('mismatch')">Chỉ lệch</button>
-    <button type="button" class="filter-chip" [class.on]="filterCompare === 'missing_in_import'" (click)="setFilter('missing_in_import')">Thiếu ở import</button>
-    <button type="button" class="filter-chip" [class.on]="filterCompare === 'extra_in_import'" (click)="setFilter('extra_in_import')">Dư ở import</button>
-  </div>
-
-  <div class="loading" *ngIf="isLoadingFg">Đang tải FG Inventory…</div>
-  <div class="error" *ngIf="fgError">{{ fgError }}</div>
-
-  <div class="grid-wrap" *ngIf="!isLoadingFg">
-    <table class="excel-table">
-      <thead>
-        <tr>
-          <th class="col-stt">#</th>
-          <th>Mã TP</th>
-          <th class="col-num">Tồn FG Inventory</th>
-          <th class="col-flag">Có trong file import</th>
-          <th class="col-compare">So sánh</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let r of filteredRows; let i = index" [class.row-mismatch]="r.compare !== 'Khớp'">
-          <td class="col-stt">{{ i + 1 }}</td>
-          <td>{{ r.materialCode }}</td>
-          <td class="col-num">{{ r.tonFg | number : '1.0-3' }}</td>
-          <td class="col-flag">{{ r.inImport ? 'Có' : 'Không' }}</td>
-          <td class="col-compare" [ngClass]="{
-            'cell-ok': r.compare === 'Khớp',
-            'cell-miss': r.compare === 'Thiếu ở file import',
-            'cell-extra': r.compare === 'Dư so với FG Inventory'
-          }">{{ r.compare }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <p class="empty" *ngIf="!filteredRows.length && !fgError">Không có dòng nào.</p>
   </div>
 </div>
