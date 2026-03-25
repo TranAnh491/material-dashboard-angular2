@@ -501,6 +501,13 @@
         font-size: 24px;
         color: #2196F3;
       }
+
+      .factory-title-icon {
+        height: 24px;
+        width: auto;
+        object-fit: contain;
+        flex-shrink: 0;
+      }
       
       .employee-id-display {
         display: flex;

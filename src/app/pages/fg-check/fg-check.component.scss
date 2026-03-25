@@ -67,6 +67,13 @@
     font-size: 28px;
     color: #000000;
   }
+
+  .page-title-icon {
+    height: 28px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
 }
 
 .action-section {

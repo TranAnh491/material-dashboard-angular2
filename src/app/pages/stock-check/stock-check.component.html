@@ -4,7 +4,7 @@
     <!-- Top Bar - ẩn hẳn khi đang mở modal scan để không còn box trắng phía trên -->
     <div class="top-bar" *ngIf="!showScanModal && !showMobileFactoryModal">
       <h2 class="factory-title" *ngIf="!showScanModal">
-        <i class="material-icons">factory</i>
+        <img src="assets/img/shipcheck.png" alt="" class="factory-title-icon">
         <span *ngIf="selectedFactory">{{ selectedFactory }} - KIỂM KÊ</span>
         <span *ngIf="!selectedFactory">KIỂM KÊ</span>
         <span class="employee-id-display" *ngIf="currentEmployeeId">

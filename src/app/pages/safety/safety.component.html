@@ -3,7 +3,10 @@
   <div class="excel-container">
     <!-- Report Title -->
     <div class="excel-header">
-      <h4>🛡️ SAFETY INVENTORY</h4>
+      <div class="excel-header-title-row">
+        <img src="assets/img/safetystock.png" alt="" class="safety-header-icon">
+        <h4>SAFETY INVENTORY</h4>
+      </div>
       <div class="scan-mode-indicator" *ngIf="isScanMode">
         <i class="material-icons">qr_code_scanner</i>
         <span>Đang scan cho {{scanFactory}}</span>

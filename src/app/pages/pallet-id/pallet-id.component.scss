@@ -7,12 +7,26 @@
 // Header
 .page-header {
   margin-bottom: 24px;
+
+  .page-header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .page-header-icon {
+    height: 36px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
   
   h2 {
     font-size: 24px;
     font-weight: 600;
     color: #333;
-    margin: 0 0 6px 0;
+    margin: 0;
   }
   
   .subtitle {
