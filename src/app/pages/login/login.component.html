@@ -56,6 +56,8 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã số nhân viên' }}</mat-label>
           <input matInput formControlName="employeeId" 
+                 class="employee-id-input"
+                 (input)="onEmployeeIdInput($event, 'login')"
                  [placeholder]="currentLanguage === 'en' ? 'Enter employee ID (ASP + 4 digits)' : 'Nhập mã số nhân viên (ASP + 4 số)'">
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Employee ID is required' : 'Mã số nhân viên là bắt buộc' }}
@@ -93,6 +95,8 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã số nhân viên' }}</mat-label>
           <input matInput formControlName="employeeId" 
+                 class="employee-id-input"
+                 (input)="onEmployeeIdInput($event, 'signup')"
                  [placeholder]="currentLanguage === 'en' ? 'Enter employee ID (ASP + 4 digits)' : 'Nhập mã số nhân viên (ASP + 4 số)'">
           <mat-error *ngIf="signupForm.get('employeeId')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Employee ID is required' : 'Mã số nhân viên là bắt buộc' }}

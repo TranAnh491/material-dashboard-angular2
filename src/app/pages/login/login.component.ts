@@ -16,6 +16,21 @@ export class LoginComponent implements OnInit {
   loading = false;
   currentLanguage: 'en' | 'vi' = 'vi'; // Default to Vietnamese
 
+  onEmployeeIdInput(event: Event, formType: 'login' | 'signup'): void {
+    const inputEl = event.target as HTMLInputElement;
+    const upper = (inputEl.value || '').toUpperCase();
+    if (inputEl.value !== upper) {
+      inputEl.value = upper;
+    }
+
+    const form = formType === 'login' ? this.loginForm : this.signupForm;
+    const control = form.get('employeeId');
+    if (control && control.value !== upper) {
+      control.setValue(upper, { emitEvent: false });
+      control.updateValueAndValidity({ emitEvent: false });
+    }
+  }
+
   constructor(
     private fb: FormBuilder,
     private authService: FirebaseAuthService,

@@ -4,13 +4,14 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3748 50%, #1e3c72 75%, #2a5298 100%);
+  background: url('/assets/img/login.png') center center / cover no-repeat;
   padding: 20px;
   position: relative;
   overflow: hidden;
   
   // Modern Warehouse Background Pattern - AI Grid
   &::before {
+    display: none;
     content: '';
     position: absolute;
     top: 0;
@@ -30,6 +31,7 @@
   
   // AI Core Orb
   &::after {
+    display: none;
     content: '';
     position: absolute;
     top: 10%;
@@ -50,6 +52,7 @@
 
 // Warehouse Elements - Robots, Shelves, AI
 .warehouse-elements {
+  display: none;
   position: absolute;
   top: 0;
   left: 0;
@@ -321,7 +324,10 @@
 }
 
 .login-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   padding: 40px;
@@ -352,6 +358,10 @@
 
 .full-width {
   width: 100%;
+}
+
+.employee-id-input {
+  text-transform: uppercase;
 }
 
 .login-footer {
