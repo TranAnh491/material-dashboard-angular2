@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import firebase from 'firebase/compat/app';
 import * as XLSX from 'xlsx';
 
 export interface FGCheckItem {
@@ -124,6 +125,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   shipmentCheckLastResult: 'ok' | 'error' | null = null;
   shipmentCheckLastScanned: string = '';
   private shipmentCheckScanFirstChar: number = 0;
+
+  /** Firestore: lịch sử quét Shipment Check (pallet) */
+  private readonly SHIPMENT_CHECK_LOGS = 'shipment-check-logs';
 
   // Popup xóa: quét mã quản lý (chỉ scan)
   private readonly MANAGER_CODES = ['ASP0106', 'ASP0538', 'ASP0119', 'ASP1761'];
@@ -2652,6 +2656,60 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
     this.shipmentCheckLoading = false;
     this.cdr.detectChanges();
+    if (this.shipmentCheckResults.length > 0) {
+      this.focusShipmentCheckScanInput();
+    }
+  }
+
+  /** Đưa focus vào ô quét pallet để máy quét gửi ký tự ngay (sau khi ô đã có trong DOM). */
+  private focusShipmentCheckScanInput(): void {
+    setTimeout(() => {
+      const el = document.getElementById('fg-shipment-check-scan-input') as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 0);
+  }
+
+  /**
+   * Tem pallet quét: {shipment}W{tuần}{2 số thứ tự pallet}
+   * Ví dụ 5330W1301 → shipment 5330, tuần 13 (phần giữa W và 2 số cuối), pallet 01 → thứ tự 1
+   */
+  private parsePalletShipmentLabelScan(raw: string): { shipment: string; week: string; palletSeq: number } | null {
+    const s = raw.trim().toUpperCase().replace(/\s/g, '');
+    const w = s.indexOf('W');
+    if (w <= 0) return null;
+    if (s.length < w + 3) return null;
+    const last2 = s.slice(-2);
+    if (!/^\d{2}$/.test(last2)) return null;
+    const shipment = s.slice(0, w);
+    if (!/^\d+$/.test(shipment)) return null;
+    const week = s.slice(w + 1, -2);
+    if (!/^\d*$/.test(week)) return null;
+    const palletSeq = parseInt(last2, 10);
+    if (!Number.isFinite(palletSeq) || palletSeq < 1) return null;
+    return { shipment, week, palletSeq };
+  }
+
+  /** Số thứ tự pallet trên mã FG Out (vd 1P/5P → 1, 12P/5P → 12) */
+  private extractPalletOrderFromCode(palletCode: string): number | null {
+    const m = String(palletCode || '').trim().match(/^(\d+)/);
+    if (m) return parseInt(m[1], 10);
+    return null;
+  }
+
+  /** Khớp thứ tự pallet từ tem (2 số cuối) với dòng trong danh sách check */
+  private findShipmentCheckPalletIndexBySeq(palletSeq: number): number {
+    const seq = Math.floor(palletSeq);
+    if (seq < 1) return -1;
+    const byLead = this.shipmentCheckResults.findIndex(r => {
+      const n = this.extractPalletOrderFromCode(r.palletCode);
+      return n !== null && n === seq;
+    });
+    if (byLead >= 0) return byLead;
+    if (seq <= this.shipmentCheckResults.length) return seq - 1;
+    return -1;
   }
 
   onShipmentCheckKeyEnter(): void {
@@ -2659,15 +2717,111 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     if (!scanned) return;
     this.shipmentCheckLastScanned = scanned;
 
-    const idx = this.shipmentCheckResults.findIndex(r => r.palletCode === scanned);
+    const expectedShipment = this.shipmentCheckCode.trim().toUpperCase();
+    let idx = -1;
+
+    const parsed = this.parsePalletShipmentLabelScan(scanned);
+    if (parsed) {
+      if (parsed.shipment === expectedShipment) {
+        idx = this.findShipmentCheckPalletIndexBySeq(parsed.palletSeq);
+      }
+    } else {
+      idx = this.shipmentCheckResults.findIndex(
+        r => String(r.palletCode || '').trim().toUpperCase() === scanned
+      );
+    }
+
     if (idx > -1) {
       this.shipmentCheckResults[idx].status = 'ok';
       this.shipmentCheckLastResult = 'ok';
     } else {
       this.shipmentCheckLastResult = 'error';
     }
+    const matchedPallet = idx > -1 ? this.shipmentCheckResults[idx].palletCode : null;
+    this.persistShipmentCheckScanLog(expectedShipment, scanned, this.shipmentCheckLastResult === 'ok', matchedPallet);
+
     this.shipmentCheckScanInput = '';
     this.cdr.detectChanges();
+    this.focusShipmentCheckScanInput();
+  }
+
+  /** Lưu từng lần quét Shipment Check lên Firebase. */
+  private persistShipmentCheckScanLog(
+    shipmentCode: string,
+    scannedRaw: string,
+    ok: boolean,
+    matchedPalletCode: string | null
+  ): void {
+    const payload = {
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      shipmentCode: String(shipmentCode || '').trim().toUpperCase(),
+      scannedRaw: String(scannedRaw || '').trim(),
+      result: ok ? 'ok' : 'error',
+      matchedPalletCode: matchedPalletCode != null && matchedPalletCode !== '' ? String(matchedPalletCode) : null
+    };
+    this.firestore
+      .collection(this.SHIPMENT_CHECK_LOGS)
+      .add(payload)
+      .then(() => {})
+      .catch((e: unknown) => console.error('persistShipmentCheckScanLog', e));
+  }
+
+  private formatShipmentCheckLogDate(val: unknown): string {
+    if (val == null) return '';
+    try {
+      let d: Date;
+      if (typeof val === 'object' && val !== null && typeof (val as { toDate?: () => Date }).toDate === 'function') {
+        d = (val as { toDate: () => Date }).toDate();
+      } else if (val instanceof Date) {
+        d = val;
+      } else {
+        return '';
+      }
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('vi-VN', { hour12: false });
+    } catch {
+      return '';
+    }
+  }
+
+  /** More: tải Excel lịch sử quét Shipment Check từ Firebase. */
+  async downloadShipmentCheckHistoryExcel(): Promise<void> {
+    try {
+      const snap = await this.firestore
+        .collection(this.SHIPMENT_CHECK_LOGS, ref => ref.orderBy('createdAt', 'desc').limit(20000))
+        .get()
+        .toPromise();
+      if (!snap || snap.empty) {
+        alert('Chưa có dữ liệu Shipment Check trên hệ thống.');
+        return;
+      }
+      const rows: object[] = [];
+      const chronological = [...snap.docs].reverse();
+      chronological.forEach((doc, i) => {
+        const d = doc.data() as any;
+        const createdAt = d.createdAt;
+        rows.push({
+          No: i + 1,
+          'Thời gian': this.formatShipmentCheckLogDate(createdAt),
+          Shipment: d.shipmentCode ?? '',
+          'Mã quét': d.scannedRaw ?? '',
+          'Kết quả': d.result === 'ok' ? 'ĐÚNG' : 'SAI',
+          'Pallet khớp': d.matchedPalletCode ?? ''
+        });
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Shipment Check');
+      const stamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Shipment_Check_Lich_su_${stamp}.xlsx`);
+      alert(`Đã tải ${rows.length} dòng lịch sử Shipment Check.`);
+    } catch (e: any) {
+      console.error('downloadShipmentCheckHistoryExcel', e);
+      const msg = e?.code === 'failed-precondition'
+        ? 'Cần tạo index Firestore cho collection shipment-check-logs (createdAt). Xem Console.'
+        : (e?.message || 'Lỗi không xác định');
+      alert('Không tải được lịch sử: ' + msg);
+    }
   }
 
   onShipmentCheckScanInput(event: KeyboardEvent): void {
@@ -2685,5 +2839,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.shipmentCheckLastResult = null;
     this.shipmentCheckLastScanned = '';
     this.cdr.detectChanges();
+    this.focusShipmentCheckScanInput();
   }
 }

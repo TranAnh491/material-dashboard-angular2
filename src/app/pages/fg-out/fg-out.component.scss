@@ -386,10 +386,12 @@ tr.drag-over {
 }
 
 .carton-cell {
-  min-width: 90px;
+  min-width: 78px; // col ~60px +30%
+  max-width: 104px;
 }
 .stock-cell {
-  min-width: 55px;
+  min-width: 78px;
+  max-width: 104px;
   text-align: center;
   color: #2196F3;
   font-weight: 500;
@@ -634,9 +636,34 @@ tr.pallet-even td {
   width: 100%;
   font-family: $fg-font-family;
   font-size: $fg-font-size-base;
-  min-width: 1500px;
+  min-width: 1614px; // bảng tối thiểu (cột Xóa 84px)
   position: relative;
-  
+
+  // Cột Carton (13) và Tồn kho (15): rộng thêm ~30%, bỏ trần 80px mặc định
+  thead tr:first-child th:nth-child(13),
+  tbody tr td.carton-cell {
+    min-width: 78px;
+    max-width: 104px;
+  }
+  thead tr:first-child th:nth-child(15),
+  tbody tr td.stock-cell {
+    min-width: 78px;
+    max-width: 104px;
+  }
+
+  // Vị trí (16): +40% so với 60px (max ~120px×1.4)
+  thead tr:first-child th:nth-child(16),
+  tbody tr td.location-cell {
+    min-width: 84px;
+    max-width: 168px;
+  }
+  // Xóa (22): gấp đôi so với 42px → 84px
+  thead tr:first-child th:nth-child(22),
+  tbody tr td.action-cell {
+    min-width: 84px;
+    max-width: 112px;
+  }
+
   thead {
     position: sticky !important;
     top: 0 !important;
@@ -856,14 +883,14 @@ tr.pallet-even td {
   max-width: 158px !important;
 }
 
-// Location cell styling
+// Location cell styling (+40% so với 80×120px)
 .location-cell {
   background: #ffffff !important;
   color: #000000;
   font-weight: normal;
   text-align: center;
-  min-width: 80px;
-  max-width: 120px;
+  min-width: 84px;
+  max-width: 168px;
   
   .location-display {
     display: inline-block;
@@ -873,7 +900,7 @@ tr.pallet-even td {
     border-radius: 2px;
     font-size: 10px;
     color: #333333;
-    min-width: 60px;
+    min-width: 84px;
     text-align: center;
   }
 }

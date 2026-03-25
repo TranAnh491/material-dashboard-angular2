@@ -63,6 +63,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   showTimeRangeDialog: boolean = false;
   startDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   endDate: Date = new Date();
+
+  /** Popup chọn tháng (nút Hiện tất cả) — giá trị input type="month": YYYY-MM */
+  showMonthViewDialog: boolean = false;
+  monthPickerValue: string = '';
   
   // Show/hide hidden shipments
   showHidden: boolean = false;
@@ -141,10 +145,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Fix date format issues - use proper date initialization
-    this.startDate = new Date('2020-01-01');
-    this.endDate = new Date('2030-12-31');
-    
+    const now = new Date();
+    this.setDateRangeToMonth(now.getFullYear(), now.getMonth());
+
     // Load dữ liệu - shipments + FG Check dùng realtime để luôn khớp (vd: shipment 5176)
     this.loadShipmentsFromFirebase();
     this.loadCustomerMapping();
@@ -391,10 +394,103 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return map[status] || 'status-default';
   }
 
+  /** Đặt khoảng Từ–Đến = cả tháng (theo CS Date / requestDate khi lọc). */
+  private setDateRangeToMonth(year: number, monthIndex0: number): void {
+    this.startDate = new Date(year, monthIndex0, 1);
+    this.endDate = new Date(year, monthIndex0 + 1, 0, 23, 59, 59, 999);
+  }
+
+  openMonthViewDialog(): void {
+    const d = this.startDate;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    this.monthPickerValue = `${y}-${m}`;
+    this.showMonthViewDialog = true;
+  }
+
+  applyMonthViewFilter(): void {
+    const v = (this.monthPickerValue || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(v)) {
+      alert('Vui lòng chọn tháng.');
+      return;
+    }
+    const [ys, ms] = v.split('-');
+    const year = parseInt(ys, 10);
+    const monthIndex0 = parseInt(ms, 10) - 1;
+    if (monthIndex0 < 0 || monthIndex0 > 11 || year < 1990 || year > 2100) {
+      alert('Tháng hoặc năm không hợp lệ.');
+      return;
+    }
+    this.setDateRangeToMonth(year, monthIndex0);
+    this.applyFilters();
+    this.showMonthViewDialog = false;
+  }
+
+  closeMonthViewDialog(): void {
+    this.showMonthViewDialog = false;
+  }
+
   // Time range filter
   applyTimeRangeFilter(): void {
     this.applyFilters();
     this.showTimeRangeDialog = false;
+  }
+
+  /** Excel: cùng cột với Export hiện tại (dùng cho export màn hình + tải toàn bộ lịch sử). */
+  private buildShipmentExportRows(shipments: ShipmentItem[]): object[] {
+    return shipments.map((shipment, index) => ({
+      'No': index + 1,
+      'Shipment': shipment.shipmentCode,
+      'Mã TP': shipment.materialCode,
+      'Mã Khách': shipment.customerCode,
+      'Lượng Xuất': shipment.quantity,
+      'PO Ship': shipment.poShip,
+      'Carton': shipment.carton,
+      'QTYBOX': shipment.qtyBox,
+      'Odd': shipment.odd,
+      'Tồn kho': shipment.inventory || 0,
+      'FWD': shipment.shipMethod,
+      'Packing': shipment.packing || 'Pallet',
+      'Qty Pallet': shipment.qtyPallet || 0,
+      'Push': shipment.push ? 'Yes' : 'No',
+      'PushNo': shipment.pushNo,
+      'Status': shipment.status,
+      'CS Date': this.formatDateForExport(shipment.requestDate),
+      'Full Date': this.formatDateForExport(shipment.fullDate),
+      'Dispatch Date': this.formatDateForExport(shipment.actualShipDate),
+      'Ngày chuẩn bị': shipment.dayPre,
+      'Ghi chú': shipment.notes
+    }));
+  }
+
+  /** Tải Excel toàn bộ shipment đã load (mọi tháng, kể cả đã ẩn). */
+  downloadFullShipmentHistoryExcel(): void {
+    try {
+      if (!this.shipments.length) {
+        alert('Không có dữ liệu shipment.');
+        return;
+      }
+      const sorted = [...this.shipments].sort((a, b) => {
+        const ta = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+        const tb = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+        if (ta !== tb) return ta - tb;
+        const sc = String(a.shipmentCode || '').localeCompare(String(b.shipmentCode || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        });
+        if (sc !== 0) return sc;
+        return String(a.materialCode || '').localeCompare(String(b.materialCode || ''));
+      });
+      const exportData = this.buildShipmentExportRows(sorted);
+      const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
+      const wb: XLSX.WorkBook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Lịch sử');
+      const stamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Shipment_Lich_su_toan_bo_${stamp}.xlsx`);
+    } catch (error) {
+      console.error('downloadFullShipmentHistoryExcel:', error);
+      alert('Lỗi khi tải file. Vui lòng thử lại.');
+    }
   }
 
   // Add shipment
@@ -2165,29 +2261,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Export to Excel
   exportToExcel(): void {
     try {
-      const exportData = this.filteredShipments.map(shipment => ({
-        'No': this.filteredShipments.indexOf(shipment) + 1,
-        'Shipment': shipment.shipmentCode,
-        'Mã TP': shipment.materialCode,
-        'Mã Khách': shipment.customerCode,
-        'Lượng Xuất': shipment.quantity,
-        'PO Ship': shipment.poShip,
-        'Carton': shipment.carton,
-        'QTYBOX': shipment.qtyBox,
-        'Odd': shipment.odd,
-        'Tồn kho': shipment.inventory || 0,
-        'FWD': shipment.shipMethod,
-        'Packing': shipment.packing || 'Pallet',
-        'Qty Pallet': shipment.qtyPallet || 0,
-        'Push': shipment.push ? 'Yes' : 'No',
-        'PushNo': shipment.pushNo,
-        'Status': shipment.status,
-        'CS Date': this.formatDateForExport(shipment.requestDate),
-        'Full Date': this.formatDateForExport(shipment.fullDate),
-        'Dispatch Date': this.formatDateForExport(shipment.actualShipDate),
-        'Ngày chuẩn bị': shipment.dayPre,
-        'Ghi chú': shipment.notes
-      }));
+      const exportData = this.buildShipmentExportRows(this.filteredShipments);
 
       const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
       const wb: XLSX.WorkBook = XLSX.utils.book_new();

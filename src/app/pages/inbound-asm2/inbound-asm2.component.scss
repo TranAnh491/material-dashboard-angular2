@@ -893,6 +893,16 @@ iframe {
       font-weight: 600;
       color: #000000;
       font-family: Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .excel-header-tab-icon {
+        height: 28px;
+        width: auto;
+        object-fit: contain;
+        vertical-align: middle;
+      }
     }
   }
   

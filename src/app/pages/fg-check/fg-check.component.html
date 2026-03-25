@@ -401,6 +401,10 @@
         <i class="material-icons">description</i>
         <span>1. Tải báo cáo Check theo tháng</span>
       </button>
+      <button type="button" class="more-popup-item" (click)="downloadShipmentCheckHistoryExcel(); closeMorePopup()">
+        <i class="material-icons">local_shipping</i>
+        <span>Tải Shipment Check (lịch sử quét pallet)</span>
+      </button>
       <button type="button" class="more-popup-item" (click)="loadItemsFromFirebase(); closeMorePopup()">
         <i class="material-icons">refresh</i>
         <span>Refresh</span>
@@ -572,9 +576,10 @@
             <div class="sc-scan-input-wrap">
               <i class="material-icons sc-scan-icon">qr_code_scanner</i>
               <input type="text"
+                     id="fg-shipment-check-scan-input"
                      class="sc-scan-input"
                      [(ngModel)]="shipmentCheckScanInput"
-                     placeholder="Scan mã pallet..."
+                     placeholder="VD: 5330W1301 (Shipment+W+tuần+số pallet) hoặc mã pallet..."
                      (keyup)="onShipmentCheckScanInput($event)"
                      autocomplete="off"
                      style="text-transform:uppercase">

@@ -136,6 +136,13 @@
                       Add Shipment
                     </a>
                     <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="toggleShowHidden(); closeDropdown()"
+                       [class.active]="showHidden">
+                      <i class="material-icons">{{ showHidden ? 'visibility' : 'visibility_off' }}</i>
+                      {{ showHidden ? 'Đang hiện cả shipment đã ẩn' : 'Hiện shipment đã ẩn' }}
+                      <span *ngIf="getHiddenShipmentsCount() > 0">({{ getHiddenShipmentsCount() }})</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
                       <i class="material-icons">file_download</i>
                       Export to Excel
@@ -195,16 +202,20 @@
                   Tổng thùng (Carton): <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
                 </div>
                 
-                <!-- Show Hidden Button -->
-                <button class="btn" 
-                        [class.btn-primary]="showHidden"
-                        [class.btn-outline-secondary]="!showHidden"
-                        type="button" 
-                        (click)="toggleShowHidden()"
-                        [title]="showHidden ? 'Đang hiện tất cả (' + getHiddenShipmentsCount() + ' đã ẩn)' : 'Hiện các shipment đã ẩn (' + getHiddenShipmentsCount() + ')'">
-                  <i class="material-icons">{{showHidden ? 'visibility' : 'visibility_off'}}</i>
-                  {{showHidden ? 'Đang hiện tất cả' : 'Hiện tất cả'}} 
-                  <span *ngIf="getHiddenShipmentsCount() > 0">({{getHiddenShipmentsCount()}})</span>
+                <!-- Chọn tháng xem (lọc theo CS Date trong tháng) + tải toàn bộ lịch sử -->
+                <button class="btn btn-outline-secondary"
+                        type="button"
+                        (click)="openMonthViewDialog()"
+                        title="Chọn tháng để chỉ hiển thị shipment có CS Date trong tháng đó">
+                  <i class="material-icons">calendar_view_month</i>
+                  Hiện tất cả
+                </button>
+                <button class="btn btn-outline-primary"
+                        type="button"
+                        (click)="downloadFullShipmentHistoryExcel()"
+                        title="Tải Excel toàn bộ shipment đã tải từ hệ thống (mọi tháng)">
+                  <i class="material-icons">cloud_download</i>
+                  Tải lịch sử
                 </button>
                 
                 <!-- Schedules Button -->
@@ -492,6 +503,44 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chọn tháng hiển thị -->
+<div class="custom-modal" [class.show]="showMonthViewDialog" [style.display]="showMonthViewDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeMonthViewDialog()"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">event</i>
+        Chọn tháng hiển thị
+      </h5>
+      <button type="button" class="close-btn" (click)="closeMonthViewDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted" style="margin-bottom: 12px; font-size: 13px;">
+        Chỉ hiển thị các dòng có <strong>CS Date</strong> nằm trong tháng đã chọn (cùng quy tắc với ô Từ / Đến).
+      </p>
+      <div class="input-group">
+        <label class="input-label">Tháng</label>
+        <input type="month"
+               class="date-input"
+               [(ngModel)]="monthPickerValue"
+               (click)="$any($event.target).showPicker?.()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeMonthViewDialog()">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="applyMonthViewFilter()">
+        <i class="material-icons">check</i>
+        Áp dụng
+      </button>
     </div>
   </div>
 </div>

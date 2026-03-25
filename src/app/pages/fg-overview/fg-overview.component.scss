@@ -14,6 +14,7 @@
   padding: 20px 20px 0;
   background: #ffffff;
   height: 100%;
+  box-sizing: border-box;
   font-family: Arial, sans-serif;
   position: relative;
   z-index: 11050;
@@ -21,6 +22,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 
   *,
   *::before,
@@ -230,19 +232,19 @@
 }
 
 // --- Bảng giống inventory-table ---
+// Không dùng height:0 (một số layout làm khung co về 0 → mất bảng). Giới hạn bằng max-height + flex để vừa lấp chỗ trống vừa có cuộn dọc.
 .table-container {
   background: #ffffff;
   border: 1px solid #000000;
   margin-bottom: 0;
   overflow-x: auto;
-  overflow-y: scroll;
-  max-height: none;
+  overflow-y: auto;
   position: relative;
   z-index: 1;
   flex: 1 1 auto;
-  min-height: 0;
-  height: 58vh;
-  max-height: 58vh;
+  min-height: 180px;
+  /* Trừ navbar + header + control bar + padding trang (~260px); giữ bảng trong viewport → thanh cuộn khi nhiều dòng */
+  max-height: calc(100vh - 56px - 260px);
   scrollbar-width: thin;
   scrollbar-color: #444 #f2f2f2;
 

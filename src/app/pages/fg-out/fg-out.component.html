@@ -19,7 +19,7 @@
                  class="custom-input search-input-uppercase" 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 placeholder="Shipment hoặc Mã TP">
+                 placeholder="4–5 ký tự: Shipment · ≥7 ký tự: Mã TP · không dùng 6 ký tự (30 ngày)">
         </div>
         <div class="shipment-box" *ngIf="filteredMaterials.length">
           <span class="shipment-box-label">Shipment:</span>
@@ -110,16 +110,16 @@
           <col style="width: 110px">
           <col style="width: 160px">
           <col style="width: 125px">
+          <col style="width: 78px">
           <col style="width: 60px">
-          <col style="width: 60px">
-          <col style="width: 60px">
-          <col style="width: 60px">
+          <col style="width: 78px">
+          <col style="width: 84px">
           <col style="width: 80px">
           <col style="width: 80px">
           <col style="width: 120px">
           <col style="width: 70px">
           <col style="width: 60px">
-          <col style="width: 30px">
+          <col style="width: 84px">
         </colgroup>
         <thead>
           <tr>
@@ -537,8 +537,61 @@
             <i class="material-icons">description</i>
             <span>Tải Template</span>
           </button>
+          <button class="popup-action-btn" (click)="openFgOutReportDialog(); closeMorePopup()">
+            <i class="material-icons">table_chart</i>
+            <span>Tải FG-OUT Report</span>
+          </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- FG-OUT Report: Excel theo khoảng ngày (dữ liệu cũ hơn 30 ngày màn hình) -->
+<div class="custom-modal" [class.show]="showFgOutReportDialog" [style.display]="showFgOutReportDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeFgOutReportDialog()"></div>
+  <div class="modal-container modal-date-range" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">table_chart</i>
+        FG-OUT Report
+      </h5>
+      <button type="button" class="close-btn" (click)="closeFgOutReportDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 13px; color: #555; margin-bottom: 12px;">
+        Màn hình chỉ load <strong>30 ngày gần nhất</strong>. Chọn khoảng ngày bên dưới để tải file Excel (toàn bộ dòng trong khoảng đó).
+      </p>
+      <div class="date-inputs">
+        <div class="input-group">
+          <label class="input-label">Từ ngày</label>
+          <mat-form-field appearance="outline" class="date-picker-field">
+            <input matInput [matDatepicker]="pickerReportStart" [(ngModel)]="fgReportStartDate" placeholder="dd/mm/yyyy">
+            <mat-datepicker-toggle matSuffix [for]="pickerReportStart"></mat-datepicker-toggle>
+            <mat-datepicker #pickerReportStart></mat-datepicker>
+          </mat-form-field>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Đến ngày</label>
+          <mat-form-field appearance="outline" class="date-picker-field">
+            <input matInput [matDatepicker]="pickerReportEnd" [(ngModel)]="fgReportEndDate" placeholder="dd/mm/yyyy">
+            <mat-datepicker-toggle matSuffix [for]="pickerReportEnd"></mat-datepicker-toggle>
+            <mat-datepicker #pickerReportEnd></mat-datepicker>
+          </mat-form-field>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeFgOutReportDialog()" [disabled]="fgReportDownloading">
+        <i class="material-icons">close</i>
+        Hủy
+      </button>
+      <button type="button" class="btn btn-apply" (click)="downloadFgOutReportExcel()" [disabled]="fgReportDownloading">
+        <i class="material-icons">{{ fgReportDownloading ? 'hourglass_empty' : 'download' }}</i>
+        {{ fgReportDownloading ? 'Đang tải...' : 'Tải Excel' }}
+      </button>
     </div>
   </div>
 </div>
@@ -575,12 +628,15 @@
           </mat-form-field>
         </div>
       </div>
+      <p class="time-range-hint" style="font-size: 12px; color: #666; margin: 8px 0 0 0;">
+        Chỉ lọc trong <strong>30 ngày</strong> đã tải. Dữ liệu cũ hơn: <strong>More → Tải FG-OUT Report</strong>.
+      </p>
       <!-- Nút chọn nhanh -->
       <div class="quick-range-btns">
         <button type="button" class="btn-quick-range" (click)="setQuickRange(7)">7 ngày</button>
         <button type="button" class="btn-quick-range" (click)="setQuickRange(14)">2 tuần</button>
         <button type="button" class="btn-quick-range" (click)="setQuickRange(30)">30 ngày</button>
-        <button type="button" class="btn-quick-range" (click)="setQuickRange(0)">Tất cả</button>
+        <button type="button" class="btn-quick-range" (click)="setQuickRange(0)">30 ngày tối đa</button>
       </div>
     </div>
     <div class="modal-footer">
