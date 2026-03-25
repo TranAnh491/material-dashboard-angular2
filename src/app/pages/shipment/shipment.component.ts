@@ -2539,9 +2539,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       </td>
       <td class="doc-meta-cell">
         <table class="doc-meta-table">
-          <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr>
-          <tr><td class="meta-label">Phiên bản</td><td>00</td></tr>
-          <tr><td class="meta-label">Ngày ban hành</td><td>05/03/2026</td></tr>
+          <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F01</td></tr>
+          <tr><td class="meta-label">Phiên bản</td><td>03</td></tr>
+          <tr><td class="meta-label">Ngày ban hành</td><td>24/03/2026</td></tr>
           <tr><td class="meta-label">Số Trang</td><td>01</td></tr>
         </table>
       </td>
@@ -2653,8 +2653,82 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
+  private getShipmentOrderPrintStorageKey(shipmentCode: string): string {
+    return `shipmentOrderPrintState:${String(shipmentCode || '').trim().toUpperCase()}`;
+  }
+
+  private getShipmentOrderPrintState(shipmentCode: string): { count: number; signature: string } {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return { count: 0, signature: '' };
+      const raw = window.localStorage.getItem(this.getShipmentOrderPrintStorageKey(shipmentCode));
+      if (!raw) return { count: 0, signature: '' };
+      const parsed = JSON.parse(raw);
+      return {
+        count: Number(parsed?.count) || 0,
+        signature: String(parsed?.signature || '')
+      };
+    } catch {
+      return { count: 0, signature: '' };
+    }
+  }
+
+  private setShipmentOrderPrintState(shipmentCode: string, next: { count: number; signature: string }): void {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      window.localStorage.setItem(
+        this.getShipmentOrderPrintStorageKey(shipmentCode),
+        JSON.stringify({ count: Number(next.count) || 0, signature: String(next.signature || '') })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  private stableStringify(value: any): string {
+    const seen = new WeakSet();
+    const normalize = (v: any): any => {
+      if (v === null || v === undefined) return v;
+      if (typeof v !== 'object') return v;
+      if (seen.has(v)) return '[Circular]';
+      seen.add(v);
+      if (Array.isArray(v)) return v.map(normalize);
+      const out: any = {};
+      Object.keys(v).sort().forEach(k => {
+        out[k] = normalize(v[k]);
+      });
+      return out;
+    };
+    return JSON.stringify(normalize(value));
+  }
+
+  private computeShipmentOrderSignature(shipmentCode: string, shipmentRow: any, items: any[]): string {
+    const payload = {
+      shipmentCode: String(shipmentCode || '').trim().toUpperCase(),
+      shipment: {
+        packing: String(shipmentRow?.packing || ''),
+        customerCode: String(shipmentRow?.customerCode || ''),
+        factory: String(shipmentRow?.factory || ''),
+        importDate: shipmentRow?.importDate ? new Date(shipmentRow.importDate).toISOString() : '',
+        actualShipDate: shipmentRow?.actualShipDate ? new Date(shipmentRow.actualShipDate).toISOString() : ''
+      },
+      items: (items || []).map((it: any) => ({
+        materialCode: String(it?.materialCode || ''),
+        quantity: Number(it?.quantity) || 0,
+        carton: Number(it?.carton) || 0,
+        poShip: String(it?.poShip || ''),
+        qtyPallet: Number(it?.qtyPallet) || 0,
+        notes: String(it?.notes || '')
+      })).sort((a: any, b: any) => {
+        const ak = `${a.materialCode}|${a.poShip}|${a.carton}|${a.quantity}|${a.qtyPallet}`;
+        const bk = `${b.materialCode}|${b.poShip}|${b.carton}|${b.quantity}|${b.qtyPallet}`;
+        return ak.localeCompare(bk);
+      })
+    };
+    return this.stableStringify(payload);
+  }
+
   /** Tạo HTML template Shipment Order (dùng cho in và xem mẫu). */
-  async buildShipmentOrderHtml(): Promise<string> {
+  async buildShipmentOrderHtml(options: { incrementPrintCount?: boolean } = {}): Promise<string> {
     if (!this.selectedShipmentForPrint) return '';
     const s = this.selectedShipmentForPrint;
     const shipmentCode = String(s.shipmentCode || '').trim().toUpperCase();
@@ -2681,6 +2755,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const dispatchDate = fmtDate(s.actualShipDate);
     const currentDate = new Date().toLocaleDateString('vi-VN');
     const factory = (s as any).factory || 'ASM1';
+
+    // Print count + change detection (stored by shipmentCode)
+    const signature = this.computeShipmentOrderSignature(shipmentCode, s, allItemsInShipment);
+    const prevState = this.getShipmentOrderPrintState(shipmentCode);
+    const hasPrevSignature = Boolean(prevState.signature);
+    const isContentChanged = hasPrevSignature && prevState.signature !== signature;
+    const printCount = (options.incrementPrintCount ? (prevState.count + 1) : prevState.count) || 0;
+    if (options.incrementPrintCount) {
+      this.setShipmentOrderPrintState(shipmentCode, { count: printCount, signature });
+    }
 
     const logoUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
       ? window.location.origin + '/assets/img/logo.png'
@@ -2766,24 +2850,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         });
 
         pklHtml = `
-          <table class="p3-top-header">
-            <tr>
-              <td class="p3-logo-cell">${logoUrl ? `<img src="${logoUrl}" alt="AIRSPEED">` : ''}</td>
-              <td class="p3-title-cell">
-                <div class="p3-title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
-                <div style="height:8px"></div>
-                <div class="p3-title-line2">PACKING LIST - BẢNG KÊ XUẤT HÀNG</div>
-              </td>
-              <td class="p3-doc-meta-cell">
-                <table class="p3-doc-meta-table">
-                  <tr><td class="p3-meta-label">Mã quản lý</td><td>WH-WI0005/F07</td></tr>
-                  <tr><td class="p3-meta-label">Phiên bản</td><td>00</td></tr>
-                  <tr><td class="p3-meta-label">Ngày ban hành</td><td>05/03/2026</td></tr>
-                  <tr><td class="p3-meta-label">Số Trang</td><td>01</td></tr>
-                </table>
-              </td>
-            </tr>
-          </table>
           <div class="p3-info-boxes">
             <div class="p3-info-box">
               <div class="p3-info-box-label">SHIPMENT</div>
@@ -2851,17 +2917,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     html, body { border: none !important; outline: none !important; font-family: Arial, sans-serif; font-size: 13px; color: #000; }
     body { padding: 8mm; max-width: 100%; width: 100%; margin: 0; box-sizing: border-box; }
     
-    .header-box { border: 2px solid #000; padding: 14px; margin-bottom: 16px; }
-    .header-row { display: flex; justify-content: space-between; align-items: flex-start; }
-    .header-left { display: flex; align-items: center; gap: 16px; text-align: left; }
-    .header-logo { height: 56px; width: auto; max-width: 180px; object-fit: contain; }
-    .header-left-text .title { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
-    .header-left-text .shipment-no { font-size: 14px; }
-    .header-left-text .shipment-no strong { margin-right: 6px; }
-    .header-right { text-align: right; }
-    .header-right .company { font-size: 15px; font-weight: bold; margin-bottom: 8px; white-space: nowrap; }
-    .header-right .date-label { font-size: 14px; }
-    .header-right .date-label strong { margin-right: 6px; }
+    /* Top header table (match PACKING LIST) */
+    .top-header{width:100%;border-collapse:collapse;margin-bottom:16px}
+    .top-header td{border:1px solid #000;padding:8px;vertical-align:middle}
+    .logo-cell{width:200px;min-width:200px;text-align:center}
+    .logo-cell img{max-width:100%;max-height:70px;object-fit:contain}
+    .title-cell{text-align:center}
+    .title-line1{font-size:17px;font-weight:bold;margin-bottom:10px}
+    .title-line2{font-size:13px;text-transform:uppercase}
+    .doc-meta-cell{width:200px;min-width:200px}
+    .doc-meta-table{width:100%;border-collapse:collapse;font-size:11px}
+    .doc-meta-table td{border:1px solid #000;padding:4px 6px}
+    .meta-label{background:#f5f5f5;width:45%}
     
     .customer-warehouse-row { display: flex; gap: 20px; margin-bottom: 12px; }
     .customer-warehouse-row .cw-box { flex: 1; border: 2px solid #000; padding: 12px; background: #f9f9f9; }
@@ -2892,6 +2959,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     .notes-box-top { border: 2px solid #666; padding: 10px; min-height: 50px; background: #fff; white-space: pre-wrap; font-size: 12px; color: #000; }
     .notes-box-top-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #000; text-transform: uppercase; }
+    .print-count-row { display: flex; gap: 12px; align-items: stretch; }
+    .print-count-box { flex: 0 0 180px; border: 2px solid #000; padding: 10px; background: #f9f9f9; }
+    .print-count-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
+    .print-count-value { font-size: 16px; font-weight: bold; }
+    .print-change-note { flex: 1; border: 2px solid #000; padding: 10px; background: #fff3cd; color: #000; font-size: 12px; display: flex; align-items: center; }
     .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
     .humidity-box-label { font-size: 12px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
     .humidity-box-input { width: 100%; max-width: 200px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
@@ -2976,22 +3048,23 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   </style>
 </head>
 <body>
-  <!-- Phần đầu trong box có viền -->
-  <div class="header-box">
-    <div class="header-row">
-      <div class="header-left">
-        ${logoUrl ? `<img src="${logoUrl}" alt="Airspeed" class="header-logo" onerror="this.style.display=\'none\'">` : ''}
-        <div class="header-left-text">
-          <div class="title">SHIPMENT ORDER</div>
-          <div class="shipment-no"><strong>Shipment No :</strong> ${this.escapeHtml(shipmentCode)}</div>
-        </div>
-      </div>
-      <div class="header-right">
-        <div class="company">AIRSPEED MANUFACTURING VIỆT NAM</div>
-        <div class="date-label"><strong>Ngày nhận thông tin / Date of information received</strong> ${importDate}</div>
-      </div>
-    </div>
-  </div>
+  <table class="top-header">
+    <tr>
+      <td class="logo-cell">${logoUrl ? `<img src="${logoUrl}" alt="AIRSPEED" onerror="this.style.display='none'">` : ''}</td>
+      <td class="title-cell">
+        <div class="title-line1">AIRSPEED MANUFACTURING VIỆT NAM</div>
+        <div class="title-line2">SHIPMENT ORDER</div>
+      </td>
+      <td class="doc-meta-cell">
+        <table class="doc-meta-table">
+          <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0005/F01</td></tr>
+          <tr><td class="meta-label">Phiên bản</td><td>03</td></tr>
+          <tr><td class="meta-label">Ngày ban hành</td><td>24/03/2026</td></tr>
+          <tr><td class="meta-label">Số Trang</td><td>01</td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
   
   <div class="customer-warehouse-row">
     <div class="cw-box">
@@ -3031,6 +3104,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       </div>
       <div class="notes-box-top-label">Ghi chú / Notes</div>
       <div class="notes-box-top">${allNotes ? this.escapeHtml(allNotes) : ''}</div>
+      <div style="height:10px"></div>
+      <div class="print-count-row">
+        <div class="print-count-box">
+          <div class="print-count-label">Lượt in</div>
+          <div class="print-count-value">${printCount}</div>
+        </div>
+        ${isContentChanged ? `<div class="print-change-note">Đã thay đổi nội dung so với lần trước</div>` : ''}
+      </div>
     </div>
   </div>
   
@@ -3058,7 +3139,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   </div>
   
   <div class="inspection-section">
-    <h4>NỘI DUNG KIỂM TRA 7 ĐIỂM (Nếu Cont) / 7-POINT INSPECTION (If Container) (không áp dụng cho xe máy)</h4>
+    <h4>NỘI DUNG KIỂM TRA 7 ĐIỂM / 7-POINT INSPECTION (If Container) (không áp dụng cho xe máy)</h4>
     <table class="inspection-table">
       <thead>
         <tr>
@@ -3190,7 +3271,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       alert('❌ Không có shipment được chọn!');
       return;
     }
-    const html = await this.buildShipmentOrderHtml();
+    const html = await this.buildShipmentOrderHtml({ incrementPrintCount: true });
     if (!html) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
