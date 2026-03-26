@@ -81,6 +81,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Dropdown state
   isDropdownOpen = false;
+
+  // Factory selection (ASM1/ASM2) - required before using Location tab features
+  showFactorySelect = true;
+  selectedFactory: 'ASM1' | 'ASM2' | null = null;
   
   // New item form
   newItem: Partial<LocationItem> = {
@@ -91,6 +95,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Auto STT counter
   nextStt = 1;
+
+  selectFactory(factory: 'ASM1' | 'ASM2') {
+    this.selectedFactory = factory;
+    this.showFactorySelect = false;
+    // Clear lookup state when switching factory
+    this.clearLocationLookup();
+    this.applyFilters();
+  }
   
   // Edit mode
   editingItem: LocationItem | null = null;
@@ -124,7 +136,180 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   filteredCustomerCodes: CustomerCode[] = [];
   customerSearchTerm = '';
   showCustomerModal = false;
-  
+
+  // Rule (materialCodePrefix(3 chars) -> allowed destination location prefixes)
+  showRuleModal = false;
+  ruleMaterialCodeInput = '';
+  ruleDestinationLocationInput = '';
+  rules: { materialCode: string; destinationLocationPrefixes: string[] }[] = [];
+  isTargetLocationForced = false;
+  forcedAllowedDestinationPrefixes: string[] = [];
+  private readonly RULES_STORAGE_KEY = 'location:material-to-location-rules:v1';
+
+  /**
+   * Chuẩn hoá mã nguyên liệu:
+   * - Xoá whitespace, uppercase
+   * - Cắt tối đa 7 ký tự (scanner/QR đang lấy 7 ký tự đầu)
+   *
+   * Lưu ý: matching rule sẽ dựa trên độ dài key (4 hoặc 7).
+   */
+  private normalizeMaterialCodeForRule(code: string): string {
+    return (code || '').replace(/\s/g, '').toUpperCase().substring(0, 7);
+  }
+
+  openRuleModal(): void {
+    this.showRuleModal = true;
+    this.ruleMaterialCodeInput = '';
+    this.ruleDestinationLocationInput = '';
+  }
+
+  closeRuleModal(): void {
+    this.showRuleModal = false;
+  }
+
+  private loadRulesFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(this.RULES_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        this.rules = parsed
+          .filter(r => r && typeof r.materialCode === 'string')
+          .map(r => {
+            const materialCode = this.normalizeMaterialCodeForRule(r.materialCode);
+
+            // Backward compatible:
+            // - old shape: { destinationLocation: "H,J,K" } or "H"
+            // - new shape: { destinationLocationPrefixes: ["H","J","K"] }
+            const prefixes: string[] = [];
+            if (Array.isArray(r.destinationLocationPrefixes)) {
+              r.destinationLocationPrefixes.forEach((p: any) => {
+                const formatted = this.formatViTriInput(String(p || ''));
+                if (formatted && this.validateViTriInput(formatted)) prefixes.push(formatted);
+              });
+            } else if (typeof r.destinationLocation === 'string') {
+              String(r.destinationLocation)
+                .split(',')
+                .map(s => this.formatViTriInput(s))
+                .filter(s => s && this.validateViTriInput(s))
+                .forEach(s => prefixes.push(s));
+            }
+
+            return { materialCode, destinationLocationPrefixes: prefixes };
+          })
+          .filter(r => r.materialCode && r.destinationLocationPrefixes.length > 0);
+      }
+    } catch (e) {
+      console.warn('Failed to load rules from storage:', e);
+    }
+  }
+
+  private saveRulesToStorage(): void {
+    try {
+      localStorage.setItem(this.RULES_STORAGE_KEY, JSON.stringify(this.rules));
+    } catch (e) {
+      console.warn('Failed to save rules to storage:', e);
+    }
+  }
+
+  upsertRuleFromInputs(): void {
+    const cleaned = (this.ruleMaterialCodeInput || '').replace(/\s/g, '').toUpperCase();
+    const normalized = this.normalizeMaterialCodeForRule(cleaned);
+    // matching rule chỉ hỗ trợ key độ dài 4 hoặc 7
+    const keyLen = normalized.length;
+    const materialCode = normalized;
+    const destinationPrefixes = (this.ruleDestinationLocationInput || '')
+      .split(',')
+      .map(s => this.formatViTriInput(s))
+      .filter(s => s && this.validateViTriInput(s));
+
+    if (!materialCode || (keyLen !== 4 && keyLen !== 7)) {
+      alert('Vui lòng nhập mã nguyên liệu');
+      return;
+    }
+    if (!destinationPrefixes || destinationPrefixes.length === 0) {
+      alert('Vui lòng nhập danh sách prefix vị trí đích (ví dụ: H,J,K)');
+      return;
+    }
+
+    const existingIdx = this.rules.findIndex(r => r.materialCode === materialCode);
+    const next = { materialCode, destinationLocationPrefixes: destinationPrefixes };
+
+    if (existingIdx >= 0) {
+      this.rules[existingIdx] = next;
+    } else {
+      this.rules.push(next);
+    }
+
+    this.rules = [...this.rules].sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    this.saveRulesToStorage();
+
+    // Nếu đang ở bước chọn vị trí cho modal cất -> ép theo rule vừa thêm
+    this.applyLocationRuleToSelectedMaterial();
+
+    alert('✅ Đã lưu rule');
+    this.ruleMaterialCodeInput = '';
+    this.ruleDestinationLocationInput = '';
+  }
+
+  deleteRule(rule: { materialCode: string; destinationLocationPrefixes: string[] }): void {
+    if (!rule?.materialCode) return;
+    if (!confirm(`Xóa rule cho mã ${rule.materialCode}?`)) return;
+    this.rules = this.rules.filter(r => r.materialCode !== rule.materialCode);
+    this.saveRulesToStorage();
+    this.applyLocationRuleToSelectedMaterial();
+  }
+
+  private applyLocationRuleToSelectedMaterial(): void {
+    if (!this.selectedMaterialForStore) {
+      this.isTargetLocationForced = false;
+      this.forcedAllowedDestinationPrefixes = [];
+      return;
+    }
+
+    const scannedCode7 = this.normalizeMaterialCodeForRule(this.selectedMaterialForStore.materialCode);
+
+    // Ưu tiên exact match cho key 7 ký tự
+    const exactRule = this.rules.find(
+      r => r.materialCode.length === 7 && r.materialCode === scannedCode7
+    );
+    if (exactRule) {
+      this.isTargetLocationForced = true;
+      this.forcedAllowedDestinationPrefixes = exactRule.destinationLocationPrefixes || [];
+      return;
+    }
+
+    // Nếu không có exact 7, áp dụng rule nhóm theo prefix (ưu tiên rule dài hơn)
+    // - Rule dài 4 ký tự sẽ match theo 4 ký tự đầu
+    // - Nếu có rule cũ dài <4 thì vẫn có thể match (tùy dữ liệu đã lưu)
+    const prefixRules = this.rules
+      .filter(r => r.materialCode.length < 7)
+      .filter(r => scannedCode7.startsWith(r.materialCode));
+
+    // Nếu có nhiều rule trùng prefix 4 (hiếm), lấy rule cụ thể nhất.
+    // Hiện tại tất cả prefix rule đều dài 4, nhưng vẫn giữ sort để an toàn.
+    const matchedRule = prefixRules.sort((a, b) => b.materialCode.length - a.materialCode.length)[0];
+    this.isTargetLocationForced = !!matchedRule;
+    this.forcedAllowedDestinationPrefixes = matchedRule?.destinationLocationPrefixes || [];
+
+    if (this.isTargetLocationForced) {
+      const allowedSuggested = this.suggestedLocations.filter(loc => this.isDestinationAllowed(loc));
+      // "Ép" theo rule: chỉ giữ giá trị hợp lệ nếu đang chọn; còn lại chọn option phù hợp đầu tiên
+      if (!this.selectedTargetLocation || !this.isDestinationAllowed(this.selectedTargetLocation)) {
+        this.selectedTargetLocation = allowedSuggested[0] || '';
+      }
+    } else {
+      this.forcedAllowedDestinationPrefixes = [];
+    }
+  }
+
+  isDestinationAllowed(location: string): boolean {
+    const formatted = this.formatViTriInput(location || '');
+    if (!formatted) return false;
+    if (!this.isTargetLocationForced) return true;
+    return this.forcedAllowedDestinationPrefixes.some(prefix => formatted.startsWith(prefix));
+  }
+
   // Dời Kệ (Move Shelf) Modal
   showMoveShelfModal = false;
   moveShelfStep: 'scan-location' | 'select-items' | 'scan-new-location' | 'complete' = 'scan-location';
@@ -167,9 +352,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnInit() {
+    // Require choosing ASM1/ASM2 when opening Location tab
+    this.showFactorySelect = true;
+    this.selectedFactory = null;
+
     this.checkPermissions();
     this.loadLocationData();
     this.loadCustomerCodes();
+    this.loadRulesFromStorage();
     
     // Close dropdown when clicking outside
     document.addEventListener('click', () => {
@@ -269,7 +459,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const formattedTerm = this.formatViTriInput(this.searchTerm.trim());
       const searchLower = formattedTerm.toLowerCase();
       items = items.filter(item => item.viTri.toLowerCase().includes(searchLower));
-      this.lookupInventoryByLocation(formattedTerm);
+      // Only lookup inventory after factory is chosen
+      if (this.selectedFactory) this.lookupInventoryByLocation(formattedTerm);
     } else {
       this.clearLocationLookup();
     }
@@ -324,6 +515,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async lookupInventoryByLocation(locationTerm: string): Promise<void> {
+    if (!this.selectedFactory) {
+      this.clearLocationLookup();
+      return;
+    }
     // Only lookup when the location exists (avoid unnecessary queries on partial typing)
     const normalized = this.normalizeLocationCode(locationTerm);
     const matchedLocation = this.locationItems.find(
@@ -342,7 +537,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     try {
       const snapshot = await this.firestore
-        .collection('inventory-materials', ref => ref.where('location', '==', matchedLocation))
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory).where('location', '==', matchedLocation)
+        )
         .get()
         .toPromise();
 
@@ -1026,12 +1223,21 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return item.id || index.toString();
   }
 
+  trackByRule(index: number, item: { materialCode: string }): string {
+    return item.materialCode || index.toString();
+  }
+
   trackByFG(index: number, item: FGLocation): string {
     return item.id || index.toString();
   }
 
   // Store Material (Cất NVL) Functions
   openStoreMaterialModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
     this.showStoreMaterialModal = true;
     this.storeMaterialStep = 'scan';
     this.storeMaterialQRInput = '';
@@ -1040,6 +1246,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectedMaterialForStore = null;
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
+    this.isTargetLocationForced = false;
+    this.forcedAllowedDestinationPrefixes = [];
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
@@ -1077,12 +1285,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectedMaterialForStore = null;
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
+    this.isTargetLocationForced = false;
+    this.forcedAllowedDestinationPrefixes = [];
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
   }
 
   async processStoreMaterialQR(): Promise<void> {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
     const qrCode = this.storeMaterialQRInput.trim();
     if (!qrCode) {
       alert('⚠️ Vui lòng nhập hoặc scan mã QR');
@@ -1137,7 +1352,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // Tìm tất cả materials có materialCode này trong inventory-materials (để lấy các vị trí khác)
       const allMaterialsSnapshot = await this.firestore
         .collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
+          ref.where('factory', '==', this.selectedFactory)
              .where('materialCode', '==', materialCode)
         )
         .get()
@@ -1242,6 +1457,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       
       // Clear và focus vào input để sẵn sàng scan/nhập vị trí mới
       this.selectedTargetLocation = '';
+      this.applyLocationRuleToSelectedMaterial();
       this.storeMaterialQRInput = '';
       this.isSearchingMaterial = false;
       
@@ -1271,6 +1487,26 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     try {
+      // Normalize and validate target location
+      const targetFormatted = this.formatViTriInput(this.selectedTargetLocation);
+      if (!targetFormatted || !this.validateViTriInput(targetFormatted)) {
+        alert('⚠️ Vị trí đích không hợp lệ');
+        return;
+      }
+
+      // Apply rule constraint (prefix match)
+      if (this.isTargetLocationForced) {
+        const ok = this.forcedAllowedDestinationPrefixes.some(prefix =>
+          targetFormatted.startsWith(prefix)
+        );
+        if (!ok) {
+          alert(`⚠️ Theo rule, vị trí đích phải bắt đầu bằng: ${this.forcedAllowedDestinationPrefixes.join(', ')}`);
+          return;
+        }
+      }
+
+      this.selectedTargetLocation = targetFormatted;
+
       // Cập nhật location trong Firebase
       await this.firestore
         .collection('inventory-materials')
@@ -1621,6 +1857,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ==================== BULK CHANGE LOCATION (ASM1) METHODS ====================
   openBulkChangeLocationModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
     this.showBulkChangeLocationModal = true;
     this.bulkStep = 'scan-location';
     this.bulkScanLocationInput = '';
@@ -1654,6 +1895,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async processBulkAsm1Location(): Promise<void> {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
     // Bulk ASM1: location có thể chứa prefix "IQC+" nên không dùng formatViTriInput (vì hàm đó loại bỏ dấu '+')
     const raw = (this.bulkScanLocationInput || '').trim();
     const loc = raw
@@ -1661,7 +1907,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .toUpperCase()
       .replace(/[^A-Z0-9.\-()+]/g, '');
     if (!loc) {
-      alert('⚠️ Vui lòng scan vị trí (ASM1)');
+      alert(`⚠️ Vui lòng scan vị trí (${this.selectedFactory})`);
       return;
     }
 
@@ -1674,7 +1920,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const queryByLocation = async (location: string) => {
         return await this.firestore
           .collection('inventory-materials', ref =>
-            ref.where('factory', '==', 'ASM1').where('location', '==', location)
+            ref.where('factory', '==', this.selectedFactory).where('location', '==', location)
           )
           .get()
           .toPromise();
@@ -1728,7 +1974,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.bulkItems = items;
       this.bulkStep = 'select-items';
     } catch (error) {
-      console.error('❌ Error loading ASM1 items by location:', error);
+      console.error(`❌ Error loading ${this.selectedFactory} items by location:`, error);
       alert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');
     } finally {
       this.isBulkLoading = false;
@@ -1840,7 +2086,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
         const updateData: any = {
           lastModified: new Date(),
-          modifiedBy: 'bulk-change-location-asm1'
+          modifiedBy: `bulk-change-location-${(this.selectedFactory || 'unknown').toLowerCase()}`
         };
         if (!this.skipBulkNewLocation || !this.skipBulkNewPallet) {
           updateData.location = locationToSave;
