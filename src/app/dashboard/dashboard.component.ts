@@ -89,6 +89,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       imd: string;
       stock: number;
       location: string;
+      iqcStatus?: string;
     }>;
   }> = [];
   iqcMaterialsLoading: boolean = false;
@@ -1293,6 +1294,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           imd: string;
           stock: number;
           location: string;
+          iqcStatus?: string;
         }>>();
 
         // Initialize map for each week
@@ -1394,6 +1396,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               if (existingIndex >= 0) {
                 // Update stock if already exists
                 weekMaterials[existingIndex].stock += stock;
+                weekMaterials[existingIndex].iqcStatus = iqcStatus;
               } else {
                 // Add new material
                 weekMaterials.push({
@@ -1401,7 +1404,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
                   poNumber: poNumber,
                   imd: imd,
                   stock: stock,
-                  location: 'IQC'
+                  location: 'IQC',
+                  iqcStatus: iqcStatus
                 });
               }
               

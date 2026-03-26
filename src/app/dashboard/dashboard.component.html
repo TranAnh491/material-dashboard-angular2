@@ -155,11 +155,11 @@
           <div class="iqc-week-box" 
                (click)="openIQCMaterialsModal()"
                style="cursor: pointer;"
-               title="Click để xem danh sách mã hàng IQC theo tuần">
+               title="Click để xem Putaway Staging Area">
             <div class="box-header">
               <h5>
                 <i class="material-icons" style="color: #ff9800;">inventory_2</i>
-                IQC Materials (8 Weeks)
+                Putaway Staging Area
               </h5>
             </div>
             
@@ -321,7 +321,7 @@
     <div class="modal-header">
       <h3>
         <i class="material-icons" style="color: #ff9800;">inventory_2</i>
-        Danh sách mã hàng IQC theo tuần
+        Putaway Staging Area
       </h3>
       <button class="close-btn" (click)="closeIQCMaterialsModal()">
         <i class="material-icons">close</i>
@@ -356,6 +356,7 @@
                   <th>Mã hàng</th>
                   <th>PO</th>
                   <th>IMD</th>
+                  <th>IQC status</th>
                   <th>Tồn kho</th>
                   <th>Vị trí</th>
                 </tr>
@@ -366,6 +367,7 @@
                   <td>{{ material.materialCode }}</td>
                   <td>{{ material.poNumber }}</td>
                   <td>{{ material.imd }}</td>
+                  <td>{{ material.iqcStatus || '-' }}</td>
                   <td>{{ material.stock | number:'1.0-2' }}</td>
                   <td>{{ material.location }}</td>
                 </tr>
