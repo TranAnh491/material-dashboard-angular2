@@ -865,10 +865,10 @@ export class QCComponent implements OnInit, OnDestroy {
       employeeName = await this.getEmployeeNameFromFirestore(employeeId);
     }
     
-    // Hardcoded list of allowed QA employee IDs
-    const allowedEmployeeIds = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2083', 'ASP2137'];
-    
-    if (allowedEmployeeIds.includes(employeeId)) {
+    // Access control from Settings (Firestore), no hardcoded QC list
+    const hasQcAccess = await this.hasQcAccessFromSettings(employeeId);
+
+    if (hasQcAccess) {
       this.currentEmployeeId = employeeId;
       this.currentEmployeeName = employeeName || employeeId; // Fallback to ID if no name
       this.isEmployeeVerified = true;
@@ -889,8 +889,51 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
     } else {
-      alert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nChỉ nhân viên QA mới được phép.`);
+      alert(`❌ Nhân viên ${employeeId} chưa được cấp quyền tab QC (tick true trong Tab Permission).`);
       this.employeeScanInput = '';
+    }
+  }
+
+  // Allow QC only when tab permission qc = true
+  private async hasQcAccessFromSettings(employeeId: string): Promise<boolean> {
+    try {
+      // 1) Find user UID from settings data by employeeId
+      let uid: string | null = null;
+
+      const permissionsSnapshot = await this.firestore.collection('user-permissions', ref =>
+        ref.where('employeeId', '==', employeeId).limit(1)
+      ).get().toPromise();
+
+      if (permissionsSnapshot && !permissionsSnapshot.empty) {
+        const doc = permissionsSnapshot.docs[0];
+        const data = doc.data() as any;
+        uid = (data?.uid || '').toString().trim() || doc.id;
+      }
+
+      if (!uid) {
+        const usersSnapshot = await this.firestore.collection('users', ref =>
+          ref.where('employeeId', '==', employeeId).limit(1)
+        ).get().toPromise();
+        if (usersSnapshot && !usersSnapshot.empty) {
+          const userDoc = usersSnapshot.docs[0];
+          const userData = userDoc.data() as any;
+          uid = (userData?.uid || '').toString().trim() || userDoc.id;
+        }
+      }
+
+      if (!uid) return false;
+
+      // 2) Check Tab Permission tick for key "qc"
+      const tabPermDoc = await this.firestore.collection('user-tab-permissions').doc(uid).get().toPromise();
+      if (!tabPermDoc || !tabPermDoc.exists) return false;
+
+      const tabPermData = tabPermDoc.data() as any;
+      const tabPermissions = tabPermData?.tabPermissions || {};
+
+      return tabPermissions['qc'] === true;
+    } catch (error) {
+      console.error('❌ Error checking QC access from Settings:', error);
+      return false;
     }
   }
   
