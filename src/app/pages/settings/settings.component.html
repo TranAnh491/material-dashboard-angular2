@@ -129,6 +129,14 @@
             </div>
             <div *ngIf="showChangePasswordForm" class="change-password-form">
               <div class="form-group">
+                <label>Password hiện tại:</label>
+                <input
+                  type="password"
+                  [(ngModel)]="currentAuthPasswordValue"
+                  placeholder="Nhập password hiện tại của tài khoản"
+                  class="password-input">
+              </div>
+              <div class="form-group">
                 <label>Password mới:</label>
                 <input 
                   type="password" 

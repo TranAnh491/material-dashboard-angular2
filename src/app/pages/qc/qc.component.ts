@@ -164,21 +164,41 @@ export class QCComponent implements OnInit, OnDestroy {
     const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
     const savedEmployeeName = localStorage.getItem('qc_currentEmployeeName');
     if (savedEmployeeId && savedEmployeeName) {
-      this.currentEmployeeId = savedEmployeeId;
-      this.currentEmployeeName = savedEmployeeName;
+      this.validateAndRestoreEmployee(savedEmployeeId, savedEmployeeName);
+    } else {
+      // Block access until employee is verified
+      this.showEmployeeModal = true;
+    }
+  }
+
+  private async validateAndRestoreEmployee(employeeId: string, fallbackName: string): Promise<void> {
+    try {
+      const allowed = await this.hasQcTabAccess(employeeId);
+      if (!allowed) {
+        console.warn(`⛔ Employee ${employeeId} no longer has QC tab access`);
+        localStorage.removeItem('qc_currentEmployeeId');
+        localStorage.removeItem('qc_currentEmployeeName');
+        this.showEmployeeModal = true;
+        this.isEmployeeVerified = false;
+        return;
+      }
+
+      this.currentEmployeeId = employeeId;
+      this.currentEmployeeName = fallbackName || employeeId;
       this.isEmployeeVerified = true;
       this.showEmployeeModal = false;
-      console.log('✅ Restored employee from localStorage:', savedEmployeeId, savedEmployeeName);
-      
+      console.log('✅ Restored employee from localStorage:', employeeId, fallbackName);
+
       // Load counts and recent materials after employee verified
       this.loadPendingQCCount();
       this.loadTodayCheckedCount();
       this.loadPendingConfirmCount();
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
-    } else {
-      // Block access until employee is verified
+    } catch (error) {
+      console.error('❌ Error validating saved employee access:', error);
       this.showEmployeeModal = true;
+      this.isEmployeeVerified = false;
     }
   }
   
@@ -865,10 +885,9 @@ export class QCComponent implements OnInit, OnDestroy {
       employeeName = await this.getEmployeeNameFromFirestore(employeeId);
     }
     
-    // Access control from Settings (Firestore), no hardcoded QC list
-    const hasQcAccess = await this.hasQcAccessFromSettings(employeeId);
+    const hasAccess = await this.hasQcTabAccess(employeeId);
 
-    if (hasQcAccess) {
+    if (hasAccess) {
       this.currentEmployeeId = employeeId;
       this.currentEmployeeName = employeeName || employeeId; // Fallback to ID if no name
       this.isEmployeeVerified = true;
@@ -889,52 +908,100 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
     } else {
-      alert(`❌ Nhân viên ${employeeId} chưa được cấp quyền tab QC (tick true trong Tab Permission).`);
+      alert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nVui lòng cấp quyền tab Quality trong Settings.`);
       this.employeeScanInput = '';
     }
   }
 
-  // Allow QC only when tab permission qc = true
-  private async hasQcAccessFromSettings(employeeId: string): Promise<boolean> {
-    try {
-      // 1) Find user UID from settings data by employeeId
-      let uid: string | null = null;
+  private async hasQcTabAccess(employeeId: string): Promise<boolean> {
+    const normalizedId = (employeeId || '').trim().toUpperCase();
+    if (!normalizedId) return false;
 
-      const permissionsSnapshot = await this.firestore.collection('user-permissions', ref =>
-        ref.where('employeeId', '==', employeeId).limit(1)
+    // Explicit allow-list requested by user
+    const qcAlwaysAllowed = new Set(['ASP0121', 'ASP1751', 'ASP1761', 'ASP2215']);
+    if (qcAlwaysAllowed.has(normalizedId)) {
+      return true;
+    }
+
+    // 1) Find UID in users collection by employeeId, then by email convention
+    let candidateUids: string[] = [];
+
+    try {
+      const usersByEmp = await this.firestore.collection('users', ref =>
+        ref.where('employeeId', '==', normalizedId).limit(5)
       ).get().toPromise();
 
-      if (permissionsSnapshot && !permissionsSnapshot.empty) {
-        const doc = permissionsSnapshot.docs[0];
-        const data = doc.data() as any;
-        uid = (data?.uid || '').toString().trim() || doc.id;
+      if (usersByEmp && !usersByEmp.empty) {
+        candidateUids.push(...usersByEmp.docs.map(doc => doc.id));
       }
-
-      if (!uid) {
-        const usersSnapshot = await this.firestore.collection('users', ref =>
-          ref.where('employeeId', '==', employeeId).limit(1)
-        ).get().toPromise();
-        if (usersSnapshot && !usersSnapshot.empty) {
-          const userDoc = usersSnapshot.docs[0];
-          const userData = userDoc.data() as any;
-          uid = (userData?.uid || '').toString().trim() || userDoc.id;
-        }
-      }
-
-      if (!uid) return false;
-
-      // 2) Check Tab Permission tick for key "qc"
-      const tabPermDoc = await this.firestore.collection('user-tab-permissions').doc(uid).get().toPromise();
-      if (!tabPermDoc || !tabPermDoc.exists) return false;
-
-      const tabPermData = tabPermDoc.data() as any;
-      const tabPermissions = tabPermData?.tabPermissions || {};
-
-      return tabPermissions['qc'] === true;
-    } catch (error) {
-      console.error('❌ Error checking QC access from Settings:', error);
-      return false;
+    } catch (e) {
+      console.warn('⚠️ users(employeeId) lookup failed:', e);
     }
+
+    const emailCandidates = [
+      `${normalizedId.toLowerCase()}@asp.com`,
+      `${normalizedId.toLowerCase()}@gmail.com`
+    ];
+
+    for (const email of emailCandidates) {
+      try {
+        const usersByEmail = await this.firestore.collection('users', ref =>
+          ref.where('email', '==', email).limit(5)
+        ).get().toPromise();
+        if (usersByEmail && !usersByEmail.empty) {
+          candidateUids.push(...usersByEmail.docs.map(doc => doc.id));
+        }
+      } catch (e) {
+        console.warn('⚠️ users(email) lookup failed:', e);
+      }
+    }
+
+    // 2) Fallback from user-permissions (sometimes this collection has extra user records)
+    try {
+      const permsByEmp = await this.firestore.collection('user-permissions', ref =>
+        ref.where('employeeId', '==', normalizedId).limit(5)
+      ).get().toPromise();
+      if (permsByEmp && !permsByEmp.empty) {
+        candidateUids.push(...permsByEmp.docs.map(doc => doc.id));
+      }
+    } catch (e) {
+      console.warn('⚠️ user-permissions(employeeId) lookup failed:', e);
+    }
+
+    for (const email of emailCandidates) {
+      try {
+        const permsByEmail = await this.firestore.collection('user-permissions', ref =>
+          ref.where('email', '==', email).limit(5)
+        ).get().toPromise();
+        if (permsByEmail && !permsByEmail.empty) {
+          candidateUids.push(...permsByEmail.docs.map(doc => doc.id));
+        }
+      } catch (e) {
+        console.warn('⚠️ user-permissions(email) lookup failed:', e);
+      }
+    }
+
+    // Deduplicate
+    candidateUids = Array.from(new Set(candidateUids.filter(Boolean)));
+    if (candidateUids.length === 0) return false;
+
+    // 3) Check tab permission qc = true in user-tab-permissions
+    for (const uid of candidateUids) {
+      try {
+        const tabDoc = await this.firestore.collection('user-tab-permissions').doc(uid).get().toPromise();
+        if (!tabDoc?.exists) continue;
+
+        const data = tabDoc.data() as any;
+        const tabPermissions = data?.tabPermissions || {};
+        if (tabPermissions?.qc === true) {
+          return true;
+        }
+      } catch (e) {
+        console.warn(`⚠️ user-tab-permissions lookup failed for uid=${uid}:`, e);
+      }
+    }
+
+    return false;
   }
   
   // Get employee name from Firestore

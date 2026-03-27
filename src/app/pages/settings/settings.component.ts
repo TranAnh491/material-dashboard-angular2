@@ -4,6 +4,8 @@ import { PermissionService, UserPermission } from '../../services/permission.ser
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { NotificationService } from '../../services/notification.service';
 import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../../services/employee-cleanup.service';
@@ -112,6 +114,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   tempTabPermissions: { [key: string]: boolean } = {};
   tempReadOnlyPermission: boolean = false;
   changePasswordValue: string = ''; // Password mới để đổi
+  currentAuthPasswordValue: string = ''; // Password hiện tại của tài khoản (Firebase Auth)
   showChangePasswordForm: boolean = false; // Hiển thị form đổi password
 
   
@@ -1187,29 +1190,28 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (user.email === 'admin@asp.com') {
       return 'Admin';
     }
-    
-    // Nếu có employeeId, chỉ hiển thị mã nhân viên
-    if (user.employeeId) {
-      return user.employeeId;
-    }
-    
-    // Xử lý email bắt đầu bằng "asp" - chỉ hiển thị 4 số sau
-    if (user.email && user.email.toLowerCase().startsWith('asp')) {
-      const email = user.email.toLowerCase();
-      const match = email.match(/^asp(\d{4})@/);
-      if (match) {
-        const numbers = match[1];
-        return `ASP${numbers}`;
-      }
-    }
-    
-    // Email @gmail hiển thị nguyên email
-    if (user.email && user.email.includes('@gmail')) {
-      return user.email;
-    }
-    
-    // Nếu không có employeeId và không phải email asp, hiển thị email
-    return user.email;
+
+    return this.extractAspEmployeeId(user) || '';
+  }
+
+  /** Chuẩn hóa tài khoản về định dạng ASP + 4 số (nếu có thể parse). */
+  private extractAspEmployeeId(user: any): string | null {
+    const fromEmployeeId = (user?.employeeId || '').toString().trim().toUpperCase();
+    const matchEmp = fromEmployeeId.match(/^ASP(\d{4})$/);
+    if (matchEmp) return `ASP${matchEmp[1]}`;
+
+    const email = (user?.email || '').toString().trim().toLowerCase();
+    const matchEmail = email.match(/^asp(\d{4})@/);
+    if (matchEmail) return `ASP${matchEmail[1]}`;
+
+    return null;
+  }
+
+  /** Email chuẩn dùng cho đăng nhập Firebase Auth. */
+  private getCanonicalAspEmail(user: any): string | null {
+    const employeeId = this.extractAspEmployeeId(user);
+    if (!employeeId) return null;
+    return `${employeeId.toLowerCase()}@asp.com`;
   }
 
   getAccountTypeLabel(user: any): string {
@@ -1322,6 +1324,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.tempTabPermissions = {};
     this.tempReadOnlyPermission = false;
     this.changePasswordValue = '';
+    this.currentAuthPasswordValue = '';
     this.showChangePasswordForm = false;
   }
 
@@ -1330,6 +1333,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (!this.selectedUser) return;
 
     try {
+      const canonicalEmail = this.getCanonicalAspEmail(this.selectedUser) || (this.selectedUser.email || '').toLowerCase();
+
       // Cập nhật local data
       this.firebaseUserTabPermissions[this.selectedUser.uid] = { ...this.tempTabPermissions };
       this.firebaseUserReadOnlyPermissions[this.selectedUser.uid] = this.tempReadOnlyPermission;
@@ -1337,7 +1342,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Lưu tab permissions vào Firestore
       await this.firestore.collection('user-tab-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
-        email: this.selectedUser.email,
+        email: canonicalEmail,
         displayName: this.selectedUser.displayName || '',
         tabPermissions: this.tempTabPermissions,
         updatedAt: new Date()
@@ -1346,7 +1351,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Lưu read-only permission vào Firestore
       await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
-        email: this.selectedUser.email,
+        email: canonicalEmail,
         displayName: this.selectedUser.displayName || '',
         hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
         hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
@@ -1354,7 +1359,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       }, { merge: true });
 
-      console.log(`✅ Saved permissions for ${this.selectedUser.email}`);
+      // Đồng bộ email chuẩn vào users collection
+      await this.firestore.collection('users').doc(this.selectedUser.uid).set({
+        email: canonicalEmail,
+        updatedAt: new Date()
+      }, { merge: true });
+
+      this.selectedUser.email = canonicalEmail;
+
+      console.log(`✅ Saved permissions for ${canonicalEmail}`);
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);
@@ -1406,6 +1419,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.showChangePasswordForm = !this.showChangePasswordForm;
     if (!this.showChangePasswordForm) {
       this.changePasswordValue = ''; // Reset password khi đóng form
+      this.currentAuthPasswordValue = '';
     }
   }
 
@@ -1429,9 +1443,34 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     try {
       const passwordToSave = this.changePasswordValue.trim();
+      const currentPasswordInput = (this.currentAuthPasswordValue || '').trim();
+      const currentPasswordSaved = (this.firebaseUserPasswords[this.selectedUser.uid] || '').trim();
+      const selectedUserEmail = (this.selectedUser.email || '').trim().toLowerCase();
+      const canonicalAspEmail = this.getCanonicalAspEmail(this.selectedUser);
+
+      if (!selectedUserEmail && !canonicalAspEmail) {
+        alert('❌ Không tìm thấy email tài khoản để đổi password.');
+        return;
+      }
+
+      const currentPasswords = Array.from(new Set([currentPasswordInput, currentPasswordSaved].filter(Boolean)));
+      if (currentPasswords.length === 0) {
+        alert('❌ Thiếu password hiện tại của tài khoản.\n\nVui lòng nhập password hiện tại (để xác thực Firebase Auth) rồi đổi lại.');
+        return;
+      }
+
+      const candidateEmails = Array.from(new Set([
+        canonicalAspEmail || '',
+        selectedUserEmail,
+      ].filter(Boolean)));
+
+      // 0. Cập nhật password trong Firebase Authentication trước
+      // Dùng secondary app để không ảnh hưởng phiên đăng nhập admin hiện tại
+      const usedEmail = await this.updateFirebaseAuthPasswordViaSecondaryApp(candidateEmails, currentPasswords, passwordToSave);
 
       // 1. Cập nhật password trong collection 'users'
       await this.firestore.collection('users').doc(this.selectedUser.uid).update({
+        email: usedEmail,
         password: passwordToSave,
         updatedAt: new Date()
       });
@@ -1439,7 +1478,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // 2. Cập nhật password trong collection 'user-permissions' (nếu có)
       await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
-        email: this.selectedUser.email,
+        email: usedEmail,
         displayName: this.selectedUser.displayName || '',
         password: passwordToSave,
         hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
@@ -1450,27 +1489,87 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
       // 3. Cập nhật local data
       this.firebaseUserPasswords[this.selectedUser.uid] = passwordToSave;
+      this.selectedUser.email = usedEmail;
 
       // 4. Cập nhật password trong Firebase Authentication (nếu có thể)
-      try {
-        // Lưu ý: Để đổi password trong Firebase Auth, cần sử dụng Admin SDK hoặc user phải tự đổi
-        // Ở đây chúng ta chỉ lưu password vào Firestore để admin có thể xem và quản lý
-        console.log('✅ Password đã được lưu vào Firestore');
-      } catch (authError) {
-        console.warn('⚠️ Không thể cập nhật password trong Firebase Auth:', authError);
-        // Vẫn tiếp tục vì đã lưu vào Firestore
-      }
+      console.log('✅ Password đã được cập nhật cả Firebase Auth và Firestore');
 
       alert(`✅ Đã đổi password thành công cho tài khoản ${this.selectedUser.email}!`);
       
       // Reset form
       this.changePasswordValue = '';
+      this.currentAuthPasswordValue = '';
       this.showChangePasswordForm = false;
 
       console.log(`✅ Password changed for ${this.selectedUser.email}`);
     } catch (error) {
       console.error('❌ Error changing password:', error);
-      alert('❌ Có lỗi xảy ra khi đổi password: ' + (error as any).message);
+      const msg = (error as any)?.message || '';
+      if (msg.includes('không khớp với Firebase Auth')) {
+        alert('❌ Password hiện tại không đúng.\n\nVui lòng nhập đúng password hiện tại của tài khoản trong ô "Password hiện tại", rồi thử lại.');
+      } else {
+        alert('❌ Có lỗi xảy ra khi đổi password: ' + msg);
+      }
+    }
+  }
+
+  /**
+   * Cập nhật password Firebase Auth cho user đích thông qua secondary app.
+   * Yêu cầu biết password hiện tại của user đích để sign-in lại.
+   */
+  private async updateFirebaseAuthPasswordViaSecondaryApp(
+    emails: string[],
+    currentPasswords: string[],
+    newPassword: string
+  ): Promise<string> {
+    const appName = `settings-pwd-updater-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    let secondaryApp: firebase.app.App | null = null;
+    let lastError: any = null;
+    try {
+      const appOptions = this.firestore.firestore.app.options as any;
+      secondaryApp = firebase.initializeApp(appOptions, appName);
+      const secondaryAuth = secondaryApp.auth();
+
+      for (const email of emails) {
+        for (const currentPassword of currentPasswords) {
+          try {
+            await secondaryAuth.signInWithEmailAndPassword(email, currentPassword);
+            const targetUser = secondaryAuth.currentUser;
+            if (!targetUser) {
+              throw new Error('Không thể xác thực tài khoản đích để đổi password.');
+            }
+
+            await targetUser.updatePassword(newPassword);
+            await secondaryAuth.signOut();
+            console.log(`✅ Updated Firebase Auth password for ${email}`);
+            return email;
+          } catch (attemptErr: any) {
+            lastError = attemptErr;
+            try {
+              await secondaryAuth.signOut();
+            } catch (_) {}
+          }
+        }
+      }
+      throw lastError || new Error('Không xác thực được tài khoản trên Firebase Auth.');
+    } catch (error: any) {
+      console.error(`❌ Failed updating Firebase Auth password for candidates:`, { emails, error });
+
+      if (error?.code === 'auth/wrong-password') {
+        throw new Error('Password hiện tại trong Settings không khớp với Firebase Auth của tài khoản này.');
+      }
+      if (error?.code === 'auth/user-not-found') {
+        throw new Error('Không tìm thấy tài khoản trên Firebase Authentication (kiểm tra lại email tài khoản trong Settings).');
+      }
+      throw error;
+    } finally {
+      if (secondaryApp) {
+        try {
+          await secondaryApp.delete();
+        } catch (e) {
+          console.warn('⚠️ Failed to delete secondary Firebase app:', e);
+        }
+      }
     }
   }
 
