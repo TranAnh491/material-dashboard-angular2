@@ -227,6 +227,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
   private reportDataByDateKey: Map<string, ReportDayAggRow[]> = new Map();
   private reportDatesLoadedFactory: string | null = null;
+  /** ON/OFF ghi nhận dữ liệu theo ngày report (true = ghi nhận, false = bỏ qua). */
+  reportDateEnabledMap: { [dateKey: string]: boolean } = {};
 
   // Locations from Location tab (for validation)
   validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
@@ -977,6 +979,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.selectedFactory = factory;
     this.currentPage = 1;
     this.isInitialDataLoaded = false; // Reset flag
+    // Reset date switches when changing factory (each factory has its own date set)
+    this.reportDateEnabledMap = {};
     
     // Subscribe ngay từ đầu để catch mọi thay đổi (trước khi load data)
     this.subscribeToSnapshotChanges();
@@ -1222,6 +1226,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         // Load stock check data from Firebase
         await this.loadStockCheckData(materialsArray);
+        // Apply report date ON/OFF switches
+        this.applyReportDateRecognitionToMaterials(materialsArray);
 
         // Load KHSX data và đánh dấu materials
         await this.loadKhsxData(materialsArray);
@@ -1383,6 +1389,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         
         // Reload stock check data và apply vào materials hiện tại (truyền snapshotData trực tiếp)
         await this.loadStockCheckData(this.allMaterials, snapshotData);
+        // Apply report date ON/OFF switches after snapshot updates
+        this.applyReportDateRecognitionToMaterials(this.allMaterials);
         this.invalidateRackStatsCache();
 
         // Update location view (box) nếu đang scan theo vị trí
@@ -3043,12 +3051,75 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           dateLabel: this.dateKeyToLabel(dk),
           totalMaterials: rows.length
         });
+
+        // Default ON for newly detected date keys
+        if (this.reportDateEnabledMap[dk] === undefined) {
+          this.reportDateEnabledMap[dk] = true;
+        }
       }
 
       this.reportDatesLoadedFactory = this.selectedFactory;
     } finally {
       this.isLoadingReportDates = false;
     }
+  }
+
+  isReportDateEnabled(dateKey: string): boolean {
+    return this.reportDateEnabledMap[dateKey] !== false;
+  }
+
+  async onToggleReportDateEnabled(dateKey: string, enabled: boolean): Promise<void> {
+    this.reportDateEnabledMap[dateKey] = enabled;
+    await this.reloadAndApplyReportDateRecognition();
+  }
+
+  private hasAnyReportDateDisabled(): boolean {
+    return Object.values(this.reportDateEnabledMap).some(v => v === false);
+  }
+
+  /** Áp ON/OFF theo ngày vào dữ liệu đang hiển thị. */
+  private applyReportDateRecognitionToMaterials(materials: StockCheckMaterial[]): void {
+    if (!materials || materials.length === 0) return;
+    if (!this.hasAnyReportDateDisabled()) return;
+
+    materials.forEach(mat => {
+      if (mat.stockCheck !== '✓') return;
+      if (!mat.dateCheck) return;
+
+      const dateObj = mat.dateCheck instanceof Date ? mat.dateCheck : new Date(mat.dateCheck as any);
+      if (isNaN(dateObj.getTime())) return;
+
+      const dk = this.toLocalDateKey(dateObj);
+      const enabled = this.isReportDateEnabled(dk);
+      if (!enabled) {
+        mat.stockCheck = '';
+        mat.qtyCheck = null;
+        mat.idCheck = '';
+        mat.dateCheck = null;
+        mat.actualLocation = '';
+      }
+    });
+  }
+
+  /** Reload snapshot check data then apply report-date switches to UI/state. */
+  private async reloadAndApplyReportDateRecognition(): Promise<void> {
+    if (!this.selectedFactory || !this.allMaterials || this.allMaterials.length === 0) return;
+
+    await this.loadStockCheckData(this.allMaterials);
+    this.applyReportDateRecognitionToMaterials(this.allMaterials);
+
+    if (!this.searchResultsMode) {
+      this.applyFilter();
+      this.loadPageFromFiltered(this.currentPage);
+    } else {
+      // Keep search snapshot stable; only refresh pagination view from frozen list
+      this.loadPageFromFiltered(this.currentPage);
+    }
+
+    this.calculateIdCheckStats();
+    this.updateLocationMaterials();
+    this.invalidateRackStatsCache();
+    this.cdr.detectChanges();
   }
 
   async exportStockCheckReportByDate(dateKey: string): Promise<void> {

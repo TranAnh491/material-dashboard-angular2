@@ -771,6 +771,17 @@
               </div>
             </div>
             <div class="archive-item-actions">
+              <label class="report-recognition-toggle" [title]="isReportDateEnabled(d.dateKey) ? 'ON: Ghi nhận dữ liệu ngày này' : 'OFF: Không ghi nhận dữ liệu ngày này'">
+                <input
+                  type="checkbox"
+                  [checked]="isReportDateEnabled(d.dateKey)"
+                  (change)="onToggleReportDateEnabled(d.dateKey, $any($event.target).checked)"
+                  [disabled]="!!isDeletingReportDateKey"
+                />
+                <span class="toggle-label" [class.off]="!isReportDateEnabled(d.dateKey)">
+                  {{ isReportDateEnabled(d.dateKey) ? 'ON' : 'OFF' }}
+                </span>
+              </label>
               <button class="download-btn" (click)="exportStockCheckReportByDate(d.dateKey)" title="Tải về Excel"
                       [disabled]="!!isDeletingReportDateKey">
                 <i class="material-icons">download</i>
