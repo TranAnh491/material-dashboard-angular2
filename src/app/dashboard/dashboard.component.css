@@ -100,6 +100,20 @@
   font-weight: 500;
 }
 
+.workorder-status-table .yesterday-overdue-row {
+  background: #fff3e0;
+}
+
+.workorder-status-table .yesterday-label {
+  font-weight: 700;
+  color: #bf360c !important;
+}
+
+.workorder-status-table .overdue-value {
+  color: #d84315 !important;
+  font-weight: 700;
+}
+
 /* 💼 Custom header: Work Order Status */
 .custom-card-header {
   padding: 18px 22px 10px 22px;

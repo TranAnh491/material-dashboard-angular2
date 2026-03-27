@@ -520,7 +520,27 @@
                      title="Lưu ý từ inbound">
             </td>
             <td class="standard-packing-cell">
-              <span class="standard-packing-value">{{ getStandardPacking(material.materialCode) }}</span>
+              <span
+                *ngIf="!material.isEditingStandardPacking"
+                class="standard-packing-value"
+                (dblclick)="startEditingStandardPacking(material)"
+                title="Nhấp đúp để sửa Standard Packing"
+              >
+                {{ getStandardPacking(material.materialCode) }}
+              </span>
+              <input
+                *ngIf="material.isEditingStandardPacking"
+                type="number"
+                class="editable-input"
+                [ngModel]="material.editStandardPackingValue"
+                (ngModelChange)="material.editStandardPackingValue = $event === '' ? null : +$event"
+                (blur)="finishEditingStandardPacking(material)"
+                (keyup.enter)="finishEditingStandardPacking(material)"
+                (keyup.escape)="cancelEditingStandardPacking(material)"
+                min="0"
+                step="1"
+                placeholder="Nhập standard packing"
+              >
             </td>
             <td class="status-cell">
               <span class="badge" 

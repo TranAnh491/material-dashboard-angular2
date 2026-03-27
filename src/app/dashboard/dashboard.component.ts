@@ -29,6 +29,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrder = "...";
   shipment = "...";
   workOrderStatus: WorkOrderStatusRow[] = [];
+  yesterdayOverdueCount: number = 0;
   shipmentStatus: any[] = [];
 
   // Factory selection
@@ -388,12 +389,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
       const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
       
-      // Get current month and year for filtering by deliveryDate
-      const currentDate = new Date();
-      const currentMonth = currentDate.getMonth() + 1; // 1-12
-      const currentYear = currentDate.getFullYear();
-      
-      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} in month ${currentMonth}/${currentYear} (by deliveryDate)`);
+      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} (count by deliveryDate - Ngày Giao NVL)`);
       
       // Load work orders from database
       this.firestore.collection('work-orders').snapshotChanges().subscribe((actions) => {
@@ -416,27 +412,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
           return { id, ...data, deliveryDate };
         });
         
-        // Filter by factory AND deliveryDate month/year
+        // Filter by factory only.
+        // Date counting (next 7 days / yesterday overdue) is computed by deliveryDate (Ngày Giao NVL).
         this.workOrders = workOrders.filter(wo => {
           const woFactory = wo.factory || 'ASM1';
-          
-          // Check factory match
-          const factoryMatch = factoryFilter.includes(woFactory);
-          
-          // Check deliveryDate month/year match
-          let monthYearMatch = false;
-          if (wo.deliveryDate) {
-            const deliveryMonth = wo.deliveryDate.getMonth() + 1;
-            const deliveryYear = wo.deliveryDate.getFullYear();
-            monthYearMatch = deliveryMonth === currentMonth && deliveryYear === currentYear;
-          }
-          
-          return factoryMatch && monthYearMatch;
+          const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+          const normalizedTargets = factoryFilter.map(f => (f || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
+          return normalizedTargets.includes(normalizedFactory);
         });
         
         this.filteredWorkOrders = [...this.workOrders];
         
-        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} with deliveryDate in ${currentMonth}/${currentYear}`);
+        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (all delivery dates)`);
         console.log('Sample work orders:', this.workOrders.slice(0, 5).map(wo => ({
           id: wo.id,
           productCode: wo.productCode,
@@ -487,6 +474,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private updateWorkOrderStatus() {
     this.workOrderStatus = [];
     const today = new Date();
+    this.yesterdayOverdueCount = this.getYesterdayOverdueCount(today);
     
     console.log('Updating work order status for next 7 days starting from:', today.toDateString());
     console.log('Total work orders to process:', this.workOrders.length);
@@ -557,6 +545,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     
     console.log(`Updated Work Order Status for next 7 days:`, this.workOrderStatus);
+  }
+
+  private getYesterdayOverdueCount(today: Date): number {
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    return this.workOrders.filter(wo => {
+      if (!wo.deliveryDate) return false;
+
+      let deliveryDate: Date;
+      if (wo.deliveryDate instanceof Date) {
+        deliveryDate = wo.deliveryDate;
+      } else if (typeof wo.deliveryDate === 'object' && wo.deliveryDate !== null && 'toDate' in wo.deliveryDate) {
+        deliveryDate = (wo.deliveryDate as any).toDate();
+      } else {
+        deliveryDate = new Date(wo.deliveryDate as any);
+      }
+
+      const isYesterday = deliveryDate.toDateString() === yesterday.toDateString();
+      const isDone = wo.status === WorkOrderStatus.DONE || !!wo.isCompleted;
+      return isYesterday && !isDone;
+    }).length;
   }
 
   private loadShipmentDataFromGoogleSheets() {

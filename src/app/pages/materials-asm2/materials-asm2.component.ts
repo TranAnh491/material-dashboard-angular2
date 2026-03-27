@@ -47,6 +47,8 @@ export interface InventoryMaterial {
   // Edit states
   isEditingOpeningStock?: boolean;
   isEditingXT?: boolean;
+  isEditingStandardPacking?: boolean;
+  editStandardPackingValue?: number | null;
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -2516,6 +2518,96 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
+  startEditingStandardPacking(material: InventoryMaterial): void {
+    if (!this.canEdit) return;
+    material.isEditingStandardPacking = true;
+    material.editStandardPackingValue = this.getStandardPacking(material.materialCode) || 0;
+  }
+
+  cancelEditingStandardPacking(material: InventoryMaterial): void {
+    material.isEditingStandardPacking = false;
+    material.editStandardPackingValue = null;
+  }
+
+  async finishEditingStandardPacking(material: InventoryMaterial): Promise<void> {
+    if (!this.canEdit) return;
+    if (!material.isEditingStandardPacking) return;
+
+    const rawValue = material.editStandardPackingValue;
+    const numericValue = rawValue === null || rawValue === undefined || rawValue === ('' as any)
+      ? 0
+      : Number(rawValue);
+
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      alert('❌ Standard Packing không hợp lệ. Vui lòng nhập số >= 0.');
+      return;
+    }
+
+    const standardizedValue = Number(numericValue);
+    const success = await this.updateStandardPackingInCatalog(material.materialCode, standardizedValue);
+
+    if (success) {
+      const existing = this.catalogCache.get(material.materialCode) || {};
+      this.catalogCache.set(material.materialCode, {
+        ...existing,
+        materialCode: material.materialCode,
+        standardPacking: standardizedValue
+      });
+      material.standardPacking = standardizedValue;
+    }
+
+    material.isEditingStandardPacking = false;
+    material.editStandardPackingValue = null;
+    this.cdr.detectChanges();
+  }
+
+  private async updateStandardPackingInCatalog(materialCode: string, standardPacking: number): Promise<boolean> {
+    const normalizedCode = String(materialCode || '').trim();
+    if (!normalizedCode) return false;
+
+    const payload = {
+      standardPacking,
+      updatedAt: new Date()
+    };
+
+    try {
+      const byIdDoc = await this.firestore.collection('materials').doc(normalizedCode).get().toPromise();
+      if (byIdDoc && byIdDoc.exists) {
+        await this.firestore.collection('materials').doc(normalizedCode).update(payload);
+        return true;
+      }
+    } catch (e) {
+      console.warn('⚠️ Update materials by docId failed:', e);
+    }
+
+    const targets = [
+      { collection: 'materials', fields: ['materialCode', 'code', 'material_code'] },
+      { collection: 'catalog', fields: ['materialCode', 'code', 'material_code'] },
+      { collection: 'material-catalog', fields: ['materialCode', 'code', 'material_code'] }
+    ];
+
+    for (const target of targets) {
+      for (const field of target.fields) {
+        try {
+          const snap = await this.firestore
+            .collection(target.collection, ref => ref.where(field, '==', normalizedCode).limit(1))
+            .get()
+            .toPromise();
+          const first = snap && !snap.empty ? snap.docs[0] : null;
+          if (first) {
+            await this.firestore.collection(target.collection).doc(first.id).update(payload);
+            return true;
+          }
+        } catch (e) {
+          console.warn(`⚠️ Update ${target.collection}.${field} failed:`, e);
+        }
+      }
+    }
+
+    alert(`❌ Không tìm thấy mã ${normalizedCode} trong catalog để lưu Standard Packing.`);
+    return false;
+  }
+
   // onHSDChange method removed - HSD column deleted
   // onHSDChange(event: any, material: InventoryMaterial): void {
   //   if (!this.canEditHSD) return;
@@ -4240,8 +4332,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       
-      // Calculate quantity per roll/bag
-      const rollsOrBags = parseFloat(material.rollsOrBags) || 1;
+      // QTY BAG nhập để in tem
+      const qtyBag = parseFloat(material.rollsOrBags) || 0;
       const totalQuantity = this.calculateCurrentStock(material);
       
       if (!totalQuantity || totalQuantity <= 0) {
@@ -4249,17 +4341,31 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       
-      // Get Standard Packing for comparison
+      // Rule in tem:
+      // - Số tem chuẩn = QTY BAG / Standard Packing
+      // - Tem tồn = Tồn kho - QTY BAG
       const standardPacking = this.getStandardPacking(material.materialCode);
-      
-      // Check if this is a partial label (in tem lẻ)
-      const isPartialLabel = standardPacking && rollsOrBags !== standardPacking;
+      if (!standardPacking || standardPacking <= 0) {
+        alert('❌ Standard Packing phải > 0 để in tem theo quy tắc mới.');
+        return;
+      }
+      if (qtyBag <= 0) {
+        alert('❌ QTY BAG phải > 0.');
+        return;
+      }
+
+      const isPartialLabel = qtyBag !== totalQuantity;
+      const fullLabelCount = Math.floor(qtyBag / standardPacking);
+      const qtyBagRemainder = qtyBag % standardPacking;
+      const remainingFromStock = totalQuantity - qtyBag;
       
       console.log('📊 QR calculation:', {
         totalQuantity,
-        rollsOrBags,
+        qtyBag,
         standardPacking,
-        isPartialLabel
+        fullLabelCount,
+        qtyBagRemainder,
+        remainingFromStock
       });
       
       // Generate QR codes based on quantity per unit
@@ -4279,44 +4385,34 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         hasSequenceNumber: imdForQR !== (material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A')
       });
       
-      if (isPartialLabel) {
-        // 🆕 LOGIC MỚI: In tem lẻ - chỉ in 1 tem với số lượng nhập vào
-        console.log('🏷️ In tem lẻ - chỉ in 1 tem với số lượng:', rollsOrBags);
+      for (let i = 0; i < fullLabelCount; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
-          unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${imdForQR}`
-        });
-      } else {
-        // 🔄 LOGIC CŨ: Tính toán bình thường dựa trên tổng tồn kho
-        const fullUnits = Math.floor(totalQuantity / rollsOrBags);
-        const remainingQuantity = totalQuantity % rollsOrBags;
-        
-        console.log('📦 In tem chuẩn - tính toán:', {
-          fullUnits,
-          remainingQuantity
-        });
-      
-      // Add full units
-      for (let i = 0; i < fullUnits; i++) {
-        qrCodes.push({
-          materialCode: material.materialCode,
-          poNumber: material.poNumber,
-          unitNumber: rollsOrBags,
-          qrData: `${material.materialCode}|${material.poNumber}|${rollsOrBags}|${imdForQR}`
+          unitNumber: standardPacking,
+          qrData: `${material.materialCode}|${material.poNumber}|${standardPacking}|${imdForQR}`
         });
       }
-      
-      // Add remaining quantity if any
-      if (remainingQuantity > 0) {
+
+      // Nếu QTY BAG không chia hết cho Standard Packing, in 1 tem lẻ phần dư
+      if (qtyBagRemainder > 0) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
-          unitNumber: remainingQuantity,
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingQuantity}|${imdForQR}`
+          unitNumber: qtyBagRemainder,
+          qrData: `${material.materialCode}|${material.poNumber}|${qtyBagRemainder}|${imdForQR}`
         });
-        }
+      }
+
+      // In thêm tem tồn nếu còn
+      if (remainingFromStock > 0) {
+        qrCodes.push({
+          materialCode: material.materialCode,
+          poNumber: material.poNumber,
+          unitNumber: remainingFromStock,
+          displayPrefix: 'TỒN',
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingFromStock}|${imdForQR}`
+        });
       }
 
       if (qrCodes.length === 0) {

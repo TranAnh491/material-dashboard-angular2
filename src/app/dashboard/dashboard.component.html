@@ -261,6 +261,15 @@
                 </tr>
               </thead>
               <tbody>
+                <tr class="yesterday-overdue-row">
+                  <td class="yesterday-label">Hôm qua (trễ)</td>
+                  <td class="empty-cell">—</td>
+                  <td class="empty-cell">—</td>
+                  <td class="empty-cell">—</td>
+                  <td [class]="yesterdayOverdueCount > 0 ? 'has-value overdue-value' : 'empty-cell'">
+                    {{ yesterdayOverdueCount > 0 ? yesterdayOverdueCount : '—' }}
+                  </td>
+                </tr>
                 <tr *ngFor="let row of workOrderStatus">
                   <td [title]="row.code">{{ row.code }}</td>
                   <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
