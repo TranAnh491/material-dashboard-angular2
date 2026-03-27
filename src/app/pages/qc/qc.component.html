@@ -198,6 +198,7 @@
               <th>Mã hàng</th>
               <th>Số P.O</th>
               <th>Lô hàng</th>
+              <th>Vị trí</th>
               <th>Trạng thái</th>
               <th class="iqc-priority-th">
                 <div class="iqc-priority-center">Ưu tiên</div>
@@ -214,6 +215,7 @@
               </td>
               <td>{{ item.poNumber }}</td>
               <td>{{ item.batchNumber }}</td>
+              <td>{{ item.location || '—' }}</td>
               <td>
                 <span class="status-badge" [ngClass]="getIQCStatusClass(item.iqcStatus)">
                   {{ item.iqcStatus || 'N/A' }}

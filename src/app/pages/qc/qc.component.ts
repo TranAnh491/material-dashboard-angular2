@@ -977,22 +977,24 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // Load pending QC count from Firestore (one-time query, not subscription)
   loadPendingQCCount(): void {
-    // Use get() instead of snapshotChanges() for one-time query (faster)
+    // Query theo factory + trạng thái; lọc khu IQC trong memory (prefix IQC, có thể kèm pallet)
+    // vì Firestore không so được "bắt đầu bằng IQC" và vị trí có thể là IQC-P01...
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', 'ASM1')
          .where('iqcStatus', '==', 'CHỜ KIỂM')
-         .where('location', '==', 'IQC')
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingQCCount = snapshot.size;
+        this.pendingQCCount = snapshot.docs.filter(doc =>
+          this.isAsm1PendingQcAtIqc(doc.data())
+        ).length;
       },
       error: (error) => {
         console.error('❌ Error loading pending QC count:', error);
         // Fallback: calculate from local materials
-        this.pendingQCCount = this.materials.filter(m => 
-          m.iqcStatus === 'CHỜ KIỂM' && m.location === 'IQC'
+        this.pendingQCCount = this.materials.filter(m =>
+          this.isAsm1PendingQcAtIqc({ iqcStatus: m.iqcStatus, location: m.location })
         ).length;
       }
     });
@@ -1216,6 +1218,7 @@ export class QCComponent implements OnInit, OnDestroy {
             materialCode: data.materialCode || '',
             poNumber: data.poNumber || '',
             batchNumber: data.batchNumber || '',
+            location: data.location || '',
             iqcStatus: statusNorm,
             qcCheckedBy,
             eventTime
@@ -1328,7 +1331,8 @@ export class QCComponent implements OnInit, OnDestroy {
               batchNumber: data.batchNumber || '',
               iqcStatus: iqcStatus,
               checkedBy: qcCheckedBy,
-              checkedAt: qcCheckedAt
+              checkedAt: qcCheckedAt,
+              location: data.location || ''
             };
           }
           return null;
@@ -1346,6 +1350,7 @@ export class QCComponent implements OnInit, OnDestroy {
           materialCode: m.materialCode,
           poNumber: m.poNumber,
           batchNumber: m.batchNumber,
+          location: (m as any).location || '',
           iqcStatus: m.iqcStatus,
           qcCheckedBy: m.checkedBy,
           eventTime: m.checkedAt
@@ -1379,8 +1384,7 @@ export class QCComponent implements OnInit, OnDestroy {
       next: (snapshot) => {
         this.pendingQCCount = snapshot.filter(doc => {
           const data = doc.payload.doc.data() as any;
-          // Filter: iqcStatus === 'CHỜ KIỂM' AND location === 'IQC'
-          return data.iqcStatus === 'CHỜ KIỂM' && data.location === 'IQC';
+          return this.isAsm1PendingQcAtIqc(data);
         }).length;
         console.log(`📊 Pending QC count (fallback, location = IQC): ${this.pendingQCCount}`);
       },
@@ -1413,6 +1417,25 @@ export class QCComponent implements OnInit, OnDestroy {
     this.iqcHistoryResults = [];
     this.iqcHistoryError = '';
     this.showIqcSearchResults = false;
+  }
+
+  /** Chuỗi vị trí sau trim + chữ hoa (so khớp prefix khu IQC / pallet). */
+  private normalizeLocationUpper(location: any): string {
+    return (location ?? '').toString().trim().toUpperCase();
+  }
+
+  /**
+   * Khu IQC: vị trí bắt đầu bằng IQC (ví dụ IQC, IQC-P01, IQC PLT01 — có thêm pallet sau IQC).
+   */
+  private isLocationAtIqcArea(location: any): boolean {
+    const loc = this.normalizeLocationUpper(location);
+    return loc.length > 0 && loc.startsWith('IQC');
+  }
+
+  /** Cùng rule với box "Mã hàng chờ kiểm": CHỜ KIỂM tại khu IQC (prefix IQC) */
+  private isAsm1PendingQcAtIqc(data: any): boolean {
+    const status = (data?.iqcStatus ?? '').toString().trim();
+    return status === 'CHỜ KIỂM' && this.isLocationAtIqcArea(data?.location);
   }
 
   private parseFirestoreDate(value: any): Date | null {
@@ -1902,8 +1925,8 @@ export class QCComponent implements OnInit, OnDestroy {
           const iqcStatus = data.iqcStatus;
           const location = data.location || '';
           
-          // Filter: Only materials with status 'CHỜ KIỂM' AND location === 'IQC'
-          if (iqcStatus === 'CHỜ KIỂM' && location === 'IQC') {
+          // Cùng rule đếm: CHỜ KIỂM tại khu IQC (vị trí bắt đầu bằng IQC, có thể kèm pallet)
+          if (this.isAsm1PendingQcAtIqc(data)) {
             return {
               id: doc.id,
               materialCode: data.materialCode || '',
@@ -1936,6 +1959,7 @@ export class QCComponent implements OnInit, OnDestroy {
           materialCode: m.materialCode,
           poNumber: m.poNumber,
           batchNumber: m.batchNumber,
+          location: m.location || '',
           iqcStatus: m.iqcStatus,
           qcCheckedBy: '—',
           eventTime: m.importDate || m.receivedDate || null
@@ -2017,6 +2041,7 @@ export class QCComponent implements OnInit, OnDestroy {
               batchNumber: data.batchNumber || '',
               quantity: data.quantity || 0,
               unit: data.unit || '',
+              location: data.location || '',
               iqcStatus: iqcStatus,
               qcCheckedBy: data.qcCheckedBy || '',
               qcCheckedAt: qcCheckedAt,
@@ -2042,6 +2067,7 @@ export class QCComponent implements OnInit, OnDestroy {
           materialCode: m.materialCode,
           poNumber: m.poNumber,
           batchNumber: m.batchNumber,
+          location: m.location || '',
           iqcStatus: m.iqcStatus,
           qcCheckedBy: m.qcCheckedBy,
           eventTime: m.qcCheckedAt || m.updatedAt || null

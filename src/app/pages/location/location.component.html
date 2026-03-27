@@ -63,6 +63,10 @@
           </button>
         </div>
 
+        <div class="rule-empty" *ngIf="rulesLoadError">
+          ❌ Không load được rule từ Firestore: {{ rulesLoadError }}
+        </div>
+
         <div class="rules-list" *ngIf="rules.length > 0">
           <div class="rules-title">Danh sách rule</div>
           <div class="rules-items">

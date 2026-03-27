@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
-import { Subject, BehaviorSubject } from 'rxjs';
+import { Subject, BehaviorSubject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
@@ -34,6 +34,15 @@ export interface FGLocation {
   stt: number;
   viTri: string;
   qrCode: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface LocationRule {
+  id?: string;
+  factory: 'ASM1' | 'ASM2';
+  materialCode: string;
+  destinationLocationPrefixes: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -101,6 +110,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showFactorySelect = false;
     // Clear lookup state when switching factory
     this.clearLocationLookup();
+    this.setupRulesListener();
     this.applyFilters();
   }
   
@@ -137,14 +147,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   customerSearchTerm = '';
   showCustomerModal = false;
 
-  // Rule (materialCodePrefix(3 chars) -> allowed destination location prefixes)
+  // Rule (materialCode prefix 4 or exact 7 -> allowed destination location prefixes)
   showRuleModal = false;
   ruleMaterialCodeInput = '';
   ruleDestinationLocationInput = '';
-  rules: { materialCode: string; destinationLocationPrefixes: string[] }[] = [];
+  rules: LocationRule[] = [];
+  rulesLoadError = '';
   isTargetLocationForced = false;
   forcedAllowedDestinationPrefixes: string[] = [];
-  private readonly RULES_STORAGE_KEY = 'location:material-to-location-rules:v1';
+  private rulesSub?: Subscription;
 
   /**
    * Chuẩn hoá mã nguyên liệu:
@@ -158,6 +169,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openRuleModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
     this.showRuleModal = true;
     this.ruleMaterialCodeInput = '';
     this.ruleDestinationLocationInput = '';
@@ -167,52 +183,44 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showRuleModal = false;
   }
 
-  private loadRulesFromStorage(): void {
-    try {
-      const raw = localStorage.getItem(this.RULES_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        this.rules = parsed
+  private setupRulesListener(): void {
+    if (!this.selectedFactory) {
+      this.rules = [];
+      this.rulesLoadError = '';
+      return;
+    }
+    this.rulesSub?.unsubscribe();
+    this.rulesLoadError = '';
+    this.rulesSub = this.firestore
+      .collection<LocationRule>('location-rules', ref =>
+        // Avoid composite index requirement (factory + orderBy materialCode)
+        ref.where('factory', '==', this.selectedFactory)
+      )
+      .valueChanges({ idField: 'id' })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((items: any[]) => {
+        this.rules = (items || [])
           .filter(r => r && typeof r.materialCode === 'string')
-          .map(r => {
-            const materialCode = this.normalizeMaterialCodeForRule(r.materialCode);
-
-            // Backward compatible:
-            // - old shape: { destinationLocation: "H,J,K" } or "H"
-            // - new shape: { destinationLocationPrefixes: ["H","J","K"] }
-            const prefixes: string[] = [];
-            if (Array.isArray(r.destinationLocationPrefixes)) {
-              r.destinationLocationPrefixes.forEach((p: any) => {
-                const formatted = this.formatViTriInput(String(p || ''));
-                if (formatted && this.validateViTriInput(formatted)) prefixes.push(formatted);
-              });
-            } else if (typeof r.destinationLocation === 'string') {
-              String(r.destinationLocation)
-                .split(',')
-                .map(s => this.formatViTriInput(s))
-                .filter(s => s && this.validateViTriInput(s))
-                .forEach(s => prefixes.push(s));
-            }
-
-            return { materialCode, destinationLocationPrefixes: prefixes };
-          })
-          .filter(r => r.materialCode && r.destinationLocationPrefixes.length > 0);
-      }
-    } catch (e) {
-      console.warn('Failed to load rules from storage:', e);
-    }
+          .map((r: any) => ({
+            id: r.id,
+            factory: r.factory,
+            materialCode: this.normalizeMaterialCodeForRule(r.materialCode || ''),
+            destinationLocationPrefixes: Array.isArray(r.destinationLocationPrefixes)
+              ? r.destinationLocationPrefixes
+                  .map((p: any) => this.formatViTriInput(String(p || '')))
+                  .filter((p: string) => !!p && this.validateViTriInput(p))
+              : [],
+          }))
+          .filter(r => r.materialCode && r.destinationLocationPrefixes.length > 0)
+          .sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+      }, (err: any) => {
+        console.error('❌ Cannot load location-rules:', err);
+        this.rules = [];
+        this.rulesLoadError = err?.message || String(err || 'Cannot load rules');
+      });
   }
 
-  private saveRulesToStorage(): void {
-    try {
-      localStorage.setItem(this.RULES_STORAGE_KEY, JSON.stringify(this.rules));
-    } catch (e) {
-      console.warn('Failed to save rules to storage:', e);
-    }
-  }
-
-  upsertRuleFromInputs(): void {
+  async upsertRuleFromInputs(): Promise<void> {
     const cleaned = (this.ruleMaterialCodeInput || '').replace(/\s/g, '').toUpperCase();
     const normalized = this.normalizeMaterialCodeForRule(cleaned);
     // matching rule chỉ hỗ trợ key độ dài 4 hoặc 7
@@ -232,17 +240,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const existingIdx = this.rules.findIndex(r => r.materialCode === materialCode);
-    const next = { materialCode, destinationLocationPrefixes: destinationPrefixes };
-
-    if (existingIdx >= 0) {
-      this.rules[existingIdx] = next;
-    } else {
-      this.rules.push(next);
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
     }
 
-    this.rules = [...this.rules].sort((a, b) => a.materialCode.localeCompare(b.materialCode));
-    this.saveRulesToStorage();
+    const existing = this.rules.find(r => r.materialCode === materialCode);
+    const payload = {
+      factory: this.selectedFactory,
+      materialCode,
+      destinationLocationPrefixes: destinationPrefixes,
+      updatedAt: new Date(),
+    };
+
+    if (existing?.id) {
+      await this.firestore.collection('location-rules').doc(existing.id).update(payload);
+    } else {
+      await this.firestore.collection('location-rules').add({
+        ...payload,
+        createdAt: new Date(),
+      });
+    }
 
     // Nếu đang ở bước chọn vị trí cho modal cất -> ép theo rule vừa thêm
     this.applyLocationRuleToSelectedMaterial();
@@ -252,11 +270,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.ruleDestinationLocationInput = '';
   }
 
-  deleteRule(rule: { materialCode: string; destinationLocationPrefixes: string[] }): void {
+  async deleteRule(rule: { id?: string; materialCode: string; destinationLocationPrefixes: string[] }): Promise<void> {
     if (!rule?.materialCode) return;
     if (!confirm(`Xóa rule cho mã ${rule.materialCode}?`)) return;
-    this.rules = this.rules.filter(r => r.materialCode !== rule.materialCode);
-    this.saveRulesToStorage();
+    if (rule.id) {
+      await this.firestore.collection('location-rules').doc(rule.id).delete();
+    } else {
+      // Fallback for legacy in-memory item without id
+      this.rules = this.rules.filter(r => r.materialCode !== rule.materialCode);
+    }
     this.applyLocationRuleToSelectedMaterial();
   }
 
@@ -300,6 +322,73 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     } else {
       this.forcedAllowedDestinationPrefixes = [];
+    }
+  }
+
+  private findMatchedRuleFromList(materialCode: string): LocationRule | null {
+    const scannedCode7 = this.normalizeMaterialCodeForRule(materialCode);
+    const exactRule = this.rules.find(
+      r => r.materialCode.length === 7 && r.materialCode === scannedCode7
+    );
+    if (exactRule) return exactRule;
+
+    const prefixRules = this.rules
+      .filter(r => r.materialCode.length < 7)
+      .filter(r => scannedCode7.startsWith(r.materialCode))
+      .sort((a, b) => b.materialCode.length - a.materialCode.length);
+
+    return prefixRules[0] || null;
+  }
+
+  private async resolveMatchedRule(materialCode: string): Promise<LocationRule | null> {
+    // 1) Try in-memory rules first
+    const fromMemory = this.findMatchedRuleFromList(materialCode);
+    if (fromMemory) return fromMemory;
+
+    // 2) Fallback query from Firestore (avoid stale/late listener state)
+    if (!this.selectedFactory) return null;
+    const scannedCode7 = this.normalizeMaterialCodeForRule(materialCode);
+    const prefix4 = scannedCode7.substring(0, 4);
+
+    try {
+      const snap = await this.firestore
+        .collection<LocationRule>('location-rules', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+             .where('materialCode', 'in', [scannedCode7, prefix4])
+        )
+        .get()
+        .toPromise();
+
+      const fetched: LocationRule[] = [];
+      snap?.forEach(doc => {
+        const d = doc.data() as any;
+        fetched.push({
+          id: doc.id,
+          factory: d.factory,
+          materialCode: this.normalizeMaterialCodeForRule(d.materialCode || ''),
+          destinationLocationPrefixes: Array.isArray(d.destinationLocationPrefixes)
+            ? d.destinationLocationPrefixes
+                .map((p: any) => this.formatViTriInput(String(p || '')))
+                .filter((p: string) => !!p && this.validateViTriInput(p))
+            : [],
+          createdAt: d.createdAt,
+          updatedAt: d.updatedAt
+        });
+      });
+
+      if (fetched.length > 0) {
+        // merge lightweight cache update
+        const map = new Map<string, LocationRule>();
+        [...this.rules, ...fetched].forEach(r => map.set(`${r.factory}:${r.materialCode}`, r));
+        this.rules = Array.from(map.values())
+          .filter(r => r.factory === this.selectedFactory)
+          .sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+      }
+
+      return this.findMatchedRuleFromList(materialCode);
+    } catch (e) {
+      console.warn('resolveMatchedRule fallback failed:', e);
+      return null;
     }
   }
 
@@ -359,7 +448,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.checkPermissions();
     this.loadLocationData();
     this.loadCustomerCodes();
-    this.loadRulesFromStorage();
     
     // Close dropdown when clicking outside
     document.addEventListener('click', () => {
@@ -374,6 +462,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+    this.rulesSub?.unsubscribe();
     
     // Remove event listeners
     document.removeEventListener('click', () => {
@@ -1494,13 +1583,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
+      // Resolve rule again at confirm-time (strong guard)
+      const matchedRule = await this.resolveMatchedRule(this.selectedMaterialForStore.materialCode || '');
+      const requiredPrefixes = matchedRule?.destinationLocationPrefixes || [];
+      this.isTargetLocationForced = requiredPrefixes.length > 0;
+      this.forcedAllowedDestinationPrefixes = requiredPrefixes;
+
       // Apply rule constraint (prefix match)
-      if (this.isTargetLocationForced) {
-        const ok = this.forcedAllowedDestinationPrefixes.some(prefix =>
+      if (requiredPrefixes.length > 0) {
+        const ok = requiredPrefixes.some(prefix =>
           targetFormatted.startsWith(prefix)
         );
         if (!ok) {
-          alert(`⚠️ Theo rule, vị trí đích phải bắt đầu bằng: ${this.forcedAllowedDestinationPrefixes.join(', ')}`);
+          alert(`⚠️ Theo rule, vị trí đích phải bắt đầu bằng: ${requiredPrefixes.join(', ')}`);
           return;
         }
       }
