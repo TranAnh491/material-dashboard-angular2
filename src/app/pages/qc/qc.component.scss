@@ -362,6 +362,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
+    justify-content: space-between;
     
     .material-icons {
       font-size: 32px;
@@ -390,6 +391,20 @@
         color: #000000;
         line-height: 1;
       }
+    }
+
+    .pending-qc-priority-right {
+      margin-left: auto;
+      padding-left: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #000000;
+      opacity: 0.85;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-width: 92px;
     }
   }
 }

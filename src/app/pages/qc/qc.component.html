@@ -114,6 +114,7 @@
             <div class="pending-qc-label">Mã hàng chờ kiểm</div>
             <div class="pending-qc-count">{{ pendingQCCount }}</div>
           </div>
+          <div class="pending-qc-priority-right">Ưu tiên: {{ pendingQcPriorityCount }}</div>
         </div>
       </div>
       
@@ -222,20 +223,20 @@
                 </span>
               </td>
               <td class="iqc-priority-col">
-                <ng-container *ngIf="iqcHistoryContext === 'pendingConfirm'; else noPriority">
+                <ng-container *ngIf="iqcHistoryContext === 'pendingConfirm' || iqcHistoryContext === 'pendingQC'; else noPriority">
                   <div class="iqc-priority-center">
                   <button
-                    *ngIf="!(item.id && item.id === priorityMaterialId)"
+                    *ngIf="iqcHistoryContext === 'pendingConfirm' ? !(item.id && item.id === priorityMaterialId) : !(item.id && priorityPendingQcIds.includes(item.id))"
                     class="iqc-priority-btn"
-                    (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                    (click)="$event.stopPropagation(); iqcHistoryContext === 'pendingConfirm' ? toggleIqcPriority(item) : togglePendingQcPriority(item)"
                     title="Ưu tiên"
                   >
                     <i class="material-icons">priority_high</i>
                   </button>
                   <span
-                    *ngIf="item.id && item.id === priorityMaterialId"
+                    *ngIf="iqcHistoryContext === 'pendingConfirm' ? (item.id && item.id === priorityMaterialId) : (item.id && priorityPendingQcIds.includes(item.id))"
                     class="iqc-priority-flame"
-                    (click)="$event.stopPropagation(); toggleIqcPriority(item)"
+                    (click)="$event.stopPropagation(); iqcHistoryContext === 'pendingConfirm' ? toggleIqcPriority(item) : togglePendingQcPriority(item)"
                     title="Bỏ ưu tiên"
                   >🔥</span>
                   </div>

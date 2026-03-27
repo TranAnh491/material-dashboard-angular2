@@ -85,10 +85,17 @@ export class QCComponent implements OnInit, OnDestroy {
   // Priority: show one item at top (for pending confirm list)
   priorityMaterialId: string | null = null;
 
+  // Priority for "Pending QC" list (can be multiple)
+  priorityPendingQcIds: string[] = [];
+
   // Monthly counts (current month)
   monthlyPassCount: number = 0;
   monthlyNgCount: number = 0;
   monthlyLockCount: number = 0;
+
+  get pendingQcPriorityCount(): number {
+    return this.priorityPendingQcIds.length;
+  }
   
   // IQC Modal properties
   showIQCModal: boolean = false;
@@ -648,9 +655,13 @@ export class QCComponent implements OnInit, OnDestroy {
     const materialToUpdate = { ...this.scannedMaterial };
     const employeeIdToSave = this.currentEmployeeId.trim();
 
-    // Priority disappears once the material status changes away from "pending confirm"
+    // Priority disappears once the material status changes away from required state
     if (statusToUpdate !== 'CHỜ XÁC NHẬN' && this.priorityMaterialId === materialId) {
       this.priorityMaterialId = null;
+    }
+    if (statusToUpdate !== 'CHỜ KIỂM') {
+      // If item no longer pending QC, drop from pending-QC priorities
+      this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(id => id !== materialId);
     }
     
     // Update local data ngay lập tức để UI responsive
@@ -1595,11 +1606,40 @@ export class QCComponent implements OnInit, OnDestroy {
     this.reorderIqcHistoryResults();
   }
 
+  togglePendingQcPriority(item: any): void {
+    if (this.iqcHistoryContext !== 'pendingQC') return;
+    if (!item?.id) return;
+
+    const id = item.id as string;
+    const set = new Set(this.priorityPendingQcIds || []);
+    if (set.has(id)) {
+      set.delete(id);
+    } else {
+      set.add(id);
+    }
+    this.priorityPendingQcIds = Array.from(set);
+    this.reorderIqcHistoryResults();
+  }
+
   private reorderIqcHistoryResults(): void {
     if (!this.iqcHistoryResults) return;
 
     const pid = this.priorityMaterialId;
     const list = [...this.iqcHistoryResults];
+
+    // Pending QC: prioritize multiple ids, then keep latest eventTime first
+    if (this.iqcHistoryContext === 'pendingQC') {
+      const pset = new Set(this.priorityPendingQcIds || []);
+      this.iqcHistoryResults = list.sort((a: any, b: any) => {
+        const ap = a?.id && pset.has(a.id) ? 1 : 0;
+        const bp = b?.id && pset.has(b.id) ? 1 : 0;
+        if (bp !== ap) return bp - ap;
+        const ta = a?.eventTime ? a.eventTime.getTime?.() ?? 0 : 0;
+        const tb = b?.eventTime ? b.eventTime.getTime?.() ?? 0 : 0;
+        return tb - ta;
+      });
+      return;
+    }
 
     if (!pid) {
       // default sort by eventTime desc (matches current "history" behavior)
@@ -1956,6 +1996,7 @@ export class QCComponent implements OnInit, OnDestroy {
         this.isLoadingReport = false;
       } else {
         this.iqcHistoryResults = (this.pendingQCMaterials || []).map(m => ({
+          id: m.id,
           materialCode: m.materialCode,
           poNumber: m.poNumber,
           batchNumber: m.batchNumber,
@@ -1966,6 +2007,11 @@ export class QCComponent implements OnInit, OnDestroy {
         }));
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = '';
+
+        // Drop priorities that are no longer in current pending QC list
+        const idsInList = new Set((this.pendingQCMaterials || []).map((x: any) => x?.id).filter((x: any) => !!x));
+        this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(id => idsInList.has(id));
+        this.reorderIqcHistoryResults();
       }
     } catch (error) {
       console.error('❌ Error loading pending QC materials:', error);
