@@ -868,16 +868,15 @@ export class QCComponent implements OnInit, OnDestroy {
     }
     
     const scannedData = this.employeeScanInput.trim();
-    
-    // Parse employee ID and name from QR code format: ASP1752-NGUYEN THANH HUY-Bo Phan Chat Luong-19/06/2023
     const normalizedInput = scannedData.replace(/ÁP/gi, 'ASP');
+
+    // Rule: 7 ký tự đầu là mã NV, giữa dấu - đầu và dấu - thứ 2 là tên NV
     const employeeId = normalizedInput.substring(0, 7).toUpperCase();
-    
-    // Extract employee name from QR code (format: ASPXXXX-NAME-...)
     let employeeName = '';
-    const parts = scannedData.split('-');
-    if (parts.length >= 2) {
-      employeeName = parts[1].trim();
+    const firstDash = normalizedInput.indexOf('-');
+    const secondDash = firstDash >= 0 ? normalizedInput.indexOf('-', firstDash + 1) : -1;
+    if (firstDash >= 0 && secondDash > firstDash) {
+      employeeName = normalizedInput.substring(firstDash + 1, secondDash).trim();
     }
     
     // If name not found in QR code, try to get from users collection
@@ -918,7 +917,15 @@ export class QCComponent implements OnInit, OnDestroy {
     if (!normalizedId) return false;
 
     // Explicit allow-list requested by user
-    const qcAlwaysAllowed = new Set(['ASP0121', 'ASP1751', 'ASP1761', 'ASP2215']);
+    const qcAlwaysAllowed = new Set([
+      'ASP0121',
+      'ASP1751',
+      'ASP1761',
+      'ASP2215',
+      'ASP0028',
+      'ASP1747',
+      'ASP2137'
+    ]);
     if (qcAlwaysAllowed.has(normalizedId)) {
       return true;
     }
