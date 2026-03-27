@@ -192,18 +192,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.rulesSub?.unsubscribe();
     this.rulesLoadError = '';
     this.rulesSub = this.firestore
-      .collection<LocationRule>('location-rules', ref =>
-        // Avoid composite index requirement (factory + orderBy materialCode)
-        ref.where('factory', '==', this.selectedFactory)
-      )
+      // Read all rules, then filter in memory:
+      // - current factory rules
+      // - legacy rules without factory (created before factory field existed)
+      .collection<LocationRule>('location-rules')
       .valueChanges({ idField: 'id' })
       .pipe(takeUntil(this.destroy$))
       .subscribe((items: any[]) => {
         this.rules = (items || [])
           .filter(r => r && typeof r.materialCode === 'string')
+          .filter((r: any) => !r.factory || r.factory === this.selectedFactory)
           .map((r: any) => ({
             id: r.id,
-            factory: r.factory,
+            factory: (r.factory || this.selectedFactory) as 'ASM1' | 'ASM2',
             materialCode: this.normalizeMaterialCodeForRule(r.materialCode || ''),
             destinationLocationPrefixes: Array.isArray(r.destinationLocationPrefixes)
               ? r.destinationLocationPrefixes
