@@ -368,11 +368,13 @@
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Người soạn</mat-label>
-                            <input matInput
-                                   [(ngModel)]="newWorkOrder.createdBy"
-                                   name="createdBy"
-                                   required
-                                   style="text-transform: uppercase;">
+                            <mat-select [(value)]="newWorkOrder.createdBy" name="createdBy" required>
+                              <mat-option value="">Chọn người</mat-option>
+                              <mat-option value="Tình">Tình</mat-option>
+                              <mat-option value="Tuấn">Tuấn</mat-option>
+                              <mat-option value="Vũ">Vũ</mat-option>
+                              <mat-option value="Phúc">Phúc</mat-option>
+                            </mat-select>
                           </mat-form-field>
                         </div>
                         <div class="col-md-3">
@@ -509,10 +511,15 @@
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                             <mat-form-field class="full-width compact-field flat-field" *ngIf="canEdit()">
-                              <input matInput
-                                     [value]="wo.createdBy || ''"
-                                     (blur)="updateWorkOrder(wo, 'createdBy', $event.target.value)"
-                                     style="font-size: 11.67px; text-align: center; text-transform: uppercase;">
+                              <mat-select [value]="wo.createdBy || ''"
+                                          (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)"
+                                          style="font-size: 11.67px; text-align: center; text-transform: uppercase;">
+                                <mat-option value="">Chọn người</mat-option>
+                                <mat-option value="Tình">Tình</mat-option>
+                                <mat-option value="Tuấn">Tuấn</mat-option>
+                                <mat-option value="Vũ">Vũ</mat-option>
+                                <mat-option value="Phúc">Phúc</mat-option>
+                              </mat-select>
                             </mat-form-field>
                             <span *ngIf="!canEdit()"
                                   style="font-size: 10px; color: #666; text-transform: uppercase;"

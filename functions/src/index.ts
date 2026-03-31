@@ -154,7 +154,7 @@ export const sendTelegramNotification = functions.https.onCall(async (data, cont
  * Gửi vào group và mention đúng “Người soạn”.
  */
 export const notifyWaitingWorkOrdersTomorrow = functions.pubsub
-  .schedule('40 16 * * *')
+  .schedule('55 16 * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
     const db = admin.firestore();

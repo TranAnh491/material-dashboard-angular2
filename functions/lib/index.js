@@ -165,7 +165,7 @@ exports.sendTelegramNotification = functions.https.onCall(async (data, context) 
  * Gửi vào group và mention đúng “Người soạn”.
  */
 exports.notifyWaitingWorkOrdersTomorrow = functions.pubsub
-    .schedule('30 16 * * *')
+    .schedule('55 16 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
     const db = admin.firestore();
