@@ -885,6 +885,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.newWorkOrder.orderNumber = this.generateOrderNumber();
       }
 
+      // Normalize creator: 1 name, uppercase
+      this.newWorkOrder.createdBy = this.normalizeCreatedBy(this.newWorkOrder.createdBy);
+
       const workOrder: WorkOrder = {
         ...this.newWorkOrder,
         createdDate: new Date(),
@@ -924,9 +927,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.newWorkOrder.customer &&
       this.newWorkOrder.deliveryDate &&
       this.newWorkOrder.productionLine &&
-      this.newWorkOrder.createdBy &&
+      this.normalizeCreatedBy(this.newWorkOrder.createdBy) &&
       this.newWorkOrder.planReceivedDate
     );
+  }
+
+  /** Người soạn: chỉ 1 tên, nhập tay, lưu dạng UPPERCASE */
+  private normalizeCreatedBy(value: any): string {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    // chỉ lấy phần đầu tiên nếu người dùng nhập nhiều tên (ngăn cách bởi , ; / | hoặc xuống dòng)
+    const first = raw.split(/[,;\/|\n\r]+/)[0]?.trim() || '';
+    // gom khoảng trắng và uppercase
+    return first.replace(/\s+/g, ' ').toUpperCase();
   }
 
   resetForm(): void {
@@ -1058,6 +1071,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         processedValue = value.toDate();
         console.log(`📅 Converting Firestore Timestamp for ${field}:`, value, '→', processedValue);
       }
+    }
+
+    // Người soạn: normalize còn 1 tên + UPPERCASE
+    if (field === 'createdBy') {
+      processedValue = this.normalizeCreatedBy(value);
     }
     
     let updatedWorkOrder = { 

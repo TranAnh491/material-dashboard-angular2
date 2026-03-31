@@ -367,10 +367,12 @@
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
-                            <mat-label>Kitting</mat-label>
-                            <mat-select [(value)]="newWorkOrder.createdBy" name="createdBy" required>
-                              <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
-                            </mat-select>
+                            <mat-label>Người soạn</mat-label>
+                            <input matInput
+                                   [(ngModel)]="newWorkOrder.createdBy"
+                                   name="createdBy"
+                                   required
+                                   style="text-transform: uppercase;">
                           </mat-form-field>
                         </div>
                         <div class="col-md-3">
@@ -506,21 +508,17 @@
                             <span *ngIf="!canEdit()" [class.red-text]="wo.missingMaterials" style="font-size: 10px; color: #666;">{{wo.missingMaterials || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <select [(ngModel)]="wo.createdBy" (change)="updateWorkOrder(wo, 'createdBy', $event.target.value)" 
-                                    [disabled]="!canEdit()"
-                                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 11.67px; text-align: center; cursor: pointer; outline: none;">
-                              <option value="">Chọn người</option>
-                              <option value="Tuấn">Tuấn</option>
-                              <option value="Tình">Tình</option>
-                              <option value="Vũ">Vũ</option>
-                              <option value="Phúc">Phúc</option>
-                              <option value="Tú">Tú</option>
-                              <option value="Hưng">Hưng</option>
-                              <option value="Toàn">Toàn</option>
-                              <option value="Ninh">Ninh</option>
-                            </select>
-                            <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;" [title]="wo.createdBy || 'Chưa có'">{{(wo.createdBy || 'Chưa có').length > 20 ? (wo.createdBy || 'Chưa có').substring(0, 20) + '...' : (wo.createdBy || 'Chưa có')}}</span>
-                            <span *ngIf="canEdit() && wo.createdBy" style="font-size: 9px; color: #999; display: block; margin-top: 2px;" [title]="wo.createdBy">{{(wo.createdBy || '').length > 20 ? (wo.createdBy || '').substring(0, 20) + '...' : (wo.createdBy || '')}}</span>
+                            <mat-form-field class="full-width compact-field flat-field" *ngIf="canEdit()">
+                              <input matInput
+                                     [value]="wo.createdBy || ''"
+                                     (blur)="updateWorkOrder(wo, 'createdBy', $event.target.value)"
+                                     style="font-size: 11.67px; text-align: center; text-transform: uppercase;">
+                            </mat-form-field>
+                            <span *ngIf="!canEdit()"
+                                  style="font-size: 10px; color: #666; text-transform: uppercase;"
+                                  [title]="wo.createdBy || 'Chưa có'">
+                              {{wo.createdBy || 'Chưa có'}}
+                            </span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                             <select [ngModel]="wo.status" (ngModelChange)="onStatusChange(wo, $event)" 

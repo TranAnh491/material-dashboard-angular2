@@ -26,6 +26,9 @@ interface ChecklistItem {
 
 /** Một dòng theo biểu mẫu NĐ/ĐA: ngày, sáng/chiều, ô nhập số */
 interface TemperatureHumidityRow {
+  /** Ngày trong tháng: 1..31 */
+  day: number;
+  /** ISO date (yyyy-mm-dd) theo tháng đang chọn, để tương thích dữ liệu cũ */
   ngay: string;
   sangNhietDo: string;
   sangDoAm: string;
@@ -94,6 +97,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   thPointMap: Record<string, { x: number; y: number }> = {};
   thActivePointKey: string | null = null;
   thLastClick: { x: number; y: number } | null = null;
+  thCoordLabel: string = '';
+  /** Tháng đang ghi nhận (yyyy-mm). Mặc định tháng hiện tại */
+  thMonthKey: string = new Date().toISOString().slice(0, 7);
 
   documentList: DocumentFile[] = [
     {
@@ -258,6 +264,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.initializeChecklists();
     this.loadThOverlayFromStorage();
     this.loadThPointsFromStorage();
+    this.ensureThRowsForMonth();
     await this.loadHistory();
     // Update checklist with recent data after loading history
     this.updateChecklistWithRecentData();
@@ -358,6 +365,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       items: [],
       thRows: [
         {
+          day: new Date().getDate(),
           ngay: today,
           sangNhietDo: '',
           sangDoAm: '',
@@ -390,6 +398,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
   openTemperatureHumidityChecklist(): void {
     this.showTemperatureHumidityChecklist = true;
+    this.ensureThRowsForMonth();
     this.loadHistory();
   }
 
@@ -463,7 +472,13 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     try {
       const raw = localStorage.getItem(TH_POINTS_LS_KEY);
       if (!raw) {
-        this.thPointMap = {};
+        // Seed example points the user provided (day-based keys)
+        this.thPointMap = {
+          '30.sangNhietDo': { x: 91.81, y: 17.10 },
+          '30.chieuNhietDo': { x: 91.81, y: 18.47 },
+          '31.sangNhietDo': { x: 94.03, y: 17.42 },
+          '31.chieuNhietDo': { x: 94.34, y: 18.61 }
+        };
         return;
       }
       const parsed = JSON.parse(raw) as Record<string, { x: number; y: number }>;
@@ -482,7 +497,10 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   setThActivePoint(rowIndex: number, field: 'ngay' | 'sangNhietDo' | 'sangDoAm' | 'chieuNhietDo' | 'chieuDoAm' | 'ghiChu'): void {
-    this.thActivePointKey = `${rowIndex}.${field}`;
+    const rows = this.temperatureHumidityData.thRows || [];
+    const row = rows[rowIndex];
+    const day = row?.day ?? rowIndex + 1;
+    this.thActivePointKey = `${day}.${field}`;
     this.showNotification = true;
     this.notificationMessage = `Chọn vị trí trên ảnh cho ô: dòng ${rowIndex + 1} - ${field}`;
     this.notificationClass = 'info';
@@ -498,9 +516,6 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   onThSvgClick(evt: MouseEvent): void {
-    if (!this.thActivePointKey) {
-      return;
-    }
     const svg = evt.currentTarget as SVGSVGElement | null;
     if (!svg) {
       return;
@@ -512,9 +527,46 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     const x = ((evt.clientX - rect.left) / rect.width) * 100;
     const y = ((evt.clientY - rect.top) / rect.height) * 100;
     const clamped = { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) };
-    this.thPointMap[this.thActivePointKey] = clamped;
     this.thLastClick = clamped;
-    this.saveThPointsToStorage();
+    if (this.thActivePointKey) {
+      this.thPointMap[this.thActivePointKey] = clamped;
+      this.saveThPointsToStorage();
+    }
+  }
+
+  formatPct(v: number | undefined, digits: number = 2): string {
+    if (typeof v !== 'number' || isNaN(v)) {
+      return '';
+    }
+    return v.toFixed(digits);
+  }
+
+  copyLastClickToClipboard(): void {
+    if (!this.thLastClick) {
+      return;
+    }
+    const text = `${this.formatPct(this.thLastClick.x)},${this.formatPct(this.thLastClick.y)}`;
+    void navigator.clipboard.writeText(text).then(() => {
+      this.showNotification = true;
+      this.notificationMessage = `Đã copy tọa độ: ${text}`;
+      this.notificationClass = 'info';
+      setTimeout(() => (this.showNotification = false), 1500);
+    });
+  }
+
+  copyLabeledLastClickToClipboard(): void {
+    if (!this.thLastClick) {
+      return;
+    }
+    const coords = `${this.formatPct(this.thLastClick.x)},${this.formatPct(this.thLastClick.y)}`;
+    const label = (this.thCoordLabel || '').trim();
+    const text = label ? `${label} = ${coords}` : coords;
+    void navigator.clipboard.writeText(text).then(() => {
+      this.showNotification = true;
+      this.notificationMessage = `Đã copy: ${text}`;
+      this.notificationClass = 'info';
+      setTimeout(() => (this.showNotification = false), 1500);
+    });
   }
 
   getThSvgTexts(): Array<{ key: string; x: number; y: number; text: string; cls?: string }> {
@@ -522,14 +574,17 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     const out: Array<{ key: string; x: number; y: number; text: string; cls?: string }> = [];
     Object.entries(this.thPointMap).forEach(([key, pt]) => {
       const [rowStr, field] = key.split('.');
-      const rowIndex = Number(rowStr);
-      if (Number.isNaN(rowIndex) || rowIndex < 0 || rowIndex >= rows.length) {
+      const day = Number(rowStr);
+      if (Number.isNaN(day) || day < 1 || day > 31) {
         return;
       }
-      const r = rows[rowIndex] as any;
+      const r = rows.find(x => x.day === day) as any;
+      if (!r) {
+        return;
+      }
       let text = '';
       if (field === 'ngay') {
-        text = this.formatThDateDisplay(r.ngay);
+        text = `${day}`;
       } else {
         text = (r[field] ?? '').toString();
       }
@@ -539,6 +594,48 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       out.push({ key, x: pt.x, y: pt.y, text, cls: field === 'ghiChu' ? 'th-svg-note' : undefined });
     });
     return out;
+  }
+
+  private buildIsoDateForMonthDay(monthKey: string, day: number): string {
+    const mm = monthKey;
+    const dd = String(day).padStart(2, '0');
+    return `${mm}-${dd}`;
+  }
+
+  ensureThRowsForMonth(): void {
+    // Always keep 31 days like the paper form.
+    const monthKey = this.thMonthKey || new Date().toISOString().slice(0, 7);
+    this.thMonthKey = monthKey;
+    if (!this.temperatureHumidityData.thRows) {
+      this.temperatureHumidityData.thRows = [];
+    }
+    const existingByDay = new Map<number, TemperatureHumidityRow>();
+    this.temperatureHumidityData.thRows.forEach(r => {
+      if (typeof r.day === 'number') {
+        existingByDay.set(r.day, r);
+      }
+    });
+    const rows: TemperatureHumidityRow[] = [];
+    for (let d = 1; d <= 31; d++) {
+      const ex = existingByDay.get(d);
+      rows.push({
+        day: d,
+        ngay: this.buildIsoDateForMonthDay(monthKey, d),
+        sangNhietDo: ex?.sangNhietDo ?? '',
+        sangDoAm: ex?.sangDoAm ?? '',
+        chieuNhietDo: ex?.chieuNhietDo ?? '',
+        chieuDoAm: ex?.chieuDoAm ?? '',
+        ghiChu: ex?.ghiChu ?? ''
+      });
+    }
+    this.temperatureHumidityData.thRows = rows;
+    // calendar key = first day of month
+    this.temperatureHumidityData.ngayKiem = `${monthKey}-01`;
+  }
+
+  onThMonthChange(): void {
+    this.ensureThRowsForMonth();
+    this.onThRowFieldChange();
   }
 
   getThOverlayOuterStyles(): Record<string, string> {
@@ -693,6 +790,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
   private createEmptyThRow(ngay?: string): TemperatureHumidityRow {
     return {
+      day: new Date().getDate(),
       ngay: ngay || this.formatDateToLocal(new Date()),
       sangNhietDo: '',
       sangDoAm: '',
@@ -1105,10 +1203,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         nguoiKiem: '',
         ngayKiem: this.formatDateToLocal(new Date()),
         items: [],
-        thRows: [this.createEmptyThRow()],
+        thRows: [],
         createdAt: Timestamp.now(),
         status: 'pending'
       };
+      this.thMonthKey = new Date().toISOString().slice(0, 7);
+      this.ensureThRowsForMonth();
     } else if (this.showSecuredChecklist) {
       this.securedChecklistData = {
         nguoiKiem: '',

@@ -547,6 +547,18 @@
           <div class="th-svg-hint" *ngIf="thActivePointKey">
             Đang chọn vị trí cho: <strong>{{ thActivePointKey }}</strong> — click lên ảnh để đặt điểm.
           </div>
+          <div class="th-svg-coords" *ngIf="thLastClick">
+            <span><strong>x%</strong>: {{ formatPct(thLastClick.x) }}</span>
+            <span><strong>y%</strong>: {{ formatPct(thLastClick.y) }}</span>
+            <button type="button" class="btn btn-sm btn-default" (click)="copyLastClickToClipboard()">Copy</button>
+            <input
+              class="form-control th-coord-label"
+              type="text"
+              [(ngModel)]="thCoordLabel"
+              placeholder="Ghi chú: tọa độ này là gì (vd: 1.sangNhietDo)"
+            />
+            <button type="button" class="btn btn-sm btn-default" (click)="copyLabeledLastClickToClipboard()">Copy kèm tên</button>
+          </div>
         </div>
 
         <div class="toolbar">
@@ -563,6 +575,10 @@
                 <option value="Phúc">Phúc</option>
                 <option value="Tú">Tú</option>
               </select>
+            </div>
+            <div class="form-group">
+              <label for="thMonthKey">Tháng:</label>
+              <input id="thMonthKey" type="month" class="form-control" [(ngModel)]="thMonthKey" (change)="onThMonthChange()">
             </div>
           </div>
 
@@ -711,7 +727,7 @@
                     <td>{{ i + 1 }}</td>
                     <td>
                       <div class="th-input-with-pin">
-                        <input type="date" class="form-control th-input-date" [(ngModel)]="row.ngay" (ngModelChange)="onThRowFieldChange()">
+                        <input type="text" class="form-control th-input-date" [value]="row.day" disabled>
                         <button type="button" class="th-pin" title="Chọn vị trí ngày trên ảnh" (click)="setThActivePoint(i,'ngay')">
                           <i class="material-icons">place</i>
                         </button>

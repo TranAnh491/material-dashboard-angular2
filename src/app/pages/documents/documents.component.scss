@@ -2529,14 +2529,14 @@
 }
 
 .th-svg-text {
-  font: 700 2.1px Arial, sans-serif; /* đơn vị theo viewBox 0..100 */
+  font: 700 1.26px Arial, sans-serif; /* 60% so với trước */
   fill: #111;
   text-anchor: middle;
   dominant-baseline: middle;
 }
 
 .th-svg-note {
-  font: 600 1.8px Arial, sans-serif;
+  font: 600 1.08px Arial, sans-serif; /* 60% so với trước */
   fill: #111;
   text-anchor: start;
   dominant-baseline: middle;
@@ -2557,6 +2557,34 @@
   padding: 6px 8px;
   border-radius: 6px;
   font-size: 12px;
+}
+
+.th-svg-coords {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+
+  .btn {
+    padding: 4px 10px;
+    margin: 0;
+    line-height: 1;
+  }
+}
+
+.th-coord-label {
+  height: 30px;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: 260px;
 }
 
 .th-data-table-wrap {
