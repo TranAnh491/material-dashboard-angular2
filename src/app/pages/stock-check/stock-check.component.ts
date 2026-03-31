@@ -980,21 +980,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /**
    * Select factory and load data
    */
-  selectFactory(factory: 'ASM1' | 'ASM2'): void {
+  async selectFactory(factory: 'ASM1' | 'ASM2'): Promise<void> {
     this.showMobileFactoryModal = false;
     this.selectedFactory = factory;
     this.currentPage = 1;
     this.isInitialDataLoaded = false; // Reset flag
-    // Load report-date settings (persist across machines) BEFORE loading data/snapshot.
+    // Load report-date settings (persist across machines) BEFORE subscribing/loading snapshot.
+    // If we don't await this, scan may still see old snapshot in cache and over-count.
     this.reportDateEnabledMap = {};
     this.reportOnlyDateKey = null;
-    this.loadReportDateSettings().catch(err =>
-      console.error('❌ [ReportByDate] Error loading report settings:', err)
-    );
-    
-    // Subscribe ngay từ đầu để catch mọi thay đổi (trước khi load data)
+    try {
+      await this.loadReportDateSettings();
+    } catch (err) {
+      console.error('❌ [ReportByDate] Error loading report settings:', err);
+    }
+
+    // Subscribe ngay từ đầu để catch mọi thay đổi (sau khi settings đã sẵn sàng)
     this.subscribeToSnapshotChanges();
-    
+
     this.loadData();
 
     // Nếu chưa login thì yêu cầu scan lại (edge case). Còn đã scan rồi thì không bắt scan lần nữa.
@@ -1433,15 +1436,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
 
       let checkedMaterials: any[] = [];
+      const cacheKey = this.selectedFactory;
 
       if (snapshotData) {
         // Nếu có snapshotData trực tiếp (từ subscription), dùng luôn
         checkedMaterials = snapshotData.materials || [];
-        // Cập nhật cache
-        this.snapshotCache[this.selectedFactory] = {
-          materials: [...checkedMaterials],
-          lastUpdated: new Date()
-        };
       } else {
         // Nếu không có, load từ Firebase
         const docId = `${this.selectedFactory}_stock_check_current`;
@@ -1470,11 +1469,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         const data = doc.data() as any;
         checkedMaterials = data.materials || [];
-        // Cập nhật cache
-        this.snapshotCache[this.selectedFactory] = {
-          materials: [...checkedMaterials],
-          lastUpdated: new Date()
-        };
       }
 
       // Apply report-date settings to snapshot materials (this affects scanning math & prevents overcount)
@@ -1486,6 +1480,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           return this.isReportDateEnabled(dk);
         });
       }
+
+      // Update cache AFTER report-date filtering so scan math won't read disabled-day data.
+      this.snapshotCache[cacheKey] = {
+        materials: [...checkedMaterials],
+        lastUpdated: new Date()
+      };
 
       if (checkedMaterials.length === 0) {
         console.log(`⚠️ [loadStockCheckData] No checked materials in snapshot`);
