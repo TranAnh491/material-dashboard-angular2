@@ -2373,6 +2373,15 @@
             &.status-partial   { border-color: #ffcc80; background: #fffaf2; }
             &.status-full      { border-color: #2e7d32; background: #f0fff0; }
 
+            // Highlight nhanh cho mã vừa scan (không reorder list)
+            &.just-scanned {
+              border-color: #111 !important;
+              box-shadow:
+                0 0 0 3px rgba(33, 150, 243, 0.55),
+                0 4px 14px rgba(33, 150, 243, 0.25);
+              transform: translateZ(0);
+            }
+
             .box-row {
               display: flex;
               align-items: center;

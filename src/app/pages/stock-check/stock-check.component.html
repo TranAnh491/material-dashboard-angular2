@@ -591,7 +591,8 @@
                [ngClass]="{
                  'status-unchecked': mat._status === 'unchecked',
                  'status-partial':   mat._status === 'partial',
-                 'status-full':      mat._status === 'full'
+                 'status-full':      mat._status === 'full',
+                 'just-scanned':     mat._flash === true
                }">
             <div class="box-row top">
               <div class="code">{{ mat.materialCode }}</div>
