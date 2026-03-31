@@ -132,6 +132,7 @@ export class TabPermissionGuard implements CanActivate {
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       '/inventory-overview-asm2': 'inventory-overview-asm2',
+      '/bag-history': 'bag-history',
       
       // ASM FG routes
       '/fg-in': 'fg-in',

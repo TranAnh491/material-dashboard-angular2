@@ -232,7 +232,10 @@
             <th class="col-material">Mã hàng</th>
             <th class="col-po">Số PO</th>
             <th class="col-batch">IMD</th>
+            <th class="col-bag-number">Bag</th>
+            <th class="col-bag-batch">Bịch</th>
             <th class="col-quantity">Xuất</th>
+            <th class="col-scan-count">Số lần</th>
             <th class="col-employee">Mã nhân viên</th>
             <th class="col-production">Lệnh sản xuất</th>
             <th class="col-delete">Xóa</th>
@@ -258,8 +261,17 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
+            <td class="bag-number-cell readonly-cell">
+              {{ getBagNumberDisplay(material.bagBatch) }}
+            </td>
+            <td class="bag-batch-cell readonly-cell">
+              {{ material.bagBatch || '—' }}
+            </td>
             <td class="number-cell readonly-cell">
               {{ material.exportQuantity != null ? (material.exportQuantity | number:'1.0-4') : '' }}
+            </td>
+            <td class="number-cell readonly-cell">
+              {{ material.scanCount ?? 0 }}
             </td>
             <td class="employee-cell readonly-cell">
               {{getDisplayEmployeeId(material.employeeId)}}
@@ -283,7 +295,10 @@
             <th class="col-material">Mã hàng</th>
             <th class="col-po">Số PO</th>
             <th class="col-batch">IMD</th>
+            <th class="col-bag-number">Bag</th>
+            <th class="col-bag-batch">Bịch</th>
             <th class="col-quantity">Xuất</th>
+            <th class="col-scan-count">Số lần</th>
             <th class="col-employee">Mã nhân viên</th>
             <th class="col-production">Lệnh sản xuất</th>
           </tr>
@@ -299,8 +314,17 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
+            <td class="bag-number-cell readonly-cell">
+              {{ getBagNumberDisplay(material.bagBatch) }}
+            </td>
+            <td class="bag-batch-cell readonly-cell">
+              {{ material.bagBatch || '—' }}
+            </td>
             <td class="number-cell readonly-cell">
               {{ material.exportQuantity != null ? (material.exportQuantity | number:'1.0-4') : '' }}
+            </td>
+            <td class="number-cell readonly-cell">
+              {{ material.scanCount ?? 0 }}
             </td>
             <td class="employee-cell readonly-cell">
               {{getDisplayEmployeeId(material.employeeId)}}
@@ -406,6 +430,9 @@
                 <div class="scan-detail" *ngIf="item.importDate">
                   <strong>IMD:</strong> {{ item.importDate }}
                 </div>
+                <div class="scan-detail" *ngIf="item.bagBatch">
+                  <strong>Bịch:</strong> {{ item.bagBatch }}
+                </div>
               </div>
             </div>
           </div>
@@ -457,6 +484,9 @@
             </div>
             <div class="scan-detail" *ngIf="item.importDate">
               <strong>IMD:</strong> {{ item.importDate }}
+            </div>
+            <div class="scan-detail" *ngIf="item.bagBatch">
+              <strong>Bịch:</strong> {{ item.bagBatch }}
             </div>
           </div>
         </div>

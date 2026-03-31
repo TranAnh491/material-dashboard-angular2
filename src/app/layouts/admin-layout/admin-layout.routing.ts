@@ -35,6 +35,7 @@ import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
+import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { TabPermissionGuard } from '../../guards/tab-permission.guard';
@@ -56,6 +57,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-asm2',         component: InboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'warehouse-loading',    loadChildren: () => import('../../pages/warehouse-loading/warehouse-loading.module').then(m => m.WarehouseLoadingModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'trace-back',           loadChildren: () => import('../../pages/trace-back/trace-back.module').then(m => m.TraceBackModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },

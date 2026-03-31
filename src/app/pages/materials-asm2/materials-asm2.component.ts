@@ -10,6 +10,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
+import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -43,6 +44,10 @@ export interface InventoryMaterial {
   importStatus?: string;
   source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
   iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
+  totalBags?: number;
+  exportedBags?: number;
+  /** String input để edit BAG (totalBags) an toàn với dấu phẩy. */
+  bagInput?: string;
   
   // Edit states
   isEditingOpeningStock?: boolean;
@@ -82,6 +87,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Loading state
   isLoading = false;
   isCatalogLoading = false;
+  /** More → ghi snapshot TỒN từ kho → rm-bag-history */
+  isSnapshottingBagHistory = false;
+  showSnapshotCodesModal = false;
+  snapshotMaterialCodesText = '';
   
   // Consolidation status
   consolidationMessage = '';
@@ -113,6 +122,14 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   
   // More popup state
   showMorePopup = false;
+
+  // ===== Standard Packing manager (More) =====
+  showStandardPackingManager = false;
+  spSearchCode = '';
+  spResults: Array<{ materialCode: string; materialName?: string; current: number; edit: number }> = [];
+  spIsSearching = false;
+  spNewCode = '';
+  spNewStandard = '';
   
   // Mobile menu state
   showMobileMenu = false;
@@ -142,7 +159,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
     private excelImportService: ExcelImportService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private rmBagHistory: RmBagHistoryService
   ) {}
 
   ngOnInit(): void {
@@ -368,6 +386,12 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
               }
             }
           }
+
+          // Init BAG input (totalBags) for editing UI.
+          material.bagInput =
+            material.totalBags != null && Number(material.totalBags) > 0
+              ? String(Math.floor(Number(material.totalBags)))
+              : '';
           
           return material;
         })
@@ -397,6 +421,73 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       this.filteredInventory = [];
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  openSnapshotCodesModal(): void {
+    if (this.isSnapshottingBagHistory) {
+      return;
+    }
+    this.snapshotMaterialCodesText = '';
+    this.closeMorePopup();
+    this.showSnapshotCodesModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeSnapshotCodesModal(): void {
+    this.showSnapshotCodesModal = false;
+    this.cdr.markForCheck();
+  }
+
+  private parseSnapshotMaterialCodesInput(raw: string): string[] {
+    return [
+      ...new Set(
+        raw
+          .split(/[\s,;]+/)
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    ];
+  }
+
+  async confirmSnapshotCodesAndRun(): Promise<void> {
+    if (this.isSnapshottingBagHistory) {
+      return;
+    }
+    const codes = this.parseSnapshotMaterialCodesInput(this.snapshotMaterialCodesText);
+    if (codes.length === 0) {
+      alert('Vui lòng nhập ít nhất một mã hàng (mỗi dòng hoặc cách bằng dấu phẩy).');
+      return;
+    }
+    const ok = confirm(
+      `Ghi snapshot TỒN cho ${codes.length} mã đã nhập (${this.FACTORY}) vào rm-bag-history?\n\n` +
+        `Chỉ các dòng inventory thuộc các mã này. Dữ liệu kho không bị xóa hay sửa.`
+    );
+    if (!ok) {
+      return;
+    }
+    this.showSnapshotCodesModal = false;
+    this.isSnapshottingBagHistory = true;
+    this.cdr.markForCheck();
+    try {
+      const r = await this.rmBagHistory.snapshotTonFromInventoryToRmHistory(this.FACTORY, { materialCodes: codes });
+      const derivedLine =
+        r.derivedFromStock > 0
+          ? `\n• ${r.derivedFromStock} dòng ước tổng bịch từ (tồn kho ÷ LDV) vì totalBags trên doc = 0.`
+          : '';
+      const codesLine =
+        r.requestedCodes != null ? `\n• Đã chọn ${r.requestedCodes} mã (khác nhau).` : '';
+      alert(
+        `✅ Đã ghi ${r.written} dòng TỒN vào rm-bag-history.\n` +
+          `Bỏ qua ${r.skipped} dòng (không còn tồn bịch, không có mã, hoặc không đủ dữ liệu ước).${derivedLine}${codesLine}\n` +
+          `Đợt: ${r.resetId}`
+      );
+    } catch (e: any) {
+      console.error('[materials-asm2] snapshot TỒN:', e);
+      alert(`❌ Lỗi: ${e?.message || String(e)}`);
+    } finally {
+      this.isSnapshottingBagHistory = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -515,6 +606,14 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
     
     return baseDate;
+  }
+
+  getBatchBagsDisplay(material: InventoryMaterial): string {
+    const total = Math.floor(Number(material.totalBags ?? 0));
+    if (total <= 0) return '—';
+    const used = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
+    const remaining = Math.max(0, total - used);
+    return `${remaining}/${total}`;
   }
 
   // Debug function to find problematic batchNumbers
@@ -1919,6 +2018,102 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('📋 More popup closed');
   }
 
+  openStandardPackingManager(): void {
+    this.showStandardPackingManager = true;
+    this.spSearchCode = '';
+    this.spResults = [];
+    this.spNewCode = '';
+    this.spNewStandard = '';
+    if (!this.catalogLoaded) {
+      this.loadCatalogFromFirebase().catch(err => console.error('❌ loadCatalogFromFirebase error:', err));
+    }
+  }
+
+  closeStandardPackingManager(): void {
+    this.showStandardPackingManager = false;
+    this.spIsSearching = false;
+    this.spResults = [];
+  }
+
+  searchStandardPacking(): void {
+    const q = (this.spSearchCode || '').trim().toUpperCase();
+    this.spIsSearching = true;
+    try {
+      const rows: Array<{ materialCode: string; materialName?: string; current: number; edit: number }> = [];
+      const keys = Array.from(this.catalogCache.keys());
+      for (const code of keys) {
+        if (!q || code.toUpperCase().includes(q)) {
+          const item = this.catalogCache.get(code);
+          const current = Number(item?.standardPacking ?? 0) || 0;
+          rows.push({
+            materialCode: code,
+            materialName: item?.materialName,
+            current,
+            edit: current
+          });
+        }
+      }
+      rows.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+      this.spResults = rows.slice(0, 200);
+    } finally {
+      this.spIsSearching = false;
+    }
+  }
+
+  async updateStandardPackingRow(row: { materialCode: string; edit: number; current: number }): Promise<void> {
+    if (!this.canEdit) return;
+    const code = String(row.materialCode || '').trim().toUpperCase();
+    if (!code) return;
+    const num = Math.max(0, Number(row.edit) || 0);
+    await this.upsertStandardPackingDoc(code, num);
+    row.current = num;
+    row.edit = num;
+  }
+
+  async addNewStandardPacking(): Promise<void> {
+    if (!this.canEdit) return;
+    const code = String(this.spNewCode || '').trim().toUpperCase();
+    const num = Math.max(0, Number(this.spNewStandard) || 0);
+    if (!code) {
+      alert('⚠️ Vui lòng nhập mã hàng');
+      return;
+    }
+    await this.upsertStandardPackingDoc(code, num, true);
+    this.spNewCode = '';
+    this.spNewStandard = '';
+    this.spSearchCode = code;
+    this.searchStandardPacking();
+  }
+
+  private async upsertStandardPackingDoc(materialCode: string, standardPacking: number, allowCreate = false): Promise<void> {
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code) return;
+    const sp = Math.max(0, Number(standardPacking) || 0);
+
+    const existing = this.catalogCache.get(code);
+    const materialName = existing?.materialName || (allowCreate ? code : undefined);
+    const unit = existing?.unit || (allowCreate ? 'PCS' : undefined);
+
+    const payload: any = {
+      materialCode: code,
+      standardPacking: sp,
+      updatedAt: new Date()
+    };
+    if (materialName) payload.materialName = materialName;
+    if (unit) payload.unit = unit;
+    if (allowCreate) payload.createdAt = new Date();
+
+    await this.firestore.collection('materials').doc(code).set(payload, { merge: true });
+
+    this.catalogCache.set(code, {
+      materialCode: code,
+      materialName: materialName || existing?.materialName || code,
+      unit: unit || existing?.unit || 'PCS',
+      standardPacking: sp
+    });
+    this.catalogLoaded = true;
+  }
+
   // Toggle mobile menu
   toggleMobileMenu(): void {
     this.showMobileMenu = !this.showMobileMenu;
@@ -2492,22 +2687,91 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
+  /** QTY BAG (rollsOrBags) - cho phép nhập tay, giá trị ban đầu được đồng bộ từ tab Inbound. */
+  onRollsOrBagsKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
+    // Prevent Enter from bubbling to parent handlers (can cause reload/reset) before Firestore update.
+    event.preventDefault();
+    event.stopPropagation();
+    this.updateRollsOrBags(material);
+  }
+
   updateRollsOrBags(material: InventoryMaterial): void {
     if (!this.canEdit) return;
-    
-    // Nếu rollsOrBags trống, tự động lấy từ Standard Packing
-    if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
-      const standardPacking = this.getStandardPacking(material.materialCode);
-      if (standardPacking && standardPacking > 0) {
-        material.rollsOrBags = standardPacking.toString();
-        console.log(`🔄 Auto-filled rollsOrBags from Standard Packing: ${material.materialCode} = ${standardPacking}`);
-      }
-    }
-    
-    this.updateMaterialInFirebase(material);
-    
-    // Update negative stock count for real-time display
-    this.updateNegativeStockCount();
+    if (!material?.id) return;
+
+    const raw = material.rollsOrBags;
+    // Normalize number input (allow "1,400" typed/pasted from UI).
+    const num =
+      raw === '' || raw === null || raw === undefined
+        ? 0
+        : typeof raw === 'number'
+          ? raw
+          : parseFloat(String(raw).replace(/,/g, '').trim());
+    const normalizedRaw = isFinite(num) ? Math.max(0, num) : 0;
+    const normalized = Math.round(normalizedRaw * 10000) / 10000;
+
+    // Keep UI type consistent (rollsOrBags is declared as string in InventoryMaterial).
+    material.rollsOrBags = String(normalized);
+    material.updatedAt = new Date();
+
+    this.firestore
+      .collection('inventory-materials')
+      .doc(material.id)
+      .update({
+        rollsOrBags: normalized,
+        updatedAt: material.updatedAt
+      })
+      .then(() => {
+        console.log(`✅ ASM2 Updated rollsOrBags for ${material.materialCode} - ${material.poNumber}: ${normalized}`);
+      })
+      .catch(error => {
+        console.error(`❌ ASM2 Error updating rollsOrBags for ${material.materialCode}:`, error);
+      });
+  }
+
+  /** BAG (totalBags = gwLdv): tổng số bịch dùng cho đuôi QR inbound. */
+  onBagsKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.updateTotalBags(material);
+  }
+
+  updateTotalBags(material: InventoryMaterial): void {
+    if (!this.canEdit) return;
+    if (!material?.id) return;
+
+    const raw = (material.bagInput ?? material.totalBags ?? '') as any;
+    const num =
+      raw === '' || raw === null || raw === undefined
+        ? 0
+        : typeof raw === 'number'
+          ? raw
+          : parseFloat(String(raw).replace(/,/g, '').trim());
+
+    const normalizedRaw = isFinite(num) ? Math.max(0, num) : 0;
+    const normalized = Math.floor(normalizedRaw);
+
+    material.totalBags = normalized;
+    material.bagInput = normalized > 0 ? String(normalized) : '';
+    material.updatedAt = new Date();
+
+    this.firestore
+      .collection('inventory-materials')
+      .doc(material.id)
+      .update({
+        totalBags: normalized,
+        updatedAt: material.updatedAt
+      })
+      .then(() => {
+        console.log(`✅ ASM2 Updated totalBags for ${material.materialCode} - ${material.poNumber}: ${normalized}`);
+      })
+      .catch(error => {
+        console.error(`❌ ASM2 Error updating totalBags for ${material.materialCode}:`, error);
+      });
+  }
+
+  isTotalBagsValid(material: InventoryMaterial): boolean {
+    return Math.floor(Number(material.totalBags ?? 0)) > 0;
   }
 
   updateRemarks(material: InventoryMaterial): void {
@@ -2518,10 +2782,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     this.updateNegativeStockCount();
   }
 
-  startEditingStandardPacking(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
-    material.isEditingStandardPacking = true;
-    material.editStandardPackingValue = this.getStandardPacking(material.materialCode) || 0;
+  startEditingStandardPacking(_material: InventoryMaterial): void {
+    // Standard Packing không sửa từ tab Materials.
   }
 
   cancelEditingStandardPacking(material: InventoryMaterial): void {
@@ -2530,35 +2792,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   async finishEditingStandardPacking(material: InventoryMaterial): Promise<void> {
-    if (!this.canEdit) return;
-    if (!material.isEditingStandardPacking) return;
-
-    const rawValue = material.editStandardPackingValue;
-    const numericValue = rawValue === null || rawValue === undefined || rawValue === ('' as any)
-      ? 0
-      : Number(rawValue);
-
-    if (!Number.isFinite(numericValue) || numericValue < 0) {
-      alert('❌ Standard Packing không hợp lệ. Vui lòng nhập số >= 0.');
-      return;
-    }
-
-    const standardizedValue = Number(numericValue);
-    const success = await this.updateStandardPackingInCatalog(material.materialCode, standardizedValue);
-
-    if (success) {
-      const existing = this.catalogCache.get(material.materialCode) || {};
-      this.catalogCache.set(material.materialCode, {
-        ...existing,
-        materialCode: material.materialCode,
-        standardPacking: standardizedValue
-      });
-      material.standardPacking = standardizedValue;
-    }
-
     material.isEditingStandardPacking = false;
     material.editStandardPackingValue = null;
-    this.cdr.detectChanges();
   }
 
   private async updateStandardPackingInCatalog(materialCode: string, standardPacking: number): Promise<boolean> {
@@ -2680,11 +2915,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     if (material.type) {
       updateData.type = material.type;
     }
-    
-    if (material.rollsOrBags !== undefined && material.rollsOrBags !== null) {
-      updateData.rollsOrBags = material.rollsOrBags;
-    }
-    
+
+    // rollsOrBags và standardPacking: không ghi từ tab Materials.
+
     if (material.remarks) {
       updateData.remarks = material.remarks;
     }
@@ -2700,12 +2933,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     if (material.batchNumber) {
       updateData.batchNumber = material.batchNumber;
     }
-    
-    // Only add standardPacking if it has a valid value
-    if (material.standardPacking !== undefined && material.standardPacking !== null) {
-      updateData.standardPacking = material.standardPacking;
-    }
-    
+
     console.log(`🔍 DEBUG: Update data to Firebase:`, updateData);
     
     this.firestore.collection('inventory-materials').doc(material.id).update(updateData).then(() => {
@@ -4315,7 +4543,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     const rollsOrBagsValue = material.rollsOrBags;
     return rollsOrBagsValue && 
            !(typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') &&
-           parseFloat(String(rollsOrBagsValue)) > 0;
+           parseFloat(String(rollsOrBagsValue).replace(/,/g, '')) > 0;
   }
 
   // Print QR Code for inventory items
@@ -4327,13 +4555,13 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const rollsOrBagsValue = material.rollsOrBags;
       if (!rollsOrBagsValue || 
           (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') ||
-          parseFloat(String(rollsOrBagsValue)) <= 0) {
+          parseFloat(String(rollsOrBagsValue).replace(/,/g, '')) <= 0) {
         alert('❌ Không thể in tem QR!\n\nLý do: Thiếu Rolls/Bags\n\nVui lòng nhập số lượng Rolls/Bags trước khi in tem QR.');
         return;
       }
       
       // QTY BAG nhập để in tem
-      const qtyBag = parseFloat(material.rollsOrBags) || 0;
+      const qtyBag = parseFloat(String(material.rollsOrBags).replace(/,/g, '')) || 0;
       const totalQuantity = this.calculateCurrentStock(material);
       
       if (!totalQuantity || totalQuantity <= 0) {
@@ -4354,10 +4582,23 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
+      const bagTotal = Math.floor(Number(material.totalBags ?? 0));
+      if (!bagTotal || bagTotal < 1) {
+        alert('❌ Không thể in tem QR - thiếu BAG (Số bịch).');
+        return;
+      }
+
+      const importDateStr = material.importDate
+        ? material.importDate.toLocaleDateString('en-GB').split('/').join('')
+        : new Date().toLocaleDateString('en-GB').split('/').join('');
+
       const isPartialLabel = qtyBag !== totalQuantity;
-      const fullLabelCount = Math.floor(qtyBag / standardPacking);
-      const qtyBagRemainder = qtyBag % standardPacking;
-      const remainingFromStock = totalQuantity - qtyBag;
+      const fullLabelCount = Math.floor(qtyBag / standardPacking + 1e-9);
+      let qtyBagRemainder = qtyBag - fullLabelCount * standardPacking;
+      // Làm tròn để tránh sai số floating (VD: 105 - 1*100 = 4.999999...)
+      qtyBagRemainder = Math.round(qtyBagRemainder * 10000) / 10000;
+      if (qtyBagRemainder < 1e-9) qtyBagRemainder = 0;
+      const remainingFromStock = Math.max(0, totalQuantity - qtyBag);
       
       console.log('📊 QR calculation:', {
         totalQuantity,
@@ -4385,13 +4626,15 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         hasSequenceNumber: imdForQR !== (material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A')
       });
       
+      let bagIndexCounter = 1;
       for (let i = 0; i < fullLabelCount; i++) {
         qrCodes.push({
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: standardPacking,
-          qrData: `${material.materialCode}|${material.poNumber}|${standardPacking}|${imdForQR}`
+          qrData: `${material.materialCode}|${material.poNumber}|${standardPacking}|${importDateStr}-${Math.min(bagIndexCounter, bagTotal)}/${bagTotal}`
         });
+        bagIndexCounter++;
       }
 
       // Nếu QTY BAG không chia hết cho Standard Packing, in 1 tem lẻ phần dư
@@ -4400,8 +4643,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           materialCode: material.materialCode,
           poNumber: material.poNumber,
           unitNumber: qtyBagRemainder,
-          qrData: `${material.materialCode}|${material.poNumber}|${qtyBagRemainder}|${imdForQR}`
+          qrData: `${material.materialCode}|${material.poNumber}|${qtyBagRemainder}|${importDateStr}-${Math.min(bagIndexCounter, bagTotal)}/${bagTotal}`
         });
+        bagIndexCounter++;
       }
 
       // In thêm tem tồn nếu còn
@@ -4411,8 +4655,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           poNumber: material.poNumber,
           unitNumber: remainingFromStock,
           displayPrefix: 'TỒN',
-          qrData: `${material.materialCode}|${material.poNumber}|${remainingFromStock}|${imdForQR}`
+          qrData: `${material.materialCode}|${material.poNumber}|${remainingFromStock}|${importDateStr}-${Math.min(bagIndexCounter, bagTotal)}/${bagTotal}`
         });
+        bagIndexCounter++;
       }
 
       if (qrCodes.length === 0) {

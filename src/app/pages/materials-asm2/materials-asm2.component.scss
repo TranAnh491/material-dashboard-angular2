@@ -52,6 +52,13 @@
   }
 }
 
+.batch-cell {
+  min-width: 72px;
+  width: 72px;
+  text-align: center;
+  font-size: 13px !important;
+}
+
 // Styling for new buttons (kept for backward compatibility)
 .sync-outbound-btn {
   margin-left: 4px;

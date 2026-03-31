@@ -924,8 +924,10 @@ iframe {
 }
 
 .excel-body-main {
-  flex: 0 0 70%;
-  max-width: 70%;
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -948,6 +950,15 @@ iframe {
   flex-direction: column;
   padding-bottom: 8px;
   min-height: 0;
+}
+
+.history-bottom--placeholder {
+  flex: 0 0 0;
+  min-height: 0;
+  padding-bottom: 0;
+  margin: 0;
+  overflow: hidden;
+  border-bottom: none;
 }
 
 .history-top {
@@ -1378,6 +1389,19 @@ iframe {
   .remarks-cell {
     min-width: 120px;
     width: 120px;
+  }
+
+  .carton-col {
+    min-width: 72px;
+    width: 76px;
+    max-width: 90px;
+    text-align: center;
+
+    .carton-count-input {
+      width: 100%;
+      max-width: 100%;
+      text-align: center;
+    }
   }
   
   .action-cell {
@@ -3783,6 +3807,11 @@ iframe {
     border-top: 2px solid #f97316;
     padding-top: 16px;
   }
+
+  &.batch-section-pending-scan {
+    border-top: 2px solid #7c3aed;
+    padding-top: 16px;
+  }
 }
 
 .batch-section-title {
@@ -3805,6 +3834,11 @@ iframe {
   &.return-section-title {
     color: #ea580c !important;
     .material-icons { color: #ea580c !important; }
+  }
+
+  &.pending-scan-section-title {
+    color: #6d28d9 !important;
+    .material-icons { color: #6d28d9 !important; }
   }
 }
 
@@ -3924,10 +3958,40 @@ iframe {
 .batch-view-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 10px 16px;
   background: #f1f5f9;
   border-bottom: 1px solid #e2e8f0;
+
+  .batch-view-header__left {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
+
+.batch-material-code-search {
+  width: min(220px, 36vw);
+  min-width: 140px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
 }
 
 .back-to-batches-btn {

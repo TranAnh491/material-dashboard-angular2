@@ -118,19 +118,25 @@ export class NavbarComponent implements OnInit, OnDestroy {
     sidebarOpen() {
         const toggleButton = this.toggleButton;
         const body = document.getElementsByTagName('body')[0];
-        setTimeout(function(){
-            toggleButton.classList.add('toggled');
-        }, 500);
-
-        body.classList.add('nav-open');
-
+        if (toggleButton) {
+          setTimeout(function(){
+              toggleButton.classList.add('toggled');
+          }, 500);
+        }
+        if (body) {
+          body.classList.add('nav-open');
+        }
         this.sidebarVisible = true;
     };
     sidebarClose() {
         const body = document.getElementsByTagName('body')[0];
-        this.toggleButton.classList.remove('toggled');
+        if (this.toggleButton) {
+          this.toggleButton.classList.remove('toggled');
+        }
         this.sidebarVisible = false;
-        body.classList.remove('nav-open');
+        if (body) {
+          body.classList.remove('nav-open');
+        }
     };
     sidebarToggle() {
         // const toggleButton = this.toggleButton;

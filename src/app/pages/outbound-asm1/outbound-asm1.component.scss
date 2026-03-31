@@ -2389,8 +2389,23 @@
     width: 10%;
     min-width: 70px;
   }
+
+  .col-bag-number {
+    width: 6%;
+    min-width: 60px;
+  }
+
+  .col-bag-batch {
+    width: 8%;
+    min-width: 70px;
+  }
   
   .col-quantity {
+    width: 8%;
+    min-width: 60px;
+  }
+
+  .col-scan-count {
     width: 8%;
     min-width: 60px;
   }
@@ -2463,18 +2478,38 @@
   }
   
   .col-batch {
-    width: 20% !important;
-    max-width: 80px !important;
+    width: 18% !important;
+    max-width: 70px !important;
   }
   
   .col-quantity {
-    width: 15% !important;
-    max-width: 60px !important;
+    width: 12% !important;
+    max-width: 50px !important;
+  }
+
+  .col-scan-count {
+    width: 12% !important;
+    max-width: 50px !important;
+  }
+
+  .col-bag-number {
+    width: 10% !important;
+    max-width: 45px !important;
+  }
+
+  .col-bag-batch {
+    width: 12% !important;
+    max-width: 55px !important;
+  }
+
+  .col-employee {
+    width: 18% !important;
+    max-width: 80px !important;
   }
   
   .col-production {
-    width: 25% !important;
-    max-width: 100px !important;
+    width: 22% !important;
+    max-width: 95px !important;
   }
   
   tbody tr {

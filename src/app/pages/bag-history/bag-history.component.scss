@@ -1,0 +1,264 @@
+/* RM1 History — đen/trắng, full width, lưới bảng có viền dọc */
+
+:host {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  background: #fff;
+}
+
+.bag-history-page {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 1rem 1.25rem 2rem;
+  margin: 0;
+  background: #fff;
+  color: #0a0a0a;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.page-header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid #0a0a0a;
+}
+
+.page-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: none;
+  font-size: 0.8125rem;
+  color: #404040;
+  font-weight: 400;
+
+  strong {
+    font-weight: 600;
+    color: #0a0a0a;
+  }
+
+  code {
+    font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    font-size: 0.8125em;
+    padding: 0.1em 0.35em;
+    border: 1px solid #d4d4d4;
+    background: #fafafa;
+    color: #0a0a0a;
+  }
+}
+
+$control-h: 40px;
+
+.toolbar-panel {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 1rem;
+  padding: 1rem 1rem 1.125rem;
+  border: 1px solid #0a0a0a;
+  background: #fff;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  align-items: flex-end;
+  width: 100%;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #0a0a0a;
+  }
+
+  select,
+  input[type='text'],
+  input[type='search'] {
+    min-width: 8.75rem;
+    min-height: $control-h;
+    height: $control-h;
+    padding: 0 0.625rem;
+    box-sizing: border-box;
+    border: 1px solid #0a0a0a;
+    border-radius: 0;
+    background: #fff;
+    color: #0a0a0a;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
+  select:focus,
+  input:focus {
+    outline: 2px solid #0a0a0a;
+    outline-offset: 1px;
+  }
+
+  .search-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: min(100%, 320px);
+  }
+
+  .search-label input {
+    min-width: min(100%, 14rem);
+  }
+
+  .btn-search,
+  .btn-clear {
+    min-height: $control-h;
+    height: $control-h;
+    padding: 0 1rem;
+    box-sizing: border-box;
+    border-radius: 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    border: 1px solid #0a0a0a;
+  }
+
+  .btn-search {
+    background: #0a0a0a;
+    color: #fff;
+  }
+
+  .btn-search:disabled {
+    background: #737373;
+    border-color: #737373;
+    color: #fff;
+    cursor: not-allowed;
+  }
+
+  .btn-clear {
+    background: #fff;
+    color: #0a0a0a;
+  }
+}
+
+.search-hint {
+  margin: 0 0 0.75rem;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0a0a0a;
+}
+
+.search-tip {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: #525252;
+  max-width: none;
+  line-height: 1.5;
+
+  strong {
+    color: #0a0a0a;
+  }
+
+  code {
+    font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    font-size: 0.85em;
+    padding: 0.1em 0.3em;
+    border: 1px solid #d4d4d4;
+    background: #fafafa;
+  }
+}
+
+.loading {
+  padding: 1.5rem 0;
+  font-size: 13px;
+  color: #525252;
+}
+
+.table-wrap {
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  border: 1px solid #0a0a0a;
+  background: #fff;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+
+  thead th {
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    background: #0a0a0a;
+    border-right: 1px solid #fff;
+    border-bottom: 1px solid #0a0a0a;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  thead th:last-child {
+    border-right: none;
+  }
+
+  tbody td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-right: 1px solid #d4d4d4;
+    border-bottom: 1px solid #d4d4d4;
+    color: #0a0a0a;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  tbody td:last-child {
+    border-right: none;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  thead th.num {
+    text-align: right;
+  }
+}
+
+.bag-batch-col {
+  white-space: nowrap;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  font-size: 12px;
+}
+
+.empty {
+  margin: 0;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  font-size: 13px;
+  color: #525252;
+  border-top: 1px solid #d4d4d4;
+}

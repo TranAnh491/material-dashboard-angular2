@@ -27,72 +27,11 @@
           <i class="material-icons">menu</i>
         </div>
         
-        <!-- More Button with Dropdown -->
-        <div class="dropdown">
-          <button class="more-btn" (click)="toggleDropdown($event)">
-            <i class="material-icons">more_vert</i>
-            <span class="desktop-only">More</span>
-          </button>
-          <div class="dropdown-menu" [class.show]="isDropdownOpen">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="importCatalog()">
-              <i class="material-icons">file_upload</i>
-              Update Standard Packing
-            </a>
-            <!-- Import/Export -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="loadStandardPacking()">
-              <i class="material-icons">file_download</i>
-              Tải Standard Packing (Excel)
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadCatalogTemplate()">
-              <i class="material-icons">description</i>
-              Download Standard Packing Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
-              <i class="material-icons">file_download</i>
-              Export to Excel
-            </a>
-            <div class="dropdown-divider"></div>
-            
-            <!-- Reports -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadFIFOReportASM1()">
-              <i class="material-icons">assessment</i>
-              Download FIFO Report ASM1
-            </a>
-            <div class="dropdown-divider"></div>
-            
-            <!-- Data Management -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="loadInventoryFromFirebase()">
-              <i class="material-icons">cloud_download</i>
-              Load toàn bộ inventory
-            </a>
-            <a class="dropdown-item text-warning" href="javascript:void(0)" (click)="consolidateAllInventory()">
-              <i class="material-icons">merge_type</i>
-              Gộp dòng trùng lặp
-            </a>
-            <div class="dropdown-divider"></div>
-            
-            <!-- Debug Tools -->
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugInventoryMatching()">
-              <i class="material-icons">bug_report</i>
-              Debug Inventory Matching
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testFIFOLogic('TEST001', 'PO001')">
-              <i class="material-icons">bug_report</i>
-              Test FIFO Logic
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testOutboundData()">
-              <i class="material-icons">bug_report</i>
-              Test Outbound Data
-            </a>
-            <div class="dropdown-divider"></div>
-            
-            <!-- Maintenance -->
-            <a class="dropdown-item text-danger" href="javascript:void(0)" (click)="fixProblematicBatchNumbers()">
-              <i class="material-icons">build</i>
-              Sửa batchNumber lỗi
-            </a>
-          </div>
-        </div>
+        <!-- More — mở popup -->
+        <button class="more-btn" type="button" (click)="openMorePopup()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
         
         <!-- Desktop Stats Boxes -->
         <div class="desktop-stats-section">
@@ -255,9 +194,10 @@
           </div>
           <div class="card-actions">
             <button class="qr-btn" 
+                    (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                     (click)="printQRCode(material)"
-                    [disabled]="!isRollsOrBagsValid(material)"
-                    [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
+                    [disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
+                    [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
               <i class="material-icons">qr_code</i>
             </button>
           </div>
@@ -268,6 +208,24 @@
           <div class="info-row">
             <span class="label">IMD:</span>
             <span class="value">{{getDisplayIMD(material)}}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">BAG:</span>
+            <ng-container *ngIf="canEdit; else bagsReadonlyMobile">
+              <input
+                type="text"
+                class="mobile-input"
+                [ngModel]="material.bagInput || ''"
+                (ngModelChange)="material.bagInput = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
+                (blur)="updateTotalBags(material)"
+                (keydown.enter)="onBagsKeyEnter(material, $event)"
+                placeholder="Nhập số bịch">
+            </ng-container>
+            <ng-template #bagsReadonlyMobile>
+              <span class="value readonly-metric">
+                {{ material.totalBags ? formatNumber(material.totalBags) : '' }}
+              </span>
+            </ng-template>
           </div>
           
           <div class="info-row">
@@ -320,18 +278,46 @@
           
           <div class="info-row">
             <span class="label">QTY BAG:</span>
-            <input type="number" 
-                   class="mobile-input" 
-                   [(ngModel)]="material.rollsOrBags" 
-                   (change)="updateRollsOrBags(material)"
-                   min="0" 
-                   step="1"
-                   [placeholder]="getStandardPacking(material.materialCode) || '0'">
+            <ng-container *ngIf="canEdit; else rollsOrBagsReadonlyMobile">
+              <input
+                type="text"
+                class="mobile-input"
+                [ngModel]="material.rollsOrBags || ''"
+                (ngModelChange)="material.rollsOrBags = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
+                (blur)="updateRollsOrBags(material)"
+                (keydown.enter)="onRollsOrBagsKeyEnter(material, $event)"
+                step="0.0001"
+                placeholder="Nhập QTY BAG">
+            </ng-container>
+            <ng-template #rollsOrBagsReadonlyMobile>
+              <span class="value readonly-metric"
+                    title="Chỉ đọc — cập nhật từ tab Inbound">
+                {{ formatNumber(material.rollsOrBags) }}
+              </span>
+            </ng-template>
           </div>
           
           <div class="info-row">
             <span class="label">Standard Packing:</span>
-            <span class="value">{{ getStandardPacking(material.materialCode) }}</span>
+            <ng-container *ngIf="!material.isEditingStandardPacking">
+              <span class="value"
+                    [class.readonly-metric]="!canEdit"
+                    [class.standard-packing-dbl]="canEdit"
+                    [title]="canEdit ? 'Double-click để sửa' : ''"
+                    (dblclick)="startEditingStandardPacking(material)">
+                {{ getStandardPacking(material.materialCode) }}
+              </span>
+            </ng-container>
+            <input *ngIf="material.isEditingStandardPacking"
+                   type="number"
+                   class="mobile-input"
+                   [ngModel]="material.editStandardPackingValue"
+                   (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
+                   (blur)="finishEditingStandardPacking(material)"
+                   (keyup.enter)="finishEditingStandardPacking(material)"
+                   (keyup.escape)="cancelEditingStandardPacking(material)"
+                   min="0"
+                   step="1">
           </div>
         </div>
         
@@ -383,6 +369,7 @@
             <th>Mã hàng</th>
             <th>PO</th>
                             <th>IMD</th>
+            <th title="Số bịch (gwLdv) dùng cho đuôi QR inbound">BAG</th>
             <th>Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
@@ -406,23 +393,29 @@
               [class.iqc-row]="isIQCLocation(material.location)">
             <td class="qr-cell">
               <button class="qr-btn" 
+                      (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                       (click)="printQRCode(material)"
-                      [disabled]="!isRollsOrBagsValid(material)"
-                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : 'Tạo QR code'">
+                      [disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
+                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
                 <i class="material-icons">qr_code</i>
               </button>
             </td>
-            <td class="rolls-bags-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.rollsOrBags" 
-                     (change)="updateRollsOrBags(material)"
-                     (blur)="updateRollsOrBags(material)"
-                     (keyup.enter)="updateRollsOrBags(material)"
-                     min="0" 
-                     step="1"
-                     [placeholder]="getStandardPacking(material.materialCode) || '0'"
-                     [title]="'QTY BAG (mặc định từ Standard Packing: ' + (getStandardPacking(material.materialCode) || 'N/A') + ')'">
+            <td class="rolls-bags-cell" [class.readonly-cell]="!canEdit"
+                [title]="canEdit ? 'Nhập tay QTY BAG (mặc định từ Inbound)' : 'Chỉ đọc — cập nhật từ tab Inbound'">
+              <ng-container *ngIf="canEdit; else rollsOrBagsReadonlyDesktop">
+                <input
+                  type="text"
+                  class="editable-input"
+                  [ngModel]="material.rollsOrBags || ''"
+                  (ngModelChange)="material.rollsOrBags = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
+                  (blur)="updateRollsOrBags(material)"
+                  (keydown.enter)="onRollsOrBagsKeyEnter(material, $event)"
+                  step="0.0001"
+                  placeholder="0">
+              </ng-container>
+              <ng-template #rollsOrBagsReadonlyDesktop>
+                {{ formatNumber(material.rollsOrBags) }}
+              </ng-template>
             </td>
             <td class="row-header">{{i + 1}}</td>
 
@@ -435,6 +428,22 @@
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
               {{getDisplayIMD(material)}}
+            </td>
+            <td class="batch-cell readonly-cell" [class.readonly-cell]="!canEdit" [class.duplicate-cell]="material.isDuplicate"
+                title="Số bịch (gwLdv) - dùng cho đuôi QR">
+              <ng-container *ngIf="canEdit; else bagsReadonlyDesktop">
+                <input
+                  type="text"
+                  class="editable-input"
+                  [ngModel]="material.bagInput || ''"
+                  (ngModelChange)="material.bagInput = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
+                  (blur)="updateTotalBags(material)"
+                  (keydown.enter)="onBagsKeyEnter(material, $event)"
+                  placeholder="Nhập số bịch">
+              </ng-container>
+              <ng-template #bagsReadonlyDesktop>
+                {{ material.totalBags ? formatNumber(material.totalBags) : '' }}
+              </ng-template>
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <span *ngIf="!material.isEditingOpeningStock" 
@@ -519,28 +528,26 @@
                      placeholder="Nhập lưu ý..."
                      title="Lưu ý từ inbound">
             </td>
-            <td class="standard-packing-cell">
-              <span
-                *ngIf="!material.isEditingStandardPacking"
-                class="standard-packing-value"
-                (dblclick)="startEditingStandardPacking(material)"
-                title="Nhấp đúp để sửa Standard Packing"
-              >
+            <td class="standard-packing-cell"
+                [class.readonly-cell]="!canEdit"
+                [title]="canEdit ? 'Double-click để sửa Standard Packing (lưu catalog)' : 'Không có quyền sửa'">
+              <span *ngIf="!material.isEditingStandardPacking"
+                    class="standard-packing-value"
+                    [class.standard-packing-dbl]="canEdit"
+                    (dblclick)="startEditingStandardPacking(material)">
                 {{ getStandardPacking(material.materialCode) }}
               </span>
-              <input
-                *ngIf="material.isEditingStandardPacking"
-                type="number"
-                class="editable-input"
-                [ngModel]="material.editStandardPackingValue"
-                (ngModelChange)="material.editStandardPackingValue = $event === '' ? null : +$event"
-                (blur)="finishEditingStandardPacking(material)"
-                (keyup.enter)="finishEditingStandardPacking(material)"
-                (keyup.escape)="cancelEditingStandardPacking(material)"
-                min="0"
-                step="1"
-                placeholder="Nhập standard packing"
-              >
+              <input *ngIf="material.isEditingStandardPacking"
+                     type="number"
+                     class="standard-packing-input"
+                     [ngModel]="material.editStandardPackingValue"
+                     (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
+                     (blur)="finishEditingStandardPacking(material)"
+                     (keyup.enter)="finishEditingStandardPacking(material)"
+                     (keyup.escape)="cancelEditingStandardPacking(material)"
+                     min="0"
+                     step="1"
+                     placeholder="SP">
             </td>
             <td class="status-cell">
               <span class="badge" 
@@ -631,6 +638,241 @@
           <h4>🔍 Đang tìm kiếm...</h4>
           <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong ASM1 inventory</p>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- More Options Popup -->
+<div class="modal-overlay" *ngIf="showMorePopup" (click)="closeMorePopup()">
+  <div class="modal-content more-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>⚙️ More Options — ASM1</h3>
+      <button type="button" class="close-btn" (click)="closeMorePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body more-popup-body">
+      <div class="popup-section">
+        <h4 class="popup-section-title">📥 Export/Import</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="exportToExcel(); closeMorePopup()">
+            <i class="material-icons">file_download</i>
+            <span>Export to Excel</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="downloadStockTemplate(); closeMorePopup()">
+            <i class="material-icons">description</i>
+            <span>Download Inventory Template</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="importCurrentStock(); closeMorePopup()">
+            <i class="material-icons">file_upload</i>
+            <span>Import Inventory (Tồn đầu)</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="importCatalog(); closeMorePopup()">
+            <i class="material-icons">file_upload</i>
+            <span>Update Standard Packing</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="loadStandardPacking(); closeMorePopup()">
+            <i class="material-icons">file_download</i>
+            <span>Tải Standard Packing (Excel)</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="openStandardPackingManager(); closeMorePopup()">
+            <i class="material-icons">manage_search</i>
+            <span>Quản lý Standard Packing</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="downloadCatalogTemplate(); closeMorePopup()">
+            <i class="material-icons">description</i>
+            <span>Download Standard Packing Template</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <h4 class="popup-section-title">📊 Reports</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="downloadFIFOReportASM1(); closeMorePopup()">
+            <i class="material-icons">assessment</i>
+            <span>Download FIFO Report ASM1</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <h4 class="popup-section-title">📦 Inventory Actions</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="loadInventoryFromFirebase(); closeMorePopup()">
+            <i class="material-icons">cloud_download</i>
+            <span>Load toàn bộ inventory</span>
+          </button>
+          <button
+            type="button"
+            class="popup-action-btn"
+            [disabled]="isSnapshottingBagHistory"
+            (click)="openSnapshotCodesModal()"
+          >
+            <i class="material-icons">history</i>
+            <span>{{ isSnapshottingBagHistory ? 'Đang ghi snapshot TỒN…' : 'Ghi snapshot TỒN → Lịch sử bịch' }}</span>
+          </button>
+          <button type="button" class="popup-action-btn warning-action" (click)="consolidateAllInventory(); closeMorePopup()">
+            <i class="material-icons">merge_type</i>
+            <span>Gộp dòng trùng lặp</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <h4 class="popup-section-title">🐛 Debug Tools</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="debugInventoryMatching(); closeMorePopup()">
+            <i class="material-icons">bug_report</i>
+            <span>Debug Inventory Matching</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="testFIFOLogic('TEST001', 'PO001'); closeMorePopup()">
+            <i class="material-icons">bug_report</i>
+            <span>Test FIFO Logic</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="testOutboundData(); closeMorePopup()">
+            <i class="material-icons">bug_report</i>
+            <span>Test Outbound Data</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <h4 class="popup-section-title">🔧 Fix Tools</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn delete-action" (click)="fixProblematicBatchNumbers(); closeMorePopup()">
+            <i class="material-icons">build</i>
+            <span>Sửa batchNumber lỗi</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Standard Packing Manager Modal -->
+<div class="modal-overlay" *ngIf="showStandardPackingManager" (click)="closeStandardPackingManager()">
+  <div class="modal-content" style="max-width: 980px; width: 95%;" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🔎 Quản lý Standard Packing — ASM1</h3>
+      <button type="button" class="close-btn" (click)="closeStandardPackingManager()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+        <input
+          type="text"
+          class="editable-input"
+          style="min-width: 260px;"
+          [(ngModel)]="spSearchCode"
+          placeholder="Nhập mã hàng để search..."
+          (keyup.enter)="searchStandardPacking()">
+        <button type="button" class="popup-action-btn" (click)="searchStandardPacking()">
+          <i class="material-icons">search</i>
+          <span>{{ spIsSearching ? 'Đang search...' : 'Search' }}</span>
+        </button>
+      </div>
+
+      <div style="margin-top: 14px; max-height: 420px; overflow: auto; border: 1px solid #eee; border-radius: 8px;">
+        <table class="excel-table" style="min-width: 780px;">
+          <thead>
+            <tr>
+              <th>Mã hàng</th>
+              <th>Tên</th>
+              <th>Standard hiện tại</th>
+              <th>Sửa Standard</th>
+              <th>Update</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of spResults">
+              <td>{{ r.materialCode }}</td>
+              <td>{{ r.materialName || '-' }}</td>
+              <td style="text-align:right">{{ formatNumber(r.current) }}</td>
+              <td style="text-align:right">
+                <input type="number"
+                       class="editable-input"
+                       style="max-width: 140px;"
+                       [(ngModel)]="r.edit"
+                       min="0"
+                       step="1">
+              </td>
+              <td>
+                <button type="button" class="popup-action-btn" (click)="updateStandardPackingRow(r)">
+                  <i class="material-icons">save</i>
+                  <span>Update</span>
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="spResults.length === 0">
+              <td colspan="5" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 16px; border-top: 1px solid #eee; padding-top: 12px;">
+        <h4 style="margin: 0 0 10px 0;">➕ Thêm mã mới + Standard</h4>
+        <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+          <input type="text"
+                 class="editable-input"
+                 style="min-width: 220px;"
+                 [(ngModel)]="spNewCode"
+                 placeholder="Mã hàng mới...">
+          <input type="number"
+                 class="editable-input"
+                 style="max-width: 160px;"
+                 [(ngModel)]="spNewStandard"
+                 min="0"
+                 step="1"
+                 placeholder="Standard...">
+          <button type="button" class="popup-action-btn" (click)="addNewStandardPacking()">
+            <i class="material-icons">add</i>
+            <span>Thêm</span>
+          </button>
+        </div>
+        <p style="margin-top: 8px; color:#666;">Ghi vào collection <strong>materials</strong>. Nếu mã chưa có tên, hệ thống sẽ tạo tên mặc định = mã.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Snapshot TỒN: nhập mã trước (tránh quá tải) -->
+<div class="modal-overlay" *ngIf="showSnapshotCodesModal" (click)="closeSnapshotCodesModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Ghi snapshot TỒN → Lịch sử bịch</h3>
+      <button type="button" class="close-btn" (click)="closeSnapshotCodesModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Nhập các mã cần snapshot (mỗi dòng một mã, hoặc cách nhau bởi dấu phẩy/chấm phẩy). Chỉ xử lý inventory của các mã này.</p>
+      <textarea
+        rows="8"
+        class="batch-delete-input"
+        style="width:100%;box-sizing:border-box;margin-top:8px;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="snapshotMaterialCodesText"
+        placeholder="VD:&#10;B017431&#10;R12345"
+      ></textarea>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="cancel-btn" (click)="closeSnapshotCodesModal()">
+          <i class="material-icons">cancel</i>
+          Hủy
+        </button>
+        <button
+          type="button"
+          class="delete-batch-btn"
+          style="background:#1e40af;"
+          (click)="confirmSnapshotCodesAndRun()"
+          [disabled]="isSnapshottingBagHistory"
+        >
+          <i class="material-icons">history</i>
+          Ghi snapshot
+        </button>
       </div>
     </div>
   </div>

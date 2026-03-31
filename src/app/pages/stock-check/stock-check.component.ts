@@ -229,6 +229,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private reportDatesLoadedFactory: string | null = null;
   /** ON/OFF ghi nhận dữ liệu theo ngày report (true = ghi nhận, false = bỏ qua). */
   reportDateEnabledMap: { [dateKey: string]: boolean } = {};
+  /**
+   * Persist report-date switches across machines.
+   * If set: ONLY this dateKey is enabled; all others are OFF.
+   */
+  private reportOnlyDateKey: string | null = null;
+  private readonly REPORT_SETTINGS_COLLECTION = 'stock-check-report-settings';
 
   // Locations from Location tab (for validation)
   validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
@@ -979,8 +985,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.selectedFactory = factory;
     this.currentPage = 1;
     this.isInitialDataLoaded = false; // Reset flag
-    // Reset date switches when changing factory (each factory has its own date set)
+    // Load report-date settings (persist across machines) BEFORE loading data/snapshot.
     this.reportDateEnabledMap = {};
+    this.reportOnlyDateKey = null;
+    this.loadReportDateSettings().catch(err =>
+      console.error('❌ [ReportByDate] Error loading report settings:', err)
+    );
     
     // Subscribe ngay từ đầu để catch mọi thay đổi (trước khi load data)
     this.subscribeToSnapshotChanges();
@@ -1465,6 +1475,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           materials: [...checkedMaterials],
           lastUpdated: new Date()
         };
+      }
+
+      // Apply report-date settings to snapshot materials (this affects scanning math & prevents overcount)
+      if (checkedMaterials && checkedMaterials.length > 0) {
+        checkedMaterials = checkedMaterials.filter((it: any) => {
+          const d = this.parseFirestoreDate(it?.dateCheck);
+          if (!d) return true;
+          const dk = this.toLocalDateKey(d);
+          return this.isReportDateEnabled(dk);
+        });
       }
 
       if (checkedMaterials.length === 0) {
@@ -3065,15 +3085,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   isReportDateEnabled(dateKey: string): boolean {
+    if (this.reportOnlyDateKey) {
+      return dateKey === this.reportOnlyDateKey;
+    }
     return this.reportDateEnabledMap[dateKey] !== false;
   }
 
   async onToggleReportDateEnabled(dateKey: string, enabled: boolean): Promise<void> {
+    // Manual toggles exit "only date" mode.
+    if (this.reportOnlyDateKey) {
+      this.reportOnlyDateKey = null;
+    }
     this.reportDateEnabledMap[dateKey] = enabled;
+    await this.saveReportDateSettings();
     await this.reloadAndApplyReportDateRecognition();
   }
 
   private hasAnyReportDateDisabled(): boolean {
+    if (this.reportOnlyDateKey) return true;
     return Object.values(this.reportDateEnabledMap).some(v => v === false);
   }
 
@@ -3099,6 +3128,55 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         mat.actualLocation = '';
       }
     });
+  }
+
+  // ======================== REPORT SETTINGS (PERSIST ACROSS MACHINES) ========================
+
+  private reportSettingsDocId(factory: string): string {
+    return `${factory}_report_settings`;
+  }
+
+  private async loadReportDateSettings(): Promise<void> {
+    if (!this.selectedFactory) return;
+    const docId = this.reportSettingsDocId(this.selectedFactory);
+    const snap = await this.firestore
+      .collection(this.REPORT_SETTINGS_COLLECTION)
+      .doc(docId)
+      .get()
+      .toPromise();
+
+    if (!snap || !snap.exists) {
+      // Theo yêu cầu: mặc định chỉ bật ngày hôm nay (tắt toàn bộ report ngày cũ).
+      this.reportOnlyDateKey = this.toLocalDateKey(new Date());
+      this.reportDateEnabledMap = {};
+      await this.saveReportDateSettings();
+      return;
+    }
+
+    const data = snap.data() as any;
+    this.reportOnlyDateKey =
+      typeof data?.onlyDateKey === 'string' && data.onlyDateKey.trim()
+        ? data.onlyDateKey.trim()
+        : null;
+    const map = data?.enabledMap && typeof data.enabledMap === 'object' ? data.enabledMap : {};
+    this.reportDateEnabledMap = { ...(map || {}) };
+  }
+
+  private async saveReportDateSettings(): Promise<void> {
+    if (!this.selectedFactory) return;
+    const docId = this.reportSettingsDocId(this.selectedFactory);
+    await this.firestore
+      .collection(this.REPORT_SETTINGS_COLLECTION)
+      .doc(docId)
+      .set(
+        {
+          factory: this.selectedFactory,
+          onlyDateKey: this.reportOnlyDateKey,
+          enabledMap: this.reportDateEnabledMap,
+          updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
   }
 
   /** Reload snapshot check data then apply report-date switches to UI/state. */

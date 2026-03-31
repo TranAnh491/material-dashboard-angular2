@@ -80,6 +80,8 @@ export class TabPermissionService {
       'materials-asm1': factoryAccess.canAccessASM1 === true,
       'materials-asm2': factoryAccess.canAccessASM2 === true,
       'inventory-overview-asm1': factoryAccess.canAccessASM1 === true,
+      'inventory-overview-asm2': factoryAccess.canAccessASM2 === true,
+      'bag-history': factoryAccess.canAccessASM1 === true,
       
       // Location tab - chỉ cho phép khi có quyền truy cập ASM1
       'location': factoryAccess.canAccessASM1 === true,
@@ -165,6 +167,7 @@ export class TabPermissionService {
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
     { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
+    { key: 'bag-history', name: 'RM1 History' },
     
     // ASM FG tabs
     { key: 'fg-in', name: 'FG In' },

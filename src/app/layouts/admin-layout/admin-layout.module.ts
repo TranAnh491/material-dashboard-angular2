@@ -67,6 +67,7 @@ import { PxkPreviewComponent } from '../../pages/pxk-preview/pxk-preview.compone
 import { QCComponent } from '../../pages/qc/qc.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
+import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 
@@ -134,6 +135,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     QCComponent,
     WhSecurityComponent,
     Rm1DeliveryComponent,
+    BagHistoryComponent,
     PrintOptionDialogComponent,
 
     ChartComponent

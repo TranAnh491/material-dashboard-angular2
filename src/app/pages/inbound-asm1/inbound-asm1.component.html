@@ -21,21 +21,31 @@
     <div class="excel-actions">
       <div class="action-controls-horizontal">
         <!-- Quay lại + Lô hàng + TBHD - cùng hàng với các nút -->
-        <ng-container *ngIf="!isLoading && selectedBatchView && !isBatchActive">
+        <div class="batch-detail-toolbar" *ngIf="!isLoading && selectedBatchView && !isBatchActive">
           <button class="back-to-batches-btn" (click)="backToBatchList()">
             <i class="material-icons">arrow_back</i>
             Quay lại
           </button>
-          <span class="batch-view-title">
-            <i class="material-icons">folder_open</i>
-            Lô hàng: <strong>{{ selectedBatchView }}</strong>
-            <span class="batch-view-count">({{ filteredMaterials.length }} mã)</span>
-          </span>
+          <div class="batch-detail-toolbar__left">
+            <span class="batch-view-title">
+              <i class="material-icons">folder_open</i>
+              Lô hàng: <strong>{{ selectedBatchView }}</strong>
+              <span class="batch-view-count">
+                ({{ batchTableRows.length }}<ng-container *ngIf="batchMaterialCodeSearch?.trim()">/{{ filteredMaterials.length }}</ng-container> mã)
+              </span>
+            </span>
+            <input type="search"
+                   class="batch-material-code-search"
+                   [(ngModel)]="batchMaterialCodeSearch"
+                   placeholder="Tìm mã hàng…"
+                   title="Lọc dòng theo mã hàng trong lô (TBHD / in QR vẫn dùng toàn bộ lô)"
+                   autocomplete="off">
+          </div>
           <button class="tbhd-btn mobile-hide" (click)="printTBHD()" title="In Thông Báo Hàng Đến">
             <i class="material-icons">print</i>
             TBHD
           </button>
-        </ng-container>
+        </div>
         <!-- Start Batch Processing Button - Dòng 1 -->
         <div class="start-batch-container mobile-row1">
           <button class="start-batch-btn" 
@@ -77,9 +87,9 @@
         
         <!-- In toàn bộ QR Button - Ẩn trên mobile -->
         <button class="print-all-qr-btn mobile-hide" 
-                (click)="printAllQRCodes()"
-                [disabled]="!canGenerateQR || getPrintableMaterialsCount() === 0"
-                [title]="getPrintableMaterialsCount() === 0 ? 'Không có material nào có thể in QR' : 'In tất cả QR codes trong danh sách'">
+                (click)="openPrintAllBatchModal()"
+                [disabled]="!canGenerateQR || distinctBatchNumbersForPrint.length === 0"
+                [title]="distinctBatchNumbersForPrint.length === 0 ? 'Không có lô trong khung ngày' : 'Chọn lô rồi in tem QR (bịch/thùng)'">
           <i class="material-icons">print</i>
           In toàn bộ
         </button>
@@ -227,6 +237,35 @@
           </div>
         </div>
       </div>
+
+      <!-- Nhập chưa Scan: đã tạo inventory IQC, chờ quét tem -->
+      <div class="batch-section batch-section-pending-scan" *ngIf="preScanBatchGroups.length > 0">
+        <div class="batch-section-title pending-scan-section-title">
+          <i class="material-icons">qr_code_scanner</i>
+          Nhập chưa Scan
+          <span class="batch-section-count">({{ preScanBatchGroups.length }} lô)</span>
+        </div>
+        <div class="batch-grid">
+          <div class="batch-box batch-box-pending-scan"
+               *ngFor="let batch of preScanBatchGroups"
+               [class.batch-box-done]="batch.receivedCount === batch.count && batch.count > 0"
+               (click)="selectBatchView(batch.batchNumber)"
+               (contextmenu)="openBatchContextMenu($event, batch.batchNumber)">
+            <div class="batch-box-number">{{ batch.batchNumber }}</div>
+            <div class="batch-box-stats">
+              <span class="batch-box-count-badge">{{ batch.count }} mã</span>
+              <span class="batch-box-received-badge"
+                    [class.fully-received]="batch.receivedCount === batch.count && batch.count > 0">
+                {{ batch.receivedCount }}/{{ batch.count }} đã nhận
+              </span>
+            </div>
+            <div class="batch-box-meta">
+              <span class="batch-box-date">{{ formatDate(batch.importDate) }}</span>
+              <span class="batch-box-supplier" *ngIf="batch.supplier">{{ batch.supplier }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Right-click context menu -->
@@ -235,6 +274,13 @@
          [style.left.px]="batchContextMenuX"
          [style.top.px]="batchContextMenuY"
          (click)="$event.stopPropagation()">
+      <button type="button"
+              class="batch-context-menu-item"
+              (click)="importBatchWithoutScanFromContextMenu()"
+              [disabled]="!canPreScanImportBatch(batchContextMenuBatchNumber)">
+        <i class="material-icons">inventory_2</i>
+        Nhập khi chưa scan
+      </button>
       <button class="batch-context-menu-item danger"
               (click)="deleteBatchFromContextMenu()"
               [disabled]="!canDeleteMaterials">
@@ -264,10 +310,12 @@
             <th class="status-cell">KK</th>
             <th class="status-cell">ĐÃ NHẬN</th>
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
-            <th class="number-cell">GW. LDV (g)</th>
+            <th class="number-cell">Số Bịch</th>
+            <th class="number-cell">Bịch (QR)</th>
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
             <th class="unitweight-cell">U.W (g)</th>
             <th class="remarks-cell">LƯU Ý</th>
+            <th class="number-cell carton-col" title="Số thùng — In toàn bộ sẽ in tem 8×8cm">THÙNG</th>
             <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
             <!-- <th class="employee-cell">MSNV</th> -->
             <!-- <th class="time-cell">THỜI GIAN</th> -->
@@ -277,7 +325,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; let i = index; trackBy: trackByMaterial" 
+          <tr *ngFor="let material of batchTableRows; let i = index; trackBy: trackByMaterial" 
               [class.received-row]="material.isReceived"
                               >
             <td class="factory-cell factory-asm1">
@@ -303,7 +351,6 @@
                      [(ngModel)]="material.materialCode" 
                      [ngModelOptions]="{updateOn: 'blur'}"
                      (change)="updateMaterial(material)"
-                     (click)="selectMaterialForHistory(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa mã hàng'">
             </td>
@@ -371,14 +418,13 @@
                       [title]="getReceivedTitle(material)">
              </td>
             <td class="number-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.rollsOrBags" 
-                     [ngModelOptions]="{updateOn: 'blur'}"
-                     (change)="updateMaterial(material)"
-                     (blur)="updateMaterial(material)"
-                     step="0.01"
-                     min="0"
+              <input type="text"
+                     inputmode="decimal"
+                     class="editable-input"
+                     [ngModel]="getRollsOrBagsInputValue(material, i)"
+                     (ngModelChange)="onRollsOrBagsInputDraft($event)"
+                     (focus)="onRollsOrBagsInputFocus(material, i)"
+                     (blur)="onRollsOrBagsInputBlur(material, i)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị (tự động lưu vào danh mục)'">
             </td>
@@ -387,11 +433,24 @@
                      class="editable-input"
                      [(ngModel)]="material.gwLdv"
                      [ngModelOptions]="{updateOn: 'blur'}"
-                     (change)="updateMaterial(material)"
-                     step="0.01"
+                     (blur)="onGwLdvCommit(material)"
+                     (keydown.enter)="$any($event.target).blur()"
+                     inputmode="numeric"
+                     step="1"
                      min="0"
+                     placeholder="bịch"
                      [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Nhập GW. LDV (gram) cho lượng đơn vị của lô này'">
+                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Nhập số bịch (đơn vị: bịch, không phải gram)'">
+            </td>
+            <td class="number-cell">
+              <input type="text"
+                     class="editable-input"
+                     [(ngModel)]="material.bagBatch"
+                     [ngModelOptions]="{updateOn: 'blur'}"
+                     (change)="updateMaterial(material)"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     placeholder="VD: 3/10"
+                     [title]="material.isReceived ? 'Đã nhận' : 'Bịch từ QR (i/tổng), có thể nhập tay'">
             </td>
             <td class="supplier-cell">
               <input type="text" 
@@ -425,6 +484,20 @@
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lưu ý'"
                      placeholder="Lưu ý">
             </td>
+            <td class="number-cell carton-col">
+              <input type="number"
+                     class="editable-input carton-count-input"
+                     [(ngModel)]="material.cartonCount"
+                     [ngModelOptions]="{updateOn: 'blur'}"
+                     (blur)="onCartonCountCommit(material)"
+                     (keydown.enter)="$any($event.target).blur()"
+                     inputmode="numeric"
+                     step="1"
+                     min="0"
+                     placeholder="0"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Đã nhận' : 'Số thùng — In toàn bộ: mỗi thùng một tem 8×8cm (QR, tên mã, PO, IMD, Thùng i/N)'">
+            </td>
              <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
              <!-- <td class="employee-cell">
                <span class="employee-display">{{ getEmployeeDisplay(material) }}</span>
@@ -444,8 +517,8 @@
                          <td class="qr-cell">
                <button class="print-qr-btn" 
                        (click)="printQRCode(material)" 
-                       [disabled]="!canGenerateQR || !material.rollsOrBags || material.rollsOrBags <= 0"
-                       [title]="!material.rollsOrBags || material.rollsOrBags <= 0 ? 'Vui lòng nhập lượng đơn vị trước' : 'In tem QR code'">
+                       [disabled]="!canGenerateQR || !canPrintInboundQr(material)"
+                       [title]="getPrintQrButtonTitle(material)">
                  <i class="material-icons">print</i>
                  Print
                </button>
@@ -453,118 +526,6 @@
           </tr>
         </tbody>
       </table>
-      </div>
-
-      <!-- Right side: material history + notes -->
-      <div class="material-history-panel">
-        <div class="history-top">
-          <h5 class="history-title">
-            History
-            <span *ngIf="selectedHistoryMaterial">
-              – {{ selectedHistoryMaterial.materialCode }}
-            </span>
-          </h5>
-
-          <div *ngIf="isLoadingHistory" class="history-loading">
-            <i class="material-icons spinning">refresh</i>
-            Đang tải lịch sử...
-          </div>
-
-          <div *ngIf="!isLoadingHistory && !selectedHistoryMaterial" class="history-empty">
-            Chọn một mã hàng trong bảng để xem lịch sử inbound.
-          </div>
-
-          <div *ngIf="!isLoadingHistory && selectedHistoryMaterial" class="history-content">
-            <div class="history-table-wrapper" *ngIf="materialHistory.length > 0; else noHistory">
-              <table class="history-table">
-                <thead>
-                  <tr>
-                    <th>Ngày nhập</th>
-                    <th>NCC</th>
-                    <th>PO</th>
-                    <th>NK</th>
-                    <th>LDV</th>
-                    <th>GW LDV (g)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let h of materialHistory">
-                    <td>{{ formatDate(h.importDate) }}</td>
-                    <td>{{ formatHistoryNcc(h.supplier) }}</td>
-                    <td>{{ h.poNumber }}</td>
-                    <td>{{ formatNumber(h.quantity) }}</td>
-                    <td>{{ h.rollsOrBags }}</td>
-                    <td>{{ h.gwLdv }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <ng-template #noHistory>
-              <div class="history-empty">
-                Không có lịch sử inbound cho mã hàng này.
-              </div>
-            </ng-template>
-          </div>
-        </div>
-
-        <div class="history-bottom">
-          <h5 class="history-title">
-            Lưu ý mã hàng
-            <span *ngIf="selectedHistoryMaterial">
-              – {{ selectedHistoryMaterial.materialCode }}
-            </span>
-          </h5>
-
-          <div *ngIf="!selectedHistoryMaterial" class="history-empty">
-            Chọn mã hàng để xem và thêm lưu ý.
-          </div>
-
-          <div *ngIf="selectedHistoryMaterial" class="notes-section">
-            <div class="notes-chart-box">
-              <span class="notes-box-label">Chart</span>
-              <div class="chart-placeholder" *ngIf="materialHistory.length === 0">
-                Chưa có dữ liệu. Chọn mã hàng có lịch sử.
-              </div>
-              <div class="chart-wrapper" *ngIf="materialHistory.length > 0">
-                <canvas #materialHistoryChart></canvas>
-              </div>
-              <div class="chart-alert" *ngIf="chartAlertMessage">
-                <i class="material-icons">warning</i>
-                {{ chartAlertMessage }}
-              </div>
-            </div>
-            <div class="notes-percent-box">
-              <span class="notes-box-label">Phần trăm kiểm tra</span>
-              <div class="note-percent">
-                <label>Phần trăm kiểm tra (%)</label>
-                <input type="number"
-                       [(ngModel)]="selectedMaterialCheckPercent"
-                       (blur)="saveSelectedMaterialNote()"
-                       min="0" max="100">
-              </div>
-              <div class="note-list" *ngIf="selectedMaterialNotes.length > 0">
-                <div class="note-item" *ngFor="let n of selectedMaterialNotes">
-                  <div class="note-text">{{ n.note }}</div>
-                  <div class="note-meta">
-                    {{ n.checkPercent }}% – {{ n.createdAt | date:'dd/MM/yyyy HH:mm' }}
-                  </div>
-                </div>
-              </div>
-              <div class="note-empty" *ngIf="selectedMaterialNotes.length === 0">
-                Chưa có lưu ý nào cho mã hàng này.
-              </div>
-              <div class="note-new">
-                <label>Nhập lưu ý mới</label>
-                <textarea [(ngModel)]="newMaterialNoteText"
-                          (keyup.enter)="saveSelectedMaterialNote(true)"
-                          placeholder="Nhập lưu ý đặc biệt cho mã hàng..."></textarea>
-                <button class="note-add-btn" (click)="saveSelectedMaterialNote(true)" [disabled]="!newMaterialNoteText.trim()">
-                  Thêm lưu ý
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -764,6 +725,43 @@
       <div class="camera-instructions">
         <p><i class="material-icons">info</i> Sử dụng camera điện thoại để quét mã QR</p>
         <p><i class="material-icons">smartphone</i> Đảm bảo camera có quyền truy cập</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- In toàn bộ: chọn lô -->
+<div class="modal-overlay" *ngIf="showPrintAllBatchModal" (click)="closePrintAllBatchModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🖨️ In toàn bộ — chọn lô</h3>
+      <button type="button" class="close-btn" (click)="closePrintAllBatchModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="mb-2">Chọn lô hàng trong khung ngày hiện tại để in tem (tránh in nhầm lô khác).</p>
+      <label for="printBatchSelect">Lô hàng / DNNK</label>
+      <select id="printBatchSelect"
+              class="batch-delete-input"
+              style="width:100%;max-width:100%;padding:8px;"
+              [(ngModel)]="printAllBatchSelection">
+        <option value="">— Chọn lô —</option>
+        <option *ngFor="let b of distinctBatchNumbersForPrint" [value]="b">{{ b }}</option>
+      </select>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="cancel-btn" (click)="closePrintAllBatchModal()">
+          <i class="material-icons">cancel</i>
+          Hủy
+        </button>
+        <button type="button"
+                class="delete-batch-btn"
+                style="background:#1e40af;"
+                (click)="confirmPrintAllBatchAndRun()"
+                [disabled]="!printAllBatchSelection">
+          <i class="material-icons">print</i>
+          In
+        </button>
       </div>
     </div>
   </div>
@@ -977,11 +975,21 @@
         <span>Nhân viên: <strong>{{ returnGoodsEmployeeId }}</strong></span>
       </div>
 
-      <!-- Step 2: Scan QR Code -->
+      <!-- Step 2: Nhận hàng trả (không bắt buộc QR) -->
       <div class="return-goods-scanner-section" *ngIf="returnGoodsStep === 2">
-        <label for="returnGoodsQRInput">
+        <label>
+          <i class="material-icons">inventory_2</i>
+          Bước 2: Nhận hàng trả
+        </label>
+        <button type="button" class="scan-submit-btn" (click)="receiveReturnGoodsWithoutQrScan()" style="margin-bottom: 12px;">
+          <i class="material-icons">done_all</i>
+          Nhận hàng trả
+        </button>
+        <p class="return-goods-subhint">Nhận toàn bộ dòng TRA chưa nhận — không cần quét QR từng dòng.</p>
+
+        <label for="returnGoodsQRInput" style="margin-top: 16px;">
           <i class="material-icons">qr_code_scanner</i>
-          Bước 2: Quét mã QR của hàng hóa
+          Tuỳ chọn: quét QR từng dòng
         </label>
         <input 
           type="text" 
@@ -989,10 +997,9 @@
           [(ngModel)]="returnGoodsQRInput"
           placeholder="Quét hoặc nhập mã QR..."
           class="return-goods-scan-input"
-          (keyup)="onReturnGoodsQRKeyup($event)"
-          autofocus>
+          (keyup)="onReturnGoodsQRKeyup($event)">
         
-        <button class="scan-submit-btn" (click)="processReturnGoodsScan()">
+        <button type="button" class="scan-submit-btn" (click)="processReturnGoodsScan()">
           <i class="material-icons">qr_code_scanner</i>
           Scan
         </button>
@@ -1031,9 +1038,8 @@
       </div>
       
       <div class="return-goods-instructions" *ngIf="returnGoodsStep === 2">
-        <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
-        <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
-        <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng TRA</p>
+        <p><i class="material-icons">info</i> Bấm <strong>Nhận hàng trả</strong> để nhận toàn bộ dòng TRA chưa nhận (không cần QR).</p>
+        <p><i class="material-icons">qr_code_scanner</i> Hoặc quét QR từng dòng — Format: MaterialCode|PO|Quantity|Date</p>
       </div>
     </div>
   </div>

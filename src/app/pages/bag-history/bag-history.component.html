@@ -1,0 +1,82 @@
+<div class="bag-history-page">
+  <header class="page-header">
+    <h1 class="page-title">RM1 History</h1>
+    <p class="subtitle">Mỗi lần <strong>Tìm</strong>, hệ thống truy vấn thẳng <code>inventory-materials</code> trên Firebase theo mã (và xưởng nếu chọn ASM1/ASM2) — lấy đủ mọi dòng cùng mã, khác PO/IMD. Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
+  </header>
+
+  <section class="toolbar-panel" *ngIf="!isLoading" aria-label="Bộ lọc và tìm kiếm">
+  <div class="toolbar">
+    <label>
+      Nhà máy
+      <select [(ngModel)]="factoryFilter" (ngModelChange)="onFactoryFilterChange()">
+        <option value="ALL">Tất cả</option>
+        <option value="ASM1">ASM1</option>
+        <option value="ASM2">ASM2</option>
+      </select>
+    </label>
+    <label>
+      Loại
+      <select [(ngModel)]="eventFilter" (ngModelChange)="onFilterChange()">
+        <option value="">Tất cả</option>
+        <option value="NHẬP">Nhập kho</option>
+        <option value="XUẤT">Xuất kho</option>
+        <option value="TỒN">Tồn (snapshot)</option>
+      </select>
+    </label>
+    <div class="search-wrap search-row">
+      <label class="search-label">
+        Tìm mã hàng (Enter hoặc nút Tìm)
+        <input
+          type="search"
+          [(ngModel)]="search"
+          (ngModelChange)="onSearchModelChange($event)"
+          (keydown)="onSearchKeydown($event)"
+          placeholder="VD: B016999"
+          autocomplete="off" />
+      </label>
+      <button type="button" class="btn-search" (click)="executeSearch()" [disabled]="isQueryRunning">Tìm</button>
+      <button type="button" class="btn-clear" *ngIf="queryResultRows !== null" (click)="clearMaterialSearch()">Xóa tìm</button>
+    </div>
+  </div>
+  </section>
+
+  <p class="search-hint" *ngIf="!isLoading && (searchHint || isQueryRunning)">
+    <span *ngIf="isQueryRunning">Đang tìm…</span>
+    <span *ngIf="!isQueryRunning">{{ searchHint }}</span>
+  </p>
+  <p class="search-tip" *ngIf="!isLoading && !searchHint && queryResultRows === null">
+    Nhập <strong>mã hàng</strong> (tự viết hoa) rồi <strong>Enter</strong> hoặc <strong>Tìm</strong>: log tối đa 2000 bản ghi; kho tải <strong>tất cả</strong> document <code>inventory-materials</code> khớp mã trên Firebase (lọc theo ô <strong>Nhà máy</strong>).
+  </p>
+
+  <div class="loading" *ngIf="isLoading">Đang tải…</div>
+
+  <div class="table-wrap" *ngIf="!isLoading && queryResultRows !== null">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Nhà máy</th>
+          <th>Mã</th>
+          <th>PO</th>
+          <th>IMD</th>
+          <th>Batch</th>
+          <th class="num">Nhập</th>
+          <th class="num">Xuất</th>
+          <th class="num">Tồn</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of searchSummaryRows">
+          <td>{{ r.factory }}</td>
+          <td>{{ r.materialCode }}</td>
+          <td>{{ r.poNumber }}</td>
+          <td>{{ r.imd || '—' }}</td>
+          <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
+          <td class="num">{{ r.nhapBags > 0 ? r.nhapBags : '' }}</td>
+          <td class="num">{{ r.xuatBags > 0 ? r.xuatBags : '' }}</td>
+          <td class="num">{{ r.tonKho > 0 || r.nhapBags > 0 ? r.tonKho : '' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="searchSummaryRows.length === 0">Không có dòng tổng hợp (thử đổi bộ lọc Loại / Nhà máy hoặc kiểm tra tab Vật tư).</p>
+  </div>
+</div>
