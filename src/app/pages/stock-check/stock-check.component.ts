@@ -121,6 +121,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private dataSubscription: any = null; // Track subscription để có thể unsubscribe
   private snapshotSubscription: any = null; // Track snapshot subscription để reload khi có thay đổi
   private isInitialDataLoaded: boolean = false; // Track xem đã load initial data chưa
+
+  /** Index để lookup vật tư theo (materialCode+po+imd) nhanh khi scan */
+  private materialByKey = new Map<string, StockCheckMaterial>();
+  /** Cache: list box hiện tại đang build cho vị trí nào */
+  private locationMaterialsLocCache: string = '';
+
+  /** Hàng đợi scan để "nuốt" input thật nhanh, xử lý ở nền */
+  private scanQueue: string[] = [];
+  private isProcessingScanQueue = false;
   
   // Factory selection
   selectedFactory: 'ASM1' | 'ASM2' | null = null;
@@ -755,14 +764,315 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef
   ) {}
 
+  private buildMaterialKey(materialCode: string, poNumber: string, imd: string): string {
+    return `${(materialCode || '').toUpperCase().trim()}|${(poNumber || '').trim()}|${(imd || '').trim()}`;
+  }
+
+  private rebuildMaterialIndex(): void {
+    this.materialByKey.clear();
+    for (const m of this.allMaterials) {
+      const key = this.buildMaterialKey(m.materialCode, m.poNumber, m.imd);
+      if (key) this.materialByKey.set(key, m);
+    }
+  }
+
+  private buildMaterialKeyFromLastScannedKey(lastKey: string): string {
+    // lastScannedLocationKey format: materialCode_po_imd
+    const parts = String(lastKey || '').split('_');
+    if (parts.length < 3) return '';
+    const materialCode = parts[0] || '';
+    const poNumber = parts[1] || '';
+    const imd = parts.slice(2).join('_') || '';
+    return this.buildMaterialKey(materialCode, poNumber, imd);
+  }
+
+  private focusScanInputSoon(delayMs: number = 0): void {
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, delayMs);
+  }
+
+  private enqueueScan(scannedData: string): void {
+    this.scanQueue.push(scannedData);
+    if (!this.isProcessingScanQueue) {
+      this.isProcessingScanQueue = true;
+      // xử lý nền, nhường event loop để ưu tiên nhận scan tiếp theo
+      setTimeout(() => this.processScanQueue(), 0);
+    }
+  }
+
+  private async processScanQueue(): Promise<void> {
+    try {
+      while (this.scanQueue.length > 0) {
+        const data = this.scanQueue.shift()!;
+        await this.processMaterialScan(data);
+        // nhường UI giữa các item để không block nhập
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+    } finally {
+      this.isProcessingScanQueue = false;
+    }
+  }
+
+  private async processMaterialScan(scannedData: string): Promise<void> {
+    // Dùng mã nhân viên đã đăng nhập
+    this.scannedEmployeeId = this.currentEmployeeId;
+    const parts = scannedData.split('|');
+
+    if (parts.length < 4) {
+      this.scanMessage = '❌ Mã không hợp lệ!\n\nFormat: Mã|PO|Số lượng|IMD\n\nScan lại';
+      this.cdr.detectChanges();
+      this.focusScanInputSoon(0);
+      return;
+    }
+
+    const materialCode = String(parts[0] ?? '').trim();
+    const poNumber = String(parts[1] ?? '').trim();
+    const quantity = String(parts[2] ?? '').trim();
+    const imdRaw = parts.slice(3).join('|').trim();
+    const imd = (imdRaw.split('-')[0] || '').trim();
+
+    const codeUpper = materialCode.toUpperCase().trim();
+    const poTrim = poNumber.trim();
+    const imdTrim = imd.trim();
+
+    const lookupKey = this.buildMaterialKey(codeUpper, poTrim, imdTrim);
+    let matchingMaterial = this.materialByKey.get(lookupKey);
+
+    // Nếu không khớp đủ 3: kiểm tra sai IMD để báo rõ (chỉ khi cần)
+    if (!matchingMaterial) {
+      const candidatesSameCodePo = this.allMaterials.filter(m =>
+        (m.materialCode || '').toUpperCase().trim() === codeUpper &&
+        (m.poNumber || '').trim() === poTrim
+      );
+      if (candidatesSameCodePo.length > 0) {
+        const imdList = candidatesSameCodePo.map(c => (c.imd || '').trim()).filter(Boolean);
+        this.scanMessage =
+          `❌ IMD KHÔNG ĐÚNG — Không ghi nhận.\n` +
+          `Mã: ${materialCode} | PO: ${poNumber}\n` +
+          `IMD scan: ${imdTrim}\n` +
+          `IMD trong dữ liệu: ${imdList.join(', ') || '-'}\n\nVui lòng scan đúng mã (đúng IMD).`;
+        this.cdr.detectChanges();
+        this.focusScanInputSoon(0);
+        return;
+      }
+    }
+
+    if (matchingMaterial) {
+      const openingStockValue = matchingMaterial.openingStock !== null && matchingMaterial.openingStock !== undefined ? matchingMaterial.openingStock : 0;
+      const currentStock = openingStockValue + (matchingMaterial.quantity || 0) - (matchingMaterial.exported || 0) - (matchingMaterial.xt || 0);
+      if (currentStock === 0 || currentStock < 0) {
+        matchingMaterial.isNewMaterial = true;
+      }
+
+      matchingMaterial.stockCheck = '✓';
+      matchingMaterial.idCheck = this.scannedEmployeeId;
+      matchingMaterial.dateCheck = new Date();
+      if (this.currentScanLocation) {
+        matchingMaterial.actualLocation = this.currentScanLocation;
+      }
+
+      const scannedQty = parseFloat(quantity) || 0;
+      const dataLoc = (matchingMaterial.location || '').trim().toUpperCase();
+      const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
+      const isWrongLocation = !!scanLoc && !!dataLoc && dataLoc !== scanLoc;
+
+      const existingQty = matchingMaterial.qtyCheck || 0;
+      const stockVal = matchingMaterial.stock || 0;
+      const remaining = stockVal - existingQty;
+      let qtyToSave = scannedQty;
+      let ignoredExcess = 0;
+      if (remaining <= 0) {
+        ignoredExcess = scannedQty;
+        qtyToSave = 0;
+      } else if (scannedQty > remaining) {
+        ignoredExcess = scannedQty - remaining;
+        qtyToSave = remaining;
+      }
+
+      if (isWrongLocation) {
+        const key = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
+        const existingWrong = this.wrongLocationItems.find(w => w.key === key);
+        const statusNow = this.getMaterialCheckStatus(matchingMaterial);
+        const remainingNow = Math.max((matchingMaterial.stock || 0) - (matchingMaterial.qtyCheck || 0), 0);
+        if (existingWrong) {
+          existingWrong.scannedQtyTotal += qtyToSave;
+          existingWrong.ignoredExcessTotal += ignoredExcess;
+          existingWrong.toLocation = scanLoc;
+          existingWrong.status = statusNow;
+          existingWrong.remaining = remainingNow;
+        } else {
+          this.wrongLocationItems.unshift({
+            key,
+            material: matchingMaterial,
+            fromLocation: dataLoc,
+            toLocation: scanLoc,
+            scannedQtyTotal: qtyToSave,
+            ignoredExcessTotal: ignoredExcess,
+            status: statusNow,
+            remaining: remainingNow
+          });
+        }
+        if (this.wrongLocationItems.length > 50) this.wrongLocationItems.pop();
+
+        const invId = matchingMaterial.inventoryId;
+        if (invId) {
+          this.firestore
+            .collection('inventory-materials')
+            .doc(invId)
+            .set(
+              {
+                location: scanLoc,
+                lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+                modifiedBy: 'stock-check-wrong-location-scan'
+              },
+              { merge: true }
+            )
+            .catch(err => console.error('❌ Error syncing wrong location to inventory-materials:', err));
+        }
+      }
+
+      if (qtyToSave <= 0) {
+        this.scanInput = '';
+        this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
+        this.updateLocationMaterials();
+        this.cdr.detectChanges();
+        this.focusScanInputSoon(0);
+        return;
+      }
+
+      this.saveStockCheckToFirebase(matchingMaterial, qtyToSave)
+        .catch(err => console.error('❌ Error saving stock check (async):', err));
+
+      const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
+      this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
+      if (this.scanHistory.length > 5) this.scanHistory.pop();
+
+      this.scanMessage = isWrongLocation
+        ? `⚠️ SAI VỊ TRÍ (đã ghi nhận)\n` +
+          `Mã: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\n` +
+          `Vị trí dữ liệu (ASM1): ${dataLoc}\n` +
+          `Vị trí scan: ${scanLoc}\n\n` +
+          `Scan mã tiếp theo (cùng vị trí)`
+        : `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\nVị trí scan: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
+
+      this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
+      this.updateLocationMaterials();
+      this.cdr.detectChanges();
+      this.focusScanInputSoon(0);
+      return;
+    }
+
+    // Không tìm thấy trong bảng - tạo material mới và thêm vào (không await tải standardPacking)
+    const scannedQty = parseFloat(quantity) || 0;
+    const newMaterial: StockCheckMaterial = {
+      stt: 0,
+      materialCode: materialCode,
+      poNumber: poNumber,
+      imd: imd,
+      stock: 0,
+      location: this.currentScanLocation || '',
+      actualLocation: this.currentScanLocation || '',
+      standardPacking: '',
+      stockCheck: '✓',
+      qtyCheck: scannedQty,
+      idCheck: this.scannedEmployeeId,
+      dateCheck: new Date(),
+      openingStock: undefined,
+      quantity: 0,
+      exported: undefined,
+      xt: undefined,
+      importDate: undefined,
+      batchNumber: undefined,
+      isNewMaterial: true
+    };
+
+    this.allMaterials.push(newMaterial);
+    this.materialByKey.set(this.buildMaterialKey(newMaterial.materialCode, newMaterial.poNumber, newMaterial.imd), newMaterial);
+
+    // sort/filter có thể nặng; để nền để không block scan
+    setTimeout(() => {
+      this.sortMaterials();
+      this.allMaterials.forEach((mat, index) => (mat.stt = index + 1));
+      this.rebuildMaterialIndex();
+      this.cdr.detectChanges();
+    }, 0);
+
+    this.saveStockCheckToFirebase(newMaterial, scannedQty)
+      .catch(err => console.error('❌ Error saving new material stock check (async):', err));
+
+    this.firestore
+      .collection('materials')
+      .doc(materialCode)
+      .get()
+      .pipe(first())
+      .subscribe({
+        next: (materialDoc: any) => {
+          try {
+            if (materialDoc && materialDoc.exists) {
+              const data = materialDoc.data();
+              if (data && data.standardPacking) {
+                newMaterial.standardPacking = data.standardPacking.toString();
+                this.cdr.detectChanges();
+              }
+            }
+          } catch (e) {
+            console.log('⚠️ Could not parse standardPacking for new material:', e);
+          }
+        },
+        error: (error: any) => console.log('⚠️ Could not load standardPacking for new material:', error)
+      });
+
+    this.scannedCount++;
+    this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${quantity} (MỚI)`);
+    if (this.scanHistory.length > 5) this.scanHistory.pop();
+
+    this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\nVị trí: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
+    this.lastScannedLocationKey = `${newMaterial.materialCode}_${newMaterial.poNumber}_${newMaterial.imd}`;
+    this.updateLocationMaterials();
+    this.cdr.detectChanges();
+    this.focusScanInputSoon(0);
+  }
+
   private updateLocationMaterials(): void {
     const loc = (this.currentScanLocation || '').trim().toUpperCase();
     if (!loc) {
       this.locationMaterials = [];
       this.locationMaterialsView = [];
+      this.locationMaterialsLocCache = '';
       return;
     }
 
+    // Tối ưu khi scan liên tục: nếu cùng vị trí, chỉ update/move mã vừa scan,
+    // tránh filter+sort toàn bộ `allMaterials` mỗi lần Enter.
+    if (this.locationMaterialsLocCache === loc && this.lastScannedLocationKey) {
+      const key = this.lastScannedLocationKey;
+      const idx = this.locationMaterials.findIndex(m => `${m.materialCode}_${m.poNumber}_${m.imd}` === key);
+      if (idx >= 0) {
+        const mat = this.locationMaterials[idx];
+        this.locationMaterialsView[idx] = { ...mat, _status: this.getMaterialCheckStatus(mat) };
+        if (idx > 0) {
+          const [moved] = this.locationMaterials.splice(idx, 1);
+          this.locationMaterials.unshift(moved);
+          const [movedView] = this.locationMaterialsView.splice(idx, 1);
+          this.locationMaterialsView.unshift(movedView);
+        }
+        return;
+      }
+
+      // Mã mới hoặc trước đó chưa nằm trong list box
+      const matFromIndex = this.materialByKey.get(this.buildMaterialKeyFromLastScannedKey(this.lastScannedLocationKey));
+      if (matFromIndex && this.getDisplayLocation(matFromIndex) === loc) {
+        this.locationMaterials.unshift(matFromIndex);
+        this.locationMaterialsView.unshift({ ...matFromIndex, _status: this.getMaterialCheckStatus(matFromIndex) });
+        return;
+      }
+      // Không tìm thấy: fallback rebuild
+    }
+
+    // Full rebuild (khi mới scan vị trí / mới load dữ liệu / hoặc fallback)
+    this.locationMaterialsLocCache = loc;
     this.locationMaterials = this.allMaterials
       .filter(m => this.getDisplayLocation(m) === loc)
       .slice()
@@ -774,18 +1084,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         return (a.imd || '').localeCompare(b.imd || '');
       });
 
-    // Pre-compute status một lần để template không gọi hàm nhiều lần
     this.locationMaterialsView = this.locationMaterials.map(m => ({
       ...m,
       _status: this.getMaterialCheckStatus(m)
     }));
 
-    // Mã vừa scan: đưa lên đầu danh sách (mobile + web)
     if (this.lastScannedLocationKey) {
       const key = this.lastScannedLocationKey;
-      const idx = this.locationMaterials.findIndex(m =>
-        `${m.materialCode}_${m.poNumber}_${m.imd}` === key
-      );
+      const idx = this.locationMaterials.findIndex(m => `${m.materialCode}_${m.poNumber}_${m.imd}` === key);
       if (idx > 0) {
         const [mat] = this.locationMaterials.splice(idx, 1);
         this.locationMaterials.unshift(mat);
@@ -1145,6 +1451,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     console.log(`📊 Loading data for factory: ${this.selectedFactory}`);
     this.isLoading = true;
     this.allMaterials = [];
+    this.materialByKey.clear();
     this.displayedMaterials = [];
 
     // Load inventory materials - sử dụng valueChanges() để real-time update
@@ -1246,6 +1553,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         await this.loadKhsxData(materialsArray);
 
         this.allMaterials = materialsArray;
+        this.rebuildMaterialIndex();
         this.invalidateRackStatsCache();
 
         // Nếu đang có vị trí scan, cập nhật danh sách box theo vị trí
@@ -1261,6 +1569,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         this.allMaterials.forEach((mat, index) => {
           mat.stt = index + 1;
         });
+        this.rebuildMaterialIndex();
 
         // Kết quả tìm kiếm (snapshot) giữ nguyên — không ghi đè khi Firestore cập nhật
         if (this.searchResultsMode) {
@@ -1950,7 +2259,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const scannedData = this.scanInput.trim();
     if (!scannedData) return;
 
-    console.log('📥 Scanned data:', scannedData);
+    // Ưu tiên "nuốt" input thật nhanh: clear + focus ngay, còn xử lý đẩy qua queue
+    this.scanInput = '';
+    this.cdr.detectChanges();
+    this.focusScanInputSoon(0);
 
     // Bước 1: scan vị trí
     if (this.scanStep === 'location') {
@@ -1983,16 +2295,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       
       // Chuyển sang bước scan mã hàng
       this.scanStep = 'material';
-      this.scanInput = '';
       this.scanMessage = `ID: ${this.currentEmployeeId}\nVị trí: ${this.currentScanLocation}\n\nScan MÃ HÀNG kiểm kê tại vị trí này.`;
       
       // Focus lại input để scan tiếp
-      setTimeout(() => {
-        const input = document.getElementById('scan-input') as HTMLInputElement;
-        if (input) {
-          input.focus();
-        }
-      }, 100);
+      this.focusScanInputSoon(0);
       return;
     }
 
@@ -2021,358 +2327,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         return;
       }
       
-      // Dùng mã nhân viên đã đăng nhập
-      this.scannedEmployeeId = this.currentEmployeeId;
-      // Process material QR code
-      // Format (cũ): materialCode|poNumber|quantity|imd
-      // Format (mới): materialCode|poNumber|quantity|imd-<đuôi bịch>  (VD: 02102025-1/14) → bỏ qua phần sau dấu '-'
-      const parts = scannedData.split('|');
-      
-      if (parts.length >= 4) {
-        const materialCode = String(parts[0] ?? '').trim();
-        const poNumber = String(parts[1] ?? '').trim();
-        const quantity = String(parts[2] ?? '').trim();
-        const imdRaw = parts.slice(3).join('|').trim();
-        const imd = (imdRaw.split('-')[0] || '').trim();
-        
-        console.log('🔍 Searching for material:', {
-          scanned: { materialCode, poNumber, imd, quantity, imdRaw },
-          totalMaterials: this.allMaterials.length
-        });
-        
-        // Debug: Show some materials for comparison
-        const sampleMaterials = this.allMaterials.slice(0, 3).map(m => ({
-          code: m.materialCode,
-          po: m.poNumber,
-          imd: m.imd
-        }));
-        console.log('📋 Sample materials in database:', sampleMaterials);
-        
-        // So sánh chính xác: Mã + PO + IMD phải khớp mới chấp nhận (phát hiện đúng mã)
-        const codeUpper = materialCode.toUpperCase().trim();
-        const poTrim = poNumber.trim();
-        const imdTrim = imd.trim();
-        let matchingMaterial = this.allMaterials.find(m =>
-          (m.materialCode || '').toUpperCase().trim() === codeUpper &&
-          (m.poNumber || '').trim() === poTrim &&
-          (m.imd || '').trim() === imdTrim
-        );
-
-        // Nếu không khớp đủ 3 (Mã+PO+IMD): kiểm tra có phải sai IMD không để báo rõ
-        if (!matchingMaterial) {
-          const candidatesSameCodePo = this.allMaterials.filter(m =>
-            (m.materialCode || '').toUpperCase().trim() === codeUpper &&
-            (m.poNumber || '').trim() === poTrim
-          );
-          if (candidatesSameCodePo.length > 0) {
-            const imdList = candidatesSameCodePo.map(c => (c.imd || '').trim()).filter(Boolean);
-            this.scanMessage =
-              `❌ IMD KHÔNG ĐÚNG — Không ghi nhận.\n` +
-              `Mã: ${materialCode} | PO: ${poNumber}\n` +
-              `IMD scan: ${imdTrim}\n` +
-              `IMD trong dữ liệu: ${imdList.join(', ') || '-'}\n\nVui lòng scan đúng mã (đúng IMD).`;
-            this.scanInput = '';
-            this.cdr.detectChanges();
-            setTimeout(() => {
-              const input = document.getElementById('scan-input') as HTMLInputElement;
-              if (input) input.focus();
-            }, 100);
-            return;
-          }
-        }
-
-        if (matchingMaterial) {
-          console.log('✅ Found matching material:', {
-            code: matchingMaterial.materialCode,
-            po: matchingMaterial.poNumber,
-            imd: matchingMaterial.imd
-          });
-          
-          // Tính stock hiện tại: openingStock + quantity - exported - xt
-          const openingStockValue = matchingMaterial.openingStock !== null && matchingMaterial.openingStock !== undefined ? matchingMaterial.openingStock : 0;
-          const currentStock = openingStockValue + (matchingMaterial.quantity || 0) - (matchingMaterial.exported || 0) - (matchingMaterial.xt || 0);
-          
-          // Nếu stock = 0 hoặc không có trong tồn kho, đánh dấu là material ngoài tồn kho
-          if (currentStock === 0 || currentStock < 0) {
-            matchingMaterial.isNewMaterial = true;
-            console.log(`📌 Material có stock = ${currentStock}, đánh dấu là mã ngoài tồn kho`);
-          }
-          
-          // Update the material - CỘNG DỒN số lượng thay vì ghi đè
-          matchingMaterial.stockCheck = '✓';
-          matchingMaterial.idCheck = this.scannedEmployeeId;
-          matchingMaterial.dateCheck = new Date();
-          
-          // Gán vị trí thực tế (nếu đã scan vị trí)
-          if (this.currentScanLocation) {
-            matchingMaterial.actualLocation = this.currentScanLocation;
-          }
-          
-          // Lấy số lượng mới scan
-          const scannedQty = parseFloat(quantity) || 0;
-
-          // Kiểm tra đúng vị trí hay sai vị trí
-          const dataLoc = (matchingMaterial.location || '').trim().toUpperCase();
-          const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
-          const isWrongLocation = !!scanLoc && !!dataLoc && dataLoc !== scanLoc;
-
-          // Nếu scan dư: báo dư và KHÔNG ghi nhận lượng dư
-          // Quy tắc: chỉ ghi nhận tối đa đến khi qtyCheck đạt stock.
-          const existingQty = matchingMaterial.qtyCheck || 0;
-          const stockVal = matchingMaterial.stock || 0;
-          const remaining = stockVal - existingQty;
-          let qtyToSave = scannedQty;
-          let ignoredExcess = 0;
-          if (remaining <= 0) {
-            ignoredExcess = scannedQty;
-            qtyToSave = 0;
-          } else if (scannedQty > remaining) {
-            ignoredExcess = scannedQty - remaining;
-            qtyToSave = remaining;
-          }
-
-          // Nếu sai vị trí: luôn ghi nhận sai vị trí (kể cả khi đã đủ qty)
-          if (isWrongLocation) {
-            const key = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
-            const existingWrong = this.wrongLocationItems.find(w => w.key === key);
-            const statusNow = this.getMaterialCheckStatus(matchingMaterial);
-            const remainingNow = Math.max((matchingMaterial.stock || 0) - (matchingMaterial.qtyCheck || 0), 0);
-            if (existingWrong) {
-              existingWrong.scannedQtyTotal += qtyToSave;
-              existingWrong.ignoredExcessTotal += ignoredExcess;
-              existingWrong.toLocation = scanLoc;
-              existingWrong.status = statusNow;
-              existingWrong.remaining = remainingNow;
-            } else {
-              this.wrongLocationItems.unshift({
-                key,
-                material: matchingMaterial,
-                fromLocation: dataLoc,
-                toLocation: scanLoc,
-                scannedQtyTotal: qtyToSave,
-                ignoredExcessTotal: ignoredExcess,
-                status: statusNow,
-                remaining: remainingNow
-              });
-            }
-            if (this.wrongLocationItems.length > 50) this.wrongLocationItems.pop();
-
-            // Sync location ngay lập tức sang inventory-materials để materials-asm1 phản ánh đúng vị trí thực tế
-            const invId = matchingMaterial.inventoryId;
-            if (invId) {
-              this.firestore
-                .collection('inventory-materials')
-                .doc(invId)
-                .set(
-                  {
-                    location: scanLoc,
-                    lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-                    modifiedBy: 'stock-check-wrong-location-scan'
-                  },
-                  { merge: true }
-                )
-                .catch(err => console.error('❌ Error syncing wrong location to inventory-materials:', err));
-            }
-          }
-
-          // Báo dư rõ ràng (nhưng ưu tiên báo sai vị trí)
-          if (ignoredExcess > 0 && !isWrongLocation) {
-            this.scanHistory.unshift(`⚠️ DƯ ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim} | Dư: ${ignoredExcess}`);
-            if (this.scanHistory.length > 5) this.scanHistory.pop();
-            const dưMsg = qtyToSave <= 0
-              ? `⚠️ DƯ — Không ghi nhận.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã đủ/ vượt tồn kho. Dư: ${ignoredExcess}`
-              : `⚠️ DƯ một phần.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã ghi nhận: ${qtyToSave} | Dư (bỏ qua): ${ignoredExcess}`;
-            this.scanMessage = dưMsg;
-            // Popup dư: 0.1s rồi tự tắt để scan tiếp.
-            this.showAutoDismissScanNotice('DƯ', dưMsg, 100);
-          }
-
-          // Nếu không ghi nhận qty nữa, vẫn cho phép tiếp tục (đặc biệt khi sai vị trí)
-          if (qtyToSave <= 0) {
-            if (isWrongLocation) {
-              const msg =
-                `⚠️ SAI VỊ TRÍ (đã ghi nhận vị trí)\n` +
-                `Mã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\n` +
-                `Vị trí dữ liệu (ASM1): ${dataLoc}\n` +
-                `Vị trí scan: ${scanLoc}\n\n` +
-                `Ghi chú: Số lượng đã đủ, không cộng thêm.`;
-              this.scanMessage = msg;
-              this.showAutoDismissScanNotice('SAI VỊ TRÍ', msg, 1800);
-            } else {
-              this.scanMessage =
-                `⚠️ DƯ - Không ghi nhận thêm\n` +
-                `Mã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\n` +
-                `Đã đủ/đang vượt tồn kho.`;
-            }
-            this.scanInput = '';
-            this.cdr.detectChanges();
-            setTimeout(() => {
-              const input = document.getElementById('scan-input') as HTMLInputElement;
-              if (input) input.focus();
-            }, 100);
-            // vẫn update list box để mã nhảy lên đầu + phản ánh vị trí
-            this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
-            this.updateLocationMaterials();
-            return;
-          }
-          
-          // Tăng tốc: không chờ Firebase, cho phép scan liên tục.
-          // saveStockCheckToFirebase đã update cache + fire-and-forget lên Firestore.
-          this.saveStockCheckToFirebase(matchingMaterial, qtyToSave)
-            .catch(err => console.error('❌ Error saving stock check (async):', err));
-          
-          // Sau khi save, cập nhật lại qtyCheck từ Firebase (đã được cộng dồn)
-          // qtyCheck sẽ được cập nhật trong saveStockCheckToFirebase
-          
-          // Add to history
-          const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
-          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
-          if (this.scanHistory.length > 5) {
-            this.scanHistory.pop();
-          }
-          
-          if (isWrongLocation) {
-            this.scanMessage =
-              `⚠️ SAI VỊ TRÍ (đã ghi nhận)\n` +
-              `Mã: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\n` +
-              `Vị trí dữ liệu (ASM1): ${dataLoc}\n` +
-              `Vị trí scan: ${scanLoc}\n\n` +
-              `Scan mã tiếp theo (cùng vị trí)`;
-          } else {
-            this.scanMessage =
-              `✓ Đã kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${qtyText}\nVị trí scan: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
-          }
-          
-          // Clear input ngay lập tức để có thể scan tiếp
-          this.scanInput = '';
-          // Mã vừa scan đưa lên đầu danh sách
-          this.lastScannedLocationKey = `${matchingMaterial.materialCode}_${matchingMaterial.poNumber}_${matchingMaterial.imd}`;
-          this.updateLocationMaterials();
-          this.cdr.detectChanges();
-        } else {
-          // Không tìm thấy trong bảng - tạo material mới và thêm vào
-          console.log('📝 Material not found in table, creating new entry:', { materialCode, poNumber, imd, quantity });
-          
-          const scannedQty = parseFloat(quantity) || 0;
-          
-          const newMaterial: StockCheckMaterial = {
-            stt: 0, // Sẽ được cập nhật sau khi sort
-            materialCode: materialCode,
-            poNumber: poNumber,
-            imd: imd,
-            stock: 0, // Không có thông tin stock từ scan
-            location: this.currentScanLocation || '', // Hiển thị trong danh sách theo vị trí đang scan
-            actualLocation: this.currentScanLocation || '', // Vị trí thực tế từ scan
-            standardPacking: '', // Sẽ tải sau nếu cần
-            stockCheck: '✓',
-            qtyCheck: scannedQty,
-            idCheck: this.scannedEmployeeId,
-            dateCheck: new Date(),
-            openingStock: undefined,
-            quantity: 0,
-            exported: undefined,
-            xt: undefined,
-            importDate: undefined,
-            batchNumber: undefined,
-            isNewMaterial: true // Đánh dấu là material mới (không có trong tồn kho)
-          };
-          
-          // Thêm vào allMaterials
-          this.allMaterials.push(newMaterial);
-          
-          // Sort lại theo sort mode hiện tại
-          this.sortMaterials();
-          
-          // Update STT sau khi sort
-          this.allMaterials.forEach((mat, index) => {
-            mat.stt = index + 1;
-          });
-          
-          // Tăng tốc: không chờ Firebase, cho phép scan liên tục.
-          this.saveStockCheckToFirebase(newMaterial, scannedQty)
-            .catch(err => console.error('❌ Error saving new material stock check (async):', err));
-          
-          // Thử tải standardPacking từ materials collection nếu có
-          try {
-            const materialDoc = await this.firestore.collection('materials').doc(materialCode).get().toPromise();
-            if (materialDoc && materialDoc.exists) {
-              const data = materialDoc.data() as any;
-              if (data && data.standardPacking) {
-                newMaterial.standardPacking = data.standardPacking.toString();
-              }
-            }
-          } catch (error) {
-            console.log('⚠️ Could not load standardPacking for new material:', error);
-          }
-          // Mã mới vừa scan đưa lên đầu danh sách
-          this.lastScannedLocationKey = `${newMaterial.materialCode}_${newMaterial.poNumber}_${newMaterial.imd}`;
-          this.updateLocationMaterials();
-          
-          // Tìm lại material sau khi filter để lấy STT chính xác
-          const updatedMaterial = this.filteredMaterials.find(m => 
-            m.materialCode.toUpperCase().trim() === materialCode.toUpperCase().trim() && 
-            m.poNumber.trim() === poNumber.trim() && 
-            m.imd.trim() === imd.trim()
-          ) || newMaterial;
-          
-          // Tăng counter số mã đã scan
-          this.scannedCount++;
-          
-          // Hiển thị popup thành công
-          this.scannedMaterialCode = materialCode;
-          this.scannedSTT = updatedMaterial.stt;
-          this.scannedQty = scannedQty;
-          this.scannedPO = poNumber;
-          this.showScanSuccessPopup = true;
-          
-          // Add to history
-          this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${quantity} (MỚI)`);
-          if (this.scanHistory.length > 5) {
-            this.scanHistory.pop();
-          }
-          
-          this.scanMessage = `✓ Đã thêm mới và kiểm tra: ${materialCode}\nPO: ${poNumber} | Số lượng: ${quantity}\nVị trí: ${this.currentScanLocation}\n\nScan mã tiếp theo (cùng vị trí)`;
-          
-          // Clear input ngay lập tức để có thể scan tiếp
-          this.scanInput = '';
-          
-          // Tự động đóng popup sau 1.5 giây và focus lại input
-          setTimeout(() => {
-            this.closeScanSuccessPopup();
-          }, 1500);
-          
-          // Update filtered materials và displayed materials (không block scan - async)
-          setTimeout(() => {
-            // Nếu đang ở filter mode 'all' hoặc 'outside', hiển thị material mới
-            if (this.filterMode === 'all' || this.filterMode === 'outside') {
-              // Tìm page chứa material mới
-              const materialIndex = this.filteredMaterials.findIndex(m => 
-                m.materialCode === materialCode && 
-                m.poNumber === poNumber && 
-                m.imd === imd
-              );
-              
-              if (materialIndex >= 0) {
-                const page = Math.floor(materialIndex / this.itemsPerPage) + 1;
-                this.currentPage = page;
-                this.loadPageFromFiltered(page);
-              }
-            }
-            
-            this.cdr.detectChanges();
-          }, 0);
-        }
-      } else {
-        this.scanMessage = '❌ Mã không hợp lệ!\n\nFormat: Mã|PO|Số lượng|IMD\n\nScan lại';
-        this.scanInput = '';
-        this.cdr.detectChanges();
-      }
-      
-      // Re-focus input for next scan
-      setTimeout(() => {
-        const input = document.getElementById('scan-input') as HTMLInputElement;
-        if (input) input.focus();
-      }, 100);
+      // Đẩy qua queue để không block nhịp scan
+      this.enqueueScan(scannedData);
     }
   }
 

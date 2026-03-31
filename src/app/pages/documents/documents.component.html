@@ -529,23 +529,25 @@
           </h3>
         </div>
 
-        <ng-template #thFormOverlay>
-          <div class="th-form-filled-inner">
-            <img src="assets/img/WH-P01-F0.jpg" alt="" class="th-form-filled-bg" />
-            <div
-              class="th-form-filled-overlay"
-              [ngStyle]="{ 'grid-template-rows': 'repeat(' + getThOverlayRowCount() + ', minmax(0, 1fr))' }">
-              <div class="th-form-filled-row" *ngFor="let row of getThRowsForOverlay()">
-                <span class="th-ov-cell th-ov-date">{{ formatThDateDisplay(row.ngay) }}</span>
-                <span class="th-ov-cell">{{ row.sangNhietDo?.trim() || '—' }}</span>
-                <span class="th-ov-cell">{{ row.sangDoAm?.trim() || '—' }}</span>
-                <span class="th-ov-cell">{{ row.chieuNhietDo?.trim() || '—' }}</span>
-                <span class="th-ov-cell">{{ row.chieuDoAm?.trim() || '—' }}</span>
-                <span class="th-ov-cell th-ov-note">{{ row.ghiChu?.trim() || '' }}</span>
-              </div>
-            </div>
+        <div class="th-svg-stage">
+          <img src="assets/img/WH-P01-F0.jpg" alt="WH-P01-F0" class="th-svg-bg" />
+          <svg class="th-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" (click)="onThSvgClick($event)">
+            <g *ngIf="thLastClick">
+              <circle [attr.cx]="thLastClick.x" [attr.cy]="thLastClick.y" r="0.8" class="th-svg-cross" />
+            </g>
+            <text
+              *ngFor="let t of getThSvgTexts()"
+              [attr.x]="t.x"
+              [attr.y]="t.y"
+              [attr.data-key]="t.key"
+              [attr.class]="t.cls || 'th-svg-text'">
+              {{ t.text }}
+            </text>
+          </svg>
+          <div class="th-svg-hint" *ngIf="thActivePointKey">
+            Đang chọn vị trí cho: <strong>{{ thActivePointKey }}</strong> — click lên ảnh để đặt điểm.
           </div>
-        </ng-template>
+        </div>
 
         <div class="toolbar">
           <div class="form-inputs">
@@ -606,7 +608,61 @@
           <p class="th-form-filled-hint" *ngIf="thOverlayRowsTruncated()">
             Chỉ hiển thị tối đa 31 dòng trên ảnh; các dòng còn lại chỉ có trong bảng nhập.
           </p>
-          <ng-container *ngTemplateOutlet="thFormOverlay"></ng-container>
+
+          <div class="th-overlay-calibrate">
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="showThOverlayCalibrate = !showThOverlayCalibrate">
+              <i class="material-icons">tune</i>
+              {{ showThOverlayCalibrate ? 'Ẩn' : 'Hiện' }} căn chỉnh vị trí trên ảnh
+            </button>
+            <div class="th-overlay-calibrate-panel" *ngIf="showThOverlayCalibrate">
+              <p class="th-overlay-calibrate-intro">
+                Ảnh JPG là file in, app không đọc được tọa độ ô tự động. Bạn chỉnh vùng bảng (top/left/width/height %)
+                và độ rộng cột cho khớp ô in, rồi <strong>Lưu</strong> — cấu hình lưu trên trình duyệt này.
+              </p>
+              <div class="th-overlay-calibrate-grid">
+                <div class="form-group">
+                  <label>Top % (từ mép trên ảnh)</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.tableTopPct" />
+                </div>
+                <div class="form-group">
+                  <label>Left %</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.tableLeftPct" />
+                </div>
+                <div class="form-group">
+                  <label>Width %</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.tableWidthPct" />
+                </div>
+                <div class="form-group">
+                  <label>Height %</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.tableHeightPct" />
+                </div>
+                <div class="form-group">
+                  <label>Chữ min (px)</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.fontSizeMinPx" />
+                </div>
+                <div class="form-group">
+                  <label>Chữ max (px)</label>
+                  <input type="number" class="form-control" step="0.5" [(ngModel)]="thOverlayConfig.fontSizeMaxPx" />
+                </div>
+              </div>
+              <p class="th-overlay-calibrate-sub">Tỷ lệ cột (6 số: ngày, sáng NĐ, sáng ĐA, chiều NĐ, chiều ĐA, ghi chú — tương đối nhau)</p>
+              <div class="th-overlay-calibrate-grid th-overlay-col-fracs">
+                <div class="form-group" *ngFor="let _ of [0,1,2,3,4,5]; let i = index">
+                  <label>Cột {{ i + 1 }}</label>
+                  <input type="number" class="form-control" step="0.05" [(ngModel)]="thOverlayConfig.colFracs[i]" />
+                </div>
+              </div>
+              <div class="th-overlay-calibrate-actions">
+                <button type="button" class="btn btn-sm btn-primary" (click)="saveThOverlayConfigToStorage()">
+                  <i class="material-icons">save</i> Lưu căn chỉnh
+                </button>
+                <button type="button" class="btn btn-sm btn-default" (click)="resetThOverlayConfigDefault()">Mặc định</button>
+                <button type="button" class="btn btn-sm btn-default" (click)="copyThOverlayJsonToClipboard()">Copy JSON</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SVG đã hiển thị phía trên -->
         </div>
 
         <div class="main-content">
@@ -654,22 +710,52 @@
                   <tr *ngFor="let row of (temperatureHumidityData.thRows || []); let i = index">
                     <td>{{ i + 1 }}</td>
                     <td>
-                      <input type="date" class="form-control th-input-date" [(ngModel)]="row.ngay" (ngModelChange)="onThRowFieldChange()">
+                      <div class="th-input-with-pin">
+                        <input type="date" class="form-control th-input-date" [(ngModel)]="row.ngay" (ngModelChange)="onThRowFieldChange()">
+                        <button type="button" class="th-pin" title="Chọn vị trí ngày trên ảnh" (click)="setThActivePoint(i,'ngay')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td>
-                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                      <div class="th-input-with-pin">
+                        <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                        <button type="button" class="th-pin" title="Chọn vị trí Sáng - Nhiệt độ" (click)="setThActivePoint(i,'sangNhietDo')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td>
-                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                      <div class="th-input-with-pin">
+                        <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                        <button type="button" class="th-pin" title="Chọn vị trí Sáng - Độ ẩm" (click)="setThActivePoint(i,'sangDoAm')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td>
-                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                      <div class="th-input-with-pin">
+                        <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                        <button type="button" class="th-pin" title="Chọn vị trí Chiều - Nhiệt độ" (click)="setThActivePoint(i,'chieuNhietDo')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td>
-                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                      <div class="th-input-with-pin">
+                        <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                        <button type="button" class="th-pin" title="Chọn vị trí Chiều - Độ ẩm" (click)="setThActivePoint(i,'chieuDoAm')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td>
-                      <input type="text" class="notes-input" [(ngModel)]="row.ghiChu" (ngModelChange)="onThRowFieldChange()" placeholder="Ghi chú...">
+                      <div class="th-input-with-pin">
+                        <input type="text" class="notes-input" [(ngModel)]="row.ghiChu" (ngModelChange)="onThRowFieldChange()" placeholder="Ghi chú...">
+                        <button type="button" class="th-pin" title="Chọn vị trí Ghi chú" (click)="setThActivePoint(i,'ghiChu')">
+                          <i class="material-icons">place</i>
+                        </button>
+                      </div>
                     </td>
                     <td class="th-col-action">
                       <button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeThRow(i)" [disabled]="(temperatureHumidityData.thRows?.length || 0) <= 1" title="Xóa dòng">

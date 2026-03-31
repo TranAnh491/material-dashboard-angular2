@@ -55,6 +55,33 @@ interface CalendarDay {
   isSunday: boolean;
 }
 
+/** Căn chỉnh vùng bảng số trên ảnh WH-P01 (theo % kích thước ảnh hiển thị) */
+interface ThOverlayConfig {
+  v: number;
+  tableTopPct: number;
+  tableLeftPct: number;
+  tableWidthPct: number;
+  tableHeightPct: number;
+  /** 6 cột: ngày, sáng NĐ, sáng ĐA, chiều NĐ, chiều ĐA, ghi chú — tỷ lệ fr */
+  colFracs: number[];
+  fontSizeMinPx: number;
+  fontSizeMaxPx: number;
+}
+
+const TH_OVERLAY_LS_KEY = 'wh-p01-th-overlay-config-v1';
+const TH_POINTS_LS_KEY = 'wh-p01-th-points-v1';
+
+const DEFAULT_TH_OVERLAY_CONFIG: ThOverlayConfig = {
+  v: 1,
+  tableTopPct: 26,
+  tableLeftPct: 4,
+  tableWidthPct: 92,
+  tableHeightPct: 46,
+  colFracs: [0.9, 0.65, 0.65, 0.65, 0.65, 1.2],
+  fontSizeMinPx: 6,
+  fontSizeMaxPx: 11
+};
+
 
 
 @Component({
@@ -63,6 +90,10 @@ interface CalendarDay {
   styleUrls: ['./documents.component.scss']
 })
 export class DocumentsComponent implements OnInit, OnDestroy {
+  /** SVG points để vẽ chữ đè lên WH-P01-F0.jpg */
+  thPointMap: Record<string, { x: number; y: number }> = {};
+  thActivePointKey: string | null = null;
+  thLastClick: { x: number; y: number } | null = null;
 
   documentList: DocumentFile[] = [
     {
@@ -225,6 +256,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     await this.initializeFirebase();
     this.initializeChecklists();
+    this.loadThOverlayFromStorage();
+    this.loadThPointsFromStorage();
     await this.loadHistory();
     // Update checklist with recent data after loading history
     this.updateChecklistWithRecentData();
@@ -269,6 +302,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   showTemperatureHumidityChecklist: boolean = false;
   /** Modal xem phóng to biểu mẫu WH-P01-F0.jpg */
   showThFormReferenceModal: boolean = false;
+  /** Panel căn chỉnh vị trí số trên JPG */
+  showThOverlayCalibrate: boolean = false;
+  thOverlayConfig: ThOverlayConfig = {
+    ...DEFAULT_TH_OVERLAY_CONFIG,
+    colFracs: [...DEFAULT_TH_OVERLAY_CONFIG.colFracs]
+  };
   temperatureHumidityHistory: ChecklistData[] = [];
 
   securedChecklistData: ChecklistData = {
@@ -352,6 +391,182 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   openTemperatureHumidityChecklist(): void {
     this.showTemperatureHumidityChecklist = true;
     this.loadHistory();
+  }
+
+  private loadThOverlayFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(TH_OVERLAY_LS_KEY);
+      if (!raw) {
+        this.thOverlayConfig = {
+          ...DEFAULT_TH_OVERLAY_CONFIG,
+          colFracs: [...DEFAULT_TH_OVERLAY_CONFIG.colFracs]
+        };
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<ThOverlayConfig>;
+      this.thOverlayConfig = {
+        ...DEFAULT_TH_OVERLAY_CONFIG,
+        ...parsed,
+        colFracs: this.normalizeThColFracs(parsed.colFracs)
+      };
+    } catch {
+      this.thOverlayConfig = {
+        ...DEFAULT_TH_OVERLAY_CONFIG,
+        colFracs: [...DEFAULT_TH_OVERLAY_CONFIG.colFracs]
+      };
+    }
+  }
+
+  private normalizeThColFracs(f: number[] | undefined): number[] {
+    const d = [...DEFAULT_TH_OVERLAY_CONFIG.colFracs];
+    if (!f || f.length !== 6) {
+      return d;
+    }
+    return f.map((x, i) => (typeof x === 'number' && !isNaN(x) && x > 0 ? x : d[i]));
+  }
+
+  saveThOverlayConfigToStorage(): void {
+    try {
+      this.thOverlayConfig.colFracs = this.normalizeThColFracs(this.thOverlayConfig.colFracs);
+      localStorage.setItem(TH_OVERLAY_LS_KEY, JSON.stringify(this.thOverlayConfig));
+      this.showNotification = true;
+      this.notificationMessage = 'Đã lưu căn chỉnh vị trí (trình duyệt này)';
+      this.notificationClass = 'success';
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 2800);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  resetThOverlayConfigDefault(): void {
+    this.thOverlayConfig = {
+      ...DEFAULT_TH_OVERLAY_CONFIG,
+      colFracs: [...DEFAULT_TH_OVERLAY_CONFIG.colFracs]
+    };
+  }
+
+  copyThOverlayJsonToClipboard(): void {
+    const text = JSON.stringify(this.thOverlayConfig, null, 2);
+    void navigator.clipboard.writeText(text).then(() => {
+      this.showNotification = true;
+      this.notificationMessage = 'Đã copy JSON cấu hình';
+      this.notificationClass = 'info';
+      setTimeout(() => {
+        this.showNotification = false;
+      }, 2000);
+    });
+  }
+
+  private loadThPointsFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(TH_POINTS_LS_KEY);
+      if (!raw) {
+        this.thPointMap = {};
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, { x: number; y: number }>;
+      this.thPointMap = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      this.thPointMap = {};
+    }
+  }
+
+  private saveThPointsToStorage(): void {
+    try {
+      localStorage.setItem(TH_POINTS_LS_KEY, JSON.stringify(this.thPointMap));
+    } catch {
+      // ignore
+    }
+  }
+
+  setThActivePoint(rowIndex: number, field: 'ngay' | 'sangNhietDo' | 'sangDoAm' | 'chieuNhietDo' | 'chieuDoAm' | 'ghiChu'): void {
+    this.thActivePointKey = `${rowIndex}.${field}`;
+    this.showNotification = true;
+    this.notificationMessage = `Chọn vị trí trên ảnh cho ô: dòng ${rowIndex + 1} - ${field}`;
+    this.notificationClass = 'info';
+    setTimeout(() => (this.showNotification = false), 1800);
+  }
+
+  clearThPoint(key: string): void {
+    delete this.thPointMap[key];
+    if (this.thActivePointKey === key) {
+      this.thActivePointKey = null;
+    }
+    this.saveThPointsToStorage();
+  }
+
+  onThSvgClick(evt: MouseEvent): void {
+    if (!this.thActivePointKey) {
+      return;
+    }
+    const svg = evt.currentTarget as SVGSVGElement | null;
+    if (!svg) {
+      return;
+    }
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return;
+    }
+    const x = ((evt.clientX - rect.left) / rect.width) * 100;
+    const y = ((evt.clientY - rect.top) / rect.height) * 100;
+    const clamped = { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) };
+    this.thPointMap[this.thActivePointKey] = clamped;
+    this.thLastClick = clamped;
+    this.saveThPointsToStorage();
+  }
+
+  getThSvgTexts(): Array<{ key: string; x: number; y: number; text: string; cls?: string }> {
+    const rows = this.temperatureHumidityData.thRows || [];
+    const out: Array<{ key: string; x: number; y: number; text: string; cls?: string }> = [];
+    Object.entries(this.thPointMap).forEach(([key, pt]) => {
+      const [rowStr, field] = key.split('.');
+      const rowIndex = Number(rowStr);
+      if (Number.isNaN(rowIndex) || rowIndex < 0 || rowIndex >= rows.length) {
+        return;
+      }
+      const r = rows[rowIndex] as any;
+      let text = '';
+      if (field === 'ngay') {
+        text = this.formatThDateDisplay(r.ngay);
+      } else {
+        text = (r[field] ?? '').toString();
+      }
+      if (!text) {
+        return;
+      }
+      out.push({ key, x: pt.x, y: pt.y, text, cls: field === 'ghiChu' ? 'th-svg-note' : undefined });
+    });
+    return out;
+  }
+
+  getThOverlayOuterStyles(): Record<string, string> {
+    const c = this.thOverlayConfig;
+    return {
+      top: `${c.tableTopPct}%`,
+      left: `${c.tableLeftPct}%`,
+      width: `${c.tableWidthPct}%`,
+      height: `${c.tableHeightPct}%`,
+      right: 'auto',
+      bottom: 'auto',
+      'grid-template-rows': `repeat(${this.getThOverlayRowCount()}, minmax(0, 1fr))`
+    };
+  }
+
+  getThOverlayRowGridStyle(): Record<string, string> {
+    const cols = this.normalizeThColFracs(this.thOverlayConfig.colFracs);
+    return {
+      'grid-template-columns': cols.map(fr => `${fr}fr`).join(' ')
+    };
+  }
+
+  getThOverlayInnerCssVars(): Record<string, string> {
+    const c = this.thOverlayConfig;
+    return {
+      '--th-font-min': `${c.fontSizeMinPx}px`,
+      '--th-font-max': `${c.fontSizeMaxPx}px`
+    };
   }
 
   closeTemperatureHumidityChecklist(): void {

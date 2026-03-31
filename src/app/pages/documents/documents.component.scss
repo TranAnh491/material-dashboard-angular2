@@ -2504,6 +2504,61 @@
   height: auto;
 }
 
+.th-svg-stage {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+
+.th-svg-bg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.th-svg-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.th-svg-text {
+  font: 700 2.1px Arial, sans-serif; /* đơn vị theo viewBox 0..100 */
+  fill: #111;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.th-svg-note {
+  font: 600 1.8px Arial, sans-serif;
+  fill: #111;
+  text-anchor: start;
+  dominant-baseline: middle;
+}
+
+.th-svg-cross {
+  fill: rgba(220, 0, 0, 0.75);
+  stroke: rgba(220, 0, 0, 0.9);
+  stroke-width: 0.15;
+}
+
+.th-svg-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .th-data-table-wrap {
   overflow-x: auto;
 }
@@ -2553,6 +2608,30 @@
   }
 }
 
+.th-input-with-pin {
+  display: grid;
+  grid-template-columns: 1fr 30px;
+  gap: 6px;
+  align-items: center;
+}
+
+.th-pin {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #fff;
+  border-radius: 6px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.th-pin .material-icons {
+  font-size: 18px;
+  color: rgba(0, 0, 0, 0.75);
+}
+
 /* Số liệu chồng lên ảnh WH-P01 — chỉnh % nếu lệch so với file in */
 .th-form-filled-section {
   margin: 0 0 1rem;
@@ -2589,19 +2668,14 @@
 
 .th-form-filled-overlay {
   position: absolute;
-  /* Vùng bảng dữ liệu trên JPG — chỉnh cho khớp ô in */
-  top: var(--th-overlay-top, 26%);
-  left: var(--th-overlay-left, 4%);
-  right: var(--th-overlay-right, 4%);
-  bottom: var(--th-overlay-bottom, 20%);
   display: grid;
   gap: 0;
   pointer-events: none;
+  box-sizing: border-box;
 }
 
 .th-form-filled-row {
   display: grid;
-  grid-template-columns: 0.85fr 0.65fr 0.65fr 0.65fr 0.65fr 1.1fr;
   align-items: center;
   justify-items: center;
   padding: 0 2px;
@@ -2609,7 +2683,7 @@
 }
 
 .th-ov-cell {
-  font-size: clamp(6px, 1.45vw, 11px);
+  font-size: clamp(var(--th-font-min, 6px), 1.45vw, var(--th-font-max, 11px));
   font-weight: 600;
   color: #0d0d0d;
   line-height: 1.15;
@@ -2641,3 +2715,73 @@
   overflow: auto;
   padding: 12px 16px 20px;
 }
+
+.th-overlay-calibrate {
+  margin-bottom: 12px;
+}
+
+.th-overlay-calibrate-panel {
+  margin-top: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+}
+
+.th-overlay-calibrate-intro {
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.75);
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.th-overlay-calibrate-sub {
+  font-size: 0.8rem;
+  margin: 0.75rem 0 0.5rem;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.th-overlay-calibrate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px 12px;
+
+  .form-group {
+    margin: 0;
+
+    label {
+      font-size: 0.75rem;
+      margin-bottom: 4px;
+    }
+
+    .form-control {
+      padding: 6px 8px;
+      font-size: 0.85rem;
+    }
+  }
+}
+
+.th-overlay-col-fracs {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.th-overlay-calibrate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+
+  .btn .material-icons {
+    font-size: 18px;
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+}
+
+@media (max-width: 768px) {
+  .th-overlay-col-fracs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
