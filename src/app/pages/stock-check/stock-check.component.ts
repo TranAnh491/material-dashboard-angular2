@@ -957,7 +957,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   /** Thông báo ngắn tự đóng — thay cho alert khi scan dư (không cần bấm OK) */
-  private showAutoDismissScanNotice(title: string, body: string, durationMs = 1600): void {
+  private showAutoDismissScanNotice(title: string, body: string, durationMs = 300): void {
     if (this.scanNoticeTimer) {
       clearTimeout(this.scanNoticeTimer);
       this.scanNoticeTimer = null;
@@ -2024,14 +2024,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       // Dùng mã nhân viên đã đăng nhập
       this.scannedEmployeeId = this.currentEmployeeId;
       // Process material QR code
-      // Format: materialCode|poNumber|quantity|imd
+      // Format (cũ): materialCode|poNumber|quantity|imd
+      // Format (mới): materialCode|poNumber|quantity|imd-<đuôi bịch>  (VD: 02102025-1/14) → bỏ qua phần sau dấu '-'
       const parts = scannedData.split('|');
       
-      if (parts.length === 4) {
-        const [materialCode, poNumber, quantity, imd] = parts.map(p => p.trim());
+      if (parts.length >= 4) {
+        const materialCode = String(parts[0] ?? '').trim();
+        const poNumber = String(parts[1] ?? '').trim();
+        const quantity = String(parts[2] ?? '').trim();
+        const imdRaw = parts.slice(3).join('|').trim();
+        const imd = (imdRaw.split('-')[0] || '').trim();
         
         console.log('🔍 Searching for material:', {
-          scanned: { materialCode, poNumber, imd, quantity },
+          scanned: { materialCode, poNumber, imd, quantity, imdRaw },
           totalMaterials: this.allMaterials.length
         });
         
@@ -2178,7 +2183,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               ? `⚠️ DƯ — Không ghi nhận.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã đủ/ vượt tồn kho. Dư: ${ignoredExcess}`
               : `⚠️ DƯ một phần.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã ghi nhận: ${qtyToSave} | Dư (bỏ qua): ${ignoredExcess}`;
             this.scanMessage = dưMsg;
-            this.showAutoDismissScanNotice('SCAN DƯ', dưMsg);
+            // Tăng tốc: hiển thị rất nhanh rồi tự tắt để scan tiếp.
+            this.showAutoDismissScanNotice('DƯ', dưMsg, 200);
           }
 
           // Nếu không ghi nhận qty nữa, vẫn cho phép tiếp tục (đặc biệt khi sai vị trí)
@@ -2210,8 +2216,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             return;
           }
           
-          // Save to Firebase - hàm này sẽ lấy giá trị từ Firebase và cộng dồn
-          await this.saveStockCheckToFirebase(matchingMaterial, qtyToSave);
+          // Tăng tốc: không chờ Firebase, cho phép scan liên tục.
+          // saveStockCheckToFirebase đã update cache + fire-and-forget lên Firestore.
+          this.saveStockCheckToFirebase(matchingMaterial, qtyToSave)
+            .catch(err => console.error('❌ Error saving stock check (async):', err));
           
           // Sau khi save, cập nhật lại qtyCheck từ Firebase (đã được cộng dồn)
           // qtyCheck sẽ được cập nhật trong saveStockCheckToFirebase
@@ -2280,8 +2288,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             mat.stt = index + 1;
           });
           
-          // Lưu vào Firebase
-          await this.saveStockCheckToFirebase(newMaterial, scannedQty);
+          // Tăng tốc: không chờ Firebase, cho phép scan liên tục.
+          this.saveStockCheckToFirebase(newMaterial, scannedQty)
+            .catch(err => console.error('❌ Error saving new material stock check (async):', err));
           
           // Thử tải standardPacking từ materials collection nếu có
           try {
