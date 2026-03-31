@@ -2,7 +2,7 @@
   <div class="container-fluid documents-container" [class.embedded]="selectedDocumentUrl">
 
     <!-- Document List View -->
-    <div *ngIf="!selectedDocumentUrl && !showDailyChecklist && !showSecuredChecklist" class="modern-checklist-interface">
+    <div *ngIf="!selectedDocumentUrl && !showDailyChecklist && !showSecuredChecklist && !showTemperatureHumidityChecklist" class="modern-checklist-interface">
       
       <!-- Two Column Layout: Checklist Left, Layout Right -->
       <div class="two-column-layout">
@@ -509,6 +509,202 @@
 
       <div class="notification" [class]="notificationClass" [class.show]="showNotification">
         {{ notificationMessage }}
+      </div>
+    </div>
+
+    <!-- Nhiệt độ & Độ ẩm -->
+    <div *ngIf="showTemperatureHumidityChecklist" class="daily-checklist-view">
+      <div class="toolbar compact-toolbar">
+        <button (click)="closeTemperatureHumidityChecklist()" class="btn btn-white btn-round btn-just-icon mr-3">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <span class="compact-header">Nhiệt Độ Độ Ẩm — Quay lại để xem danh sách checklist.</span>
+      </div>
+
+      <div class="container">
+        <div class="header">
+          <h3 class="compact-title">
+            <i class="material-icons">thermostat</i> Nhiệt Độ Độ Ẩm
+            <span *ngIf="hasUnsavedChanges" class="unsaved-indicator">• Chưa lưu</span>
+          </h3>
+        </div>
+
+        <ng-template #thFormOverlay>
+          <div class="th-form-filled-inner">
+            <img src="assets/img/WH-P01-F0.jpg" alt="" class="th-form-filled-bg" />
+            <div
+              class="th-form-filled-overlay"
+              [ngStyle]="{ 'grid-template-rows': 'repeat(' + getThOverlayRowCount() + ', minmax(0, 1fr))' }">
+              <div class="th-form-filled-row" *ngFor="let row of getThRowsForOverlay()">
+                <span class="th-ov-cell th-ov-date">{{ formatThDateDisplay(row.ngay) }}</span>
+                <span class="th-ov-cell">{{ row.sangNhietDo?.trim() || '—' }}</span>
+                <span class="th-ov-cell">{{ row.sangDoAm?.trim() || '—' }}</span>
+                <span class="th-ov-cell">{{ row.chieuNhietDo?.trim() || '—' }}</span>
+                <span class="th-ov-cell">{{ row.chieuDoAm?.trim() || '—' }}</span>
+                <span class="th-ov-cell th-ov-note">{{ row.ghiChu?.trim() || '' }}</span>
+              </div>
+            </div>
+          </div>
+        </ng-template>
+
+        <div class="toolbar">
+          <div class="form-inputs">
+            <div class="form-group">
+              <label for="nguoiKiemTh">Người kiểm:</label>
+              <select id="nguoiKiemTh" class="form-control" [(ngModel)]="temperatureHumidityData.nguoiKiem">
+                <option value="">Chọn người kiểm</option>
+                <option value="Hoàng Vũ">Hoàng Vũ</option>
+                <option value="Hữu Tình">Hữu Tình</option>
+                <option value="Hoàng Tuấn">Hoàng Tuấn</option>
+                <option value="Toàn">Toàn</option>
+                <option value="Hưng">Hưng</option>
+                <option value="Phúc">Phúc</option>
+                <option value="Tú">Tú</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toolbar-actions">
+            <button type="button" class="btn btn-default" (click)="addThRow()" [disabled]="isLoading">
+              <i class="material-icons">playlist_add</i> Thêm dòng
+            </button>
+            <button class="btn btn-primary" (click)="startNewChecklist()" [disabled]="isLoading">
+              <span class="loading-spinner" [class.show]="isLoading"></span>
+              <i class="material-icons">add</i> Tạo mới
+            </button>
+            <button class="btn btn-success" (click)="exportData()" [disabled]="isLoading">
+              <i class="material-icons">file_download</i> Xuất Excel
+            </button>
+            <button class="btn btn-primary" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
+              <span class="loading-spinner" [class.show]="isLoading"></span>
+              <i class="material-icons">save</i> Lưu ngay
+            </button>
+          </div>
+        </div>
+
+        <div class="th-form-reference">
+          <div class="th-form-reference-header">
+            <h4 class="section-title compact-section th-form-reference-title">
+              <i class="material-icons">description</i> Biểu mẫu WH-P01-F0
+            </h4>
+            <button type="button" class="btn btn-sm btn-info" (click)="openThFormReferenceModal()">
+              <i class="material-icons">zoom_in</i> Phóng to
+            </button>
+          </div>
+          <div class="th-form-reference-preview">
+            <img src="assets/img/WH-P01-F0.jpg" alt="WH-P01-F0" class="th-form-reference-img">
+          </div>
+        </div>
+
+        <div class="th-form-filled-section">
+          <div class="th-form-reference-header">
+            <h4 class="section-title compact-section th-form-reference-title">
+              <i class="material-icons">layers</i> Số liệu trên biểu mẫu (xem trước)
+            </h4>
+            <span class="th-form-filled-badge">Cập nhật theo bảng nhập bên dưới</span>
+          </div>
+          <p class="th-form-filled-hint" *ngIf="thOverlayRowsTruncated()">
+            Chỉ hiển thị tối đa 31 dòng trên ảnh; các dòng còn lại chỉ có trong bảng nhập.
+          </p>
+          <ng-container *ngTemplateOutlet="thFormOverlay"></ng-container>
+        </div>
+
+        <div class="main-content">
+          <div class="summary-cards">
+            <div class="summary-card total">
+              <i class="material-icons card-icon">list_alt</i>
+              <div class="summary-number">{{ getThRowCount() }}</div>
+              <div class="summary-label">Số dòng</div>
+            </div>
+            <div class="summary-card ok">
+              <i class="material-icons card-icon">check_circle</i>
+              <div class="summary-number">{{ getThRowsCompleteCount() }}</div>
+              <div class="summary-label">Đã đủ số liệu</div>
+            </div>
+            <div class="summary-card pending">
+              <i class="material-icons card-icon">schedule</i>
+              <div class="summary-number">{{ getThRowsIncompleteCount() }}</div>
+              <div class="summary-label">Chưa đủ</div>
+            </div>
+          </div>
+
+          <div class="checklist-section">
+            <h4 class="section-title compact-section">
+              <i class="material-icons">thermostat</i> Ghi nhận nhiệt độ &amp; độ ẩm (theo ngày — sáng / chiều)
+            </h4>
+            <div class="table-container th-data-table-wrap">
+              <table class="checklist-table th-data-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2" class="th-col-stt">STT</th>
+                    <th rowspan="2" class="th-col-date">Ngày</th>
+                    <th colspan="2">Sáng</th>
+                    <th colspan="2">Chiều</th>
+                    <th rowspan="2" class="th-col-note">Ghi chú</th>
+                    <th rowspan="2" class="th-col-action"></th>
+                  </tr>
+                  <tr>
+                    <th>Nhiệt độ (°C)</th>
+                    <th>Độ ẩm (%)</th>
+                    <th>Nhiệt độ (°C)</th>
+                    <th>Độ ẩm (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of (temperatureHumidityData.thRows || []); let i = index">
+                    <td>{{ i + 1 }}</td>
+                    <td>
+                      <input type="date" class="form-control th-input-date" [(ngModel)]="row.ngay" (ngModelChange)="onThRowFieldChange()">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.sangDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuNhietDo" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control th-input-num" [(ngModel)]="row.chieuDoAm" (ngModelChange)="onThRowFieldChange()" placeholder="—" inputmode="decimal">
+                    </td>
+                    <td>
+                      <input type="text" class="notes-input" [(ngModel)]="row.ghiChu" (ngModelChange)="onThRowFieldChange()" placeholder="Ghi chú...">
+                    </td>
+                    <td class="th-col-action">
+                      <button type="button" class="btn btn-link btn-sm text-danger p-0" (click)="removeThRow(i)" [disabled]="(temperatureHumidityData.thRows?.length || 0) <= 1" title="Xóa dòng">
+                        <i class="material-icons">delete_outline</i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="floating-save" (click)="saveData()" [disabled]="isLoading || !hasUnsavedChanges">
+        <span class="loading-spinner" [class.show]="isLoading"></span>
+        <i class="material-icons">save</i> {{ isLoading ? 'Đang lưu...' : 'Lưu dữ liệu' }}
+      </button>
+
+      <div class="notification" [class]="notificationClass" [class.show]="showNotification">
+        {{ notificationMessage }}
+      </div>
+
+      <div class="modal" [class.show]="showThFormReferenceModal">
+        <div class="modal-content th-form-modal-wide">
+          <div class="modal-header">
+            <h2>WH-P01-F0 — xem trước có số liệu</h2>
+            <button type="button" class="close-btn" (click)="closeThFormReferenceModal()">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+          <div class="modal-body th-modal-body">
+            <ng-container *ngTemplateOutlet="thFormOverlay"></ng-container>
+          </div>
+        </div>
       </div>
     </div>
 

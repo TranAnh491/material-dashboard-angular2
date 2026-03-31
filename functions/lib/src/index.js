@@ -33,40 +33,44 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateUserPasswordAdmin = exports.placeholder = void 0;
+exports.sendTelegramNotification = exports.placeholder = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
+// Stub: health check khi deploy Functions.
 exports.placeholder = functions.https.onRequest((req, res) => {
     res.status(200).send('OK');
 });
 /**
- * Admin password reset for a target Firebase Auth user.
- * NOTE: this is intentionally callable from Settings client flow.
+ * Gửi tin nhắn Telegram (bot → group) — token chỉ nằm trên server.
+ * Cấu hình: firebase functions:config:set telegram.bot_token="..." telegram.chat_id="-100..."
+ * Gọi từ Angular: httpsCallable(getFunctions(app), 'sendTelegramNotification')({ text: '...' })
  */
-exports.updateUserPasswordAdmin = functions.https.onCall(async (data, context) => {
-    var _a;
-    try {
-        const uid = ((data === null || data === void 0 ? void 0 : data.uid) || '').toString().trim();
-        const newPassword = ((data === null || data === void 0 ? void 0 : data.newPassword) || '').toString();
-        if (!uid) {
-            throw new functions.https.HttpsError('invalid-argument', 'Missing target uid');
-        }
-        if (!newPassword || newPassword.length < 6) {
-            throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 6 characters');
-        }
-        // Optional guard: require caller to be authenticated
-        if (!((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
-            throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
-        }
-        await admin.auth().updateUser(uid, { password: newPassword });
-        return { success: true };
+exports.sendTelegramNotification = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
-    catch (err) {
-        console.error('updateUserPasswordAdmin error:', err);
-        if (err instanceof functions.https.HttpsError)
-            throw err;
-        throw new functions.https.HttpsError('internal', (err === null || err === void 0 ? void 0 : err.message) || 'Failed to update password');
+    const text = typeof (data === null || data === void 0 ? void 0 : data.text) === 'string' ? data.text.trim() : '';
+    if (!text) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu nội dung.');
     }
+    const cfg = functions.config().telegram || {};
+    const botToken = cfg.bot_token;
+    const chatId = cfg.chat_id;
+    if (!botToken || !chatId) {
+        throw new functions.https.HttpsError('failed-precondition', 'Chưa cấu hình telegram.bot_token / telegram.chat_id trên Functions.');
+    }
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4096) }),
+    });
+    if (!res.ok) {
+        const errBody = await res.text();
+        console.error('Telegram API error', res.status, errBody);
+        throw new functions.https.HttpsError('internal', 'Gửi Telegram thất bại.');
+    }
+    return { ok: true };
 });
 //# sourceMappingURL=index.js.map

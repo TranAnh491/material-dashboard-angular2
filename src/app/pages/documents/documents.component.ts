@@ -24,11 +24,23 @@ interface ChecklistItem {
   notes: string;
 }
 
+/** Một dòng theo biểu mẫu NĐ/ĐA: ngày, sáng/chiều, ô nhập số */
+interface TemperatureHumidityRow {
+  ngay: string;
+  sangNhietDo: string;
+  sangDoAm: string;
+  chieuNhietDo: string;
+  chieuDoAm: string;
+  ghiChu: string;
+}
+
 interface ChecklistData {
   id?: string;
   nguoiKiem: string;
   ngayKiem: string;
   items: ChecklistItem[];
+  /** Form Nhiệt độ & Độ ẩm (WH-P01): bảng theo ngày, sáng/chiều */
+  thRows?: TemperatureHumidityRow[];
   createdAt: any;
   status: 'pending' | 'completed';
 }
@@ -158,6 +170,20 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       priority: 'high',
       url: null,
       loading: false
+    },
+    {
+      id: 'temperature-humidity',
+      title: 'Nhiệt Độ Độ Ẩm',
+      description: 'Theo dõi nhiệt độ và độ ẩm kho',
+      icon: 'thermostat',
+      status: 'ready',
+      completionPercentage: 0,
+      itemCount: 31,
+      assignedUser: 'Hoàng Tuấn',
+      lastUpdated: new Date(),
+      priority: 'high',
+      url: null,
+      loading: false
     }
   ];
 
@@ -240,6 +266,11 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
   // Checklist state
   showSecuredChecklist: boolean = false;
+  showTemperatureHumidityChecklist: boolean = false;
+  /** Modal xem phóng to biểu mẫu WH-P01-F0.jpg */
+  showThFormReferenceModal: boolean = false;
+  temperatureHumidityHistory: ChecklistData[] = [];
+
   securedChecklistData: ChecklistData = {
     nguoiKiem: '',
     ngayKiem: new Date().toISOString().split('T')[0],
@@ -280,6 +311,27 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     status: 'pending'
   };
 
+  temperatureHumidityData: ChecklistData = (() => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      nguoiKiem: '',
+      ngayKiem: today,
+      items: [],
+      thRows: [
+        {
+          ngay: today,
+          sangNhietDo: '',
+          sangDoAm: '',
+          chieuNhietDo: '',
+          chieuDoAm: '',
+          ghiChu: ''
+        }
+      ],
+      createdAt: Timestamp.now(),
+      status: 'pending'
+    };
+  })();
+
   // Daily Checklist Methods
   openDailyChecklist(): void {
     this.showDailyChecklist = true;
@@ -295,6 +347,24 @@ export class DocumentsComponent implements OnInit, OnDestroy {
 
   closeSecuredChecklist(): void {
     this.showSecuredChecklist = false;
+  }
+
+  openTemperatureHumidityChecklist(): void {
+    this.showTemperatureHumidityChecklist = true;
+    this.loadHistory();
+  }
+
+  closeTemperatureHumidityChecklist(): void {
+    this.showTemperatureHumidityChecklist = false;
+    this.showThFormReferenceModal = false;
+  }
+
+  openThFormReferenceModal(): void {
+    this.showThFormReferenceModal = true;
+  }
+
+  closeThFormReferenceModal(): void {
+    this.showThFormReferenceModal = false;
   }
 
   async loadSecuredHistory() {
@@ -386,15 +456,122 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     return this.securedChecklistData.items.filter(item => item.isNG).length;
   }
 
+  getThRowCount(): number {
+    return this.temperatureHumidityData.thRows?.length ?? 0;
+  }
+
+  /** Số dòng đã nhập đủ 4 giá trị (sáng/chiều — NĐ & ĐA) */
+  getThRowsCompleteCount(): number {
+    const rows = this.temperatureHumidityData.thRows || [];
+    return rows.filter(
+      r =>
+        r.sangNhietDo?.trim() &&
+        r.sangDoAm?.trim() &&
+        r.chieuNhietDo?.trim() &&
+        r.chieuDoAm?.trim()
+    ).length;
+  }
+
+  getThRowsIncompleteCount(): number {
+    return Math.max(0, this.getThRowCount() - this.getThRowsCompleteCount());
+  }
+
+  private createEmptyThRow(ngay?: string): TemperatureHumidityRow {
+    return {
+      ngay: ngay || this.formatDateToLocal(new Date()),
+      sangNhietDo: '',
+      sangDoAm: '',
+      chieuNhietDo: '',
+      chieuDoAm: '',
+      ghiChu: ''
+    };
+  }
+
+  onThRowFieldChange(): void {
+    this.hasUnsavedChanges = true;
+  }
+
+  addThRow(): void {
+    if (!this.temperatureHumidityData.thRows) {
+      this.temperatureHumidityData.thRows = [];
+    }
+    this.temperatureHumidityData.thRows.push(this.createEmptyThRow());
+    this.onThRowFieldChange();
+  }
+
+  removeThRow(index: number): void {
+    const rows = this.temperatureHumidityData.thRows || [];
+    if (rows.length <= 1) {
+      return;
+    }
+    rows.splice(index, 1);
+    this.onThRowFieldChange();
+  }
+
+  /** Hiển thị ngày dạng dd/mm trên ảnh biểu mẫu */
+  formatThDateDisplay(ngay: string): string {
+    if (!ngay) {
+      return '';
+    }
+    const d = ngay.split('T')[0];
+    const parts = d.split('-');
+    if (parts.length !== 3) {
+      return ngay;
+    }
+    return `${parts[2]}/${parts[1]}`;
+  }
+
+  /** Tối đa 31 dòng trên preview (khớp tháng); chỉnh nếu biểu mẫu khác */
+  private static readonly TH_OVERLAY_MAX_ROWS = 31;
+
+  getThRowsForOverlay(): TemperatureHumidityRow[] {
+    const rows = this.temperatureHumidityData.thRows || [];
+    return rows.slice(0, DocumentsComponent.TH_OVERLAY_MAX_ROWS);
+  }
+
+  getThOverlayRowCount(): number {
+    return Math.max(1, this.getThRowsForOverlay().length);
+  }
+
+  thOverlayRowsTruncated(): boolean {
+    return (this.temperatureHumidityData.thRows?.length || 0) > DocumentsComponent.TH_OVERLAY_MAX_ROWS;
+  }
+
+  private getThRowsFullyFilledCount(rows: TemperatureHumidityRow[] | undefined): number {
+    if (!rows?.length) {
+      return 0;
+    }
+    return rows.filter(
+      r =>
+        r.sangNhietDo?.trim() &&
+        r.sangDoAm?.trim() &&
+        r.chieuNhietDo?.trim() &&
+        r.chieuDoAm?.trim()
+    ).length;
+  }
+
+  private syncThNgayKiemFromRows(data: ChecklistData): void {
+    const rows = data.thRows || [];
+    const dates = rows.map(r => r.ngay).filter(Boolean).sort();
+    if (dates.length) {
+      data.ngayKiem = dates[dates.length - 1];
+    }
+  }
+
   getPreviousCategory(index: number): string {
     return index > 0 ? this.currentData.items[index - 1].category : '';
   }
 
   updateItemStatus(index: number) {
-    // Determine which checklist is currently active
-    const isSecuredChecklist = this.showSecuredChecklist;
-    const item = isSecuredChecklist ? this.securedChecklistData.items[index] : this.currentData.items[index];
-    const nguoiKiem = isSecuredChecklist ? this.securedChecklistData.nguoiKiem : this.currentData.nguoiKiem;
+    if (this.showTemperatureHumidityChecklist) {
+      return;
+    }
+    const item = this.showSecuredChecklist
+      ? this.securedChecklistData.items[index]
+      : this.currentData.items[index];
+    const nguoiKiem = this.showSecuredChecklist
+      ? this.securedChecklistData.nguoiKiem
+      : this.currentData.nguoiKiem;
     
     // Ensure only one checkbox can be selected at a time
     if (item.isOK && item.isNG) {
@@ -445,10 +622,18 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     console.log('🔄 Starting save operation...');
     console.log('Connection status:', this.connectionStatus);
     
-    // Determine which checklist is currently active
-    const isSecuredChecklist = this.showSecuredChecklist;
-    const activeData = isSecuredChecklist ? this.securedChecklistData : this.currentData;
-    const collectionName = isSecuredChecklist ? 'secured-checklist' : 'warehouse-checklist';
+    const isTh = this.showTemperatureHumidityChecklist;
+    const isSecuredChecklist = this.showSecuredChecklist && !isTh;
+    const activeData = isTh
+      ? this.temperatureHumidityData
+      : isSecuredChecklist
+        ? this.securedChecklistData
+        : this.currentData;
+    const collectionName = isTh
+      ? 'temperature-humidity-checklist'
+      : isSecuredChecklist
+        ? 'secured-checklist'
+        : 'warehouse-checklist';
     
     console.log('Active data:', activeData);
     console.log('Collection:', collectionName);
@@ -481,12 +666,30 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     try {
-      const completedItems = activeData.items.filter(item => item.isOK || item.isNG).length;
-      const totalItems = activeData.items.length;
-      const calculatedStatus = completedItems === totalItems ? 'completed' : 'pending';
-      
+      if (isTh) {
+        this.syncThNgayKiemFromRows(activeData);
+      }
+
+      let completedItems: number;
+      let totalItems: number;
+      let calculatedStatus: 'pending' | 'completed';
+
+      if (isTh) {
+        const rows = activeData.thRows || [];
+        totalItems = rows.length;
+        completedItems = this.getThRowsFullyFilledCount(rows);
+        calculatedStatus =
+          totalItems > 0 && completedItems === totalItems ? 'completed' : 'pending';
+      } else {
+        completedItems = activeData.items.filter(item => item.isOK || item.isNG).length;
+        totalItems = activeData.items.length;
+        calculatedStatus = completedItems === totalItems ? 'completed' : 'pending';
+      }
+
       const dataToSave = {
         ...activeData,
+        items: isTh ? [] : activeData.items,
+        ...(isTh ? { thRows: activeData.thRows || [] } : {}),
         createdAt: Timestamp.now(),
         status: calculatedStatus
       };
@@ -495,8 +698,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         completedItems,
         totalItems,
         calculatedStatus,
-        checkedItems: activeData.items.filter(item => item.isOK).length,
-        ngItems: activeData.items.filter(item => item.isNG).length
+        isTh
       });
       console.log('📝 Data to save:', dataToSave);
       console.log('📅 Date being saved:', dataToSave.ngayKiem);
@@ -565,6 +767,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       console.error('🔥 Error loading from Firebase:', error);
       this.isLoading = false;
       this.historyData = [];
+      this.temperatureHumidityHistory = [];
       this.checklistDates.clear();
       
       // Show error notification
@@ -581,18 +784,22 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     // Load from both collections for calendar
     const wareouseQ = query(collection(this.db, 'warehouse-checklist'), orderBy('createdAt', 'desc'));
     const securedQ = query(collection(this.db, 'secured-checklist'), orderBy('createdAt', 'desc'));
-    
-    const [warehouseSnapshot, securedSnapshot] = await Promise.all([
+    const thQ = query(collection(this.db, 'temperature-humidity-checklist'), orderBy('createdAt', 'desc'));
+
+    const [warehouseSnapshot, securedSnapshot, thSnapshot] = await Promise.all([
       getDocs(wareouseQ),
-      getDocs(securedQ)
+      getDocs(securedQ),
+      getDocs(thQ)
     ]);
-    
+
     this.historyData = [];
+    this.temperatureHumidityHistory = [];
     this.checklistDates.clear();
     
     // Process warehouse checklist data with chunking to prevent blocking
     const warehouseDocs = warehouseSnapshot.docs;
     const securedDocs = securedSnapshot.docs;
+    const thDocs = thSnapshot.docs;
     
     // Process in chunks to prevent UI blocking
     const chunkSize = 10;
@@ -642,7 +849,22 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         console.log('📅 Added to checklistDates (secured):', data.ngayKiem, 'from record:', doc.id);
       }
     });
-    
+
+    thDocs.forEach((docSnap) => {
+      const data = docSnap.data() as ChecklistData;
+      if ((data as any).deleted) {
+        return;
+      }
+      this.temperatureHumidityHistory.push({
+        id: docSnap.id,
+        ...data
+      });
+      if (data.ngayKiem) {
+        this.checklistDates.add(data.ngayKiem);
+        console.log('📅 Added to checklistDates (temperature-humidity):', data.ngayKiem, 'from record:', docSnap.id);
+      }
+    });
+
     this.totalRecords = this.historyData.length;
     console.log(`📊 Loaded ${this.historyData.length} warehouse records, ${this.checklistDates.size} unique dates for calendar`);
     console.log('📅 Calendar dates:', Array.from(this.checklistDates).sort());
@@ -663,10 +885,16 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Determine which checklist is currently active
-    const isSecuredChecklist = this.showSecuredChecklist;
-    
-    if (isSecuredChecklist) {
+    if (this.showTemperatureHumidityChecklist) {
+      this.temperatureHumidityData = {
+        nguoiKiem: '',
+        ngayKiem: this.formatDateToLocal(new Date()),
+        items: [],
+        thRows: [this.createEmptyThRow()],
+        createdAt: Timestamp.now(),
+        status: 'pending'
+      };
+    } else if (this.showSecuredChecklist) {
       this.securedChecklistData = {
         nguoiKiem: '',
         ngayKiem: this.formatDateToLocal(new Date()),
@@ -785,7 +1013,9 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   exportData() {
-    if (this.historyData.length === 0) {
+    const thMode = this.showTemperatureHumidityChecklist;
+    const source = thMode ? this.temperatureHumidityHistory : this.historyData;
+    if (source.length === 0) {
       this.showNotification = true;
       this.notificationMessage = '❌ Không có dữ liệu để xuất';
       this.notificationClass = 'error';
@@ -793,22 +1023,38 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Create CSV content
-    let csvContent = 'Ngày kiểm,Người kiểm,Trạng thái,Tổng mục,Hoàn thành,Ghi chú\n';
-    
-    this.historyData.forEach(record => {
-      const completedCount = this.getCompletedCount(record.items);
-      const notes = record.items.map(item => item.notes).filter(note => note).join('; ');
-      
-      csvContent += `${record.ngayKiem},${record.nguoiKiem},${record.status === 'completed' ? 'Hoàn thành' : 'Đang thực hiện'},${record.items.length},${completedCount},"${notes}"\n`;
-    });
+    let csvContent: string;
+    if (thMode) {
+      csvContent =
+        'Ngày báo cáo,Người kiểm,Trạng thái,Ngày (dòng),Sáng N°C,Sáng %RH,Chiều N°C,Chiều %RH,Ghi chú\n';
+      (source as ChecklistData[]).forEach(record => {
+        const rows = record.thRows || [];
+        const status = record.status === 'completed' ? 'Hoàn thành' : 'Đang thực hiện';
+        if (rows.length === 0) {
+          csvContent += `${record.ngayKiem},${record.nguoiKiem},${status},,,,,,,\n`;
+        } else {
+          rows.forEach(line => {
+            const gc = (line.ghiChu || '').replace(/"/g, '""');
+            csvContent += `${record.ngayKiem},${record.nguoiKiem},${status},${line.ngay},${line.sangNhietDo},${line.sangDoAm},${line.chieuNhietDo},${line.chieuDoAm},"${gc}"\n`;
+          });
+        }
+      });
+    } else {
+      csvContent = 'Ngày kiểm,Người kiểm,Trạng thái,Tổng mục,Hoàn thành,Ghi chú\n';
+      (source as ChecklistData[]).forEach(record => {
+        const completedCount = this.getCompletedCount(record.items);
+        const notes = record.items.map(item => item.notes).filter(note => note).join('; ');
+        csvContent += `${record.ngayKiem},${record.nguoiKiem},${record.status === 'completed' ? 'Hoàn thành' : 'Đang thực hiện'},${record.items.length},${completedCount},"${notes}"\n`;
+      });
+    }
 
     // Download CSV
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `warehouse-checklist-${new Date().getTime()}.csv`);
+    const filePrefix = thMode ? 'temperature-humidity-checklist' : 'warehouse-checklist';
+    link.setAttribute('download', `${filePrefix}-${new Date().getTime()}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -1263,6 +1509,8 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         this.openDailyChecklist();
       } else if (checklist.id === 'secured-checklist') {
         this.openSecuredChecklist();
+      } else if (checklist.id === 'temperature-humidity') {
+        this.openTemperatureHumidityChecklist();
       } else {
         this.selectDocument({ 
           title: checklist.title, 
@@ -1357,7 +1605,47 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       this.checklists[checklistIndex].lastUpdated = new Date(2025, 6, 1); // July 1, 2025 as fallback
       console.log('No history data found, using default status');
     }
-    
+
+    const thIndex = this.checklists.findIndex(c => c.id === 'temperature-humidity');
+    if (thIndex !== -1) {
+      if (this.temperatureHumidityHistory.length > 0) {
+        const sortedTh = [...this.temperatureHumidityHistory].sort((a, b) => {
+          const dateA = new Date(a.ngayKiem);
+          const dateB = new Date(b.ngayKiem);
+          return dateB.getTime() - dateA.getTime();
+        });
+        const mostRecent = sortedTh[0];
+        this.checklists[thIndex].lastUpdated = new Date(mostRecent.ngayKiem);
+        this.checklists[thIndex].assignedUser = mostRecent.nguoiKiem;
+        const thRows = mostRecent.thRows || [];
+        const totalItems = thRows.length > 0 ? thRows.length : mostRecent.items.length;
+        const completedItems =
+          thRows.length > 0
+            ? this.getThRowsFullyFilledCount(thRows)
+            : this.getCompletedCount(mostRecent.items);
+        const isFullyCompleted = totalItems > 0 && completedItems === totalItems;
+        if (isFullyCompleted) {
+          this.checklists[thIndex].status = 'completed';
+        } else {
+          const daysSinceLastCheck = Math.floor(
+            (new Date().getTime() - new Date(mostRecent.ngayKiem).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysSinceLastCheck === 0) {
+            this.checklists[thIndex].status = 'pending';
+          } else if (daysSinceLastCheck <= 1) {
+            this.checklists[thIndex].status = 'ready';
+          } else if (daysSinceLastCheck <= 3) {
+            this.checklists[thIndex].status = 'pending';
+          } else {
+            this.checklists[thIndex].status = 'overdue';
+          }
+        }
+      } else {
+        this.checklists[thIndex].status = 'overdue';
+        this.checklists[thIndex].lastUpdated = new Date(2025, 6, 1);
+      }
+    }
+
     // Update filtered checklists as well
     this.filteredChecklists = [...this.checklists];
   }

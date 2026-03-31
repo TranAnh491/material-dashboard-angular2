@@ -2183,8 +2183,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               ? `⚠️ DƯ — Không ghi nhận.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã đủ/ vượt tồn kho. Dư: ${ignoredExcess}`
               : `⚠️ DƯ một phần.\nMã: ${materialCode} | PO: ${poNumber} | IMD: ${imdTrim}\nĐã ghi nhận: ${qtyToSave} | Dư (bỏ qua): ${ignoredExcess}`;
             this.scanMessage = dưMsg;
-            // Tăng tốc: hiển thị rất nhanh rồi tự tắt để scan tiếp.
-            this.showAutoDismissScanNotice('DƯ', dưMsg, 200);
+            // Popup dư: 0.1s rồi tự tắt để scan tiếp.
+            this.showAutoDismissScanNotice('DƯ', dưMsg, 100);
           }
 
           // Nếu không ghi nhận qty nữa, vẫn cho phép tiếp tục (đặc biệt khi sai vị trí)
