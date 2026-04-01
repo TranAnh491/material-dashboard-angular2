@@ -48,6 +48,8 @@ export interface InventoryMaterial {
   exportedBags?: number;
   /** String input để edit BAG (totalBags) an toàn với dấu phẩy. */
   bagInput?: string;
+  bagTrackingInitialized?: boolean;
+  openingStockAtBagInit?: number;
   
   // Edit states
   isEditingOpeningStock?: boolean;
@@ -387,11 +389,16 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             }
           }
 
-          // Init BAG input (totalBags) for editing UI.
+          material.bagTrackingInitialized = !!data.bagTrackingInitialized;
+          material.openingStockAtBagInit =
+            typeof data.openingStockAtBagInit === 'number' ? data.openingStockAtBagInit : undefined;
           material.bagInput =
-            material.totalBags != null && Number(material.totalBags) > 0
-              ? String(Math.floor(Number(material.totalBags)))
-              : '';
+            material.bagTrackingInitialized
+              ? ''
+              : material.totalBags != null && Number(material.totalBags) > 0
+                ? String(Math.floor(Number(material.totalBags)))
+                : '';
+          this.applyLocalDerivedBags(material);
           
           return material;
         })
@@ -614,6 +621,79 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     const used = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
     const remaining = Math.max(0, total - used);
     return `${remaining}/${total}`;
+  }
+
+  getEffectiveStandardPacking(material: InventoryMaterial): number {
+    const row = Number(material.standardPacking);
+    if (row > 0 && Number.isFinite(row)) {
+      return row;
+    }
+    return this.getStandardPacking(material.materialCode);
+  }
+
+  computeTotalBagsFromStock(material: InventoryMaterial): number {
+    const sp = this.getEffectiveStandardPacking(material);
+    const stock = this.calculateCurrentStock(material);
+    if (!sp || sp <= 0 || stock <= 0) {
+      return 0;
+    }
+    return Math.ceil(stock / sp);
+  }
+
+  applyLocalDerivedBags(material: InventoryMaterial): void {
+    if (!material.bagTrackingInitialized) {
+      return;
+    }
+    material.totalBags = this.computeTotalBagsFromStock(material);
+    material.bagInput = '';
+  }
+
+  getBagsBreakdownText(material: InventoryMaterial): string {
+    if (!material.bagTrackingInitialized) {
+      return material.totalBags != null && Number(material.totalBags) > 0
+        ? this.formatNumber(material.totalBags)
+        : '';
+    }
+    const sp = this.getEffectiveStandardPacking(material);
+    const stock = this.calculateCurrentStock(material);
+    if (!sp || sp <= 0) {
+      return material.totalBags != null && Number(material.totalBags) > 0
+        ? this.formatNumber(material.totalBags)
+        : '—';
+    }
+    if (stock <= 0) {
+      return '0';
+    }
+    const totalUnits = Math.ceil(stock / sp);
+    const fullCount = Math.floor(stock / sp);
+    const partial = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
+    if (partial <= 1e-9) {
+      return `${totalUnits} (${fullCount} bịch × ${sp})`;
+    }
+    return `${totalUnits} (${fullCount} bịch × ${sp} + 1 bịch ${partial})`;
+  }
+
+  getBagsBreakdownTitle(material: InventoryMaterial): string {
+    if (!material.bagTrackingInitialized) {
+      return '';
+    }
+    const init = material.openingStockAtBagInit;
+    const initStr = init != null && Number.isFinite(init) ? String(init) : '—';
+    return `Tự tính từ tồn kho ÷ Standard Packing. Tồn khi khởi tạo bịch: ${initStr}`;
+  }
+
+  private appendDerivedTotalBagsIfNeeded(material: InventoryMaterial, updateData: any): void {
+    if (!material.bagTrackingInitialized) {
+      return;
+    }
+    const sp = this.getEffectiveStandardPacking(material);
+    if (!sp || sp <= 0) {
+      return;
+    }
+    const derived = this.computeTotalBagsFromStock(material);
+    material.totalBags = derived;
+    material.bagInput = '';
+    updateData.totalBags = derived;
   }
 
   // Debug function to find problematic batchNumbers
@@ -1829,6 +1909,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     const originalCount = this.inventoryMaterials.length;
     this.inventoryMaterials = [...Array.from(finalConsolidatedMap.values()), ...inboundMaterials];
     this.filteredInventory = [...this.inventoryMaterials];
+    this.inventoryMaterials.forEach(m => this.applyLocalDerivedBags(m));
     
     // Sắp xếp FIFO sau khi gộp dữ liệu
     this.sortInventoryFIFO();
@@ -2740,6 +2821,42 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     if (!this.canEdit) return;
     if (!material?.id) return;
 
+    if (material.bagTrackingInitialized) {
+      const sp = this.getEffectiveStandardPacking(material);
+      if (!sp || sp <= 0) {
+        return;
+      }
+      const derived = this.computeTotalBagsFromStock(material);
+      material.totalBags = derived;
+      material.bagInput = '';
+      material.updatedAt = new Date();
+      this.firestore
+        .collection('inventory-materials')
+        .doc(material.id)
+        .update({
+          totalBags: derived,
+          updatedAt: material.updatedAt
+        })
+        .then(() => {
+          console.log(`✅ ASM2 Synced totalBags (auto) for ${material.materialCode} - ${material.poNumber}: ${derived}`);
+        })
+        .catch(error => {
+          console.error(`❌ ASM2 Error syncing totalBags for ${material.materialCode}:`, error);
+        });
+      return;
+    }
+
+    const sp = this.getEffectiveStandardPacking(material);
+    if (!sp || sp <= 0) {
+      alert('❌ Cần Standard Packing > 0 (catalog hoặc dòng) để khởi tạo số bịch theo tồn kho.');
+      return;
+    }
+    const stock = this.calculateCurrentStock(material);
+    if (stock <= 0) {
+      alert('❌ Tồn kho phải > 0 trước khi khởi tạo số bịch.');
+      return;
+    }
+
     const raw = (material.bagInput ?? material.totalBags ?? '') as any;
     const num =
       raw === '' || raw === null || raw === undefined
@@ -2747,30 +2864,48 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         : typeof raw === 'number'
           ? raw
           : parseFloat(String(raw).replace(/,/g, '').trim());
-
     const normalizedRaw = isFinite(num) ? Math.max(0, num) : 0;
-    const normalized = Math.floor(normalizedRaw);
+    const userBags = Math.floor(normalizedRaw);
+    if (userBags < 1) {
+      return;
+    }
 
-    material.totalBags = normalized;
-    material.bagInput = normalized > 0 ? String(normalized) : '';
+    const canonical = Math.ceil(stock / sp);
+    if (userBags !== canonical) {
+      console.warn(
+        `[BAG] Nhập ${userBags} nhưng tồn ${stock} ÷ SP ${sp} ⇒ ${canonical} bịch — lưu theo công thức.`
+      );
+    }
+
+    material.bagTrackingInitialized = true;
+    material.openingStockAtBagInit = stock;
+    material.totalBags = canonical;
+    material.bagInput = '';
     material.updatedAt = new Date();
 
     this.firestore
       .collection('inventory-materials')
       .doc(material.id)
       .update({
-        totalBags: normalized,
+        bagTrackingInitialized: true,
+        openingStockAtBagInit: stock,
+        totalBags: canonical,
         updatedAt: material.updatedAt
       })
       .then(() => {
-        console.log(`✅ ASM2 Updated totalBags for ${material.materialCode} - ${material.poNumber}: ${normalized}`);
+        console.log(
+          `✅ ASM2 Khởi tạo bịch (tồn đầu kỳ=${stock}, totalBags=${canonical}) ${material.materialCode} - ${material.poNumber}`
+        );
       })
       .catch(error => {
-        console.error(`❌ ASM2 Error updating totalBags for ${material.materialCode}:`, error);
+        console.error(`❌ ASM2 Error updating bag tracking for ${material.materialCode}:`, error);
       });
   }
 
   isTotalBagsValid(material: InventoryMaterial): boolean {
+    if (material.bagTrackingInitialized) {
+      return this.computeTotalBagsFromStock(material) >= 1;
+    }
     return Math.floor(Number(material.totalBags ?? 0)) > 0;
   }
 
@@ -2933,6 +3068,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     if (material.batchNumber) {
       updateData.batchNumber = material.batchNumber;
     }
+
+    this.appendDerivedTotalBagsIfNeeded(material, updateData);
 
     console.log(`🔍 DEBUG: Update data to Firebase:`, updateData);
     
@@ -3343,10 +3480,12 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     
     try {
       console.log(`🔄 Updating Firebase document: inventory-materials/${material.id}`);
-      const updateData = {
+      material.exported = exportedQuantity;
+      const updateData: any = {
         exported: exportedQuantity,
         updatedAt: new Date()
       };
+      this.appendDerivedTotalBagsIfNeeded(material, updateData);
       console.log(`📝 Update data:`, updateData);
       
       await this.firestore.collection('inventory-materials').doc(material.id).update(updateData);
@@ -4582,7 +4721,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
-      const bagTotal = Math.floor(Number(material.totalBags ?? 0));
+      const bagTotal = material.bagTrackingInitialized
+        ? this.computeTotalBagsFromStock(material)
+        : Math.floor(Number(material.totalBags ?? 0));
       if (!bagTotal || bagTotal < 1) {
         alert('❌ Không thể in tem QR - thiếu BAG (Số bịch).');
         return;
@@ -5252,7 +5393,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       // Update các item đã gộp
       for (const material of consolidatedMaterials) {
         if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}`)!.length > 1) {
-          await this.firestore.collection('inventory-materials').doc(material.id).update({
+          const consolidateUpdateAsm2: any = {
             openingStock: material.openingStock,
             quantity: material.quantity,
             stock: material.stock,
@@ -5267,7 +5408,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             supplier: material.supplier,
             rollsOrBags: material.rollsOrBags,
             updatedAt: material.updatedAt
-          });
+          };
+          this.appendDerivedTotalBagsIfNeeded(material, consolidateUpdateAsm2);
+          await this.firestore.collection('inventory-materials').doc(material.id).update(consolidateUpdateAsm2);
           console.log(`✅ Auto-updated: ${material.materialCode} - PO ${material.poNumber}`);
         }
       }
@@ -5477,7 +5620,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       for (const material of consolidatedMaterials) {
         if (material.id && materialPoMap.get(`${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`)!.length > 1) {
           // Đây là item đã gộp, cần update
-          await this.firestore.collection('inventory-materials').doc(material.id).update({
+          const consolidateUpdateAsm2b: any = {
             openingStock: material.openingStock,
             quantity: material.quantity,
             stock: material.stock,
@@ -5492,7 +5635,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             supplier: material.supplier,
             rollsOrBags: material.rollsOrBags,
             updatedAt: material.updatedAt
-          });
+          };
+          this.appendDerivedTotalBagsIfNeeded(material, consolidateUpdateAsm2b);
+          await this.firestore.collection('inventory-materials').doc(material.id).update(consolidateUpdateAsm2b);
           console.log(`✅ Updated: ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'}`);
         }
       }

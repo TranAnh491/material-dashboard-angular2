@@ -135,7 +135,7 @@
           </div>
           <div class="info-row">
             <span class="label">BAG:</span>
-            <ng-container *ngIf="canEdit; else bagsReadonlyMobile">
+            <ng-container *ngIf="canEdit && !material.bagTrackingInitialized; else bagsMobileReadonlyOrAuto">
               <input
                 type="text"
                 class="mobile-input"
@@ -143,11 +143,12 @@
                 (ngModelChange)="material.bagInput = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
                 (blur)="updateTotalBags(material)"
                 (keydown.enter)="onBagsKeyEnter(material, $event)"
-                placeholder="Nhập số bịch">
+                placeholder="Nhập số bịch (lần đầu)">
             </ng-container>
-            <ng-template #bagsReadonlyMobile>
-              <span class="value readonly-metric">
-                {{ material.totalBags ? formatNumber(material.totalBags) : '' }}
+            <ng-template #bagsMobileReadonlyOrAuto>
+              <span class="value readonly-metric"
+                    [title]="getBagsBreakdownTitle(material)">
+                {{ getBagsBreakdownText(material) }}
               </span>
             </ng-template>
           </div>
@@ -348,8 +349,8 @@
               {{getDisplayIMD(material)}}
             </td>
             <td class="batch-cell readonly-cell" [class.readonly-cell]="!canEdit" [class.duplicate-cell]="material.isDuplicate"
-                title="Số bịch (gwLdv) - dùng cho đuôi QR">
-              <ng-container *ngIf="canEdit; else bagsReadonlyDesktop">
+                title="Số bịch — sau lần nhập đầu: tự tính từ tồn kho ÷ Standard Packing">
+              <ng-container *ngIf="canEdit && !material.bagTrackingInitialized; else bagsDesktopReadonlyOrAuto">
                 <input
                   type="text"
                   class="editable-input"
@@ -357,10 +358,12 @@
                   (ngModelChange)="material.bagInput = ($event === '' || $event === null || $event === undefined) ? '' : '' + $event"
                   (blur)="updateTotalBags(material)"
                   (keydown.enter)="onBagsKeyEnter(material, $event)"
-                  placeholder="Nhập số bịch">
+                  placeholder="Lần đầu">
               </ng-container>
-              <ng-template #bagsReadonlyDesktop>
-                {{ material.totalBags ? formatNumber(material.totalBags) : '' }}
+              <ng-template #bagsDesktopReadonlyOrAuto>
+                <span [title]="getBagsBreakdownTitle(material)" style="font-size: 11px;">
+                  {{ getBagsBreakdownText(material) }}
+                </span>
               </ng-template>
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
