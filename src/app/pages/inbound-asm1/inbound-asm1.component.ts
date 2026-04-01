@@ -2551,6 +2551,40 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return `${materialId}::${String(qrPart4 || '').trim()}`;
   }
 
+  /**
+   * Chữ in bên phải tem QR: Mã hàng, PO, Số lượng, IMD, số bag.
+   * Chuỗi QR: Mã|PO|lượng|DDMMYYYY-bịch/tổng (tem thùng: ...|DDMMYYYY-i/N).
+   */
+  private parseInboundQrLabelDisplayFields(qrData: string): {
+    materialCode: string;
+    po: string;
+    quantity: string;
+    imd: string;
+    bag: string;
+  } {
+    const parts = String(qrData || '').split('|');
+    const p4 = (parts[3] || '').trim();
+    const di = p4.indexOf('-');
+    const imd = di >= 0 ? p4.slice(0, di).trim() : p4;
+    const bag = di >= 0 ? p4.slice(di + 1).trim() : '';
+    return {
+      materialCode: (parts[0] || '').trim(),
+      po: (parts[1] || '').trim(),
+      quantity: (parts[2] || '').trim(),
+      imd,
+      bag
+    };
+  }
+
+  /** Số lượng trên tem: phân tách hàng nghìn bằng dấu phẩy (VD: 10000 → 10,000). */
+  private formatInboundLabelQuantity(qty: string): string {
+    const raw = String(qty ?? '').trim().replace(/,/g, '');
+    if (raw === '') return '';
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return String(qty);
+    return n.toLocaleString('en-US');
+  }
+
   async printQRCode(material: InboundMaterial): Promise<void> {
     if (!this.canGenerateQR) {
       alert('Bạn không có quyền tạo QR code');
@@ -2677,16 +2711,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   padding: 1mm !important;
                   display: flex !important;
                   flex-direction: column !important;
-                  justify-content: space-between !important;
+                  justify-content: flex-start !important;
+                  align-items: flex-start !important;
                   font-size: 9.6px !important; /* Tăng 20% từ 8px */
-                  line-height: 1.2 !important;
+                  line-height: 1.15 !important;
                   box-sizing: border-box !important;
                   color: #000000 !important; /* Tất cả text màu đen */
                   text-align: left !important;
                 }
                 
                 .info-row {
-                  margin: 0.2mm 0 !important;
+                  margin: 0.8mm 0 !important;
                   font-weight: bold !important;
                   color: #000000 !important; /* Tất cả text màu đen */
                   text-align: left !important;
@@ -2697,7 +2732,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 }
                 
                 .info-row.material-code {
-                  font-size: 23.04px !important; /* Gấp đôi từ 9.6px + tăng 20% */
+                  font-size: 17.7408px !important; /* số lượng */
+                  line-height: 1.05 !important;
+                  font-weight: bold !important;
+                }
+                
+                .info-row.material-code.material-code-main {
+                  font-size: 21.356368px !important; /* mã hàng +10% so với 19.41488px */
+                  line-height: 1.05 !important;
                   font-weight: bold !important;
                 }
                 
@@ -2737,7 +2779,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 }
                 
                 .qr-grid {
-                  text-align: center !important;
+                  text-align: left !important;
                   display: flex !important;
                   flex-direction: row !important;
                   flex-wrap: wrap !important;
@@ -2789,6 +2831,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     padding: 1mm !important;
                     color: #000000 !important; /* Tất cả text màu đen */
                     text-align: left !important;
+                    justify-content: flex-start !important;
+                    align-items: flex-start !important;
+                    line-height: 1.15 !important;
                   }
                   
                   .info-row {
@@ -2798,7 +2843,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   }
                   
                   .info-row.material-code {
-                    font-size: 23.04px !important; /* Gấp đôi từ 9.6px + tăng 20% */
+                    font-size: 17.7408px !important; /* số lượng */
+                    line-height: 1.05 !important;
+                    font-weight: bold !important;
+                  }
+                  
+                  .info-row.material-code.material-code-main {
+                    font-size: 21.356368px !important; /* mã hàng +10% so với 19.41488px */
+                    line-height: 1.05 !important;
                     font-weight: bold !important;
                   }
                   
@@ -2858,28 +2910,26 @@ export class InboundASM1Component implements OnInit, OnDestroy {
               </head>
               <body>
                 <div class="qr-grid">
-                  ${qrImages.map(qr => `
+                  ${qrImages.map(qr => {
+                    const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+                    return `
                     <div class="qr-container">
                       <div class="qr-section">
                         <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
                       <div class="info-section">
                         <div>
-                          <div class="info-row material-code">${qr.materialCode}</div>
-                          <div class="info-row">PO: ${qr.poNumber}</div>
-                          <div class="info-row">${qr.qrData.split('|')[3]}</div>
-                          <div class="info-row">${qr.unitNumber}</div>
-                          <div class="info-row small">${qr.bagIndex}/${qr.bagTotal}</div>
-                        </div>
-                        <div>
-                          <div class="info-row small">Date: ${qr.printDate}</div>
-                          <div class="info-row small">${qr.printedBy}</div>
-                          <div class="info-row small page-number">${qr.pageNumber}/${qr.totalPages}</div>
+                          <div class="info-row material-code material-code-main">${f.materialCode}</div>
+                          <div class="info-row">PO: ${f.po}</div>
+                          <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
+                          <div class="info-row">IMD: ${f.imd}</div>
+                          <div class="info-row">BAG: ${f.bag}</div>
                         </div>
                       </div>
                       ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                     </div>
-                  `).join('')}
+                  `;
+                  }).join('')}
                 </div>
                 <script>
                   window.onload = function() {
@@ -3396,16 +3446,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   padding: 1mm !important;
                   display: flex !important;
                   flex-direction: column !important;
-                  justify-content: space-between !important;
+                  justify-content: flex-start !important;
+                  align-items: flex-start !important;
                   font-size: 9.6px !important;
-                  line-height: 1.2 !important;
+                  line-height: 1.15 !important;
                   box-sizing: border-box !important;
                   color: #000000 !important;
                   text-align: left !important;
                 }
                 
                 .info-row {
-                  margin: 0.2mm 0 !important;
+                  margin: 0.8mm 0 !important;
                   font-weight: bold !important;
                   color: #000000 !important;
                   text-align: left !important;
@@ -3416,7 +3467,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 }
                 
                 .info-row.material-code {
-                  font-size: 23.04px !important;
+                  font-size: 17.7408px !important; /* số lượng */
+                  line-height: 1.05 !important;
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                
+                .info-row.material-code.material-code-main {
+                  font-size: 21.356368px !important; /* mã hàng +10% so với 19.41488px */
+                  line-height: 1.05 !important;
                   font-weight: bold !important;
                   color: #000000 !important;
                 }
@@ -3457,7 +3516,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 }
                 
                 .qr-grid {
-                  text-align: center !important;
+                  text-align: left !important;
                   display: flex !important;
                   flex-direction: row !important;
                   flex-wrap: wrap !important;
@@ -3509,7 +3568,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     padding: 1mm !important;
                     color: #000000 !important;
                     text-align: left !important;
-                    line-height: 1.2 !important;
+                    line-height: 1.15 !important;
+                    justify-content: flex-start !important;
+                    align-items: flex-start !important;
                   }
                   
                   .info-row {
@@ -3518,11 +3579,19 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     white-space: nowrap !important;
                     font-family: Arial, sans-serif !important;
                     letter-spacing: 0 !important;
-                    margin: 0.2mm 0 !important;
+                    margin: 0.8mm 0 !important;
                   }
                   
                   .info-row.material-code {
-                    font-size: 23.04px !important;
+                    font-size: 17.7408px !important; /* số lượng */
+                    line-height: 1.05 !important;
+                    font-weight: bold !important;
+                    color: #000000 !important;
+                  }
+                  
+                  .info-row.material-code.material-code-main {
+                    font-size: 21.356368px !important; /* mã hàng +10% so với 19.41488px */
+                    line-height: 1.05 !important;
                     font-weight: bold !important;
                     color: #000000 !important;
                   }
@@ -3586,28 +3655,26 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             </head>
             <body>
               <div class="qr-grid">
-                ${qrImages.map(qr => `
+                ${qrImages.map(qr => {
+                  const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+                  return `
                   <div class="qr-container">
                     <div class="qr-section">
                       <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                     </div>
                     <div class="info-section">
                       <div>
-                        <div class="info-row material-code">${qr.materialCode}</div>
-                        <div class="info-row">PO: ${qr.poNumber}</div>
-                        <div class="info-row">${qr.qrData.split('|')[3]}</div>
-                        <div class="info-row">${qr.unitNumber}</div>
-                        <div class="info-row small">${qr.bagIndex}/${qr.bagTotal}</div>
-                      </div>
-                      <div>
-                        <div class="info-row small">Date: ${qr.printDate}</div>
-                        <div class="info-row small">${qr.printedBy}</div>
-                        <div class="info-row small page-number">${qr.pageNumber}/${qr.totalPages}</div>
+                        <div class="info-row material-code material-code-main">${f.materialCode}</div>
+                        <div class="info-row">PO: ${f.po}</div>
+                        <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
+                        <div class="info-row">IMD: ${f.imd}</div>
+                        <div class="info-row">BAG: ${f.bag}</div>
                       </div>
                     </div>
                     ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                   </div>
-                `).join('')}
+                `;
+                }).join('')}
               </div>
               <script>
                 window.onload = function() {

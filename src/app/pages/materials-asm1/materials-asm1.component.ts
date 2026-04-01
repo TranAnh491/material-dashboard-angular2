@@ -5012,7 +5012,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const qrImages = await Promise.all(
         qrCodes.map(async (qrCode, index) => {
           const qrImage = await QRCode.toDataURL(qrCode.qrData, {
-            width: 200,
+            width: 240,
             margin: 1,
             color: {
               dark: '#000000',
@@ -5198,18 +5198,45 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // Create print window for QR codes - Using Inbound format
+  /** Đồng bộ nội dung tem QR với inbound-asm (chuỗi Mã|PO|SL|DDMMYYYY-bịch/tổng). */
+  private parseInboundQrLabelDisplayFields(qrData: string): {
+    materialCode: string;
+    po: string;
+    quantity: string;
+    imd: string;
+    bag: string;
+  } {
+    const parts = String(qrData || '').split('|');
+    const p4 = (parts[3] || '').trim();
+    const di = p4.indexOf('-');
+    const imd = di >= 0 ? p4.slice(0, di).trim() : p4;
+    const bag = di >= 0 ? p4.slice(di + 1).trim() : '';
+    return {
+      materialCode: (parts[0] || '').trim(),
+      po: (parts[1] || '').trim(),
+      quantity: (parts[2] || '').trim(),
+      imd,
+      bag
+    };
+  }
+
+  private formatInboundLabelQuantity(qty: string): string {
+    const raw = String(qty ?? '').trim().replace(/,/g, '');
+    if (raw === '') return '';
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return String(qty);
+    return n.toLocaleString('en-US');
+  }
+
+  // Create print window for QR codes — cùng layout/cỡ chữ/nội dung như inbound tem bịch
   private createQRPrintWindow(qrImages: any[], material: InventoryMaterial, isPartialLabel: boolean = false): void {
     const printWindow = window.open('', '_blank');
-    
+
     if (!printWindow) {
       alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
 
-    const currentDate = new Date().toLocaleDateString('vi-VN');
-    
-    // Use exact same format as Inbound for consistency
     printWindow.document.write(`
       <html>
         <head>
@@ -5220,29 +5247,29 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               padding: 0 !important;
               box-sizing: border-box !important;
             }
-            
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0 !important; 
+
+            body {
+              font-family: Arial, sans-serif;
+              margin: 0 !important;
               padding: 0 !important;
               background: white !important;
               overflow: hidden !important;
               width: 57mm !important;
               height: 32mm !important;
             }
-            
-            .qr-container { 
-              display: flex !important; 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              border: 1px solid #000 !important; 
-              width: 57mm !important; 
-              height: 32mm !important; 
+
+            .qr-container {
+              display: flex !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              border: 1px solid #000 !important;
+              width: 57mm !important;
+              height: 32mm !important;
               page-break-inside: avoid !important;
               background: white !important;
               box-sizing: border-box !important;
             }
-            
+
             .qr-section {
               width: 30mm !important;
               height: 30mm !important;
@@ -5252,44 +5279,52 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               border-right: 1px solid #ccc !important;
               box-sizing: border-box !important;
             }
-            
+
             .qr-image {
               width: 28mm !important;
               height: 28mm !important;
               display: block !important;
             }
-            
+
             .info-section {
               flex: 1 !important;
               padding: 1mm !important;
               display: flex !important;
               flex-direction: column !important;
-              justify-content: space-between !important;
-              font-size: 9.6px !important; /* Tăng 20% từ 8px */
-              line-height: 1.1 !important;
+              justify-content: flex-start !important;
+              align-items: flex-start !important;
+              font-size: 9.6px !important;
+              line-height: 1.15 !important;
               box-sizing: border-box !important;
-              color: #000000 !important; /* Tất cả text màu đen */
+              color: #000000 !important;
+              text-align: left !important;
             }
-            
+
             .info-row {
-              margin: 0.3mm 0 !important;
-              font-weight: bold !important;
-              color: #000000 !important; /* Tất cả text màu đen */
-            }
-            
-            .info-row.material-code {
-              font-size: 19.2px !important; /* Gấp đôi từ 9.6px */
+              margin: 0.8mm 0 !important;
               font-weight: bold !important;
               color: #000000 !important;
+              text-align: left !important;
+              display: block !important;
+              white-space: nowrap !important;
+              font-family: Arial, sans-serif !important;
+              letter-spacing: 0 !important;
             }
-            
-            .info-row.small {
-              font-size: 8.4px !important; /* Tăng 20% từ 7px */
-              color: #000000 !important; /* Đổi từ #666 thành đen */
+
+            .info-row.material-code {
+              font-size: 17.7408px !important;
+              line-height: 1.05 !important;
+              font-weight: bold !important;
             }
-            
+
+            .info-row.material-code.material-code-main {
+              font-size: 21.356368px !important;
+              line-height: 1.05 !important;
+              font-weight: bold !important;
+            }
+
             .qr-grid {
-              text-align: center !important;
+              text-align: left !important;
               display: flex !important;
               flex-direction: row !important;
               flex-wrap: wrap !important;
@@ -5301,52 +5336,69 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               width: 57mm !important;
               height: 32mm !important;
             }
-            
+
             @media print {
-              body { 
-                margin: 0 !important; 
+              body {
+                margin: 0 !important;
                 padding: 0 !important;
                 overflow: hidden !important;
                 width: 57mm !important;
                 height: 32mm !important;
               }
-              
+
               @page {
                 margin: 0 !important;
                 size: 57mm 32mm !important;
                 padding: 0 !important;
               }
-              
-              .qr-container { 
-                margin: 0 !important; 
+
+              .qr-container {
+                margin: 0 !important;
                 padding: 0 !important;
                 width: 57mm !important;
                 height: 32mm !important;
                 page-break-inside: avoid !important;
                 border: 1px solid #000 !important;
               }
-              
+
               .qr-section {
                 width: 30mm !important;
                 height: 30mm !important;
               }
-              
+
               .qr-image {
                 width: 28mm !important;
                 height: 28mm !important;
               }
-              
+
               .info-section {
-                font-size: 9.6px !important; /* Tăng 20% từ 8px */
+                font-size: 9.6px !important;
                 padding: 1mm !important;
-                color: #000000 !important; /* Tất cả text màu đen */
+                color: #000000 !important;
+                text-align: left !important;
+                justify-content: flex-start !important;
+                align-items: flex-start !important;
+                line-height: 1.15 !important;
               }
-              
-              .info-row.small {
-                font-size: 8.4px !important; /* Tăng 20% từ 7px */
-                color: #000000 !important; /* Đổi từ #666 thành đen */
+
+              .info-row {
+                text-align: left !important;
+                display: block !important;
+                white-space: nowrap !important;
               }
-              
+
+              .info-row.material-code {
+                font-size: 17.7408px !important;
+                line-height: 1.05 !important;
+                font-weight: bold !important;
+              }
+
+              .info-row.material-code.material-code-main {
+                font-size: 21.356368px !important;
+                line-height: 1.05 !important;
+                font-weight: bold !important;
+              }
+
               .qr-grid {
                 gap: 0 !important;
                 padding: 0 !important;
@@ -5359,20 +5411,30 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         </head>
         <body>
           <div class="qr-grid">
-            ${qrImages.map(qr => `
+            ${qrImages
+              .map(qr => {
+                const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+                const qtyLine = qr.displayPrefix
+                  ? `${qr.displayPrefix} ${this.formatInboundLabelQuantity(f.quantity)}`
+                  : this.formatInboundLabelQuantity(f.quantity);
+                return `
               <div class="qr-container">
                 <div class="qr-section">
                   <img src="${qr.image}" alt="QR Code" class="qr-image">
                 </div>
                 <div class="info-section">
-                  <div class="info-row material-code">${qr.materialCode}</div>
-                  <div class="info-row">${qr.poNumber}</div>
-                  <div class="info-row">${qr.displayPrefix ? `${qr.displayPrefix} ${qr.unitNumber}` : qr.unitNumber}</div>
-                  <div class="info-row small">ASM1</div>
-                  <div class="info-row small">${currentDate}</div>
+                  <div>
+                    <div class="info-row material-code material-code-main">${f.materialCode}</div>
+                    <div class="info-row">PO: ${f.po}</div>
+                    <div class="info-row material-code">${qtyLine}</div>
+                    <div class="info-row">IMD: ${f.imd}</div>
+                    <div class="info-row">BAG: ${f.bag}</div>
+                  </div>
                 </div>
               </div>
-            `).join('')}
+            `;
+              })
+              .join('')}
           </div>
           <script>
             window.onload = function() {
