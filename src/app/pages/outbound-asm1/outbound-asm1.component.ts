@@ -2373,9 +2373,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           }
         }
         
-        // Update inventory
+        // Update inventory — atomic increment (tránh race khi nhiều scan cùng lúc cùng một dòng tồn).
         const data = targetDoc.data() as any;
-        const currentExported = data.exported || 0;
+        const currentExported = Number(data.exported) || 0;
         const newExported = currentExported + exportQuantity;
 
         let imdForRow = '';
@@ -2390,10 +2390,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         const newExpBags = prevExpBags + (exportedBagsDelta > 0 ? exportedBagsDelta : 0);
         const remainingB = Math.max(0, totalB - newExpBags);
         
-        console.log(`🔄 Updating inventory doc ${targetDoc.id}: exported ${currentExported} → ${newExported}`);
+        console.log(
+          `🔄 Updating inventory doc ${targetDoc.id}: exported += ${exportQuantity} (atomic; snapshot was ${currentExported} → ~${newExported})`
+        );
         
         const payload: Record<string, unknown> = {
-          exported: newExported,
+          exported: firebase.default.firestore.FieldValue.increment(exportQuantity),
           updatedAt: new Date()
         };
         if (exportedBagsDelta > 0) {

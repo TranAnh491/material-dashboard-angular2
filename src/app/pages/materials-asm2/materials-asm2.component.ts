@@ -13,6 +13,8 @@ import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import * as firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 
 export interface InventoryMaterial {
   id?: string;
@@ -2266,18 +2268,22 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           console.log('📋 Processed catalog data:', catalogData);
           
           try {
-            // Save to Firebase
-            await this.saveCatalogToFirebase(catalogData);
+            const result = await this.saveCatalogToFirebase(catalogData);
             console.log('✅ Firebase update completed successfully');
             
-            // Update local cache
-            this.updateCatalogCache(catalogData);
+            if (result.applied.length > 0) {
+              this.updateCatalogCache(result.applied);
+            }
             
-            // Reload catalog from Firebase to ensure consistency
             await this.loadCatalogFromFirebase();
             
-            // Show success message ONLY after successful Firebase update
-            alert(`✅ Cập nhật Standard Packing thành công!\n\n📦 Tổng số mã hàng: ${catalogData.length}\n💡 Chỉ cập nhật field Standard Packing\n🎯 Dữ liệu được update trong collections 'materials' (chính) và 'catalog'\n🔄 Cột Standard Packing sẽ hiển thị số đúng ngay lập tức`);
+            alert(
+              `✅ Import Standard Packing xong!\n\n` +
+              `✏️ Ghi đè (mã trùng trong materials): ${result.updated}\n` +
+              `⏭️ Bỏ qua (mã không có trong materials): ${result.skipped}\n` +
+              `📄 Mã khác nhau trong file (sau gộp trùng): ${result.uniqueInFile}\n\n` +
+              `💡 Chỉ cập nhật field Standard Packing; collection catalog chỉ sync khi đã có doc cùng mã.`
+            );
             
           } catch (firebaseError) {
             console.error('❌ Firebase update failed:', firebaseError);
@@ -2337,8 +2343,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Process catalog data from Excel - FOCUS ON Standard Packing only
   private processCatalogData(data: any[]): any[] {
     return data.map(row => {
-      // ✅ CHỈ CẦN 2 FIELD: Mã hàng + Standard Packing
-      const materialCode = row['Mã hàng'] || row['materialCode'] || row['Mã'] || row['Code'] || '';
+      const rawCode = row['Mã hàng'] || row['materialCode'] || row['Mã'] || row['Code'] || row['Material Code'] || '';
+      const materialCode = String(rawCode || '').trim().toUpperCase();
       const standardPacking = parseFloat(row['Standard Packing'] || row['standardPacking'] || row['Số lượng đóng gói'] || '0') || 0;
       
       return {
@@ -2346,9 +2352,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         standardPacking
       };
     }).filter(item => {
-      // Filter out rows without materialCode
-      const hasMaterialCode = item.materialCode && item.materialCode.trim() !== '';
-      // Warn if standardPacking is 0
+      const hasMaterialCode = item.materialCode && item.materialCode !== '';
       if (hasMaterialCode && item.standardPacking === 0) {
         console.warn(`⚠️ Warning: Material ${item.materialCode} has standardPacking = 0`);
       }
@@ -2356,47 +2360,96 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     });
   }
 
-  // Save catalog to Firebase - UPDATE Standard Packing in both collections
-  private async saveCatalogToFirebase(catalogData: any[]): Promise<void> {
-    try {
-      console.log('💾 Starting Firebase update...');
-      
-      const batch = this.firestore.firestore.batch();
-      
-              for (const item of catalogData) {
-          // ✅ UPDATE field standardPacking trong collection 'materials' (chính - có 8750 docs)
-          const materialsDocRef = this.firestore.collection('materials').doc(item.materialCode).ref;
-          batch.update(materialsDocRef, {
-            standardPacking: item.standardPacking,
-            updatedAt: new Date()
-          });
-          
-          // ✅ Cũng UPDATE trong collection 'catalog' (đồng bộ)
-          const catalogDocRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
-          batch.update(catalogDocRef, {
-            standardPacking: item.standardPacking,
-            updatedAt: new Date()
-          });
-          
-          console.log(`📝 Prepared update for ${item.materialCode}: standardPacking = ${item.standardPacking}`);
-        }
-      
-      console.log('🚀 Committing batch update to Firebase...');
-      await batch.commit();
-      console.log(`✅ Successfully updated Standard Packing for ${catalogData.length} materials in both collections`);
-      
-    } catch (error) {
-      console.error('❌ Firebase update failed:', error);
-      
-      // Re-throw the error to be handled by the caller
-      throw error;
+  private async filterExistingDocIds(collectionName: string, docIds: string[]): Promise<Set<string>> {
+    const unique = [...new Set(docIds.map(id => String(id || '').trim().toUpperCase()).filter(Boolean))];
+    const out = new Set<string>();
+    if (unique.length === 0) {
+      return out;
     }
+    const db = this.firestore.firestore;
+    const idPath = firebase.default.firestore.FieldPath.documentId();
+    const IN_MAX = 10;
+    for (let i = 0; i < unique.length; i += IN_MAX) {
+      const chunk = unique.slice(i, i + IN_MAX);
+      const snap = await db.collection(collectionName).where(idPath, 'in', chunk).get();
+      snap.docs.forEach(d => out.add(d.id));
+    }
+    return out;
+  }
+
+  private async saveCatalogToFirebase(
+    catalogData: any[]
+  ): Promise<{ updated: number; skipped: number; applied: any[]; uniqueInFile: number }> {
+    const byCode = new Map<string, { materialCode: string; standardPacking: number }>();
+    for (const item of catalogData) {
+      const code = String(item.materialCode || '').trim().toUpperCase();
+      if (!code) {
+        continue;
+      }
+      byCode.set(code, { materialCode: code, standardPacking: item.standardPacking });
+    }
+    const rows = Array.from(byCode.values());
+    const codes = rows.map(r => r.materialCode);
+
+    const existingMaterials = await this.filterExistingDocIds('materials', codes);
+    const toUpdate = rows.filter(r => existingMaterials.has(r.materialCode));
+    const skipped = rows.length - toUpdate.length;
+
+    if (toUpdate.length === 0) {
+      console.log('💾 Import Standard Packing: không có mã nào trùng với materials — không ghi Firebase.');
+      return { updated: 0, skipped, applied: [], uniqueInFile: rows.length };
+    }
+
+    const codesToSync = toUpdate.map(r => r.materialCode);
+    const existingCatalog = await this.filterExistingDocIds('catalog', codesToSync);
+
+    const db = this.firestore.firestore;
+    let idx = 0;
+    while (idx < toUpdate.length) {
+      const batch = db.batch();
+      let ops = 0;
+      while (idx < toUpdate.length && ops < 500) {
+        const item = toUpdate[idx];
+        const catOps = existingCatalog.has(item.materialCode) ? 2 : 1;
+        if (ops + catOps > 500) {
+          break;
+        }
+        const matRef = this.firestore.collection('materials').doc(item.materialCode).ref;
+        batch.update(matRef, {
+          standardPacking: item.standardPacking,
+          updatedAt: new Date()
+        });
+        ops++;
+        if (existingCatalog.has(item.materialCode)) {
+          const catRef = this.firestore.collection('catalog').doc(item.materialCode).ref;
+          batch.update(catRef, {
+            standardPacking: item.standardPacking,
+            updatedAt: new Date()
+          });
+          ops++;
+        }
+        console.log(`📝 Update ${item.materialCode}: standardPacking = ${item.standardPacking}`);
+        idx++;
+      }
+      await batch.commit();
+    }
+
+    console.log(`✅ Import SP: ghi đè ${toUpdate.length} mã, bỏ qua ${skipped} mã (không có trong materials).`);
+    return { updated: toUpdate.length, skipped, applied: toUpdate, uniqueInFile: rows.length };
   }
 
   // Update local catalog cache
   private updateCatalogCache(catalogData: any[]): void {
     for (const item of catalogData) {
-      this.catalogCache.set(item.materialCode, item);
+      const code = String(item.materialCode || '').trim().toUpperCase();
+      const prev = this.catalogCache.get(code);
+      this.catalogCache.set(code, {
+        ...(prev || {}),
+        materialCode: code,
+        standardPacking: item.standardPacking,
+        materialName: prev?.materialName || code,
+        unit: prev?.unit || 'PCS'
+      });
     }
     this.catalogLoaded = true;
     console.log(`🔄 Updated local catalog cache with ${catalogData.length} items`);
@@ -3167,216 +3220,132 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // 🔧 LOGIC FIFO MỚI: Lấy số lượng xuất từ Outbound theo FIFO (Material + PO + Batch)
-  // - Sử dụng logic FIFO để phân bổ số lượng xuất cho từng dòng inventory
-  // - Đảm bảo dòng có FIFO thấp nhất được trừ trước
-  // - Tránh tồn kho âm ở các dòng sau
-  // - QUAN TRỌNG: Phải match theo Material + PO + Batch để tránh nhận sai dữ liệu
+  /**
+   * Outbound lưu `importDate` là chuỗi QR đầy đủ (vd. 25032025-14/77), không khớp Firestore `==` với IMD 8 số trên tồn kho.
+   * Trích 8 số DDMMYYYY để khớp với dòng inventory.
+   */
+  private normalizeOutboundImdToKey(data: any): string {
+    const raw = data?.importDate ?? data?.batchNumber ?? data?.batch;
+    if (raw == null || raw === '') {
+      return '';
+    }
+    if (typeof raw === 'string') {
+      const t = raw.trim();
+      const full = /^(\d{8})(?:-\d+\/\d+)?$/.exec(t);
+      if (full) {
+        return full[1];
+      }
+      const prefix = /^(\d{8})-/.exec(t);
+      if (prefix) {
+        return prefix[1];
+      }
+      if (/^\d{8}$/.test(t)) {
+        return t;
+      }
+    }
+    if (raw && typeof (raw as any).toDate === 'function') {
+      const d = (raw as any).toDate();
+      return d.toLocaleDateString('en-GB').split('/').join('');
+    }
+    if (raw instanceof Date) {
+      return raw.toLocaleDateString('en-GB').split('/').join('');
+    }
+    return '';
+  }
+
+  /** Khớp cột IMD tồn kho: 8 số đầu từ batchNumber (nếu có), không thì từ importDate. */
+  private getInventoryImdBaseKey(material: InventoryMaterial): string | undefined {
+    if (material.batchNumber && String(material.batchNumber).trim()) {
+      const b = String(material.batchNumber).trim();
+      const m = /^(\d{8})/.exec(b);
+      if (m) {
+        return m[1];
+      }
+    }
+    if (material.importDate) {
+      return material.importDate.toLocaleDateString('en-GB').split('/').join('');
+    }
+    return undefined;
+  }
+
+  /**
+   * Đồng bộ "Đã xuất": query Material + PO, rồi lọc theo 8 số IMD (batch) vì outbound không lưu trùng field với tồn kho.
+   */
   async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string, batch?: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
     try {
-      console.log(`🔍 Getting exported quantity with FIFO logic for ${materialCode} - PO: ${poNumber} - Batch: ${batch || 'N/A'}`);
-      
+      const batchKey = batch ? String(batch).trim() : '';
+      console.log(`🔍 FIFO export: ${materialCode} - PO: ${poNumber} - IMD key: ${batchKey || '(tất cả)'}`);
+
       const outboundRef = this.firestore.collection('outbound-materials');
-      
-      // QUAN TRỌNG: Query theo Material + PO + Batch để tránh nhận sai dữ liệu
-      let snapshot;
+      const normCode = String(materialCode || '').trim();
+      const normPo = String(poNumber || '').trim();
+
+      let snapshot: any;
       try {
-        if (batch) {
-          // Nếu có batch, query theo Material + PO + Batch
-          console.log(`🔍 Querying with batch: ${materialCode} - PO: ${poNumber} - Batch: ${batch}`);
-          
-          // Thử query với field 'importDate' trước (vì outbound data sử dụng importDate)
-          try {
-            console.log(`🔍 Trying query with 'importDate' field...`);
-            snapshot = await outboundRef
-              .ref
-              .where('factory', '==', this.FACTORY)
-              .where('materialCode', '==', materialCode)
-              .where('poNumber', '==', poNumber)
-              .where('importDate', '==', batch)
-              .orderBy('exportDate', 'asc')
-              .get();
-            console.log(`✅ Query with 'importDate' field successful, found ${snapshot.size} records`);
-          } catch (importDateError) {
-            console.log(`⚠️ Query with 'importDate' field failed, trying with 'batch':`, importDateError);
-            // Fallback: thử với field 'batch'
-            try {
-              snapshot = await outboundRef
-                .ref
-                .where('factory', '==', this.FACTORY)
-                .where('materialCode', '==', materialCode)
-                .where('poNumber', '==', poNumber)
-                .where('batch', '==', batch)
-                .orderBy('exportDate', 'asc')
-                .get();
-              console.log(`✅ Query with 'batch' field successful, found ${snapshot.size} records`);
-            } catch (batchError) {
-              console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
-              // Fallback: thử với field 'batchNumber'
-              snapshot = await outboundRef
-                .ref
-                .where('factory', '==', this.FACTORY)
-                .where('materialCode', '==', materialCode)
-                .where('poNumber', '==', poNumber)
-                .where('batchNumber', '==', batch)
-                .orderBy('exportDate', 'asc')
-                .get();
-              console.log(`✅ Query with 'batchNumber' field successful, found ${snapshot.size} records`);
-            }
-          }
-        } else {
-          // Nếu không có batch, query theo Material + PO (fallback)
-          console.log(`⚠️ No batch provided, querying without batch: ${materialCode} - PO: ${poNumber}`);
-          snapshot = await outboundRef
-            .ref
-            .where('factory', '==', this.FACTORY)
-            .where('materialCode', '==', materialCode)
-            .where('poNumber', '==', poNumber)
-            .orderBy('exportDate', 'asc')
-            .get();
-          console.log(`✅ Query without batch successful, found ${snapshot.size} records`);
-        }
-              } catch (orderByError) {
-          console.log(`⚠️ OrderBy exportDate failed, trying without orderBy:`, orderByError);
-          // Fallback: tìm không có orderBy
-          if (batch) {
-            // Thử query với field 'batch' trước
-            try {
-              snapshot = await outboundRef
-                .ref
-                .where('factory', '==', this.FACTORY)
-                .where('materialCode', '==', materialCode)
-                .where('poNumber', '==', poNumber)
-                .where('batch', '==', batch)
-                .get();
-            } catch (batchError) {
-              console.log(`⚠️ Query with 'batch' field failed, trying with 'batchNumber':`, batchError);
-              // Fallback: thử với field 'batchNumber'
-              snapshot = await outboundRef
-                .ref
-                .where('factory', '==', this.FACTORY)
-                .where('materialCode', '==', materialCode)
-                .where('poNumber', '==', poNumber)
-                .where('batchNumber', '==', batch)
-                .get();
-            }
-          } else {
-            snapshot = await outboundRef
-              .ref
-              .where('factory', '==', this.FACTORY)
-              .where('materialCode', '==', materialCode)
-              .where('poNumber', '==', poNumber)
-              .get();
+        snapshot = await outboundRef.ref
+          .where('factory', '==', this.FACTORY)
+          .where('materialCode', '==', normCode)
+          .where('poNumber', '==', normPo)
+          .orderBy('exportDate', 'asc')
+          .get();
+      } catch {
+        snapshot = await outboundRef.ref
+          .where('factory', '==', this.FACTORY)
+          .where('materialCode', '==', normCode)
+          .where('poNumber', '==', normPo)
+          .get();
+      }
+
+      if (snapshot.empty) {
+        console.log(`ℹ️ No outbound for ${materialCode} - PO ${poNumber}`);
+        return { totalExported: 0, outboundRecords: [] };
+      }
+
+      let totalExported = 0;
+      const outboundRecords: any[] = [];
+
+      snapshot.forEach((doc: any) => {
+        const data = doc.data() as any;
+        const imdKey = this.normalizeOutboundImdToKey(data);
+        if (batchKey) {
+          if (!imdKey || imdKey !== batchKey) {
+            return;
           }
         }
 
-      console.log(`🔍 Query result: ${snapshot.size} records found`);
-      
-      if (!snapshot.empty) {
-        let totalExported = 0;
-        const outboundRecords: any[] = [];
-        
-        console.log(`📋 Processing ${snapshot.size} outbound records:`);
-        snapshot.forEach((doc, index) => {
-          const data = doc.data() as any;
-          console.log(`  Record ${index + 1}:`, {
-            materialCode: data.materialCode,
-            poNumber: data.poNumber,
-            batch: data.batch || data.batchNumber || 'N/A',
-            exportQuantity: data.exportQuantity,
-            exported: data.exported,
-            quantity: data.quantity,
-            exportDate: data.exportDate
-          });
-          
-          // Thử nhiều field names khác nhau để tìm số lượng xuất
-          let exportQuantity = 0;
-          
-          // Kiểm tra từng field name có thể có
-          if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
-            exportQuantity = data.exportQuantity;
-            console.log(`    → Using exportQuantity: ${exportQuantity}`);
-          } else if (data.exported !== undefined && data.exported !== null) {
-            exportQuantity = data.exported;
-            console.log(`    → Using exported: ${exportQuantity}`);
-          } else if (data.quantity !== undefined && data.quantity !== null) {
-            exportQuantity = data.quantity;
-            console.log(`    → Using quantity: ${exportQuantity}`);
-          } else if (data.amount !== undefined && data.amount !== null) {
-            exportQuantity = data.amount;
-          } else if (data.qty !== undefined && data.qty !== null) {
-            exportQuantity = data.qty;
-          }
-          
-          // Đảm bảo exportQuantity là số
-          if (typeof exportQuantity === 'string') {
-            exportQuantity = parseFloat(exportQuantity) || 0;
-          }
-          
-          totalExported += exportQuantity;
-          
-          outboundRecords.push({
-            id: doc.id,
-            exportQuantity: exportQuantity,
-            exportDate: data.exportDate,
-            location: data.location || 'N/A'
-          });
-          
-          console.log(`🔍 Debug: Outbound record - ID: ${doc.id}, Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${exportQuantity}`);
-        });
-        
-        const batchInfo = batch ? ` - Batch: ${batch}` : '';
-        console.log(`✅ Total exported quantity with FIFO for ${materialCode} - PO ${poNumber}${batchInfo}: ${totalExported} (${outboundRecords.length} records)`);
-        
-        // Debug: Log chi tiết từng record và raw data
-        console.log(`📋 Detailed outbound records:`);
-        outboundRecords.forEach((record, index) => {
-          console.log(`  ${index + 1}. ID: ${record.id}, Quantity: ${record.exportQuantity}, Date: ${record.exportDate}, Location: ${record.location}`);
-        });
-        
-        // Debug: Log raw data từ snapshot để kiểm tra field names
-        console.log(`🔍 Raw snapshot data for debugging:`);
-        snapshot.forEach(doc => {
-          const rawData = doc.data();
-          console.log(`  Doc ${doc.id}:`, {
-            materialCode: rawData.materialCode,
-            poNumber: rawData.poNumber,
-            batch: rawData.batch,
-            batchNumber: rawData.batchNumber, // Kiểm tra cả batch và batchNumber
-            exportQuantity: rawData.exportQuantity,
-            exported: rawData.exported,
-            quantity: rawData.quantity,
-            exportDate: rawData.exportDate,
-            factory: rawData.factory
-          });
-        });
-        
-        return { totalExported, outboundRecords };
-      } else {
-        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
-        
-        // Debug: Kiểm tra xem có records nào với material code này không
-        const debugSnapshot = await outboundRef
-          .ref
-          .where('factory', '==', this.FACTORY)
-          .where('materialCode', '==', materialCode)
-          .limit(5)
-          .get();
-        
-        if (!debugSnapshot.empty) {
-          console.log(`🔍 Found ${debugSnapshot.size} outbound records with material code ${materialCode}, but PO numbers don't match:`);
-          debugSnapshot.forEach(doc => {
-            const data = doc.data() as any;
-            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), Material: "${data.materialCode}" (type: ${typeof data.materialCode})`);
-          });
-        } else {
-          console.log(`⚠️ No outbound records found at all for material code ${materialCode}`);
+        let exportQuantity = 0;
+        if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
+          exportQuantity = data.exportQuantity;
+        } else if (data.exported !== undefined && data.exported !== null) {
+          exportQuantity = data.exported;
+        } else if (data.quantity !== undefined && data.quantity !== null) {
+          exportQuantity = data.quantity;
+        } else if (data.amount !== undefined && data.amount !== null) {
+          exportQuantity = data.amount;
+        } else if (data.qty !== undefined && data.qty !== null) {
+          exportQuantity = data.qty;
         }
-        
-        return { totalExported: 0, outboundRecords: [] };
-      }
+        if (typeof exportQuantity === 'string') {
+          exportQuantity = parseFloat(exportQuantity) || 0;
+        }
+
+        totalExported += exportQuantity;
+        outboundRecords.push({
+          id: doc.id,
+          materialCode: data.materialCode,
+          poNumber: data.poNumber,
+          exportQuantity,
+          exportDate: data.exportDate,
+          location: data.location || 'N/A'
+        });
+      });
+
+      console.log(
+        `✅ FIFO total: ${totalExported} (${outboundRecords.length} dòng) IMD=${batchKey || 'ALL'}`
+      );
+      return { totalExported, outboundRecords };
     } catch (error) {
-      console.error(`❌ Error getting exported quantity with FIFO for ${materialCode} - PO ${poNumber}:`, error);
+      console.error(`❌ Error getExportedQuantityFromOutboundFIFO:`, error);
       return { totalExported: 0, outboundRecords: [] };
     }
   }
@@ -3390,11 +3359,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
       
-      // Lấy thông tin outbound - QUAN TRỌNG: Truyền importDate để query chính xác
+      const imdBase = this.getInventoryImdBaseKey(material);
       const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
-        material.materialCode, 
-        material.poNumber, 
-        material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : undefined // Truyền importDate để query chính xác
+        material.materialCode,
+        material.poNumber,
+        imdBase
       );
       
       console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);

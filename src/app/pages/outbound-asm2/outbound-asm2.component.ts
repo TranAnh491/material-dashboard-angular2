@@ -2360,9 +2360,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           }
         }
         
-        // Update inventory
+        // Update inventory — dùng atomic increment để tránh race khi scan nhanh nhiều tem cùng dòng
+        // (đọc currentExported rồi ghi lại khiến mọi lần đều thấy cùng snapshot → chỉ cộng được một bước).
         const data = targetDoc.data() as any;
-        const currentExported = data.exported || 0;
+        const currentExported = Number(data.exported) || 0;
         const newExported = currentExported + exportQuantity;
 
         let imdForRow = '';
@@ -2377,10 +2378,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         const newExpBags = prevExpBags + (exportedBagsDelta > 0 ? exportedBagsDelta : 0);
         const remainingB = Math.max(0, totalB - newExpBags);
         
-        console.log(`🔄 Updating inventory doc ${targetDoc.id}: exported ${currentExported} → ${newExported}`);
+        console.log(
+          `🔄 Updating inventory doc ${targetDoc.id}: exported += ${exportQuantity} (atomic; snapshot was ${currentExported} → ~${newExported} nếu không scan song song)`
+        );
         
         const payload: Record<string, unknown> = {
-          exported: newExported,
+          exported: firebase.default.firestore.FieldValue.increment(exportQuantity),
           updatedAt: new Date()
         };
         if (exportedBagsDelta > 0) {
