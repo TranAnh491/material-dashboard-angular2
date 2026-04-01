@@ -8,6 +8,7 @@ export interface RouteInfo {
 
 export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
+  { path: '/assistant', title: 'Assistant', icon: 'smart_toy', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
   { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: '' },

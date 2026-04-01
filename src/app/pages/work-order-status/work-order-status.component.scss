@@ -3369,4 +3369,86 @@ textarea.mat-input-element {
   }
 }
 
+/* Tab Work order: tắt animation/transition (chạy nhẹ hơn) + chữ đen */
+.main-content.wo-status-performance {
+  color: #000 !important;
+
+  &,
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  p,
+  li,
+  ul,
+  ol,
+  span,
+  label,
+  td,
+  th,
+  div,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  small,
+  strong,
+  .import-info,
+  .section-title,
+  .card-category,
+  .card-title,
+  .card-body,
+  .status-success,
+  .firebase-status,
+  .loading-indicator,
+  .mat-mdc-form-field,
+  mat-label,
+  .mdc-floating-label,
+  .mat-mdc-select-value-text,
+  .mat-mdc-select-min-line,
+  input:not([type='hidden']),
+  select,
+  textarea,
+  option,
+  .table,
+  .excel-table,
+  .badge,
+  .red-text,
+  .material-icons,
+  mat-icon {
+    color: #000 !important;
+  }
+
+  /* Nút nền màu: giữ chữ trắng để đọc được (kể cả span/icon bên trong) */
+  .btn-primary,
+  .btn-success,
+  .btn-danger,
+  .btn-info,
+  .mat-mdc-raised-button.mat-primary,
+  .mat-mdc-raised-button.mat-accent,
+  .mat-mdc-raised-button.mat-warn,
+  .mat-mdc-unelevated-button.mat-primary {
+    color: #fff !important;
+
+    span,
+    .material-icons,
+    mat-icon {
+      color: #fff !important;
+    }
+  }
+}
+
+/* Panel mat-select mở ra ngoài host — tắt animation */
+:host ::ng-deep .wo-status-select-panel.mat-mdc-select-panel,
+:host ::ng-deep .wo-status-select-panel .mat-mdc-option {
+  animation: none !important;
+  transition: none !important;
+}
+
 

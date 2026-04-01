@@ -61,7 +61,8 @@ export class TabPermissionService {
   private generateDefaultPermissions(factoryAccess: any): { [key: string]: boolean } {
     // CHỈ cho phép Dashboard mặc định, các tab khác phải được cấp quyền trong Settings
     const basePermissions = {
-      'dashboard': true, // Chỉ dashboard được phép mặc định
+      'dashboard': true,
+      'assistant': true,
       // Tất cả các tab khác mặc định KHÔNG được phép (false hoặc không có trong object)
     };
 
@@ -151,6 +152,7 @@ export class TabPermissionService {
   availableTabs = [
     // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
+    { key: 'assistant', name: 'Assistant' },
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },
     

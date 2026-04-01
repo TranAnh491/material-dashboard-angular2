@@ -241,3 +241,90 @@ export const notifyWaitingWorkOrdersTomorrow = functions.pubsub
       return null;
     }
   });
+
+function getOpenAiApiKey(): string {
+  const cfg = (functions.config() as any)?.openai || {};
+  const key = cfg.api_key || cfg.key || '';
+  if (!key) {
+    throw new Error('Missing openai.api_key');
+  }
+  return key;
+}
+
+type AssistantChatPayload = {
+  messages?: Array<{ role: 'user' | 'assistant'; text: string }>;
+  context?: any;
+};
+
+/**
+ * Chat AI cho tab Assistant (OpenAI) — key nằm trên server.
+ * Cấu hình: firebase functions:config:set openai.api_key="sk-..."
+ */
+export const assistantChat = functions.https.onCall(async (data: AssistantChatPayload, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+
+  let apiKey = '';
+  try {
+    apiKey = getOpenAiApiKey();
+  } catch {
+    apiKey = '';
+  }
+  if (!apiKey) {
+    throw new functions.https.HttpsError('failed-precondition', 'Chưa cấu hình OpenAI API key trên Functions.');
+  }
+
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  const lastUser = [...messages].reverse().find(m => m?.role === 'user' && typeof m?.text === 'string');
+  const userText = (lastUser?.text || '').trim();
+  if (!userText) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu nội dung.');
+  }
+
+  // Limit history to avoid huge payloads
+  const trimmedHistory = messages
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+    .slice(-12)
+    .map(m => ({ role: m.role, content: m.text.slice(0, 4000) }));
+
+  const safeContext = data?.context ?? {};
+  const system =
+    'Bạn là Trợ lý Kho cho hệ thống warehouse. Trả lời ngắn gọn, đúng số liệu theo CONTEXT JSON.' +
+    ' Nếu thiếu dữ liệu thì nói rõ thiếu gì và gợi ý nơi kiểm tra (RM1/RM2/QC/Shipment/Dashboard).' +
+    ' Không bịa số. Trả lời bằng tiếng Việt.';
+
+  const body = {
+    model: 'gpt-4o-mini',
+    temperature: 0.2,
+    max_tokens: 600,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'system', content: 'CONTEXT_JSON:\n' + JSON.stringify(safeContext).slice(0, 20000) },
+      ...trimmedHistory
+    ]
+  };
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error('OpenAI error', res.status, errText.slice(0, 2000));
+    throw new functions.https.HttpsError('internal', 'OpenAI call failed.');
+  }
+
+  const json: any = await res.json();
+  const answer = (json?.choices?.[0]?.message?.content || '').toString().trim();
+  if (!answer) {
+    throw new functions.https.HttpsError('internal', 'Empty OpenAI response.');
+  }
+
+  return { text: answer };
+});

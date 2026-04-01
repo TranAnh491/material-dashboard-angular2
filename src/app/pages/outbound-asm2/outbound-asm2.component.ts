@@ -109,6 +109,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Professional Scanning Modal properties
   showScanningSetupModal: boolean = false;
   scanningSetupStep: 'lsx' | 'employee' = 'lsx';
+
+  private isValidLsxCode(lsx: string): boolean {
+    const s = (lsx ?? '').trim().toUpperCase();
+    return s.startsWith('KZLSX') || s.startsWith('LHLSX');
+  }
   
   // Auto-hide previous day's scan history
   hidePreviousDayHistory: boolean = true;
@@ -468,6 +473,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   onLSXScanned(lsx: string): void {
     if (!lsx || !lsx.trim()) return;
     const lsxTrim = lsx.trim();
+    if (!this.isValidLsxCode(lsxTrim)) {
+      this.showScanError('Sai LSX. LSX phải bắt đầu bằng KZLSX hoặc LHLSX');
+      return;
+    }
     this.checkWorkOrderKittingStatus(lsxTrim).then(ok => {
       if (!ok) return;
       this.batchProductionOrder = lsxTrim;
@@ -2087,11 +2096,13 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
 
   // 🔧 SỬA LỖI: Scan đơn giản - 1 lần bấm là scan và ghi luôn
   private processBatchScanInput(scannedData: string): void {
-    if (!scannedData.trim()) return;
+    const scannedTrim = (scannedData ?? '').trim();
+    if (!scannedTrim) return;
 
     console.log('🔍 === SIMPLE SCAN PROCESS START ===');
     console.log('🔍 Scanned data:', scannedData);
-    console.log('🔍 Data length:', scannedData.length);
+    console.log('🔍 Scanned (trim):', scannedTrim);
+    console.log('🔍 Data length:', scannedTrim.length);
     
     // Clear the input field after processing
     this.scannerBuffer = '';
@@ -2101,10 +2112,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       
       // 1. Nếu chưa scan LSX, ưu tiên scan LSX (kiểm tra Work Order phải ở trạng thái Kitting)
       if (!this.isProductionOrderScanned) {
-        if (scannedData.includes('LSX') || scannedData.includes('KZLSX') || scannedData.includes('LHLSX')) {
-          this.checkWorkOrderKittingStatus(scannedData).then(ok => {
+        // Rule: LSX phải bắt đầu bằng KZLSX hoặc LHLSX
+        if (this.isValidLsxCode(scannedTrim)) {
+          this.checkWorkOrderKittingStatus(scannedTrim).then(ok => {
             if (!ok) return;
-            this.batchProductionOrder = scannedData;
+            this.batchProductionOrder = scannedTrim;
             this.isProductionOrderScanned = true;
             console.log('✅ LSX scanned:', this.batchProductionOrder);
             this.showScanStatus();
@@ -2114,15 +2126,18 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             }
           });
           return;
+        } else {
+          this.showScanError('Sai LSX. LSX phải bắt đầu bằng KZLSX hoặc LHLSX');
+          return;
         }
       }
       
       // 2. Nếu chưa scan Employee ID, ưu tiên scan Employee ID
       if (!this.isEmployeeIdScanned) {
-        if (scannedData.includes('ASP') || scannedData.length <= 10) {
+        if (scannedTrim.includes('ASP') || scannedTrim.length <= 10) {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
-          const extractedId = scannedData.substring(0, 7);
-          console.log(`🔍 Auto-detect: Original "${scannedData}" → Extracted "${extractedId}"`);
+          const extractedId = scannedTrim.substring(0, 7);
+          console.log(`🔍 Auto-detect: Original "${scannedTrim}" → Extracted "${extractedId}"`);
           this.batchEmployeeId = extractedId;
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
@@ -2140,16 +2155,20 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       // 3. Nếu đã scan cả LSX và Employee ID, xử lý mã hàng
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
         // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
-      this.processBatchMaterialScan(scannedData);
+      this.processBatchMaterialScan(scannedTrim);
         return;
       }
       
       // 4. Nếu không nhận diện được, thử xử lý theo độ dài
       if (!this.isProductionOrderScanned && !this.isEmployeeIdScanned) {
-        if (scannedData.length > 10) {
-          this.checkWorkOrderKittingStatus(scannedData).then(ok => {
+        if (scannedTrim.length > 10) {
+          if (!this.isValidLsxCode(scannedTrim)) {
+            this.showScanError('Sai LSX. LSX phải bắt đầu bằng KZLSX hoặc LHLSX');
+            return;
+          }
+          this.checkWorkOrderKittingStatus(scannedTrim).then(ok => {
             if (!ok) return;
-            this.batchProductionOrder = scannedData;
+            this.batchProductionOrder = scannedTrim;
             this.isProductionOrderScanned = true;
             console.log('✅ LSX detected by length:', this.batchProductionOrder);
             this.showScanStatus();
@@ -2161,8 +2180,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           return;
         } else {
           // 🔧 SỬA LỖI: Chỉ lấy 7 ký tự đầu tiên của mã nhân viên
-          const extractedId = scannedData.substring(0, 7);
-          console.log(`🔍 Auto-detect: Original "${scannedData}" → Extracted "${extractedId}"`);
+          const extractedId = scannedTrim.substring(0, 7);
+          console.log(`🔍 Auto-detect: Original "${scannedTrim}" → Extracted "${extractedId}"`);
           this.batchEmployeeId = extractedId;
           this.isEmployeeIdScanned = true;
           // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
@@ -2178,8 +2197,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       }
       
       // 5. Nếu không xử lý được, hiện thông báo lỗi
-      console.log('❌ Không thể xử lý dữ liệu scan:', scannedData);
-      this.showScanError('Không thể xử lý dữ liệu scan: ' + scannedData);
+      console.log('❌ Không thể xử lý dữ liệu scan:', scannedTrim);
+      this.showScanError('Không thể xử lý dữ liệu scan: ' + scannedTrim);
       
     } catch (error) {
       console.error('❌ Error processing scan:', error);
@@ -2542,6 +2561,19 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       this.showScanError('Không thể đọc mã hàng từ dữ liệu scan!');
       return;
     }
+
+    // Rule: Không được trùng bộ 3 (Mã hàng + Số PO + IMD)
+    const imdKey = (importDate ?? '').trim();
+    const isDuplicate = this.pendingScanData.some(item =>
+      String(item?.materialCode ?? '').trim() === materialCode &&
+      String(item?.poNumber ?? '').trim() === poNumber &&
+      String(item?.importDate ?? '').trim() === imdKey
+    );
+    if (isDuplicate) {
+      this.showScanError('Trùng tem và scan lại');
+      return;
+    }
+
     const exportedBagsDelta = this.parseImdFromQrPart4(importDate).bagDelta;
     const bagBatch = this.rmBagHistory.extractBagLabelFromQrPart4(importDate);
     const scanItem = {

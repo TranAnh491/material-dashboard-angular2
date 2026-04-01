@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { DashboardComponent } from '../../dashboard/dashboard.component';
+import { AssistantComponent } from '../../pages/assistant/assistant.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
 
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
@@ -49,6 +50,7 @@ export const AdminLayoutRoutes: Routes = [
   },
   { path: 'menu',                 component: MenuComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'assistant',            component: AssistantComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inventory-overview-asm1', component: InventoryOverviewASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },

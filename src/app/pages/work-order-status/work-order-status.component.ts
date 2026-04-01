@@ -87,6 +87,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   displayLimit = 100; // Chỉ hiển thị 100 dòng đầu để tránh chậm
   readonly DISPLAY_PAGE_SIZE = 100;
 
+  /**
+   * Người soạn: `value` phải trùng kết quả `normalizeCreatedBy(label)` (IN HOA có dấu)
+   * thì mat-select mới hiển thị đúng sau khi lưu Firebase.
+   */
+  readonly createdByPickerOptions: ReadonlyArray<{ value: string; label: string }> = [
+    { value: 'TÌNH', label: 'Tình' },
+    { value: 'TUẤN', label: 'Tuấn' },
+    { value: 'VŨ', label: 'Vũ' },
+    { value: 'PHÚC', label: 'Phúc' },
+  ];
+
   get displayedWorkOrders(): WorkOrder[] {
     return this.filteredWorkOrders.slice(0, this.displayLimit);
   }
@@ -483,6 +494,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
       if (processedWo.lastUpdated && typeof processedWo.lastUpdated === 'object' && processedWo.lastUpdated !== null && 'toDate' in processedWo.lastUpdated) {
         processedWo.lastUpdated = (processedWo.lastUpdated as any).toDate();
+      }
+
+      if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
+        processedWo.createdBy = this.normalizeCreatedBy(processedWo.createdBy);
       }
       
       return processedWo;

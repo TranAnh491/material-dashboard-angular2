@@ -11,10 +11,12 @@ interface WorkOrderStatusRow {
   code: string;
   value: string;
   note: string;
+  kitting: string;
   ready: string;
   extra: string;
   doneClass: string;
   waitingClass: string;
+  kittingClass: string;
   readyClass: string;
   delayClass: string;
 }
@@ -124,6 +126,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
     
     // Tools & Operations
+    { path: '/assistant', title: 'Assistant', icon: 'smart_toy', category: 'Tools' },
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Tools' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Tools' },
     { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
@@ -173,9 +176,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     // Load Rack Utilization Warnings
     this.loadRackWarnings();
-    
-    // Auto refresh rack warnings every 4 hours
-    this.rackWarningsRefreshInterval = setInterval(() => this.loadRackWarnings(), this.rackWarningsRefreshTime);
+
+    this.rackWarningsRefreshInterval = setInterval(
+      () => this.loadRackWarnings(),
+      this.rackWarningsRefreshTime
+    );
     
     // Load IQC materials by week
     this.loadIQCByWeek();
@@ -443,33 +448,57 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** LSX thuộc tháng hiện tại: ưu tiên year/month trên doc; không có thì theo Ngày Giao NVL. */
+  private isWorkOrderInCurrentMonth(wo: WorkOrder): boolean {
+    const now = new Date();
+    const cy = now.getFullYear();
+    const cm = now.getMonth() + 1;
+    const y = Number(wo.year);
+    const m = Number(wo.month);
+    if (Number.isFinite(y) && Number.isFinite(m) && y > 0 && m >= 1 && m <= 12) {
+      return y === cy && m === cm;
+    }
+    if (!wo.deliveryDate) {
+      return false;
+    }
+    let d: Date;
+    if (wo.deliveryDate instanceof Date) {
+      d = wo.deliveryDate;
+    } else if (typeof wo.deliveryDate === 'object' && wo.deliveryDate !== null && 'toDate' in (wo.deliveryDate as any)) {
+      d = (wo.deliveryDate as any).toDate();
+    } else {
+      d = new Date(wo.deliveryDate as any);
+    }
+    return d.getFullYear() === cy && d.getMonth() + 1 === cm;
+  }
+
   private updateWorkOrderSummary() {
-    if (this.workOrders.length === 0) {
-      this.workOrder = "0";
-      console.log('No work orders found, setting summary to 0');
+    const monthOrders = this.workOrders.filter(wo => this.isWorkOrderInCurrentMonth(wo));
+
+    if (monthOrders.length === 0) {
+      this.workOrder = '0';
+      console.log('No work orders in current month, setting summary to 0');
       return;
     }
-    
-    const totalWorkOrders = this.workOrders.length;
-    const completedWorkOrders = this.workOrders.filter(wo => {
-      // Check if work order is completed
+
+    const totalWorkOrders = monthOrders.length;
+    const completedWorkOrders = monthOrders.filter(wo => {
       if (wo.isCompleted) return true;
       if (wo.status === WorkOrderStatus.DONE) return true;
       return false;
     }).length;
-    
+
     this.workOrder = `${completedWorkOrders}/${totalWorkOrders}`;
-    console.log(`Work Order Summary: ${this.workOrder} for ${this.selectedFactory}`);
-    console.log(`Total: ${totalWorkOrders}, Completed: ${completedWorkOrders}`);
-    
-    // Log work order status breakdown
-    const statusBreakdown = this.workOrders.reduce((acc, wo) => {
+    console.log(`Work Order Summary (tháng hiện tại): ${this.workOrder} for ${this.selectedFactory}`);
+    console.log(`Total in month: ${totalWorkOrders}, Completed: ${completedWorkOrders}`);
+
+    const statusBreakdown = monthOrders.reduce((acc, wo) => {
       const status = wo.status || 'UNKNOWN';
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as any);
-    
-    console.log('Work order status breakdown:', statusBreakdown);
+
+    console.log('Work order status breakdown (month):', statusBreakdown);
   }
 
   private updateWorkOrderStatus() {
@@ -518,6 +547,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const waitingCount = workOrdersForDate.filter(wo => 
         wo.status === WorkOrderStatus.WAITING
       ).length;
+
+      const kittingCount = workOrdersForDate.filter(wo =>
+        wo.status === WorkOrderStatus.KITTING
+      ).length;
       
       const readyCount = workOrdersForDate.filter(wo => 
         wo.status === WorkOrderStatus.READY
@@ -531,18 +564,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
         code: dateStr,
         value: doneCount > 0 ? doneCount.toString() : '—',
         note: waitingCount > 0 ? waitingCount.toString() : '—',
+        kitting: kittingCount > 0 ? kittingCount.toString() : '—',
         ready: readyCount > 0 ? readyCount.toString() : '—',
         extra: delayCount > 0 ? delayCount.toString() : '—',
         // Add CSS classes for styling
         doneClass: doneCount > 0 ? 'has-value' : 'empty-cell',
         waitingClass: waitingCount > 0 ? 'has-value' : 'empty-cell',
+        kittingClass: kittingCount > 0 ? 'has-value' : 'empty-cell',
         readyClass: readyCount > 0 ? 'has-value' : 'empty-cell',
         delayClass: delayCount > 0 ? 'has-value' : 'empty-cell'
       };
       
       this.workOrderStatus.push(statusRow);
       
-      console.log(`Date ${dateStr}: Done=${doneCount}, Waiting=${waitingCount}, Ready=${readyCount}, Delay=${delayCount}`);
+      console.log(`Date ${dateStr}: Done=${doneCount}, Waiting=${waitingCount}, Kitting=${kittingCount}, Ready=${readyCount}, Delay=${delayCount}`);
     }
     
     console.log(`Updated Work Order Status for next 7 days:`, this.workOrderStatus);
@@ -928,7 +963,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       ).get().toPromise();
       
       const materials = inventorySnapshot.docs.map(doc => doc.data() as any);
-      
+
       // Load catalog for unit weights
       const catalogSnapshot = await this.firestore.collection('materials').get().toPromise();
       const catalogCache = new Map<string, any>();

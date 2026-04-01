@@ -61,6 +61,7 @@
     "lucide-angular": "^0.542.0",
     "mermaid": "^11.9.0",
     "moment": "2.29.1",
+    "openai": "^6.33.0",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^5.5.207",
     "perfect-scrollbar": "1.5.5",

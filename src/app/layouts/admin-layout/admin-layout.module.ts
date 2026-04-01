@@ -10,6 +10,7 @@ import { GoogleSheetService } from '../../services/google-sheet.service';
 
 // Các component mặc định của admin layout
 import { DashboardComponent } from '../../dashboard/dashboard.component';
+import { AssistantComponent } from '../../pages/assistant/assistant.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 
 // Angular Material modules
@@ -109,6 +110,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
   ],
   declarations: [
     DashboardComponent,
+    AssistantComponent,
     MenuComponent,
     KpiReportsComponent,
     EquipmentComponent,

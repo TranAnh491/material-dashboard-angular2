@@ -49,6 +49,65 @@
   box-shadow: none !important;
 }
 
+// Instruction banner (used for LSX quick-scan too)
+.scan-instruction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #e3f2fd;
+  border: 1px solid #2196f3;
+  border-radius: 6px;
+  color: #1976d2;
+  font-size: 12px;
+  font-weight: 500;
+
+  i {
+    font-size: 16px;
+    color: #2196f3;
+  }
+
+  span {
+    flex: 1;
+    line-height: 1.4;
+  }
+}
+
+// ✅ Normalize action button sizing (Outbound header controls)
+.action-controls-horizontal {
+  button {
+    height: 40px;
+    min-height: 40px;
+    border: 1px solid #d1d5db !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+
+  // icon-only small buttons (search/clear)
+  .search-btn,
+  .clear-search-btn {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  // keep inputs aligned with buttons
+  .scanner-input-group .scanner-input,
+  .lsx-search-box .lsx-search-input,
+  .date-range-selector .date-input {
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+  }
+}
+
 // 📱 Material Scan Controls
 .material-scan-controls {
   display: flex;

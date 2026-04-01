@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyWaitingWorkOrdersTomorrow = exports.sendTelegramNotification = void 0;
+exports.assistantChat = exports.notifyWaitingWorkOrdersTomorrow = exports.sendTelegramNotification = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
@@ -245,5 +245,78 @@ exports.notifyWaitingWorkOrdersTomorrow = functions.pubsub
         await lockRef.set({ status: 'error', errorAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         return null;
     }
+});
+function getOpenAiApiKey() {
+    var _a;
+    const cfg = ((_a = functions.config()) === null || _a === void 0 ? void 0 : _a.openai) || {};
+    const key = cfg.api_key || cfg.key || '';
+    if (!key) {
+        throw new Error('Missing openai.api_key');
+    }
+    return key;
+}
+/**
+ * Chat AI cho tab Assistant (OpenAI) — key nằm trên server.
+ * Cấu hình: firebase functions:config:set openai.api_key="sk-..."
+ */
+exports.assistantChat = functions.https.onCall(async (data, context) => {
+    var _a, _b, _c, _d;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    let apiKey = '';
+    try {
+        apiKey = getOpenAiApiKey();
+    }
+    catch (_e) {
+        apiKey = '';
+    }
+    if (!apiKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'Chưa cấu hình OpenAI API key trên Functions.');
+    }
+    const messages = Array.isArray(data === null || data === void 0 ? void 0 : data.messages) ? data.messages : [];
+    const lastUser = [...messages].reverse().find(m => (m === null || m === void 0 ? void 0 : m.role) === 'user' && typeof (m === null || m === void 0 ? void 0 : m.text) === 'string');
+    const userText = ((lastUser === null || lastUser === void 0 ? void 0 : lastUser.text) || '').trim();
+    if (!userText) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu nội dung.');
+    }
+    // Limit history to avoid huge payloads
+    const trimmedHistory = messages
+        .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+        .slice(-12)
+        .map(m => ({ role: m.role, content: m.text.slice(0, 4000) }));
+    const safeContext = (_a = data === null || data === void 0 ? void 0 : data.context) !== null && _a !== void 0 ? _a : {};
+    const system = 'Bạn là Trợ lý Kho cho hệ thống warehouse. Trả lời ngắn gọn, đúng số liệu theo CONTEXT JSON.' +
+        ' Nếu thiếu dữ liệu thì nói rõ thiếu gì và gợi ý nơi kiểm tra (RM1/RM2/QC/Shipment/Dashboard).' +
+        ' Không bịa số. Trả lời bằng tiếng Việt.';
+    const body = {
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        max_tokens: 600,
+        messages: [
+            { role: 'system', content: system },
+            { role: 'system', content: 'CONTEXT_JSON:\n' + JSON.stringify(safeContext).slice(0, 20000) },
+            ...trimmedHistory
+        ]
+    };
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error('OpenAI error', res.status, errText.slice(0, 2000));
+        throw new functions.https.HttpsError('internal', 'OpenAI call failed.');
+    }
+    const json = await res.json();
+    const answer = (((_d = (_c = (_b = json === null || json === void 0 ? void 0 : json.choices) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.content) || '').toString().trim();
+    if (!answer) {
+        throw new functions.https.HttpsError('internal', 'Empty OpenAI response.');
+    }
+    return { text: answer };
 });
 //# sourceMappingURL=index.js.map

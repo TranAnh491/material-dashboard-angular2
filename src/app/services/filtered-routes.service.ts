@@ -97,6 +97,7 @@ export class FilteredRoutesService {
   private getTabKeyFromRoute(path: string): string | null {
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
+      '/assistant': 'assistant',
       '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
       

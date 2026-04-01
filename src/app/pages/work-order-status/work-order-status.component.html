@@ -1,4 +1,4 @@
-<div class="main-content">
+<div class="main-content wo-status-performance">
   <div class="container-fluid">
     
     <!-- Main Work Order View -->
@@ -239,7 +239,7 @@
                       <div class="col-md-2">
                         <mat-form-field class="full-width compact-field">
                           <mat-label>Year</mat-label>
-                          <mat-select [(value)]="yearFilter" (selectionChange)="onYearFilterChange()">
+                          <mat-select panelClass="wo-status-select-panel" [(value)]="yearFilter" (selectionChange)="onYearFilterChange()">
                             <mat-option *ngFor="let year of years" [value]="year">{{year}}</mat-option>
                           </mat-select>
                         </mat-form-field>
@@ -249,7 +249,7 @@
                       <div class="col-md-2">
                         <mat-form-field class="full-width compact-field">
                           <mat-label>Month</mat-label>
-                          <mat-select [(value)]="monthFilter" (selectionChange)="onMonthFilterChange()">
+                          <mat-select panelClass="wo-status-select-panel" [(value)]="monthFilter" (selectionChange)="onMonthFilterChange()">
                             <mat-option *ngFor="let month of months" [value]="month.value">{{month.name}}</mat-option>
                           </mat-select>
                         </mat-form-field>
@@ -259,7 +259,7 @@
                       <div class="col-md-3">
                         <mat-form-field class="full-width compact-field">
                           <mat-label>Status</mat-label>
-                          <mat-select [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
+                          <mat-select panelClass="wo-status-select-panel" [(value)]="statusFilter" (selectionChange)="onStatusFilterChange()">
                             <mat-option value="all">All</mat-option>
                             <mat-option value="waiting">Waiting</mat-option>
                             <mat-option value="kitting">Kitting</mat-option>
@@ -274,7 +274,7 @@
                       <div class="col-md-2">
                         <mat-form-field class="full-width compact-field">
                           <mat-label>Filter Done</mat-label>
-                          <mat-select [(value)]="doneFilter" (selectionChange)="onDoneFilterChange()">
+                          <mat-select panelClass="wo-status-select-panel" [(value)]="doneFilter" (selectionChange)="onDoneFilterChange()">
                             <mat-option value="notCompleted">Chưa hoàn thành</mat-option>
                             <mat-option value="completed">Hoàn thành</mat-option>
                           </mat-select>
@@ -301,7 +301,7 @@
                         <div class="col-md-2">
                           <mat-form-field class="full-width">
                             <mat-label>Year</mat-label>
-                            <mat-select [(value)]="newWorkOrder.year" required>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.year" required>
                               <mat-option *ngFor="let year of years" [value]="year">{{year}}</mat-option>
                             </mat-select>
                           </mat-form-field>
@@ -309,7 +309,7 @@
                         <div class="col-md-2">
                           <mat-form-field class="full-width">
                             <mat-label>Month</mat-label>
-                            <mat-select [(value)]="newWorkOrder.month" required>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.month" required>
                               <mat-option *ngFor="let month of months" [value]="month.value">{{month.name}}</mat-option>
                             </mat-select>
                           </mat-form-field>
@@ -360,7 +360,7 @@
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Line</mat-label>
-                            <mat-select [(value)]="newWorkOrder.productionLine" name="productionLine" required>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.productionLine" name="productionLine" required>
                               <mat-option *ngFor="let line of availableLines" [value]="line">{{line}}</mat-option>
                             </mat-select>
                           </mat-form-field>
@@ -368,19 +368,16 @@
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Người soạn</mat-label>
-                            <mat-select [(value)]="newWorkOrder.createdBy" name="createdBy" required>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.createdBy" name="createdBy" required>
                               <mat-option value="">Chọn người</mat-option>
-                              <mat-option value="Tình">Tình</mat-option>
-                              <mat-option value="Tuấn">Tuấn</mat-option>
-                              <mat-option value="Vũ">Vũ</mat-option>
-                              <mat-option value="Phúc">Phúc</mat-option>
+                              <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
                             </mat-select>
                           </mat-form-field>
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Checked By</mat-label>
-                            <mat-select [(value)]="newWorkOrder.checkedBy" name="checkedBy">
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.checkedBy" name="checkedBy">
                               <mat-option value="">None</mat-option>
                               <mat-option *ngFor="let person of availablePersons" [value]="person">{{person}}</mat-option>
                             </mat-select>
@@ -469,7 +466,7 @@
                             <span *ngIf="wo.status === 'done'" style="color: #4caf50; font-size: 20px; display: block; text-align: center;">✅</span>
                           </td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.productCode}}</td>
-                          <td class="lsx-cell" style="font-size: 11.67px; text-align: center; vertical-align: middle;" [style.color]="isTransferDisabledForWorkOrder(wo) ? '#d32f2f' : (hasPxkForWorkOrder(wo) ? '#2e7d32' : null)" [style.font-weight]="hasPxkForWorkOrder(wo) ? '600' : null">{{wo.productionOrder}}</td>
+                          <td class="lsx-cell" style="font-size: 11.67px; text-align: center; vertical-align: middle; color: #000;" [style.font-weight]="hasPxkForWorkOrder(wo) ? '600' : null">{{wo.productionOrder}}</td>
                           <td style="text-align: center; vertical-align: middle;">
                             <button class="print-qr-btn" [class.pxk-imported]="hasPxkForWorkOrder(wo)" (click)="openPrintOptionDialog(wo)" title="In QR Code / PXK">
                               <i class="material-icons">print</i>
@@ -511,14 +508,12 @@
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
                             <mat-form-field class="full-width compact-field flat-field" *ngIf="canEdit()">
-                              <mat-select [value]="wo.createdBy || ''"
+                              <mat-select panelClass="wo-status-select-panel"
+                                          [value]="wo.createdBy || ''"
                                           (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)"
                                           style="font-size: 11.67px; text-align: center; text-transform: uppercase;">
                                 <mat-option value="">Chọn người</mat-option>
-                                <mat-option value="Tình">Tình</mat-option>
-                                <mat-option value="Tuấn">Tuấn</mat-option>
-                                <mat-option value="Vũ">Vũ</mat-option>
-                                <mat-option value="Phúc">Phúc</mat-option>
+                                <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
                               </mat-select>
                             </mat-form-field>
                             <span *ngIf="!canEdit()"

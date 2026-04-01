@@ -1,0 +1,52 @@
+<div class="main-content assistant-page">
+  <div class="container-fluid py-3">
+    <div class="assistant-page-header">
+      <div>
+        <h4 class="assistant-title">{{ title }}</h4>
+        <p class="assistant-subtitle text-muted mb-0">{{ assistantSubtitle }}</p>
+      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm assistant-refresh" (click)="refreshAll()" title="Làm mới rack, IQC, Safety">
+        <i class="material-icons">refresh</i>
+        Làm mới dữ liệu
+      </button>
+    </div>
+
+    <div class="assistant-chat-card">
+      <div class="assistant-chat-header">
+        <i class="material-icons text-primary">warehouse</i>
+        <span>Trợ lý Kho</span>
+      </div>
+      <div class="assistant-messages" #assistantScroll>
+        <div
+          *ngFor="let m of messages"
+          class="assistant-row"
+          [class.user]="m.role === 'user'"
+          [class.assistant]="m.role === 'assistant'">
+          <span class="assistant-bubble">{{ m.text }}</span>
+        </div>
+        <div class="assistant-row assistant" *ngIf="busy">
+          <span class="assistant-bubble typing">Đang trả lời…</span>
+        </div>
+      </div>
+      <div class="assistant-input-row">
+        <input
+          type="text"
+          class="assistant-input"
+          [(ngModel)]="inputText"
+          (keydown)="onKeydown($event)"
+          placeholder="VD: kho rm1, kho rm2, qc, lsx…"
+          [disabled]="busy"
+          maxlength="500"
+          aria-label="Tin nhắn Trợ lý Kho" />
+        <button
+          type="button"
+          class="assistant-send"
+          (click)="sendMessage()"
+          [disabled]="busy || !inputText.trim()"
+          title="Gửi">
+          <i class="material-icons">send</i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

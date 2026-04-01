@@ -281,27 +281,32 @@
   /* Specific column widths for mobile */
   .workorder-status-table th:nth-child(1),
   .workorder-status-table td:nth-child(1) {
-    width: 20%; /* Date/Ship Date */
+    width: 17%; /* Date */
   }
 
   .workorder-status-table th:nth-child(2),
   .workorder-status-table td:nth-child(2) {
-    width: 20%; /* Done/Shipment */
+    width: 16%; /* Done */
   }
 
   .workorder-status-table th:nth-child(3),
   .workorder-status-table td:nth-child(3) {
-    width: 20%; /* Waiting/Customer */
+    width: 16%; /* Waiting */
   }
 
   .workorder-status-table th:nth-child(4),
   .workorder-status-table td:nth-child(4) {
-    width: 20%; /* Ready/Carton */
+    width: 17%; /* Kitting */
   }
 
   .workorder-status-table th:nth-child(5),
   .workorder-status-table td:nth-child(5) {
-    width: 20%; /* Delay/Status Detail */
+    width: 17%; /* Ready */
+  }
+
+  .workorder-status-table th:nth-child(6),
+  .workorder-status-table td:nth-child(6) {
+    width: 17%; /* Delay */
   }
 
   /* Mobile card improvements */
@@ -462,27 +467,32 @@
   /* Even more compact column widths for small mobile */
   .workorder-status-table th:nth-child(1),
   .workorder-status-table td:nth-child(1) {
-    width: 18%; /* Date/Ship Date */
+    width: 15%; /* Date */
   }
 
   .workorder-status-table th:nth-child(2),
   .workorder-status-table td:nth-child(2) {
-    width: 18%; /* Done/Shipment */
+    width: 14%; /* Done */
   }
 
   .workorder-status-table th:nth-child(3),
   .workorder-status-table td:nth-child(3) {
-    width: 18%; /* Waiting/Customer */
+    width: 14%; /* Waiting */
   }
 
   .workorder-status-table th:nth-child(4),
   .workorder-status-table td:nth-child(4) {
-    width: 18%; /* Ready/Carton */
+    width: 14%; /* Kitting */
   }
 
   .workorder-status-table th:nth-child(5),
   .workorder-status-table td:nth-child(5) {
-    width: 28%; /* Delay/Status Detail - wider for more text */
+    width: 14%; /* Ready */
+  }
+
+  .workorder-status-table th:nth-child(6),
+  .workorder-status-table td:nth-child(6) {
+    width: 29%; /* Delay — rộng hơn */
   }
 
   /* Ultra compact cards */
