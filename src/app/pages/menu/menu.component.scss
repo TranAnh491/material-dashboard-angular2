@@ -1,7 +1,7 @@
-// Menu Page - Light Theme
+// Menu Page - Dark Theme (black background, white labels)
 .menu-container {
   min-height: 100vh;
-  background: #ffffff;
+  background: #000000;
   padding: 40px 20px;
   width: 100%;
   margin: 0;
@@ -10,10 +10,10 @@
 .menu-header {
   margin-bottom: 50px;
   padding: 30px 0;
-  border-bottom: 3px solid #e0e0e0;
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-bottom: 3px solid #333333;
+  background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.06);
 }
 
 .header-content {
@@ -47,7 +47,7 @@
 .menu-title {
   font-size: 2.2rem;
   font-weight: 400;
-  color: #333333;
+  color: #ffffff;
   margin: 0;
   letter-spacing: -0.5px;
   line-height: 1.2;
@@ -56,7 +56,7 @@
 .menu-subtitle {
   font-size: 1.5rem;
   font-weight: 400;
-  color: #333333;
+  color: #ffffff;
   margin: 0;
   letter-spacing: 0.5px;
 }
@@ -104,7 +104,7 @@
 .menu-footer {
   margin-top: 60px;
   padding-top: 40px;
-  border-top: 2px solid #e0e0e0;
+  border-top: 2px solid #333333;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -113,10 +113,10 @@
 .menu-category-title {
   font-size: 1.3rem;
   font-weight: 400;
-  color: #333333;
+  color: #ffffff;
   margin: 0 0 20px 0;
   padding-bottom: 12px;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 2px solid #333333;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -188,8 +188,8 @@
 
 .menu-item:hover {
   transform: translateY(-4px);
-  background: rgba(0, 0, 0, 0.04);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .menu-item:active {
@@ -223,77 +223,77 @@
 // Main Category
 .menu-item-main {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
 // ASM1 RM Category
 .menu-item-asm1-rm {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
 // ASM2 RM Category
 .menu-item-asm2-rm {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
 // ASM FG Category
 .menu-item-asm1-fg {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
 // Tools Category
 .menu-item-tools {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
 // Quality Category
 .menu-item-quality {
   .material-icons {
-    color: #333333 !important;
+    color: #ffffff !important;
   }
 
   span {
-    color: #333333 !important;
+    color: #ffffff !important;
   }
 }
 
 // Admin Category
 .menu-item-admin {
   .material-icons {
-    color: #333333;
+    color: #ffffff;
   }
   
   span {
-    color: #333333;
+    color: #ffffff;
   }
 }
 
