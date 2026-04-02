@@ -784,6 +784,10 @@
       <div class="popup-section">
         <h4 class="popup-section-title">📦 Inventory Actions</h4>
         <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="toggleQtyBagRule()">
+            <i class="material-icons">{{ qtyBagRuleEnabled ? 'toggle_on' : 'toggle_off' }}</i>
+            <span>QTY BAG rule: {{ qtyBagRuleEnabled ? 'ON' : 'OFF' }}</span>
+          </button>
           <button type="button" class="popup-action-btn" (click)="loadInventoryFromFirebase(); closeMorePopup()">
             <i class="material-icons">cloud_download</i>
             <span>Load toàn bộ inventory</span>

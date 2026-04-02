@@ -137,6 +137,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   /** More — mở popup (giống ASM2) */
   showMorePopup = false;
 
+  /** QTY BAG rule: ON = multiple of Standard Packing; OFF = legacy free input */
+  qtyBagRuleEnabled = true;
+  private readonly QTY_BAG_RULE_KEY = 'materials-asm1:qty-bag-rule-enabled:v1';
+
   // ===== Tem Lẽ (tách tem từ QR hiện tại) =====
   showTemLePopup = false;
   temLeQrText: string = '';
@@ -332,6 +336,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     // 🆕 Load catalog once when component initializes
     this.loadCatalogOnce();
+
+    // QTY BAG rule toggle persistence
+    const savedRule = localStorage.getItem(this.QTY_BAG_RULE_KEY);
+    if (savedRule === '0' || savedRule === '1') {
+      this.qtyBagRuleEnabled = savedRule === '1';
+    }
     
     // 🔍 DEBUG: Check outbound data on init
     this.debugOutboundDataOnInit();
@@ -2492,6 +2502,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.showMorePopup = true;
   }
 
+  toggleQtyBagRule(): void {
+    this.qtyBagRuleEnabled = !this.qtyBagRuleEnabled;
+    localStorage.setItem(this.QTY_BAG_RULE_KEY, this.qtyBagRuleEnabled ? '1' : '0');
+  }
+
   closeMorePopup(): void {
     this.showMorePopup = false;
   }
@@ -3182,9 +3197,22 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const normalizedRaw = isFinite(num) ? Math.max(0, num) : 0;
     const normalized = Math.round(normalizedRaw * 10000) / 10000;
 
+    // Validate: QTY BAG must be multiple of Standard Packing
+    if (this.qtyBagRuleEnabled && normalized > 0) {
+      const sp = this.getStandardPacking(material.materialCode);
+      if (sp && sp > 0 && !this.isMultipleOfStandardPacking(normalized, sp)) {
+        alert(`❌ QTY BAG không hợp lệ.\n\nStandard Packing = ${sp}\nQTY BAG phải là bội số của Standard Packing (VD: ${sp}, ${sp * 2}, ${sp * 3}...)`);
+        // Revert UI to previous persisted value if possible
+        const prev = (material as any).__prevRollsOrBags;
+        material.rollsOrBags = prev !== undefined ? String(prev) : '';
+        return;
+      }
+    }
+
     // Keep UI type consistent (rollsOrBags is declared as string in InventoryMaterial).
     material.rollsOrBags = String(normalized);
     material.updatedAt = new Date();
+    (material as any).__prevRollsOrBags = normalized;
 
     this.firestore
       .collection('inventory-materials')
@@ -5013,9 +5041,25 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Helper method to check if Rolls/Bags is valid for QR printing
   isRollsOrBagsValid(material: InventoryMaterial): boolean {
     const rollsOrBagsValue = material.rollsOrBags;
-    return rollsOrBagsValue && 
-           !(typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') &&
-           parseFloat(String(rollsOrBagsValue).replace(/,/g, '')) > 0;
+    if (!rollsOrBagsValue) return false;
+    if (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') return false;
+    const qty = parseFloat(String(rollsOrBagsValue).replace(/,/g, '').trim());
+    if (!(qty > 0)) return false;
+    if (!this.qtyBagRuleEnabled) return true;
+    const sp = this.getStandardPacking(material.materialCode);
+    if (sp && sp > 0) {
+      return this.isMultipleOfStandardPacking(qty, sp);
+    }
+    return true;
+  }
+
+  private isMultipleOfStandardPacking(qty: number, sp: number): boolean {
+    // Work with 4-decimal precision to reduce floating errors
+    const scale = 10000;
+    const q = Math.round((Number(qty) || 0) * scale);
+    const s = Math.round((Number(sp) || 0) * scale);
+    if (s <= 0) return true;
+    return q % s === 0;
   }
 
   // Print QR Code for inventory items
