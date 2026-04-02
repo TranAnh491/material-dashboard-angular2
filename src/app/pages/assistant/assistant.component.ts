@@ -448,11 +448,16 @@ export class AssistantComponent implements OnInit, OnDestroy {
       });
     } catch (e: any) {
       console.error('assistantChat failed', e);
+      const errMsg =
+        (e?.details && typeof e.details === 'string' && e.details.trim()) ||
+        (e?.message && typeof e.message === 'string' && e.message.trim()) ||
+        '';
       const fallback = this.buildReply(text);
       this.messages.push({
         role: 'assistant',
         text:
-          'Không gọi được AI cloud (OpenAI). Mình tạm trả lời theo dữ liệu local trên trang.\n\n' +
+          `Không gọi được AI cloud (OpenAI). ${errMsg ? `Lỗi: ${errMsg}\n\n` : ''}` +
+          'Mình tạm trả lời theo dữ liệu local trên trang.\n\n' +
           fallback
       });
     } finally {

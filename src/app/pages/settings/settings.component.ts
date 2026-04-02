@@ -54,7 +54,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'outbound-asm1', name: 'RM1 Outbound' },
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'inventory-overview-asm1', name: 'RM1 Overview' },
-    { key: 'bag-history', name: 'RM1 History' },
+    { key: 'bag-history', name: 'Control Batch' },
     
     // ASM2 RM tabs
     { key: 'inbound-asm2', name: 'RM2 Inbound' },

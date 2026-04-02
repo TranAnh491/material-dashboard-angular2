@@ -22,7 +22,7 @@ export const ROUTES: RouteInfo[] = [
       { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'OB', class: '' },
       { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'IV', class: '' },
       { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' },
-      { path: '/bag-history', title: 'History', icon: 'H', class: '' }
+      { path: '/bag-history', title: 'Control Batch', icon: 'H', class: '' }
     ]
   },
   { 

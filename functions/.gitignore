@@ -1,0 +1,4 @@
+# Params / local env (do Firebase CLI tạo khi deploy)
+.env
+.env.*
+!.env.example

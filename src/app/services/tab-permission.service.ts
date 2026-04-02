@@ -25,7 +25,7 @@ export class TabPermissionService {
     private factoryAccessService: FactoryAccessService
   ) { }
 
-  // Lấy quyền truy cập tab của user hiện tại
+  // Lấy quyền truy cập tab của user hiện tại (chỉ từ user-tab-permissions — cấp trong Settings)
   getCurrentUserTabPermissions(): Observable<{ [key: string]: boolean }> {
     return this.afAuth.authState.pipe(
       switchMap(user => {
@@ -36,22 +36,17 @@ export class TabPermissionService {
             .valueChanges()
             .pipe(
               switchMap((data: any) => {
-                // Kiểm tra xem user có document trong user-tab-permissions chưa
                 if (data && data.tabPermissions && typeof data.tabPermissions === 'object') {
-                  // Nếu user có permissions được cấu hình cụ thể, sử dụng permissions đó
-                  // KHÔNG tự động thêm Dashboard nữa - phải được cấp quyền rõ ràng
                   return of({ ...data.tabPermissions });
-                } else {
-                  // Nếu không có permissions được cấu hình, trả về TẤT CẢ false (không xem được gì)
-                  // User mới đăng ký phải chờ admin duyệt trong Settings
-                  console.log(`⚠️ No tab permissions found for user ${user.uid}, returning empty permissions (chờ duyệt)`);
-                  return of({});
                 }
+                console.log(
+                  `⚠️ No tab permissions found for user ${user.uid}, returning empty permissions (chờ duyệt)`
+                );
+                return of({});
               })
             );
-        } else {
-          return of({});
         }
+        return of({});
       })
     );
   }
@@ -169,7 +164,7 @@ export class TabPermissionService {
     { key: 'materials-asm2', name: 'RM2 Inventory' },
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
     { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
-    { key: 'bag-history', name: 'RM1 History' },
+    { key: 'bag-history', name: 'Control Batch' },
     
     // ASM FG tabs
     { key: 'fg-in', name: 'FG In' },

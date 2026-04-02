@@ -912,23 +912,10 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Quyền quét tem QC: chỉ khi tài khoản Firebase (uid) được bật tab Quality trong Settings (user-tab-permissions.qc). */
   private async hasQcTabAccess(employeeId: string): Promise<boolean> {
     const normalizedId = (employeeId || '').trim().toUpperCase();
     if (!normalizedId) return false;
-
-    // Explicit allow-list requested by user
-    const qcAlwaysAllowed = new Set([
-      'ASP0121',
-      'ASP1751',
-      'ASP1761',
-      'ASP2215',
-      'ASP0028',
-      'ASP1747',
-      'ASP2137'
-    ]);
-    if (qcAlwaysAllowed.has(normalizedId)) {
-      return true;
-    }
 
     // 1) Find UID in users collection by employeeId, then by email convention
     let candidateUids: string[] = [];

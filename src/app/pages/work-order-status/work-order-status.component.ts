@@ -170,6 +170,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isProcessingScan: boolean = false;
   scannedItems: ScannedItem[] = [];
   allWorkOrdersForScan: WorkOrder[] = []; // Store all work orders across factories for scan lookup
+  private workOrderScanIndex = new Map<string, WorkOrder>(); // normalized LSX -> WorkOrder
 
   // Scan QR -> Chọn trạng thái dialog (sau khi scan LSX)
   showScanStatusSelectDialog: boolean = false;
@@ -4245,7 +4246,6 @@ ${nvlSxKsBoxHtml}
   /** Mở scan QR - chỉ dùng máy scanner (không camera) */
   async openScanPopup(): Promise<void> {
     console.log('🚀 Opening scan - máy scanner...');
-    await this.loadAllWorkOrdersForScan();
     this.isScanPopupMode = true;
     this.isPhysicalScannerMode = true;
     this.showScanLSXPopup = true;
@@ -4256,9 +4256,6 @@ ${nvlSxKsBoxHtml}
     console.log('🚀 Opening scan page...');
     this.currentView = 'scan';
     this.scannedItems = [];
-
-    // Load all work orders first, then start scanner
-    await this.loadAllWorkOrdersForScan();
     
     // Auto-start scanner mode after data is loaded
     setTimeout(() => {
@@ -4302,22 +4299,19 @@ ${nvlSxKsBoxHtml}
         console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
         
         this.allWorkOrdersForScan = [];
+        this.workOrderScanIndex.clear();
         querySnapshot.forEach((doc) => {
           const data = doc.data() as WorkOrder;
-          this.allWorkOrdersForScan.push({
+          const wo: WorkOrder = {
             id: doc.id,
             ...data
-          } as WorkOrder);
+          } as WorkOrder;
+          this.allWorkOrdersForScan.push(wo);
+          const key = String(wo.productionOrder || '').trim().toUpperCase();
+          if (key) this.workOrderScanIndex.set(key, wo);
         });
 
         console.log(`✅ Loaded ${this.allWorkOrdersForScan.length} work orders for scan lookup`);
-        
-        // Debug: show first few work orders
-        console.log('🔍 Sample work orders:', this.allWorkOrdersForScan.slice(0, 3).map(wo => ({
-          lsx: wo.productionOrder,
-          factory: wo.factory,
-          id: wo.id
-        })));
       } else {
         console.log('❌ QuerySnapshot is null');
       }
@@ -4404,6 +4398,8 @@ ${nvlSxKsBoxHtml}
     console.log('📱 QR Code scanned:', decodedText);
     
     try {
+      // Avoid double-trigger while selecting status
+      if (this.showScanStatusSelectDialog) return;
       // Xử lý QR code chỉ chứa LSX
       const lsxValue = decodedText.trim();
       this.processLSXQRCode(lsxValue);
@@ -4413,30 +4409,48 @@ ${nvlSxKsBoxHtml}
     }
   }
 
+  private async findWorkOrderForScanByLsx(lsxValue: string): Promise<WorkOrder | null> {
+    const trimUpper = (s: string) => String(s || '').trim().toUpperCase();
+    const raw = String(lsxValue || '').trim();
+    const rawUpper = raw.toUpperCase();
+    const base = raw.split('/')[0].trim();
+    const baseUpper = base.toUpperCase();
+
+    const candidates = Array.from(new Set([raw, rawUpper, base, baseUpper].filter(Boolean)));
+    for (const c of candidates) {
+      const k = trimUpper(c);
+      const cached = this.workOrderScanIndex.get(k);
+      if (cached) return cached;
+    }
+
+    // Query Firestore directly (fast path, avoids loading all work orders)
+    for (const c of candidates) {
+      try {
+        const snap = await this.firestore.collection('work-orders', ref =>
+          ref.where('productionOrder', '==', c).limit(1)
+        ).get().toPromise();
+        const docSnap = snap && !snap.empty ? snap.docs[0] : null;
+        if (docSnap) {
+          const data = docSnap.data() as WorkOrder;
+          const wo = { id: docSnap.id, ...data } as WorkOrder;
+          const key = trimUpper(wo.productionOrder);
+          if (key) this.workOrderScanIndex.set(key, wo);
+          return wo;
+        }
+      } catch {
+        // ignore and try next candidate
+      }
+    }
+
+    return null;
+  }
+
   async processLSXQRCode(lsxValue: string): Promise<void> {
     console.log('🔍 Looking for Work Order with LSX:', lsxValue);
     
-    const trimUpper = (s: string) => String(s || '').trim().toUpperCase();
-    const scanNorm = trimUpper(lsxValue);
-    
-    // Find work order by LSX (exact, base, hoặc normalize)
-    let workOrder = this.allWorkOrdersForScan.find(wo => {
-      const po = String(wo.productionOrder || '').trim();
-      if (po === lsxValue || po === scanNorm) return true;
-      if (trimUpper(po) === scanNorm) return true;
-      const baseScan = lsxValue.split('/')[0];
-      if (po === baseScan || trimUpper(po) === trimUpper(baseScan)) return true;
-      return false;
-    });
-
+    const workOrder = await this.findWorkOrderForScanByLsx(lsxValue);
     if (!workOrder) {
-      console.log('❌ Available work orders count:', this.allWorkOrdersForScan.length);
-      console.log('❌ Available work orders:', this.allWorkOrdersForScan.map(wo => ({
-        lsx: wo.productionOrder,
-        factory: wo.factory
-      })));
-      console.log('❌ Looking for LSX:', lsxValue);
-      alert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}.\n\nCó ${this.allWorkOrdersForScan.length} work orders trong hệ thống.`);
+      alert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}`);
       return;
     }
     

@@ -2,13 +2,13 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 setGlobalOptions({ maxInstances: 10 });
 
-const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
-export const chatAI = onCall({ secrets: [OPENAI_API_KEY] }, async (request) => {
+export const chatAI = onCall({ secrets: [GEMINI_API_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Cần đăng nhập.");
   }
@@ -21,47 +21,41 @@ export const chatAI = onCall({ secrets: [OPENAI_API_KEY] }, async (request) => {
     throw new HttpsError("invalid-argument", "Thiếu message.");
   }
 
-  const client = new OpenAI({
-    apiKey: OPENAI_API_KEY.value(),
+  const rawKey = (GEMINI_API_KEY.value() || "").toString();
+  const apiKey = rawKey.trim();
+  logger.info("chatAI (Gemini) key check", {
+    keyPrefix: apiKey.slice(0, 6),
+    keyLen: apiKey.length,
+    hasLeadingOrTrailingWhitespace: rawKey.length !== apiKey.length,
+    uid: request.auth.uid,
   });
 
-  let response: any;
+  if (!apiKey) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Chưa cấu hình GEMINI_API_KEY trên Functions. Hãy set secret GEMINI_API_KEY rồi deploy lại functions."
+    );
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const prompt =
+    "Bạn là trợ lý quản lý kho, trả lời ngắn gọn, dễ hiểu. Không bịa số liệu; nếu thiếu dữ liệu thì nói rõ.\n\n" +
+    `Câu hỏi: ${message}\n\n` +
+    `Dữ liệu kho (JSON): ${JSON.stringify(contextData).slice(0, 20000)}`;
+
   try {
-    response = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Bạn là trợ lý quản lý kho, trả lời ngắn gọn, dễ hiểu. Không bịa số liệu; nếu thiếu dữ liệu thì nói rõ.",
-        },
-        {
-          role: "user",
-          content:
-            `Câu hỏi: ${message}\n` +
-            `Dữ liệu kho (JSON): ${JSON.stringify(contextData).slice(0, 20000)}`,
-        },
-      ],
-    });
-  } catch (e: any) {
-    const status = Number(e?.status || e?.response?.status || 0) || 0;
-    const code = (e?.code || "").toString();
-    if (status === 401 || code === "invalid_api_key") {
-      throw new HttpsError(
-        "failed-precondition",
-        "OpenAI API key không đúng. Hãy set lại secret OPENAI_API_KEY và deploy lại functions."
-      );
+    const result = await model.generateContent(prompt);
+    const text = result.response?.text?.() ? result.response.text().trim() : "";
+    if (!text) {
+      logger.error("Empty Gemini response", { uid: request.auth.uid });
+      throw new HttpsError("internal", "Gemini trả về rỗng.");
     }
-    logger.error("OpenAI call failed", { status, code, message: e?.message });
-    throw new HttpsError("internal", "Gọi OpenAI thất bại.");
+    return { content: text };
+  } catch (e: any) {
+    const message = (e?.message || "").toString();
+    logger.error("Gemini call failed", { message, uid: request.auth.uid });
+    throw new HttpsError("internal", "Gọi Gemini thất bại.");
   }
-
-  const msg = response.choices?.[0]?.message;
-  if (!msg) {
-    logger.error("Empty OpenAI response", { responseId: (response as any)?.id });
-    throw new HttpsError("internal", "OpenAI trả về rỗng.");
-  }
-
-  return msg;
 });

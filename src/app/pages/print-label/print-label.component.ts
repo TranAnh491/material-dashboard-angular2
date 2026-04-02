@@ -1995,6 +1995,143 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
   }
 
   // ==================== QR LABEL PRINTING ====================
+
+  private getScheduleItemQrData(item: ScheduleItem): { maTem: string; soLuongTem: string; lenhSanXuat: string } | null {
+    const maTem = (item.maTem || '').trim();
+    if (!maTem) return null;
+    const soLuongTem = (item.soLuongYeuCau || item.soLuongPhoi || '').toString().trim();
+    const lenhSanXuat = (item.lenhSanXuat || '').toString().trim();
+    return { maTem, soLuongTem, lenhSanXuat };
+  }
+
+  async printBatchPrintedQrLabels(): Promise<void> {
+    try {
+      const items = this.getDisplayScheduleData()
+        .filter(item => (item.tinhTrang || '').toString().trim() === 'Đã in');
+
+      if (!items.length) {
+        alert('⚠️ Không có dòng nào có tình trạng "Đã in" để in.');
+        return;
+      }
+
+      const user = await this.auth.currentUser;
+      const currentUser = user ? user.email || user.uid : 'UNKNOWN';
+      const printDate = new Date().toLocaleDateString('vi-VN');
+
+      const labelHtmlParts: string[] = [];
+
+      for (const item of items) {
+        const d = this.getScheduleItemQrData(item);
+        if (!d) continue;
+        const qrData = `${d.maTem}|${d.soLuongTem}|${d.lenhSanXuat}`;
+
+        const qrImage = await QRCode.toDataURL(qrData, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+
+        labelHtmlParts.push(`
+          <div class="qr-container">
+            <div class="qr-section">
+              <img src="${qrImage}" class="qr-image" alt="QR Code">
+            </div>
+            <div class="info-section">
+              <div>
+                <div class="info-row">Mã tem: ${d.maTem}</div>
+                <div class="info-row">Lượng: ${d.soLuongTem}</div>
+                <div class="info-row">LSX: ${d.lenhSanXuat}</div>
+              </div>
+              <div>
+                <div class="info-row small">Ngày in: ${printDate}</div>
+                <div class="info-row small">NV: ${currentUser}</div>
+              </div>
+            </div>
+          </div>
+        `);
+      }
+
+      if (!labelHtmlParts.length) {
+        alert('⚠️ Không có dữ liệu tem hợp lệ để in.');
+        return;
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
+        return;
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title></title>
+            <style>
+              * { margin: 0 !important; padding: 0 !important; box-sizing: border-box !important; }
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+              }
+              .qr-container {
+                display: flex !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 1px solid #000 !important;
+                width: 57mm !important;
+                height: 32mm !important;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+                background: white !important;
+                box-sizing: border-box !important;
+              }
+              .qr-container:last-child { page-break-after: auto !important; }
+              .qr-section {
+                width: 30mm !important;
+                height: 30mm !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-right: 1px solid #ccc !important;
+              }
+              .qr-image { width: 28mm !important; height: 28mm !important; display: block !important; }
+              .info-section {
+                flex: 1 !important;
+                padding: 1mm !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                font-size: 9.6px !important;
+                line-height: 1.1 !important;
+                color: #000000 !important;
+              }
+              .info-row { margin: 0.3mm 0 !important; font-weight: bold !important; color: #000000 !important; }
+              .info-row.small { font-size: 8.4px !important; color: #000000 !important; }
+              @media print {
+                @page { margin: 0 !important; size: 57mm 32mm !important; }
+                html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+            ${labelHtmlParts.join('')}
+            <script>
+              window.onload = function() {
+                document.title = '';
+                setTimeout(() => { window.print(); }, 300);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+
+    } catch (error: any) {
+      console.error('❌ Error batch printing QR labels:', error);
+      alert(`❌ Lỗi khi in hàng loạt: ${error?.message || error}`);
+    }
+  }
   
   async printQRLabel(item: ScheduleItem): Promise<void> {
     console.log('🖨️ Printing QR label for:', item);

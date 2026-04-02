@@ -109,7 +109,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'arrow_upward', category: 'ASM1 RM' },
     { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', category: 'ASM1 RM' },
     { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'assessment', category: 'ASM1 RM' },
-    { path: '/bag-history', title: 'RM1 History', icon: 'history', category: 'ASM1 RM' },
+    { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'ASM1 RM' },
     
     // ASM2 RM
     { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'arrow_downward', category: 'ASM2 RM' },

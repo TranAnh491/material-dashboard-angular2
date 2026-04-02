@@ -1,7 +1,11 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 import { Subject } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { RmBagHistoryEventType } from '../../services/rm-bag-history.service';
 
@@ -47,6 +51,19 @@ export interface BagSearchSummaryRow {
   tonKho: number;
 }
 
+/** Nhóm xuất kho trùng khóa (nhà máy + mã + PO + IMD + bag) từ outbound-materials. */
+export interface OutboundDuplicateGroupRow {
+  factory: string;
+  materialCode: string;
+  poNumber: string;
+  imd: string;
+  bagBatch: string;
+  /** Số bản ghi outbound cùng khóa (>1). */
+  count: number;
+  /** LSX (`productionOrder`) gom từ các lần xuất trùng; nhiều lệnh cách nhau bằng · */
+  productionOrderSummary: string;
+}
+
 @Component({
   selector: 'app-bag-history',
   templateUrl: './bag-history.component.html',
@@ -77,11 +94,29 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   /** Mã đã tìm (chuẩn hóa IN HOA); null = chưa tìm, không hiện bảng dữ liệu. */
   lastSearchedMaterialCode: string | null = null;
 
+  /** Kiểm tra trùng xuất kho (outbound ASM1/ASM2) khi mở tab. */
+  outboundDupLoading = true;
+  outboundDupError = '';
+  outboundDupRows: OutboundDuplicateGroupRow[] = [];
+  outboundDupTotalScanned = 0;
+  /** Số bản ghi outbound thỏa lọc định dạng (dùng để gom trùng). */
+  outboundDupEligibleCount = 0;
+
+  /** Đang gửi mail báo cáo trùng (callable). */
+  sendMailBusy = false;
+
   factoryFilter: '' | 'ASM1' | 'ASM2' | 'ALL' = 'ALL';
   eventFilter: '' | RmBagHistoryEventType = '';
   search = '';
 
-  constructor(private firestore: AngularFirestore) {}
+  /** Chỉ tính kiểm tra trùng outbound từ 00:00 ngày 02/04/2026 (giờ local). */
+  private readonly outboundDupSinceMs = new Date(2026, 3, 2, 0, 0, 0, 0).getTime();
+
+  constructor(
+    private firestore: AngularFirestore,
+    private fns: AngularFireFunctions,
+    private snackBar: MatSnackBar
+  ) {}
 
   ngOnInit(): void {
     this.firestore
@@ -100,11 +135,39 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       }, () => {
         this.isLoading = false;
       });
+    void this.loadOutboundExportDuplicates();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /** Gửi mail báo cáo trùng xuất kho tại thời điểm bấm (cùng logic quét với bảng trên). */
+  async onSendControlBatchMail(): Promise<void> {
+    if (this.sendMailBusy) {
+      return;
+    }
+    this.sendMailBusy = true;
+    try {
+      const callable = this.fns.httpsCallable<unknown, { ok?: boolean; dupGroups?: number }>(
+        'sendControlBatchReportEmail'
+      );
+      const res = await firstValueFrom(callable({}));
+      const n = res?.dupGroups ?? 0;
+      this.snackBar.open(
+        n === 0
+          ? 'Đã gửi mail: không có nhóm trùng tại thời điểm quét.'
+          : `Đã gửi mail: ${n} nhóm trùng xuất kho.`,
+        'Đóng',
+        { duration: 6000 }
+      );
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: string }).message) : 'Gửi mail thất bại.';
+      this.snackBar.open(msg, 'Đóng', { duration: 8000 });
+    } finally {
+      this.sendMailBusy = false;
+    }
   }
 
   private toRow(id: string, d: any): BagHistoryRow {
@@ -171,6 +234,17 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       this.lastSearchedMaterialCode = null;
       this.searchInventoryDocs = [];
       this.searchHint = '';
+      this.applyFilters();
+      this.rebuildInventorySummary();
+      return;
+    }
+
+    if (!this.isValidRmMaterialCode(code)) {
+      this.queryResultRows = null;
+      this.lastSearchedMaterialCode = null;
+      this.searchInventoryDocs = [];
+      this.searchHint =
+        'Mã hàng không hợp lệ: phải là A hoặc B ở đầu và đúng 6 chữ số sau (VD: A005006, B001033).';
       this.applyFilters();
       this.rebuildInventorySummary();
       return;
@@ -292,6 +366,225 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
 
   private rowAggregateKey(factory: string, materialCode: string, poNumber: string, imd: string): string {
     return `${factory}|${(materialCode || '').trim()}|${(poNumber || '').trim()}|${(imd || '').trim()}`;
+  }
+
+  /**
+   * Khóa trùng với tab Xuất kho ASM1/ASM2: mã + PO + IMD (batchNumber/importDate) + bag (bagBatch).
+   */
+  /** Mã RM: một chữ A hoặc B + đúng 6 số (VD A005006, B001033). */
+  isValidRmMaterialCode(code: string): boolean {
+    const c = (code || '').trim().toUpperCase();
+    return /^[AB]\d{6}$/.test(c);
+  }
+
+  /** PO: có chữ, bắt đầu bằng KZ hoặc LH (không phân biệt hoa thường). */
+  private isValidOutboundPo(po: string): boolean {
+    const p = (po || '').trim();
+    if (!p || !/[A-Za-z]/.test(p)) {
+      return false;
+    }
+    const u = p.toUpperCase();
+    return u.startsWith('KZ') || u.startsWith('LH');
+  }
+
+  private stringHasDigit(s: string): boolean {
+    return /\d/.test(String(s || ''));
+  }
+
+  /** Chỉ gom trùng khi đủ điều kiện định dạng mã / PO / IMD / bag. */
+  private isOutboundRowEligibleForDupAnalysis(
+    materialCode: string,
+    poNumber: string,
+    imd: string,
+    bagBatch: string
+  ): boolean {
+    const mc = (materialCode || '').trim().toUpperCase();
+    if (!this.isValidRmMaterialCode(mc)) {
+      return false;
+    }
+    if (!this.isValidOutboundPo(poNumber)) {
+      return false;
+    }
+    if (!this.stringHasDigit(imd)) {
+      return false;
+    }
+    if (!this.stringHasDigit(bagBatch)) {
+      return false;
+    }
+    return true;
+  }
+
+  private tryFirestoreTimeToMs(v: unknown): number | null {
+    if (v == null) {
+      return null;
+    }
+    if (typeof (v as { toDate?: () => Date }).toDate === 'function') {
+      const dt = (v as { toDate: () => Date }).toDate();
+      const t = dt.getTime();
+      return Number.isNaN(t) ? null : t;
+    }
+    if (v instanceof Date) {
+      const t = v.getTime();
+      return Number.isNaN(t) ? null : t;
+    }
+    return null;
+  }
+
+  /** Thời điểm xuất / tạo document: ưu tiên exportDate → createdAt → updatedAt. */
+  private getOutboundDocTimeMs(d: Record<string, unknown>): number | null {
+    return (
+      this.tryFirestoreTimeToMs(d['exportDate']) ??
+      this.tryFirestoreTimeToMs(d['createdAt']) ??
+      this.tryFirestoreTimeToMs(d['updatedAt'])
+    );
+  }
+
+  private isOutboundDocOnOrAfterDupSince(d: Record<string, unknown>): boolean {
+    const t = this.getOutboundDocTimeMs(d);
+    if (t == null) {
+      return false;
+    }
+    return t >= this.outboundDupSinceMs;
+  }
+
+  private outboundDupCompositeKey(
+    factory: string,
+    materialCode: string,
+    poNumber: string,
+    imd: string,
+    bagBatch: string
+  ): string {
+    const fac = (factory || '').trim();
+    const mc = (materialCode || '').trim().toUpperCase();
+    const po = (poNumber || '').trim();
+    const im = (imd || '').trim();
+    const bag = (bagBatch || '').trim();
+    return `${fac}|${mc}|${po}|${im}|${bag}`;
+  }
+
+  private async fetchAllOutboundDocsForFactory(
+    factory: 'ASM1' | 'ASM2',
+    batchSize: number
+  ): Promise<firebase.firestore.QueryDocumentSnapshot[]> {
+    const ref = this.firestore.collection('outbound-materials').ref;
+    const idPath = firebase.firestore.FieldPath.documentId();
+    const out: firebase.firestore.QueryDocumentSnapshot[] = [];
+    let last: firebase.firestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+      let q: firebase.firestore.Query = ref
+        .where('factory', '==', factory)
+        .orderBy(idPath)
+        .limit(batchSize);
+      if (last) {
+        q = q.startAfter(last);
+      }
+      const snap = await q.get();
+      if (snap.empty) {
+        break;
+      }
+      out.push(...snap.docs);
+      if (snap.docs.length < batchSize) {
+        break;
+      }
+      last = snap.docs[snap.docs.length - 1];
+    }
+    return out;
+  }
+
+  /** Đọc toàn bộ outbound-materials (ASM1 + ASM2), gom theo mã+PO+IMD+bag; chỉ giữ nhóm count > 1. */
+  async loadOutboundExportDuplicates(): Promise<void> {
+    this.outboundDupLoading = true;
+    this.outboundDupError = '';
+    this.outboundDupRows = [];
+    this.outboundDupTotalScanned = 0;
+    this.outboundDupEligibleCount = 0;
+    try {
+      const [docs1, docs2] = await Promise.all([
+        this.fetchAllOutboundDocsForFactory('ASM1', 500),
+        this.fetchAllOutboundDocsForFactory('ASM2', 500)
+      ]);
+      const all = [...docs1, ...docs2];
+      this.outboundDupTotalScanned = 0;
+      const counts = new Map<
+        string,
+        {
+          count: number;
+          sample: Omit<OutboundDuplicateGroupRow, 'count' | 'productionOrderSummary'>;
+          lsx: Set<string>;
+        }
+      >();
+      for (const doc of all) {
+        const d = doc.data() as Record<string, unknown>;
+        if (!this.isOutboundDocOnOrAfterDupSince(d)) {
+          continue;
+        }
+        this.outboundDupTotalScanned += 1;
+        const factory = String(d['factory'] ?? '');
+        const materialCode = String(d['materialCode'] ?? '');
+        const poNumber = String(d['poNumber'] ?? '');
+        const imdRaw = d['batchNumber'] ?? d['importDate'];
+        const imd = imdRaw != null ? String(imdRaw) : '';
+        const bagRaw = d['bagBatch'];
+        const bagBatch = bagRaw != null ? String(bagRaw) : '';
+        if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagBatch)) {
+          continue;
+        }
+        this.outboundDupEligibleCount += 1;
+        const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bagBatch);
+        const lsxVal = d['productionOrder'];
+        const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
+        const prev = counts.get(key);
+        if (prev) {
+          prev.count += 1;
+          if (lsxStr) {
+            prev.lsx.add(lsxStr);
+          }
+        } else {
+          const lsx = new Set<string>();
+          if (lsxStr) {
+            lsx.add(lsxStr);
+          }
+          counts.set(key, {
+            count: 1,
+            sample: {
+              factory: factory.trim(),
+              materialCode: materialCode.trim(),
+              poNumber: poNumber.trim(),
+              imd: imd.trim(),
+              bagBatch: bagBatch.trim()
+            },
+            lsx
+          });
+        }
+      }
+      const dupes: OutboundDuplicateGroupRow[] = [];
+      for (const { count, sample, lsx } of counts.values()) {
+        if (count > 1) {
+          const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
+          const productionOrderSummary =
+            lsxList.length > 0 ? lsxList.join(' · ') : '—';
+          dupes.push({ ...sample, count, productionOrderSummary });
+        }
+      }
+      dupes.sort((a, b) => {
+        const fc = (a.factory || '').localeCompare(b.factory || '');
+        if (fc !== 0) return fc;
+        const mc = (a.materialCode || '').localeCompare(b.materialCode || '');
+        if (mc !== 0) return mc;
+        const po = (a.poNumber || '').localeCompare(b.poNumber || '');
+        if (po !== 0) return po;
+        const im = (a.imd || '').localeCompare(b.imd || '');
+        if (im !== 0) return im;
+        return (a.bagBatch || '').localeCompare(b.bagBatch || '');
+      });
+      this.outboundDupRows = dupes;
+    } catch (e) {
+      console.error('bag-history outbound duplicate scan', e);
+      this.outboundDupError =
+        'Không đọc được outbound-materials (kiểm tra quyền Firebase / index factory + documentId).';
+    } finally {
+      this.outboundDupLoading = false;
+    }
   }
 
   /** Nhập / xuất / tồn từ kết quả fetch inventory theo mã (searchInventoryDocs). */

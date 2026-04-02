@@ -1,4 +1,4 @@
-/* RM1 History — đen/trắng, full width, lưới bảng có viền dọc */
+/* Control Batch (bag-history) — đen/trắng, full width, lưới bảng có viền dọc */
 
 :host {
   display: block;
@@ -53,6 +53,87 @@
     background: #fafafa;
     color: #0a0a0a;
   }
+
+  & + & {
+    margin-top: 0.5rem;
+  }
+}
+
+.outbound-dup-panel {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1rem 1.125rem;
+  border: 1px solid #0a0a0a;
+  background: #fafafa;
+}
+
+.outbound-dup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.outbound-dup-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0a0a0a;
+}
+
+.btn-send-mail {
+  min-height: 36px;
+  padding: 0 1rem;
+  border: 1px solid #0a0a0a;
+  background: #0a0a0a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.btn-send-mail:disabled {
+  background: #737373;
+  border-color: #737373;
+  cursor: not-allowed;
+}
+
+.outbound-dup-loading,
+.outbound-dup-error {
+  margin: 0;
+  font-size: 13px;
+}
+
+.outbound-dup-error {
+  color: #991b1b;
+  font-weight: 500;
+}
+
+.outbound-dup-summary {
+  margin: 0 0 0.75rem;
+  font-size: 13px;
+  line-height: 1.45;
+
+  &.ok {
+    color: #14532d;
+  }
+
+  &.warn {
+    color: #92400e;
+    font-weight: 500;
+  }
+
+  strong {
+    font-weight: 700;
+  }
+}
+
+.outbound-dup-table-wrap {
+  margin-top: 0.5rem;
 }
 
 $control-h: 40px;
@@ -195,7 +276,7 @@ $control-h: 40px;
 
 .data-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 880px;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 13px;
@@ -252,6 +333,13 @@ $control-h: 40px;
   white-space: nowrap;
   font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
   font-size: 12px;
+}
+
+.lsx-col {
+  max-width: 18rem;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .empty {

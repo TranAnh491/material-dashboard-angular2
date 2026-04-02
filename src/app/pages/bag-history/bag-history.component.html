@@ -1,8 +1,59 @@
 <div class="bag-history-page">
   <header class="page-header">
-    <h1 class="page-title">RM1 History</h1>
-    <p class="subtitle">Mỗi lần <strong>Tìm</strong>, hệ thống truy vấn thẳng <code>inventory-materials</code> trên Firebase theo mã (và xưởng nếu chọn ASM1/ASM2) — lấy đủ mọi dòng cùng mã, khác PO/IMD. Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
+    <h1 class="page-title">Control Batch</h1>
+    <p class="subtitle">Mỗi lần <strong>Tìm</strong>, chỉ chấp nhận <strong>mã hàng</strong> dạng A hoặc B đầu + đúng 6 chữ số (VD A005006, B001033). Hệ thống truy vấn <code>inventory-materials</code> theo mã (và xưởng nếu chọn ASM1/ASM2). Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
+    <p class="subtitle dup-check-desc">Khi mở tab, hệ thống quét <code>outbound-materials</code> (ASM1 + ASM2). <strong>Chỉ tính từ 02/04/2026</strong> (theo <code>exportDate</code>, không có thì <code>createdAt</code> / <code>updatedAt</code>). Chỉ xét bản ghi đủ điều kiện: <strong>mã</strong> A hoặc B + 6 số; <strong>PO</strong> có chữ và bắt đầu KZ hoặc LH; <strong>IMD</strong> có ít nhất một số; <strong>Bag</strong> có ít nhất một số. Trùng = cùng bộ mã + PO + IMD + bag (&gt;1 lần). <strong>Firebase Functions</strong> cũng tự chạy <strong>12:00</strong> và <strong>17:00</strong> (giờ VN) mỗi ngày; nếu có trùng sẽ gửi email (params <code>EMAIL_USER</code> / <code>EMAIL_TO</code> + secret <code>EMAIL_PASS</code> trên Functions).</p>
   </header>
+
+  <section class="outbound-dup-panel" aria-label="Kiểm tra trùng xuất kho">
+    <div class="outbound-dup-head">
+      <h2 class="outbound-dup-title">Kiểm tra trùng xuất kho (outbound)</h2>
+      <button
+        type="button"
+        class="btn-send-mail"
+        (click)="onSendControlBatchMail()"
+        [disabled]="sendMailBusy || outboundDupLoading"
+        title="Gửi email báo cáo trùng xuất tại thời điểm bấm (tới các địa chỉ đã cấu hình trên Functions)">
+        {{ sendMailBusy ? 'Đang gửi…' : 'Send Mail' }}
+      </button>
+    </div>
+    <p class="outbound-dup-loading" *ngIf="outboundDupLoading">Đang đọc outbound-materials…</p>
+    <p class="outbound-dup-error" *ngIf="!outboundDupLoading && outboundDupError">{{ outboundDupError }}</p>
+    <ng-container *ngIf="!outboundDupLoading && !outboundDupError">
+      <p class="outbound-dup-summary ok" *ngIf="outboundDupRows.length === 0">
+        Từ 02/04/2026: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện định dạng — <strong>không có</strong> nhóm trùng (mã + PO + IMD + bag).
+      </p>
+      <p class="outbound-dup-summary warn" *ngIf="outboundDupRows.length > 0">
+        Từ 02/04/2026: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện — <strong>{{ outboundDupRows.length }}</strong> nhóm trùng (cùng mã + PO + IMD + bag, số lần &gt; 1).
+      </p>
+      <div class="table-wrap outbound-dup-table-wrap" *ngIf="outboundDupRows.length > 0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Nhà máy</th>
+              <th>Mã</th>
+              <th>PO</th>
+              <th>IMD</th>
+              <th>Bag</th>
+              <th class="num">Số lần xuất</th>
+              <th>Lệnh sản xuất</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of outboundDupRows">
+              <td>{{ r.factory }}</td>
+              <td>{{ r.materialCode }}</td>
+              <td>{{ r.poNumber }}</td>
+              <td>{{ r.imd || '—' }}</td>
+              <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
+              <td class="num">{{ r.count }}</td>
+              <td class="lsx-col">{{ r.productionOrderSummary }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </ng-container>
+  </section>
 
   <section class="toolbar-panel" *ngIf="!isLoading" aria-label="Bộ lọc và tìm kiếm">
   <div class="toolbar">
@@ -31,7 +82,8 @@
           [(ngModel)]="search"
           (ngModelChange)="onSearchModelChange($event)"
           (keydown)="onSearchKeydown($event)"
-          placeholder="VD: B016999"
+          placeholder="VD: A005006, B001033"
+          maxlength="7"
           autocomplete="off" />
       </label>
       <button type="button" class="btn-search" (click)="executeSearch()" [disabled]="isQueryRunning">Tìm</button>
@@ -45,7 +97,7 @@
     <span *ngIf="!isQueryRunning">{{ searchHint }}</span>
   </p>
   <p class="search-tip" *ngIf="!isLoading && !searchHint && queryResultRows === null">
-    Nhập <strong>mã hàng</strong> (tự viết hoa) rồi <strong>Enter</strong> hoặc <strong>Tìm</strong>: log tối đa 2000 bản ghi; kho tải <strong>tất cả</strong> document <code>inventory-materials</code> khớp mã trên Firebase (lọc theo ô <strong>Nhà máy</strong>).
+    Nhập mã <strong>A/B + 6 số</strong> (tối đa 7 ký tự, tự viết hoa), rồi <strong>Enter</strong> hoặc <strong>Tìm</strong>: log tối đa 2000 bản ghi; kho tải <strong>tất cả</strong> document <code>inventory-materials</code> khớp mã (lọc <strong>Nhà máy</strong>).
   </p>
 
   <div class="loading" *ngIf="isLoading">Đang tải…</div>
