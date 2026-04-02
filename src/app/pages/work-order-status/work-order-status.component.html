@@ -1026,5 +1026,10 @@
       </div>
     </div>
 
+  <!-- Status changed popup (auto-hide after 0.5s) -->
+  <div *ngIf="showStatusChangedPopup" class="status-changed-popup" role="status" aria-live="polite">
+    Đã đổi tình trạng từ <strong>{{statusChangedFromLabel}}</strong> qua <strong>{{statusChangedToLabel}}</strong>
+  </div>
+
   </div>
 </div>

@@ -172,9 +172,23 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   allWorkOrdersForScan: WorkOrder[] = []; // Store all work orders across factories for scan lookup
   private workOrderScanIndex = new Map<string, WorkOrder>(); // normalized LSX -> WorkOrder
 
+  // Cache outbound scan qty to avoid slow Firestore reads per scan/status update.
+  // Key: factoryFilter ('ASM1' | 'ASM2') -> value: lsxNorm -> (mat|po -> qty)
+  private outboundLsxScanMapCacheByFactory = new Map<
+    string,
+    { byLsx: Map<string, Map<string, number>>; loadedAt: number }
+  >();
+  private readonly OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
   // Scan QR -> Chọn trạng thái dialog (sau khi scan LSX)
   showScanStatusSelectDialog: boolean = false;
   scanStatusSelectWorkOrder: WorkOrder | null = null;
+
+  // Popup "status changed" after scanning
+  showStatusChangedPopup: boolean = false;
+  statusChangedFromLabel: string = '';
+  statusChangedToLabel: string = '';
+  private statusChangedPopupTimerId: any = null;
 
   /** true = đang chờ máy scanner (popup mode, không dùng camera) */
   isScanPopupMode: boolean = false;
@@ -767,23 +781,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     for (const fac of factories) {
       const isAsm1 = (fac || 'ASM1').toUpperCase().includes('ASM1');
       try {
-        const snap = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
-          ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
-        ).get());
-        const byLsx = new Map<string, Map<string, number>>();
-        snap.docs.forEach((doc: any) => {
-          const d = doc.data() as any;
-          const poLsxNorm = normLsx(d.productionOrder || '');
-          if (!poLsxNorm) return;
-          const mat = String(d.materialCode || '').trim().toUpperCase();
-          if (mat.charAt(0) !== 'B') return;
-          const po = String(d.poNumber ?? d.po ?? '').trim();
-          const qty = Number(d.exportQuantity || 0) || 0;
-          if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
-          const scanMap = byLsx.get(poLsxNorm)!;
-          const key = `${mat}|${po}`;
-          scanMap.set(key, (scanMap.get(key) || 0) + qty);
-        });
+        const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
+        const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
         factoryToLsxScanMap.set(fac, byLsx);
       } catch (_) {}
     }
@@ -1038,21 +1037,30 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   async updateWorkOrderStatus(workOrder: WorkOrder, newStatus: WorkOrderStatus): Promise<void> {
     try {
       // If changing from DONE to other status, remove completed flag
-      let updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: new Date() };
+      const oldStatus = workOrder.status;
+      const now = new Date();
+      let updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: now };
       
-      if (workOrder.status === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
+      if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
         updatedWorkOrder.isCompleted = false;
         console.log('🔄 Removing completed flag - status changed from DONE to', newStatus);
       }
       
       console.log('🔄 Updating work order status:', {
         id: workOrder.id,
-        oldStatus: workOrder.status,
+        oldStatus: oldStatus,
         newStatus: newStatus,
         isCompleted: updatedWorkOrder.isCompleted
       });
       
       await this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder);
+
+      // Update the passed object only after Firebase succeeds
+      workOrder.status = newStatus;
+      workOrder.lastUpdated = now;
+      if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
+        workOrder.isCompleted = false;
+      }
       
       // Update local array
       const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
@@ -3769,37 +3777,59 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return new Date() >= RULE_THIEU_BLOCK_DATE;
   }
 
+  private async getOutboundLsxScanMapForFactoryFilter(
+    factoryFilter: string
+  ): Promise<Map<string, Map<string, number>>> {
+    const now = Date.now();
+    const cached = this.outboundLsxScanMapCacheByFactory.get(factoryFilter);
+    if (cached && now - cached.loadedAt < this.OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS) {
+      return cached.byLsx;
+    }
+
+    const byLsx = new Map<string, Map<string, number>>();
+    try {
+      const outboundSnapshot = await firstValueFrom(
+        this.firestore.collection('outbound-materials', ref =>
+          ref.where('factory', '==', factoryFilter)
+        ).get()
+      );
+
+      outboundSnapshot.docs.forEach((doc: any) => {
+        const d = doc.data() as any;
+        const poLsxNorm = this.normLsxForMatch(d.productionOrder || '');
+        if (!poLsxNorm) return;
+
+        const mat = String(d.materialCode || '').trim().toUpperCase();
+        if (mat.charAt(0) !== 'B') return;
+
+        const po = String(d.poNumber ?? d.po ?? '').trim();
+        const qty = Number(d.exportQuantity || 0) || 0;
+
+        if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
+        const scanMap = byLsx.get(poLsxNorm)!;
+        const key = `${mat}|${po}`;
+        scanMap.set(key, (scanMap.get(key) || 0) + qty);
+      });
+    } catch (e) {
+      // Fail-safe: return empty map if network/permission errors occur.
+      return new Map<string, Map<string, number>>();
+    }
+
+    this.outboundLsxScanMapCacheByFactory.set(factoryFilter, { byLsx, loadedAt: now });
+    return byLsx;
+  }
+
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */
   async hasPxkThieuForLsx(lsx: string, factory: string): Promise<boolean> {
     const lines = this.getPxkLinesForLsx(lsx);
     if (lines.length === 0) return false;
     const isAsm1 = (factory || 'ASM1').toUpperCase().includes('ASM1');
     const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
-    const normLsx = (s: string) => {
-      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-      return m ? m[1].replace(/[-.]/g, '/') : t;
-    };
-    const woLsxNorm = normLsx(lsx);
-    const scanMap = new Map<string, number>();
-    try {
-      const outboundSnapshot = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
-        ref.where('factory', '==', factoryFilter)
-      ).get());
-      outboundSnapshot.docs.forEach((doc: any) => {
-        const d = doc.data() as any;
-        const poLsxNorm = normLsx(d.productionOrder || '');
-        if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
-        const mat = String(d.materialCode || '').trim().toUpperCase();
-        if (mat.charAt(0) !== 'B') return;
-        const po = String(d.poNumber ?? d.po ?? '').trim();
-        const qty = Number(d.exportQuantity || 0) || 0;
-        const key = `${mat}|${po}`;
-        scanMap.set(key, (scanMap.get(key) || 0) + qty);
-      });
-    } catch (e) {
-      return false;
-    }
+
+    const woLsxNorm = this.normLsxForMatch(lsx);
+    const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
+    const scanMap = byLsx.get(woLsxNorm) || new Map<string, number>();
+
     const getScanQty = (materialCode: string, po: string): number =>
       scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
@@ -4424,25 +4454,27 @@ ${nvlSxKsBoxHtml}
     }
 
     // Query Firestore directly (fast path, avoids loading all work orders)
-    for (const c of candidates) {
-      try {
-        const snap = await this.firestore.collection('work-orders', ref =>
-          ref.where('productionOrder', '==', c).limit(1)
-        ).get().toPromise();
-        const docSnap = snap && !snap.empty ? snap.docs[0] : null;
-        if (docSnap) {
+    const queryResults: Array<WorkOrder | null> = await Promise.all(
+      candidates.map(async (c) => {
+        try {
+          const snap = await this.firestore.collection('work-orders', ref =>
+            ref.where('productionOrder', '==', c).limit(1)
+          ).get().toPromise();
+          const docSnap = snap && !snap.empty ? snap.docs[0] : null;
+          if (!docSnap) return null;
+
           const data = docSnap.data() as WorkOrder;
           const wo = { id: docSnap.id, ...data } as WorkOrder;
           const key = trimUpper(wo.productionOrder);
           if (key) this.workOrderScanIndex.set(key, wo);
           return wo;
+        } catch {
+          return null;
         }
-      } catch {
-        // ignore and try next candidate
-      }
-    }
+      })
+    );
 
-    return null;
+    return queryResults.find((x): x is WorkOrder => x != null) || null;
   }
 
   async processLSXQRCode(lsxValue: string): Promise<void> {
@@ -4482,15 +4514,60 @@ ${nvlSxKsBoxHtml}
     }
   }
 
+  private workOrderStatusToLabel(status: WorkOrderStatus): string {
+    switch (status) {
+      case WorkOrderStatus.WAITING:
+        return 'Waiting';
+      case WorkOrderStatus.KITTING:
+        return 'Kitting';
+      case WorkOrderStatus.READY:
+        return 'Ready';
+      case WorkOrderStatus.TRANSFER:
+        return 'Transfer';
+      case WorkOrderStatus.DONE:
+        return 'Done';
+      case WorkOrderStatus.DELAY:
+        return 'Delay';
+      default:
+        return 'Waiting';
+    }
+  }
+
+  private showStatusChangedToast(from: WorkOrderStatus, to: WorkOrderStatus): void {
+    if (this.statusChangedPopupTimerId) {
+      clearTimeout(this.statusChangedPopupTimerId);
+    }
+
+    this.statusChangedFromLabel = this.workOrderStatusToLabel(from);
+    this.statusChangedToLabel = this.workOrderStatusToLabel(to);
+    this.showStatusChangedPopup = true;
+
+    this.statusChangedPopupTimerId = setTimeout(() => {
+      this.showStatusChangedPopup = false;
+      this.statusChangedPopupTimerId = null;
+      this.cdr.detectChanges();
+    }, 500);
+  }
+
   async onScanStatusSelect(newStatus: string): Promise<void> {
     const wo = this.scanStatusSelectWorkOrder;
     if (!wo) return;
+
+    const beforeStatus = (wo.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    const toStatusEnum = this.convertStringToStatus(newStatus);
+
     await this.onStatusChange(wo, newStatus);
+
+    const afterStatus = (wo.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    if (afterStatus !== beforeStatus) {
+      this.showStatusChangedToast(beforeStatus, afterStatus);
+    }
+
     this.closeScanStatusSelectDialog();
     // Cập nhật allWorkOrdersForScan để lần scan sau có data mới
     const idx = this.allWorkOrdersForScan.findIndex(w => w.id === wo.id);
     if (idx >= 0) {
-      this.allWorkOrdersForScan[idx] = { ...this.allWorkOrdersForScan[idx], status: newStatus as WorkOrderStatus };
+      this.allWorkOrdersForScan[idx] = { ...this.allWorkOrdersForScan[idx], status: afterStatus };
     }
   }
 

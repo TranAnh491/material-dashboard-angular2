@@ -198,10 +198,66 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadPendingConfirmCount();
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
+
+      // Load priority state from backend so F5 won't lose "ưu tiên"
+      this.loadQcPriorityFromBackend();
     } catch (error) {
       console.error('❌ Error validating saved employee access:', error);
       this.showEmployeeModal = true;
       this.isEmployeeVerified = false;
+    }
+  }
+
+  /**
+   * Load priority flags từ Firestore:
+   * - `qcPriorityPendingConfirm`: 1 item (pending confirm) được ưu tiên
+   * - `qcPriorityPendingQC`: nhiều item (pending QC) được ưu tiên
+   */
+  private async loadQcPriorityFromBackend(): Promise<void> {
+    try {
+      // Pending QC (can be multiple)
+      const pendingQcSnap = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('qcPriorityPendingQC', '==', true)
+           .limit(200)
+      ).get().toPromise();
+
+      const pendingQcIds: string[] = (pendingQcSnap?.docs || [])
+        .map(doc => ({ id: doc.id, data: doc.data() as any }))
+        .filter(x => x.data?.factory === 'ASM1' && this.isAsm1PendingQcAtIqc(x.data))
+        .map(x => x.id);
+
+      this.priorityPendingQcIds = pendingQcIds;
+
+      // Pending Confirm (choose best candidate, if multiple)
+      const pendingConfirmSnap = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('qcPriorityPendingConfirm', '==', true)
+           .limit(50)
+      ).get().toPromise();
+
+      let bestId: string | null = null;
+      let bestTime = 0;
+      (pendingConfirmSnap?.docs || []).forEach(doc => {
+        const data = doc.data() as any;
+        if (data?.factory !== 'ASM1') return;
+        const status = (data?.iqcStatus ?? '').toString().trim();
+        if (status !== 'CHỜ XÁC NHẬN') return;
+
+        // Use qcCheckedAt/updatedAt for "most recent" priority
+        const t =
+          this.parseFirestoreDate(data?.qcCheckedAt)?.getTime() ||
+          this.parseFirestoreDate(data?.updatedAt)?.getTime() ||
+          0;
+
+        if (!bestId || t > bestTime) {
+          bestId = doc.id;
+          bestTime = t;
+        }
+      });
+
+      this.priorityMaterialId = bestId;
+    } catch (error) {
+      console.warn('⚠️ Failed to load QC priority from backend:', error);
+      // Fallback: keep whatever current UI has
     }
   }
   
@@ -681,10 +737,16 @@ export class QCComponent implements OnInit, OnDestroy {
     const oldIqcStatus = (materialToUpdate.iqcStatus || '').trim();
     // Mail chỉ khi: cột ưu tiên = ưu tiên (danh sách Chờ kiểm), trạng thái CHỜ KIỂM → trạng thái khác (ưu tiên sẽ mất).
     const wasPendingQcPriority = (this.priorityPendingQcIds || []).includes(materialId);
+    const wasPendingConfirmPriority = this.priorityMaterialId === materialId;
     const shouldNotifyPriorityResolved =
       wasPendingQcPriority &&
       oldIqcStatus === 'CHỜ KIỂM' &&
       statusToUpdate !== 'CHỜ KIỂM';
+
+    const shouldClearPendingConfirmPriority =
+      wasPendingConfirmPriority && statusToUpdate !== 'CHỜ XÁC NHẬN';
+    const shouldClearPendingQcPriority =
+      wasPendingQcPriority && statusToUpdate !== 'CHỜ KIỂM';
 
     // Priority disappears once the material status changes away from required state
     if (statusToUpdate !== 'CHỜ XÁC NHẬN' && this.priorityMaterialId === materialId) {
@@ -722,6 +784,14 @@ export class QCComponent implements OnInit, OnDestroy {
       qcCheckedBy: employeeIdToSave,
       qcCheckedAt: now
     };
+
+    // Clear backend priority flags when leaving priority-required statuses
+    if (shouldClearPendingConfirmPriority) {
+      updatePayload.qcPriorityPendingConfirm = false;
+    }
+    if (shouldClearPendingQcPriority) {
+      updatePayload.qcPriorityPendingQC = false;
+    }
 
     // Save extra fields by selected status
     if (statusToUpdate === 'NG') {
@@ -1745,14 +1815,53 @@ export class QCComponent implements OnInit, OnDestroy {
     if (!item?.id) return;
 
     const id = item.id as string;
-    if (this.priorityMaterialId === id) {
+    const prevId = this.priorityMaterialId;
+
+    if (prevId === id) {
+      // Optimistic update UI
       this.priorityMaterialId = null;
       this.reorderIqcHistoryResults();
+
+      // Persist to backend
+      const now = new Date();
+      this.firestore.collection('inventory-materials').doc(id).update({
+        qcPriorityPendingConfirm: false,
+        qcPriorityUpdatedAt: now
+      }).catch(() => {
+        // Revert on failure
+        this.priorityMaterialId = id;
+        this.reorderIqcHistoryResults();
+      });
       return;
     }
 
+    // Optimistic update UI
     this.priorityMaterialId = id;
     this.reorderIqcHistoryResults();
+
+    // Persist to backend (ensure only one item is prioritized)
+    const now = new Date();
+    const updates: Promise<void>[] = [];
+    if (prevId) {
+      updates.push(
+        this.firestore.collection('inventory-materials').doc(prevId).update({
+          qcPriorityPendingConfirm: false,
+          qcPriorityUpdatedAt: now
+        })
+      );
+    }
+    updates.push(
+      this.firestore.collection('inventory-materials').doc(id).update({
+        qcPriorityPendingConfirm: true,
+        qcPriorityUpdatedAt: now
+      })
+    );
+
+    Promise.all(updates).catch(() => {
+      // Revert on failure
+      this.priorityMaterialId = prevId;
+      this.reorderIqcHistoryResults();
+    });
   }
 
   togglePendingQcPriority(item: any): void {
@@ -1761,13 +1870,32 @@ export class QCComponent implements OnInit, OnDestroy {
 
     const id = item.id as string;
     const set = new Set(this.priorityPendingQcIds || []);
-    if (set.has(id)) {
-      set.delete(id);
-    } else {
-      set.add(id);
-    }
+    const wasPriority = set.has(id);
+
+    if (wasPriority) set.delete(id);
+    else set.add(id);
+
+    // Optimistic update UI
     this.priorityPendingQcIds = Array.from(set);
     this.reorderIqcHistoryResults();
+
+    const now = new Date();
+    this.firestore.collection('inventory-materials').doc(id).update({
+      qcPriorityPendingQC: !wasPriority,
+      qcPriorityUpdatedAt: now
+    }).catch(() => {
+      // Revert on failure
+      if (wasPriority) {
+        // Make it prioritized again
+        if (!this.priorityPendingQcIds.includes(id)) {
+          this.priorityPendingQcIds = Array.from(new Set([...(this.priorityPendingQcIds || []), id]));
+        }
+      } else {
+        // Remove priority again
+        this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(x => x !== id);
+      }
+      this.reorderIqcHistoryResults();
+    });
   }
 
   private reorderIqcHistoryResults(): void {
@@ -2108,6 +2236,7 @@ export class QCComponent implements OnInit, OnDestroy {
         return;
       }
       
+      const pendingQcPrioritySet = new Set<string>();
       this.pendingQCMaterials = snapshot.docs
         .map(doc => {
           const data = doc.data() as any;
@@ -2116,6 +2245,10 @@ export class QCComponent implements OnInit, OnDestroy {
           
           // Cùng rule đếm: CHỜ KIỂM tại khu IQC (vị trí bắt đầu bằng IQC, có thể kèm pallet)
           if (this.isAsm1PendingQcAtIqc(data)) {
+            // Read backend priority flag
+            if (!!data.qcPriorityPendingQC) {
+              pendingQcPrioritySet.add(doc.id);
+            }
             return {
               id: doc.id,
               materialCode: data.materialCode || '',
@@ -2140,6 +2273,8 @@ export class QCComponent implements OnInit, OnDestroy {
           return dateB.getTime() - dateA.getTime();
         });
       
+      // Sync priority ids with backend (used by cột "Ưu tiên" và stats)
+      this.priorityPendingQcIds = Array.from(pendingQcPrioritySet);
       console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC materials`);
       if (showPopup) {
         this.isLoadingReport = false;
@@ -2217,6 +2352,9 @@ export class QCComponent implements OnInit, OnDestroy {
         return;
       }
       
+      let pendingConfirmPriorityId: string | null = null;
+      let pendingConfirmBestTime = 0;
+
       // Filter materials with status 'CHỜ XÁC NHẬN' in memory
       this.pendingConfirmMaterials = snapshot.docs
         .map(doc => {
@@ -2227,6 +2365,17 @@ export class QCComponent implements OnInit, OnDestroy {
           if (iqcStatus === 'CHỜ XÁC NHẬN') {
             const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
             const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+
+            // Read backend priority flag
+            if (!!data.qcPriorityPendingConfirm) {
+              const t =
+                (qcCheckedAt?.getTime?.() ?? 0) ||
+                (updatedAt?.getTime?.() ?? 0);
+              if (!pendingConfirmPriorityId || t > pendingConfirmBestTime) {
+                pendingConfirmPriorityId = doc.id;
+                pendingConfirmBestTime = t;
+              }
+            }
             
             return {
               id: doc.id,
@@ -2252,6 +2401,9 @@ export class QCComponent implements OnInit, OnDestroy {
           const dateB = b!.updatedAt || b!.qcCheckedAt || new Date(0);
           return dateB.getTime() - dateA.getTime();
         });
+      
+      // Sync priority id with backend
+      this.priorityMaterialId = pendingConfirmPriorityId;
       
       console.log(`✅ Loaded ${this.pendingConfirmMaterials.length} pending confirm materials`);
       if (showPopup) {

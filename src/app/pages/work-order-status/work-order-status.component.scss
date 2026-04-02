@@ -1186,7 +1186,22 @@ textarea.mat-input-element {
 
 // Improved table hover effects (no transform/animation)
 .table-hover tbody tr:hover {
-  background-color: rgba(0, 0, 0, 0.075);
+  background-color: transparent !important;
+  transition: none !important;
+  box-shadow: none !important;
+}
+
+// Disable "row hover highlight" (performance) - remove blue/green backgrounds
+// used by status-* classes when hovering rows.
+.table-hover tbody tr.status-waiting:hover,
+.table-hover tbody tr.status-kitting:hover,
+.table-hover tbody tr.status-ready:hover,
+.table-hover tbody tr.status-transfer:hover,
+.table-hover tbody tr.status-done:hover,
+.table-hover tbody tr.status-delay:hover,
+.table-hover tbody tr.urgent-row:hover {
+  background-color: transparent !important;
+  transition: none !important;
 }
 
 // Import Dialog Styling
@@ -1201,6 +1216,28 @@ textarea.mat-input-element {
   justify-content: center;
   align-items: center;
   z-index: 9999;
+}
+
+// Status changed popup (auto-hide, after Scan QR)
+.status-changed-popup {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(33, 33, 33, 0.92);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 100000;
+  pointer-events: none;
+  white-space: nowrap;
+
+  // performance: no animation/transition
+  animation: none !important;
+  transition: none !important;
+  box-shadow: none !important;
 }
 
 .import-dialog {
@@ -3005,9 +3042,17 @@ textarea.mat-input-element {
       color: #000;
     }
     
+    &:focus-visible,
+    &:focus {
+      outline: none;
+      box-shadow: none;
+    }
+    
     &:hover:not(.active) {
       border-color: #ff9800;
       color: #000;
+      background: white !important; /* avoid stuck hover background */
+      box-shadow: none !important;
     }
     
     mat-icon {
