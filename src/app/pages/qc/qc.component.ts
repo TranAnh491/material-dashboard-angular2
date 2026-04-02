@@ -2,7 +2,9 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 
 export interface InventoryMaterial {
   id?: string;
@@ -144,7 +146,8 @@ export class QCComponent implements OnInit, OnDestroy {
   
   constructor(
     private firestore: AngularFirestore,
-    private router: Router
+    private router: Router,
+    private fns: AngularFireFunctions
   ) {}
   
   getYearOptions(): number[] {
@@ -675,6 +678,14 @@ export class QCComponent implements OnInit, OnDestroy {
     const materialToUpdate = { ...this.scannedMaterial };
     const employeeIdToSave = this.currentEmployeeId.trim();
 
+    const oldIqcStatus = (materialToUpdate.iqcStatus || '').trim();
+    // Mail chỉ khi: cột ưu tiên = ưu tiên (danh sách Chờ kiểm), trạng thái CHỜ KIỂM → trạng thái khác (ưu tiên sẽ mất).
+    const wasPendingQcPriority = (this.priorityPendingQcIds || []).includes(materialId);
+    const shouldNotifyPriorityResolved =
+      wasPendingQcPriority &&
+      oldIqcStatus === 'CHỜ KIỂM' &&
+      statusToUpdate !== 'CHỜ KIỂM';
+
     // Priority disappears once the material status changes away from required state
     if (statusToUpdate !== 'CHỜ XÁC NHẬN' && this.priorityMaterialId === materialId) {
       this.priorityMaterialId = null;
@@ -726,7 +737,14 @@ export class QCComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('inventory-materials').doc(materialId).update(updatePayload).then(() => {
       console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
-      
+      this.notifyQcPriorityResolvedIfNeeded(
+        shouldNotifyPriorityResolved,
+        materialToUpdate,
+        oldIqcStatus,
+        statusToUpdate,
+        employeeIdToSave
+      );
+
       // Refresh counts và recent materials sau khi update thành công (chạy background)
       setTimeout(() => {
         this.loadPendingQCCount();
@@ -767,7 +785,34 @@ export class QCComponent implements OnInit, OnDestroy {
       alert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nVui lòng thử lại.`);
     });
   }
-  
+
+  /** Gửi mail khi mã ưu tiên ở danh sách Chờ kiểm đổi từ CHỜ KIỂM sang trạng thái khác — không chặn UI. */
+  private notifyQcPriorityResolvedIfNeeded(
+    shouldNotify: boolean,
+    material: InventoryMaterial,
+    oldStatus: string,
+    newStatus: string,
+    checkedBy: string
+  ): void {
+    if (!shouldNotify) {
+      return;
+    }
+    const payload = {
+      materialCode: String(material.materialCode || '').slice(0, 120),
+      poNumber: String(material.poNumber || '').slice(0, 120),
+      imd: String(this.getDisplayIMD(material) || '').slice(0, 120),
+      location: String(material.location || '').slice(0, 120),
+      factory: String(material.factory || 'ASM1').slice(0, 40),
+      oldStatus: String(oldStatus || '').slice(0, 80),
+      newStatus: String(newStatus || '').slice(0, 80),
+      checkedBy: String(checkedBy || '').slice(0, 80)
+    };
+    const callable = this.fns.httpsCallable('sendQcPriorityResolvedEmailFn');
+    firstValueFrom(callable(payload))
+      .then(() => console.log('📧 QC ưu tiên: đã gửi thông báo email'))
+      .catch((e) => console.warn('📧 QC ưu tiên: gửi email thất bại', e));
+  }
+
   // Update local counts immediately (optimistic update)
   updateLocalCounts(newStatus: string, material: InventoryMaterial): void {
     const oldStatus = material.iqcStatus || 'CHỜ KIỂM';

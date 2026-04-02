@@ -269,7 +269,7 @@ function buildHtml(dupes: OutboundDupRow[]): string {
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
 <thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th></tr></thead>
 <tbody>${rows}</tbody></table>
-<p style="color:#555;font-size:12px">Gửi tự động từ Firebase Functions.</p>
+<p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`;
 }
 
@@ -333,7 +333,7 @@ export async function sendOutboundDupReportManual(
 <p><strong>Control Batch</strong> — báo cáo từ nút Send Mail.</p>
 <p>Thời điểm quét: <strong>${esc(atStr)}</strong></p>
 <p>Không có nhóm trùng xuất kho.</p>
-<p style="color:#555;font-size:12px">Gửi từ Firebase Functions.</p>
+<p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`
     });
     return { dupGroups: 0 };

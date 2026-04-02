@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
+exports.qcPriorityEmailTo = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
 /**
  * SMTP cho Control Batch (email cảnh báo trùng xuất kho).
  *
@@ -13,6 +13,7 @@ exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emai
  *   EMAIL_FROM=           # để trống = EMAIL_USER
  *   EMAIL_SMTP_HOST=smtp.gmail.com
  *   EMAIL_SMTP_PORT=587
+ *   QC_PRIORITY_EMAIL_TO=plan4@airspeedmfgvn.com   (mail khi ưu tiên Chờ kiểm: CHỜ KIỂM → trạng thái khác)
  */
 const params_1 = require("firebase-functions/params");
 exports.emailUser = (0, params_1.defineString)('EMAIL_USER', { default: '', description: 'SMTP user (e.g. Gmail)' });
@@ -24,4 +25,9 @@ exports.emailTo = (0, params_1.defineString)('EMAIL_TO', {
 exports.emailFrom = (0, params_1.defineString)('EMAIL_FROM', { default: '', description: 'From address; empty = EMAIL_USER' });
 exports.emailSmtpHost = (0, params_1.defineString)('EMAIL_SMTP_HOST', { default: 'smtp.gmail.com' });
 exports.emailSmtpPort = (0, params_1.defineString)('EMAIL_SMTP_PORT', { default: '587' });
+/** Tab QC: ưu tiên Chờ kiểm, đổi từ CHỜ KIỂM sang trạng thái khác */
+exports.qcPriorityEmailTo = (0, params_1.defineString)('QC_PRIORITY_EMAIL_TO', {
+    default: 'plan4@airspeedmfgvn.com',
+    description: 'Email nhận thông báo mã QC ưu tiên đã xử lý'
+});
 //# sourceMappingURL=params-config.js.map
