@@ -59,6 +59,52 @@
   font-size: 13px !important;
 }
 
+/* Tem Lẽ button: reuse More button styling */
+.tem-le-btn {
+  margin-left: 8px;
+}
+
+.tem-le-popup-content {
+  max-width: 640px;
+  width: 95%;
+}
+
+.tem-le-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.tem-le-label {
+  font-weight: 700;
+}
+
+.tem-le-preview {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tem-le-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #991b1b;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 // Styling for new buttons (kept for backward compatibility)
 .sync-outbound-btn {
   margin-left: 4px;

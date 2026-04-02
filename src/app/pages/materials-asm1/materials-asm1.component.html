@@ -89,6 +89,13 @@
               Cần ít nhất 3 ký tự
             </div>
           </div>
+          <button type="button"
+                  class="more-btn tem-le-btn"
+                  (click)="openTemLePopup()"
+                  title="Tách tem lẻ từ tem hiện tại">
+            <i class="material-icons">call_split</i>
+            Tem Lẽ
+          </button>
         </div>
         
         <!-- Mobile Stats Section - Individual boxes on mobile -->
@@ -143,6 +150,13 @@
             Cần ít nhất 3 ký tự
             </div>
           </div>
+          <button type="button"
+                  class="more-btn tem-le-btn"
+                  (click)="openTemLePopup()"
+                  title="Tách tem lẻ từ tem hiện tại">
+            <i class="material-icons">call_split</i>
+            Tem Lẽ
+          </button>
         </div>
         
         <!-- Action Buttons -->
@@ -642,6 +656,72 @@
           <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong ASM1 inventory</p>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tem Lẽ Popup -->
+<div class="modal-overlay" *ngIf="showTemLePopup" (click)="closeTemLePopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🏷️ Tem Lẽ — Tách tem</h3>
+      <button type="button" class="close-btn" (click)="closeTemLePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="tem-le-row">
+        <div class="tem-le-label">Scan tem hiện tại (scanner)</div>
+      </div>
+
+      <input
+        id="tem-le-scan-input-asm1"
+        type="text"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temLeQrText"
+        (ngModelChange)="onTemLeQrTextChanged()"
+        (keyup.enter)="onTemLeQrEnter()"
+        placeholder="Bấm Tem Lẽ xong bắn mã QR vào đây (Mã|PO|SL|IMD-bịch/tổng)..."
+        autocomplete="off"
+      />
+
+      <div class="tem-le-preview" *ngIf="temLeParsed">
+        <div><strong>Mã:</strong> {{ temLeParsed.materialCode }}</div>
+        <div><strong>PO:</strong> {{ temLeParsed.po }}</div>
+        <div><strong>Số lượng tem:</strong> {{ temLeParsed.quantity }}</div>
+        <div><strong>IMD-bịch:</strong> {{ temLeParsed.p4 }}</div>
+      </div>
+
+      <div class="tem-le-row" style="margin-top: 12px;">
+        <div class="tem-le-label">Số lượng cần tách</div>
+        <input type="number"
+               id="tem-le-split-qty-asm1"
+               class="editable-input"
+               style="max-width: 200px;"
+               [(ngModel)]="temLeSplitQty"
+               min="0"
+               step="0.0001"
+               placeholder="Nhập số lượng...">
+      </div>
+
+      <div class="tem-le-error" *ngIf="temLeError">
+        <i class="material-icons">error</i>
+        {{ temLeError }}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemLePopup()">
+        <i class="material-icons">cancel</i>
+        Hủy
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="confirmTemLeSplitAndPrint()">
+        <i class="material-icons">print</i>
+        In 2 tem
+      </button>
     </div>
   </div>
 </div>

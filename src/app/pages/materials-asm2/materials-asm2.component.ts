@@ -127,6 +127,13 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // More popup state
   showMorePopup = false;
 
+  // ===== Tem Lẽ (tách tem từ QR hiện tại) =====
+  showTemLePopup = false;
+  temLeQrText: string = '';
+  temLeSplitQty: number | null = null;
+  temLeError: string = '';
+  temLeParsed: { materialCode: string; po: string; quantity: number; p4: string } | null = null;
+
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
   spSearchCode = '';
@@ -166,6 +173,131 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private dialog: MatDialog,
     private rmBagHistory: RmBagHistoryService
   ) {}
+
+  openTemLePopup(): void {
+    this.showTemLePopup = true;
+    this.temLeQrText = '';
+    this.temLeSplitQty = null;
+    this.temLeError = '';
+    this.temLeParsed = null;
+
+    // Scanner (keyboard wedge) will type into focused input
+    setTimeout(() => {
+      const el = document.getElementById('tem-le-scan-input-asm2') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 50);
+  }
+
+  closeTemLePopup(): void {
+    this.showTemLePopup = false;
+    this.temLeQrText = '';
+    this.temLeSplitQty = null;
+    this.temLeError = '';
+    this.temLeParsed = null;
+  }
+
+  onTemLeQrTextChanged(): void {
+    this.temLeError = '';
+    this.temLeParsed = this.parseTemLeQrText(this.temLeQrText);
+  }
+
+  onTemLeQrEnter(): void {
+    // Ensure latest parse, then move focus to split qty
+    this.onTemLeQrTextChanged();
+    if (!this.temLeParsed || this.temLeError) return;
+    setTimeout(() => {
+      const el = document.getElementById('tem-le-split-qty-asm2') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 0);
+  }
+
+  private parseTemLeQrText(qrText: string): { materialCode: string; po: string; quantity: number; p4: string } | null {
+    const raw = String(qrText || '').trim();
+    if (!raw) return null;
+    const parts = raw.split('|').map(x => (x ?? '').toString().trim());
+    if (parts.length < 4) {
+      this.temLeError = 'QR không hợp lệ. Định dạng: Mã|PO|Số lượng|IMD-bịch/tổng';
+      return null;
+    }
+    const materialCode = parts[0] || '';
+    const po = parts[1] || '';
+    const qty = Number(String(parts[2] || '').replace(/,/g, '').trim());
+    const p4 = parts[3] || '';
+    if (!materialCode || !po || !Number.isFinite(qty) || qty <= 0 || !p4) {
+      this.temLeError = 'QR không hợp lệ. Vui lòng scan lại tem.';
+      return null;
+    }
+    return { materialCode, po, quantity: qty, p4 };
+  }
+
+  async confirmTemLeSplitAndPrint(): Promise<void> {
+    this.temLeError = '';
+
+    const parsed = this.temLeParsed || this.parseTemLeQrText(this.temLeQrText);
+    if (!parsed) return;
+
+    const splitQty = Number(this.temLeSplitQty);
+    if (!Number.isFinite(splitQty) || splitQty <= 0) {
+      this.temLeError = 'Vui lòng nhập số lượng cần tách > 0';
+      return;
+    }
+    if (splitQty >= parsed.quantity) {
+      this.temLeError = 'Số lượng tách phải nhỏ hơn số lượng trên tem';
+      return;
+    }
+
+    const round4 = (n: number) => Math.round(n * 10000) / 10000;
+    const remainingQty = round4(parsed.quantity - splitQty);
+    const splitQtyR = round4(splitQty);
+
+    const baseP4 = String(parsed.p4 || '').trim().replace(/\(T\d+\)\s*$/i, '');
+    const splitP4 = `${baseP4}(T1)`;
+    const remainP4 = baseP4;
+
+    const splitQrData = `${parsed.materialCode}|${parsed.po}|${splitQtyR}|${splitP4}`;
+    const remainQrData = `${parsed.materialCode}|${parsed.po}|${remainingQty}|${remainP4}`;
+
+    try {
+      const [splitImg, remainImg] = await Promise.all([
+        QRCode.toDataURL(splitQrData, { width: 240, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } }),
+        QRCode.toDataURL(remainQrData, { width: 240, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } })
+      ]);
+
+      const qrImages = [
+        { image: splitImg, qrData: splitQrData, index: 1 },
+        { image: remainImg, qrData: remainQrData, index: 2 }
+      ];
+
+      const fakeMaterial: InventoryMaterial = {
+        factory: this.FACTORY,
+        importDate: new Date(),
+        batchNumber: '',
+        materialCode: parsed.materialCode,
+        poNumber: parsed.po,
+        openingStock: null,
+        quantity: 0,
+        unit: '',
+        location: '',
+        type: '',
+        expiryDate: new Date(),
+        qualityCheck: false,
+        isReceived: false,
+        notes: '',
+        rollsOrBags: '',
+        supplier: '',
+        remarks: '',
+        isCompleted: false
+      };
+
+      this.createQRPrintWindow(qrImages, fakeMaterial, true);
+      this.closeTemLePopup();
+    } catch (e) {
+      console.error('❌ Tem Lẽ print error:', e);
+      this.temLeError = 'Lỗi khi tạo/in tem. Vui lòng thử lại.';
+    }
+  }
 
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');

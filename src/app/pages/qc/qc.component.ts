@@ -1021,6 +1021,9 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadPendingConfirmCount();
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
+
+      // Load priority state from backend so icons/count are correct ngay sau khi xác thực
+      this.loadQcPriorityFromBackend();
     } else {
       alert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nVui lòng cấp quyền tab Quality trong Settings.`);
       this.employeeScanInput = '';
