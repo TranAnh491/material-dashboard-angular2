@@ -9,7 +9,8 @@ import 'firebase/compat/auth';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { NotificationService } from '../../services/notification.service';
 import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../../services/employee-cleanup.service';
-import { Subscription } from 'rxjs';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { Subscription, firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-settings',
@@ -116,7 +117,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
   tempTabPermissions: { [key: string]: boolean } = {};
   tempReadOnlyPermission: boolean = false;
   changePasswordValue: string = ''; // Password mới để đổi
-  currentAuthPasswordValue: string = ''; // Password hiện tại của tài khoản (Firebase Auth)
+  generatedNewPassword: string = '';
+  isResettingPassword: boolean = false;
   showChangePasswordForm: boolean = false; // Hiển thị form đổi password
 
   
@@ -130,6 +132,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private userPermissionService: UserPermissionService,
     private notificationService: NotificationService,
     private employeeCleanupService: EmployeeCleanupService,
+    private fns: AngularFireFunctions,
     private router: Router
   ) { }
 
@@ -1326,7 +1329,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.tempTabPermissions = {};
     this.tempReadOnlyPermission = false;
     this.changePasswordValue = '';
-    this.currentAuthPasswordValue = '';
     this.showChangePasswordForm = false;
   }
 
@@ -1420,98 +1422,59 @@ export class SettingsComponent implements OnInit, OnDestroy {
   toggleChangePasswordForm(): void {
     this.showChangePasswordForm = !this.showChangePasswordForm;
     if (!this.showChangePasswordForm) {
-      this.changePasswordValue = ''; // Reset password khi đóng form
-      this.currentAuthPasswordValue = '';
+      this.changePasswordValue = '';
+      this.generatedNewPassword = '';
+      return;
+    }
+
+    // Mở form => hệ thống tự tạo mật khẩu mới (đúng theo yêu cầu của bạn).
+    if (this.selectedUser) {
+      this.changeUserPassword();
     }
   }
 
   // Đổi password cho user
   async changeUserPassword(): Promise<void> {
     if (!this.selectedUser) return;
+    if (this.isResettingPassword) return;
 
-    if (!this.changePasswordValue || this.changePasswordValue.trim() === '') {
-      alert('⚠️ Vui lòng nhập password mới!');
-      return;
-    }
-
-    if (this.changePasswordValue.length < 6) {
-      alert('⚠️ Password phải có ít nhất 6 ký tự!');
-      return;
-    }
-
-    if (!confirm(`Bạn có chắc chắn muốn đổi password cho tài khoản ${this.selectedUser.email}?\n\nPassword mới sẽ được lưu vào hệ thống.`)) {
+    if (!confirm(`Bạn có chắc chắn muốn tạo mật khẩu mới 6 số ngẫu nhiên cho tài khoản ${this.selectedUser.email}?`)) {
       return;
     }
 
     try {
-      const passwordToSave = this.changePasswordValue.trim();
-      const currentPasswordInput = (this.currentAuthPasswordValue || '').trim();
-      const currentPasswordSaved = (this.firebaseUserPasswords[this.selectedUser.uid] || '').trim();
-      const selectedUserEmail = (this.selectedUser.email || '').trim().toLowerCase();
-      const canonicalAspEmail = this.getCanonicalAspEmail(this.selectedUser);
+      this.isResettingPassword = true;
 
-      if (!selectedUserEmail && !canonicalAspEmail) {
-        alert('❌ Không tìm thấy email tài khoản để đổi password.');
-        return;
+      const result: any = await firstValueFrom(
+        this.fns.httpsCallable('adminResetUserPasswordFn')({
+          uid: this.selectedUser.uid
+        })
+      );
+
+      const newPassword =
+        result?.newPassword ?? result?.data?.newPassword ?? '';
+
+      if (!newPassword) {
+        throw new Error('Không nhận được mật khẩu mới từ server.');
       }
 
-      const currentPasswords = Array.from(new Set([currentPasswordInput, currentPasswordSaved].filter(Boolean)));
-      if (currentPasswords.length === 0) {
-        alert('❌ Thiếu password hiện tại của tài khoản.\n\nVui lòng nhập password hiện tại (để xác thực Firebase Auth) rồi đổi lại.');
-        return;
-      }
+      this.generatedNewPassword = newPassword;
+      this.firebaseUserPasswords[this.selectedUser.uid] = newPassword;
 
-      const candidateEmails = Array.from(new Set([
-        canonicalAspEmail || '',
-        selectedUserEmail,
-      ].filter(Boolean)));
+      alert(`✅ Mật khẩu mới (6 số) cho ${this.selectedUser.email}: ${newPassword}`);
 
-      // 0. Cập nhật password trong Firebase Authentication trước
-      // Dùng secondary app để không ảnh hưởng phiên đăng nhập admin hiện tại
-      const usedEmail = await this.updateFirebaseAuthPasswordViaSecondaryApp(candidateEmails, currentPasswords, passwordToSave);
-
-      // 1. Cập nhật password trong collection 'users'
-      await this.firestore.collection('users').doc(this.selectedUser.uid).update({
-        email: usedEmail,
-        password: passwordToSave,
-        updatedAt: new Date()
-      });
-
-      // 2. Cập nhật password trong collection 'user-permissions' (nếu có)
-      await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
-        uid: this.selectedUser.uid,
-        email: usedEmail,
-        displayName: this.selectedUser.displayName || '',
-        password: passwordToSave,
-        hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
-        hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
-        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[this.selectedUser.uid] || false,
-        updatedAt: new Date()
-      }, { merge: true });
-
-      // 3. Cập nhật local data
-      this.firebaseUserPasswords[this.selectedUser.uid] = passwordToSave;
-      this.selectedUser.email = usedEmail;
-
-      // 4. Cập nhật password trong Firebase Authentication (nếu có thể)
-      console.log('✅ Password đã được cập nhật cả Firebase Auth và Firestore');
-
-      alert(`✅ Đã đổi password thành công cho tài khoản ${this.selectedUser.email}!`);
-      
-      // Reset form
+      this.isResettingPassword = false;
       this.changePasswordValue = '';
-      this.currentAuthPasswordValue = '';
-      this.showChangePasswordForm = false;
-
-      console.log(`✅ Password changed for ${this.selectedUser.email}`);
     } catch (error) {
       console.error('❌ Error changing password:', error);
-      const msg = (error as any)?.message || '';
-      if (msg.includes('không khớp với Firebase Auth')) {
-        alert('❌ Password hiện tại không đúng.\n\nVui lòng nhập đúng password hiện tại của tài khoản trong ô "Password hiện tại", rồi thử lại.');
-      } else {
-        alert('❌ Có lỗi xảy ra khi đổi password: ' + msg);
-      }
+      const anyErr = error as any;
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+      const msg = (anyErr?.message as string) || '';
+      const details = anyErr?.details ? String(anyErr.details) : '';
+      const suffix = [msg, details].filter(Boolean).join(' | ');
+      alert('❌ Có lỗi xảy ra khi đổi password: ' + (code ? `${code} - ` : '') + (suffix || '(không có message chi tiết)'));
+    } finally {
+      this.isResettingPassword = false;
     }
   }
 

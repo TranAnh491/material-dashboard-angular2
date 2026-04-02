@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { runOutboundDupNotifyForSlot, sendOutboundDupReportManual } from './outbound-dup-notify';
 import { sendQcPriorityResolvedEmail, QcPriorityResolvedPayload } from './qc-priority-email';
 import { emailPass } from './params-config';
+import { adminUpdateUserPassword, adminResetUserPassword } from './admin-update-user-password';
 
 admin.initializeApp();
 
@@ -82,5 +83,95 @@ export const sendQcPriorityResolvedEmailFn = functions
         msg.includes('Thiếu') ? 'failed-precondition' : 'internal',
         msg
       );
+    }
+  });
+
+/** Admin: đổi password user theo uid (không cần password hiện tại). */
+export const adminUpdateUserPasswordFn = functions
+  .https.onCall(async (data: { uid?: string; newPassword?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const uid = typeof data?.uid === 'string' ? data.uid.trim() : '';
+    const newPassword = typeof data?.newPassword === 'string' ? data.newPassword : '';
+
+    if (!uid || !newPassword) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid hoặc newPassword.');
+    }
+
+    try {
+      await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
+      return { ok: true };
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Chỉ Admin/Quản lý mới đổi được password.'
+        );
+      }
+
+      // Errors từ Firebase Admin Auth
+      if (code === 'auth/user-not-found') {
+        throw new functions.https.HttpsError('not-found', 'Không tìm thấy user trong Firebase Auth.');
+      }
+      if (code === 'auth/invalid-uid') {
+        throw new functions.https.HttpsError('invalid-argument', 'UID user không hợp lệ.');
+      }
+      if (code === 'auth/operation-not-allowed') {
+        throw new functions.https.HttpsError('failed-precondition', 'Operation đổi password không được phép.');
+      }
+
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
+/** Admin: tạo mật khẩu mới 6 số ngẫu nhiên và đổi theo uid. */
+export const adminResetUserPasswordFn = functions
+  .https.onCall(async (data: { uid?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const uid = typeof data?.uid === 'string' ? data.uid.trim() : '';
+
+    if (!uid) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
+    }
+
+    try {
+      const newPassword = await adminResetUserPassword(context.auth.uid, uid);
+      return { ok: true, newPassword };
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      console.error('❌ adminResetUserPasswordFn error:', {
+        callerUid: context.auth?.uid,
+        targetUid: uid,
+        code,
+        msg
+      });
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+      }
+      if (code === 'auth/user-not-found') {
+        throw new functions.https.HttpsError('not-found', 'Không tìm thấy user trong Firebase Auth.');
+      }
+      if (code === 'auth/invalid-uid') {
+        throw new functions.https.HttpsError('invalid-argument', 'UID user không hợp lệ.');
+      }
+      if (code === 'auth/operation-not-allowed') {
+        throw new functions.https.HttpsError('failed-precondition', 'Tài khoản không cho phép đổi password bằng phương thức này.');
+      }
+      if (code === 'auth/weak-password' || code === 'auth/invalid-password') {
+        throw new functions.https.HttpsError('invalid-argument', 'Password mới không đạt chuẩn của Firebase Auth.');
+      }
+
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });

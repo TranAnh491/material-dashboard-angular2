@@ -1,0 +1,84 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.adminUpdateUserPassword = adminUpdateUserPassword;
+exports.adminResetUserPassword = adminResetUserPassword;
+const admin = __importStar(require("firebase-admin"));
+function isAdminOrManager(role) {
+    return role === 'Admin' || role === 'Quản lý';
+}
+/**
+ * Đổi password cho user theo uid, chỉ dùng Admin SDK nên KHÔNG cần biết password hiện tại.
+ * Đồng thời cập nhật field password trong Firestore để UI Settings hiển thị đúng.
+ */
+async function adminUpdateUserPassword(callerUid, targetUid, newPassword) {
+    var _a;
+    if (!callerUid || !targetUid) {
+        throw new Error('Thiếu callerUid hoặc targetUid.');
+    }
+    if (!newPassword || newPassword.length < 6) {
+        throw new Error('Password mới phải có ít nhất 6 ký tự.');
+    }
+    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
+    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
+    console.log('🔐 adminUpdateUserPassword', {
+        callerUid,
+        callerRole,
+        targetUid,
+        passwordLen: newPassword === null || newPassword === void 0 ? void 0 : newPassword.length
+    });
+    if (!isAdminOrManager(callerRole)) {
+        throw new Error('permission-denied');
+    }
+    // Update Firebase Auth password
+    await admin.auth().updateUser(targetUid, { password: newPassword });
+    // Cập nhật lại password ở Firestore để màn hình Settings hiển thị đồng bộ.
+    await admin.firestore().collection('users').doc(targetUid).set({ password: newPassword, updatedAt: new Date() }, { merge: true });
+    await admin.firestore().collection('user-permissions').doc(targetUid).set({ password: newPassword, updatedAt: new Date() }, { merge: true });
+}
+function generateSixDigitPassword() {
+    const n = Math.floor(100000 + Math.random() * 900000);
+    return String(n);
+}
+/**
+ * Admin: sinh mật khẩu mới 6 số ngẫu nhiên rồi đổi cho user theo uid.
+ * Trả về password mới để Admin hiển thị/sao chép.
+ */
+async function adminResetUserPassword(callerUid, targetUid) {
+    const newPassword = generateSixDigitPassword();
+    await adminUpdateUserPassword(callerUid, targetUid, newPassword);
+    return newPassword;
+}
+//# sourceMappingURL=admin-update-user-password.js.map

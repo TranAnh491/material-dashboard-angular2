@@ -129,23 +129,20 @@
             </div>
             <div *ngIf="showChangePasswordForm" class="change-password-form">
               <div class="form-group">
-                <label>Password hiện tại:</label>
+                <label>Password mới (6 số ngẫu nhiên):</label>
                 <input
-                  type="password"
-                  [(ngModel)]="currentAuthPasswordValue"
-                  placeholder="Nhập password hiện tại của tài khoản"
+                  type="text"
+                  [value]="generatedNewPassword || ''"
+                  readonly
+                  placeholder="Nhấn 'Tạo password mới' để sinh"
                   class="password-input">
               </div>
-              <div class="form-group">
-                <label>Password mới:</label>
-                <input 
-                  type="password" 
-                  [(ngModel)]="changePasswordValue" 
-                  placeholder="Nhập password mới (tối thiểu 6 ký tự)"
-                  class="password-input">
-              </div>
-              <button class="btn-save-password" (click)="changeUserPassword()" type="button">
-                Lưu password mới
+              <button
+                class="btn-save-password"
+                (click)="changeUserPassword()"
+                type="button"
+                [disabled]="isResettingPassword">
+                {{ isResettingPassword ? 'Đang tạo…' : 'Tạo lại mật khẩu (6 số)' }}
               </button>
             </div>
           </div>

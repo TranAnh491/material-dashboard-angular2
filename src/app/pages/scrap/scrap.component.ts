@@ -11,6 +11,13 @@ export interface ScrapSession {
   note?: string;
 }
 
+/** Một dòng hiển thị sau khi gộp theo mã thùng (nhiều doc Firestore cùng thùng → 1 dòng). */
+export interface ScrapBoxGroup {
+  boxCode: string;
+  materials: string[];
+  docIds: string[];
+}
+
 type ScanStep = 'idle' | 'scan-box' | 'scan-materials';
 
 @Component({
@@ -118,23 +125,45 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
     this.needFocusMaterial = true;
   }
 
-  removeMaterial(idx: number): void {
-    this.currentMaterials.splice(idx, 1);
+  undoLastMaterial(): void {
+    this.currentMaterials.pop();
   }
 
   async saveSession(): Promise<void> {
     if (!this.currentBoxCode) return;
     this.isLoading = true;
+    const box = this.currentBoxCode.trim();
     const materials7 = this.currentMaterials.map(m => (m || '').slice(0, 7));
-    const session: Omit<ScrapSession, 'id'> = {
-      boxCode: this.currentBoxCode,
-      materials: materials7,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp() as any
-    };
     try {
-      await this.firestore.collection('scrap-data').add(session);
+      const snap = await this.firestore
+        .collection<ScrapSession>('scrap-data', ref => ref.where('boxCode', '==', box))
+        .get()
+        .toPromise();
+      const docs = (snap?.docs || []).slice().sort(
+        (a, b) => this.docCreatedMs(a.data()) - this.docCreatedMs(b.data())
+      );
+      if (docs.length === 0) {
+        await this.firestore.collection('scrap-data').add({
+          boxCode: box,
+          materials: materials7,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp() as any
+        });
+      } else {
+        const merged: string[] = [];
+        for (const d of docs) {
+          merged.push(...((d.data().materials || []) as string[]));
+        }
+        merged.push(...materials7);
+        await docs[0].ref.update({
+          materials: merged,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp() as any
+        });
+        for (let i = 1; i < docs.length; i++) {
+          await docs[i].ref.delete();
+        }
+      }
       this.savedMsg = 'Đã lưu!';
-      setTimeout(() => this.savedMsg = '', 2500);
+      setTimeout(() => (this.savedMsg = ''), 2500);
       this.cancelScan();
     } catch (e) {
       alert('Lỗi khi lưu: ' + e);
@@ -143,10 +172,59 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
     }
   }
 
-  async deleteSession(s: ScrapSession): Promise<void> {
-    if (!s.id) return;
-    if (!confirm(`Xóa bản ghi thùng ${s.boxCode}?`)) return;
-    await this.firestore.collection('scrap-data').doc(s.id).delete();
+  private docCreatedMs(data: ScrapSession): number {
+    const ca = data?.createdAt as any;
+    if (!ca) return 0;
+    if (typeof ca.toMillis === 'function') return ca.toMillis();
+    if (ca instanceof Date) return ca.getTime();
+    return 0;
+  }
+
+  /** Gộp các bản ghi cùng mã thùng (giữ thứ tự xuất hiện trong stream). */
+  groupByBoxCode(sessions: ScrapSession[]): ScrapBoxGroup[] {
+    const map = new Map<string, ScrapBoxGroup>();
+    const order: string[] = [];
+    for (const s of sessions) {
+      const key = (s.boxCode || '').trim();
+      if (!key) continue;
+      let g = map.get(key);
+      if (!g) {
+        g = { boxCode: key, materials: [], docIds: [] };
+        map.set(key, g);
+        order.push(key);
+      }
+      g.materials.push(...(s.materials || []));
+      if (s.id && !g.docIds.includes(s.id)) {
+        g.docIds.push(s.id);
+      }
+    }
+    return order.map(k => map.get(k)!);
+  }
+
+  get allGrouped(): ScrapBoxGroup[] {
+    return this.groupByBoxCode(this.sessions);
+  }
+
+  get filteredGrouped(): ScrapBoxGroup[] {
+    const q = this.searchTerm.trim().toLowerCase();
+    if (!q) return this.allGrouped;
+    return this.allGrouped.filter(
+      g =>
+        g.boxCode.toLowerCase().includes(q) ||
+        g.materials.some(m => (m || '').toLowerCase().includes(q))
+    );
+  }
+
+  get searchTrim(): string {
+    return this.searchTerm.trim();
+  }
+
+  async deleteAggregated(g: ScrapBoxGroup): Promise<void> {
+    if (!g.docIds.length) return;
+    if (!confirm(`Xóa toàn bộ dữ liệu thùng ${g.boxCode}?`)) return;
+    for (const id of g.docIds) {
+      await this.firestore.collection('scrap-data').doc(id).delete();
+    }
   }
 
   /** Nhóm materials theo mã 7 ký tự, đếm Bag */
@@ -158,22 +236,6 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
       map.set(c, (map.get(c) ?? 0) + 1);
     }
     return Array.from(map.entries()).map(([code, bags]) => ({ code, bags }));
-  }
-
-  get filtered(): ScrapSession[] {
-    const q = this.searchTerm.trim().toLowerCase();
-    if (!q) return this.sessions;
-    return this.sessions.filter(s =>
-      s.boxCode.toLowerCase().includes(q) ||
-      s.materials.some(m => m.toLowerCase().includes(q))
-    );
-  }
-
-  formatDate(val: any): string {
-    if (!val) return '';
-    if (val instanceof Date) return val.toLocaleString('vi-VN');
-    if (val && val.toDate) return val.toDate().toLocaleString('vi-VN');
-    return String(val);
   }
 
   getDateKey(d?: Date): string {
