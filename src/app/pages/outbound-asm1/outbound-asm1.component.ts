@@ -31,6 +31,8 @@ export interface OutboundMaterial {
       batchNumber?: string; // Batch number từ QR code
   /** Bịch quét (i/tổng từ QR phần 4, VD: 3/10) */
   bagBatch?: string;
+  /** Cột Bag: số bịch hiện tại, có hậu tố tách VD `5(T1)` */
+  bagNumberDisplay?: string;
   scanMethod?: string;
   notes?: string;
   createdAt?: Date;
@@ -448,6 +450,15 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
     return nums.length ? nums.join(', ') : '—';
   }
+
+  /** Cột Bag: ưu tiên `bagNumberDisplay` (VD 5(T1)), không có thì suy từ bagBatch. */
+  getOutboundBagColumnDisplay(material: { bagNumberDisplay?: string; bagBatch?: string }): string {
+    const d = (material.bagNumberDisplay ?? '').trim();
+    if (d) {
+      return d;
+    }
+    return this.getBagNumberDisplay(material.bagBatch);
+  }
   
   // 🗑️ REMOVED: Debug functions - không cần nữa
   
@@ -638,6 +649,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         // 🔧 TỐI ƯU HÓA: Xử lý batch thay vì từng record để tăng tốc độ
         const materials = snapshot.map(doc => {
           const data = doc.payload.doc.data() as any;
+          const rawImd = data.importDate != null && data.importDate !== '' ? String(data.importDate) : '';
+          const pImd = rawImd ? this.rmBagHistory.parseQrPart4(rawImd) : null;
+          const importDateNorm = pImd?.imdKey || rawImd || null;
+          const bagBatchNorm =
+            (data.bagBatch && String(data.bagBatch).trim()) ||
+            pImd?.bagFractionLabel ||
+            '';
+          const bagNumNorm =
+            (data.bagNumberDisplay && String(data.bagNumberDisplay).trim()) ||
+            pImd?.bagNumberDisplay ||
+            '';
           
           return {
             id: doc.payload.doc.id,
@@ -653,9 +675,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             exportedBy: data.exportedBy || '',
             employeeId: data.employeeId || '',
             productionOrder: data.productionOrder || '',
-            batchNumber: data.batchNumber || data.importDate || null,
-            importDate: data.importDate || null,
-            bagBatch: data.bagBatch || '',
+            batchNumber: data.batchNumber || importDateNorm || null,
+            importDate: importDateNorm,
+            bagBatch: bagBatchNorm,
+            bagNumberDisplay: bagNumNorm,
             scanMethod: data.scanMethod || 'MANUAL',
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -899,6 +922,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       
       const allMaterials = snapshot.docs.map(doc => {
         const data = doc.data() as any;
+        const rawImd = data.importDate != null && data.importDate !== '' ? String(data.importDate) : '';
+        const pImd = rawImd ? this.rmBagHistory.parseQrPart4(rawImd) : null;
+        const importDateNorm = pImd?.imdKey || rawImd || null;
+        const bagBatchNorm =
+          (data.bagBatch && String(data.bagBatch).trim()) ||
+          pImd?.bagFractionLabel ||
+          '';
+        const bagNumNorm =
+          (data.bagNumberDisplay && String(data.bagNumberDisplay).trim()) ||
+          pImd?.bagNumberDisplay ||
+          '';
         return {
           id: doc.id,
           factory: data.factory || 'ASM1',
@@ -912,9 +946,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           exportedBy: data.exportedBy || '',
           employeeId: data.employeeId || '',
           productionOrder: data.productionOrder || '',
-          batchNumber: data.batchNumber || data.importDate || null,
-          importDate: data.importDate || null,
-          bagBatch: data.bagBatch || '',
+          batchNumber: data.batchNumber || importDateNorm || null,
+          importDate: importDateNorm,
+          bagBatch: bagBatchNorm,
+          bagNumberDisplay: bagNumNorm,
           scanMethod: data.scanMethod || 'MANUAL',
           notes: data.notes || '',
           createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
@@ -1365,6 +1400,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       const outboundCollection = this.firestore.collection('outbound-materials');
       
       for (const scanItem of this.pendingScanData) {
+        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
+        const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate;
         const outboundData: OutboundMaterial = {
           factory: this.selectedFactory,
           materialCode: scanItem.materialCode,
@@ -1376,16 +1413,17 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           exportDate: new Date(),
           location: scanItem.location,
           exportedBy: scanItem.employeeId,
-          batch: scanItem.importDate,
-          batchNumber: scanItem.importDate,
-          bagBatch: scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate),
+          batch: imdStored,
+          batchNumber: imdStored,
+          bagBatch: scanItem.bagBatch || p.bagFractionLabel,
+          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
           scanMethod: 'CAMERA', // 🔧 CAMERA ONLY: Đánh dấu rõ ràng là camera
           notes: `Auto-scanned export - ${scanItem.scanTime.toISOString()}`,
           createdAt: new Date(),
           updatedAt: new Date(),
           productionOrder: scanItem.productionOrder,
           employeeId: scanItem.employeeId,
-          importDate: scanItem.importDate
+          importDate: imdStored
         };
         
         const docRef = outboundCollection.ref.doc();
@@ -1725,6 +1763,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   // Create new outbound record
   private async createNewOutboundRecord(exportedBy: string): Promise<void> {
+    const p = this.rmBagHistory.parseQrPart4(this.lastScannedData.importDate);
+    const imdStored =
+      p.imdKey || this.normalizeImportDate(this.lastScannedData.importDate) || this.lastScannedData.importDate || null;
     const outboundRecord: OutboundMaterial = {
       factory: 'ASM1',
       materialCode: this.lastScannedData.materialCode,
@@ -1737,11 +1778,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       exportedBy: this.batchEmployeeId || exportedBy,
       employeeId: this.batchEmployeeId || exportedBy,
       productionOrder: this.batchProductionOrder || '',
-      batchNumber: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)
-      bagBatch: this.rmBagHistory.extractBagLabelFromQrPart4(this.lastScannedData.importDate),
+      batchNumber: imdStored,
+      bagBatch: p.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(this.lastScannedData.importDate),
+      bagNumberDisplay: p.bagNumberDisplay || undefined,
       scanMethod: 'SCANNER', // 🔧 SCANNER ONLY: Đánh dấu rõ ràng là scanner
       notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
-      importDate: this.lastScannedData.importDate || null, // Lưu batch number từ QR code (ví dụ: 26082025)
+      importDate: imdStored,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1980,8 +2022,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         const existing = consolidatedMap.get(key);
         existing.scanCount = (existing.scanCount || 1) + (scanItem.scanCount || 1);
         existing.updatedAt = scanItem.scanTime;
-        const bb =
-          scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate);
+        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
+        const bb = scanItem.bagBatch || p.bagFractionLabel;
         if (bb) {
           const parts = new Set(
             (existing.bagBatch ? String(existing.bagBatch).split(/\s*,\s*/) : []).filter(Boolean)
@@ -1989,9 +2031,19 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           parts.add(bb);
           existing.bagBatch = [...parts].join(', ');
         }
+        const bnd = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
+        if (bnd) {
+          const bset = new Set(
+            (existing.bagNumberDisplay ? String(existing.bagNumberDisplay).split(/\s*,\s*/) : []).filter(Boolean)
+          );
+          bset.add(bnd);
+          existing.bagNumberDisplay = [...bset].join(', ');
+        }
         console.log(`📊 Merged scan: ${scanItem.materialCode} (${scanItem.quantity}kg) into existing record`);
       } else {
         // ❌ KHÁC ÍT NHẤT 1 TRƯỜNG → Tạo dòng mới
+        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
+        const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate || null;
         consolidatedMap.set(key, {
           factory: 'ASM1',
           materialCode: scanItem.materialCode,
@@ -2005,11 +2057,12 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           exportedBy: scanItem.employeeId,
           productionOrder: scanItem.productionOrder,
           employeeId: scanItem.employeeId,
-          batchNumber: scanItem.importDate || null,
-          bagBatch: scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate),
+          batchNumber: imdStored,
+          bagBatch: scanItem.bagBatch || p.bagFractionLabel,
+          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
           scanMethod: 'CAMERA',
           notes: `Batch scan - ${scanItem.productionOrder}`,
-          importDate: scanItem.importDate || null,
+          importDate: imdStored,
           createdAt: scanItem.scanTime,
           updatedAt: scanItem.scanTime
         });
@@ -2461,13 +2514,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
   
-  /** Phần 4 QR: DDMMYYYY hoặc DDMMYYYY-i/n — khớp IMD kho; -i/n → +1 bịch. */
+  /** Phần 4 QR: DDMMYYYY, DDMMYYYY-i/tổng, có thể (T1) tách bịch — khớp IMD kho; có i/tổng → +1 bịch. */
   private parseImdFromQrPart4(part4: string | null | undefined): { imdKey: string; bagDelta: number } {
+    const p = this.rmBagHistory.parseQrPart4(part4);
+    if (p.imdKey) {
+      return { imdKey: p.imdKey, bagDelta: p.bagDelta };
+    }
     const s = (part4 ?? '').trim();
-    if (!s) return { imdKey: '', bagDelta: 0 };
-    const m = /^(\d{8})-\d+\/\d+$/.exec(s);
-    if (m) return { imdKey: m[1], bagDelta: 1 };
-    return { imdKey: this.normalizeImportDate(s), bagDelta: 0 };
+    return { imdKey: s ? this.normalizeImportDate(s) : '', bagDelta: 0 };
   }
 
   // Chuẩn hóa importDate về format DDMMYYYY để so sánh
@@ -2582,8 +2636,10 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
-    const exportedBagsDelta = this.parseImdFromQrPart4(importDate).bagDelta;
-    const bagBatch = this.rmBagHistory.extractBagLabelFromQrPart4(importDate);
+    const p = this.rmBagHistory.parseQrPart4(importDate);
+    const exportedBagsDelta = p.bagDelta;
+    const bagBatch = p.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(importDate);
+    const bagNumberDisplay = p.bagNumberDisplay || '';
     const scanItem = {
       materialCode,
       poNumber,
@@ -2592,6 +2648,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       importDate,
       exportedBagsDelta,
       bagBatch,
+      bagNumberDisplay,
       location: 'N/A',
       productionOrder: this.batchProductionOrder,
       employeeId: this.batchEmployeeId,

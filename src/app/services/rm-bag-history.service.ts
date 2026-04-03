@@ -6,6 +6,19 @@ import 'firebase/compat/firestore';
 /** Loại sự kiện theo bịch (RM1/RM2) */
 export type RmBagHistoryEventType = 'NHẬP' | 'XUẤT' | 'TỒN';
 
+/**
+ * Phần 4 QR (IMD): `DDMMYYYY`, `DDMMYYYY-i/tổng`, hoặc `DDMMYYYY-i/tổng(T1)` (bịch tách).
+ * - imdKey: DDMMYYYY — khớp inventory / cột IMD materials
+ * - bagFractionLabel: `i/tổng` — cột Bịch, rm-bag-history
+ * - bagNumberDisplay: `i` hoặc `i(T1)` — cột Bag trên outbound
+ */
+export type QrPart4Parsed = {
+  imdKey: string;
+  bagDelta: number;
+  bagFractionLabel: string;
+  bagNumberDisplay: string;
+};
+
 export interface RmBagHistoryEntry {
   event: RmBagHistoryEventType;
   factory: string;
@@ -47,13 +60,59 @@ export class RmBagHistoryService {
   constructor(private firestore: AngularFirestore) {}
 
   /**
-   * Phần 4 QR nhập/xuất: DDMMYYYY hoặc DDMMYYYY-i/tổng (VD: 19112025-3/10).
-   * Trả về nhãn bịch "i/tổng" để hiển thị cột Batch / ghi rm-bag-history.
+   * Parse phần 4 QR: hậu tố `(T1)` / `(t2)` = bịch tách; phần bịch vẫn là i/tổng.
+   */
+  parseQrPart4(part4: string | null | undefined): QrPart4Parsed {
+    const raw = (part4 ?? '').trim();
+    if (!raw) {
+      return { imdKey: '', bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
+    }
+
+    let splitSuffix = '';
+    let head = raw;
+    const splitM = /^(.+?)(\([Tt]\d+\))$/.exec(raw);
+    if (splitM) {
+      head = splitM[1].trim();
+      splitSuffix = splitM[2];
+    }
+
+    const m = /^(\d{8})-(\d+)\/(\d+)$/.exec(head);
+    if (m) {
+      const num = m[2];
+      const den = m[3];
+      const bagFractionLabel = `${num}/${den}`;
+      const bagNumberDisplay = splitSuffix ? `${num}${splitSuffix}` : num;
+      return {
+        imdKey: m[1],
+        bagDelta: 1,
+        bagFractionLabel,
+        bagNumberDisplay
+      };
+    }
+
+    if (/^\d{8}$/.test(head)) {
+      return { imdKey: head, bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
+    }
+
+    const lead8 = /^(\d{8})/.exec(head);
+    if (lead8) {
+      return {
+        imdKey: lead8[1],
+        bagDelta: 0,
+        bagFractionLabel: '',
+        bagNumberDisplay: ''
+      };
+    }
+
+    return { imdKey: head, bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
+  }
+
+  /**
+   * Phần 4 QR nhập/xuất: DDMMYYYY hoặc DDMMYYYY-i/tổng (có thể thêm (T1)).
+   * Trả về nhãn bịch "i/tổng" để hiển thị cột Bịch / ghi rm-bag-history.
    */
   extractBagLabelFromQrPart4(part4: string | null | undefined): string {
-    const s = (part4 ?? '').trim();
-    const m = /^(\d{8})-(\d+)\/(\d+)$/.exec(s);
-    return m ? `${m[2]}/${m[3]}` : '';
+    return this.parseQrPart4(part4).bagFractionLabel;
   }
 
   /** Ghi một dòng lịch sử (không throw — tránh chặn nhập/xuất). */

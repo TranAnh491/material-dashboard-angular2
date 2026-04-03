@@ -9,8 +9,76 @@ import {
   emailUser
 } from './params-config';
 
-/** 00:00 ngày 02/04/2026 (giờ Việt Nam UTC+7) = 01/04/2026 17:00 UTC */
-const OUTBOUND_DUP_SINCE_MS = Date.UTC(2026, 3, 1, 17, 0, 0, 0);
+const CONTROL_BATCH_EXCLUSION_COLLECTION = 'control-batch-exclusion';
+const CONTROL_BATCH_EXCLUSION_DOC = 'settings';
+
+/** Mặc định: 02/04/2026 00:00 (VN), lưu dạng YYYY-MM-DD trên Firestore. */
+export const DEFAULT_OUTBOUND_DUP_SINCE_YMD = '2026-04-02';
+
+export type ControlBatchExclusion = {
+  enabled: boolean;
+  codes: Set<string>;
+};
+
+/** Cấu hình quét trùng: loại trừ + mốc ngày bắt đầu tính (00:00 VN). */
+export type ControlBatchDupSettings = {
+  exclusion: ControlBatchExclusion;
+  dupSinceMs: number;
+  dupSinceYmd: string;
+  /** DD/MM/YYYY — hiển thị email / đồng bộ với app. */
+  dupSinceLabel: string;
+};
+
+/** 00:00 ngày `ymd` theo múi Asia/Ho_Chi_Minh. */
+export function vnYmdStartMs(ymd: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) {
+    return null;
+  }
+  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00+07:00`);
+  return Number.isNaN(t) ? null : t;
+}
+
+function formatYmdVnDisplay(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) {
+    return ymd.trim();
+  }
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function normalizeOutboundDupSinceYmd(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s) && vnYmdStartMs(s) != null) {
+    return s;
+  }
+  return DEFAULT_OUTBOUND_DUP_SINCE_YMD;
+}
+
+/** Đọc `control-batch-exclusion/settings` (loại trừ + outboundDupSinceDate). */
+export async function loadControlBatchDupSettings(
+  db: admin.firestore.Firestore
+): Promise<ControlBatchDupSettings> {
+  const snap = await db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC).get();
+  const d = snap.data() || {};
+  const enabled = d.excludeEnabled === true;
+  const arr = Array.isArray(d.excludeMaterialCodes) ? d.excludeMaterialCodes : [];
+  const codes = new Set<string>();
+  for (const x of arr) {
+    const c = String(x || '').trim().toUpperCase();
+    if (c) {
+      codes.add(c);
+    }
+  }
+  const dupSinceYmd = normalizeOutboundDupSinceYmd(d.outboundDupSinceDate);
+  const dupSinceMs = vnYmdStartMs(dupSinceYmd)!;
+  return {
+    exclusion: { enabled, codes },
+    dupSinceMs,
+    dupSinceYmd,
+    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd)
+  };
+}
 
 export type OutboundDupRow = {
   factory: string;
@@ -85,12 +153,12 @@ function docTimeMs(data: admin.firestore.DocumentData): number | null {
   return tryOne(data.exportDate) ?? tryOne(data.createdAt) ?? tryOne(data.updatedAt);
 }
 
-function isOnOrAfterDupSince(data: admin.firestore.DocumentData): boolean {
+function isOnOrAfterDupSince(data: admin.firestore.DocumentData, sinceMs: number): boolean {
   const t = docTimeMs(data);
   if (t == null) {
     return false;
   }
-  return t >= OUTBOUND_DUP_SINCE_MS;
+  return t >= sinceMs;
 }
 
 function compositeKey(
@@ -136,7 +204,12 @@ async function fetchAllOutboundByFactory(
 }
 
 /** Cùng logic với tab Control Batch (Angular). */
-export async function scanOutboundDuplicates(db: admin.firestore.Firestore): Promise<OutboundDupRow[]> {
+export async function scanOutboundDuplicates(
+  db: admin.firestore.Firestore,
+  cached?: ControlBatchDupSettings
+): Promise<OutboundDupRow[]> {
+  const s = cached ?? (await loadControlBatchDupSettings(db));
+  const excl = s.exclusion;
   const [docs1, docs2] = await Promise.all([
     fetchAllOutboundByFactory(db, 'ASM1'),
     fetchAllOutboundByFactory(db, 'ASM2')
@@ -146,7 +219,7 @@ export async function scanOutboundDuplicates(db: admin.firestore.Firestore): Pro
 
   for (const doc of all) {
     const d = doc.data();
-    if (!isOnOrAfterDupSince(d)) {
+    if (!isOnOrAfterDupSince(d, s.dupSinceMs)) {
       continue;
     }
     const factory = String(d.factory ?? '');
@@ -158,6 +231,11 @@ export async function scanOutboundDuplicates(db: admin.firestore.Firestore): Pro
     const bagBatch = bagRaw != null ? String(bagRaw) : '';
 
     if (!isOutboundRowEligible(materialCode, poNumber, imd, bagBatch)) {
+      continue;
+    }
+
+    const mcNorm = materialCode.trim().toUpperCase();
+    if (excl.enabled && excl.codes.has(mcNorm)) {
       continue;
     }
 
@@ -246,18 +324,19 @@ function getEmailCfg(): EmailCfg | null {
   return { host, port, user, pass, from, to };
 }
 
-function buildPlainText(dupes: OutboundDupRow[]): string {
+function buildPlainText(dupes: OutboundDupRow[], dupSinceLabel: string, exclusionNote?: string): string {
   const lines = dupes.map(
     r =>
       `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bag ${r.bagBatch || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary}`
   );
   return (
-    `Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ 02/04/2026, đủ điều kiện định dạng).\n\n` +
-    lines.join('\n')
+    `Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ ${dupSinceLabel}, đủ điều kiện định dạng).\n\n` +
+    lines.join('\n') +
+    (exclusionNote ? `\n\n${exclusionNote}` : '')
   );
 }
 
-function buildHtml(dupes: OutboundDupRow[]): string {
+function buildHtml(dupes: OutboundDupRow[], dupSinceLabel: string, exclusionNoteHtml?: string): string {
   const rows = dupes
     .map(
       r =>
@@ -265,7 +344,8 @@ function buildHtml(dupes: OutboundDupRow[]): string {
     )
     .join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
-<p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ 02/04/2026).</p>
+<p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ ${esc(dupSinceLabel)}).</p>
+${exclusionNoteHtml || ''}
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
 <thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th></tr></thead>
 <tbody>${rows}</tbody></table>
@@ -281,7 +361,22 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-async function sendDupEmail(dupes: OutboundDupRow[], cfg: EmailCfg): Promise<void> {
+async function sendDupEmail(
+  dupes: OutboundDupRow[],
+  cfg: EmailCfg,
+  settings: ControlBatchDupSettings
+): Promise<void> {
+  const exclusion = settings.exclusion;
+  const exclNote =
+    exclusion.enabled && exclusion.codes.size > 0
+      ? `Đang bật loại trừ: ${exclusion.codes.size} mã hàng không tính trong báo cáo trùng.`
+      : exclusion.enabled
+        ? 'Đang bật loại trừ (danh sách mã trống).'
+        : '';
+  const exclHtml =
+    exclNote !== ''
+      ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> ${esc(exclNote)}</p>`
+      : '';
   const transporter = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
@@ -292,8 +387,8 @@ async function sendDupEmail(dupes: OutboundDupRow[], cfg: EmailCfg): Promise<voi
     from: cfg.from,
     to: cfg.to.join(', '),
     subject: `[Control Batch] Cảnh báo: ${dupes.length} nhóm trùng xuất kho`,
-    text: buildPlainText(dupes),
-    html: buildHtml(dupes)
+    text: buildPlainText(dupes, settings.dupSinceLabel, exclNote || undefined),
+    html: buildHtml(dupes, settings.dupSinceLabel, exclHtml || undefined)
   });
 }
 
@@ -304,7 +399,9 @@ async function sendDupEmail(dupes: OutboundDupRow[], cfg: EmailCfg): Promise<voi
 export async function sendOutboundDupReportManual(
   db: admin.firestore.Firestore
 ): Promise<{ dupGroups: number }> {
-  const dupes = await scanOutboundDuplicates(db);
+  const settings = await loadControlBatchDupSettings(db);
+  const dupes = await scanOutboundDuplicates(db, settings);
+  const excl = settings.exclusion;
   const cfg = getEmailCfg();
   if (!cfg) {
     throw new Error('Thiếu cấu hình SMTP (EMAIL_USER, EMAIL_PASS, EMAIL_TO)');
@@ -321,17 +418,32 @@ export async function sendOutboundDupReportManual(
     auth: { user: cfg.user, pass: cfg.pass }
   });
 
+  const exclNote =
+    excl.enabled && excl.codes.size > 0
+      ? `\n\nGhi chú: đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.`
+      : excl.enabled
+        ? '\n\nGhi chú: đang bật loại trừ (danh sách mã trống).'
+        : '';
+  const exclHtml =
+    excl.enabled && excl.codes.size > 0
+      ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.</p>`
+      : excl.enabled
+        ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ (danh sách mã trống).</p>`
+        : '';
+
   if (dupes.length === 0) {
     await transporter.sendMail({
       from: cfg.from,
       to: cfg.to.join(', '),
       subject: `[Control Batch] Báo cáo — không có nhóm trùng (${atStr})`,
       text:
-        `Kiểm tra trùng xuất kho (từ 02/04/2026, đủ điều kiện định dạng).\n` +
-        `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).`,
+        `Kiểm tra trùng xuất kho (từ ${settings.dupSinceLabel}, đủ điều kiện định dạng).\n` +
+        `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).` +
+        exclNote,
       html: `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — báo cáo từ nút Send Mail.</p>
 <p>Thời điểm quét: <strong>${esc(atStr)}</strong></p>
+${exclHtml}
 <p>Không có nhóm trùng xuất kho.</p>
 <p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`
@@ -339,7 +451,7 @@ export async function sendOutboundDupReportManual(
     return { dupGroups: 0 };
   }
 
-  const bodyHtml = buildHtml(dupes).replace(
+  const bodyHtml = buildHtml(dupes, settings.dupSinceLabel, exclHtml).replace(
     '</body>',
     `<p style="margin-top:12px">Thời điểm quét: <strong>${esc(
       atStr
@@ -349,7 +461,7 @@ export async function sendOutboundDupReportManual(
     from: cfg.from,
     to: cfg.to.join(', '),
     subject: `[Control Batch] Báo cáo — ${dupes.length} nhóm trùng xuất kho (${atStr})`,
-    text: `${buildPlainText(dupes)}\n\n---\nThời điểm quét: ${atStr}`,
+    text: `${buildPlainText(dupes, settings.dupSinceLabel, exclNote.trim() || undefined)}\n\n---\nThời điểm quét: ${atStr}`,
     html: bodyHtml
   });
   return { dupGroups: dupes.length };
@@ -396,7 +508,8 @@ export async function runOutboundDupNotifyForSlot(
   }
 
   try {
-    const dupes = await scanOutboundDuplicates(db);
+    const settings = await loadControlBatchDupSettings(db);
+    const dupes = await scanOutboundDuplicates(db, settings);
     if (dupes.length === 0) {
       await lockRef.set(
         {
@@ -428,7 +541,7 @@ export async function runOutboundDupNotifyForSlot(
       return;
     }
 
-    await sendDupEmail(dupes, emailCfg);
+    await sendDupEmail(dupes, emailCfg, settings);
     await lockRef.set(
       {
         status: 'done',

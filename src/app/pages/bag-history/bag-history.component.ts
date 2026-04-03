@@ -105,12 +105,35 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   /** Đang gửi mail báo cáo trùng (callable). */
   sendMailBusy = false;
 
+  /** Loại trừ mã khỏi báo cáo trùng (đồng bộ Firestore `control-batch-exclusion/settings`). */
+  excludeEnabled = false;
+  private excludeMaterialCodesSet = new Set<string>();
+
+  showControlBatchMoreModal = false;
+  controlBatchCatalogOpen = false;
+  excludeEnabledDraft = false;
+  excludeCatalogDraft = '';
+  exclusionSaveBusy = false;
+
+  /** Popup ghi chú hướng dẫn (icon info cạnh tiêu đề). */
+  showPageInfoModal = false;
+
+  /** Mốc ngày bắt đầu tính trùng xuất (đồng bộ Firestore `outboundDupSinceDate` YYYY-MM-DD, 00:00 VN). */
+  private static readonly DEFAULT_OUTBOUND_DUP_YMD = '2026-04-02';
+
+  /** YYYY-MM-DD đang áp dụng. */
+  outboundDupSinceYmd = BagHistoryComponent.DEFAULT_OUTBOUND_DUP_YMD;
+  /** DD/MM/YYYY — hiển thị tóm tắt. */
+  outboundDupSinceLabel = '02/04/2026';
+  private outboundDupSinceMs = Date.parse(
+    `${BagHistoryComponent.DEFAULT_OUTBOUND_DUP_YMD}T00:00:00+07:00`
+  );
+  /** Bản nháp ngày trong popup More (datepicker). */
+  outboundDupSinceDraft: Date = new Date(2026, 3, 2);
+
   factoryFilter: '' | 'ASM1' | 'ASM2' | 'ALL' = 'ALL';
   eventFilter: '' | RmBagHistoryEventType = '';
   search = '';
-
-  /** Chỉ tính kiểm tra trùng outbound từ 00:00 ngày 02/04/2026 (giờ local). */
-  private readonly outboundDupSinceMs = new Date(2026, 3, 2, 0, 0, 0, 0).getTime();
 
   constructor(
     private firestore: AngularFirestore,
@@ -135,12 +158,166 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       }, () => {
         this.isLoading = false;
       });
-    void this.loadOutboundExportDuplicates();
+
+    this.firestore
+      .doc('control-batch-exclusion/settings')
+      .valueChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(
+        data => {
+          this.applyControlBatchExclusionDoc(data);
+          void this.loadOutboundExportDuplicates();
+        },
+        err => {
+          console.error('control-batch-exclusion subscribe', err);
+          this.outboundDupError =
+            'Không đọc được cấu hình loại trừ (control-batch-exclusion).';
+          this.outboundDupLoading = false;
+        }
+      );
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /** Số mã đang trong danh sách loại trừ (để hiển thị gợi ý trên bảng). */
+  get excludeCodeCount(): number {
+    return this.excludeMaterialCodesSet.size;
+  }
+
+  openControlBatchMoreModal(): void {
+    this.excludeEnabledDraft = this.excludeEnabled;
+    this.excludeCatalogDraft = Array.from(this.excludeMaterialCodesSet)
+      .sort((a, b) => a.localeCompare(b, 'vi'))
+      .join('\n');
+    this.outboundDupSinceDraft = this.ymdToLocalDate(this.outboundDupSinceYmd);
+    this.controlBatchCatalogOpen = false;
+    this.showControlBatchMoreModal = true;
+  }
+
+  closeControlBatchMoreModal(): void {
+    this.showControlBatchMoreModal = false;
+  }
+
+  onControlBatchMoreBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closeControlBatchMoreModal();
+    }
+  }
+
+  openPageInfoModal(): void {
+    this.showPageInfoModal = true;
+  }
+
+  closePageInfoModal(): void {
+    this.showPageInfoModal = false;
+  }
+
+  onPageInfoBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closePageInfoModal();
+    }
+  }
+
+  private applyControlBatchExclusionDoc(data: unknown): void {
+    const d = data as {
+      excludeEnabled?: unknown;
+      excludeMaterialCodes?: unknown;
+      outboundDupSinceDate?: unknown;
+    } | null | undefined;
+    this.excludeEnabled = d?.excludeEnabled === true;
+    const arr = Array.isArray(d?.excludeMaterialCodes) ? d.excludeMaterialCodes : [];
+    this.excludeMaterialCodesSet = new Set(
+      arr.map(x => String(x || '').trim().toUpperCase()).filter(Boolean)
+    );
+    this.outboundDupSinceYmd = this.normalizeOutboundDupSinceYmd(d?.outboundDupSinceDate);
+    const ms = this.vnYmdStartMs(this.outboundDupSinceYmd);
+    this.outboundDupSinceMs =
+      ms ??
+      Date.parse(`${BagHistoryComponent.DEFAULT_OUTBOUND_DUP_YMD}T00:00:00+07:00`);
+    this.outboundDupSinceLabel = this.formatYmdVnDisplay(this.outboundDupSinceYmd);
+  }
+
+  private vnYmdStartMs(ymd: string): number | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+    if (!m) {
+      return null;
+    }
+    const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00+07:00`);
+    return Number.isNaN(t) ? null : t;
+  }
+
+  private normalizeOutboundDupSinceYmd(raw: unknown): string {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && this.vnYmdStartMs(s) != null) {
+      return s;
+    }
+    return BagHistoryComponent.DEFAULT_OUTBOUND_DUP_YMD;
+  }
+
+  private formatYmdVnDisplay(ymd: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+    if (!m) {
+      return ymd.trim();
+    }
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+
+  private ymdToLocalDate(ymd: string): Date {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+    if (!m) {
+      return new Date(2026, 3, 2);
+    }
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+
+  private formatDraftDateToYmd(d: Date): string {
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${day}`;
+  }
+
+  private parseExcludeCatalogText(text: string): string[] {
+    const raw = text
+      .split(/[\n,;]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    return Array.from(new Set(raw));
+  }
+
+  async saveControlBatchExclusionSettings(): Promise<void> {
+    if (this.exclusionSaveBusy) {
+      return;
+    }
+    this.exclusionSaveBusy = true;
+    try {
+      const codes = this.parseExcludeCatalogText(this.excludeCatalogDraft);
+      const ymd = this.outboundDupSinceDraft
+        ? this.formatDraftDateToYmd(this.outboundDupSinceDraft)
+        : BagHistoryComponent.DEFAULT_OUTBOUND_DUP_YMD;
+      const ymdNorm = this.normalizeOutboundDupSinceYmd(ymd);
+      await this.firestore
+        .doc('control-batch-exclusion/settings')
+        .set(
+          {
+            excludeEnabled: this.excludeEnabledDraft,
+            excludeMaterialCodes: codes,
+            outboundDupSinceDate: ymdNorm,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+      this.snackBar.open('Đã lưu cài đặt Control Batch.', 'Đóng', { duration: 4500 });
+      this.closeControlBatchMoreModal();
+    } catch (e) {
+      console.error('save control-batch-exclusion', e);
+      this.snackBar.open('Lưu thất bại. Kiểm tra quyền Firestore.', 'Đóng', { duration: 6000 });
+    } finally {
+      this.exclusionSaveBusy = false;
+    }
   }
 
   /** Gửi mail báo cáo trùng xuất kho tại thời điểm bấm (cùng logic quét với bảng trên). */
@@ -527,6 +704,10 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         const bagRaw = d['bagBatch'];
         const bagBatch = bagRaw != null ? String(bagRaw) : '';
         if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagBatch)) {
+          continue;
+        }
+        const mcNorm = materialCode.trim().toUpperCase();
+        if (this.excludeEnabled && this.excludeMaterialCodesSet.has(mcNorm)) {
           continue;
         }
         this.outboundDupEligibleCount += 1;

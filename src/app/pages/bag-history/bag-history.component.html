@@ -1,30 +1,70 @@
 <div class="bag-history-page">
   <header class="page-header">
     <h1 class="page-title">Control Batch</h1>
-    <p class="subtitle">Mỗi lần <strong>Tìm</strong>, chỉ chấp nhận <strong>mã hàng</strong> dạng A hoặc B đầu + đúng 6 chữ số (VD A005006, B001033). Hệ thống truy vấn <code>inventory-materials</code> theo mã (và xưởng nếu chọn ASM1/ASM2). Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
-    <p class="subtitle dup-check-desc">Khi mở tab, hệ thống quét <code>outbound-materials</code> (ASM1 + ASM2). <strong>Chỉ tính từ 02/04/2026</strong> (theo <code>exportDate</code>, không có thì <code>createdAt</code> / <code>updatedAt</code>). Chỉ xét bản ghi đủ điều kiện: <strong>mã</strong> A hoặc B + 6 số; <strong>PO</strong> có chữ và bắt đầu KZ hoặc LH; <strong>IMD</strong> có ít nhất một số; <strong>Bag</strong> có ít nhất một số. Trùng = cùng bộ mã + PO + IMD + bag (&gt;1 lần). <strong>Firebase Functions</strong> cũng tự chạy <strong>12:00</strong> và <strong>17:00</strong> (giờ VN) mỗi ngày; nếu có trùng sẽ gửi email (params <code>EMAIL_USER</code> / <code>EMAIL_TO</code> + secret <code>EMAIL_PASS</code> trên Functions).</p>
   </header>
+
+  <div
+    class="page-info-overlay"
+    *ngIf="showPageInfoModal"
+    (click)="onPageInfoBackdropClick($event)"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="page-info-title">
+    <div class="page-info-dialog" (click)="$event.stopPropagation()">
+      <h2 id="page-info-title" class="page-info-dialog-title">Hướng dẫn Control Batch</h2>
+      <div class="page-info-body">
+        <p class="subtitle">Mỗi lần <strong>Tìm</strong>, chỉ chấp nhận <strong>mã hàng</strong> dạng A hoặc B đầu + đúng 6 chữ số (VD A005006, B001033). Hệ thống truy vấn <code>inventory-materials</code> theo mã (và xưởng nếu chọn ASM1/ASM2). Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
+        <p class="subtitle dup-check-desc">Khi mở tab, hệ thống quét <code>outbound-materials</code> (ASM1 + ASM2). <strong>Ngày bắt đầu tính</strong> (00:00 giờ Việt Nam) do bạn chọn trong <strong>More</strong> và lưu trên Firestore — mặc định 02/04/2026; đổi ngày trong More thì bảng, Send Mail và lịch Functions đều theo ngày mới. Thời điểm so trên mỗi bản ghi: <code>exportDate</code>, không có thì <code>createdAt</code> / <code>updatedAt</code>. Chỉ xét bản ghi đủ điều kiện: <strong>mã</strong> A hoặc B + 6 số; <strong>PO</strong> có chữ và bắt đầu KZ hoặc LH; <strong>IMD</strong> có ít nhất một số; <strong>Bag</strong> có ít nhất một số. Trùng = cùng bộ mã + PO + IMD + bag (&gt;1 lần). <strong>Firebase Functions</strong> cũng tự chạy <strong>12:00</strong> và <strong>17:00</strong> (giờ VN) mỗi ngày; nếu có trùng sẽ gửi email (params <code>EMAIL_USER</code> / <code>EMAIL_TO</code> + secret <code>EMAIL_PASS</code> trên Functions).</p>
+      </div>
+      <div class="page-info-actions">
+        <button type="button" class="btn-page-info-close" (click)="closePageInfoModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
 
   <section class="outbound-dup-panel" aria-label="Kiểm tra trùng xuất kho">
     <div class="outbound-dup-head">
       <h2 class="outbound-dup-title">Kiểm tra trùng xuất kho (outbound)</h2>
-      <button
-        type="button"
-        class="btn-send-mail"
-        (click)="onSendControlBatchMail()"
-        [disabled]="sendMailBusy || outboundDupLoading"
-        title="Gửi email báo cáo trùng xuất tại thời điểm bấm (tới các địa chỉ đã cấu hình trên Functions)">
-        {{ sendMailBusy ? 'Đang gửi…' : 'Send Mail' }}
-      </button>
+      <div class="outbound-dup-actions">
+        <button
+          type="button"
+          class="btn-page-info"
+          (click)="openPageInfoModal()"
+          aria-label="Hướng dẫn Control Batch"
+          title="Hướng dẫn">
+          <mat-icon aria-hidden="true">info</mat-icon>
+        </button>
+        <button
+          type="button"
+          class="btn-more"
+          (click)="openControlBatchMoreModal()"
+          title="Cài đặt loại trừ mã khỏi báo cáo trùng">
+          More
+        </button>
+        <button
+          type="button"
+          class="btn-send-mail"
+          (click)="onSendControlBatchMail()"
+          [disabled]="sendMailBusy || outboundDupLoading"
+          title="Gửi email báo cáo trùng xuất tại thời điểm bấm (tới các địa chỉ đã cấu hình trên Functions)">
+          {{ sendMailBusy ? 'Đang gửi…' : 'Send Mail' }}
+        </button>
+      </div>
     </div>
     <p class="outbound-dup-loading" *ngIf="outboundDupLoading">Đang đọc outbound-materials…</p>
     <p class="outbound-dup-error" *ngIf="!outboundDupLoading && outboundDupError">{{ outboundDupError }}</p>
     <ng-container *ngIf="!outboundDupLoading && !outboundDupError">
+      <p class="outbound-dup-exclude-hint" *ngIf="excludeEnabled && excludeCodeCount > 0">
+        Đang <strong>bật loại trừ</strong>: {{ excludeCodeCount }} mã không tính trong báo cáo trùng (màn hình và email).
+      </p>
+      <p class="outbound-dup-exclude-hint muted" *ngIf="excludeEnabled && excludeCodeCount === 0">
+        Loại trừ đang <strong>bật</strong> nhưng danh sách mã trống — mọi mã vẫn được tính.
+      </p>
       <p class="outbound-dup-summary ok" *ngIf="outboundDupRows.length === 0">
-        Từ 02/04/2026: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện định dạng — <strong>không có</strong> nhóm trùng (mã + PO + IMD + bag).
+        Từ {{ outboundDupSinceLabel }}: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện định dạng — <strong>không có</strong> nhóm trùng (mã + PO + IMD + bag).
       </p>
       <p class="outbound-dup-summary warn" *ngIf="outboundDupRows.length > 0">
-        Từ 02/04/2026: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện — <strong>{{ outboundDupRows.length }}</strong> nhóm trùng (cùng mã + PO + IMD + bag, số lần &gt; 1).
+        Từ {{ outboundDupSinceLabel }}: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện — <strong>{{ outboundDupRows.length }}</strong> nhóm trùng (cùng mã + PO + IMD + bag, số lần &gt; 1).
       </p>
       <div class="table-wrap outbound-dup-table-wrap" *ngIf="outboundDupRows.length > 0">
         <table class="data-table">
@@ -54,6 +94,57 @@
       </div>
     </ng-container>
   </section>
+
+  <div
+    class="cb-more-overlay"
+    *ngIf="showControlBatchMoreModal"
+    (click)="onControlBatchMoreBackdropClick($event)"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cb-more-title">
+    <div class="cb-more-dialog" (click)="$event.stopPropagation()">
+      <h3 id="cb-more-title" class="cb-more-title">Cài đặt Control Batch</h3>
+      <div class="cb-more-date-block">
+        <span class="cb-more-label">Hiển thị từ (ngày)</span>
+        <mat-form-field appearance="outline" class="cb-dup-since-field" subscriptSizing="dynamic">
+          <input matInput [matDatepicker]="dupSincePk" [(ngModel)]="outboundDupSinceDraft" />
+          <mat-datepicker-toggle matSuffix [for]="dupSincePk"></mat-datepicker-toggle>
+          <mat-datepicker #dupSincePk></mat-datepicker>
+        </mat-form-field>
+        <p class="cb-more-hint cb-more-hint-tight">
+          Chỉ tính bản ghi outbound từ 00:00 ngày đã chọn (giờ Việt Nam). Lưu kèm loại trừ; lần sau và email / lịch Functions dùng cùng ngày.
+        </p>
+      </div>
+      <div class="cb-more-row">
+        <span class="cb-more-label">Loại trừ khỏi báo cáo trùng</span>
+        <mat-slide-toggle [(ngModel)]="excludeEnabledDraft" color="primary"></mat-slide-toggle>
+      </div>
+      <p class="cb-more-hint">Khi bật, các mã trong danh mục bên dưới không được gom vào nhóm trùng (bảng trên và email Functions).</p>
+      <button type="button" class="cb-catalog-toggle" (click)="controlBatchCatalogOpen = !controlBatchCatalogOpen">
+        {{ controlBatchCatalogOpen ? 'Thu gọn' : 'Mở' }} danh mục loại trừ
+      </button>
+      <div class="cb-catalog-block" *ngIf="controlBatchCatalogOpen">
+        <label class="cb-catalog-label" for="cb-exclude-catalog">Mã loại trừ (một mã một dòng, hoặc cách nhau bằng dấu phẩy / chấm phẩy)</label>
+        <textarea
+          id="cb-exclude-catalog"
+          class="cb-catalog-textarea"
+          [(ngModel)]="excludeCatalogDraft"
+          rows="10"
+          spellcheck="false"
+          placeholder="VD: A005006, B001033 (mỗi dòng một mã)"></textarea>
+      </div>
+      <div class="cb-more-actions">
+        <button type="button" class="btn-cb-cancel" (click)="closeControlBatchMoreModal()">Đóng</button>
+        <button
+          type="button"
+          class="btn-cb-save"
+          (click)="saveControlBatchExclusionSettings()"
+          [disabled]="exclusionSaveBusy">
+          {{ exclusionSaveBusy ? 'Đang lưu…' : 'Lưu' }}
+        </button>
+      </div>
+    </div>
+  </div>
 
   <section class="toolbar-panel" *ngIf="!isLoading" aria-label="Bộ lọc và tìm kiếm">
   <div class="toolbar">

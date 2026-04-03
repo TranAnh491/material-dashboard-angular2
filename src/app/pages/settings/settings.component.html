@@ -35,6 +35,29 @@
         <div class="stat-label">Quản trị viên</div>
             </div>
           </div>
+
+    <!-- Reset mật khẩu tài khoản -->
+    <div class="reset-account-panel">
+      <h3>Reset mật khẩu tài khoản</h3>
+      <p class="reset-account-hint">Nhập mã nhân viên (VD: <strong>ASP0054</strong> hoặc <strong>0054</strong>). Mật khẩu sẽ được đặt về <strong>123456</strong>.</p>
+      <div class="reset-account-row">
+        <input
+          type="text"
+          name="resetAccountInput"
+          [(ngModel)]="resetAccountInput"
+          (input)="onResetAccountInput($event)"
+          placeholder="ASP0054"
+          autocomplete="off"
+          [disabled]="isResettingAccountPassword">
+        <button
+          type="button"
+          class="btn-reset-account"
+          (click)="resetAccountPasswordToDefault()"
+          [disabled]="isResettingAccountPassword || !resetAccountInput?.trim()">
+          {{ isResettingAccountPassword ? 'Đang xử lý…' : 'Reset' }}
+        </button>
+      </div>
+    </div>
           
     <!-- Notifications -->
     <div *ngIf="newUserNotifications.length > 0" class="notifications">

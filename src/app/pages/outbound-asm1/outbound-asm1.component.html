@@ -262,7 +262,7 @@
               {{material.importDate || 'N/A'}}
             </td>
             <td class="bag-number-cell readonly-cell">
-              {{ getBagNumberDisplay(material.bagBatch) }}
+              {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">
               {{ material.bagBatch || '—' }}
@@ -315,7 +315,7 @@
               {{material.importDate || 'N/A'}}
             </td>
             <td class="bag-number-cell readonly-cell">
-              {{ getBagNumberDisplay(material.bagBatch) }}
+              {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">
               {{ material.bagBatch || '—' }}
