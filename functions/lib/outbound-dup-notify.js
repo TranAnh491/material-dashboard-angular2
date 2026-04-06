@@ -33,14 +33,64 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DEFAULT_OUTBOUND_DUP_SINCE_YMD = void 0;
+exports.vnYmdStartMs = vnYmdStartMs;
+exports.loadControlBatchDupSettings = loadControlBatchDupSettings;
 exports.scanOutboundDuplicates = scanOutboundDuplicates;
 exports.sendOutboundDupReportManual = sendOutboundDupReportManual;
 exports.runOutboundDupNotifyForSlot = runOutboundDupNotifyForSlot;
 const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
 const params_config_1 = require("./params-config");
-/** 00:00 ngày 02/04/2026 (giờ Việt Nam UTC+7) = 01/04/2026 17:00 UTC */
-const OUTBOUND_DUP_SINCE_MS = Date.UTC(2026, 3, 1, 17, 0, 0, 0);
+const CONTROL_BATCH_EXCLUSION_COLLECTION = 'control-batch-exclusion';
+const CONTROL_BATCH_EXCLUSION_DOC = 'settings';
+/** Mặc định: 02/04/2026 00:00 (VN), lưu dạng YYYY-MM-DD trên Firestore. */
+exports.DEFAULT_OUTBOUND_DUP_SINCE_YMD = '2026-04-02';
+/** 00:00 ngày `ymd` theo múi Asia/Ho_Chi_Minh. */
+function vnYmdStartMs(ymd) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+    if (!m) {
+        return null;
+    }
+    const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00+07:00`);
+    return Number.isNaN(t) ? null : t;
+}
+function formatYmdVnDisplay(ymd) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+    if (!m) {
+        return ymd.trim();
+    }
+    return `${m[3]}/${m[2]}/${m[1]}`;
+}
+function normalizeOutboundDupSinceYmd(raw) {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && vnYmdStartMs(s) != null) {
+        return s;
+    }
+    return exports.DEFAULT_OUTBOUND_DUP_SINCE_YMD;
+}
+/** Đọc `control-batch-exclusion/settings` (loại trừ + outboundDupSinceDate). */
+async function loadControlBatchDupSettings(db) {
+    const snap = await db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC).get();
+    const d = snap.data() || {};
+    const enabled = d.excludeEnabled === true;
+    const arr = Array.isArray(d.excludeMaterialCodes) ? d.excludeMaterialCodes : [];
+    const codes = new Set();
+    for (const x of arr) {
+        const c = String(x || '').trim().toUpperCase();
+        if (c) {
+            codes.add(c);
+        }
+    }
+    const dupSinceYmd = normalizeOutboundDupSinceYmd(d.outboundDupSinceDate);
+    const dupSinceMs = vnYmdStartMs(dupSinceYmd);
+    return {
+        exclusion: { enabled, codes },
+        dupSinceMs,
+        dupSinceYmd,
+        dupSinceLabel: formatYmdVnDisplay(dupSinceYmd)
+    };
+}
 function isValidRmMaterialCode(code) {
     const c = (code || '').trim().toUpperCase();
     return /^[AB]\d{6}$/.test(c);
@@ -89,12 +139,12 @@ function docTimeMs(data) {
     };
     return (_b = (_a = tryOne(data.exportDate)) !== null && _a !== void 0 ? _a : tryOne(data.createdAt)) !== null && _b !== void 0 ? _b : tryOne(data.updatedAt);
 }
-function isOnOrAfterDupSince(data) {
+function isOnOrAfterDupSince(data, sinceMs) {
     const t = docTimeMs(data);
     if (t == null) {
         return false;
     }
-    return t >= OUTBOUND_DUP_SINCE_MS;
+    return t >= sinceMs;
 }
 function compositeKey(factory, materialCode, poNumber, imd, bagBatch) {
     const fac = (factory || '').trim();
@@ -128,8 +178,10 @@ async function fetchAllOutboundByFactory(db, factory) {
     return out;
 }
 /** Cùng logic với tab Control Batch (Angular). */
-async function scanOutboundDuplicates(db) {
+async function scanOutboundDuplicates(db, cached) {
     var _a, _b, _c, _d;
+    const s = cached !== null && cached !== void 0 ? cached : (await loadControlBatchDupSettings(db));
+    const excl = s.exclusion;
     const [docs1, docs2] = await Promise.all([
         fetchAllOutboundByFactory(db, 'ASM1'),
         fetchAllOutboundByFactory(db, 'ASM2')
@@ -138,7 +190,7 @@ async function scanOutboundDuplicates(db) {
     const counts = new Map();
     for (const doc of all) {
         const d = doc.data();
-        if (!isOnOrAfterDupSince(d)) {
+        if (!isOnOrAfterDupSince(d, s.dupSinceMs)) {
             continue;
         }
         const factory = String((_a = d.factory) !== null && _a !== void 0 ? _a : '');
@@ -149,6 +201,10 @@ async function scanOutboundDuplicates(db) {
         const bagRaw = d.bagBatch;
         const bagBatch = bagRaw != null ? String(bagRaw) : '';
         if (!isOutboundRowEligible(materialCode, poNumber, imd, bagBatch)) {
+            continue;
+        }
+        const mcNorm = materialCode.trim().toUpperCase();
+        if (excl.enabled && excl.codes.has(mcNorm)) {
             continue;
         }
         const key = compositeKey(factory, materialCode, poNumber, imd, bagBatch);
@@ -225,17 +281,19 @@ function getEmailCfg() {
     const from = fromRaw || user;
     return { host, port, user, pass, from, to };
 }
-function buildPlainText(dupes) {
+function buildPlainText(dupes, dupSinceLabel, exclusionNote) {
     const lines = dupes.map(r => `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bag ${r.bagBatch || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary}`);
-    return (`Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ 02/04/2026, đủ điều kiện định dạng).\n\n` +
-        lines.join('\n'));
+    return (`Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ ${dupSinceLabel}, đủ điều kiện định dạng).\n\n` +
+        lines.join('\n') +
+        (exclusionNote ? `\n\n${exclusionNote}` : ''));
 }
-function buildHtml(dupes) {
+function buildHtml(dupes, dupSinceLabel, exclusionNoteHtml) {
     const rows = dupes
         .map(r => `<tr><td>${esc(r.factory)}</td><td>${esc(r.materialCode)}</td><td>${esc(r.poNumber)}</td><td>${esc(r.imd)}</td><td>${esc(r.bagBatch)}</td><td style="text-align:right">${r.count}</td><td>${esc(r.productionOrderSummary)}</td></tr>`)
         .join('');
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
-<p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ 02/04/2026).</p>
+<p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ ${esc(dupSinceLabel)}).</p>
+${exclusionNoteHtml || ''}
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
 <thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th></tr></thead>
 <tbody>${rows}</tbody></table>
@@ -249,7 +307,16 @@ function esc(s) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-async function sendDupEmail(dupes, cfg) {
+async function sendDupEmail(dupes, cfg, settings) {
+    const exclusion = settings.exclusion;
+    const exclNote = exclusion.enabled && exclusion.codes.size > 0
+        ? `Đang bật loại trừ: ${exclusion.codes.size} mã hàng không tính trong báo cáo trùng.`
+        : exclusion.enabled
+            ? 'Đang bật loại trừ (danh sách mã trống).'
+            : '';
+    const exclHtml = exclNote !== ''
+        ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> ${esc(exclNote)}</p>`
+        : '';
     const transporter = nodemailer.createTransport({
         host: cfg.host,
         port: cfg.port,
@@ -260,8 +327,8 @@ async function sendDupEmail(dupes, cfg) {
         from: cfg.from,
         to: cfg.to.join(', '),
         subject: `[Control Batch] Cảnh báo: ${dupes.length} nhóm trùng xuất kho`,
-        text: buildPlainText(dupes),
-        html: buildHtml(dupes)
+        text: buildPlainText(dupes, settings.dupSinceLabel, exclNote || undefined),
+        html: buildHtml(dupes, settings.dupSinceLabel, exclHtml || undefined)
     });
 }
 /**
@@ -269,7 +336,9 @@ async function sendDupEmail(dupes, cfg) {
  * Cùng logic lọc với lịch 12h/17h.
  */
 async function sendOutboundDupReportManual(db) {
-    const dupes = await scanOutboundDuplicates(db);
+    const settings = await loadControlBatchDupSettings(db);
+    const dupes = await scanOutboundDuplicates(db, settings);
+    const excl = settings.exclusion;
     const cfg = getEmailCfg();
     if (!cfg) {
         throw new Error('Thiếu cấu hình SMTP (EMAIL_USER, EMAIL_PASS, EMAIL_TO)');
@@ -285,28 +354,40 @@ async function sendOutboundDupReportManual(db) {
         secure: cfg.port === 465,
         auth: { user: cfg.user, pass: cfg.pass }
     });
+    const exclNote = excl.enabled && excl.codes.size > 0
+        ? `\n\nGhi chú: đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.`
+        : excl.enabled
+            ? '\n\nGhi chú: đang bật loại trừ (danh sách mã trống).'
+            : '';
+    const exclHtml = excl.enabled && excl.codes.size > 0
+        ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.</p>`
+        : excl.enabled
+            ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ (danh sách mã trống).</p>`
+            : '';
     if (dupes.length === 0) {
         await transporter.sendMail({
             from: cfg.from,
             to: cfg.to.join(', '),
             subject: `[Control Batch] Báo cáo — không có nhóm trùng (${atStr})`,
-            text: `Kiểm tra trùng xuất kho (từ 02/04/2026, đủ điều kiện định dạng).\n` +
-                `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).`,
+            text: `Kiểm tra trùng xuất kho (từ ${settings.dupSinceLabel}, đủ điều kiện định dạng).\n` +
+                `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).` +
+                exclNote,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — báo cáo từ nút Send Mail.</p>
 <p>Thời điểm quét: <strong>${esc(atStr)}</strong></p>
+${exclHtml}
 <p>Không có nhóm trùng xuất kho.</p>
 <p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`
         });
         return { dupGroups: 0 };
     }
-    const bodyHtml = buildHtml(dupes).replace('</body>', `<p style="margin-top:12px">Thời điểm quét: <strong>${esc(atStr)}</strong> (báo cáo từ nút Send Mail).</p></body>`);
+    const bodyHtml = buildHtml(dupes, settings.dupSinceLabel, exclHtml).replace('</body>', `<p style="margin-top:12px">Thời điểm quét: <strong>${esc(atStr)}</strong> (báo cáo từ nút Send Mail).</p></body>`);
     await transporter.sendMail({
         from: cfg.from,
         to: cfg.to.join(', '),
         subject: `[Control Batch] Báo cáo — ${dupes.length} nhóm trùng xuất kho (${atStr})`,
-        text: `${buildPlainText(dupes)}\n\n---\nThời điểm quét: ${atStr}`,
+        text: `${buildPlainText(dupes, settings.dupSinceLabel, exclNote.trim() || undefined)}\n\n---\nThời điểm quét: ${atStr}`,
         html: bodyHtml
     });
     return { dupGroups: dupes.length };
@@ -343,7 +424,8 @@ async function runOutboundDupNotifyForSlot(db, slot) {
         return;
     }
     try {
-        const dupes = await scanOutboundDuplicates(db);
+        const settings = await loadControlBatchDupSettings(db);
+        const dupes = await scanOutboundDuplicates(db, settings);
         if (dupes.length === 0) {
             await lockRef.set({
                 status: 'done',
@@ -365,7 +447,7 @@ async function runOutboundDupNotifyForSlot(db, slot) {
             }, { merge: true });
             return;
         }
-        await sendDupEmail(dupes, emailCfg);
+        await sendDupEmail(dupes, emailCfg, settings);
         await lockRef.set({
             status: 'done',
             dupGroups: dupes.length,

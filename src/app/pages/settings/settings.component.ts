@@ -19,6 +19,7 @@ import { Subscription, firstValueFrom } from 'rxjs';
 })
 export class SettingsComponent implements OnInit, OnDestroy {
   isAdminLoggedIn = false;
+  private hasLoadedAdminData = false;
   adminUsername = '';
   adminPassword = '';
   loginError = '';
@@ -126,6 +127,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   isResettingAccountPassword = false;
   private static readonly DEFAULT_RESET_PASSWORD = '123456';
 
+  // Cleanup Firebase Auth users outside Settings
+  isCleaningAuthUsers = false;
+
   constructor(
     private permissionService: PermissionService,
     private firebaseAuthService: FirebaseAuthService,
@@ -163,17 +167,61 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   private async resolveUidByAspEmployeeId(employeeId: string): Promise<string | null> {
-    const email = `${employeeId.toLowerCase()}@asp.com`;
-    const fromList = this.firebaseUsers.find((u) => this.getEmployeeIdOnly(u) === employeeId);
+    const normalized = (employeeId || '').trim().toUpperCase();
+    if (!normalized) return null;
+
+    // 1) Tìm theo danh sách đã load (getEmployeeIdOnly xử lý được case-insensitive từ email)
+    const fromList = this.firebaseUsers.find((u) => this.getEmployeeIdOnly(u) === normalized);
     if (fromList) return fromList.uid;
 
-    const snap = await this.firestore
-      .collection('users', (ref) => ref.where('email', '==', email).limit(1))
-      .get()
-      .toPromise();
-    if (snap && !snap.empty) {
-      return snap.docs[0].id;
+    // 2) Tìm lại trực tiếp trong Firestore: email có thể bị lưu hoa/thường khác nhau hoặc domain khác.
+    //    Firestore equality match case-sensitive => thử nhiều biến thể.
+    const emailCandidates = Array.from(
+      new Set<string>([
+        `${normalized.toLowerCase()}@asp.com`,
+        `${normalized}@asp.com`,
+        `${normalized.toLowerCase()}@gmail.com`,
+        `${normalized}@gmail.com`
+      ])
+    );
+
+    // 2a) Thử lookup theo field employeeId (nếu dự án có lưu field này ở `users`)
+    try {
+      const byEmployeeIdSnap = await this.firestore
+        .collection('users', (ref) => ref.where('employeeId', '==', normalized).limit(1))
+        .get()
+        .toPromise();
+      if (byEmployeeIdSnap && !byEmployeeIdSnap.empty) {
+        return byEmployeeIdSnap.docs[0].id;
+      }
+    } catch (e) {
+      // bỏ qua: field có thể không tồn tại hoặc bị chặn bởi rules
     }
+
+    for (const email of emailCandidates) {
+      // users
+      try {
+        const snap = await this.firestore
+          .collection('users', (ref) => ref.where('email', '==', email).limit(1))
+          .get()
+          .toPromise();
+        if (snap && !snap.empty) return snap.docs[0].id;
+      } catch (e) {
+        // bỏ qua và thử candidate khác
+      }
+
+      // user-permissions (đôi khi có đủ thông tin hơn)
+      try {
+        const permSnap = await this.firestore
+          .collection('user-permissions', (ref) => ref.where('email', '==', email).limit(1))
+          .get()
+          .toPromise();
+        if (permSnap && !permSnap.empty) return permSnap.docs[0].id;
+      } catch (e) {
+        // bỏ qua và thử candidate khác
+      }
+    }
+
     return null;
   }
 
@@ -181,12 +229,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.resetAccountInput);
     if (!employeeId) {
       alert('Vui lòng nhập mã tài khoản đúng dạng (VD: ASP0054 hoặc 0054).');
-      return;
-    }
-
-    const uid = await this.resolveUidByAspEmployeeId(employeeId);
-    if (!uid) {
-      alert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
       return;
     }
 
@@ -201,14 +243,45 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     this.isResettingAccountPassword = true;
     try {
-      await firstValueFrom(
-        this.fns.httpsCallable('adminUpdateUserPasswordFn')({
-          uid,
-          newPassword: SettingsComponent.DEFAULT_RESET_PASSWORD
-        })
-      );
-      this.firebaseUserPasswords[uid] = SettingsComponent.DEFAULT_RESET_PASSWORD;
-      alert(`✅ Đã đặt mật khẩu ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}.`);
+      // Ưu tiên reset theo employeeId (lookup thẳng Firebase Auth), không phụ thuộc Firestore list.
+      try {
+        const result: any = await firstValueFrom(
+          this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
+            employeeId,
+            newPassword: SettingsComponent.DEFAULT_RESET_PASSWORD
+          })
+        );
+
+        const uid = result?.uid as string | undefined;
+        if (uid) {
+          this.firebaseUserPasswords[uid] = SettingsComponent.DEFAULT_RESET_PASSWORD;
+        }
+
+        alert(
+          `✅ Đã đặt mật khẩu ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}.`
+        );
+      } catch (callErr: any) {
+        // Nếu function mới chưa deploy/không tồn tại, fallback theo uid dựa trên Firestore list hiện có.
+        console.warn('Fallback reset by uid (adminUpdateUserPasswordFn) do callable lỗi:', callErr);
+
+        const uid = await this.resolveUidByAspEmployeeId(employeeId);
+        if (!uid) {
+          alert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
+          return;
+        }
+
+        await firstValueFrom(
+          this.fns.httpsCallable('adminUpdateUserPasswordFn')({
+            uid,
+            newPassword: SettingsComponent.DEFAULT_RESET_PASSWORD
+          })
+        );
+        this.firebaseUserPasswords[uid] = SettingsComponent.DEFAULT_RESET_PASSWORD;
+        alert(
+          `✅ Đã đặt mật khẩu ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}.`
+        );
+      }
+
       this.resetAccountInput = '';
       await this.refreshFirebaseUsers();
     } catch (error: any) {
@@ -227,6 +300,40 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
+  async cleanupAuthUsersNotInSettings(): Promise<void> {
+    if (this.isCleaningAuthUsers) return;
+
+    const ok = confirm(
+      'Xóa toàn bộ tài khoản Firebase Authentication KHÔNG thuộc danh sách người dùng trong Settings.\n\n' +
+        'Thao tác này không thể hoàn tác. Bạn chắc chắn muốn tiếp tục?'
+    );
+    if (!ok) return;
+
+    const typed = window.prompt('Nhập đúng: DELETE để xác nhận xoá.');
+    if (typed !== 'DELETE') return;
+
+    this.isCleaningAuthUsers = true;
+    try {
+      const result: any = await firstValueFrom(
+        this.fns.httpsCallable('adminDeleteAuthUsersNotInSettingsFn')({})
+      );
+      const deleted = result?.deletedCount ?? 0;
+      const sample = Array.isArray(result?.deletedUidsSample) ? result.deletedUidsSample : [];
+      alert(
+        `✅ Đã xóa ${deleted} user khỏi Firebase Auth.\n` +
+          (sample.length ? `Mẫu uid bị xóa: ${sample.slice(0, 5).join(', ')}` : '')
+      );
+
+      await this.refreshFirebaseUsers();
+    } catch (error: any) {
+      console.error('❌ cleanupAuthUsersNotInSettings:', error);
+      const msg = (error?.message as string) || 'Có lỗi xảy ra khi xóa user.';
+      alert('❌ ' + msg);
+    } finally {
+      this.isCleaningAuthUsers = false;
+    }
+  }
+
   ngOnInit(): void {
     console.log('🚀 Settings Component Initializing...');
     
@@ -235,16 +342,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
     
     // Setup auth state listener
     this.setupAuthStateListener();
-    
-    // Load initial data
-    this.loadUserPermissions();
-    this.loadFirebaseUsers();
-    // Luôn load permissions vì luôn cho phép sửa
-    this.loadFirebaseUserPermissions();
-    
 
-    
-    console.log('✅ Settings Component Initialized');
+    // Không load dữ liệu nặng (Firestore) cho đến khi admin login thành công.
+    console.log('✅ Settings Component Initialized (waiting for Admin login)');
   }
 
   ngOnDestroy(): void {
@@ -323,7 +423,18 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.isAdminLoggedIn = true;
       this.loginError = '';
       this.adminPassword = ''; // Clear password
-      void this.ensureAsp0054Account();
+
+      // Chỉ load data sau khi admin login thành công
+      if (!this.hasLoadedAdminData) {
+        await this.loadUserPermissions();
+        await this.loadFirebaseUsers();
+        // Luôn load permissions vì luôn cho phép sửa
+        await this.loadFirebaseUserPermissions();
+        this.hasLoadedAdminData = true;
+      }
+
+      // Seed tài khoản ASP cố định (có thể gọi refresh)
+      await this.ensureAspAccountsSeeded();
     } else {
       this.loginError = 'Tên đăng nhập hoặc mật khẩu không đúng!';
       this.adminPassword = '';
@@ -331,15 +442,27 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Tạo / đồng bộ tài khoản ASP0054 (asp0054@asp.com, mật khẩu 123456) qua Firebase Auth + Firestore.
-   * Dùng secondary Firebase app để không làm mất phiên đăng nhập hiện tại.
+   * Sau khi đăng nhập Settings (Admin/Admin), tạo/đồng bộ các tài khoản ASP cố định (Firebase Auth + Firestore).
    */
-  private async ensureAsp0054Account(): Promise<void> {
-    const email = 'asp0054@asp.com';
-    const password = '123456';
-    const displayName = 'ASP0054';
+  private async ensureAspAccountsSeeded(): Promise<void> {
+    await this.ensureAspAccount('0054', { grantSettingsTab: false });
+    await this.ensureAspAccount('0609', { grantSettingsTab: true });
+  }
 
-    const appName = `settings-create-asp0054-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  /**
+   * Tạo / đồng bộ tài khoản asp{4 số}@asp.com, mật khẩu 123456.
+   * grantSettingsTab: bật thêm tab Settings (kèm Dashboard).
+   */
+  private async ensureAspAccount(
+    fourDigits: string,
+    options: { grantSettingsTab: boolean }
+  ): Promise<void> {
+    const digits = (fourDigits || '').replace(/\D/g, '').padStart(4, '0').slice(-4);
+    const email = `asp${digits}@asp.com`;
+    const password = '123456';
+    const displayName = `ASP${digits}`;
+
+    const appName = `settings-create-${digits}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     let secondaryApp: firebase.app.App | null = null;
     try {
       const appOptions = this.firestore.firestore.app.options as any;
@@ -353,16 +476,18 @@ export class SettingsComponent implements OnInit, OnDestroy {
         await secondaryAuth.signOut();
       } catch (e: any) {
         if (e?.code === 'auth/email-already-in-use') {
-          try {
-            const cred = await secondaryAuth.signInWithEmailAndPassword(email, password);
-            uid = cred.user!.uid;
-            await secondaryAuth.signOut();
-          } catch (e2: any) {
-            if (e2?.code === 'auth/wrong-password') {
-              console.warn('ASP0054 đã tồn tại trên Firebase Auth với mật khẩu khác 123456.');
-              return;
-            }
-            throw e2;
+          // Email đã tồn tại trên Firebase Auth:
+          // - không phụ thuộc mật khẩu hiện tại
+          // - gọi callable (Admin SDK) để set password đúng 123456 và lấy uid
+          const r: any = await firstValueFrom(
+            this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
+              employeeId: fourDigits,
+              newPassword: password
+            })
+          );
+          uid = r?.uid as string;
+          if (!uid) {
+            throw new Error(`Không nhận được uid khi seed ${displayName}.`);
           }
         } else {
           throw e;
@@ -400,7 +525,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
       const defaultTabPermissions: { [key: string]: boolean } = {};
       this.availableTabs.forEach((tab) => {
-        defaultTabPermissions[tab.key] = tab.key === 'dashboard';
+        const allow =
+          tab.key === 'dashboard' || (options.grantSettingsTab && tab.key === 'settings');
+        defaultTabPermissions[tab.key] = allow;
       });
 
       await this.firestore.collection('user-tab-permissions').doc(uid).set(
@@ -416,9 +543,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
 
       await this.refreshFirebaseUsers();
-      console.log('✅ Đã đảm bảo tài khoản ASP0054 (asp0054@asp.com).');
+      console.log(`✅ Đã đảm bảo tài khoản ${displayName} (${email}).`);
     } catch (error) {
-      console.error('❌ ensureAsp0054Account:', error);
+      console.error(`❌ ensureAspAccount ${displayName}:`, error);
     } finally {
       if (secondaryApp) {
         try {
@@ -435,6 +562,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.adminUsername = '';
     this.adminPassword = '';
     this.loginError = '';
+
+    // Giữ hasLoadedAdminData để lần login sau không load lại toàn bộ.
+    // Có thể clear arrays nếu bạn muốn (nhưng UI đã ẩn khi chưa login).
   }
 
   async loadUserPermissions(): Promise<void> {

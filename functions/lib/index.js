@@ -33,13 +33,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.adminDeleteAuthUsersNotInSettingsFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const outbound_dup_notify_1 = require("./outbound-dup-notify");
 const qc_priority_email_1 = require("./qc-priority-email");
 const params_config_1 = require("./params-config");
 const admin_update_user_password_1 = require("./admin-update-user-password");
+const admin_sync_auth_users_1 = require("./admin-sync-auth-users");
 admin.initializeApp();
 /**
  * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
@@ -187,6 +188,57 @@ exports.adminResetUserPasswordFn = functions
         }
         if (code === 'auth/weak-password' || code === 'auth/invalid-password') {
             throw new functions.https.HttpsError('invalid-argument', 'Password mới không đạt chuẩn của Firebase Auth.');
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
+exports.adminSetUserPasswordByEmployeeIdFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
+    const newPassword = typeof (data === null || data === void 0 ? void 0 : data.newPassword) === 'string' ? data.newPassword : '';
+    if (!employeeId || !newPassword) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId hoặc newPassword.');
+    }
+    try {
+        const r = await (0, admin_update_user_password_1.adminSetUserPasswordByEmployeeId)(context.auth.uid, employeeId, newPassword);
+        return { ok: true, uid: r.uid, email: r.email };
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+        }
+        if (msg.includes('Không tìm thấy Firebase Auth user')) {
+            throw new functions.https.HttpsError('not-found', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: xóa Firebase Auth users không nằm trong danh sách Settings (collection users/user-permissions). */
+exports.adminDeleteAuthUsersNotInSettingsFn = functions
+    .https.onCall(async (_data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const r = await (0, admin_sync_auth_users_1.adminDeleteAuthUsersNotInSettings)(context.auth.uid);
+        return r;
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = anyErr instanceof Error ? anyErr.message : (_a = anyErr === null || anyErr === void 0 ? void 0 : anyErr.message) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }

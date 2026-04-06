@@ -83,6 +83,12 @@
         <h3>Danh sách người dùng</h3>
         <div class="actions">
           <button (click)="refreshFirebaseUsers()">Làm mới</button>
+          <button
+            type="button"
+            (click)="cleanupAuthUsersNotInSettings()"
+            [disabled]="isCleaningAuthUsers">
+            {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa ngoài Settings' }}
+          </button>
           <a routerLink="/menu" class="btn-menu" title="Về Menu">
             <i class="material-icons">home</i>
             Về menu

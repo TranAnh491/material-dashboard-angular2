@@ -399,30 +399,46 @@
   }
   
   .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
   
   .menu-item {
-    padding: 18px 12px;
-    min-height: 95px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px 12px;
+    min-height: auto;
   }
   
   .menu-item .material-icons {
-    font-size: 36px;
+    font-size: 18px; // Giảm 50% so với 36px hiện tại
+  }
+
+  .menu-item .menu-tab-icon-img {
+    width: 41px;  // Giảm ~50% so với 82px
+    height: 51px; // Giảm ~50% so với 102px
   }
   
   .menu-item span {
     font-size: 0.9rem;
+    text-align: left;
+    line-height: 1.2;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  
+
+  // Ẩn tên khu vực (Main / ASM1 RM / ...) trên mobile
   .menu-category-title {
-    font-size: 1.1rem;
-    margin-bottom: 15px;
+    display: none;
   }
-  
+
+  // Gom các section lại gần nhau, không tạo khoảng cách lớn
   .menu-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
   }
 }
 
@@ -456,30 +472,35 @@
   }
   
   .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
   
   .menu-item {
-    padding: 15px 10px;
-    min-height: 85px;
+    padding: 12px 10px;
+    min-height: auto;
   }
   
   .menu-item .material-icons {
-    font-size: 32px;
+    font-size: 16px; // Giảm 50% so với 32px hiện tại
   }
   
   .menu-item span {
     font-size: 0.8rem;
+    max-width: 100%;
   }
-  
+
+  .menu-item .menu-tab-icon-img {
+    width: 38px;
+    height: 48px;
+  }
+
   .menu-category-title {
-    font-size: 1rem;
-    margin-bottom: 12px;
+    display: none;
   }
-  
+
   .menu-section {
-    margin-bottom: 25px;
+    margin-bottom: 0;
   }
 }
 

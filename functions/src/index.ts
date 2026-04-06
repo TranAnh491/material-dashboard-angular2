@@ -3,7 +3,12 @@ import * as admin from 'firebase-admin';
 import { runOutboundDupNotifyForSlot, sendOutboundDupReportManual } from './outbound-dup-notify';
 import { sendQcPriorityResolvedEmail, QcPriorityResolvedPayload } from './qc-priority-email';
 import { emailPass } from './params-config';
-import { adminUpdateUserPassword, adminResetUserPassword } from './admin-update-user-password';
+import {
+  adminUpdateUserPassword,
+  adminResetUserPassword,
+  adminSetUserPasswordByEmployeeId
+} from './admin-update-user-password';
+import { adminDeleteAuthUsersNotInSettings } from './admin-sync-auth-users';
 
 admin.initializeApp();
 
@@ -172,6 +177,61 @@ export const adminResetUserPasswordFn = functions
         throw new functions.https.HttpsError('invalid-argument', 'Password mới không đạt chuẩn của Firebase Auth.');
       }
 
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
+/** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
+export const adminSetUserPasswordByEmployeeIdFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: { employeeId?: string; newPassword?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+    const newPassword = typeof data?.newPassword === 'string' ? data.newPassword : '';
+
+    if (!employeeId || !newPassword) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId hoặc newPassword.');
+    }
+
+    try {
+      const r = await adminSetUserPasswordByEmployeeId(context.auth.uid, employeeId, newPassword);
+      return { ok: true, uid: r.uid, email: r.email };
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+      }
+      if (msg.includes('Không tìm thấy Firebase Auth user')) {
+        throw new functions.https.HttpsError('not-found', msg);
+      }
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
+/** Admin: xóa Firebase Auth users không nằm trong danh sách Settings (collection users/user-permissions). */
+export const adminDeleteAuthUsersNotInSettingsFn = functions
+  .https.onCall(async (_data: unknown, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+
+    try {
+      const r = await adminDeleteAuthUsersNotInSettings(context.auth.uid);
+      return r;
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = anyErr instanceof Error ? anyErr.message : anyErr?.message ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
+      }
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });

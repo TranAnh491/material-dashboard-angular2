@@ -35,9 +35,21 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminUpdateUserPassword = adminUpdateUserPassword;
 exports.adminResetUserPassword = adminResetUserPassword;
+exports.adminSetUserPasswordByEmployeeId = adminSetUserPasswordByEmployeeId;
 const admin = __importStar(require("firebase-admin"));
 function isAdminOrManager(role) {
-    return role === 'Admin' || role === 'Quản lý';
+    const r = (role || '').toString().trim().toLowerCase();
+    const normalized = r
+        // bỏ dấu tiếng Việt để so sánh ổn định
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '');
+    return (normalized === 'admin' ||
+        normalized === 'quan ly' ||
+        normalized === 'quan ly ' ||
+        normalized === 'quan ly\n' ||
+        r === 'admin' ||
+        r === 'quản lý' // fallback nếu môi trường không hỗ trợ regex diacritics
+    );
 }
 /**
  * Đổi password cho user theo uid, chỉ dùng Admin SDK nên KHÔNG cần biết password hiện tại.
@@ -80,5 +92,62 @@ async function adminResetUserPassword(callerUid, targetUid) {
     const newPassword = generateSixDigitPassword();
     await adminUpdateUserPassword(callerUid, targetUid, newPassword);
     return newPassword;
+}
+function normalizeAspEmployeeId(input) {
+    const t = (input || '').trim().toUpperCase();
+    if (!t)
+        return null;
+    const m1 = t.match(/^ASP(\d{4})$/);
+    if (m1)
+        return `ASP${m1[1]}`;
+    const m2 = t.match(/^(\d{4})$/);
+    if (m2)
+        return `ASP${m2[1]}`;
+    return null;
+}
+/**
+ * Admin: đặt password cho user theo mã nhân viên ASP (ASPxxxx hoặc xxxx).
+ * Lookup user bằng Firebase Auth (getUserByEmail) rồi update password theo uid.
+ * Đồng thời cập nhật Firestore để UI hiển thị đúng.
+ */
+async function adminSetUserPasswordByEmployeeId(callerUid, employeeIdRaw, newPassword) {
+    if (!callerUid)
+        throw new Error('Thiếu callerUid.');
+    if (!employeeIdRaw)
+        throw new Error('Thiếu employeeId.');
+    if (!newPassword || newPassword.length < 6) {
+        throw new Error('Password mới phải có ít nhất 6 ký tự.');
+    }
+    const employeeId = normalizeAspEmployeeId(employeeIdRaw);
+    if (!employeeId)
+        throw new Error('employeeId không đúng định dạng (ASPxxxx hoặc xxxx).');
+    const digits = employeeId.replace(/^ASP/, '');
+    const emailCandidates = [
+        `${digits.toLowerCase()}@asp.com`,
+        `${digits.toLowerCase()}@gmail.com`
+    ];
+    let foundUid = null;
+    let foundEmail = null;
+    for (const email of emailCandidates) {
+        try {
+            const userRecord = await admin.auth().getUserByEmail(email);
+            if (userRecord === null || userRecord === void 0 ? void 0 : userRecord.uid) {
+                foundUid = userRecord.uid;
+                foundEmail = email;
+                break;
+            }
+        }
+        catch (e) {
+            // Nếu không tìm thấy email này thì thử candidate khác
+            if ((e === null || e === void 0 ? void 0 : e.code) === 'auth/user-not-found')
+                continue;
+            throw e;
+        }
+    }
+    if (!foundUid || !foundEmail) {
+        throw new Error(`Không tìm thấy Firebase Auth user theo mã ${employeeId}.`);
+    }
+    await adminUpdateUserPassword(callerUid, foundUid, newPassword);
+    return { uid: foundUid, email: foundEmail };
 }
 //# sourceMappingURL=admin-update-user-password.js.map

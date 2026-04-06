@@ -1433,6 +1433,22 @@
   .mobile-stats-section {
     display: none;
   }
+
+  // Mobile: hide More + Tem Lẽ, keep only search
+  .more-btn,
+  .tem-le-btn {
+    display: none !important;
+  }
+
+  // Mobile: keep only search input
+  .negative-stock-counter-box,
+  .total-counter-box,
+  .total-stock-counter-box,
+  .reset-btn,
+  .catalog-ready-icon,
+  .mobile-search-section .search-type-selector {
+    display: none !important;
+  }
   
   // Desktop stats section - HIDDEN on mobile
   .desktop-stats-section {
