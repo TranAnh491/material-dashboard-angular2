@@ -141,6 +141,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   qtyBagRuleEnabled = true;
   private readonly QTY_BAG_RULE_KEY = 'materials-asm1:qty-bag-rule-enabled:v1';
 
+  /** Rule Bag: 4 ký tự đầu mã — khi master QTY BAG rule ON, chỉ nhóm prefix ON mới bắt bội số SP */
+  showRuleBagPopup = false;
+  ruleBagPrefixes: string[] = [];
+  private qtyBagRuleByPrefix: Record<string, boolean> = {};
+  private readonly QTY_BAG_RULE_BY_PREFIX_KEY = 'materials-asm1:qty-bag-rule-by-prefix:v1';
+
+  /** Đầu mã thêm tay (không cần load inventory), lưu localStorage */
+  ruleBagManualPrefixes: string[] = [];
+  ruleBagNewPrefixInput = '';
+  private readonly RULE_BAG_MANUAL_PREFIXES_KEY = 'materials-asm1:rule-bag-manual-prefixes:v1';
+
+  /** Đồng bộ QTY BAG + Rule Bag cho mọi máy qua Firestore */
+  private readonly QTY_BAG_FIRESTORE_COLLECTION = 'materials-qty-bag-rules';
+
   // ===== Tem Lẽ (tách tem từ QR hiện tại) =====
   showTemLePopup = false;
   temLeQrText: string = '';
@@ -342,7 +356,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (savedRule === '0' || savedRule === '1') {
       this.qtyBagRuleEnabled = savedRule === '1';
     }
-    
+    this.loadQtyBagRuleByPrefixFromStorage();
+    this.loadRuleBagManualPrefixesFromStorage();
+    this.subscribeQtyBagRulesFromFirestore();
+
     // 🔍 DEBUG: Check outbound data on init
     this.debugOutboundDataOnInit();
 
@@ -2504,7 +2521,213 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   toggleQtyBagRule(): void {
     this.qtyBagRuleEnabled = !this.qtyBagRuleEnabled;
+    this.syncQtyBagRulesToLocalStorage();
+    this.pushQtyBagRulesToFirestore();
+  }
+
+  openRuleBagPopup(): void {
+    this.rebuildRuleBagPrefixList();
+    this.showRuleBagPopup = true;
+    this.closeMorePopup();
+  }
+
+  closeRuleBagPopup(): void {
+    this.showRuleBagPopup = false;
+  }
+
+  /** Lắng nghe Firestore — mọi máy cập nhật khi có thay đổi */
+  private subscribeQtyBagRulesFromFirestore(): void {
+    this.firestore
+      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.FACTORY}`)
+      .valueChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(data => {
+        if (!data || typeof data !== 'object') {
+          return;
+        }
+        this.applyQtyBagRulesFromFirestoreDoc(data as Record<string, unknown>);
+      });
+  }
+
+  private applyQtyBagRulesFromFirestoreDoc(data: Record<string, unknown>): void {
+    if (typeof data['enabled'] === 'boolean') {
+      this.qtyBagRuleEnabled = data['enabled'];
+    }
+    if ('prefixOff' in data && Array.isArray(data['prefixOff'])) {
+      const next: Record<string, boolean> = {};
+      for (const p of data['prefixOff'] as unknown[]) {
+        const k = this.getMaterialCodePrefix4(String(p));
+        if (k) {
+          next[k] = false;
+        }
+      }
+      this.qtyBagRuleByPrefix = next;
+    }
+    if ('manualPrefixes' in data && Array.isArray(data['manualPrefixes'])) {
+      const set = new Set<string>();
+      for (const x of data['manualPrefixes'] as unknown[]) {
+        const k = this.getMaterialCodePrefix4(String(x ?? ''));
+        if (k) {
+          set.add(k);
+        }
+      }
+      this.ruleBagManualPrefixes = Array.from(set).sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      );
+    }
+    this.rebuildRuleBagPrefixList();
+    this.syncQtyBagRulesToLocalStorage();
+    this.cdr.markForCheck();
+  }
+
+  /** Ghi cache local (offline) trùng với trạng thái đang áp dụng */
+  private syncQtyBagRulesToLocalStorage(): void {
     localStorage.setItem(this.QTY_BAG_RULE_KEY, this.qtyBagRuleEnabled ? '1' : '0');
+    this.persistQtyBagRuleByPrefix();
+    this.persistRuleBagManualPrefixes();
+  }
+
+  private pushQtyBagRulesToFirestore(): void {
+    const prefixOff = Object.keys(this.qtyBagRuleByPrefix).filter(
+      k => this.qtyBagRuleByPrefix[k] === false
+    );
+    this.firestore
+      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.FACTORY}`)
+      .set(
+        {
+          factory: this.FACTORY,
+          enabled: this.qtyBagRuleEnabled,
+          prefixOff,
+          manualPrefixes: [...this.ruleBagManualPrefixes],
+          updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      )
+      .then(() => console.log(`✅ [${this.FACTORY}] QTY bag / Rule Bag đã đồng bộ lên Firestore`))
+      .catch(err => {
+        console.error(`❌ [${this.FACTORY}] Lỗi đồng bộ Rule lên Firestore:`, err);
+        alert('Không lưu được cài đặt Rule lên Firebase. Kiểm tra mạng hoặc quyền Firestore.');
+      });
+  }
+
+  private loadQtyBagRuleByPrefixFromStorage(): void {
+    const raw = localStorage.getItem(this.QTY_BAG_RULE_BY_PREFIX_KEY);
+    if (!raw) return;
+    try {
+      const o = JSON.parse(raw) as Record<string, unknown>;
+      if (!o || typeof o !== 'object') return;
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(o)) {
+        if (typeof o[k] === 'boolean') {
+          const nk = this.getMaterialCodePrefix4(k);
+          if (nk) next[nk] = o[k] as boolean;
+        }
+      }
+      this.qtyBagRuleByPrefix = next;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private persistQtyBagRuleByPrefix(): void {
+    localStorage.setItem(this.QTY_BAG_RULE_BY_PREFIX_KEY, JSON.stringify(this.qtyBagRuleByPrefix));
+  }
+
+  private getMaterialCodePrefix4(materialCode: string): string {
+    const c = String(materialCode || '').trim().toUpperCase();
+    if (!c) return '';
+    return c.length >= 4 ? c.slice(0, 4) : c;
+  }
+
+  private loadRuleBagManualPrefixesFromStorage(): void {
+    const raw = localStorage.getItem(this.RULE_BAG_MANUAL_PREFIXES_KEY);
+    if (!raw) return;
+    try {
+      const arr = JSON.parse(raw) as unknown;
+      if (!Array.isArray(arr)) return;
+      const set = new Set<string>();
+      for (const x of arr) {
+        const p = this.getMaterialCodePrefix4(String(x ?? ''));
+        if (p) set.add(p);
+      }
+      this.ruleBagManualPrefixes = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private persistRuleBagManualPrefixes(): void {
+    localStorage.setItem(this.RULE_BAG_MANUAL_PREFIXES_KEY, JSON.stringify(this.ruleBagManualPrefixes));
+  }
+
+  rebuildRuleBagPrefixList(): void {
+    const set = new Set<string>();
+    for (const p of this.ruleBagManualPrefixes) {
+      if (p) set.add(p);
+    }
+    for (const m of this.inventoryMaterials || []) {
+      const p = this.getMaterialCodePrefix4(m.materialCode);
+      if (p) set.add(p);
+    }
+    this.ruleBagPrefixes = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }
+
+  addRuleBagPrefix(): void {
+    const p = this.getMaterialCodePrefix4(this.ruleBagNewPrefixInput);
+    if (!p) {
+      alert('Nhập đầu mã (tối đa 4 ký tự, ví dụ 2602).');
+      return;
+    }
+    if (this.ruleBagManualPrefixes.includes(p)) {
+      this.ruleBagNewPrefixInput = '';
+      return;
+    }
+    this.ruleBagManualPrefixes = [...this.ruleBagManualPrefixes, p].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+    this.syncQtyBagRulesToLocalStorage();
+    this.ruleBagNewPrefixInput = '';
+    this.rebuildRuleBagPrefixList();
+    this.pushQtyBagRulesToFirestore();
+  }
+
+  removeRuleBagManualPrefix(prefix: string, event?: Event): void {
+    event?.stopPropagation();
+    const p = this.getMaterialCodePrefix4(prefix);
+    if (!p || !this.ruleBagManualPrefixes.includes(p)) return;
+    this.ruleBagManualPrefixes = this.ruleBagManualPrefixes.filter(x => x !== p);
+    this.syncQtyBagRulesToLocalStorage();
+    this.rebuildRuleBagPrefixList();
+    this.pushQtyBagRulesToFirestore();
+  }
+
+  isRuleBagManualPrefix(prefix: string): boolean {
+    return this.ruleBagManualPrefixes.includes(this.getMaterialCodePrefix4(prefix));
+  }
+
+  isQtyBagRuleOnForPrefix(prefix: string): boolean {
+    return this.qtyBagRuleByPrefix[prefix] !== false;
+  }
+
+  toggleQtyBagRuleForPrefix(prefix: string): void {
+    const on = this.qtyBagRuleByPrefix[prefix] !== false;
+    const copy = { ...this.qtyBagRuleByPrefix };
+    if (on) {
+      copy[prefix] = false;
+    } else {
+      delete copy[prefix];
+    }
+    this.qtyBagRuleByPrefix = copy;
+    this.syncQtyBagRulesToLocalStorage();
+    this.pushQtyBagRulesToFirestore();
+  }
+
+  /** Master OFF → không bắt; master ON → chỉ bắt khi prefix Rule Bag đang ON (mặc định ON nếu chưa tắt) */
+  private shouldEnforceQtyBagMultipleForMaterial(materialCode: string): boolean {
+    if (!this.qtyBagRuleEnabled) return false;
+    const prefix = this.getMaterialCodePrefix4(materialCode);
+    if (!prefix) return true;
+    return this.qtyBagRuleByPrefix[prefix] !== false;
   }
 
   closeMorePopup(): void {
@@ -3197,11 +3420,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const normalizedRaw = isFinite(num) ? Math.max(0, num) : 0;
     const normalized = Math.round(normalizedRaw * 10000) / 10000;
 
-    // Validate: QTY BAG must be multiple of Standard Packing
-    if (this.qtyBagRuleEnabled && normalized > 0) {
+    // Validate: QTY BAG must be multiple of Standard Packing (theo master + Rule Bag prefix),
+    // trừ khi QTY BAG = đúng tồn kho (in cả lô → in tách tem chuẩn + lẻ).
+    if (this.shouldEnforceQtyBagMultipleForMaterial(material.materialCode) && normalized > 0) {
       const sp = this.getStandardPacking(material.materialCode);
-      if (sp && sp > 0 && !this.isMultipleOfStandardPacking(normalized, sp)) {
-        alert(`❌ QTY BAG không hợp lệ.\n\nStandard Packing = ${sp}\nQTY BAG phải là bội số của Standard Packing (VD: ${sp}, ${sp * 2}, ${sp * 3}...)`);
+      if (
+        sp &&
+        sp > 0 &&
+        !this.isMultipleOfStandardPacking(normalized, sp) &&
+        !this.isQtyBagEqualsFullStockForPrint(material, normalized)
+      ) {
+        alert(
+          `❌ QTY BAG không hợp lệ.\n\nStandard Packing = ${sp}\nQTY BAG phải là bội số của Standard Packing (VD: ${sp}, ${sp * 2}, ${sp * 3}...)\n\n` +
+            `Ngoại lệ: nhập QTY BAG đúng bằng Tồn kho thì được in tách tem xuất (bịch chuẩn + phần lẻ).`
+        );
         // Revert UI to previous persisted value if possible
         const prev = (material as any).__prevRollsOrBags;
         material.rollsOrBags = prev !== undefined ? String(prev) : '';
@@ -5038,6 +5270,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
 
 
+  /**
+   * Ngoại lệ quy tắc bội SP: QTY BAG = đúng tồn kho (in cả lô) → cho phép số lẻ so với Standard Packing,
+   * tem in tách: n tem bịch chuẩn + 1 tem phần dư (VD tồn 2066, SP 1000 → 1000+1000+66).
+   */
+  private isQtyBagEqualsFullStockForPrint(material: InventoryMaterial, qtyBag: number): boolean {
+    const stock = this.calculateCurrentStock(material);
+    if (!(stock > 0) || !(qtyBag > 0)) {
+      return false;
+    }
+    const a = Math.round(Number(stock) * 10000) / 10000;
+    const b = Math.round(Number(qtyBag) * 10000) / 10000;
+    return Math.abs(a - b) <= 0.0001;
+  }
+
   // Helper method to check if Rolls/Bags is valid for QR printing
   isRollsOrBagsValid(material: InventoryMaterial): boolean {
     const rollsOrBagsValue = material.rollsOrBags;
@@ -5045,10 +5291,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') return false;
     const qty = parseFloat(String(rollsOrBagsValue).replace(/,/g, '').trim());
     if (!(qty > 0)) return false;
-    if (!this.qtyBagRuleEnabled) return true;
+    if (!this.shouldEnforceQtyBagMultipleForMaterial(material.materialCode)) return true;
     const sp = this.getStandardPacking(material.materialCode);
     if (sp && sp > 0) {
-      return this.isMultipleOfStandardPacking(qty, sp);
+      if (this.isMultipleOfStandardPacking(qty, sp)) return true;
+      if (this.isQtyBagEqualsFullStockForPrint(material, qty)) return true;
+      return false;
     }
     return true;
   }

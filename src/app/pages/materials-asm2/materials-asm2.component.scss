@@ -2474,3 +2474,146 @@
   }
 }
 
+.rule-bag-popup-content {
+  max-width: 520px;
+  width: 92%;
+}
+
+.rule-bag-popup-body {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-top: 8px;
+}
+
+.rule-bag-hint {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0 0 12px 0;
+  line-height: 1.45;
+}
+
+.rule-bag-add-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rule-bag-add-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 10px 12px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.rule-bag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 2px solid #2563eb;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  .material-icons {
+    font-size: 20px;
+  }
+
+  &:hover {
+    background: #dbeafe;
+  }
+}
+
+.rule-bag-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-bag-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  border-radius: 6px;
+
+  .material-icons {
+    font-size: 22px;
+  }
+
+  &:hover {
+    background: #fef2f2;
+  }
+}
+
+.rule-bag-empty {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.rule-bag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rule-bag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid #f3f4f6;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.rule-bag-prefix {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+}
+
+.rule-bag-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+
+  .material-icons {
+    font-size: 22px;
+    color: #6b7280;
+  }
+
+  &:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+}
+

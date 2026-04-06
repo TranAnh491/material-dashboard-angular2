@@ -698,6 +698,10 @@
             <i class="material-icons">{{ qtyBagRuleEnabled ? 'toggle_on' : 'toggle_off' }}</i>
             <span>QTY BAG rule: {{ qtyBagRuleEnabled ? 'ON' : 'OFF' }}</span>
           </button>
+          <button class="popup-action-btn" type="button" (click)="openRuleBagPopup()">
+            <i class="material-icons">tune</i>
+            <span>Rule Bag</span>
+          </button>
           <button class="popup-action-btn" (click)="loadInventoryFromFirebase(); closeMorePopup()">
             <i class="material-icons">cloud_download</i>
             <span>Load toàn bộ inventory</span>
@@ -749,6 +753,63 @@
             <i class="material-icons">build</i>
             <span>Sửa batchNumber lỗi</span>
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Rule Bag: bật/tắt rule theo 4 ký tự đầu mã (khi QTY BAG rule master ON) -->
+<div class="modal-overlay" *ngIf="showRuleBagPopup" (click)="closeRuleBagPopup()">
+  <div class="modal-content rule-bag-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Rule Bag — 4 ký tự đầu mã</h3>
+      <button type="button" class="close-btn" (click)="closeRuleBagPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body rule-bag-popup-body">
+      <p class="rule-bag-hint" *ngIf="qtyBagRuleEnabled">
+        QTY BAG rule đang <strong>ON</strong>: nhóm đặt <strong>OFF</strong> bên dưới được nhập QTY BAG không cần bội số Standard Packing.
+      </p>
+      <p class="rule-bag-hint" *ngIf="!qtyBagRuleEnabled">
+        QTY BAG rule đang <strong>OFF</strong> — toàn bộ mã nhập tự do; cấu hình Rule Bag chỉ có hiệu lực khi bật QTY BAG rule.
+      </p>
+      <div class="rule-bag-add-bar">
+        <input
+          type="text"
+          class="rule-bag-add-input"
+          [(ngModel)]="ruleBagNewPrefixInput"
+          maxlength="32"
+          placeholder="Nhập đầu mã (4 ký tự, VD: 2602)"
+          (keyup.enter)="addRuleBagPrefix()"
+        />
+        <button type="button" class="rule-bag-add-btn" (click)="addRuleBagPrefix()">
+          <i class="material-icons">add</i>
+          <span>Thêm</span>
+        </button>
+      </div>
+      <p class="rule-bag-empty" *ngIf="ruleBagPrefixes.length === 0">
+        Chưa có đầu mã trong danh sách. Nhập và bấm <strong>Thêm</strong> (không cần load tồn). Sau khi load inventory, các đầu mã từ tồn sẽ tự hiện thêm.
+      </p>
+      <div class="rule-bag-list" *ngIf="ruleBagPrefixes.length > 0">
+        <div class="rule-bag-row" *ngFor="let pf of ruleBagPrefixes">
+          <span class="rule-bag-prefix">{{ pf }}</span>
+          <div class="rule-bag-row-actions">
+            <button type="button" class="rule-bag-toggle-btn" (click)="toggleQtyBagRuleForPrefix(pf)">
+              <i class="material-icons">{{ isQtyBagRuleOnForPrefix(pf) ? 'toggle_on' : 'toggle_off' }}</i>
+              <span>{{ isQtyBagRuleOnForPrefix(pf) ? 'ON' : 'OFF' }}</span>
+            </button>
+            <button
+              *ngIf="isRuleBagManualPrefix(pf)"
+              type="button"
+              class="rule-bag-remove-btn"
+              (click)="removeRuleBagManualPrefix(pf, $event)"
+              title="Xóa khỏi danh sách thêm tay"
+            >
+              <i class="material-icons">delete_outline</i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
