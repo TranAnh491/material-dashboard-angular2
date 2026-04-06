@@ -1155,6 +1155,18 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.updateMaterialInFirebase(material);
   }
 
+  /** Sửa tay số lượng khi phiếu chưa khóa (chỉ gọi khi canEditMaterial). */
+  updateQuantity(material: FgInItem): void {
+    if (!this.canEditMaterial(material)) return;
+    let q = Number(material.quantity);
+    if (isNaN(q) || q < 0) {
+      q = 0;
+    }
+    material.quantity = Math.floor(q);
+    material.updatedAt = new Date();
+    this.updateMaterialInFirebase(material);
+  }
+
   // UNHIDE Dialog Functions
   openUnhideDialog(): void {
     this.showUnhideDialog = true;

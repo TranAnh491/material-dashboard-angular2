@@ -14,7 +14,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, where, limit, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -361,33 +361,85 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   async loadWorkOrders(): Promise<void> {
     console.log('🔄 Loading work orders from database...');
-    await this.loadPxkFromFirebase();
-    console.log('📄 Using direct Firestore methods for better reliability');
-    await this.loadWorkOrdersDirect();
+    this.isLoading = true;
+    try {
+      // PXK phụ thuộc danh sách WO: chỉ load LSX chưa Done → phải có work orders trước
+      const workOrders = await this.fetchWorkOrdersForCurrentFilters();
+      await this.loadPxkFromFirebase(workOrders);
+      this.processLoadedWorkOrders(workOrders);
+    } catch (e) {
+      console.error('❌ loadWorkOrders failed:', e);
+      alert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
+    } finally {
+      this.isLoading = false;
+      this.cdr.markForCheck();
+    }
   }
 
-  /** Load PXK từ Firebase để dùng khi cần (Box Check, Print PXK, chặn Done) */
-  async loadPxkFromFirebase(): Promise<void> {
-    try {
-      const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
-      this.pxkDataByLsx = {};
-      let skipped = 0;
-      snapshot.docs.forEach((docSnap: any) => {
-        const d = docSnap.data();
-        const lsx = String(d?.lsx || '').trim();
-        const lines = Array.isArray(d?.lines) ? d.lines : [];
-        if (lsx && lines.length > 0) {
-          this.pxkDataByLsx[lsx] = lines;
-        } else {
-          skipped++;
-          console.warn(`[PXK Load] Bỏ qua doc ${docSnap.id}: lsx="${lsx}", lines=${lines.length}`);
-        }
-      });
-      this.invalidatePxkCache();
-      console.log(`[PXK Load] ✅ Tổng docs: ${snapshot.docs.length}, Loaded: ${Object.keys(this.pxkDataByLsx).length} LSX, Bỏ qua: ${skipped}`);
-      if (snapshot.docs.length === 0) {
-        console.warn('[PXK Load] ⚠️ Collection pxk-import-data TRỐNG — chưa có dữ liệu nào được lưu');
+  /** Firebase modular: dùng app đã có (AngularFire), tránh initializeApp lặp / lỗi duplicate. */
+  private getFirebaseV9App() {
+    return getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
+  }
+
+  /** LSX cần PXK: WO chưa Done (Done không cần Box Check / chặn Done theo PXK). */
+  private collectLsxNeedingPxk(workOrders: WorkOrder[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const addVariants = (raw: string) => {
+      const t = String(raw || '').trim();
+      if (!t) return;
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
       }
+      const u = t.toUpperCase();
+      if (u !== t && !seen.has(u)) {
+        seen.add(u);
+        out.push(u);
+      }
+    };
+    for (const wo of workOrders) {
+      if (wo.status === WorkOrderStatus.DONE) continue;
+      addVariants(wo.productionOrder || '');
+    }
+    return out;
+  }
+
+  /** Load PXK chỉ cho LSX WO chưa Done (query `lsx in`, batch 30 — giới hạn Firestore). */
+  async loadPxkFromFirebase(workOrders: WorkOrder[]): Promise<void> {
+    const FIRESTORE_IN_MAX = 30;
+    const lsxList = this.collectLsxNeedingPxk(workOrders);
+    this.pxkDataByLsx = {};
+    try {
+      if (lsxList.length === 0) {
+        this.invalidatePxkCache();
+        console.log('[PXK Load] Không có LSX chưa Done — bỏ qua tải PXK');
+        return;
+      }
+      let totalDocs = 0;
+      let skipped = 0;
+      for (let i = 0; i < lsxList.length; i += FIRESTORE_IN_MAX) {
+        const chunk = lsxList.slice(i, i + FIRESTORE_IN_MAX);
+        const snapshot = await firstValueFrom(
+          this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', chunk)).get()
+        );
+        totalDocs += snapshot.docs.length;
+        snapshot.docs.forEach((docSnap: any) => {
+          const d = docSnap.data();
+          const lsx = String(d?.lsx || '').trim();
+          const lines = Array.isArray(d?.lines) ? d.lines : [];
+          if (lsx && lines.length > 0) {
+            this.pxkDataByLsx[lsx] = lines;
+          } else {
+            skipped++;
+            console.warn(`[PXK Load] Bỏ qua doc ${docSnap.id}: lsx="${lsx}", lines=${lines.length}`);
+          }
+        });
+      }
+      this.invalidatePxkCache();
+      console.log(
+        `[PXK Load] ✅ LSX cần load: ${lsxList.length} (query variants), docs: ${totalDocs}, map keys: ${Object.keys(this.pxkDataByLsx).length}, bỏ qua: ${skipped}`
+      );
     } catch (e) {
       console.error('[PXK Load] ❌ Lỗi khi load:', e);
     }
@@ -463,43 +515,31 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
   
   private processLoadedWorkOrders(workOrders: WorkOrder[]): void {
-    console.log(`📊 Loaded ${workOrders.length} work orders from database:`, workOrders);
-    
+    console.log(`📊 Loaded ${workOrders.length} work orders from database`);
+
     // Process date fields to ensure they are proper Date objects
     const processedWorkOrders = workOrders.map(wo => {
       const processedWo = { ...wo };
-      
+
       // Handle deliveryDate
       if (processedWo.deliveryDate) {
         if (typeof processedWo.deliveryDate === 'object' && processedWo.deliveryDate !== null && 'toDate' in processedWo.deliveryDate) {
-          // Firestore Timestamp
           processedWo.deliveryDate = (processedWo.deliveryDate as any).toDate();
-          console.log(`📅 Converted deliveryDate from Firestore Timestamp:`, processedWo.deliveryDate);
         } else if (typeof processedWo.deliveryDate === 'string') {
-          // String date
           processedWo.deliveryDate = new Date(processedWo.deliveryDate);
-          console.log(`📅 Converted deliveryDate from string:`, processedWo.deliveryDate);
         } else if (!(processedWo.deliveryDate instanceof Date)) {
-          // Other format, try to convert
-          processedWo.deliveryDate = new Date(processedWo.deliveryDate);
-          console.log(`📅 Converted deliveryDate from other format:`, processedWo.deliveryDate);
+          processedWo.deliveryDate = new Date(processedWo.deliveryDate as any);
         }
       }
-      
+
       // Handle planReceivedDate
       if (processedWo.planReceivedDate) {
         if (typeof processedWo.planReceivedDate === 'object' && processedWo.planReceivedDate !== null && 'toDate' in processedWo.planReceivedDate) {
-          // Firestore Timestamp
           processedWo.planReceivedDate = (processedWo.planReceivedDate as any).toDate();
-          console.log(`📅 Converted planReceivedDate from Firestore Timestamp:`, processedWo.planReceivedDate);
         } else if (typeof processedWo.planReceivedDate === 'string') {
-          // String date
           processedWo.planReceivedDate = new Date(processedWo.planReceivedDate);
-          console.log(`📅 Converted planReceivedDate from string:`, processedWo.planReceivedDate);
         } else if (!(processedWo.planReceivedDate instanceof Date)) {
-          // Other format, try to convert
-          processedWo.planReceivedDate = new Date(processedWo.planReceivedDate);
-          console.log(`📅 Converted planReceivedDate from other format:`, processedWo.planReceivedDate);
+          processedWo.planReceivedDate = new Date(processedWo.planReceivedDate as any);
         }
       }
       
@@ -539,77 +579,41 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
   
-  private async loadWorkOrdersDirect(): Promise<void> {
-    console.log('🔄 Loading work orders using direct Firestore...');
-    
+  private async fetchWorkOrdersForCurrentFilters(): Promise<WorkOrder[]> {
     try {
-      // Try Firebase v9 SDK first (most reliable)
-      console.log('📄 Trying Firebase v9 SDK first...');
-      await this.loadWorkOrdersWithFirebaseV9();
+      return await this.fetchWorkOrdersWithFirebaseV9();
     } catch (firebaseV9Error) {
-      console.log('⚠️ Firebase v9 SDK failed, trying AngularFirestore...', firebaseV9Error);
-      
-      try {
-        console.log('📄 Trying AngularFirestore...');
-        this.firestore.collection('work-orders', ref =>
-          ref.where('year', '==', this.yearFilter)
-             .where('month', '==', this.monthFilter)
-             .limit(500)
-        ).snapshotChanges()
-          .pipe(takeUntil(this.destroy$))
-          .subscribe({
-            next: (actions) => {
-              const workOrders = actions.map(a => {
-                const data = a.payload.doc.data() as WorkOrder;
-                const id = a.payload.doc.id;
-                return { id, ...data };
-              });
-              console.log('✅ AngularFirestore load successful!');
-              this.processLoadedWorkOrders(workOrders);
-            },
-            error: (error) => {
-              console.error('❌ All Firestore load methods failed!', error);
-              // Try one more time after delay
-              setTimeout(() => {
-                console.log('🔄 Retrying load after delay...');
-                this.loadWorkOrdersWithFirebaseV9();
-              }, 2000);
-            }
-          });
-      } catch (angularFireError) {
-        console.error('❌ All Firestore load methods failed!', angularFireError);
-        alert(`⚠️ Error loading work orders: ${angularFireError?.message || angularFireError}\n\nPlease check your internet connection and try refreshing the page.`);
-      }
+      console.warn('⚠️ Firebase v9 load failed, trying AngularFirestore get()...', firebaseV9Error);
+      return await this.fetchWorkOrdersWithCompatGet();
     }
   }
-  
-  private async loadWorkOrdersWithFirebaseV9(): Promise<void> {
-    try {
-      console.log('📄 Using Firebase v9 SDK to load work orders (Năm:', this.yearFilter, ', Tháng:', this.monthFilter, ')...');
-      
-      const app = initializeApp(environment.firebase);
-      const db = getFirestore(app);
-      const q = query(
-        collection(db, 'work-orders'),
-        where('year', '==', this.yearFilter),
-        where('month', '==', this.monthFilter),
-        limit(500)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const workOrders: WorkOrder[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as WorkOrder;
-        workOrders.push({ id: doc.id, ...data });
-      });
-      
-      console.log('✅ Firebase v9 SDK load successful!');
-      this.processLoadedWorkOrders(workOrders);
-    } catch (error) {
-      console.error('❌ Firebase v9 SDK load failed!', error);
-      throw error;
-    }
+
+  private async fetchWorkOrdersWithFirebaseV9(): Promise<WorkOrder[]> {
+    const app = this.getFirebaseV9App();
+    const db = getFirestore(app);
+    const q = query(
+      collection(db, 'work-orders'),
+      where('year', '==', this.yearFilter),
+      where('month', '==', this.monthFilter),
+      limit(500)
+    );
+    const querySnapshot = await getDocs(q);
+    const workOrders: WorkOrder[] = [];
+    querySnapshot.forEach((d) => {
+      workOrders.push({ id: d.id, ...(d.data() as WorkOrder) });
+    });
+    return workOrders;
+  }
+
+  private async fetchWorkOrdersWithCompatGet(): Promise<WorkOrder[]> {
+    const snap = await firstValueFrom(
+      this.firestore
+        .collection('work-orders', (ref) =>
+          ref.where('year', '==', this.yearFilter).where('month', '==', this.monthFilter).limit(500)
+        )
+        .get()
+    );
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as WorkOrder) }));
   }
 
   // Auto-mark old completed work orders as completed
@@ -750,7 +754,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.transferOrders = filtered.filter(wo => wo.status === WorkOrderStatus.TRANSFER).length;
     this.doneOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DONE).length;
     this.delayOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DELAY).length;
-    this.calculateCheckCount(); // Đếm LSX đã import PXK có Thiếu
+    // Trì hoãn query outbound nặng để không chặn paint / tương tác ngay sau load
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => void this.calculateCheckCount());
+    } else {
+      setTimeout(() => void this.calculateCheckCount(), 0);
+    }
   }
 
   /** Đếm số LSX (đã import PXK) có So sánh Thiếu - load outbound 1 lần/factory để tránh lag */
@@ -2185,7 +2194,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         console.log('⚠️ Angular Fire failed, trying Firebase v9 SDK...', angularFireError);
         
         // Fallback to Firebase v9 modular SDK
-        const app = initializeApp(environment.firebase);
+        const app = this.getFirebaseV9App();
         const db = getFirestore(app);
         const docRef = await addDoc(collection(db, 'work-orders'), workOrder);
         console.log('✅ Firebase v9 SDK save successful!', docRef);
@@ -2226,7 +2235,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     // Try method 3: Firebase v9 SDK (final fallback)
     try {
       console.log('📄 Attempt 3: Firebase v9 SDK delete');
-      const app = initializeApp(environment.firebase);
+      const app = this.getFirebaseV9App();
       const db = getFirestore(app);
       await deleteDoc(doc(db, 'work-orders', id));
       console.log('✅ Firebase v9 SDK delete successful');
@@ -3144,7 +3153,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     
     try {
       // Try Firebase v9 SDK first
-      const app = initializeApp(environment.firebase);
+      const app = this.getFirebaseV9App();
       const db = getFirestore(app);
       const querySnapshot = await getDocs(collection(db, 'work-orders'));
       

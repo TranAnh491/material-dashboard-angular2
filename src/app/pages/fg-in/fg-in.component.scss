@@ -636,6 +636,12 @@ mat-checkbox {
   }
 }
 
+.excel-table .number-cell .qty-editable-input {
+  text-align: right;
+  min-width: 52px;
+  max-width: 96px;
+}
+
 .editable-input-no-border {
   border: none;
   background: transparent;
@@ -1753,6 +1759,34 @@ mat-checkbox {
       .card-qty {
         font-weight: 600;
         color: #000000;
+      }
+
+      .card-qty-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        color: #000000;
+      }
+
+      .card-qty-label {
+        flex-shrink: 0;
+      }
+
+      .card-qty-input {
+        width: 72px;
+        max-width: 28vw;
+        padding: 4px 6px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        text-align: right;
+
+        &:focus {
+          outline: none;
+          border-color: #000000;
+        }
       }
       
       .card-batch {

@@ -87,7 +87,18 @@
                (click)="openConfirmReceiptDialog(material)">
             <div class="card-material-code">{{ material.materialCode }}</div>
             <div class="card-details">
-              <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
+              <span class="card-qty-row" (click)="$event.stopPropagation()">
+                <span class="card-qty-label">SL:</span>
+                <input *ngIf="canEditMaterial(material)"
+                       type="number"
+                       class="card-qty-input"
+                       [(ngModel)]="material.quantity"
+                       (blur)="updateQuantity(material)"
+                       (change)="updateQuantity(material)"
+                       min="0"
+                       step="1">
+                <span *ngIf="!canEditMaterial(material)" class="card-qty">{{ material.quantity | number:'1.0-0' }}</span>
+              </span>
               <span class="card-batch">{{ material.batchNumber }}</span>
             </div>
             <div class="card-lsx">{{ material.lsx }}</div>
@@ -173,7 +184,18 @@
             <td>{{material.poNumber || ''}}</td>
             <td>{{material.lot}}</td>
             <td>{{material.lsx}}</td>
-            <td class="number-cell">{{ material.quantity | number:'1.0-0' }}</td>
+            <td class="number-cell" (click)="$event.stopPropagation()">
+              <ng-container *ngIf="canEditMaterial(material); else qtyReadonly">
+                <input type="number"
+                       class="editable-input qty-editable-input"
+                       [(ngModel)]="material.quantity"
+                       (blur)="updateQuantity(material)"
+                       (change)="updateQuantity(material)"
+                       min="0"
+                       step="1">
+              </ng-container>
+              <ng-template #qtyReadonly>{{ material.quantity | number:'1.0-0' }}</ng-template>
+            </td>
             <td class="number-cell">{{calculateCartonAndOdd(material).carton}}</td>
             <td class="number-cell">{{calculateCartonAndOdd(material).odd}}</td>
             <td (click)="$event.stopPropagation()">
