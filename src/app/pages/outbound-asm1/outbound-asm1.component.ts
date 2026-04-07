@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
@@ -123,6 +124,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
   // Dropdown management
   isDropdownOpen: boolean = false;
+
+  // QC rule (IQC Status chặn xuất) — More → QC rule
+  showQcRuleModal = false;
+  qcRuleModalEnabled = false;
+  qcRuleModalText = '';
+  qcRuleSaving = false;
+  private qcRuleEnabledActive = false;
+  private qcRuleBlockedList: string[] = [];
   
   // REMOVED: inventoryMaterials - Không cần tính stock để scan nhanh
   
@@ -133,7 +142,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private outboundQcRule: OutboundQcRuleService
   ) {}
   
   ngOnInit(): void {
@@ -154,6 +164,55 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // 🔧 GLOBAL SCANNER LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
     document.addEventListener('keydown', (event) => this.onGlobalKeydown(event));
+
+    void this.refreshOutboundQcRuleCache();
+  }
+
+  private async refreshOutboundQcRuleCache(): Promise<void> {
+    try {
+      const doc = await this.outboundQcRule.loadRule('ASM1');
+      this.qcRuleEnabledActive = doc.enabled === true;
+      this.qcRuleBlockedList = this.outboundQcRule.parseBlockedList(doc.blockedStatusesText);
+    } catch (e) {
+      console.error('❌ QC rule load:', e);
+    }
+  }
+
+  async openQcRuleModal(): Promise<void> {
+    this.closeDropdown();
+    try {
+      const doc = await this.outboundQcRule.loadRule('ASM1');
+      this.qcRuleModalEnabled = doc.enabled === true;
+      this.qcRuleModalText = doc.blockedStatusesText || '';
+    } catch (e) {
+      console.error(e);
+      this.qcRuleModalEnabled = false;
+      this.qcRuleModalText = '';
+    }
+    this.showQcRuleModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeQcRuleModal(): void {
+    this.showQcRuleModal = false;
+  }
+
+  async saveQcRuleFromModal(): Promise<void> {
+    this.qcRuleSaving = true;
+    try {
+      await this.outboundQcRule.saveRule('ASM1', {
+        enabled: this.qcRuleModalEnabled,
+        blockedStatusesText: this.qcRuleModalText
+      });
+      await this.refreshOutboundQcRuleCache();
+      this.showQcRuleModal = false;
+    } catch (e) {
+      console.error(e);
+      alert('❌ Không lưu được QC rule.');
+    } finally {
+      this.qcRuleSaving = false;
+      this.cdr.markForCheck();
+    }
   }
   
   private setupDefaultDateRange(): void {
@@ -2220,8 +2279,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
       // 3. Nếu đã scan cả LSX và Employee ID, xử lý mã hàng
     if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
-        // 🔧 TỐI ƯU HÓA: Bỏ console.log để tăng tốc độ
-      this.processBatchMaterialScan(scannedTrim);
+        void this.processBatchMaterialScanAsync(scannedTrim).catch(err => console.error('❌ processBatchMaterialScanAsync', err));
         return;
       }
       
@@ -2587,16 +2645,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     const next = this.materialScanQueue.shift();
     if (!next) return;
     this.isProcessingMaterialScan = true;
-    try {
-      this.processBatchMaterialScan(next);
-    } finally {
-      this.isProcessingMaterialScan = false;
-      setTimeout(() => this.processMaterialScanQueue(), 0);
-    }
+    void this.processBatchMaterialScanAsync(next)
+      .catch(err => console.error('❌ processBatchMaterialScanAsync', err))
+      .finally(() => {
+        this.isProcessingMaterialScan = false;
+        setTimeout(() => this.processMaterialScanQueue(), 0);
+      });
   }
 
-  // Parse and push a material scan to pending (no DB writes here)
-  private processBatchMaterialScan(scannedData: string): void {
+  /** Parse và ghi pending — có kiểm QC rule (IQC) trên inventory khớp vật tư. */
+  private async processBatchMaterialScanAsync(scannedData: string): Promise<void> {
     if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
       this.showScanError('Phải scan LSX và mã nhân viên trước!');
       return;
@@ -2611,7 +2669,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (parts.length >= 3) {
         materialCode = parts[0].trim();
         poNumber = parts[1].trim();
-        quantity = parseInt(parts[2]) || 1;
+        quantity = parseInt(parts[2], 10) || 1;
         if (parts.length >= 4) importDate = parts[3].trim();
       }
     } else {
@@ -2633,6 +2691,21 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     );
     if (isDuplicate) {
       this.showScanError('Trùng tem và scan lại');
+      return;
+    }
+
+    const qc = await this.outboundQcRule.shouldBlockOutbound(
+      'ASM1',
+      this.qcRuleEnabledActive,
+      this.qcRuleBlockedList,
+      materialCode,
+      poNumber,
+      importDate
+    );
+    if (qc.block) {
+      this.showScanError(
+        `Không cho xuất kho: IQC Status = ${qc.iqc ?? '—'} (trùng QC rule).`
+      );
       return;
     }
 

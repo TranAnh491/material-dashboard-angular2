@@ -901,6 +901,7 @@
               <th>Tên</th>
               <th>Standard hiện tại</th>
               <th>Sửa Standard</th>
+              <th>Lock</th>
               <th>Update</th>
             </tr>
           </thead>
@@ -914,18 +915,30 @@
                        class="editable-input"
                        style="max-width: 140px;"
                        [(ngModel)]="r.edit"
+                       [disabled]="r.locked || !canEdit"
                        min="0"
                        step="1">
               </td>
+              <td style="text-align:center; vertical-align: middle;">
+                <mat-slide-toggle
+                  color="primary"
+                  [checked]="r.locked"
+                  [disabled]="!canEdit || spLockSaving"
+                  (change)="onStandardPackingLockToggle($event, r)">
+                </mat-slide-toggle>
+              </td>
               <td>
-                <button type="button" class="popup-action-btn" (click)="updateStandardPackingRow(r)">
+                <button type="button"
+                        class="popup-action-btn"
+                        [disabled]="r.locked || !canEdit"
+                        (click)="updateStandardPackingRow(r)">
                   <i class="material-icons">save</i>
                   <span>Update</span>
                 </button>
               </td>
             </tr>
             <tr *ngIf="spResults.length === 0">
-              <td colspan="5" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
+              <td colspan="6" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
             </tr>
           </tbody>
         </table>

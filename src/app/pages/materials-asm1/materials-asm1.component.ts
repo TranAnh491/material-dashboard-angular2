@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
@@ -172,8 +173,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
   spSearchCode = '';
-  spResults: Array<{ materialCode: string; materialName?: string; current: number; edit: number }> = [];
+  spResults: Array<{
+    materialCode: string;
+    materialName?: string;
+    current: number;
+    edit: number;
+    locked: boolean;
+  }> = [];
   spIsSearching = false;
+  spLockSaving = false;
   spNewCode = '';
   spNewStandard = '';
   
@@ -1952,7 +1960,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               materialCode: materialCode,
               materialName: materialName,
               unit: data.unit || data.unitOfMeasure || 'PCS',
-              standardPacking: data.standardPacking || data.packing || data.unitSize || 0
+              standardPacking: data.standardPacking || data.packing || data.unitSize || 0,
+              standardPackingLocked: data.standardPackingLocked === true
             };
             
             this.catalogCache.set(materialCode, catalogItem);
@@ -3069,17 +3078,25 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const q = (this.spSearchCode || '').trim().toUpperCase();
     this.spIsSearching = true;
     try {
-      const rows: Array<{ materialCode: string; materialName?: string; current: number; edit: number }> = [];
+      const rows: Array<{
+        materialCode: string;
+        materialName?: string;
+        current: number;
+        edit: number;
+        locked: boolean;
+      }> = [];
       const keys = Array.from(this.catalogCache.keys());
       for (const code of keys) {
         if (!q || code.toUpperCase().includes(q)) {
           const item = this.catalogCache.get(code);
           const current = Number(item?.standardPacking ?? 0) || 0;
+          const locked = item?.standardPackingLocked === true;
           rows.push({
             materialCode: code,
             materialName: item?.materialName,
             current,
-            edit: current
+            edit: current,
+            locked
           });
         }
       }
@@ -3091,8 +3108,50 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  async updateStandardPackingRow(row: { materialCode: string; edit: number; current: number }): Promise<void> {
+  async onStandardPackingLockToggle(ev: MatSlideToggleChange, row: { materialCode: string; locked: boolean }): Promise<void> {
+    if (!this.canEdit) {
+      ev.source.checked = row.locked;
+      return;
+    }
+    const code = String(row.materialCode || '').trim().toUpperCase();
+    if (!code) {
+      return;
+    }
+    const prev = row.locked;
+    const next = ev.checked;
+    this.spLockSaving = true;
+    try {
+      await this.firestore
+        .collection('materials')
+        .doc(code)
+        .set({ standardPackingLocked: next, updatedAt: new Date() }, { merge: true });
+      row.locked = next;
+      const cached = this.catalogCache.get(code);
+      if (cached) {
+        cached.standardPackingLocked = next;
+      }
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('❌ standardPackingLocked:', e);
+      ev.source.checked = prev;
+      alert('❌ Không lưu được trạng thái Lock. Thử lại.');
+    } finally {
+      this.spLockSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async updateStandardPackingRow(row: {
+    materialCode: string;
+    edit: number;
+    current: number;
+    locked?: boolean;
+  }): Promise<void> {
     if (!this.canEdit) return;
+    if (row.locked) {
+      alert('⚠️ Mã này đang Lock — không thể sửa Standard Packing.');
+      return;
+    }
     const code = String(row.materialCode || '').trim().toUpperCase();
     if (!code) return;
     const num = Math.max(0, Number(row.edit) || 0);
@@ -3124,6 +3183,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
     // Use existing catalog item if present; if creating new, ensure it has minimal fields so it appears in cache.
     const existing = this.catalogCache.get(code);
+    if (existing?.standardPackingLocked === true) {
+      alert(
+        '⚠️ Standard Packing của mã này đang bị khóa (Lock ON). Tắt Lock trong Quản lý Standard Packing để sửa.'
+      );
+      return;
+    }
     const materialName = existing?.materialName || (allowCreate ? code : undefined);
     const unit = existing?.unit || (allowCreate ? 'PCS' : undefined);
 
@@ -3143,10 +3208,17 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       materialCode: code,
       materialName: materialName || existing?.materialName || code,
       unit: unit || existing?.unit || 'PCS',
-      standardPacking: sp
+      standardPacking: sp,
+      standardPackingLocked: existing?.standardPackingLocked === true
     });
     this.catalogLoaded = true;
     this.cdr.markForCheck();
+  }
+
+  /** Khóa chỉnh sửa Standard Packing khi Lock ON (catalog Firestore). */
+  isStandardPackingLockedForCode(materialCode: string): boolean {
+    const code = String(materialCode || '').trim().toUpperCase();
+    return this.catalogCache.get(code)?.standardPackingLocked === true;
   }
 
   // Toggle mobile menu
@@ -3353,7 +3425,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const codes = rows.map(r => r.materialCode);
 
     const existingMaterials = await this.filterExistingDocIds('materials', codes);
-    const toUpdate = rows.filter(r => existingMaterials.has(r.materialCode));
+    const toUpdate = rows.filter(
+      r =>
+        existingMaterials.has(r.materialCode) &&
+        this.catalogCache.get(r.materialCode)?.standardPackingLocked !== true
+    );
     const skipped = rows.length - toUpdate.length;
 
     if (toUpdate.length === 0) {
@@ -3409,7 +3485,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         materialCode: code,
         standardPacking: item.standardPacking,
         materialName: prev?.materialName || code,
-        unit: prev?.unit || 'PCS'
+        unit: prev?.unit || 'PCS',
+        standardPackingLocked: prev?.standardPackingLocked === true
       });
     }
     this.catalogLoaded = true;
@@ -3885,6 +3962,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (!this.canEdit) {
       return;
     }
+    if (this.isStandardPackingLockedForCode(material.materialCode)) {
+      alert(
+        '⚠️ Standard Packing đang bị khóa (Lock ON). Tắt Lock trong More → Quản lý Standard Packing.'
+      );
+      return;
+    }
     material.isEditingStandardPacking = true;
     const fromCat = this.getStandardPacking(material.materialCode);
     const fromRow = material.standardPacking;
@@ -3934,6 +4017,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private async updateStandardPackingInCatalog(materialCode: string, standardPacking: number): Promise<boolean> {
     const normalizedCode = String(materialCode || '').trim();
     if (!normalizedCode) return false;
+    if (this.isStandardPackingLockedForCode(normalizedCode)) {
+      alert(
+        '⚠️ Standard Packing đang bị khóa (Lock ON). Tắt Lock trong More → Quản lý Standard Packing.'
+      );
+      return false;
+    }
 
     const payload = {
       standardPacking,
@@ -6276,7 +6365,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             materialCode: materialCode,
             materialName: data.materialName || 'N/A',
             unit: data.unit || 'N/A',
-            standardPacking: data.standardPacking
+            standardPacking: data.standardPacking,
+            standardPackingLocked: data.standardPackingLocked === true
           });
         }
       });

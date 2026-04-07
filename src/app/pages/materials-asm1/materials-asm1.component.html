@@ -330,9 +330,9 @@
             <span class="label">Standard Packing:</span>
             <ng-container *ngIf="!material.isEditingStandardPacking">
               <span class="value"
-                    [class.readonly-metric]="!canEdit"
-                    [class.standard-packing-dbl]="canEdit"
-                    [title]="canEdit ? 'Double-click để sửa' : ''"
+                    [class.readonly-metric]="!canEdit || isStandardPackingLockedForCode(material.materialCode)"
+                    [class.standard-packing-dbl]="canEdit && !isStandardPackingLockedForCode(material.materialCode)"
+                    [title]="isStandardPackingLockedForCode(material.materialCode) ? 'Đang Lock — không sửa được' : (canEdit ? 'Double-click để sửa' : '')"
                     (dblclick)="startEditingStandardPacking(material)">
                 {{ getStandardPacking(material.materialCode) }}
               </span>
@@ -340,6 +340,7 @@
             <input *ngIf="material.isEditingStandardPacking"
                    type="number"
                    class="mobile-input"
+                   [disabled]="isStandardPackingLockedForCode(material.materialCode)"
                    [ngModel]="material.editStandardPackingValue"
                    (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
                    (blur)="finishEditingStandardPacking(material)"
@@ -560,17 +561,18 @@
                      title="Lưu ý từ inbound">
             </td>
             <td class="standard-packing-cell"
-                [class.readonly-cell]="!canEdit"
-                [title]="canEdit ? 'Double-click để sửa Standard Packing (lưu catalog)' : 'Không có quyền sửa'">
+                [class.readonly-cell]="!canEdit || isStandardPackingLockedForCode(material.materialCode)"
+                [title]="isStandardPackingLockedForCode(material.materialCode) ? 'Đang Lock — không sửa được' : (canEdit ? 'Double-click để sửa Standard Packing (lưu catalog)' : 'Không có quyền sửa')">
               <span *ngIf="!material.isEditingStandardPacking"
                     class="standard-packing-value"
-                    [class.standard-packing-dbl]="canEdit"
+                    [class.standard-packing-dbl]="canEdit && !isStandardPackingLockedForCode(material.materialCode)"
                     (dblclick)="startEditingStandardPacking(material)">
                 {{ getStandardPacking(material.materialCode) }}
               </span>
               <input *ngIf="material.isEditingStandardPacking"
                      type="number"
                      class="standard-packing-input"
+                     [disabled]="isStandardPackingLockedForCode(material.materialCode)"
                      [ngModel]="material.editStandardPackingValue"
                      (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
                      (blur)="finishEditingStandardPacking(material)"
@@ -993,6 +995,7 @@
               <th>Tên</th>
               <th>Standard hiện tại</th>
               <th>Sửa Standard</th>
+              <th>Lock</th>
               <th>Update</th>
             </tr>
           </thead>
@@ -1006,18 +1009,30 @@
                        class="editable-input"
                        style="max-width: 140px;"
                        [(ngModel)]="r.edit"
+                       [disabled]="r.locked || !canEdit"
                        min="0"
                        step="1">
               </td>
+              <td style="text-align:center; vertical-align: middle;">
+                <mat-slide-toggle
+                  color="primary"
+                  [checked]="r.locked"
+                  [disabled]="!canEdit || spLockSaving"
+                  (change)="onStandardPackingLockToggle($event, r)">
+                </mat-slide-toggle>
+              </td>
               <td>
-                <button type="button" class="popup-action-btn" (click)="updateStandardPackingRow(r)">
+                <button type="button"
+                        class="popup-action-btn"
+                        [disabled]="r.locked || !canEdit"
+                        (click)="updateStandardPackingRow(r)">
                   <i class="material-icons">save</i>
                   <span>Update</span>
                 </button>
               </td>
             </tr>
             <tr *ngIf="spResults.length === 0">
-              <td colspan="5" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
+              <td colspan="6" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
             </tr>
           </tbody>
         </table>

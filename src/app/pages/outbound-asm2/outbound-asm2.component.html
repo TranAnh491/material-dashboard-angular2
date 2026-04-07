@@ -157,6 +157,11 @@
               <i class="material-icons">cleaning_services</i>
               Làm sạch dữ liệu
             </a>
+
+            <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
+              <i class="material-icons">policy</i>
+              QC rule
+            </a>
           </div>
         </div>
         
@@ -500,6 +505,39 @@
         <button class="confirm-btn" (click)="confirmAndSave()">
           <i class="material-icons">save</i>
           Xác Nhận & Lưu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scan-review-modal" *ngIf="showQcRuleModal" (click)="closeQcRuleModal()">
+    <div class="scan-review-content" style="max-width: 520px;" (click)="$event.stopPropagation()">
+      <div class="scan-review-header">
+        <h3>QC rule — Outbound ASM2</h3>
+        <button class="close-btn" type="button" (click)="closeQcRuleModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="scan-review-list" style="padding: 16px;">
+        <p style="margin: 0 0 12px; color:#666; font-size: 14px;">
+          Bật <strong>ON</strong> và nhập các giá trị <strong>IQC Status</strong> (giống cột IQC Status ở tab RM Inventory).
+          Khi scan xuất kho, nếu dòng tồn khớp mã + PO + lô (IMD) và IQC trùng một trong các giá trị dưới → <strong>không cho xuất</strong>.
+        </p>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <mat-slide-toggle [(ngModel)]="qcRuleModalEnabled" color="primary">Bật rule</mat-slide-toggle>
+        </div>
+        <label style="display:block; margin-bottom:6px; font-weight:600;">Danh sách IQC cấm xuất (mỗi dòng hoặc cách nhau bởi dấu phẩy/chấm phẩy)</label>
+        <textarea
+          rows="6"
+          class="scanner-input"
+          style="width:100%; box-sizing:border-box; font-family: inherit; resize: vertical;"
+          [(ngModel)]="qcRuleModalText"
+          placeholder="NG&#10;CHỜ XÁC NHẬN&#10;ĐẶC CÁCH"></textarea>
+      </div>
+      <div class="scan-review-footer">
+        <button class="cancel-btn" type="button" (click)="closeQcRuleModal()">Hủy</button>
+        <button class="confirm-btn" type="button" (click)="saveQcRuleFromModal()" [disabled]="qcRuleSaving">
+          {{ qcRuleSaving ? 'Đang lưu...' : 'Lưu' }}
         </button>
       </div>
     </div>
