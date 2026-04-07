@@ -127,6 +127,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   isResettingAccountPassword = false;
   private static readonly DEFAULT_RESET_PASSWORD = '123456';
 
+  /** Tạo tài khoản Firebase (Auth + Firestore) từ Settings */
+  createAccountEmployeeId = '';
+  createAccountPassword = '';
+  isCreatingAccount = false;
+  isDeletingAccountByEmployeeId = false;
+
   // Cleanup Firebase Auth users outside Settings
   isCleaningAuthUsers = false;
 
@@ -155,6 +161,193 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
+  onCreateAccountEmployeeInput(event: Event): void {
+    const inputEl = event.target as HTMLInputElement;
+    const upper = (inputEl.value || '').toUpperCase();
+    if (inputEl.value !== upper) {
+      inputEl.value = upper;
+      this.createAccountEmployeeId = upper;
+    }
+  }
+
+  /**
+   * Tạo tài khoản: mã ASP + mật khẩu → Firebase Auth (aspxxxx@asp.com) + users / user-permissions / user-tab-permissions.
+   * Sau khi tạo xong mở popup phân quyền tab (giống seed ensureAspAccount).
+   */
+  async createFirebaseAccountFromSettings(): Promise<void> {
+    if (this.isCreatingAccount) return;
+
+    const employeeId = this.parseAspEmployeeIdFromResetInput(this.createAccountEmployeeId);
+    const password = (this.createAccountPassword || '').trim();
+
+    if (!employeeId) {
+      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
+      return;
+    }
+    if (!password || password.length < 6) {
+      alert('Mật khẩu phải có ít nhất 6 ký tự (yêu cầu của Firebase Authentication).');
+      return;
+    }
+
+    const dup = this.firebaseUsers.some((u) => this.getEmployeeIdOnly(u) === employeeId);
+    if (dup) {
+      alert(`Mã ${employeeId} đã có trong danh sách người dùng.`);
+      return;
+    }
+
+    const digits = employeeId.replace(/^ASP/, '');
+    const email = `asp${digits}@asp.com`;
+    const displayName = employeeId;
+
+    this.isCreatingAccount = true;
+    const appName = `settings-create-${digits}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    let secondaryApp: firebase.app.App | null = null;
+
+    try {
+      const appOptions = this.firestore.firestore.app.options as any;
+      secondaryApp = firebase.initializeApp(appOptions, appName);
+      const secondaryAuth = secondaryApp.auth();
+
+      let uid: string;
+      try {
+        const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+        uid = cred.user!.uid;
+        await secondaryAuth.signOut();
+      } catch (e: any) {
+        if (e?.code === 'auth/email-already-in-use') {
+          alert(
+            `Tài khoản email ${email} đã tồn tại trên Firebase Authentication.\n\n` +
+              'Nếu đây là cùng mã nhân viên, hãy dùng mục "Reset mật khẩu" hoặc kiểm tra danh sách người dùng.'
+          );
+          return;
+        }
+        if (e?.code === 'auth/weak-password') {
+          alert('Mật khẩu quá yếu. Vui lòng chọn mật khẩu đủ mạnh hơn (tối thiểu 6 ký tự).');
+          return;
+        }
+        throw e;
+      }
+
+      await this.firestore.collection('users').doc(uid).set(
+        {
+          uid,
+          email,
+          employeeId: displayName,
+          displayName,
+          password,
+          department: '',
+          factory: '',
+          role: 'User',
+          createdAt: new Date(),
+          lastLoginAt: new Date()
+        },
+        { merge: true }
+      );
+
+      await this.firestore.collection('user-permissions').doc(uid).set(
+        {
+          uid,
+          email,
+          displayName,
+          hasDeletePermission: false,
+          hasCompletePermission: false,
+          hasReadOnlyPermission: true,
+          password,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
+
+      const defaultTabPermissions: { [key: string]: boolean } = {};
+      this.availableTabs.forEach((tab) => {
+        defaultTabPermissions[tab.key] = tab.key === 'dashboard';
+      });
+
+      await this.firestore.collection('user-tab-permissions').doc(uid).set(
+        {
+          uid,
+          email,
+          displayName,
+          tabPermissions: defaultTabPermissions,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
+
+      this.firebaseUserPasswords[uid] = password;
+
+      this.createAccountEmployeeId = '';
+      this.createAccountPassword = '';
+
+      await this.refreshFirebaseUsers();
+
+      const created = this.firebaseUsers.find((u) => u.uid === uid);
+      if (created) {
+        this.openPermissionModal(created);
+      } else {
+        alert(`✅ Đã tạo tài khoản ${displayName} (${email}). Vào danh sách để cấp quyền tab.`);
+      }
+    } catch (error: any) {
+      console.error('❌ createFirebaseAccountFromSettings:', error);
+      const msg = error?.message || String(error);
+      alert('❌ Không tạo được tài khoản: ' + msg);
+    } finally {
+      if (secondaryApp) {
+        try {
+          await secondaryApp.delete();
+        } catch (e) {
+          console.warn('⚠️ Failed to delete secondary Firebase app:', e);
+        }
+      }
+      this.isCreatingAccount = false;
+    }
+  }
+
+  async deleteAccountByEmployeeId(): Promise<void> {
+    if (this.isDeletingAccountByEmployeeId) return;
+
+    const employeeId = this.parseAspEmployeeIdFromResetInput(this.createAccountEmployeeId);
+    if (!employeeId) {
+      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0609 hoặc 0609).');
+      return;
+    }
+
+    const ok = confirm(
+      `Xóa tài khoản ${employeeId} khỏi Firebase Authentication + Firestore?\n\n` +
+        'Thao tác này không thể hoàn tác. Sau khi xóa bạn có thể tạo lại tài khoản.'
+    );
+    if (!ok) return;
+
+    this.isDeletingAccountByEmployeeId = true;
+    try {
+      await firstValueFrom(
+        this.fns.httpsCallable('adminDeleteUserByEmployeeIdFn')({
+          employeeId
+        })
+      );
+
+      // Clear UI + refresh
+      this.createAccountPassword = '';
+      await this.refreshFirebaseUsers();
+      alert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
+    } catch (error: any) {
+      console.error('❌ deleteAccountByEmployeeId:', error);
+      const code = typeof error?.code === 'string' ? error.code : '';
+      const msg = (error?.message as string) || '';
+      const details = error?.details ? String(error.details) : '';
+      const suffix = [msg, details].filter(Boolean).join(' | ');
+      alert(
+        '❌ Không xóa được tài khoản: ' +
+          (code ? `${code} — ` : '') +
+          (suffix || '(không có chi tiết)')
+      );
+    } finally {
+      this.isDeletingAccountByEmployeeId = false;
+    }
+  }
+
   /** Chuẩn hóa nhập: ASP0054 hoặc 0054 → ASP0054 */
   private parseAspEmployeeIdFromResetInput(raw: string): string | null {
     const t = (raw || '').trim().toUpperCase();
@@ -170,6 +363,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const normalized = (employeeId || '').trim().toUpperCase();
     if (!normalized) return null;
 
+    const digits = normalized.replace(/^ASP/, '');
+
     // 1) Tìm theo danh sách đã load (getEmployeeIdOnly xử lý được case-insensitive từ email)
     const fromList = this.firebaseUsers.find((u) => this.getEmployeeIdOnly(u) === normalized);
     if (fromList) return fromList.uid;
@@ -181,7 +376,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
         `${normalized.toLowerCase()}@asp.com`,
         `${normalized}@asp.com`,
         `${normalized.toLowerCase()}@gmail.com`,
-        `${normalized}@gmail.com`
+        `${normalized}@gmail.com`,
+        // hỗ trợ dạng digits@domain và asp{digits}@domain
+        `${digits.toLowerCase()}@asp.com`,
+        `${digits.toLowerCase()}@gmail.com`,
+        `asp${digits.toLowerCase()}@asp.com`,
+        `asp${digits.toLowerCase()}@gmail.com`
       ])
     );
 

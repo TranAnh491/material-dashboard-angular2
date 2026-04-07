@@ -58,6 +58,47 @@
         </button>
       </div>
     </div>
+
+    <!-- Tạo tài khoản Firebase + Firestore -->
+    <div class="reset-account-panel create-account-panel">
+      <h3>Tạo tài khoản</h3>
+      <p class="reset-account-hint">
+        Nhập <strong>mã nhân viên</strong> (VD: <strong>ASP0054</strong> hoặc <strong>0054</strong>) và <strong>mật khẩu</strong> để đăng nhập app.
+        Hệ thống tạo user <strong>aspxxxx@asp.com</strong> trên Firebase Authentication và lưu Firestore.
+        Sau khi tạo, popup <strong>Quản lý quyền truy cập</strong> sẽ mở để bạn bật các tab cần thiết.
+      </p>
+      <div class="reset-account-row">
+        <input
+          type="text"
+          name="createAccountEmployeeId"
+          [(ngModel)]="createAccountEmployeeId"
+          (input)="onCreateAccountEmployeeInput($event)"
+          placeholder="ASP0054"
+          autocomplete="off"
+          [disabled]="isCreatingAccount">
+        <input
+          type="password"
+          name="createAccountPassword"
+          [(ngModel)]="createAccountPassword"
+          placeholder="Mật khẩu (tối thiểu 6 ký tự)"
+          autocomplete="new-password"
+          [disabled]="isCreatingAccount">
+        <button
+          type="button"
+          class="btn-create-account"
+          (click)="createFirebaseAccountFromSettings()"
+          [disabled]="isCreatingAccount || !createAccountEmployeeId?.trim() || !createAccountPassword?.trim()">
+          {{ isCreatingAccount ? 'Đang tạo…' : 'Tạo tài khoản' }}
+        </button>
+        <button
+          type="button"
+          class="btn-delete-account"
+          (click)="deleteAccountByEmployeeId()"
+          [disabled]="isDeletingAccountByEmployeeId || isCreatingAccount || !createAccountEmployeeId?.trim()">
+          {{ isDeletingAccountByEmployeeId ? 'Đang xóa…' : 'Xóa tài khoản' }}
+        </button>
+      </div>
+    </div>
           
     <!-- Notifications -->
     <div *ngIf="newUserNotifications.length > 0" class="notifications">

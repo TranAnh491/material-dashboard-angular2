@@ -13,7 +13,7 @@ import {
   adminResetUserPassword,
   adminSetUserPasswordByEmployeeId
 } from './admin-update-user-password';
-import { adminDeleteAuthUsersNotInSettings } from './admin-sync-auth-users';
+import { adminDeleteAuthUsersNotInSettings, adminDeleteUserByEmployeeId } from './admin-sync-auth-users';
 
 admin.initializeApp();
 
@@ -218,6 +218,40 @@ export const adminSetUserPasswordByEmployeeIdFn = functions
       if (msg.includes('Không tìm thấy Firebase Auth user')) {
         throw new functions.https.HttpsError('not-found', msg);
       }
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
+/** Admin: xóa user theo mã nhân viên (Auth + Firestore). */
+export const adminDeleteUserByEmployeeIdFn = functions
+  .https.onCall(async (data: { employeeId?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+    if (!employeeId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId.');
+    }
+
+    try {
+      const r = await adminDeleteUserByEmployeeId(context.auth.uid, employeeId);
+      return r;
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+      }
+      if (msg.includes('Không tìm thấy Firebase Auth user')) {
+        throw new functions.https.HttpsError('not-found', msg);
+      }
+      if (msg.includes('Không thể xóa chính')) {
+        throw new functions.https.HttpsError('failed-precondition', msg);
+      }
+
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });

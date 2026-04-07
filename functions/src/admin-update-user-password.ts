@@ -116,6 +116,10 @@ export async function adminSetUserPasswordByEmployeeId(
 
   const digits = employeeId.replace(/^ASP/, '');
   const emailCandidates = [
+    // Legacy/đang dùng trong app Settings: asp0609@asp.com
+    `asp${digits.toLowerCase()}@asp.com`,
+    `asp${digits.toLowerCase()}@gmail.com`,
+    // Một số môi trường cũ: 0609@asp.com
     `${digits.toLowerCase()}@asp.com`,
     `${digits.toLowerCase()}@gmail.com`
   ];

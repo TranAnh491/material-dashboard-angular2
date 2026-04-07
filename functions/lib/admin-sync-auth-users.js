@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.adminDeleteUserByEmployeeId = adminDeleteUserByEmployeeId;
 exports.adminDeleteAuthUsersNotInSettings = adminDeleteAuthUsersNotInSettings;
 const admin = __importStar(require("firebase-admin"));
 function isAdminOrManager(role) {
@@ -44,6 +45,77 @@ function isAdminOrManager(role) {
         normalized === 'quan ly' ||
         r === 'admin' ||
         r === 'quản lý');
+}
+function normalizeAspEmployeeId(input) {
+    const t = (input || '').trim().toUpperCase();
+    if (!t)
+        return null;
+    const m1 = t.match(/^ASP(\d{4})$/);
+    if (m1)
+        return `ASP${m1[1]}`;
+    const m2 = t.match(/^(\d{4})$/);
+    if (m2)
+        return `ASP${m2[1]}`;
+    return null;
+}
+/**
+ * Admin: xóa 1 tài khoản theo mã nhân viên ASP (ASPxxxx hoặc xxxx).
+ * - Xóa Firebase Auth user (Admin SDK)
+ * - Xóa Firestore docs: users / user-permissions / user-tab-permissions theo uid
+ */
+async function adminDeleteUserByEmployeeId(callerUid, employeeIdRaw) {
+    var _a;
+    if (!callerUid)
+        throw new Error('Thiếu callerUid.');
+    if (!employeeIdRaw)
+        throw new Error('Thiếu employeeId.');
+    const employeeId = normalizeAspEmployeeId(employeeIdRaw);
+    if (!employeeId)
+        throw new Error('employeeId không đúng định dạng (ASPxxxx hoặc xxxx).');
+    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
+    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
+    if (!isAdminOrManager(callerRole)) {
+        throw new Error('permission-denied');
+    }
+    const digits = employeeId.replace(/^ASP/, '');
+    const emailCandidates = [
+        `asp${digits.toLowerCase()}@asp.com`,
+        `asp${digits.toLowerCase()}@gmail.com`,
+        `${digits.toLowerCase()}@asp.com`,
+        `${digits.toLowerCase()}@gmail.com`
+    ];
+    let uid = null;
+    let email = null;
+    for (const e of emailCandidates) {
+        try {
+            const ur = await admin.auth().getUserByEmail(e);
+            if (ur === null || ur === void 0 ? void 0 : ur.uid) {
+                uid = ur.uid;
+                email = e;
+                break;
+            }
+        }
+        catch (err) {
+            if ((err === null || err === void 0 ? void 0 : err.code) === 'auth/user-not-found')
+                continue;
+            throw err;
+        }
+    }
+    if (!uid || !email) {
+        throw new Error(`Không tìm thấy Firebase Auth user theo mã ${employeeId}.`);
+    }
+    // Không cho xóa chính mình (an toàn)
+    if (uid === callerUid) {
+        throw new Error('Không thể xóa chính tài khoản đang đăng nhập.');
+    }
+    // Xóa Firestore trước (để app không còn thấy user), sau đó xóa Auth
+    const batch = admin.firestore().batch();
+    batch.delete(admin.firestore().collection('users').doc(uid));
+    batch.delete(admin.firestore().collection('user-permissions').doc(uid));
+    batch.delete(admin.firestore().collection('user-tab-permissions').doc(uid));
+    await batch.commit();
+    await admin.auth().deleteUser(uid);
+    return { ok: true, employeeId, deletedAuth: true, uid, email };
 }
 /**
  * Admin: xóa toàn bộ Firebase Auth users KHÔNG có trong danh sách Settings.
