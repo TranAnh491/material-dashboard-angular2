@@ -18,6 +18,38 @@
     font-family: Arial, sans-serif !important;
   }
 
+  /* UI đơn sắc: trắng/đen/be — không đậm, không đổ bóng */
+  .excel-actions {
+    background: #f5f1e6 !important;
+    border-bottom: 1px solid #000000 !important;
+  }
+
+  .excel-header h4 {
+    font-weight: 400 !important;
+    text-transform: uppercase !important;
+  }
+
+  .excel-table thead th {
+    font-weight: 400 !important;
+    text-transform: uppercase !important;
+    background: #f5f1e6 !important;
+  }
+
+  /* Override tất cả shadow / bold do inline style */
+  .excel-container,
+  .table-container,
+  .dropdown-menu,
+  .custom-btn,
+  .status-chip,
+  .excel-table th,
+  .excel-table td,
+  .excel-table span,
+  .excel-table div,
+  .excel-table button {
+    box-shadow: none !important;
+    font-weight: 400 !important;
+  }
+
   // Excel header styling
   .excel-header {
     background: #ffffff !important;

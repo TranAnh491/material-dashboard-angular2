@@ -14,7 +14,7 @@
       <h2 id="page-info-title" class="page-info-dialog-title">Hướng dẫn Control Batch</h2>
       <div class="page-info-body">
         <p class="subtitle">Mỗi lần <strong>Tìm</strong>, chỉ chấp nhận <strong>mã hàng</strong> dạng A hoặc B đầu + đúng 6 chữ số (VD A005006, B001033). Hệ thống truy vấn <code>inventory-materials</code> theo mã (và xưởng nếu chọn ASM1/ASM2). Một dòng bảng = một bộ (nhà máy + mã + PO + IMD).</p>
-        <p class="subtitle dup-check-desc">Khi mở tab, hệ thống quét <code>outbound-materials</code> (ASM1 + ASM2). <strong>Ngày bắt đầu tính</strong> (00:00 giờ Việt Nam) do bạn chọn trong <strong>More</strong> và lưu trên Firestore — mặc định 02/04/2026; đổi ngày trong More thì bảng, Send Mail và lịch Functions đều theo ngày mới. Thời điểm so trên mỗi bản ghi: <code>exportDate</code>, không có thì <code>createdAt</code> / <code>updatedAt</code>. Chỉ xét bản ghi đủ điều kiện: <strong>mã</strong> A hoặc B + 6 số; <strong>PO</strong> có chữ và bắt đầu KZ hoặc LH; <strong>IMD</strong> có ít nhất một số; <strong>Bag</strong> có ít nhất một số. Trùng = cùng bộ mã + PO + IMD + bag (&gt;1 lần). <strong>Firebase Functions</strong> cũng tự chạy <strong>12:00</strong> và <strong>17:00</strong> (giờ VN) mỗi ngày; nếu có trùng sẽ gửi email (params <code>EMAIL_USER</code> / <code>EMAIL_TO</code> + secret <code>EMAIL_PASS</code> trên Functions).</p>
+        <p class="subtitle dup-check-desc">Khi mở tab, hệ thống quét <code>outbound-materials</code> (ASM1 + ASM2). <strong>Ngày bắt đầu tính</strong> (00:00 giờ Việt Nam) do bạn chọn trong <strong>More</strong> và lưu trên Firestore — mặc định 02/04/2026; đổi ngày trong More thì bảng và lịch Functions đều theo ngày mới. <strong>Send Mail</strong> gửi kèm cùng thông số đang hiển thị (từ ngày + loại trừ) để khớp bảng. Thời điểm so trên mỗi bản ghi: <code>exportDate</code>, không có thì <code>createdAt</code> / <code>updatedAt</code>. Chỉ xét bản ghi đủ điều kiện: <strong>mã</strong> A hoặc B + 6 số; <strong>PO</strong> có chữ và bắt đầu KZ hoặc LH; <strong>IMD</strong> có ít nhất một số; <strong>Bag</strong> có ít nhất một số. Trùng = cùng bộ mã + PO + IMD + bag (&gt;1 lần). <strong>Firebase Functions</strong> cũng tự chạy <strong>12:00</strong> và <strong>17:00</strong> (giờ VN) mỗi ngày; nếu có trùng sẽ gửi email (params <code>EMAIL_USER</code> / <code>EMAIL_TO</code> + secret <code>EMAIL_PASS</code> trên Functions).</p>
       </div>
       <div class="page-info-actions">
         <button type="button" class="btn-page-info-close" (click)="closePageInfoModal()">Đóng</button>
@@ -46,7 +46,7 @@
           class="btn-send-mail"
           (click)="onSendControlBatchMail()"
           [disabled]="sendMailBusy || outboundDupLoading"
-          title="Gửi email báo cáo trùng xuất tại thời điểm bấm (tới các địa chỉ đã cấu hình trên Functions)">
+          title="Gửi email báo cáo trùng — cùng mốc Từ ngày và Loại trừ đang hiển thị phía trên (khớp bảng). SMTP cấu hình trên Functions.">
           {{ sendMailBusy ? 'Đang gửi…' : 'Send Mail' }}
         </button>
       </div>

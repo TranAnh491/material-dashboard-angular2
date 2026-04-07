@@ -68,7 +68,10 @@ exports.sendControlBatchReportEmail = functions
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
     try {
-        const r = await (0, outbound_dup_notify_1.sendOutboundDupReportManual)(admin.firestore());
+        const db = admin.firestore();
+        const fromUi = (0, outbound_dup_notify_1.buildControlBatchDupSettingsFromCallablePayload)(data);
+        const settings = fromUi !== null && fromUi !== void 0 ? fromUi : (await (0, outbound_dup_notify_1.loadControlBatchDupSettings)(db));
+        const r = await (0, outbound_dup_notify_1.sendOutboundDupReportManual)(db, settings);
         return { ok: true, dupGroups: r.dupGroups };
     }
     catch (e) {

@@ -83,6 +83,42 @@ export function isMaterialCodeExcludedByControlBatchRules(mcNorm: string, rules:
 }
 
 /** Đọc `control-batch-exclusion/settings` (loại trừ + outboundDupSinceDate). */
+/**
+ * Payload từ app (bag-history — Send Mail): cùng nguồn với bảng lọc trùng.
+ * Nếu thiếu/invalid → trả null (Functions sẽ đọc Firestore như trước).
+ */
+export function buildControlBatchDupSettingsFromCallablePayload(data: unknown): ControlBatchDupSettings | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  const d = data as Record<string, unknown>;
+  const ymdRaw = d['outboundDupSinceDate'];
+  if (typeof ymdRaw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymdRaw.trim())) {
+    return null;
+  }
+  const dupSinceYmd = normalizeOutboundDupSinceYmd(ymdRaw);
+  const dupSinceMs = vnYmdStartMs(dupSinceYmd);
+  if (dupSinceMs == null) {
+    return null;
+  }
+  const enabled = d['excludeEnabled'] === true;
+  const raw = d['excludeMaterialCodes'];
+  const arr = Array.isArray(raw) ? raw : [];
+  const codes = new Set<string>();
+  for (const x of arr) {
+    const c = String(x || '').trim().toUpperCase();
+    if (c) {
+      codes.add(c);
+    }
+  }
+  return {
+    exclusion: { enabled, codes },
+    dupSinceMs,
+    dupSinceYmd,
+    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd)
+  };
+}
+
 export async function loadControlBatchDupSettings(
   db: admin.firestore.Firestore
 ): Promise<ControlBatchDupSettings> {
@@ -421,14 +457,15 @@ async function sendDupEmail(
 
 /**
  * Quét trùng tại thời điểm gọi và gửi mail (nút Send Mail trên Control Batch).
- * Cùng logic lọc với lịch 12h/17h.
+ * `settings` nếu có (từ app) = đúng mốc ngày + loại trừ đang hiển thị; không thì đọc Firestore.
  */
 export async function sendOutboundDupReportManual(
-  db: admin.firestore.Firestore
+  db: admin.firestore.Firestore,
+  settings?: ControlBatchDupSettings
 ): Promise<{ dupGroups: number }> {
-  const settings = await loadControlBatchDupSettings(db);
-  const dupes = await scanOutboundDuplicates(db, settings);
-  const excl = settings.exclusion;
+  const s = settings ?? (await loadControlBatchDupSettings(db));
+  const dupes = await scanOutboundDuplicates(db, s);
+  const excl = s.exclusion;
   const cfg = getEmailCfg();
   if (!cfg) {
     throw new Error('Thiếu cấu hình SMTP (EMAIL_USER, EMAIL_PASS, EMAIL_TO)');
@@ -464,7 +501,7 @@ export async function sendOutboundDupReportManual(
       to: cfg.to.join(', '),
       subject: `[Control Batch] Báo cáo — không có nhóm trùng (${atStr})`,
       text:
-        `Kiểm tra trùng xuất kho (từ ${settings.dupSinceLabel}, đủ điều kiện định dạng).\n` +
+        `Kiểm tra trùng xuất kho (từ ${s.dupSinceLabel}, đủ điều kiện định dạng).\n` +
         `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).` +
         exclNote,
       html: `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
@@ -478,7 +515,7 @@ ${exclHtml}
     return { dupGroups: 0 };
   }
 
-  const bodyHtml = buildHtml(dupes, settings.dupSinceLabel, exclHtml).replace(
+  const bodyHtml = buildHtml(dupes, s.dupSinceLabel, exclHtml).replace(
     '</body>',
     `<p style="margin-top:12px">Thời điểm quét: <strong>${esc(
       atStr
@@ -488,7 +525,7 @@ ${exclHtml}
     from: cfg.from,
     to: cfg.to.join(', '),
     subject: `[Control Batch] Báo cáo — ${dupes.length} nhóm trùng xuất kho (${atStr})`,
-    text: `${buildPlainText(dupes, settings.dupSinceLabel, exclNote.trim() || undefined)}\n\n---\nThời điểm quét: ${atStr}`,
+    text: `${buildPlainText(dupes, s.dupSinceLabel, exclNote.trim() || undefined)}\n\n---\nThời điểm quét: ${atStr}`,
     html: bodyHtml
   });
   return { dupGroups: dupes.length };

@@ -50,6 +50,8 @@ export class PrintLabelComponent implements OnInit {
   isSaving: boolean = false;
   isLoading: boolean = false;
 
+  morePopupView: 'menu' | 'printers' = 'menu';
+
   // Authentication properties
   isAuthenticated: boolean = false;
   currentEmployeeId: string = '';
@@ -98,6 +100,13 @@ export class PrintLabelComponent implements OnInit {
   // Download modal properties
   showDownloadModal: boolean = false;
 
+  // More popup + danh mục Người in
+  showMorePopup = false;
+  printerCatalog: string[] = [];
+  printerNewName = '';
+  printerCatalogSaving = false;
+  private readonly PRINTER_CATALOG_DOC = 'print-label-settings/printers';
+
   constructor(
     private firestore: AngularFirestore,
     private permissionService: PermissionService,
@@ -119,12 +128,99 @@ export class PrintLabelComponent implements OnInit {
         this.loadDataFromFirebase();
         this.refreshStorageInfo();
         this.autoHandleDocumentSizeLimit();
+        void this.loadPrinterCatalog();
       }, 1000);
     } else {
       // Desktop loading
       this.loadDataFromFirebase();
       this.refreshStorageInfo();
       this.autoHandleDocumentSizeLimit();
+      void this.loadPrinterCatalog();
+    }
+  }
+
+  openMorePopup(): void {
+    this.showMorePopup = true;
+    this.morePopupView = 'menu';
+    this.printerNewName = '';
+  }
+
+  closeMorePopup(): void {
+    this.showMorePopup = false;
+    this.morePopupView = 'menu';
+  }
+
+  openMorePrinters(): void {
+    this.morePopupView = 'printers';
+    this.printerNewName = '';
+  }
+
+  backToMoreMenu(): void {
+    this.morePopupView = 'menu';
+    this.printerNewName = '';
+  }
+
+  private normalizePrinterName(v: string): string {
+    return String(v ?? '').trim();
+  }
+
+  async loadPrinterCatalog(): Promise<void> {
+    try {
+      const snap = await this.firestore.doc(this.PRINTER_CATALOG_DOC).get().toPromise();
+      const d = (snap && snap.exists ? snap.data() : null) as any;
+      const arr = Array.isArray(d?.printers) ? d.printers : [];
+      const list: string[] = arr
+        .map((x: any) => this.normalizePrinterName(String(x ?? '')))
+        .filter((x: string) => Boolean(x));
+      // unique, giữ thứ tự alpha theo vi
+      this.printerCatalog = Array.from(new Set<string>(list)).sort((a, b) => a.localeCompare(b, 'vi'));
+
+      // Nếu chưa có danh mục, seed từ các giá trị đang có trong dữ liệu (để không mất trải nghiệm)
+      if (this.printerCatalog.length === 0 && this.scheduleData.length > 0) {
+        const fromData = this.scheduleData
+          .map(it => this.normalizePrinterName(String(it.nguoiIn ?? '')))
+          .filter(Boolean);
+        this.printerCatalog = Array.from(new Set(fromData)).sort((a, b) => a.localeCompare(b, 'vi'));
+      }
+    } catch (e) {
+      console.error('❌ loadPrinterCatalog:', e);
+      this.printerCatalog = [];
+    }
+  }
+
+  async addPrinterToCatalog(): Promise<void> {
+    const name = this.normalizePrinterName(this.printerNewName);
+    if (!name) return;
+    const next = Array.from(new Set([...this.printerCatalog, name])).sort((a, b) => a.localeCompare(b, 'vi'));
+    await this.savePrinterCatalog(next);
+    this.printerNewName = '';
+  }
+
+  async removePrinterFromCatalog(name: string): Promise<void> {
+    const n = this.normalizePrinterName(name);
+    if (!n) return;
+    const next = this.printerCatalog.filter(x => x !== n);
+    await this.savePrinterCatalog(next);
+  }
+
+  private async savePrinterCatalog(next: string[]): Promise<void> {
+    if (this.printerCatalogSaving) return;
+    this.printerCatalogSaving = true;
+    try {
+      const cleaned = next
+        .map(x => this.normalizePrinterName(x))
+        .filter(Boolean);
+      const unique = Array.from(new Set(cleaned)).sort((a, b) => a.localeCompare(b, 'vi'));
+      await this.firestore.doc(this.PRINTER_CATALOG_DOC).set(
+        { printers: unique, updatedAt: new Date() },
+        { merge: true }
+      );
+      this.printerCatalog = unique;
+    } catch (e: any) {
+      console.error('❌ savePrinterCatalog:', e);
+      alert('❌ Không lưu được danh mục Người in.');
+    } finally {
+      this.printerCatalogSaving = false;
     }
   }
 
@@ -2007,10 +2103,10 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
   async printBatchPrintedQrLabels(): Promise<void> {
     try {
       const items = this.getDisplayScheduleData()
-        .filter(item => (item.tinhTrang || '').toString().trim() === 'Đã in');
+        .filter(item => (item.tinhTrang || '').toString().trim() === 'Chờ in');
 
       if (!items.length) {
-        alert('⚠️ Không có dòng nào có tình trạng "Đã in" để in.');
+        alert('⚠️ Không có dòng nào có tình trạng "Chờ in" để in.');
         return;
       }
 

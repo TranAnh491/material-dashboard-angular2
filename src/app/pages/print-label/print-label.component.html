@@ -9,56 +9,10 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls">
-        <div class="dropdown">
-          <button class="custom-btn dropdown-toggle" type="button" id="moreDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" aria-labelledby="moreDropdown">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="triggerFileImport()">
-              <i class="material-icons">file_upload</i>
-              Import Excel
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); $event.preventDefault()">
-              <i class="material-icons">download</i>
-              Template
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="removeDuplicateItems()">
-              <i class="material-icons">content_copy</i>
-              Xóa mã trùng (DUP)
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteOldDataDialog(); $event.preventDefault()">
-              <i class="material-icons">delete_sweep</i>
-              Xóa dữ liệu cũ
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showDeleteCurrentDataDialog(); $event.preventDefault()">
-              <i class="material-icons">cleaning_services</i>
-              Xóa dữ liệu hiện tại
-            </a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="debugFirebaseData(); $event.preventDefault()">
-              <i class="material-icons">bug_report</i>
-              Debug Firebase Data
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="findLostData(); $event.preventDefault()">
-              <i class="material-icons">search</i>
-              Tìm dữ liệu mất
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="showAllFirebaseData(); $event.preventDefault()">
-              <i class="material-icons">list</i>
-              Hiển thị tất cả mã
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="testBatchGeneration(); $event.preventDefault()">
-              <i class="material-icons">science</i>
-              Test Batch Generation
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="checkAndClearFirebaseData(); $event.preventDefault()">
-              <i class="material-icons">delete_forever</i>
-              Kiểm tra & Xóa hết Firebase
-            </a>
-          </div>
-  </div>
+        <button class="custom-btn" type="button" (click)="openMorePopup()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
 
         <div class="search-box" style="display: flex; align-items: center; gap: 8px;">
           <input type="text" 
@@ -86,18 +40,17 @@
             <i class="material-icons">download</i>
           </button>
           
-          <button class="custom-btn" 
+          <button class="custom-btn custom-btn--iqc" 
                   (click)="openIQCModal()"
                   title="IQC - Kiểm tra chất lượng"
-                  style="background: #FDD835; color: black; font-weight: 600;">
+                  >
             <i class="material-icons">check_circle</i>
             IQC
           </button>
 
-          <button class="custom-btn"
+          <button class="custom-btn custom-btn--print"
                   (click)="printBatchPrintedQrLabels()"
-                  title="In hàng loạt các tem có tình trạng Đã in"
-                  style="background: #4caf50; color: white; font-weight: 600;">
+                  title="In hàng loạt các tem có tình trạng Đã in">
             <i class="material-icons">print</i>
             Print
           </button>
@@ -108,29 +61,14 @@
         </div>
         
         <!-- Status Indicators -->
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; margin-right: 0;">
-          <div (click)="filterByStatus('IQC')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            🔍 IQC: {{getIQCItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('Late')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            ⏰ Late: {{getLateItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('Pass')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            ✅ Pass: {{getPassItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('Chờ in')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            ⏳ Chờ in: {{getPendingItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('Chờ bản vẽ')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            📐 Chờ bản vẽ: {{getChoBanVeItemsCount()}}
-          </div>
-          <div (click)="filterByStatus('Chờ Template')" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            🎨 Chờ Template: {{getChoTemplateItemsCount()}}
-          </div>
-          <div (click)="clearStatusFilter()" style="background: #ffffff; padding: 6px 12px; border-radius: 16px; font-weight: bold; color: #000000; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 2px solid #000000; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='#f0f8ff'; this.style.transform='scale(1.05)'" onmouseout="this.style.background='#ffffff'; this.style.transform='scale(1)'">
-            📊 Total: {{getNotDoneItemsCount()}}
-          </div>
-
+        <div class="status-chips">
+          <button type="button" class="status-chip" (click)="filterByStatus('IQC')">IQC: {{getIQCItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="filterByStatus('Late')">LATE: {{getLateItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="filterByStatus('Pass')">PASS: {{getPassItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="filterByStatus('Chờ in')">CHỜ IN: {{getPendingItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="filterByStatus('Chờ bản vẽ')">CHỜ BẢN VẼ: {{getChoBanVeItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="filterByStatus('Chờ Template')">CHỜ TEMPLATE: {{getChoTemplateItemsCount()}}</button>
+          <button type="button" class="status-chip" (click)="clearStatusFilter()">TOTAL: {{getNotDoneItemsCount()}}</button>
         </div>
       </div>
       </div>
@@ -243,14 +181,7 @@
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
-                    <option value="Tuấn">Tuấn</option>
-                    <option value="Tình">Tình</option>
-                    <option value="Hưng">Hưng</option>
-                    <option value="Vũ">Vũ</option>
-                    <option value="Toàn">Toàn</option>
-                    <option value="Ninh">Ninh</option>
-                    <option value="Phúc">Phúc</option>
-                    <option value="Tú">Tú</option>
+                    <option *ngFor="let p of printerCatalog" [value]="p">{{ p }}</option>
                   </select>
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
@@ -548,14 +479,15 @@
     .excel-header h4 {
       margin: 0;
       font-size: 24px;
-      font-weight: 600;
+      font-weight: 400;
       color: #000;
+      text-transform: uppercase;
     }
     
     .excel-actions {
-      background: #f8f9fa;
+      background: #f5f1e6;
       padding: 15px 20px;
-      border-bottom: 1px solid #e9ecef;
+      border-bottom: 1px solid #000;
     }
     
     .action-controls {
@@ -567,28 +499,38 @@
     
     .custom-btn {
       background: #fff;
-      border: 2px solid #ff9800;
+      border: 1px solid #000;
       color: #000;
-      padding: 8px 16px;
+      padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
-      transition: all 0.2s;
-      display: flex;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-weight: 500;
+      font-weight: 400;
+      box-shadow: none;
+      text-transform: uppercase;
     }
     
     .custom-btn:hover {
-      background: #fff3e0;
-      border-color: #f57c00;
+      background: #efe7d3;
+      border-color: #000;
     }
     
     .custom-btn.active {
-      background: #ff9800;
+      background: #efe7d3;
       color: #000;
-      border-color: #f57c00;
+      border-color: #000;
+    }
+
+    .custom-btn--iqc {
+      background: #f5f1e6;
+    }
+
+    .custom-btn--print {
+      background: #ffffff;
     }
     
     .dropdown-toggle::after {
@@ -613,7 +555,7 @@
       background-color: #fff;
       border: 1px solid rgba(0,0,0,.15);
       border-radius: 6px;
-      box-shadow: 0 6px 12px rgba(0,0,0,.175);
+      box-shadow: none;
     }
     
     .dropdown:hover .dropdown-menu {
@@ -685,15 +627,17 @@
     }
     
     .excel-table th {
-      background: #ff9800;
-      padding: 12px 8px;
+      background: #f5f1e6;
+      padding: 10px 6px;
       text-align: center;
-      font-weight: 600;
+      font-weight: 400;
       color: #000;
-      border: 1px solid #f57c00;
+      border: 1px solid #000;
       position: sticky;
       top: 0;
       z-index: 10;
+      text-transform: uppercase;
+      box-shadow: none;
     }
     
     .excel-table td {
@@ -704,7 +648,32 @@
     }
     
     .excel-table tbody tr:hover {
-      background-color: #fff3e0 !important;
+      background-color: #f5f1e6 !important;
+    }
+
+    .status-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-left: auto;
+      margin-right: 0;
+    }
+
+    .status-chip {
+      background: #fff;
+      border: 1px solid #000;
+      color: #000;
+      padding: 6px 10px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 400;
+      cursor: pointer;
+      box-shadow: none;
+      text-transform: uppercase;
+    }
+
+    .status-chip:hover {
+      background: #efe7d3;
     }
     
     .complete-btn:hover {
@@ -917,3 +886,85 @@
     </div>
   </div>
 </div> 
+
+<!-- More Popup -->
+<div class="modal-overlay" *ngIf="showMorePopup" (click)="closeMorePopup()">
+  <div class="modal-content" style="max-width: 720px; width: 92%;" (click)="$event.stopPropagation()">
+    <div class="modal-header" style="background: #f5f1e6; color:#000; border-bottom: 1px solid #000;">
+      <h3 style="margin:0; font-weight:400; text-transform: uppercase;">MORE</h3>
+      <button class="close-btn" type="button" (click)="closeMorePopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" style="padding: 16px;">
+      <!-- MENU -->
+      <ng-container *ngIf="morePopupView === 'menu'">
+        <div style="display:flex; flex-wrap: wrap; gap: 8px;">
+          <button type="button" class="custom-btn" (click)="triggerFileImport(); closeMorePopup()">Import Excel</button>
+          <button type="button" class="custom-btn" (click)="downloadTemplate(); closeMorePopup()">Template</button>
+          <button type="button" class="custom-btn" (click)="removeDuplicateItems(); closeMorePopup()">Xóa mã trùng (DUP)</button>
+          <button type="button" class="custom-btn" (click)="showDeleteOldDataDialog(); closeMorePopup()">Xóa dữ liệu cũ</button>
+          <button type="button" class="custom-btn" (click)="showDeleteCurrentDataDialog(); closeMorePopup()">Xóa dữ liệu hiện tại</button>
+          <button type="button" class="custom-btn" (click)="debugFirebaseData(); closeMorePopup()">Debug Firebase Data</button>
+          <button type="button" class="custom-btn" (click)="findLostData(); closeMorePopup()">Tìm dữ liệu mất</button>
+          <button type="button" class="custom-btn" (click)="showAllFirebaseData(); closeMorePopup()">Hiển thị tất cả mã</button>
+          <button type="button" class="custom-btn" (click)="testBatchGeneration(); closeMorePopup()">Test Batch Generation</button>
+          <button type="button" class="custom-btn" (click)="checkAndClearFirebaseData(); closeMorePopup()">Kiểm tra & Xóa hết Firebase</button>
+          <button type="button" class="custom-btn" (click)="openMorePrinters()">Người in</button>
+        </div>
+      </ng-container>
+
+      <!-- PRINTER CATALOG -->
+      <ng-container *ngIf="morePopupView === 'printers'">
+        <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="display:flex; align-items:center; gap: 8px;">
+            <button type="button" class="custom-btn" (click)="backToMoreMenu()">Quay lại</button>
+            <h4 style="margin:0; font-weight:400; text-transform: uppercase;">Danh mục người in</h4>
+          </div>
+          <button type="button" class="custom-btn" (click)="loadPrinterCatalog()">Reload</button>
+        </div>
+
+        <div style="display:flex; gap: 8px; align-items:center; margin-top: 10px; flex-wrap: wrap;">
+          <input
+            type="text"
+            class="custom-input"
+            [(ngModel)]="printerNewName"
+            placeholder="Nhập tên người in..."
+            style="min-width: 260px; border: 1px solid #000; border-radius: 6px; padding: 8px 10px; text-transform:none;"
+            (keyup.enter)="addPrinterToCatalog()"
+          />
+          <button type="button" class="custom-btn" (click)="addPrinterToCatalog()" [disabled]="printerCatalogSaving">
+            {{ printerCatalogSaving ? 'Đang lưu...' : 'Thêm' }}
+          </button>
+        </div>
+
+        <div style="margin-top: 10px; max-height: 260px; overflow:auto; border: 1px solid #000; border-radius: 6px; background: #fff;">
+          <table class="excel-table" style="margin:0;">
+            <thead>
+              <tr>
+                <th style="text-transform: uppercase;">TÊN</th>
+                <th style="width: 90px; text-transform: uppercase;">XÓA</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let p of printerCatalog">
+                <td style="text-align:left; padding-left:10px; text-transform:none;">{{ p }}</td>
+                <td>
+                  <button type="button" class="custom-btn" (click)="removePrinterFromCatalog(p)" [disabled]="printerCatalogSaving">
+                    Xóa
+                  </button>
+                </td>
+              </tr>
+              <tr *ngIf="printerCatalog.length === 0">
+                <td colspan="2" style="padding: 12px; color:#000;">Chưa có danh mục. Nhập tên và bấm Thêm.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 8px 0 0; color:#000; opacity:0.75; font-size: 13px;">
+          Cột <strong>Người in</strong> sẽ lấy từ danh mục này.
+        </p>
+      </ng-container>
+    </div>
+  </div>
+</div>

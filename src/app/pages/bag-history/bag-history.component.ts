@@ -354,10 +354,23 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     }
     this.sendMailBusy = true;
     try {
-      const callable = this.fns.httpsCallable<unknown, { ok?: boolean; dupGroups?: number }>(
-        'sendControlBatchReportEmail'
+      const callable = this.fns.httpsCallable<
+        {
+          outboundDupSinceDate: string;
+          excludeEnabled: boolean;
+          excludeMaterialCodes: string[];
+        },
+        { ok?: boolean; dupGroups?: number }
+      >('sendControlBatchReportEmail');
+      const res = await firstValueFrom(
+        callable({
+          outboundDupSinceDate: this.outboundDupSinceYmd,
+          excludeEnabled: this.excludeEnabled,
+          excludeMaterialCodes: Array.from(this.excludeMaterialCodesSet).sort((a, b) =>
+            a.localeCompare(b, 'vi')
+          )
+        })
       );
-      const res = await firstValueFrom(callable({}));
       const n = res?.dupGroups ?? 0;
       this.snackBar.open(
         n === 0

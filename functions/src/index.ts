@@ -1,6 +1,11 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { runOutboundDupNotifyForSlot, sendOutboundDupReportManual } from './outbound-dup-notify';
+import {
+  buildControlBatchDupSettingsFromCallablePayload,
+  loadControlBatchDupSettings,
+  runOutboundDupNotifyForSlot,
+  sendOutboundDupReportManual
+} from './outbound-dup-notify';
 import { sendQcPriorityResolvedEmail, QcPriorityResolvedPayload } from './qc-priority-email';
 import { emailPass } from './params-config';
 import {
@@ -40,7 +45,10 @@ export const sendControlBatchReportEmail = functions
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
     try {
-      const r = await sendOutboundDupReportManual(admin.firestore());
+      const db = admin.firestore();
+      const fromUi = buildControlBatchDupSettingsFromCallablePayload(data);
+      const settings = fromUi ?? (await loadControlBatchDupSettings(db));
+      const r = await sendOutboundDupReportManual(db, settings);
       return { ok: true, dupGroups: r.dupGroups };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
